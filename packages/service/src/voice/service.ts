@@ -53,8 +53,8 @@ import { SOCKET_CLOSE_CODE, voiceSocket } from "./socket.js";
  *
  * One upgrade stands. `/api/voice/sessions` takes a signed-in Mac under its
  * account bearer, resolved and spent by the same account code every hosted
- * route uses, before any session exists. Every call is about one plan: a
- * call newly created carries the planning opening as the last message of the
+ * route uses, before any session exists. Every call is about one task: a
+ * call newly created carries the task opening as the last message of the
  * history it is created with, so Luke speaks first with nothing appended,
  * acknowledged, or cued after the start.
  *
@@ -515,7 +515,7 @@ export class VoiceService {
         sideband,
         // The call's plan as its notetaker has it now, sent on a fiber of
         // the service's own set since the exchange reports it from inside
-        // its own, so the Plans tab types it in as the call goes on; a
+        // its own, so the Tasks tab types it in as the call goes on; a
         // device gone by then takes it nowhere.
         onPlanDraft: (draft) => {
           const frame: PlanDraftFrame = {
@@ -531,7 +531,7 @@ export class VoiceService {
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
         // What each part of Luke is doing, sent the same way, so the
-        // Plans tab says the voice's state and the backend's apart.
+        // Tasks tab says the voice's state and the backend's apart.
         onActivity: (activity) => {
           const frame: TaskActivityFrame = {
             type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
@@ -540,9 +540,9 @@ export class VoiceService {
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
-        // Code Luke is about to talk about, with its lines as the planning
-        // model read them from the plan's repository, sent the same way, so
-        // the Plans tab's code pane draws it as he says it.
+        // Code Luke is about to talk about, with its lines as the brain
+        // read them from the task's repository, sent the same way, so
+        // the Tasks tab's code pane draws it as he says it.
         onCode: (shown) => {
           const frame: TaskCodeFrame = {
             type: VOICE_SERVICE_FRAME.TASK_CODE,
@@ -551,8 +551,8 @@ export class VoiceService {
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
-        // Each planning turn's work, sent the same way, so the Plans tab's
-        // Work tab reads what Luke's planning model wrote and ran as it goes.
+        // Each brain turn's work, sent the same way, so the Tasks tab's
+        // Work tab reads what Luke's brain wrote and ran as it goes.
         onWork: (turn) => {
           const frame: TaskWorkFrame = {
             type: VOICE_SERVICE_FRAME.TASK_WORK,

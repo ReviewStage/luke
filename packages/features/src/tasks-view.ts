@@ -26,6 +26,7 @@ import {
 import { pictureDataUrlSchema, pictureTypeSchema } from "./picture-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
+import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
   codeRefSchema,
   planRevisionAnswerSchema,
@@ -70,15 +71,15 @@ import {
 } from "./workspace-wire.js";
 
 /**
- * tasks-view.ts -- the named plans as one Mac holds them for its panel's Plans tab: the list, the one active plan, and its saved document.
+ * tasks-view.ts -- the named tasks as one Mac holds them for its panel's Tasks tab: the list, the one active task, and its saved document.
  *
  * The host reads the service for these and tells the desktop the whole view
- * whenever it moves; the desktop writes it into the document the planning
- * window draws from. Exactly one plan is ever active, the one the window has
- * open, and it is the plan a voice session binds to. The view carries plan
- * names, documents, and what was said on the active plan's calls from the
- * service, and nothing of this Mac's own: a plan's repository is the
- * service's, named on the plan itself. Beside the plans it carries the
+ * whenever it moves; the desktop writes it into the document the tasks
+ * window draws from. Exactly one task is ever active, the one the window has
+ * open, and it is the task a voice session binds to. The view carries task
+ * names, documents, and what was said on the active task's calls from the
+ * service, and nothing of this Mac's own: a task's repository is the
+ * service's, named on the task itself. Beside the tasks it carries the
  * workspaces the account is a member of, and the shapes the window asks a
  * workspace made, a GitHub organization connected or disconnected, a
  * members read, a removal, and a leave in.
@@ -94,14 +95,14 @@ export const TASKS_READ = {
   READY: "ready",
   /** The last read did not land; the window offers to try again. */
   FAILED: "failed",
-  /** The active plan is not one the account holds any more. */
+  /** The active task is not one the account holds any more. */
   MISSING: "missing",
 } as const;
 
 const tasksReadSchema = EffectSchema.Literals(Object.values(TASKS_READ));
 
 /**
- * The active plan's document as last read: the plan whole while a read has
+ * The active task's document as last read: the plan whole while a read has
  * landed, kept through a later read that failed, so the window never draws a
  * document it did not read and never drops one it did.
  */
@@ -113,7 +114,7 @@ const tasksDocumentSchema = EffectSchema.Struct({
 export type TasksDocument = typeof tasksDocumentSchema.Type;
 
 /**
- * What was said on the active plan's calls as last read, kept through a
+ * What was said on the active task's calls as last read, kept through a
  * later read that failed, as the document is. The call standing now is not
  * in it until the call ends and the transcript is read again: its words so
  * far are the voice window's to report.
@@ -125,7 +126,7 @@ const tasksTranscriptSchema = EffectSchema.Struct({
 
 /**
  * The two waits on the voice side that no live status names: the voice model
- * delegated an ask the planning model has not yet taken, or words are queued
+ * delegated an ask the brain has not yet taken, or words are queued
  * for Luke that his voice has not begun to say.
  */
 export const VOICE_PHASE = {
@@ -135,13 +136,13 @@ export const VOICE_PHASE = {
 
 export type VoicePhase = (typeof VOICE_PHASE)[keyof typeof VOICE_PHASE];
 
-/** The most of the planning model's pending command an activity carries; the service cuts it there. */
+/** The most of the brain's pending command an activity carries; the service cuts it there. */
 export const TASK_ACTIVITY_ACTION_MAX_CHARS = 120;
 
 /**
- * What each part of Luke is doing on a planning call, whole, as the service's
+ * What each part of Luke is doing on a task call, whole, as the service's
  * `task.activity` frame says it: the voice's wait where it is in one, the
- * planning model while it works on an ask with the command it is running
+ * brain while it works on an ask with the command it is running
  * where one is pending, and whether the notetaker is writing. Nothing of the
  * ask, and no tool's output.
  */
@@ -160,7 +161,7 @@ export const taskActivitySchema = EffectSchema.Struct({
 
 export type TaskActivity = typeof taskActivitySchema.Type;
 
-/** How far a planning turn, or one call inside it, has got. */
+/** How far a brain turn, or one call inside it, has got. */
 export const TASK_WORK_STATE = {
   RUNNING: "running",
   DONE: "done",
@@ -175,7 +176,7 @@ export type TaskWorkState = (typeof TASK_WORK_STATE)[keyof typeof TASK_WORK_STAT
  * a large file still travels in a frame of tens of kilobytes.
  */
 export const TASK_WORK_BOUNDS = {
-  /** The most turns one read of a plan's work carries, the newest before where it began; older ones are read a page at a time. */
+  /** The most turns one read of a task's work carries, the newest before where it began; older ones are read a page at a time. */
   TURNS: 20,
   PARTS: 60,
   TEXT_CHARS: 4_000,
@@ -227,10 +228,10 @@ const taskWorkWorkerSchema = EffectSchema.Struct({
 export type TaskWorkWorker = typeof taskWorkWorkerSchema.Type;
 
 /**
- * One planning turn as the Work tab draws it: the turn, when it started and
+ * One brain turn as the Work tab draws it: the turn, when it started and
  * ended, how far it has got, its journal and the workers it handed work to,
  * and what it ran on and spent. Unlike `task.activity`, this carries each
- * call's output: the text a command answered in the plan's repository
+ * call's output: the text a command answered in the task's repository
  * sandbox, and pages read from the public web, shown back to the developer
  * on their own Mac.
  */
@@ -301,10 +302,10 @@ export const codeLinesSchema = EffectSchema.Array(EffectSchema.Array(codeTokenSc
 export type CodeLines = typeof codeLinesSchema.Type;
 
 /**
- * One code Luke showed on the active plan: what he named, the repository
+ * One code Luke showed on the active task: what he named, the repository
  * the service read it from, the file's lines as they arrived and this
  * Mac coloured them, the window's first line first, and his note on them. Nothing of it enters
- * the plan's document.
+ * the task's document.
  */
 const taskCodeSchema = EffectSchema.Struct({
   ref: codeRefSchema,
@@ -324,7 +325,7 @@ const taskCodeSchema = EffectSchema.Struct({
 export type TaskCode = typeof taskCodeSchema.Type;
 
 /**
- * One code Luke showed on a plan: the `show_code` call that showed it, the
+ * One code Luke showed on a task: the `show_code` call that showed it, the
  * turn it ran in and when that turn began writing, and the place and lines
  * as the call answered them.
  */
@@ -343,7 +344,7 @@ export const taskShownCodeSchema = EffectSchema.Struct({
 export type TaskShownCode = typeof taskShownCodeSchema.Type;
 
 /**
- * One code shown on the active plan as the Code tab draws it: the call that
+ * One code shown on the active task as the Code tab draws it: the call that
  * showed it, its turn and when that began, and the lines coloured.
  */
 const taskCodeShowingSchema = EffectSchema.Struct({
@@ -354,27 +355,27 @@ const taskCodeShowingSchema = EffectSchema.Struct({
 export type TaskCodeShowing = typeof taskCodeShowingSchema.Type;
 
 /**
- * A plan's work as the service keeps it (GET `/api/tasks/{id}/work`, with
- * `before` naming a turn for an older page): a page of the planning turns of
+ * A task's work as the service keeps it (GET `/api/plans/{id}/work`, with
+ * `before` naming a turn for an older page): a page of the brain turns of
  * its calls, the newest before where the read began, oldest first, each as
  * a `task.work` frame would tell it, and the turn to read before for the
  * page older than this one. The newest page also carries every code Luke
- * showed on the plan, oldest first, with the lines each `show_code` call
+ * showed on the task, oldest first, with the lines each `show_code` call
  * answered, several of one file included. It is what the Work and Code tabs
- * draw when a plan opens, after a restart or a switch from another plan,
+ * draw when a task opens, after a restart or a switch from another task,
  * before any call about it tells more.
  */
 export const taskWorkAnswerSchema = EffectSchema.Struct({
   turns: EffectSchema.Array(taskWorkTurnSchema),
   /** The turn the next older page is read before; absent where no older turn stands. */
   earlier: EffectSchema.optionalKey(EffectSchema.String),
-  /** Every code shown on the plan, oldest first; carried on the newest page alone. */
+  /** Every code shown on the task, oldest first; carried on the newest page alone. */
   code: EffectSchema.optionalKey(EffectSchema.Array(taskShownCodeSchema)),
 });
 
 export type TaskWorkAnswer = typeof taskWorkAnswerSchema.Type;
 
-/** Every code Luke showed on one plan, oldest first, as the Code tab draws it: the plan-work page's `code`, read on its own. */
+/** Every code Luke showed on one task, oldest first, as the Code tab draws it: the plan-work page's `code`, read on its own. */
 export const taskCodeAnswerSchema = EffectSchema.Struct({
   code: EffectSchema.Array(taskShownCodeSchema),
 });
@@ -394,7 +395,7 @@ export const githubConnectionSchema = EffectSchema.Struct({
 });
 
 export const tasksViewSchema = EffectSchema.Struct({
-  /** The account's plans, newest started first, as the last list read answered. */
+  /** The account's tasks, newest started first, as the last list read answered. */
   tasks: EffectSchema.Array(taskSummarySchema),
   /** The agents with no plan in the account's workspaces, newest started first, as the last list read answered; absent before the first that carried them. */
   tasklessAgents: EffectSchema.optionalKey(EffectSchema.Array(tasklessAgentSchema)),
@@ -405,43 +406,45 @@ export const tasksViewSchema = EffectSchema.Struct({
   github: EffectSchema.optionalKey(githubConnectionSchema),
   /** The repositories the account pinned in the sidebar, newest pinned first, as last read or pinned; absent before the first read lands. */
   repositoryPins: EffectSchema.optionalKey(EffectSchema.Array(repositoryPinSchema)),
-  /** The one active plan, absent while the window has none open. */
+  /** The sections the account made in its sidebars and the tasks it keeps in them, as last read or written; absent before the first read lands. */
+  taskSections: EffectSchema.optionalKey(taskSectionsAnswerSchema),
+  /** The one active task, absent while the window has none open. */
   activeTaskId: EffectSchema.optionalKey(EffectSchema.String),
   document: tasksDocumentSchema,
-  /** What each part of Luke is doing on the call about the active plan, as last told; absent with no plan open or no word yet. */
+  /** What each part of Luke is doing on the call about the active task, as last told; absent with no task open or no word yet. */
   activity: EffectSchema.optionalKey(taskActivitySchema),
   /**
-   * What each part of Luke is doing on the standing call, whichever plan it
+   * What each part of Luke is doing on the standing call, whichever task it
    * is about, as last told: what the floating call window draws while the
-   * call's plan is not the one open. Absent before the first word and once
+   * call's task is not the one open. Absent before the first word and once
    * the call has ended.
    */
   callActivity: EffectSchema.optionalKey(taskActivitySchema),
-  /** The active plan's whiteboard as last read or saved; absent with no plan open or before its first read lands. */
+  /** The active task's whiteboard as last read or saved; absent with no task open or before its first read lands. */
   board: EffectSchema.optionalKey(boardSchema),
-  /** What was said on the active plan's calls as last read; absent with no plan open. */
+  /** What was said on the active task's calls as last read; absent with no task open. */
   transcript: EffectSchema.optionalKey(tasksTranscriptSchema),
   /**
-   * Every code Luke showed on the active plan, oldest first, several of one
-   * file included: what the plan's work holds, read with the newest page,
+   * Every code Luke showed on the active task, oldest first, several of one
+   * file included: what the task's work holds, read with the newest page,
    * and each code a call shows since, by its call, so a call's code and
    * the record's copy of it stand once; absent with none, and cleared with
    * the activity. A call's end keeps them.
    */
   shownCode: EffectSchema.optionalKey(EffectSchema.Array(taskCodeShowingSchema)),
   /**
-   * The planning turns of the active plan's calls, oldest first: the newest
-   * page read from the service when the plan opens, each older page read as
+   * The brain turns of the active task's calls, oldest first: the newest
+   * page read from the service when the task opens, each older page read as
    * the Work tab scrolls back, and each turn a call tells since as last
    * told; absent before the first, and cleared with the activity. A call's
    * end keeps them.
    */
   work: EffectSchema.optionalKey(EffectSchema.Array(taskWorkTurnSchema)),
-  /** The turn the active plan's next older page of work is read before; absent where none stands or before the first read. */
+  /** The turn the active task's next older page of work is read before; absent where none stands or before the first read. */
   workEarlier: EffectSchema.optionalKey(EffectSchema.String),
   /**
-   * The active plan's planning conversation as an agent's transcript is
-   * read: the newest page read when the plan opens, each page the held read
+   * The active task's conversation as an agent's transcript is
+   * read: the newest page read when the task opens, each page the held read
    * hears since joined by message id, and each older page read as the Call
    * tab scrolls back, before the rest. Its cursor is where the held read goes
    * on from, its `earlier` the turn the next older page is read before, and
@@ -452,7 +455,7 @@ export const tasksViewSchema = EffectSchema.Struct({
   conversation: EffectSchema.optionalKey(codingAgentMessagesAnswerSchema),
   /**
    * The pages agents wrote for the active plan, each by its newest version,
-   * the most recently written first, as last read with the plan; absent with
+   * the most recently written first, as last read with the task; absent with
    * none, and cleared with the activity. Their HTML is never held here: the
    * frame that draws a page reads it alone (`brain.page`).
    */
@@ -462,9 +465,9 @@ export const tasksViewSchema = EffectSchema.Struct({
 export type TasksView = typeof tasksViewSchema.Type;
 
 /**
- * One page of a plan's planning conversation, as a window asks it: past a
+ * One page of a task's conversation, as a window asks it: past a
  * cursor, before a turn, or the newest where it names neither; or, naming
- * the call that started one, a planning worker's transcript under the plan,
+ * the call that started one, a brain worker's transcript under the task,
  * past a cursor, as an agent's worker tab reads it.
  */
 export const tasksMessagesParamsSchema = EffectSchema.Struct({
@@ -476,7 +479,7 @@ export const tasksMessagesParamsSchema = EffectSchema.Struct({
 
 export type TasksMessagesParams = typeof tasksMessagesParamsSchema.Type;
 
-/** The view before anything is asked: no plans read, none active. */
+/** The view before anything is asked: no tasks read, none active. */
 export const IDLE_TASKS_VIEW: TasksView = {
   tasks: [],
   listStatus: TASKS_READ.IDLE,
@@ -484,7 +487,7 @@ export const IDLE_TASKS_VIEW: TasksView = {
   document: { status: TASKS_READ.IDLE },
 };
 
-/** Starting a plan, as the window asks it: the name, and the repository it is about where one is chosen; the service keeps both. */
+/** Starting a task, as the window asks it: the name, and the repository it is about where one is chosen; the service keeps both. */
 export const tasksStartRequestSchema = taskCreateRequestSchema;
 
 export type TasksStartRequest = typeof tasksStartRequestSchema.Type;
@@ -496,7 +499,7 @@ export const tasksRepositoriesParamsSchema = EffectSchema.Struct({
 
 export type TasksRepositoriesParams = typeof tasksRepositoriesParamsSchema.Type;
 
-/** Renaming a plan, as the window asks it: the plan, and the name the service keeps. */
+/** Renaming a task, as the window asks it: the task, and the name the service keeps. */
 export const tasksRenameParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   ...taskRenameRequestSchema.fields,
@@ -504,7 +507,7 @@ export const tasksRenameParamsSchema = EffectSchema.Struct({
 
 export type TasksRenameParams = typeof tasksRenameParamsSchema.Type;
 
-/** Pinning a plan, or unpinning it, as the window asks it. */
+/** Pinning a task, or unpinning it, as the window asks it. */
 export const tasksPinParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   pinned: EffectSchema.Boolean,
@@ -519,7 +522,12 @@ export const tasksPinRepositoryParamsSchema = repositoryPinRequestSchema;
 
 export type TasksPinRepositoryParams = typeof tasksPinRepositoryParamsSchema.Type;
 
-/** Archiving a plan, or bringing it back, as the window asks it. */
+/** One change to the account's sidebar sections, as the window asks it; the service keeps them on the account. */
+export const tasksWriteSectionParamsSchema = taskSectionWriteSchema;
+
+export type TasksWriteSectionParams = typeof tasksWriteSectionParamsSchema.Type;
+
+/** Archiving a task, or bringing it back, as the window asks it. */
 export const tasksArchiveParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   archived: EffectSchema.Boolean,
@@ -527,7 +535,7 @@ export const tasksArchiveParamsSchema = EffectSchema.Struct({
 
 export type TasksArchiveParams = typeof tasksArchiveParamsSchema.Type;
 
-/** Giving a plan its repository, or taking it away: the plan, and the repository's full name or null for none. */
+/** Giving a task its repository, or taking it away: the task, and the repository's full name or null for none. */
 export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   repository: EffectSchema.NullOr(githubRepositoryFullNameSchema),
@@ -535,7 +543,7 @@ export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
 
 export type TasksSetRepositoryParams = typeof tasksSetRepositoryParamsSchema.Type;
 
-/** Moving a plan to another of the account's workspaces: the plan, and the workspace it moves to. */
+/** Moving a task to another of the account's workspaces: the task, and the workspace it moves to. */
 export const tasksMoveParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   workspaceId: workspaceIdSchema,
@@ -543,7 +551,7 @@ export const tasksMoveParamsSchema = EffectSchema.Struct({
 
 export type TasksMoveParams = typeof tasksMoveParamsSchema.Type;
 
-/** A plan's board as the panel asks it saved: the whole scene, and the number of Luke's drawing it holds. */
+/** A task's board as the panel asks it saved: the whole scene, and the number of Luke's drawing it holds. */
 export const tasksBoardSaveParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   ...boardSaveRequestSchema.fields,
@@ -551,15 +559,15 @@ export const tasksBoardSaveParamsSchema = EffectSchema.Struct({
 
 export type TasksBoardSaveParams = typeof tasksBoardSaveParamsSchema.Type;
 
-/** Why a plan call answered nothing a window can draw. */
+/** Why a task call answered nothing a window can draw. */
 export const TASK_CALL_FAILURE = {
   /** The call never reached an answer: no credential, the network, a refusal, a shape not read. */
   UNANSWERED: "unanswered",
-  /** The plan is not one the account holds: deleted, or never the caller's. */
+  /** The task is not one the account holds: deleted, or never the caller's. */
   NOT_FOUND: "not-found",
   /** The repository named is not one the Luke GitHub App reaches for the account. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** The plan is archived, so it takes no write until it is brought back. */
+  /** The task is archived, so it takes no write until it is brought back. */
   TASK_ARCHIVED: "plan-archived",
   /** The workspace's Linear could not be read for the issue a plan was to start from: none connected, its grant refused, or no such issue. */
   LINEAR_UNAVAILABLE: "linear-unavailable",
@@ -585,7 +593,7 @@ const START_CALL_FAILURES = [
 
 export type StartCallFailure = (typeof START_CALL_FAILURES)[number];
 
-/** Starting a plan, as the window hears it: the plan now active, or why none started. */
+/** Starting a task, as the window hears it: the task now active, or why none started. */
 export const tasksStartAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ planId: EffectSchema.String }),
   EffectSchema.Struct({ failure: EffectSchema.Literals(START_CALL_FAILURES) }),
@@ -606,7 +614,7 @@ export const tasksRepositoriesAnswerSchema = EffectSchema.Union([
 
 export type TasksRepositoriesAnswer = typeof tasksRepositoriesAnswerSchema.Type;
 
-/** A plan's repository changed, as the window hears it: the repository the plan now names, or why it is unchanged. */
+/** A task's repository changed, as the window hears it: the repository the task now names, or why it is unchanged. */
 export const tasksSetRepositoryAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ repository: EffectSchema.NullOr(EffectSchema.String) }),
   EffectSchema.Struct({ failure: repositoryCallFailureSchema }),
@@ -614,7 +622,7 @@ export const tasksSetRepositoryAnswerSchema = EffectSchema.Union([
 
 export type TasksSetRepositoryAnswer = typeof tasksSetRepositoryAnswerSchema.Type;
 
-/** A plan moved, as the window hears it: the workspace it now belongs to, or why it stands where it was. */
+/** A task moved, as the window hears it: the workspace it now belongs to, or why it stands where it was. */
 export const tasksMoveAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ workspaceId: EffectSchema.String }),
   EffectSchema.Struct({ failure: EffectSchema.Literals(Object.values(TASK_CALL_FAILURE)) }),
@@ -622,7 +630,7 @@ export const tasksMoveAnswerSchema = EffectSchema.Union([
 
 export type TasksMoveAnswer = typeof tasksMoveAnswerSchema.Type;
 
-/** The developer's edit of a plan's document, as the window asks it saved: the plan, and the edit as the service takes it. */
+/** The developer's edit of a task's document, as the window asks it saved: the task, and the edit as the service takes it. */
 export const tasksEditParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   edit: planEditRequestSchema,
@@ -630,7 +638,7 @@ export const tasksEditParamsSchema = EffectSchema.Struct({
 
 export type TasksEditParams = typeof tasksEditParamsSchema.Type;
 
-/** Why an edit saved nothing: the service did not answer, the plan is gone or archived, or the plan would be longer than a plan may be. */
+/** Why an edit saved nothing: the service did not answer, the task is gone or archived, or the plan would be longer than a plan may be. */
 const EDIT_FAILURES = [
   TASK_CALL_FAILURE.UNANSWERED,
   TASK_CALL_FAILURE.NOT_FOUND,
@@ -641,7 +649,7 @@ const EDIT_FAILURES = [
 export type TasksEditFailure = (typeof EDIT_FAILURES)[number];
 
 /**
- * An edit as the window hears it: saved, the plan arriving on the document
+ * An edit as the window hears it: saved, the task arriving on the document
  * as the service answered it; a conflict, with what the field holds now; or
  * why nothing was saved.
  */
@@ -653,7 +661,7 @@ export const tasksEditAnswerSchema = EffectSchema.Union([
 
 export type TasksEditAnswer = typeof tasksEditAnswerSchema.Type;
 
-/** A window of a file of a plan's repository, as the File tab asks the host for it: the plan, the path, and the window's first and last line. */
+/** A window of a file of a task's repository, as the File tab asks the host for it: the task, the path, and the window's first and last line. */
 export const tasksFileParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   ...taskFileRequestSchema.fields,
@@ -774,7 +782,7 @@ export const tasksIssueSchema = EffectSchema.NullOr(githubIssueSummarySchema);
 
 export type TasksIssue = typeof tasksIssueSchema.Type;
 
-/** A page of a plan's history, as the version history asks the host for it: the plan, and the revision the page is read before where it is an older page. */
+/** A page of a plan's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
 export const tasksRevisionsParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   before: EffectSchema.optionalKey(planRevisionSeqSchema),
@@ -790,7 +798,7 @@ export const tasksRevisionsAnswerSchema = EffectSchema.Union([
 
 export type TasksRevisionsAnswer = typeof tasksRevisionsAnswerSchema.Type;
 
-/** One revision of a plan, as the version history names it to read it or to restore it: the plan and the revision's number. */
+/** One revision of a plan, as the version history names it to read it or to restore it: the task and the revision's number. */
 export const tasksRevisionParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   seq: planRevisionSeqSchema,

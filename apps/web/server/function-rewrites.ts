@@ -127,8 +127,23 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1" },
   { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
   { src: "/api/agents/([^/]+)/pull-request", route: "agents/pull-request", query: "id=$1" },
+  {
+    src: "/api/agents/([^/]+)/pull-request/action",
+    route: "agents/pull-request-action",
+    query: "id=$1",
+  },
   { src: "/api/agents/([^/]+)/changes", route: "agents/changes", query: "id=$1" },
-  { src: "/api/agents/([^/]+)/overview", route: "agents/overview", query: "id=$1" },
+  {
+    src: "/api/agents/([^/]+)/overview/pull-request",
+    route: "agents/overview-pull-request",
+    query: "id=$1",
+  },
+  { src: "/api/agents/([^/]+)/overview/checks", route: "agents/overview-checks", query: "id=$1" },
+  {
+    src: "/api/agents/([^/]+)/overview/conversation",
+    route: "agents/overview-conversation",
+    query: "id=$1",
+  },
   { src: "/api/agents/([^/]+)/github-image", route: "agents/github-image", query: "id=$1" },
   { src: "/api/agents/([^/]+)/inbox", route: "agents/inbox", query: "id=$1" },
   {

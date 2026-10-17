@@ -33,14 +33,14 @@ import {
 /**
  * plan-agents.ts -- what each listed plan's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card, and the agents with no plan the list carries beside the plans.
  *
- * Four statements answer the whole list however many plans it holds: the
- * agents of every plan named with the pull request each last published,
+ * Four statements answer the whole list however many tasks it holds: the
+ * agents of every task named with the pull request each last published,
  * their newest turns, which of them hold a line awaiting its turn, and the
  * names of the members who started them. An agent's status and its starter
  * are read exactly as its tab's are (`coder-host/status.ts`), and a pull
  * request is the one its row keeps as GitHub last answered, so
- * nothing here asks GitHub. A plan with no agent carries nothing, so the
- * list stays as small as it was for every plan nobody has started an agent
+ * nothing here asks GitHub. A task with no agent carries nothing, so the
+ * list stays as small as it was for every task nobody has started an agent
  * on.
  */
 
@@ -102,9 +102,9 @@ const PULL_REQUEST_RANK = {
 } as const satisfies Record<TaskPullRequestLine["state"], number>;
 
 /**
- * One plan's agents in brief: those at work named first, then the rest,
+ * One task's agents in brief: those at work named first, then the rest,
  * newest started first within each; the pull requests each named once by
- * their page, since two agents on one branch share theirs and a plan whose
+ * their page, since two agents on one branch share theirs and a task whose
  * repository changed may hold two of one number, those still open first, then
  * merged, then closed, newest agent's first within each, so the few a row
  * names always hold the one its mark is drawn for; and the latest settled
@@ -139,7 +139,7 @@ function summaryOf(read: readonly ReadAgent[]): TaskAgentsSummary {
   };
 }
 
-/** The account's listed plans, each carrying its agents in brief, whichever member started each, where it has any; the plans' order and every other field as listed. */
+/** The account's listed tasks, each carrying its agents in brief, whichever member started each, where it has any; the tasks' order and every other field as listed. */
 export function withTaskAgents(
   userId: string,
   tasks: readonly TaskSummary[],
@@ -153,7 +153,7 @@ export function withTaskAgents(
       { includeArchived: true },
     );
     const conversationIds = held.map(({ agent }) => agent.conversationId);
-    // The agents were read through the plans' gate, and each conversation is its starter's, a teammate's as often as the account's.
+    // The agents were read through the tasks' gate, and each conversation is its starter's, a teammate's as often as the account's.
     const turns = yield* latestTurnsOfReached(conversationIds);
     const awaiting = yield* awaitingLinesOfReached(conversationIds);
     const names = yield* readAccountNames(held.map(({ agent }) => agent.userId));
@@ -161,7 +161,7 @@ export function withTaskAgents(
     const byTask = new Map<string, ReadAgent[]>();
     for (const agent of held) {
       const { conversationId, taskId } = agent.agent;
-      // An agent with no plan is no plan's to summarise.
+      // An agent with no task is no task's to summarise.
       if (taskId === null) continue;
       const line = agentLine(
         agent,

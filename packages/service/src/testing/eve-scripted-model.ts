@@ -21,28 +21,28 @@ import { DRAW_ON_BOARD_TOOL } from "../tasks/board-tool.js";
  * notetaker writes the document; told to look something up, it searches the
  * public web for it instead and answers with the first source the search
  * found, or says it found none; told to draw something, it draws it on the
- * plan's board as one labelled box and says so; told to research something,
+ * task's board as one labelled box and says so; told to research something,
  * it hands it to the worker through its delegate and says so, and the worker,
  * running on the same model, looks it up; told to read something, it runs
- * that command in the plan's repository and says what it read, or why it
+ * that command in the task's repository and says what it read, or why it
  * read nothing, in the tool's own words. It is selected only by the
  * fixture's own environment variable and a deployment never names it.
  */
 
 export const SCRIPTED_BRAIN_REPLY = "Who should be able to do that?";
-/** What a developer's words start with when they ask the scripted planner to research the rest. */
+/** What a developer's words start with when they ask the scripted brain to research the rest. */
 const SCRIPTED_LOOK_UP = "Look up: ";
 const SCRIPTED_RESEARCH_REPLY = "The first source I found:";
 const SCRIPTED_NO_SOURCE_REPLY = "I found no source for that, so it stays an open question.";
-/** What a developer's words start with when they ask the scripted planner to hand the rest to the worker. */
+/** What a developer's words start with when they ask the scripted brain to hand the rest to the worker. */
 export const SCRIPTED_DELEGATE = "Research: ";
 const SCRIPTED_DELEGATED_REPLY = "The worker is on it.";
-/** What a developer's words start with when they ask the scripted planner to draw the rest as one box. */
+/** What a developer's words start with when they ask the scripted brain to draw the rest as one box. */
 const SCRIPTED_DRAW = "Draw: ";
-/** The id the scripted planner gives the box it draws. */
+/** The id the scripted brain gives the box it draws. */
 const SCRIPTED_DRAWN_ID = "sketch";
 const SCRIPTED_DRAWN_REPLY = "It's on the board.";
-/** What a developer's words start with when they ask the scripted planner to run the rest in the repository. */
+/** What a developer's words start with when they ask the scripted brain to run the rest in the repository. */
 export const SCRIPTED_READ = "Read: ";
 /** The reply to a command that ran: its stdout follows. */
 export const SCRIPTED_READ_REPLY = "The repository says:";

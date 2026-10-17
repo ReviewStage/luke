@@ -11,7 +11,7 @@
  * item again. An Inbox whose
  * list holds nothing but the item has no way back, there being no list worth
  * going back to. The line is drawn by the Inbox's own width rather than the
- * window's, because the window's Inbox and a plan's own Inbox tab stand in
+ * window's, because the window's Inbox and a task's own Inbox tab stand in
  * columns of their own, beside a sidebar, a side panel, or neither. An Inbox
  * narrowed keeps the item it shows, as Material's list-detail layout does,
  * and one that splits again forgets that the list was asked for, so it

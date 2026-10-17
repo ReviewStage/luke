@@ -79,7 +79,7 @@
 
   .luke-detail-page-heading {
     flex: 1 1 240px;
-    min-width: min(100%, 120px);
+    min-width: min(100%, 240px);
     overflow-wrap: anywhere;
   }
 

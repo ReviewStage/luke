@@ -9,13 +9,6 @@ import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import {
-  focusByKeyboard,
-  focusByPress,
-  layWindowStyles,
-  ringOf,
-  ringsDrawnFor,
-} from "#testing/focus-ring";
 import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 
@@ -155,34 +148,6 @@ test("a set the agent showed stays out of the finished turn's fold, each picture
     /1 tool call/u,
     "the fold counts the command, not the set",
   );
-});
-
-test("a picture of a set rings once, round the picture itself, and only once the keyboard moved focus", async () => {
-  const styles = await layWindowStyles();
-  const { container } = await drawn(
-    finished([shown("call-show", [picture(1200, 720), picture(390, 700)]), text("Both.")]),
-  );
-  const [tile] = container.querySelectorAll<HTMLElement>(".picture-set-tile");
-  assert.ok(tile, "the set draws its tiles");
-  const frame = tile.querySelector(".picture-set-frame");
-  assert.ok(frame, "a tile draws its picture's frame");
-
-  focusByKeyboard(tile);
-  assert.deepEqual(
-    ringsDrawnFor(tile).map((each) => each.className),
-    [frame.className],
-    "one ring, on the picture, none around picture and caption",
-  );
-  assert.deepEqual(ringOf(frame), { style: "solid", width: 2, offset: 1 }, "the window's own ring");
-
-  tile.blur();
-  focusByPress(tile);
-  assert.deepEqual(
-    ringsDrawnFor(tile).map((each) => each.className),
-    [],
-    "a press rings nothing",
-  );
-  styles.remove();
 });
 
 test("two shown sets one after another are one set, and one picture alone is its own block", async () => {

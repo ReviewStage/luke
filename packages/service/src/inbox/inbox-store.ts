@@ -13,7 +13,7 @@ import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxAttachment } from "@luke/database/schemas/inbox-attachment";
-import { task } from "@luke/database/schemas/plan";
+import { task } from "@luke/database/schemas/task";
 import type {
   AccountInboxAutomation,
   AccountInboxEntry,
@@ -41,12 +41,12 @@ import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
 /**
- * inbox-store.ts -- the developer's inbox: the items a plan's coding agents post, close, and read, and the developer's answers to them.
+ * inbox-store.ts -- the developer's inbox: the items a task's coding agents post, close, and read, and the developer's answers to them.
  *
- * Every statement names the account beside the plan, the agent, or the
+ * Every statement names the account beside the task, the agent, or the
  * item. An item is its agent's, written under the member who started the
- * agent, and the plan's inbox is the workspace's: every member of the
- * plan's workspace reads and answers it, gated on that membership
+ * agent, and the task's inbox is the workspace's: every member of the
+ * task's workspace reads and answers it, gated on that membership
  * (`workspace-store.ts`), so an item of a workspace the account is not in
  * reads and writes exactly as one that names nothing. An agent posts an item under a key of its own, which is
  * one row per agent and key: posting under a key it used before writes
@@ -67,8 +67,8 @@ import { SqlClient, SqlSchema } from "effect/sql";
  * while the item is open, so an answer to an item the agent has since
  * changed is refused rather than taken for what it now asks; an answer sent
  * again under the key it was taken by finds it taken. What waits across
- * the account, every open item on a plan it has not archived, is read on
- * its own index, so a desktop can hold that read whichever plan is open.
+ * the account, every open item on a task it has not archived, is read on
+ * its own index, so a desktop can hold that read whichever task is open.
  * Every function is an effect over the ambient `SqlClient` and names no
  * database of its own.
  */
@@ -78,7 +78,7 @@ type InboxStoreFailure = QueryError | Schema.SchemaError;
 /** What an inbox store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type InboxStoreEffect<A> = Effect.Effect<A, InboxStoreFailure, DatabaseServices>;
 
-/** The agent an item belongs to, as every write of the agent's names it: the plan it works on, or none for an agent an automation started with no plan. */
+/** The agent an item belongs to, as every write of the agent's names it: the task it works on, or none for an agent an automation started with no task. */
 export interface InboxAgent {
   readonly userId: string;
   readonly taskId: string | null;
@@ -127,6 +127,10 @@ const INBOX_COLUMNS = {
   response: inboxItem.response,
   needsReply: inboxItem.needsReply,
   status: inboxItem.status,
+  startedBy: inboxItem.userId,
+  startedByName: sql<
+    string | null
+  >`(select "name" from ${user} where ${user.id} = ${inboxItem.userId})`,
   answer: inboxItem.answer,
   answerKey: inboxItem.answerKey,
   answeredBy: inboxItem.answeredBy,
@@ -150,6 +154,8 @@ const InboxRowSchema = Schema.Struct({
   response: inboxResponseSchema,
   needsReply: Schema.Boolean,
   status: Schema.Literals(Object.values(INBOX_STATUS)),
+  startedBy: Schema.String,
+  startedByName: Schema.NullOr(Schema.String),
   answer: Schema.NullOr(inboxReplySchema),
   answerKey: Schema.NullOr(Schema.String),
   answeredBy: Schema.NullOr(Schema.String),
@@ -175,6 +181,9 @@ function storedItem(row: InboxRow): StoredInboxItem {
       response: row.response,
       needsReply: row.needsReply,
       status: row.status,
+      ...(row.startedByName === null
+        ? undefined
+        : { startedBy: { userId: row.startedBy, name: row.startedByName } }),
       ...(row.answer === null ? undefined : { answer: row.answer }),
       ...(row.answeredBy === null || row.answeredByName === null
         ? undefined
@@ -189,10 +198,10 @@ function storedItem(row: InboxRow): StoredInboxItem {
 
 const AgentKeySchema = Schema.Struct({ userId: Schema.String, agentId: Schema.String });
 
-/** An item row's workspace: its own, or its plan's on a row the backfill has not reached yet. */
+/** An item row's workspace: its own, or its task's on a row the backfill has not reached yet. */
 const ITEM_WORKSPACE = sql<string>`coalesce(${inboxItem.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${inboxItem.taskId}))`;
 
-/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no plan as much as one on a plan. */
+/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no task as much as one on a task. */
 function itemReachableBy(userId: string): SQL {
   return workspaceReachableBy(userId, ITEM_WORKSPACE);
 }
@@ -284,7 +293,7 @@ const deleteOtherAttachments = SqlSchema.void({
     ),
 });
 
-/** The attachment, where it is the item's and the account reaches the item's plan: its type and its bytes. */
+/** The attachment, where it is the item's and the account reaches the item's task: its type and its bytes. */
 const findAttachment = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -390,7 +399,7 @@ const closeItem = SqlSchema.findOneOption({
     ),
 });
 
-/** Where a read looks: one plan's items, any member's agents' alike; one agent's own, under the member who started it; or one agent's, as any member of its workspace reads them. */
+/** Where a read looks: one task's items, any member's agents' alike; one agent's own, under the member who started it; or one agent's, as any member of its workspace reads them. */
 const INBOX_SCOPE = {
   TASK: "plan",
   AGENT: "agent",
@@ -405,7 +414,7 @@ const ScopeSchema = Schema.Struct({
 
 type InboxScope = typeof ScopeSchema.Type;
 
-/** The rows a scope names: the plan's or the agent's where the account is a member of their workspace, or the agent's under the account that started it. */
+/** The rows a scope names: the task's or the agent's where the account is a member of their workspace, or the agent's under the account that started it. */
 function inScope(scope: InboxScope) {
   switch (scope.scope) {
     case INBOX_SCOPE.TASK:
@@ -492,7 +501,7 @@ const findSettledStamps = SqlSchema.findAll({
 });
 
 /**
- * The open items on the plans of the account's workspaces it has not
+ * The open items on the tasks of the account's workspaces it has not
  * archived, whichever member's agent posted each: the rows the account's
  * read of what waits names.
  */
@@ -504,7 +513,7 @@ function accountWaiting(userId: string) {
   );
 }
 
-/** The open items of agents with no plan in the account's workspaces, whichever member's agent posted each: what the account's read names beside the plans' items. */
+/** The open items of agents with no task in the account's workspaces, whichever member's agent posted each: what the account's read names beside the tasks' items. */
 function tasklessWaiting(userId: string) {
   return and(
     isNull(inboxItem.taskId),
@@ -557,7 +566,7 @@ const findWaitingItems = SqlSchema.findAll({
     ),
 });
 
-/** One open item of an agent with no plan as the account's read carries it, with its automation and repository where a plan's item names its plan. */
+/** One open item of an agent with no task as the account's read carries it, with its automation and repository where a task's item names its task. */
 const TasklessRowSchema = Schema.Struct({
   id: Schema.String,
   agentId: Schema.String,
@@ -609,7 +618,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
     ),
 });
 
-/** Where every item the account's read names stands, a plan's or an agent's with no plan. Note that the plan is joined on the left, because an item with no plan has none to join. */
+/** Where every item the account's read names stands, a task's or an agent's with no task. Note that the task is joined on the left, because an item with no task has none to join. */
 const findWaitingStamps = SqlSchema.findAll({
   Request: AccountRequestSchema,
   Result: StampRowSchema,
@@ -624,19 +633,19 @@ const findWaitingStamps = SqlSchema.findAll({
     ),
 });
 
-/** One plan holding items as the account's read lists it: how many, and when the latest changed. */
+/** One task holding items as the account's read lists it: how many, and when the latest changed. */
 const TaskItemsRowSchema = Schema.Struct({
   taskId: Schema.String,
   items: Schema.Number,
   updatedAt: InstantColumnSchema,
 });
 
-/** When a plan's latest item changed, which orders the plans holding items. */
+/** When a task's latest item changed, which orders the tasks holding items. */
 const LATEST_ITEM = max(inboxItem.updatedAt);
 
 /**
- * Every plan of the account's workspaces it has not archived that holds an
- * item, open or settled, whichever member's agent posted it, the plan whose
+ * Every task of the account's workspaces it has not archived that holds an
+ * item, open or settled, whichever member's agent posted it, the task whose
  * item changed latest first.
  */
 const findTasksWithItems = SqlSchema.findAll({
@@ -654,7 +663,7 @@ const findTasksWithItems = SqlSchema.findAll({
     ),
 });
 
-/** One automation holding items of its runs' agents with no plan, as the account's read lists it; null for the agents no standing automation names. */
+/** One automation holding items of its runs' agents with no task, as the account's read lists it; null for the agents no standing automation names. */
 const AutomationItemsRowSchema = Schema.Struct({
   automationId: Schema.NullOr(Schema.String),
   items: Schema.Number,
@@ -662,9 +671,9 @@ const AutomationItemsRowSchema = Schema.Struct({
 });
 
 /**
- * Every automation whose runs' agents with no plan hold an item in the
+ * Every automation whose runs' agents with no task hold an item in the
  * account's workspaces, open or settled, whichever member's agent posted
- * it, the automation whose item changed latest first, as the plans are
+ * it, the automation whose item changed latest first, as the tasks are
  * listed; one the account may not read is listed as none, beside the
  * agents no standing automation names.
  */
@@ -852,7 +861,7 @@ export function agentInboxItems(
 }
 
 /**
- * The plan's inbox: every item still open, then the latest settled ones as
+ * The task's inbox: every item still open, then the latest settled ones as
  * many as a read carries. Note that the open items are read apart from the
  * bound, because one left unanswered while many others changed must still
  * wait where the developer looks.
@@ -864,7 +873,7 @@ export function taskInboxItems(
   return scopeItems({ userId, scope: INBOX_SCOPE.TASK, id: taskId }, INBOX_BOUNDS.MAX_ITEMS_READ);
 }
 
-/** One agent's items as any member of its workspace reads them, an agent with no plan as much as one on a plan: every open one, then the latest settled. */
+/** One agent's items as any member of its workspace reads them, an agent with no task as much as one on a task: every open one, then the latest settled. */
 export function memberAgentInboxItems(
   userId: string,
   agentId: string,
@@ -883,7 +892,7 @@ export function memberAgentInboxStamps(
   return scopeStamps({ userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId });
 }
 
-/** Where each of the plan's items stands, the same items `planInboxItems` reads and none of their words: what a held read compares between looks. */
+/** Where each of the task's items stands, the same items `planInboxItems` reads and none of their words: what a held read compares between looks. */
 export function taskInboxStamps(
   userId: string,
   taskId: string,
@@ -977,8 +986,8 @@ export function answerInboxItem(
 type AccountWaitingRow = AccountInboxEntry & Pick<InboxStamp, "status">;
 
 /**
- * Every item that waits on the developer across the account's plans, the
- * latest changed first: open, and on a plan the account has not archived.
+ * Every item that waits on the developer across the account's tasks, the
+ * latest changed first: open, and on a task the account has not archived.
  * Note that none is left out for being old, because one left unanswered
  * while many others changed must still be counted; the open bound per
  * agent keeps these few.
@@ -996,13 +1005,13 @@ export function accountWaitingItems(
   );
 }
 
-/** One open item of an agent with no plan as the account's read carries it, and where it stands. */
+/** One open item of an agent with no task as the account's read carries it, and where it stands. */
 type AccountTasklessRow = AccountTasklessEntry & Pick<InboxStamp, "status">;
 
 /**
- * Every item that waits on the developer from an agent with no plan in the
+ * Every item that waits on the developer from an agent with no task in the
  * account's workspaces, the latest changed first, with the automation and
- * repository that stand in a plan's place; none is left out for being old,
+ * repository that stand in a task's place; none is left out for being old,
  * as `accountWaitingItems` leaves none out.
  */
 export function accountTasklessItems(
@@ -1026,9 +1035,9 @@ export function accountWaitingStamps(userId: string): InboxStoreEffect<readonly 
 }
 
 /**
- * Every plan the account has not archived that holds an inbox item,
+ * Every task the account has not archived that holds an inbox item,
  * waiting or settled, with how many and when the latest changed, the
- * plan whose item changed latest first: what the desktop's Inbox lists.
+ * task whose item changed latest first: what the desktop's Inbox lists.
  */
 export function accountInboxTasks(userId: string): InboxStoreEffect<readonly AccountInboxTask[]> {
   return Effect.map(findTasksWithItems({ userId }), (rows) =>
@@ -1040,7 +1049,7 @@ export function accountInboxTasks(userId: string): InboxStoreEffect<readonly Acc
   );
 }
 
-/** Every automation whose runs' agents with no plan hold an item, waiting or settled, listed as `accountInboxPlans` lists the plans. */
+/** Every automation whose runs' agents with no task hold an item, waiting or settled, listed as `accountInboxPlans` lists the tasks. */
 export function accountInboxAutomations(
   userId: string,
 ): InboxStoreEffect<readonly AccountInboxAutomation[]> {

@@ -3,7 +3,7 @@
  *
  * Every place that says an agent is working draws this mark through the one
  * seat that says so (`state-glyph.tsx`'s `StateGlyph`): an agent's or a
- * subagent's glyph, a sidebar plan's row, and a call's row in a transcript. Its cells and the gap between them are whole
+ * subagent's glyph, a sidebar task's row, and a call's row in a transcript. Its cells and the gap between them are whole
  * pixels, eight cells lapped round a 3×3 grid. Each cell steps to the next
  * on one beat, so the motion is stepped frames of `transform` alone and
  * never lays anything out. Reduced motion and a capture run hold it on

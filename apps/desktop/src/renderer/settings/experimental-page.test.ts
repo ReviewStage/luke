@@ -112,7 +112,7 @@ test("each experiment is a switch, on as the account chose, that writes the choi
   assert.ok(factory, "Factory has a switch");
   assert.equal(factory.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
-  assert.ok(page.textContent?.startsWith("Chat"));
+  assert.ok(page.textContent?.startsWith("Sections"));
 
   await act(async () => factory.click());
   assert.deepEqual(sent, [
@@ -130,6 +130,8 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     for (const button of feedback) button.click();
   });
   assert.deepEqual(feedbackAbout, [
+    EXPERIMENT.SECTIONS,
+    EXPERIMENT.ISSUES,
     EXPERIMENT.CHAT,
     EXPERIMENT.VIDEO_CALLS,
     EXPERIMENT.AUTOMATIONS,
@@ -159,13 +161,20 @@ test("with Video calls on, its avatar is chosen in its card beneath its switch, 
     view: rowsInput(experiments),
   });
 
-  const chip = page.querySelector<HTMLButtonElement>('[aria-label="Avatar: Default"]');
-  assert.ok(chip, "the avatar is a choice, the deployment's own at first");
+  const chip = page.querySelector<HTMLButtonElement>('[aria-label="Avatar: Atlas"]');
+  assert.ok(chip, "the avatar is a choice, Atlas at first");
   // Each experiment is a card of its own, and the avatar stands in Video calls' card, under its switch.
   const cards = [...page.querySelectorAll(".settings-card")].map((card) =>
     [...card.querySelectorAll(".settings-row strong")].map((label) => label.textContent),
   );
-  assert.deepEqual(cards, [["Chat"], ["Video calls", "Avatar"], ["Automations"], ["Factory"]]);
+  assert.deepEqual(cards, [
+    ["Sections"],
+    ["Issues"],
+    ["Chat"],
+    ["Video calls", "Avatar"],
+    ["Automations"],
+    ["Factory"],
+  ]);
 
   await act(async () => chip.click());
   const options = [...document.querySelectorAll('[role="option"]')];
@@ -177,7 +186,6 @@ test("with Video calls on, its avatar is chosen in its card beneath its switch, 
       .join(""),
   );
   assert.deepEqual(names, [
-    "Default",
     "Atlas",
     "Caspian",
     "Cassidy",
@@ -187,12 +195,10 @@ test("with Video calls on, its avatar is chosen in its card beneath its switch, 
     "Orion",
     "Selene",
   ]);
-  // Each stock avatar shows its face from Keyframe's storage; the deployment's default, which has none, its letter.
+  // Each avatar shows its face from Keyframe's storage.
   const pictures = options.map((option) => option.querySelector("img")?.getAttribute("src"));
-  assert.equal(pictures[0], undefined);
-  assert.equal(options[0]?.querySelector(".actor-face")?.textContent, "D");
-  assert.equal(pictures.slice(1).length, 8);
-  for (const picture of pictures.slice(1)) {
+  assert.equal(pictures.length, 8);
+  for (const picture of pictures) {
     assert.ok(picture?.startsWith(`${VIDEO_AVATAR_COVER_ORIGIN}/personas/`), String(picture));
   }
   const celia = options[names.indexOf("Celia")];

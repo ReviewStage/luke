@@ -5,6 +5,7 @@ import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
+import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
@@ -89,7 +90,7 @@ const ISSUE = {
 };
 const ISSUE_NONE = 8;
 
-/** The plan the host has open, as the fixture's main process reads it. */
+/** The task the host has open, as the fixture's main process reads it. */
 interface OpenTask {
   activeTaskId: string | undefined;
 }
@@ -98,7 +99,7 @@ interface OpenTask {
 interface StartScript {
   answer: TasksStartAnswer;
   voiceReady: boolean;
-  /** Whether a call is already in progress, about whichever plan. */
+  /** Whether a call is already in progress, about whichever task. */
   callStanding: boolean;
 }
 
@@ -171,6 +172,11 @@ function fixture() {
       tasksPinRepository: (params) =>
         Effect.sync(() => {
           asked.push(`pin-repository:${params.repository}:${params.pinned}`);
+          return true;
+        }),
+      tasksWriteSection: (params) =>
+        Effect.sync(() => {
+          asked.push(`section:${params.kind}`);
           return true;
         }),
       tasksArchive: (params) =>
@@ -391,7 +397,7 @@ function fixture() {
     callStanding: () => start.callStanding,
     colourCode: highlightSnippet,
   });
-  // SAFETY: only the planning rows are under test; the router dispatches on
+  // SAFETY: only the task rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
   return { router, asked, talked, opened, view, start, page, host };
@@ -500,9 +506,20 @@ it.effect("the voice window does not reach the plans", () =>
       status: ACT_OUTCOME_STATUS.REFUSED,
       reason: ACT[ACT_KIND.TASKS_SELECT].refusal,
     });
+    const sectioned = yield* f.router.performAct(
+      {
+        kind: ACT_KIND.TASKS_WRITE_SECTION,
+        payload: { kind: TASK_SECTION_WRITE.PLACE, taskId: TASK_ID, sectionId: null },
+      },
+      VOICE,
+    );
     assert.deepEqual(saved, {
       status: ACT_OUTCOME_STATUS.REFUSED,
       reason: ACT[ACT_KIND.TASKS_BOARD_SAVE].refusal,
+    });
+    assert.deepEqual(sectioned, {
+      status: ACT_OUTCOME_STATUS.REFUSED,
+      reason: ACT[ACT_KIND.TASKS_WRITE_SECTION].refusal,
     });
     assert.deepEqual(f.asked, []);
   }),

@@ -2,6 +2,7 @@ import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { inPinOrder, type PinPlace, pinPositionsForMove } from "@luke/features/pin-order";
+import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import {
@@ -37,9 +38,23 @@ import {
   taskRowsCreatedBy,
   taskRowTime,
 } from "@luke/ui/task-list-model";
+import {
+  placeWrites,
+  sectionEntries,
+  sectionOrder,
+  workspaceSections,
+} from "@luke/ui/task-sections-model";
 import { repositoryPageUrl, TASKS_PAGE } from "@luke/ui/tasks-model";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import { FactoryIcon, HouseIcon, InboxIcon, MessagesSquareIcon, ZapIcon } from "lucide-react";
+import {
+  FactoryIcon,
+  FolderPlusIcon,
+  HouseIcon,
+  InboxIcon,
+  ListTodoIcon,
+  MessagesSquareIcon,
+  ZapIcon,
+} from "lucide-react";
 import { useRef } from "react";
 import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
@@ -73,6 +88,12 @@ import { SidebarFoot } from "./sidebar-foot";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
 import {
+  type DrawnSection,
+  SidebarSections,
+  TASKS_DROP_ZONE,
+  useSectionDialogs,
+} from "./sidebar-sections";
+import {
   SidebarSectionHead,
   TaskViewOptions,
   useTaskViewCommands,
@@ -90,17 +111,17 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
  */
 const WORK_RESERVE = 360;
 
-/** What the header over the plans with no repository says. */
+/** What the header over the tasks with no repository says. */
 const NO_REPOSITORY = "No repository";
 
-/** The widths of the plans' names while the list is first read, uneven as names are. */
+/** The widths of the tasks' names while the list is first read, uneven as names are. */
 const LIST_SKELETON = ["72%", "54%", "64%", "46%"] as const;
 
 /**
- * The edge of the window's left column, the plans' sidebar or Settings' page
+ * The edge of the window's left column, the tasks' sidebar or Settings' page
  * list, which share one width: resizing either resizes both. `onCollapse`
  * folds the column away past its least width; without it, as in Settings,
- * where there is no plans' sidebar to fold, the drag holds at the bound.
+ * where there is no tasks' sidebar to fold, the drag holds at the bound.
  */
 export function useSidebarEdge(
   sidebar: SidebarCollapse,
@@ -163,19 +184,19 @@ export function HistoryButtons({ history }: { history: NavigationHistory }): Rea
   );
 }
 
-/** What every row of the plans is drawn with, whichever section it stands in. */
+/** What every row of the tasks is drawn with, whichever section it stands in. */
 interface RowContext {
   readonly tasks: TasksControl;
-  /** Whether a plan is the one open, which a fold still leaves standing. */
+  /** Whether a task is the one open, which a fold still leaves standing. */
   readonly current: (taskId: string) => boolean;
-  /** Whether a row is the one the sidebar marks: the pin the open plan was opened from, else the open plan's own row. */
+  /** Whether a row is the one the sidebar marks: the pin the open task was opened from, else the open task's own row. */
   readonly marked: (planId: string, pin: PinnedTab | undefined) => boolean;
   readonly onOpen: (planId: string) => void;
   /** Whether a row is the one standing: the open plan's, or the agent's whose page stands. */
   readonly currentRow: (row: TaskRow) => boolean;
   /** Opens an agent with no plan on its own page. */
   readonly onOpenAgent: (agentId: string) => void;
-  /** Whether a plan was saved since the developer last looked at it on this Mac. */
+  /** Whether a task was saved since the developer last looked at it on this Mac. */
   readonly unread: (plan: TaskSummary) => boolean;
   /** Whether an agent's turn ended while the developer was not looking at it. */
   readonly unseenAgent: (agentId: string) => boolean;
@@ -189,6 +210,8 @@ interface RowContext {
   readonly faces: boolean;
   /** Whether the sidebar is in sight: folded away, nothing it opened stands over the window. */
   readonly inSight: boolean;
+  /** Hears a plan's row let go over a section, or over Tasks, while the account keeps sections; none while it does not. */
+  readonly dropOut: ((taskId: string, zone: string, at: number) => void) | undefined;
 }
 
 /**
@@ -208,8 +231,19 @@ function TaskRows({
   repository?: (row: TaskRow) => string | undefined;
   face?: boolean;
 }): React.JSX.Element {
+  // Note that the rows keep the view's order, so a row is dragged only out of them, into a section.
+  const { dropOut } = context;
+  const drag = useRowDrag(undefined, {
+    onDropOut:
+      dropOut === undefined
+        ? undefined
+        : (from, zone, at) => {
+            const row = rows[from];
+            if (row?.kind === TASK_ROW.TASK) dropOut(row.plan.id, zone, at);
+          },
+  });
   return (
-    <ul className="sidebar-tasks">
+    <ul className="sidebar-tasks" onPointerDown={drag}>
       {rows.map((row) =>
         row.kind === TASK_ROW.TASK ? (
           <SidebarTask
@@ -451,9 +485,9 @@ function PinnedSection({
 /**
  * A repository's actions, offered alike from its header's ⋯ and from a
  * right-click on the header: Pin holds the group above the rest on the
- * account, Archive plans puts every plan under the header away, and Open on
+ * account, Archive tasks puts every task under the header away, and Open on
  * GitHub opens the repository's page, under GitHub's mark rather than the
- * owner's picture, since it is about GitHub. The plans with no repository
+ * owner's picture, since it is about GitHub. The tasks with no repository
  * have no pin, since they always stand last, and no page to open. A group of
  * archived plans offers no Archive, since its plans are already away, so the
  * plans with no repository offer nothing there.
@@ -492,23 +526,23 @@ function repositoryActionGroups(
   return [[pin, ...archive], [github]];
 }
 
-/** Pinned holds tabs as well as plans, so its count is read as pins. */
+/** Pinned holds tabs as well as tasks, so its count is read as pins. */
 const PIN_NOUN: CountNoun = { one: "pin", many: "pins" };
 
 /**
- * One repository's plans under a header in the headings' voice, which folds
+ * One repository's tasks under a header in the headings' voice, which folds
  * and unfolds them, the fold kept across launches. The header is a row like
- * a plan's, with its hover, led by the owner's picture, which gives way to
+ * a task's, with its hover, led by the owner's picture, which gives way to
  * the fold's chevron while the header is hovered or reached from the
  * keyboard, pointing down while the group is open and right while it is
  * folded, the way Codex and Cursor draw a project. Its actions stand at its end while it is hovered or holds
  * focus: a ⋯ that drops the repository's menu, which a right-click anywhere
- * on the header opens too, and a + that starts a new plan with the
+ * on the header opens too, and a + that starts a new task with the
  * repository already chosen. Both stand beside the fold rather than inside
- * it, so pressing either folds nothing. Folded, the header counts its plans
- * at its end while hovered or reached from the keyboard, and the open plan
- * still stands under it, so the plan being worked on never leaves the list.
- * The plans with no repository stand under "No repository", with nothing to
+ * it, so pressing either folds nothing. Folded, the header counts its tasks
+ * at its end while hovered or reached from the keyboard, and the open task
+ * still stands under it, so the task being worked on never leaves the list.
+ * The tasks with no repository stand under "No repository", with nothing to
  * preset and no page to open.
  */
 function RepositorySection({
@@ -764,7 +798,7 @@ function TaskGroups({
 }
 
 /**
- * The plans while the list is first read: a plan row's room and its name's
+ * The tasks while the list is first read: a task row's room and its name's
  * type for each block, one line as a row's name is, so the rows land where
  * the blocks stood. Nothing stands for the repository headers, whose number
  * nobody knows yet.
@@ -783,8 +817,8 @@ function ListSkeleton(): React.JSX.Element {
 
 /**
  * How many items wait on the developer: those of the listed workspace's
- * plans, the sum of the Inbox's row counts, and every one from an agent
- * with no plan, which names no workspace to be counted in.
+ * tasks, the sum of the Inbox's row counts, and every one from an agent
+ * with no task, which names no workspace to be counted in.
  */
 function waitingItems(tasks: TasksControl): number {
   return tasks.listed.inbox.reduce(
@@ -827,9 +861,9 @@ function SidebarHomeRow({
 /**
  * The Inbox's row, last of the rows heading the list and drawn as they are:
  * the tray, its name, and how many items wait on the developer across every
- * plan at its end, the sum of the counts the Inbox's rows show, muted in
+ * task at its end, the sum of the counts the Inbox's rows show, muted in
  * even figures as a group's count is, and nothing at none. Its chord takes the count's place while the row is hovered or
- * reached from the keyboard, as New plan's and Search's show theirs. A press
+ * reached from the keyboard, as New task's and Search's show theirs. A press
  * opens the window's Inbox (`desktop-inbox.tsx`), and the row is the place
  * shown while it stands.
  */
@@ -967,6 +1001,36 @@ function SidebarFactoryRow({
 }
 
 /**
+ * The Issues page's row, after the Automations page's and drawn as it is:
+ * its glyph, its name, and its chord. A press opens the window's Issues page
+ * (`issues-page.tsx`), and the row is the place shown while it stands.
+ */
+function SidebarIssuesRow({
+  current,
+  disabled,
+  onOpen,
+}: {
+  current: boolean;
+  disabled: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="sidebar-search sidebar-issues"
+      aria-current={current ? "page" : undefined}
+      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.ISSUES)}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      <ListTodoIcon />
+      Issues
+      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.ISSUES].chord} className="row-shortcut" />
+    </button>
+  );
+}
+
+/**
  * The Automations page's row, after Factory's and drawn as it is: the
  * zap, its name, and its chord. A press opens the window's Automations page
  * (`automations-page.tsx`), and the row is the place shown while it stands.
@@ -1003,6 +1067,57 @@ function SidebarAutomationsRow({
       ) : null}
       <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.AUTOMATIONS].chord} className="row-shortcut" />
     </button>
+  );
+}
+
+/** The listed workspace's sections as the sidebar draws them, and the tasks standing in any of them, which Tasks leaves out. */
+interface SectionedTasks {
+  readonly sections: readonly DrawnSection[];
+  readonly taskIds: ReadonlySet<string>;
+}
+
+/**
+ * The account's sections in the workspace, each with the tasks of `free`,
+ * the listed tasks no pin holds, it keeps, in its order. A task in a
+ * section that stands elsewhere, pinned or archived, is no row of it,
+ * and comes back to it once it stands free again. None while the account
+ * keeps no sections here.
+ */
+function sectionedTasks(
+  tasks: TasksControl,
+  workspaceId: string | undefined,
+  free: readonly TaskSummary[],
+): SectionedTasks {
+  if (workspaceId === undefined) return { sections: [], taskIds: new Set() };
+  const state = tasks.taskSections;
+  const byId = new Map(free.map((plan) => [plan.id, plan]));
+  const sections = workspaceSections(state, workspaceId).map((section): DrawnSection => {
+    const entries = sectionOrder(state, section.id).filter((entry) => byId.has(entry.taskId));
+    const held = entries.flatMap((entry) => byId.get(entry.taskId) ?? []);
+    return { section, entries, tasks: held };
+  });
+  const standing = new Set(sections.map((drawn) => drawn.section.id));
+  const taskIds = new Set(
+    [...sectionEntries(state).values()]
+      .filter((entry) => standing.has(entry.sectionId) && byId.has(entry.taskId))
+      .map((entry) => entry.taskId),
+  );
+  return { sections, taskIds };
+}
+
+/** New section, at the head of Tasks while the account keeps sections: it opens the section dialog in the listed workspace. */
+function NewSectionButton({ onNew }: { onNew: () => void }): React.JSX.Element {
+  return (
+    <Tooltip label="New section">
+      <button
+        type="button"
+        className="icon-button sidebar-view-options"
+        aria-label="New section"
+        onClick={onNew}
+      >
+        <FolderPlusIcon className="icon-button-glyph" />
+      </button>
+    </Tooltip>
   );
 }
 
@@ -1055,14 +1170,14 @@ function NewTaskButton({
  * The window's left column: at its head the workspace chosen, by its tile
  * and name and who shares it, with the menu that chooses another
  * (`workspace-switcher.tsx`), or Luke while no workspace is read; the way to
- * a new plan, Search, which opens the command palette, every plan of the
+ * a new task, Search, which opens the command palette, every task of the
  * workspace chosen, and the account's
  * row, whose menu and gear lead to Settings and the rest. Home's row, the
  * Inbox's, and Factory's follow Search above the rule: Home's goes to the
  * home page, the Inbox's counts what waits on the developer and opens the
  * window's Inbox, and Factory's, while its experiment is on, opens the
  * window's Factory, and the Automations page's likewise opens it; Chat's, where
- * a chat is read, counts what waits on the developer in Chat and opens it. The pinned plans, and the side panel tabs
+ * a chat is read, counts what waits on the developer in Chat and opens it. The pinned tasks, and the side panel tabs
  * pinned to the sidebar, stand in the Pinned section while any are pinned,
  * newest pinned first, under a head that folds it, every row one line whose
  * hover card says the rest; whatever the list's view says, they stand as
@@ -1075,9 +1190,9 @@ function NewTaskButton({
  * chosen, until its chip's × or another workspace turns it back.
  * It is where the developer moves between things; what they work on is the
  * column beside it.
- * The open plan's row is marked, or, where the plan was opened from a pin,
- * that pin's row, while the plan stays open.
- * A plan's actions are a right-click on it away, whether or not it is open.
+ * The open task's row is marked, or, where the task was opened from a pin,
+ * that pin's row, while the task stays open.
+ * A task's actions are a right-click on it away, whether or not it is open.
  * The strip above Luke is the window's drag handle and the traffic lights'
  * room, with back and forward at its right. Its right edge resizes it, and a drag well past its least width
  * folds it away. Folded away, it is inert as well as out of sight, so no key
@@ -1104,11 +1219,12 @@ function SidebarColumn({
 }: DesktopSidebarProps): React.JSX.Element {
   const onTasks = tab === PANEL_TAB.TASKS;
   const overlay = useFloatingSidebar(sidebar);
-  // The window's Inbox, an agent's page, Factory, the Automations page, and Chat stand in the plan's place, so while one does no plan is the place shown.
+  // The window's Inbox, an agent's page, Factory, the Automations page, Chat, and the Issues page stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
   const inFactory = onTasks && tasks.factoryView.open;
   const inAutomations = onTasks && tasks.automationsView.open;
   const inChat = onTasks && tasks.chatView.open;
+  const inIssues = onTasks && tasks.issuesView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
   const automationFailed = useFailedRunsMark(
@@ -1124,12 +1240,15 @@ function SidebarColumn({
     inFactory ||
     inAutomations ||
     inChat ||
+    inIssues ||
     (onTasks && tasks.agentView.agentId !== undefined);
-  // Factory, the Automations page, and Chat are experiments: each row stands only while the account has it on.
+  // Factory, the Automations page, Chat, and the Issues page are experiments: each row stands only while the account has it on.
   const chatOn = useChatOn();
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
-  // A press in the list is always about plans, so it brings the Plans tab
+  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
+  const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
+  // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
@@ -1154,6 +1273,10 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.factoryView.onOpen();
   };
+  const openIssues = () => {
+    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    tasks.issuesView.onOpen();
+  };
   const openAutomations = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.automationsView.onOpen();
@@ -1166,8 +1289,8 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.onGoHome();
   };
-  // The home page is the place shown while no plan is open, the Inbox is not
-  // standing in its place, and no launch is still reopening a plan.
+  // The home page is the place shown while no task is open, the Inbox is not
+  // standing in its place, and no launch is still reopening a task.
   const atHome = onTasks && !standingIn && tasks.page === TASKS_PAGE.HOME && !tasks.restoring;
   const newTaskIn = (repository: string) => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
@@ -1203,7 +1326,7 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.agentView.onOpen(agentId);
   };
-  // The list is the chosen workspace's; the unread marks above read every plan.
+  // The list is the chosen workspace's; the unread marks above read every task.
   const { listed: listedRows, listedAgents } = tasks;
   const unlisted =
     listedRows.tasks.length === 0 &&
@@ -1213,8 +1336,8 @@ function SidebarColumn({
   const pinned = tasks.listed.tasks.filter((plan) => plan.pinnedAt !== undefined);
   const pinnedAgents = listedAgents.standing.filter((agent) => agent.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, pinnedAgents, tasks);
-  // The pin the open plan was opened from is marked in its plan's place,
-  // whichever of the plan's tabs is shown, while its row still stands.
+  // The pin the open task was opened from is marked in its task's place,
+  // whichever of the task's tabs is shown, while its row still stands.
   const { chosenPin } = tasks;
   const pinMarked = pinnedSection.find(
     (row) =>
@@ -1226,6 +1349,25 @@ function SidebarColumn({
       row.pin.at === chosenPin.at,
   );
   const markedPin = pinMarked?.kind === TASK_ROW.TASK ? pinMarked.pin : undefined;
+  // The account's own sections stand while its experiment is on, a workspace is listed, and the archived tasks are not shown.
+  const sectionsShown =
+    sectionsOn && tasks.signedIn && tasks.workspace !== undefined && !archive.shown;
+  const sectioned = sectionedTasks(
+    tasks,
+    sectionsShown ? tasks.workspace?.id : undefined,
+    tasks.listed.tasks.filter((plan) => plan.pinnedAt === undefined),
+  );
+  const sectionDialogs = useSectionDialogs(tasks, tasks.shown && overlay.inSight);
+  const dropTask = (taskId: string, zone: string, at: number) => {
+    if (zone === TASKS_DROP_ZONE) {
+      if (!sectioned.taskIds.has(taskId)) return;
+      tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null }]);
+      return;
+    }
+    const target = sectioned.sections.find((drawn) => drawn.section.id === zone);
+    if (target === undefined) return;
+    tasks.onWriteSections(placeWrites(target.entries, taskId, zone, at, Date.now()));
+  };
   const { chosen } = overlay;
   const context: RowContext = {
     tasks,
@@ -1243,9 +1385,10 @@ function SidebarColumn({
     faces: createdBy === undefined,
     archived: archive.shown,
     inSight: overlay.inSight,
+    dropOut: sectionsShown ? dropTask : undefined,
   };
-  // A pinned tab is on show where its plan is open and its column shows it:
-  // an agent's or the Inbox in the plan's own column, any other in the side panel. The
+  // A pinned tab is on show where its task is open and its column shows it:
+  // an agent's or the Inbox in the task's own column, any other in the side panel. The
   // pin marked stands too, so a fold never hides the row the sidebar marks, and so
   // does a pinned agent while its page stands.
   const pinnedShown = (row: PinnedRow) => {
@@ -1267,7 +1410,9 @@ function SidebarColumn({
   // The agents with no plan stand among the plans, the archived ones among the archived.
   const unpinnedPlans = archive.shown
     ? listedRows.archived
-    : listedRows.tasks.filter((plan) => plan.pinnedAt === undefined);
+    : listedRows.tasks.filter(
+        (plan) => plan.pinnedAt === undefined && !sectioned.taskIds.has(plan.id),
+      );
   const unpinnedAgents = archive.shown
     ? listedAgents.archived
     : listedAgents.standing.filter((agent) => agent.pinnedAt === undefined);
@@ -1292,8 +1437,12 @@ function SidebarColumn({
   // away, the open row standing in its place even under a fold, so walking
   // the list still moves from it.
   const pinnedDrawn = pinnedTaskRows(pinnedSection);
+  const sectionsDrawn = sectioned.sections.flatMap(({ section, tasks: held }) =>
+    (folds.sectionFolded(section.id) ? held.filter((plan) => current(plan.id)) : held).map(taskRow),
+  );
   const drawn = [
     ...(archive.shown ? [] : folds.pinnedFolded ? pinnedDrawn.filter(currentRow) : pinnedDrawn),
+    ...sectionsDrawn,
     ...drawnTasks(sections, folds, currentRow),
   ];
   // Moving up and down the list as it reads: down from the home page, where
@@ -1333,7 +1482,7 @@ function SidebarColumn({
       )}
 
       <NewTaskButton tasks={tasks} onNewTask={chosen(newTask)} />
-      {/* Search is a second door to the command palette, drawn as New plan
+      {/* Search is a second door to the command palette, drawn as New task
           is, since it heads the list the same way. */}
       <button
         type="button"
@@ -1378,9 +1527,16 @@ function SidebarColumn({
           onOpen={chosen(openAutomations)}
         />
       ) : null}
+      {issuesOn ? (
+        <SidebarIssuesRow
+          current={inIssues}
+          disabled={!tasks.signedIn}
+          onOpen={chosen(openIssues)}
+        />
+      ) : null}
       <hr className="sidebar-rule" />
 
-      {/* One scroller for both sections, so the pinned plans scroll away
+      {/* One scroller for both sections, so the pinned tasks scroll away
           with the rest rather than holding half the column. */}
       <div className="sidebar-section scroll-fade">
         {tasks.signedIn && pinnedSection.length > 0 && !archive.shown ? (
@@ -1392,9 +1548,48 @@ function SidebarColumn({
             onOpenTab={chosen(openPinnedTab)}
           />
         ) : null}
-        <nav className="sidebar-group" aria-label={archive.shown ? "Archived tasks" : "Tasks"}>
+        {sectioned.sections.length > 0 ? (
+          <SidebarSections
+            sections={sectioned.sections}
+            context={{
+              tasks,
+              dialogs: sectionDialogs,
+              current,
+              inSight: overlay.inSight,
+              folded: folds.sectionFolded,
+              onToggle: folds.toggleSection,
+              row: (plan) => (
+                <SidebarTask
+                  key={plan.id}
+                  tasks={tasks}
+                  task={plan}
+                  current={context.marked(plan.id, undefined)}
+                  open={current(plan.id)}
+                  unread={unread(plan)}
+                  now={now}
+                  face={context.faces}
+                  onOpen={() => context.onOpen(plan.id)}
+                />
+              ),
+              onDropTask: dropTask,
+            }}
+          />
+        ) : null}
+        <nav
+          className="sidebar-group"
+          aria-label={archive.shown ? "Archived tasks" : "Tasks"}
+          data-row-drop={sectionsShown ? TASKS_DROP_ZONE : undefined}
+        >
           {tasks.signedIn ? (
             <SidebarSectionHead name={archive.shown ? "Archived tasks" : "Tasks"}>
+              {sectionsShown && tasks.workspace !== undefined ? (
+                <NewSectionButton
+                  onNew={chosen(() => {
+                    const { workspace } = tasks;
+                    if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
+                  })}
+                />
+              ) : null}
               <TaskViewOptions
                 shown={tasks.shown && overlay.inSight}
                 control={taskView}
@@ -1485,6 +1680,7 @@ function SidebarColumn({
           onSignOut={onSignOut}
         />
       </ColumnFoot>
+      {sectionDialogs.dialog}
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
       {sidebar.collapsed ? null : <SidebarResizeEdge edge={edge} />}
     </aside>

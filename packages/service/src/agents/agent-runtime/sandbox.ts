@@ -3,7 +3,8 @@
  *
  * Both roots open their sessions' sandboxes from one Vercel environment,
  * the coding agent's: the code extension's tooling (`gh`, signed commits,
- * TypeScript diagnostics), the runtimes a repository's checks are likely
+ * TypeScript diagnostics), `gh`'s stack extension, which restacks a stack
+ * of pull requests, the runtimes a repository's checks are likely
  * to need, which the base image carries or `prepare` installs, and
  * Playwright with its Chromium, which an agent screenshots what it built
  * with, and GTK 3, the one library an Electron app needs beyond Chromium's,
@@ -11,7 +12,7 @@
  * image's own; pnpm and Python are added where absent. Every command runs
  * with `NO_COLOR` set, so a test runner's output reaches the model as words
  * rather than escape codes it has to strip. Every session starts from the
- * snapshot `prepare` made, so the larger image costs a planning session
+ * snapshot `prepare` made, so the larger image costs a brain session
  * nothing at open.
  *
  * Each root's `sandbox.ts` exports this one environment object, which is
@@ -40,6 +41,38 @@ import { type AgentRole, ROLE_PROFILE, SANDBOX_POLICY, type SandboxPolicy } from
 
 /** The Playwright the image carries, pinned so a rebuilt snapshot holds the same browser. */
 const PLAYWRIGHT_VERSION = "1.64.1";
+
+/**
+ * GitHub's own `gh stack` extension (github/gh-stack), pinned to a release
+ * and to the SHA-256 GitHub publishes for its Linux x86-64 binary, the
+ * Vercel sandbox's architecture.
+ */
+const GH_STACK = {
+  VERSION: "v0.2.1",
+  SHA256: "ffe9d48b6342faffc3b0cb420202ff1df32e24faf32693debd7423274bbdf859",
+  DIRECTORY: "/usr/local/lib/gh-stack",
+} as const;
+
+/**
+ * Installs `gh stack`, `$SUDO` as `PREPARE_TMUX` set it. `gh extension
+ * install github/gh-stack` cannot run here: it reaches GitHub's API with
+ * `gh`'s token, and while the image is prepared no credential stands at the
+ * firewall, so GitHub would refuse the wrapper's placeholder. So the pinned
+ * release's binary is fetched from its public download, checked against its
+ * digest, and linked as a local extension, which `gh` installs without
+ * reaching GitHub. Each step is skipped where it already holds, so a second
+ * run changes nothing.
+ */
+const INSTALL_GH_STACK = [
+  `if ! echo '${GH_STACK.SHA256}  ${GH_STACK.DIRECTORY}/gh-stack' | sha256sum --check --status >/dev/null 2>&1; then`,
+  `  curl -fsSL -o /tmp/gh-stack https://github.com/github/gh-stack/releases/download/${GH_STACK.VERSION}/linux-amd64`,
+  `  echo '${GH_STACK.SHA256}  /tmp/gh-stack' | sha256sum --check --quiet`,
+  `  $SUDO install -D -m 755 /tmp/gh-stack ${GH_STACK.DIRECTORY}/gh-stack`,
+  "  rm -f /tmp/gh-stack",
+  "fi",
+  `gh stack --help >/dev/null 2>&1 || (cd ${GH_STACK.DIRECTORY} && gh extension install .)`,
+  "gh stack --help >/dev/null",
+];
 
 /**
  * Installs GTK 3 with the system's own package manager, `$SUDO` as
@@ -78,6 +111,7 @@ const PREPARE_SCRIPT = [
   "playwright install --with-deps chromium",
   // After Playwright, whose `--with-deps` has just refreshed the package lists and installed Xvfb.
   INSTALL_GTK,
+  ...INSTALL_GH_STACK,
 ].join("\n");
 
 /**
@@ -105,7 +139,7 @@ interface SandboxLifecycle {
  * The coding agent's sandbox lives the platform's maximum, so a long run is
  * never cut off mid-turn, and is stopped the moment a turn ends rather than
  * waiting that out. Its size is enough memory for the repository's own lint,
- * chosen at open, so a stopped sandbox resumes at it. A planning sandbox
+ * chosen at open, so a stopped sandbox resumes at it. A brain sandbox
  * opens at the defaults and is never stopped by Luke: Vercel stops it for
  * idleness, and it resumes from its snapshot with the checkout intact.
  */
@@ -157,6 +191,8 @@ async function prepareImage(sandbox: SandboxSession): Promise<void> {
 export const environment = VercelSandbox.environment({
   env: {
     NO_COLOR: "1",
+    // The extension is pinned, so a notice of a newer release is one the agent cannot act on.
+    GH_STACK_NO_UPDATE_NOTIFIER: "1",
     LUKE_SANDBOX_IMAGE: createHash("sha256")
       .update(PREPARE_SCRIPT)
       .update(prepareImage.toString())

@@ -1,5 +1,6 @@
+import { sentryLayer } from "@luke/service/observability/sentry";
 import { type WebServices, type WebServicesError, webServices } from "@luke/service/runtime";
-import { type Effect, ManagedRuntime } from "effect";
+import { type Effect, Layer, ManagedRuntime } from "effect";
 
 /**
  * Module scope is the memoization: Vercel keeps a warm instance's module
@@ -10,9 +11,13 @@ import { type Effect, ManagedRuntime } from "effect";
  */
 let standing: ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> | undefined;
 
-/** The one runtime a web function runs an effect on. */
+/**
+ * The one runtime a web function runs an effect on, with Sentry started
+ * before the services it watches, as Sentry's Effect guide provides it to
+ * the HTTP layer.
+ */
 function webRuntime(): ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> {
-  standing ??= ManagedRuntime.make(webServices);
+  standing ??= ManagedRuntime.make(Layer.provideMerge(webServices, sentryLayer()));
   return standing;
 }
 

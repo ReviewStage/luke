@@ -44,7 +44,7 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(func
     report,
   });
 
-  // What the host tells its clients of the panel's plans, written to the
+  // What the host tells its clients of the panel's tasks, written to the
   // document every window is told from. The subscription is the scope's, so
   // the close that ends the wiring ends it.
   const stopTasks = host.onTasksChanged((tasks) => {

@@ -115,7 +115,7 @@ export function TerminalTab({
   agents: CodingAgentsControl;
   /** Whether the tab is on screen, the one moment it holds a connection. */
   shown: boolean;
-  /** Opens the agent's own tab in the plan's column. */
+  /** Opens the agent's own tab in the task's column. */
   onOpenAgent: () => void;
   /** Closes the tab, as an archived agent's does. */
   onClose: () => void;

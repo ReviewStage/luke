@@ -93,15 +93,15 @@ export interface WindowService extends DesktopService {
   windowFactsFor: (sender: WebContents) => AppWindowFacts;
   /** Hands a payload to the voice window alone, the one peer of the host's live session. */
   sendToVoice: <Payload>(channel: string, payload: Payload) => void;
-  /** Asks the panels to open a plan on one agent's tab: a notification's click. */
+  /** Asks the panels to open a task on one agent's tab: a notification's click. */
   showAgent: (place: AgentPlace) => void;
   /** A panel has painted and hears the links it is handed: every Luke link held opens now, and each later one as it comes. */
   panelReady: () => void;
   /** Asks the panels to say an agent's turn ended in their toast: its end while the window is focused. */
   toastAgentEnd: (end: AgentEndToast) => void;
-  /** Asks the panels to open a plan on its Inbox tab: an inbox notification's click. */
+  /** Asks the panels to open a task on its Inbox tab: an inbox notification's click. */
   showInbox: (taskId: string) => void;
-  /** Asks the panels to open the window's Inbox on an item of an agent with no plan. */
+  /** Asks the panels to open the window's Inbox on an item of an agent with no task. */
   showInboxItem: (item: {
     readonly agentId: string;
     readonly itemId: string;
@@ -368,9 +368,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     hasCredentials: () => operator.voiceAvailable(),
     host: {
       voiceHost: () => voiceWindow.current(),
-      // The plan open in the panel is what a press with no call opens one
+      // The task open in the panel is what a press with no call opens one
       // about, whether or not the panel still shows it; a standing call takes
-      // the press whatever plan is open, and with neither the key opens nothing.
+      // the press whatever task is open, and with neither the key opens nothing.
       talkTaskId: () => state.snapshot().tasks.activeTaskId,
       hotkeyChanged: (rank) => {
         const current = state.snapshot().hotkeys;

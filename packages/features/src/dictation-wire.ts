@@ -6,7 +6,7 @@ import { countedNumber } from "./service-wire.js";
  *
  * `POST /api/dictation` takes one short recording, WebM with Opus as
  * Chromium's recorder writes it, in base64, with how long it ran and the
- * words it is likely to say: the repository's name, the plan's title, the
+ * words it is likely to say: the repository's name, the task's title, the
  * paths the plan names. The service hands the clip and those words to its
  * transcription model and answers the text, and keeps neither the clip nor
  * the text. A clip past the bounds below is refused as too large before

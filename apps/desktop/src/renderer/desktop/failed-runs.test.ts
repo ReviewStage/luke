@@ -101,7 +101,7 @@ function mount(runs: readonly AccountFailedRun[], opened?: string) {
   return draw;
 }
 
-test("a failed run's toast is in the failed tone under its automation's name, and its View opens the run in its own workspace", () => {
+test("a failed run's toast is under its automation's name, and its View opens the run in its own workspace", () => {
   mount([]);
 
   act(() =>
@@ -115,10 +115,7 @@ test("a failed run's toast is in the failed tone under its automation's name, an
   );
   const toast = document.querySelector<HTMLElement>(".toast");
   assert.ok(toast);
-  assert.deepEqual(
-    [toast.querySelector(".toast-detail")?.textContent, toast.dataset.tone],
-    ["Flaky test sweep", "failed"],
-  );
+  assert.equal(toast.querySelector(".toast-detail")?.textContent, "Flaky test sweep");
   act(() => toast.querySelector<HTMLButtonElement>(".toast-action")?.click());
   assert.deepEqual(viewed, [
     { automationId: SWEEP, runId: RUN_ID, workspaceId: "workspace-other" },

@@ -43,13 +43,17 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
-  type CodingAgentOverviewAnswerView,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
   type CodingAgentPictureParams,
   type CodingAgentPinParams,
+  type CodingAgentPullRequestActionParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
+  type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
   type CodingAgentServersParams,
   type CodingAgentStartParams,
@@ -66,9 +70,12 @@ import {
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
-  codingAgentOverviewAnswerViewSchema,
+  codingAgentOverviewChecksAnswerViewSchema,
+  codingAgentOverviewConversationAnswerViewSchema,
+  codingAgentOverviewPullRequestAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPullRequestAnswerViewSchema,
+  codingAgentPullRequestWriteAnswerViewSchema,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
@@ -182,6 +189,7 @@ import {
   type TasksWorkspacePhotoSetParams,
   type TasksWorkspaceRenameParams,
   type TasksWorkspaceTransferParams,
+  type TasksWriteSectionParams,
   tasksEditAnswerSchema,
   tasksFileAnswerSchema,
   tasksGitHubDisconnectAnswerSchema,
@@ -259,7 +267,7 @@ import { Base64 } from "effect/encoding";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
- * voice, planning, and client-fact methods the runtime host answers, and the events it pushes. Every method answers an effect: it
+ * voice, task, and client-fact methods the runtime host answers, and the events it pushes. Every method answers an effect: it
  * composes one request and reads its answer, and nothing here runs it — the
  * act row that asked yields it, and the router runs it once on the launch's
  * own runtime. The host is this same process, so an answer that is not the
@@ -316,7 +324,7 @@ export interface HostOperator {
   /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
   liveDiagnostics(): Effect.Effect<Option.Option<LiveDiagnostics>>;
   /**
-   * The peer's SDP offer, and the plan the call is about, answered with the
+   * The peer's SDP offer, and the task the call is about, answered with the
    * session the host created; a host that creates none answers nothing.
    */
   createLiveSession(
@@ -338,47 +346,48 @@ export interface HostOperator {
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
   ): Effect.Effect<void>;
-  /** The Plans tab shows: the host reads the plan list and the active document now and follows both until it is paused. */
+  /** The Tasks tab shows: the host reads the task list and the active document now and follows both until it is paused. */
   tasksRefresh(): Effect.Effect<void>;
   /** The account's workspaces read again, where the host's last read is a minute old. */
   workspacesRefresh(): Effect.Effect<void>;
-  /** The Work tab scrolled back: the host reads the open plan's page of work before the oldest turn it holds, and the view takes it. */
+  /** The Work tab scrolled back: the host reads the open task's page of work before the oldest turn it holds, and the view takes it. */
   tasksWorkEarlier(): Effect.Effect<void>;
-  /** The Call tab scrolled back: the host reads the open plan's page of conversation before the oldest turn it holds, and the view takes it. */
+  /** The Call tab scrolled back: the host reads the open task's page of conversation before the oldest turn it holds, and the view takes it. */
   tasksConversationEarlier(): Effect.Effect<void>;
-  /** One page of a plan's conversation, or a planning worker's, held by the service while it runs; or why there is none. */
+  /** One page of a task's conversation, or the brain's worker's, held by the service while it runs; or why there is none. */
   tasksMessages(params: TasksMessagesParams): Effect.Effect<CodingAgentMessagesAnswerView>;
-  /** The Plans tab stopped showing: the host follows nothing, and the open plan and its call stand. */
-  /** One plan made the active one, replacing whichever was; answers whether the host took it. */
+  /** The Tasks tab stopped showing: the host follows nothing, and the open task and its call stand. */
+  /** One task made the active one, replacing whichever was; answers whether the host took it. */
   tasksOpen(taskId: string): Effect.Effect<boolean>;
-  /** The developer left the open plan: its call ends and no plan is active. */
+  /** The developer left the open task: its call ends and no task is active. */
   tasksClose(): Effect.Effect<void>;
-  /** A named plan started on the repository it names, where it names one, and made the active one; or why none started. */
+  /** A named task started on the repository it names, where it names one, and made the active one; or why none started. */
   tasksStart(request: TasksStartRequest): Effect.Effect<TasksStartAnswer>;
-  /** One plan deleted; answers whether the service deleted it. */
+  /** One task deleted; answers whether the service deleted it. */
   tasksDelete(taskId: string): Effect.Effect<boolean>;
-  /** One plan renamed; answers whether the service renamed it. */
+  /** One task renamed; answers whether the service renamed it. */
   tasksRename(params: TasksRenameParams): Effect.Effect<boolean>;
-  /** One plan pinned or unpinned; answers whether the service changed it. */
+  /** One task pinned or unpinned; answers whether the service changed it. */
   tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
   /** One repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
-  /** One plan archived or brought back; answers whether the service changed it. */
+  tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
+  /** One task archived or brought back; answers whether the service changed it. */
   tasksArchive(params: TasksArchiveParams): Effect.Effect<boolean>;
   /** The repositories the account reaches through the Luke GitHub App, read from the service now; or why there is no list. */
   tasksRepositories(params: TasksRepositoriesParams): Effect.Effect<TasksRepositoriesAnswer>;
-  /** One plan given its repository, or none; the repository as kept, or why it is unchanged. */
+  /** One task given its repository, or none; the repository as kept, or why it is unchanged. */
   tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
-  /** One plan moved to another of the account's workspaces; the workspace it now belongs to, or why it stands where it was. */
+  /** One task moved to another of the account's workspaces; the workspace it now belongs to, or why it stands where it was. */
   tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
-  /** The developer's edit of a plan's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
+  /** The developer's edit of a task's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
   tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
-  /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
+  /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   tasksBoardSave(params: TasksBoardSaveParams): Effect.Effect<void>;
-  /** A window of a file of a plan's repository, coloured; or why it is not shown. */
+  /** A window of a file of a task's repository, coloured; or why it is not shown. */
   tasksFile(params: TasksFileParams): Effect.Effect<TasksFileAnswer>;
   tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
-  /** The skills a developer may choose of a plan's repository; or why they are not read. */
+  /** The skills a developer may choose of a task's repository; or why they are not read. */
   tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
   /** One pull request of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
   tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
@@ -390,7 +399,7 @@ export interface HostOperator {
   tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
   /** One revision of a plan restored as its content; answers whether the service restored it. */
   tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
-  /** One version of one page of a plan with its HTML, for the frame that draws it; or that the service did not answer. */
+  /** One version of one page of a task with its HTML, for the frame that draws it; or that the service did not answer. */
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
   /** One picture of one plan as its bytes in base64, or why there is none. */
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
@@ -468,13 +477,13 @@ export interface HostOperator {
   codingAgentDefaultRead(): Effect.Effect<CodingAgentDefaultAnswer>;
   /** The default written; the choice as kept, or why it is unchanged. */
   codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<CodingAgentDefaultAnswer>;
-  /** One plan's coding agents with their status; or why there is no list. */
+  /** One task's coding agents with their status; or why there is no list. */
   codingAgentList(params: CodingAgentListParams): Effect.Effect<CodingAgentListAnswer>;
   /** One workspace's coding agents, newest started first, on one repository where one is named; or why there is no list. */
   codingAgentWorkspaceList(
     params: CodingAgentWorkspaceListParams,
   ): Effect.Effect<CodingAgentListAnswer>;
-  /** An agent started on a plan under the press's own key; the agent, or why none started. */
+  /** An agent started on a task under the press's own key; the agent, or why none started. */
   codingAgentStart(params: CodingAgentStartParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent's transcript past a cursor, held by the service while the agent runs; or why there is none. */
   codingAgentMessages(
@@ -492,9 +501,9 @@ export interface HostOperator {
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
   codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
   codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
-  /** One agent read whole as its own page, on a plan or with none; or why there is no answer. */
+  /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
-  /** The account's automations, or one plan's or one workspace's; or why there are none. */
+  /** The account's automations, or one task's or one workspace's; or why there are none. */
   automationList(params: AutomationListParams): Effect.Effect<AutomationListView>;
   /** An automation made; the automation as the service kept it, or why it was not made. */
   automationCreate(params: AutomationCreateParams): Effect.Effect<AutomationView>;
@@ -528,10 +537,22 @@ export interface HostOperator {
   codingAgentGitHubImage(
     params: CodingAgentGitHubImageParams,
   ): Effect.Effect<CodingAgentGitHubImageView>;
-  /** One agent's pull request as its Pull request tab draws it: its description, checks, reviewers, and conversation as GitHub holds them; or why there is none. */
-  codingAgentOverview(
+  /** One change to an agent's pull request, made on GitHub as the account on its own GitHub sign-in; how GitHub took it, or why there is no answer. */
+  codingAgentPullRequestAction(
+    params: CodingAgentPullRequestActionParams,
+  ): Effect.Effect<CodingAgentPullRequestWriteAnswerView>;
+  /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them; or why there is none. */
+  codingAgentOverviewPullRequest(
     params: CodingAgentPullRequestParams,
-  ): Effect.Effect<CodingAgentOverviewAnswerView>;
+  ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
+  /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
+  codingAgentOverviewChecks(
+    params: CodingAgentPullRequestParams,
+  ): Effect.Effect<CodingAgentOverviewChecksAnswerView>;
+  /** One agent's pull request's conversation and where its reviewers stand, as GitHub holds them; or why there is none. */
+  codingAgentOverviewConversation(
+    params: CodingAgentPullRequestParams,
+  ): Effect.Effect<CodingAgentOverviewConversationAnswerView>;
   /** The account's own provider keys as hints and statuses; or why there are none. */
   providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider key saved, carried once; the keys as they then stand, or why nothing was kept. */
@@ -556,13 +577,13 @@ export interface HostOperator {
   dictationTranscribe(
     params: DictationTranscribeParams,
   ): Effect.Effect<DictationTranscribeAnswerView>;
-  /** One plan's inbox past a cursor, held by the service while nothing changed; or why there is none. */
+  /** One task's inbox past a cursor, held by the service while nothing changed; or why there is none. */
   codingAgentInbox(params: CodingAgentInboxParams): Effect.Effect<CodingAgentInboxAnswerView>;
-  /** One agent's inbox past a cursor, an agent with no plan as much as one on a plan, held as a plan's is; or why there is none. */
+  /** One agent's inbox past a cursor, an agent with no task as much as one on a task, held as a task's is; or why there is none. */
   codingAgentAgentInbox(
     params: CodingAgentAgentInboxParams,
   ): Effect.Effect<CodingAgentInboxAnswerView>;
-  /** One item of a plan's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
+  /** One item of a task's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
   codingAgentInboxAnswer(
     params: CodingAgentInboxAnswerParams,
   ): Effect.Effect<CodingAgentInboxAnsweredView>;
@@ -971,6 +992,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           repository: params.repository,
           pinned: params.pinned,
         }),
+        (answer) => record(answer)?.changed === true,
+      ),
+    tasksWriteSection: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_WRITE_SECTION, params),
         (answer) => record(answer)?.changed === true,
       ),
     tasksArchive: (params) =>
@@ -1518,10 +1544,32 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE, params),
         codingAgentAnswer(codingAgentGitHubImageViewSchema),
       ),
-    codingAgentOverview: (params) =>
+    codingAgentPullRequestAction: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW, { agentId: params.agentId }),
-        codingAgentAnswer(codingAgentOverviewAnswerViewSchema),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION, {
+          agentId: params.agentId,
+          request: params.request,
+        }),
+        codingAgentAnswer(codingAgentPullRequestWriteAnswerViewSchema),
+      ),
+    codingAgentOverviewPullRequest: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, {
+          agentId: params.agentId,
+        }),
+        codingAgentAnswer(codingAgentOverviewPullRequestAnswerViewSchema),
+      ),
+    codingAgentOverviewChecks: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentOverviewChecksAnswerViewSchema),
+      ),
+    codingAgentOverviewConversation: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION, {
+          agentId: params.agentId,
+        }),
+        codingAgentAnswer(codingAgentOverviewConversationAnswerViewSchema),
       ),
     providerKeysRead: () =>
       Effect.map(

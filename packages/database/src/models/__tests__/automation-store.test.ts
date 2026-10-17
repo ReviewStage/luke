@@ -18,7 +18,7 @@ import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { automation, automationRun } from "../../schemas/automation.js";
 import { personalWorkspace } from "../../schemas/personal-workspace.js";
-import { task } from "../../schemas/plan.js";
+import { task } from "../../schemas/task.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   automationRunsSince,
@@ -41,12 +41,12 @@ import { createTask, updateTask } from "../task-store.js";
 
 /**
  * An account's automations and their runs, over a real dialect: made only
- * on a plan the account reaches, read and changed by that account alone
- * while it still reaches the plan, one run per firing however often it is
+ * on a task the account reaches, read and changed by that account alone
+ * while it still reaches the task, one run per firing however often it is
  * claimed, a run settled once, and a schedule claimed once when due, its
  * backlog moved on rather than run.
  *
- * Synthetic accounts, workspaces, and plans throughout.
+ * Synthetic accounts, workspaces, and tasks throughout.
  */
 
 const openAccount = Effect.gen(function* () {
@@ -56,7 +56,7 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A plan in a workspace the account owns, as the organization plugin would leave the rows. */
+/** A task in a workspace the account owns, as the organization plugin would leave the rows. */
 const openTask = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;

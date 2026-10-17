@@ -1,5 +1,6 @@
 {
   "name": "luke",
+  "version": "0.17.0",
   "private": true,
   "description": "Luke is a macOS app for planning a feature by voice before you hand it to a coding agent",
   "packageManager": "pnpm@10.34.5",
@@ -22,7 +23,7 @@
     "prepare": "husky",
     "release:macos": "./scripts/release-macos.sh",
     "start": "pnpm --filter @luke/desktop start",
-    "test": "node scripts/turbo.mjs run test:vitest test:vitest:1 test:vitest:2 --concurrency=1",
+    "test": "node scripts/turbo.mjs run test:vitest test:vitest:1 test:vitest:2 test:vitest:3 --concurrency=1",
     "trace:export": "tsx tools/trace-export/src/cli.ts",
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },

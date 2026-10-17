@@ -128,7 +128,7 @@ function hover(element: Element): void {
 
 /** The cards standing in the window, the first hung first. */
 function cards(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>(".tooltip-card:not([data-leaving])")];
+  return [...document.querySelectorAll<HTMLElement>(".luke-tooltip-card:not([data-leaving])")];
 }
 
 /** The agent named in a place of the workspace as Dean reads it, the experiment `on` or off, inside the window's own directory of the workspace too where `nested`, its card hung, and every automation page opened. */

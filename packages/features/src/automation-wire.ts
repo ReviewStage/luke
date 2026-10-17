@@ -12,11 +12,11 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * automation-wire.ts -- an automation as the service keeps it: what fires it, what it starts, the guards on how often, and each run it made.
  *
  * An automation belongs to the account that made it and works on one of its
- * plans: when its trigger fires, the service starts a coding agent on the
- * plan's repository with the automation's prompt as the agent's prompt, the
+ * tasks: when its trigger fires, the service starts a coding agent on the
+ * task's repository with the automation's prompt as the agent's prompt, the
  * firing described beneath it, exactly as a developer's own Start with a
  * task would. A trigger is a schedule, a cron expression read in an IANA
- * time zone, or an event of the plan's repository the Luke GitHub App is
+ * time zone, or an event of the task's repository the Luke GitHub App is
  * told of, filtered by label or branch, or a call to the automation's own
  * webhook address. Every firing is a run, kept whether it started an agent,
  * was held back by a guard, or failed to start, so the history says why an
@@ -58,7 +58,7 @@ export const AUTOMATION_BOUNDS = {
 export const AUTOMATION_TRIGGER = {
   /** A cron schedule in a time zone, fired by the service's once-a-minute sweep. */
   SCHEDULE: "schedule",
-  /** An event of the plan's repository, delivered by the Luke GitHub App's webhook. */
+  /** An event of the task's repository, delivered by the Luke GitHub App's webhook. */
   GITHUB: "github",
   /** A POST to the automation's own secret address. */
   WEBHOOK: "webhook",
@@ -84,7 +84,7 @@ export type GitHubTriggerEvent = (typeof GITHUB_TRIGGER_EVENT)[keyof typeof GITH
 
 /** What an automation starts when it fires. */
 export const AUTOMATION_ACTION = {
-  /** A coding agent on the plan's repository, handed the prompt as its task. */
+  /** A coding agent on the task's repository, handed the prompt as its task. */
   CODING_AGENT: "coding-agent",
 } as const;
 
@@ -328,13 +328,13 @@ export const AUTOMATION_RUN_REASON = {
   CONCURRENCY: "concurrency",
   /** It had already started as many runs as its daily cap allows. */
   DAILY_CAP: "daily-cap",
-  /** The plan is gone, or no longer reachable by the account. */
+  /** The task is gone, or no longer reachable by the account. */
   TASK_UNREACHABLE: "plan-unreachable",
   /** Its creator is no longer a member of its workspace, and a run starts as its creator. */
   CREATOR_LEFT: "creator-left",
-  /** The plan names no repository. */
+  /** The task names no repository. */
   NO_REPOSITORY: "no-repository",
-  /** The GitHub installation connected to the plan's workspace no longer reaches the repository. */
+  /** The GitHub installation connected to the task's workspace no longer reaches the repository. */
   REPOSITORY_UNREACHABLE: "repository-unreachable",
   /** No longer produced, but still read: rows written before repositories came only from the workspace's installation hold it. */
   GITHUB_SIGN_IN: "github-sign-in",
@@ -342,7 +342,7 @@ export const AUTOMATION_RUN_REASON = {
   MODEL: "model",
   /** The coding agents' service could not be reached. */
   UNAVAILABLE: "unavailable",
-  /** The plan moved to another repository after this run's GitHub event was queued. */
+  /** The task moved to another repository after this run's GitHub event was queued. */
   REPOSITORY_CHANGED: "repository-changed",
   /** The automation was paused after this run was queued and before it was acted on. */
   PAUSED: "paused",
@@ -362,7 +362,7 @@ export const automationRunReasonSchema = EffectSchema.Literals(
   Object.values(AUTOMATION_RUN_REASON),
 );
 
-/** The query an automation list may narrow by: one plan's automations alone. */
+/** The query an automation list may narrow by: one task's automations alone. */
 export const AUTOMATION_LIST_QUERY = { TASK_ID: "planId", WORKSPACE_ID: "workspaceId" } as const;
 
 /**
@@ -396,13 +396,13 @@ const automationRunSummarySchema = EffectSchema.Struct({
 export type AutomationRunSummary = typeof automationRunSummarySchema.Type;
 
 /**
- * One automation as the list shows it: the plan it works on, whether it
+ * One automation as the list shows it: the task it works on, whether it
  * runs and why not where the service paused it, what fires it and what it
  * starts, its guards, when a schedule is next due, and its newest run.
  */
 export const automationSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
-  /** The plan it was made on; null for an automation made on its workspace with no plan, which its repositories stand in for. */
+  /** The task it was made on; null for an automation made on its workspace with no task, which its repositories stand in for. */
   planId: EffectSchema.NullOr(wireUuidSchema),
   planName: EffectSchema.NullOr(EffectSchema.String),
   /** The workspace it belongs to, whose members its scope lets reach it; absent from a service before it. */
@@ -470,10 +470,10 @@ const automationRepositoriesSchema = EffectSchema.Array(githubRepositoryFullName
 
 /**
  * An automation to make (POST): where it stands, its name, trigger, and
- * action, and its guards or the defaults. It stands on a plan, whose
+ * action, and its guards or the defaults. It stands on a task, whose
  * workspace and repository it takes, or on a workspace with the
  * repositories its runs work in, which is how an automation is made with no
- * plan; a request naming both, or neither, is refused.
+ * task; a request naming both, or neither, is refused.
  */
 export const automationCreateRequestSchema = EffectSchema.Struct({
   planId: EffectSchema.optionalKey(wireUuidSchema),

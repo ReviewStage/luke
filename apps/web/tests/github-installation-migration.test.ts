@@ -97,7 +97,7 @@ it.effect(
         yield* runWebMigrations();
 
         assert.deepEqual(yield* installationRows(sql), before);
-        assert.deepEqual(yield* sql`select organization_id, repository from plan`, [
+        assert.deepEqual(yield* sql`select organization_id, repository from task`, [
           { organization_id: "acme", repository: "acme-org/relay" },
         ]);
         yield* sql`insert into github_installation

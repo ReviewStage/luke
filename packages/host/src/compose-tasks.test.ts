@@ -29,6 +29,12 @@ import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
 import type { PlanEditAnswer } from "@luke/features/plan-edit";
 import {
+  TASK_SECTION_WRITE,
+  type TaskSection,
+  type TaskSections,
+  type TaskSectionWrite,
+} from "@luke/features/task-section-wire";
+import {
   PLAN_ACTOR,
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
@@ -74,7 +80,8 @@ import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient, type TasksConversationClient } from "./compose-tasks.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-/** The text the edit tests' plan opens on. */
+const SECTION_ID = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
+/** The text the edit tests' task opens on. */
 const INVITES_TEXT = "# Teammate invitations";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
@@ -105,10 +112,10 @@ function summary({
   return rest;
 }
 
-/** The service as a table of plans the test edits between beats. */
+/** The service as a table of tasks the test edits between beats. */
 interface FakeService extends TasksClient {
   tasks: Task[];
-  /** What the list says of each plan's coding agents, by plan id; a plan with none says nothing. */
+  /** What the list says of each task's coding agents, by task id; a task with none says nothing. */
   agents: Record<string, TaskAgentsSummary>;
   /** The agents with no plan the list carries beside the plans. */
   tasklessAgents: TasklessAgent[];
@@ -124,23 +131,23 @@ interface FakeService extends TasksClient {
   repositoryUnreachable: boolean;
   /** Every read the service answered, in order, so a test can see that nothing reads on a clock. */
   readonly reads: string[];
-  /** Each plan's board, by plan id; a plan with none answers no board, as a service that did not answer. */
+  /** Each task's board, by task id; a task with none answers no board, as a service that did not answer. */
   boards: Record<string, Board>;
-  /** The image each plan's last save carried, by plan id, as the service keeps it beside the board. */
+  /** The image each task's last save carried, by task id, as the service keeps it beside the board. */
   readonly images: Record<string, string | undefined>;
-  /** Each plan's transcript, by plan id; a plan with none answers no transcript, as a service that did not answer. */
+  /** Each task's transcript, by task id; a task with none answers no transcript, as a service that did not answer. */
   transcripts: Record<string, TaskTranscript>;
-  /** Each plan's newest page of work as the service keeps it, by plan id; a plan with none answers nothing, as a service that did not answer. */
+  /** Each task's newest page of work as the service keeps it, by task id; a task with none answers nothing, as a service that did not answer. */
   works: Record<string, TaskWorkAnswer>;
   /** The older pages of work, by the turn each is read before. */
   olderWorks: Record<string, TaskWorkAnswer>;
-  /** Every page of work asked for, in order: the plan, and the turn it was read before where it was. */
+  /** Every page of work asked for, in order: the task, and the turn it was read before where it was. */
   readonly workReads: string[];
   /** What the service answers for each file's window, by path; a path with none answers nothing, as a service that did not answer. */
   files: Record<string, TaskFileAnswer>;
   /** What the service answers for each folder's listing, by path; a path with none answers nothing, as a service that did not answer. */
   folders: Record<string, TaskTreeAnswer>;
-  /** What the service answers for each plan's skills, by plan id; a plan with none answers nothing, as a service that did not answer. */
+  /** What the service answers for each task's skills, by task id; a task with none answers nothing, as a service that did not answer. */
   skills: Record<string, TaskSkillsAnswer>;
   /** What the service answers of a repository a workspace reaches, read with no plan, by workspace id and then repository: its folders by path, and its skills. */
   places: Record<
@@ -151,15 +158,15 @@ interface FakeService extends TasksClient {
   pullRequests: Record<string, Record<string, Map<number, GitHubRepositoryPullRequestAnswer>>>;
   /** What the service answers for a repository's issues, kept as its pull requests are. */
   issues: Record<string, Record<string, Map<number, GitHubRepositoryIssueAnswer>>>;
-  /** The newest page of the history, for any plan; none answers nothing, as a service that did not answer. */
+  /** The newest page of the history, for any task; none answers nothing, as a service that did not answer. */
   history: PlanRevisionsAnswer | undefined;
   /** The older pages of the history, by the revision each is read before. */
   olderHistory: Record<number, PlanRevisionsAnswer>;
-  /** Each revision the service holds, by its number, which a restore puts back as the plan's document. */
+  /** Each revision the service holds, by its number, which a restore puts back as the task's document. */
   revisions: Record<number, PlanRevisionAnswer["revision"]>;
-  /** Every version of every page the service holds, for any plan. */
+  /** Every version of every page the service holds, for any task. */
   pages: PageVersion[];
-  /** Each plan's pages as the service lists them, by plan id; a plan with none answers nothing, as a service that did not answer. */
+  /** Each task's pages as the service lists them, by task id; a task with none answers nothing, as a service that did not answer. */
   pageLines: Record<string, readonly PageLine[]>;
   /** The plans' pictures the service holds, by plan and then by picture. */
   pictures: Map<string, Map<string, { contentType: PictureType; base64: string }>>;
@@ -169,6 +176,10 @@ interface FakeService extends TasksClient {
   pins: RepositoryPin[];
   /** Whether the pins are refused, read and written alike, as a service that did not answer refuses them. */
   pinsFail: boolean;
+  /** The account's sidebar sections as the service keeps them; none where it does not answer, as before any test sets them. */
+  sections: TaskSections | undefined;
+  /** Every change to the sections the service was asked for, in order. */
+  sectionWrites: TaskSectionWrite[];
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
   /** The Luke GitHub App install address a connection answers. */
@@ -322,6 +333,8 @@ function fakeService(tasks: Task[]): FakeService {
     editAnswer: undefined,
     pins: [],
     pinsFail: false,
+    sections: undefined,
+    sectionWrites: [],
     memberships: [PERSONAL],
     installUrl: INSTALL_URL,
     workspacesFail: false,
@@ -559,7 +572,14 @@ function fakeService(tasks: Task[]): FakeService {
           : others;
         return service.pins;
       }),
-    // The service writes the edit's value into the document's decisions and answers the plan whole.
+    taskSections: () => Effect.sync(() => service.sections),
+    // The service answers its sections as they stand, the test having set them to what the write left.
+    writeTaskSection: (write) =>
+      Effect.sync(() => {
+        service.sectionWrites.push(write);
+        return service.sections;
+      }),
+    // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
       Effect.sync((): TaskCallResult<PlanEditAnswer, typeof TASK_CALL_FAILURE.NOT_FOUND> => {
         if (service.editAnswer !== undefined) return { ok: true, answer: service.editAnswer };
@@ -641,7 +661,7 @@ function fakeService(tasks: Task[]): FakeService {
         );
         return service.repositoriesAnswer;
       }),
-    // The service keeps the repository on the plan and answers the plan whole.
+    // The service keeps the repository on the task and answers the task whole.
     setRepository: (taskId, repository) =>
       Effect.sync((): TaskCallResult<Task, RepositoryCallFailure> => {
         if (service.repositoryUnreachable) {
@@ -655,7 +675,7 @@ function fakeService(tasks: Task[]): FakeService {
         );
         return { ok: true, answer: changed };
       }),
-    // The service moves the plan and answers it whole.
+    // The service moves the task and answers it whole.
     move: (taskId, workspaceId) =>
       Effect.sync((): TaskCallResult<Task, TaskCallFailure> => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
@@ -705,7 +725,7 @@ function fakeService(tasks: Task[]): FakeService {
   return service;
 }
 
-/** Which page of a plan's conversation a read asked for. */
+/** Which page of a task's conversation a read asked for. */
 const CONVERSATION_READ = {
   NEWEST: "newest",
   AFTER: "after",
@@ -714,11 +734,11 @@ const CONVERSATION_READ = {
 
 type ConversationRead = (typeof CONVERSATION_READ)[keyof typeof CONVERSATION_READ];
 
-/** One read of a plan's conversation as the service heard it: the plan, which page, and the cursor or turn it named. */
+/** One read of a task's conversation as the service heard it: the task, which page, and the cursor or turn it named. */
 type ConversationAsk = readonly [taskId: string, read: ConversationRead, from?: string];
 
 /**
- * The service's side of each plan's conversation. A read from the newest
+ * The service's side of each task's conversation. A read from the newest
  * turns or past a cursor waits for the page the test hands it, as the
  * service holds a read open while a turn runs; a read before a turn is
  * answered at once from the older pages.
@@ -773,12 +793,12 @@ function fakeConversations(): Effect.Effect<FakeConversations> {
   });
 }
 
-/** One planning turn's journal as the service stores it, its words as one text part. */
+/** One brain turn's journal as the service stores it, its words as one text part. */
 function journal(id: string, text: string): CodingAgentMessage {
   return { id, role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text }] };
 }
 
-/** A page of a plan's conversation as the service answers it. */
+/** A page of a task's conversation as the service answers it. */
 function conversationPage(
   messages: readonly CodingAgentMessage[],
   cursor: string,
@@ -796,7 +816,7 @@ function conversationPage(
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
-/** The one voice call as the live composer holds it: about a plan, about the desk, or none. */
+/** The one voice call as the live composer holds it: about a task, about the desk, or none. */
 interface StandingCall {
   about: { readonly taskId: string | undefined } | undefined;
   /** Where ending a call waits before it lands, as a real call's close does. */
@@ -1075,6 +1095,39 @@ it.effect("behind a closed account gate nothing is read and nothing starts", () 
     assert.deepEqual(told, []);
     assert.deepEqual(service.reads, []);
   }),
+);
+
+it.effect(
+  "the window's refresh reads the account's sections, a change takes the service's answer, and one refused leaves them as read",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last } = yield* subject(service);
+      const launch: TaskSection = {
+        id: SECTION_ID,
+        workspaceId: PERSONAL.id,
+        title: "Launch",
+        createdAt: 5,
+      };
+      service.sections = { sections: [launch], entries: [] };
+
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      assert.deepEqual(last()?.taskSections, service.sections);
+
+      const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
+      service.sections = { sections: [launch], entries: [placed] };
+      const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, place), { changed: true });
+      assert.deepEqual(last()?.taskSections, { sections: [launch], entries: [placed] });
+
+      service.sections = undefined;
+      const removal = { ...place, sectionId: null };
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WRITE_SECTION, removal), {
+        changed: false,
+      });
+      assert.deepEqual(last()?.taskSections, { sections: [launch], entries: [placed] });
+      assert.deepEqual(service.sectionWrites, [place, removal]);
+    }),
 );
 
 it.effect("a sign-out drops the view the window drew", () =>

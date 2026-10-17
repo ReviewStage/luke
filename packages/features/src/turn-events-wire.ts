@@ -3,7 +3,7 @@ import type { ShownCode } from "./task-wire.js";
 /**
  * A turn's events: what the voice hears of a turn it asked while the turn
  * runs. The kinds are the run seams the live session service consumes — a
- * slow step began, a planning turn queued a question, showed code, or asked
+ * slow step began, a brain turn queued a question, showed code, or asked
  * to end the call, every
  * action settled, one sentence of the reply, the turn ended — and nothing
  * wider: no tool part, no reasoning, and no message, only what a voice needs
@@ -17,13 +17,13 @@ import type { ShownCode } from "./task-wire.js";
 export const TURN_EVENT_KIND = {
   /** The turn began a step slow enough to be worth telling the developer about; at most once per turn. */
   SLOW_STEP: "slow_step",
-  /** A planning turn queued one question for the voice to ask when it reaches it; told as the call is journaled, before the turn ends. */
+  /** A brain turn queued one question for the voice to ask when it reaches it; told as the call is journaled, before the turn ends. */
   QUESTION_QUEUED: "question_queued",
-  /** A planning turn took back a question it queued that an answer made moot, by its words; told as the call is journaled. */
+  /** A brain turn took back a question it queued that an answer made moot, by its words; told as the call is journaled. */
   QUESTION_WITHDRAWN: "question_withdrawn",
-  /** A planning turn put code of the plan's repository on screen, with its lines; told once its call has read them, before the turn ends. */
+  /** A brain turn put code of the task's repository on screen, with its lines; told once its call has read them, before the turn ends. */
   CODE_SHOWN: "code_shown",
-  /** A planning turn asked to end the call, the developer having said they are done; told once per turn, as the call is journaled. */
+  /** A brain turn asked to end the call, the developer having said they are done; told once per turn, as the call is journaled. */
   CALL_ENDING: "call_ending",
   /** Every action the turn has journaled by now has its result on the record; the reply's sentences follow, the first while the turn may still run. */
   ACTIONS_SETTLED: "actions_settled",
@@ -35,7 +35,7 @@ export const TURN_EVENT_KIND = {
 
 export type TurnEventKind = (typeof TURN_EVENT_KIND)[keyof typeof TURN_EVENT_KIND];
 
-/** Which kind of slow step began: a whole transcript read, a write the provider carries, or a planning call's look into its repository. */
+/** Which kind of slow step began: a whole transcript read, a write the provider carries, or a task call's look into its repository. */
 export const TURN_SLOW_STEP = {
   TRANSCRIPT_READ: "transcript_read",
   PROVIDER_WRITE: "provider_write",
