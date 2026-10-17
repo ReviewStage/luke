@@ -480,7 +480,7 @@ export function AgentComposer({
   const handBack = (set: (open: boolean) => void) => (open: boolean) => {
     const more = foot.current?.querySelector<HTMLElement>(".agent-composer-more") ?? null;
     const returning =
-      !open && (document.activeElement?.closest(".anchored-popover") ?? null) !== null;
+      !open && (document.activeElement?.closest(".luke-anchored-popover") ?? null) !== null;
     set(open);
     if (returning && more !== null && getComputedStyle(more).display !== "none") {
       queueMicrotask(() => more.focus());

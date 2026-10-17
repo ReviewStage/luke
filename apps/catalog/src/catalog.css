@@ -188,6 +188,41 @@ body {
   white-space: nowrap;
 }
 
+/* A popover's anchor, the positioned box that holds its button alone, and
+   the room the popover opens in: tall enough above the buttons to hold it. */
+.catalog-anchor {
+  position: relative;
+}
+
+.catalog-popover-stage {
+  max-width: 760px;
+  padding-top: 120px;
+}
+
+.catalog-popover {
+  padding: var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-ground);
+  box-shadow: 0 4px 16px var(--luke-color-shadow);
+}
+
+/* A short room that scrolls, its button low enough that the popover opens
+   above it until a scroll lifts the button toward the room's top. */
+.catalog-popover-room {
+  position: relative;
+  max-width: 560px;
+  height: 200px;
+  overflow: auto;
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-popover-scroll {
+  height: 480px;
+  padding: 140px var(--luke-space-12) 0;
+}
+
 /* An example's column of samples, each a row of its own. */
 .catalog-stack {
   display: flex;
@@ -245,17 +280,9 @@ body {
   overflow-y: auto;
 }
 
-/* A settings card standing in for the section that holds a page's rows:
-   its edge, and a rule between rows. */
+/* The measure a settings page gives its sections. */
 .catalog-settings {
   max-width: 560px;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-10);
-  background: var(--luke-color-surface);
-}
-
-.catalog-settings > * + * {
-  border-top: 1px solid var(--luke-color-border);
 }
 
 .catalog-settings-narrow {

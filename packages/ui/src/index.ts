@@ -1,4 +1,5 @@
 export * from "./cn.js";
+export * from "./components/anchored-popover/anchored-popover.js";
 export * from "./components/auth-page/auth-page.js";
 export * from "./components/badge/badge.js";
 export * from "./components/button/button.js";
@@ -8,8 +9,10 @@ export * from "./components/dialog/dialog.js";
 export * from "./components/form-field/form-field.js";
 export * from "./components/hover-card/hover-card.js";
 export * from "./components/layout/layout.js";
+export * from "./components/list-row/list-row.js";
 export * from "./components/segmented/segmented.js";
 export * from "./components/settings-row/settings-row.js";
+export * from "./components/settings-section/settings-section.js";
 export * from "./components/skeleton/skeleton.js";
 export * from "./components/spinner/spinner.js";
 export * from "./components/switch/switch.js";
