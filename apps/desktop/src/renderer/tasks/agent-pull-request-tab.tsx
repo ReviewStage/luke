@@ -71,7 +71,7 @@ import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
-import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
+import { AgentChangesTab, THREAD_PLACE, type ThreadPlace, useAgentRead } from "./agent-changes-tab";
 import { threadPreview } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import {
@@ -879,16 +879,19 @@ function ThreadComments({
  */
 function InlineThread({
   thread,
+  place,
   now,
   picture,
 }: {
   thread: ReviewThread;
+  /** Under its line, or above the diff, where it names the lines it is on. */
+  place: ThreadPlace;
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   const { settings } = useFileViewSettings();
   const labels = threadLabels(thread);
-  const lines = thread.line === null ? threadLines(thread) : undefined;
+  const lines = place === THREAD_PLACE.ABOVE ? threadLines(thread) : undefined;
   const folded = labels.length > 0 || settings.diffMinimizeComments;
   const first = thread.comments[0];
   return (
@@ -1633,7 +1636,10 @@ export function AgentPullRequestTab({
             tree={tree}
             threads={{
               list: reviewThreadsOf(landed(parts.conversation)),
-              draw: (thread) => <InlineThread thread={thread} now={now} picture={picture} />,
+              draw: (thread, place) => (
+                <InlineThread thread={thread} place={place} now={now} picture={picture} />
+              ),
+              refresh: ask.conversation,
             }}
           />
         </div>

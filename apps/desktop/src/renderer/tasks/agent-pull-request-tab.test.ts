@@ -2082,7 +2082,8 @@ test("Files changed draws each review thread under its line, its comments throug
             additions: 2,
             deletions: 1,
             omitted: null,
-            patch: thread().diffHunk,
+            // The hunk as the pull request's files carry it, its header counting the lines it holds.
+            patch: thread().diffHunk.replace("@@ -8,6 +8,7 @@", "@@ -8,5 +8,6 @@"),
           },
         ],
       },

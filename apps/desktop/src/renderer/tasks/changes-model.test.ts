@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { DIFF_SIDE } from "@luke/features/coding-agent-wire";
+import { CHANGED_FILE_STATUS, DIFF_SIDE, PATCH_OMITTED } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
 import { threadPreview, threadsOn } from "./changes-model";
 
@@ -135,31 +135,60 @@ function threadAt(path: string, line: number | null, url: string) {
   };
 }
 
-test("a file's threads stand under the lines they stand on now, on the side they count on, and those a push outdated above its diff", () => {
-  const onLeft = {
-    ...threadAt("src/a.ts", 4, "https://github.com/acme/relay/pull/7#r1"),
-    side: DIFF_SIDE.LEFT,
-  };
+/** The changed file the threads are on: one hunk, old lines 3 to 5 and new lines 3 to 6, line 4 changed and a line added. */
+const FILE_A = {
+  path: "src/a.ts",
+  previousPath: null,
+  status: CHANGED_FILE_STATUS.MODIFIED,
+  additions: 2,
+  deletions: 1,
+  omitted: null,
+  patch:
+    "@@ -3,3 +3,4 @@\n const c = 3;\n-const d = 4;\n+const d = 5;\n+const e = 6;\n const f = 7;",
+};
+
+const R = "https://github.com/acme/relay/pull/7#r";
+
+test("a file's threads stand under the lines its diff draws, on the side they count on, and every other above its diff", () => {
   const { placed, above } = threadsOn(
     [
-      onLeft,
-      threadAt("src/a.ts", 9, "https://github.com/acme/relay/pull/7#r2"),
-      threadAt("src/a.ts", null, "https://github.com/acme/relay/pull/7#r3"),
-      threadAt("src/b.ts", 2, "https://github.com/acme/relay/pull/7#r4"),
+      { ...threadAt("src/a.ts", 4, `${R}1`), side: DIFF_SIDE.LEFT },
+      threadAt("src/a.ts", 5, `${R}2`),
+      threadAt("src/a.ts", null, `${R}3`),
+      threadAt("src/a.ts", 120, `${R}4`),
+      threadAt("src/b.ts", 2, `${R}5`),
       { ...threadAt("src/a.ts", 5, "unused"), comments: [] },
     ],
-    "src/a.ts",
+    FILE_A,
   );
 
   assert.deepEqual(
     placed.map(({ key, side, line }) => [key, side, line]),
     [
-      ["https://github.com/acme/relay/pull/7#r1", "deletions", 4],
-      ["https://github.com/acme/relay/pull/7#r2", "additions", 9],
+      [`${R}1`, "deletions", 4],
+      [`${R}2`, "additions", 5],
     ],
   );
   assert.deepEqual(
+    above.map(({ key, line }) => [key, line]),
+    [
+      [`${R}3`, 7],
+      [`${R}4`, 120],
+    ],
+    "an outdated thread, and one on a line no hunk shows",
+  );
+});
+
+test("every thread on a file whose diff is not drawn stands above where its diff would", () => {
+  const { placed, above } = threadsOn([threadAt("src/a.ts", 4, `${R}1`)], {
+    ...FILE_A,
+    patch: null,
+    omitted: PATCH_OMITTED.BINARY,
+  });
+
+  assert.deepEqual(placed, []);
+  assert.deepEqual(
     above.map(({ key }) => key),
-    ["https://github.com/acme/relay/pull/7#r3"],
+    [`${R}1`],
   );
 });
