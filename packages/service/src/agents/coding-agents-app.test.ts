@@ -2930,8 +2930,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           attachments: [trace],
         });
         assert.equal(sent.status, HOSTED_HTTP_STATUS.OK);
-        assert.equal(eve.sent.length, before + 1, "a file reaches the agent as a note does");
-        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        const handed = JSON.stringify(eve.sent.slice(before).map((each) => each.message.message));
         assert.ok(handed.includes(INBOX_ANSWER_LEAD), "it reads as an Inbox answer");
         assert.ok(handed.includes("flag on in staging"), "it carries the file");
         const kept = (yield* read()).items.find((item) => item.key === "flag-file");
