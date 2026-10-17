@@ -123,7 +123,7 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
  * says it took the item back, and why. A block or a response of a type
  * this build does not know, one a newer service wrote, is drawn as a line
  * naming a newer Luke, so the rest still reads. The pane's bar is its
- * path, plan › agent, each crumb drawn as its tab in the plan's column,
+ * path, task › agent, each crumb drawn as its tab in the task's column,
  * opening what it names and hanging the card its sidebar row or tab
  * hangs, after a way back to the list where the item stands alone. Wherever the thread names the agent, its bylines and the line
  * saying an answer was sent to it, the name is the agent's own reference
@@ -136,7 +136,7 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
  * viewer, drawn over the window outside it, is out of it on its own.
  */
 
-/** What the thread says under its item where the plan's inbox could not be read. */
+/** What the thread says under its item where the task's inbox could not be read. */
 const INBOX_FAILED_LINE = "The inbox could not be read.";
 
 /** What a card says of an image whose read did not answer. */
@@ -206,9 +206,9 @@ export function LinkBlock({
 
 /** What a code block reads its lines through and opens its file with. */
 export interface InboxCodeDoors {
-  /** The plan's repository, `owner/name`, which the lines are read through; none where the plan names none. */
+  /** The task's repository, `owner/name`, which the lines are read through; none where the task names none. */
   readonly repository: string | null;
-  /** Reads a window of a file of the plan's repository, as the File tab does. */
+  /** Reads a window of a file of the task's repository, as the File tab does. */
   readonly readFile: ReadFileWindow;
   /** Opens the file in the side panel's File tab at the commit named, the reference's lines lit. */
   readonly onOpenFile: (ref: CodeRef, commit: string) => void;
@@ -218,7 +218,7 @@ export interface InboxCodeDoors {
  * A code block: a card as the Code tab draws one, headed by the path and
  * the lines, the file opened in the File tab at the block's commit from
  * either, and the lines read from GitHub at that commit with a few around
- * them, the block's own lit; lines the plan cannot read say why, and open
+ * them, the block's own lit; lines the task cannot read say why, and open
  * nothing. Note that the read goes through a ref to the
  * latest door, so a parent drawing a fresh door does not read again, and
  * that an answer landing after the block changed or left is dropped.
@@ -268,7 +268,7 @@ function CodeBlock({
         codeRef={codeRef}
         note={undefined}
         copied={shown.kind === CODE_READ.READY ? copiedLines(shown.code) : undefined}
-        // Note that lines the plan does not read open nothing, because the File tab reads the plan's repository alone.
+        // Note that lines the task does not read open nothing, because the File tab reads the task's repository alone.
         onOpen={unread === undefined ? () => code.onOpenFile(codeRef, sha) : undefined}
       />
       {shown.kind === CODE_READ.READY ? (
@@ -913,11 +913,11 @@ function AnswerBox({
 
 /** What the pane's crumbs open, and the cards they hang. */
 export interface InboxPaneDoors {
-  /** Opens what holds the item: its plan, or its automation's page; nothing where there is none to open. */
+  /** Opens what holds the item: its task, or its automation's page; nothing where there is none to open. */
   readonly onOpenHolder: (() => void) | undefined;
-  /** The plan's hover card, as its sidebar row hangs it; none for an automation. */
+  /** The task's hover card, as its sidebar row hangs it; none for an automation. */
   readonly taskCard: React.ReactNode;
-  /** Opens the agent's tab on its plan. */
+  /** Opens the agent's tab on its task. */
   readonly onOpenAgent: (agentId: string) => void;
   /** Opens a link block's web page in the browser (`use-open-link.ts`). */
   readonly openLink: (url: string) => void;
@@ -975,11 +975,11 @@ function AutomationCrumb({
 }
 
 /**
- * The pane's path, plan › agent, each crumb drawn as its tab is in the
- * plan's column, the plan's document glyph and the agent's mark: each opens
- * what it names, the plan or the agent's tab, and hangs the card its
- * sidebar row or tab hangs, the plan's crumb as every place naming the
- * plan does (`PlanRef`). An agent with no plan stands under the automation
+ * The pane's path, task › agent, each crumb drawn as its tab is in the
+ * task's column, the task's document glyph and the agent's mark: each opens
+ * what it names, the task or the agent's tab, and hangs the card its
+ * sidebar row or tab hangs, the task's crumb as every place naming the
+ * task does (`TaskRef`). An agent with no task stands under the automation
  * that started it instead, by its clock and name, which hang its card and
  * open the automation's page where that can be opened. An agent this window does
  * not list, one started on another Mac, hangs a card saying so and still
@@ -1054,10 +1054,10 @@ export function InboxPane({
   pager,
   next,
 }: {
-  /** What holds the item: its plan, or the automation that started its agent with no plan. */
+  /** What holds the item: its task, or the automation that started its agent with no task. */
   holder: InboxHolder;
   item: InboxItem;
-  /** The live read of the item's plan, or of its agent with no plan, which answers it and holds its draft. */
+  /** The live read of the item's task, or of its agent with no task, which answers it and holds its draft. */
   control: TaskInboxControl;
   agents: CodingAgentsControl;
   doors: InboxPaneDoors;

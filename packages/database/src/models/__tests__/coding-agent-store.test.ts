@@ -23,8 +23,8 @@ import { Database } from "../../core/query.js";
 import { agentPin } from "../../schemas/agent-pin.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
-import { task } from "../../schemas/plan.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
+import { task } from "../../schemas/task.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace } from "../../testing/index.js";
 import {
@@ -61,7 +61,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * dialect: every delegation its conversation recorded by a kept call, oldest
  * first, each on the pair it recorded, and none of another account's. And
  * a turn Anthropic refused Fast for, as its usage reads it. And an agent
- * with no plan, which its workspace's members reach and no one else does,
+ * with no task, which its workspace's members reach and no one else does,
  * and the workspace's agents listed for its members alone. And what sent
  * each of the developer's lines to an agent, read by the agent's account.
  * And where in a turn under way each line arrived, as the turn took it in.

@@ -11,7 +11,7 @@ import { user } from "./auth.js";
  * few minutes of one another are one revision each save moves on
  * (`models/plan-template-revisions.ts`), and a restore or a reset is a
  * revision of its own that nothing joins. The template is the account's
- * alone, so a row names the account rather than a plan, and goes with it.
+ * alone, so a row names the account rather than a task, and goes with it.
  * The first save after history began finds the template the account held
  * and records it first, under `earlier`.
  */

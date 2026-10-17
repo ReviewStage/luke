@@ -13,9 +13,9 @@ import { type PageToolBinding, runShowPage, SHOW_PAGE_REFUSAL } from "./page-too
 
 /**
  * `show_page`, every agent's one tool for a page, through its public
- * function against a real dialect: inline HTML makes a page the plan lists,
+ * function against a real dialect: inline HTML makes a page the task lists,
  * a page named again takes its next version, a secret file is never read,
- * and another account's plan takes no page. Synthetic accounts, plans, and
+ * and another account's task takes no page. Synthetic accounts, tasks, and
  * pages throughout.
  */
 

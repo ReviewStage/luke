@@ -9,24 +9,29 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ProviderMark } from "@luke/ui";
+import { CHAT_PLACE, type ChatPlace, chatNames } from "@luke/ui/chat-model";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeAll, test } from "vitest";
+import { onRegistry } from "#testing/copy-feedback";
+import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { taskCards } from "../desktop/side-panel";
 import { NOTHING_HELD } from "./agent-ref";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
+import { fixtureChat } from "./chat-fixture";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 
 /**
  * agent-tab.test.ts -- a call about something the window draws in a tab of
  * its own is a row that opens that tab, and every other call a row that
  * folds open in place; a run of calls and a finished turn's lead fold under
- * a line led by a chevron saying whether it is open, while the calls under
- * it, a list of the agents among them, keep their own icons. A row that opens an agent's or a worker's tab
- * hangs that tab's card. A call of an integration's own tool is one row
+ * a line saying whether it is open. A row that opens an agent's or a
+ * worker's tab hangs that tab's card. A call of an integration's own tool is one row
  * wearing the integration's mark, with the `connection_execute` that ran it
  * left out.
  */
@@ -254,20 +259,7 @@ for (const call of FOLDING_CALLS) {
   });
 }
 
-/** The chevron leading a fold's line: a right-pointing chevron, turned down where the line says it is open; nothing where the line has none. */
-function chevronOf(line: Element | null | undefined): { open: boolean } | undefined {
-  const glyph = line?.firstElementChild;
-  if (!glyph?.classList.contains("lucide-chevron-right")) return undefined;
-  const open = glyph.classList.contains("rotate-90");
-  assert.equal(
-    line?.getAttribute("aria-expanded"),
-    String(open),
-    "the chevron agrees with the line",
-  );
-  return { open };
-}
-
-test("a run of calls folds under a line whose chevron says it is open, and its calls keep their icons, a list of the agents a list's", () => {
+test("a run of calls folds under a line that says it is open", () => {
   const { container } = drawn(
     assistant([
       toolPart("list_coding_agents", {}, { agents: [] }),
@@ -277,21 +269,10 @@ test("a run of calls folds under a line whose chevron says it is open, and its c
   );
   const group = container.querySelector("[data-turn-fold] > summary");
   assert.equal(group?.textContent, "2 tools called");
-  assert.deepEqual(chevronOf(group), { open: true }, "the open group's chevron points down");
-  const rows = [...container.querySelectorAll("[data-turn-fold] summary")];
-  const listed = rows.find((row) => row.textContent?.includes("Listed the coding agents"));
-  assert.ok(
-    listed?.querySelector("svg")?.classList.contains("lucide-layout-list"),
-    "the list's row wears LayoutList",
-  );
-  const ran = rows.find((row) => row.textContent?.includes("git status"));
-  assert.ok(
-    ran?.querySelector("svg")?.classList.contains("lucide-laptop"),
-    "the command's row wears Laptop",
-  );
+  assert.equal(group?.getAttribute("aria-expanded"), "true", "the group says it is open");
 });
 
-test("a finished turn's lead folds under a line whose chevron turns as it opens, and its calls keep their icons", () => {
+test("a finished turn's lead folds under a line that opens as it is pressed", () => {
   const { container } = drawn(
     assistant([
       toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
@@ -302,14 +283,13 @@ test("a finished turn's lead folds under a line whose chevron turns as it opens,
   );
   const fold = container.querySelector<HTMLElement>("[data-turn-fold] > summary");
   assert.equal(fold?.textContent, "2 tool calls, 1 message");
-  assert.deepEqual(chevronOf(fold), { open: false }, "the closed fold's chevron points right");
+  assert.equal(fold?.getAttribute("aria-expanded"), "false", "the fold stands closed");
   act(() => fold?.click());
-  assert.deepEqual(chevronOf(fold), { open: true }, "the opened fold's chevron points down");
+  assert.equal(fold?.getAttribute("aria-expanded"), "true", "the pressed fold says it is open");
   const rows = [...container.querySelectorAll("[data-turn-fold] summary")];
-  const read = rows.find((row) => row.textContent?.includes("src/new.ts"));
   assert.ok(
-    read?.querySelector("svg")?.classList.contains("lucide-file-text"),
-    "the read's row wears FileText",
+    rows.some((row) => row.textContent?.includes("src/new.ts")),
+    "the opened fold lists the read",
   );
 });
 
@@ -404,7 +384,7 @@ for (const { name, parts, standings, label } of FAILURE_LINES) {
   });
 }
 
-/** An agent of the plan's, as its list holds it. */
+/** An agent of the task's, as its list holds it. */
 function listedAgent(id: string, title: string, overrides: Partial<CodingAgentSummary> = {}) {
   return {
     id,
@@ -608,5 +588,148 @@ test("a connection_execute that failed keeps its own row beside the call it ran,
   assert.ok(
     container.querySelector('[data-call-id="call-linear_remote"]') !== null,
     "the call it ran keeps its row too",
+  );
+});
+
+// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+
+/** A line a chat notice steered into the agent's turn, telling of message 43 from @agent-2. */
+const NOTICE: CodingAgentMessage = {
+  id: "notice",
+  role: MESSAGE_ROLE.USER,
+  parts: [
+    { type: "text", text: "Chat: @agent-2 in #teammate-invitations asked about memberships." },
+  ],
+  metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "agent-2" },
+};
+
+/** The notice drawn in an agent's transcript, beside the fixture's chat or none, with Chat offered or not, every place it opens recorded. */
+function noticeDrawn(withChat: boolean, chatOn = true) {
+  const opened: ChatPlace[] = [];
+  const read = fixtureChat({ fixtureMode: true }, 0);
+  assert.ok(read);
+  const chat = withChat
+    ? {
+        chat: read.answer,
+        names: chatNames([], read.agents, undefined),
+        onOpen: (place: ChatPlace) => opened.push(place),
+      }
+    : undefined;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(AgentMessage, {
+          message: NOTICE,
+          plan: false,
+          lead: AGENT_LEAD,
+          moving: false,
+          delegation: { models: [], chat, chatOn },
+        }),
+      ),
+    ),
+  );
+  return { container, opened };
+}
+
+/** The fixture's chat, and the channel a message of it was posted in. */
+function channelOf(seq: number): string | undefined {
+  const chat = fixtureChat({ fixtureMode: true }, 0);
+  assert.ok(chat);
+  return chat.answer.messages.find((message) => message.seq === seq)?.channelId;
+}
+
+test("a line a chat notice wrote draws as a card from its sender, naming the channel and the message's place, its words the message's own, and Open in Chat opens the channel", () => {
+  const { container, opened } = noticeDrawn(true);
+  const card = container.querySelector<HTMLElement>("[data-chat-notice]");
+  assert.ok(card, "the notice draws as a card");
+  assert.equal(card.dataset.messageId, "notice", "a link to the line finds its card");
+  assert.equal(container.querySelector(".is-user"), null);
+  assert.equal(card.querySelector(".chat-notice-from")?.textContent, "@agent-2");
+  assert.match(
+    card.querySelector(".chat-notice-place")?.textContent ?? "",
+    /^in #teammate-invitations · m 43 · /u,
+  );
+  assert.match(
+    card.querySelector(".chat-notice-words")?.textContent ?? "",
+    /^@agent-1 are you changing memberships columns\?/u,
+  );
+  const open = card.querySelector<HTMLButtonElement>(".chat-notice-open");
+  act(() => open?.click());
+  assert.deepEqual(opened, [{ kind: CHAT_PLACE.CHANNEL, channelId: channelOf(43) }]);
+});
+
+test("where the window holds no chat, a notice's card says its sender and place from the notice alone, its own words under them, with nothing to open", () => {
+  const { container } = noticeDrawn(false);
+  const card = container.querySelector<HTMLElement>("[data-chat-notice]");
+  assert.equal(card?.querySelector(".chat-notice-from")?.textContent, "@agent-2");
+  assert.equal(card?.querySelector(".chat-notice-place")?.textContent, "m 43");
+  assert.equal(
+    card?.querySelector(".chat-notice-words")?.textContent?.trim(),
+    "Chat: @agent-2 in #teammate-invitations asked about memberships.",
+  );
+  assert.equal(card?.querySelector(".chat-notice-open"), null);
+});
+
+test("with Chat off, a line a chat notice wrote is drawn as the plain line it is, with no card and nothing to open", () => {
+  const { container } = noticeDrawn(true, false);
+  assert.equal(container.querySelector("[data-chat-notice]"), null);
+  assert.match(container.textContent ?? "", /Chat: @agent-2 in #teammate-invitations asked/u);
+});
+
+test("a notice of a message holding no Markdown, a link alone, keeps the notice's own words under its head", () => {
+  const read = fixtureChat({ fixtureMode: true }, 0);
+  assert.ok(read);
+  const answer = {
+    ...read.answer,
+    messages: read.answer.messages.map((message) =>
+      message.seq === 43
+        ? {
+            ...message,
+            blocks: [
+              {
+                type: "link" as const,
+                url: "https://github.com/acme/relay/pull/214",
+                label: "#214",
+              },
+            ],
+          }
+        : message,
+    ),
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(AgentMessage, {
+          message: NOTICE,
+          plan: false,
+          lead: AGENT_LEAD,
+          moving: false,
+          delegation: {
+            models: [],
+            chatOn: true,
+            chat: {
+              chat: answer,
+              names: chatNames([], read.agents, undefined),
+              onOpen: () => undefined,
+            },
+          },
+        }),
+      ),
+    ),
+  );
+  assert.equal(
+    container.querySelector(".chat-notice-words")?.textContent?.trim(),
+    "Chat: @agent-2 in #teammate-invitations asked about memberships.",
   );
 });

@@ -6,7 +6,7 @@ import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.j
 import { CODE_PATH_MAX_CHARS, codeLineSchema, commitShaSchema } from "./task-wire.js";
 
 /**
- * inbox-wire.ts -- the developer's inbox: what a plan's coding agents need of the developer, posted by the agents and answered on the desktop.
+ * inbox-wire.ts -- the developer's inbox: what a task's coding agents need of the developer, posted by the agents and answered on the desktop.
  *
  * An item is one thing an agent cannot do or decide alone, kept on the
  * service as a row of its own rather than in the agent's transcript, so it
@@ -39,7 +39,7 @@ import { CODE_PATH_MAX_CHARS, codeLineSchema, commitShaSchema } from "./task-wir
  *
  * The agent posts, closes, and reads its items through the tools named
  * below, whose inputs are declared here so the model is shown, eve holds,
- * and the desktop draws one shape. A plan's inbox is read past a cursor the
+ * and the desktop draws one shape. A task's inbox is read past a cursor the
  * service hands back, held open while nothing changed, as a transcript is.
  * Every request refuses a key it does not name; an answer ignores one a
  * newer service added. The item a desktop reads carries the version of
@@ -98,7 +98,7 @@ export const INBOX_BOUNDS = {
   MAX_REASON_CHARS: 600,
   /** The most items one agent keeps open at once: what a person works through, never a log. */
   MAX_OPEN_PER_AGENT: 20,
-  /** The most settled items a read of a plan's inbox carries beside every open one, the latest changed first. */
+  /** The most settled items a read of a task's inbox carries beside every open one, the latest changed first. */
   MAX_ITEMS_READ: 200,
   /** The most settled items an agent's inbox tool answers with beside every open one: enough to hear what was answered lately. */
   MAX_SETTLED_TOLD: 20,
@@ -490,10 +490,17 @@ export const inboxItemSchema = EffectSchema.Struct({
   response: inboxReadResponseSchema,
   needsReply: EffectSchema.Boolean,
   status: EffectSchema.Literals(Object.values(INBOX_STATUS)),
+  /**
+   * The member who started the agent that posted the item, whose question it
+   * is, as the account's read names it (`account-inbox-wire.ts`); absent from
+   * a service before it, which the desktop reads as the reader's own, as it
+   * read every item before.
+   */
+  startedBy: EffectSchema.optionalKey(memberRefSchema),
   /** The developer's answer, on an answered item. */
   answer: EffectSchema.optionalKey(inboxReplySchema),
   /**
-   * The member who answered, on an answered item, any member of the plan's
+   * The member who answered, on an answered item, any member of the task's
    * workspace; absent for an answer nobody can be named for, and from a
    * service before answerers were kept. The window says "You" only where it
    * is the signed-in account.
@@ -515,7 +522,7 @@ export const INBOX_CURSOR_START = "0";
 /** Where a reader of an inbox stands, as the service last handed it back. */
 export const inboxCursorSchema = filledText(INBOX_BOUNDS.MAX_CURSOR_CHARS);
 
-/** A plan's inbox as it stands: every item its agents posted, the latest changed first, and the cursor to read on from. */
+/** A task's inbox as it stands: every item its agents posted, the latest changed first, and the cursor to read on from. */
 export const inboxAnswerSchema = EffectSchema.Struct({
   items: EffectSchema.Array(inboxItemSchema),
   cursor: EffectSchema.String,

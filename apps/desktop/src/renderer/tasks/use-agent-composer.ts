@@ -120,7 +120,7 @@ function holdsNothing(draft: Draft): boolean {
 
 export function useAgentComposer(input: {
   agentId: string;
-  /** The agent's plan, whose repository a refusal's remedy mends; null for an agent with no plan, whose refusal says its words alone. */
+  /** The agent's task, whose repository a refusal's remedy mends; null for an agent with no task, whose refusal says its words alone. */
   taskId: string | null;
   /** The transcript as the tab holds it, which a sent line is read back from. */
   messages: readonly CodingAgentMessage[];

@@ -25,7 +25,7 @@ import { type TranscriptElement, TranscriptWords } from "./transcript-blocks";
  *
  * A message the developer sent a coding agent names a skill as the words
  * `/name` (`skill-mention.ts`), and its bubble draws each `/name` that names
- * one of the plan's repository's skills as the chip the composer drew it as
+ * one of the task's repository's skills as the chip the composer drew it as
  * while it was typed (`skill-ref.tsx`), where Claude Code and Codex draw a
  * slash command as a token too; a `/word` that names none stays words. The
  * chip is a button: a press, or Enter once it has the focus, opens the
@@ -34,14 +34,14 @@ import { type TranscriptElement, TranscriptWords } from "./transcript-blocks";
  * A chip the composer drew opens the same file on a press
  * (`skill-picker.tsx`). The words stay the message's own underneath, so a
  * copy of the message and a find in the tab read `/name`.
- * The skills are the ones the composer offers, read once for the plan
+ * The skills are the ones the composer offers, read once for the task
  * (`repository-skills.ts`), and only once a transcript holds a word they
  * could name, so a conversation naming none reads nothing. The "Loaded
  * skill" row of a call that loaded one hangs the same card and opens the
  * same file (`useSkill`).
  */
 
-/** The plan's skills as read, by name, the ask that reads them, and what opening one's file does, handed to every transcript of the plan. */
+/** The task's skills as read, by name, the ask that reads them, and what opening one's file does, handed to every transcript of the task. */
 interface SkillFileDoors {
   /** The skills, by name; nothing before a reader asked and the read landed, or where it did not. */
   readonly skills: ReadonlyMap<string, SkillOption> | undefined;
@@ -57,7 +57,7 @@ const SKILL_ELEMENT = {
 
 const SkillFileContext = createContext<SkillFileDoors | undefined>(undefined);
 
-/** The plan's skills, by name, read once a reader wants them; nothing before they land, or where they were not read. */
+/** The task's skills, by name, read once a reader wants them; nothing before they land, or where they were not read. */
 function useKnownSkills(wanted: boolean): ReadonlyMap<string, SkillOption> | undefined {
   const doors = useContext(SkillFileContext);
   const ask = doors?.ask;
@@ -94,13 +94,13 @@ function SkillElement({ node }: ExtraProps): ReactNode {
 
 const SKILL_COMPONENTS: Components = { [SKILL_ELEMENT.TAG]: SkillElement };
 
-/** Hands every transcript under it the plan's skills and what opening one's file does. */
+/** Hands every transcript under it the task's skills and what opening one's file does. */
 export function SkillFiles({
   source,
   onOpen,
   children,
 }: {
-  /** Where the plan's skills are read from; nothing while the plan names no repository. */
+  /** Where the task's skills are read from; nothing while the task names no repository. */
   source: SkillSource | undefined;
   onOpen: (skill: SkillOption) => void;
   children: ReactNode;
@@ -120,7 +120,7 @@ export function SkillFiles({
     if (source === undefined || asked.current === source) return;
     asked.current = source;
     source().then((answer) => {
-      // A read for a plan or repository left since is no answer for this one.
+      // A read for a task or repository left since is no answer for this one.
       if (asked.current !== source) return;
       if ("skills" in answer) {
         setRead({ source, skills: new Map(answer.skills.map((skill) => [skill.name, skill])) });
@@ -136,7 +136,7 @@ export function SkillFiles({
   return <SkillFileContext.Provider value={doors}>{children}</SkillFileContext.Provider>;
 }
 
-/** The named skill and what opens its `SKILL.md`; nothing where no skill of the plan's is so named, or its skills are not read. */
+/** The named skill and what opens its `SKILL.md`; nothing where no skill of the task's is so named, or its skills are not read. */
 export function useSkill(name: string | undefined): SkillSubject | undefined {
   const onOpen = useContext(SkillFileContext)?.onOpen;
   const skill = useKnownSkills(name !== undefined && name !== "")?.get(name ?? "");
@@ -144,7 +144,7 @@ export function useSkill(name: string | undefined): SkillSubject | undefined {
   return { skill, onOpen: () => onOpen(skill) };
 }
 
-/** What opens a skill's `SKILL.md`, for the composer's chips, which read the skills themselves; nothing outside a plan's page. */
+/** What opens a skill's `SKILL.md`, for the composer's chips, which read the skills themselves; nothing outside a task's page. */
 export function useSkillOpener(): ((skill: SkillOption) => void) | undefined {
   return useContext(SkillFileContext)?.onOpen;
 }

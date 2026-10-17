@@ -28,15 +28,20 @@ import { refusalLine, refusalPasses } from "./file-tab-model";
  * inbox-model.ts -- the Inbox as pure decisions: which items it lists and how, what an item's answer is, and how a settled one reads.
  *
  * The list holds every item of every plan it is handed, the latest changed
- * first, under its plan or in one run, and Needs you lists only what waits,
- * though the steps through it keep the item chosen. A settled item keeps everything its agent offered,
+ * first, under its plan, under the person whose agent asks it, or in one
+ * run. An item is the reader's where they started the agent that asks it,
+ * or where the service does not say who did, as main counts what waits on
+ * the account (`agent-notices.ts`), and only the reader's open items need
+ * them: Needs you lists only those, though the steps through it keep the
+ * item chosen, while a teammate's open item stands in the list as waiting
+ * on them. A settled item keeps everything its agent offered,
  * the developer's pick marked, and says who settled it and what they
- * wrote. A plan's board, which counts what waits, holds what waits the
+ * wrote. A task's board, which counts what waits, holds what waits the
  * oldest posted first, since it has held its agent longest, and what is
  * settled, answered or taken back by its agent, the latest changed first.
- * Every item the plan's inbox holds is
+ * Every item the task's inbox holds is
  * drawn, whether or not the window's list of agents has caught up with the
- * agent that posted it, since the service reads the inbox by plan and an
+ * agent that posted it, since the service reads the inbox by task and an
  * agent's items go with it. A card's answer is held to the same rule the
  * service holds it to (`inbox-wire.ts`'s `inboxReplyRefusal`), so a press
  * the service would refuse is never offered; an item asking a response
@@ -60,7 +65,7 @@ export interface InboxBoardView {
   readonly settled: readonly InboxItem[];
 }
 
-/** The plan's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first. */
+/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first. */
 export function inboxBoard(items: readonly InboxItem[]): InboxBoardView {
   return {
     open: items
@@ -289,7 +294,7 @@ export const NEEDS_YOU = {
   ANSWERED: "You've answered everything",
 } as const;
 
-/** What an item is listed under: the plan its agent works on, or, for an agent with no plan, the automation that started it. */
+/** What an item is listed under: the task its agent works on, or, for an agent with no task, the automation that started it. */
 export const INBOX_HOLDER = {
   TASK: "plan",
   AUTOMATION: "automation",
@@ -302,8 +307,8 @@ type InboxAgentLine = Pick<
 >;
 
 /**
- * The plan holding an item, or the automation holding an item of an agent
- * with no plan, named as its group's header names it, and its agents as
+ * The task holding an item, or the automation holding an item of an agent
+ * with no task, named as its group's header names it, and its agents as
  * main's read names them, by id; none for the agents no automation the
  * reader may read started.
  */
@@ -329,13 +334,13 @@ export type PlanlessAgent = Pick<
   | "workspaceId"
 >;
 
-/** The key a holder's group is folded and drawn by: the plan's id, the automation's, or one key for the agents no automation names. */
+/** The key a holder's group is folded and drawn by: the task's id, the automation's, or one key for the agents no automation names. */
 export function holderKey(holder: InboxHolder): string {
   if (holder.kind === INBOX_HOLDER.TASK) return holder.task.id;
   return holder.automationId ?? NO_AUTOMATION_KEY;
 }
 
-/** A plan as the holder of its items. */
+/** A task as the holder of its items. */
 export function taskHolder(task: TaskSummary): InboxHolder {
   return { kind: INBOX_HOLDER.TASK, task };
 }
@@ -351,7 +356,7 @@ export function itemWorkspaceId(holder: InboxHolder, agentId: string): string | 
     : holder.agents.get(agentId)?.workspaceId;
 }
 
-/** A holder's name as its header and a row's context say it: the plan's, or the automation's. */
+/** A holder's name as its header and a row's context say it: the task's, or the automation's. */
 export function holderName(holder: InboxHolder): string {
   return holder.kind === INBOX_HOLDER.TASK ? holder.task.name : holder.name;
 }
@@ -363,10 +368,10 @@ const NO_AUTOMATION_KEY = "no-automation";
 const NO_AUTOMATION_NAME = "Other agents";
 
 /**
- * Whether a waiting item of an agent with no plan is listed in the workspace
+ * Whether a waiting item of an agent with no task is listed in the workspace
  * given: one of that workspace's agents', or one whose workspace the service
  * does not name. Note that with no workspace listed every agent's items
- * stand, as every plan's do.
+ * stand, as every task's do.
  */
 export function listedIn(
   entry: Pick<AppInboxTasklessItem, "workspaceId">,
@@ -380,7 +385,7 @@ export function listedIn(
 }
 
 /**
- * The groups the items of agents with no plan stand in: one per automation
+ * The groups the items of agents with no task stand in: one per automation
  * that started them, by its name, and one for the agents no automation the
  * reader may read names, each holding every item its agents' reads hold,
  * settled ones too; only the listed workspace's agents, where the service
@@ -418,15 +423,16 @@ export function tasklessGroups(
   }));
 }
 
-/** How the window's Inbox lists its items: under each plan, or in one list. */
+/** How the window's Inbox lists its items: under each task, or in one list. */
 export const INBOX_GROUPING = {
   TASK: "plan",
   NEWEST: "newest",
+  PERSON: "person",
 } as const;
 
 export type InboxGrouping = (typeof INBOX_GROUPING)[keyof typeof INBOX_GROUPING];
 
-/** One holder, a plan or an automation, and every item it holds, as the list is handed them. */
+/** One holder, a task or an automation, and every item it holds, as the list is handed them. */
 export interface InboxGroup {
   readonly holder: InboxHolder;
   readonly items: readonly InboxItem[];
@@ -438,10 +444,74 @@ export interface InboxListed {
   readonly item: InboxItem;
 }
 
-/** The list as it is drawn: a group for each plan holding an item it shows, or every item in one run. */
-export type InboxListView =
+/** The member who started an item's agent, as the service names them. */
+export type InboxStarter = NonNullable<InboxItem["startedBy"]>;
+
+/** One person's items, by whoever started the agents that ask them; the reader's own where `starter` is none. */
+export interface InboxPersonGroup {
+  /** What the group is folded by, apart from any plan's or automation's key. */
+  readonly key: string;
+  readonly starter: InboxStarter | undefined;
+  readonly items: readonly InboxListed[];
+}
+
+/**
+ * The list as it is drawn: a group for each task holding an item it shows,
+ * one for each person whose agents ask one, or every item in one run; and
+ * the reader it was drawn for, whose items alone need them.
+ */
+export type InboxListView = { readonly readerId: string | undefined } & (
   | { readonly grouping: typeof INBOX_GROUPING.TASK; readonly groups: readonly InboxGroup[] }
-  | { readonly grouping: typeof INBOX_GROUPING.NEWEST; readonly items: readonly InboxListed[] };
+  | { readonly grouping: typeof INBOX_GROUPING.NEWEST; readonly items: readonly InboxListed[] }
+  | {
+      readonly grouping: typeof INBOX_GROUPING.PERSON;
+      readonly groups: readonly InboxPersonGroup[];
+    }
+);
+
+/**
+ * Whether an item is the reader's: its agent started by them, or by nobody
+ * the service names, or read before the reader's own id is known, as main
+ * counts what waits on the account and as every item read before.
+ */
+export function readersItem(item: InboxItem, readerId: string | undefined): boolean {
+  const starter = item.startedBy?.userId;
+  return starter === undefined || readerId === undefined || starter === readerId;
+}
+
+/** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */
+export function needsReader(item: InboxItem, readerId: string | undefined): boolean {
+  return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId);
+}
+
+/** What a person's group is folded by: their account's id, or one key for the reader's own. */
+const PERSON_KEY = { PREFIX: "person:", YOU: "person:you" } as const;
+
+/**
+ * The items, the latest changed first, grouped by who started their agents:
+ * the reader's own first, then each teammate's, the one whose item changed
+ * latest first, each group's items in the order given.
+ */
+function personGroups(
+  items: readonly InboxListed[],
+  readerId: string | undefined,
+): readonly InboxPersonGroup[] {
+  const groups = new Map<
+    string,
+    { key: string; starter: InboxStarter | undefined; items: InboxListed[] }
+  >();
+  for (const listed of items) {
+    const starter = readersItem(listed.item, readerId) ? undefined : listed.item.startedBy;
+    const key = starter === undefined ? PERSON_KEY.YOU : `${PERSON_KEY.PREFIX}${starter.userId}`;
+    const held = groups.get(key);
+    if (held === undefined) groups.set(key, { key, starter, items: [listed] });
+    else held.items.push(listed);
+  }
+  // Note that the groups stand in the order their latest item changed, which a stable sort keeps behind the reader's own.
+  return [...groups.values()].toSorted(
+    (a, b) => Number(a.starter !== undefined) - Number(b.starter !== undefined),
+  );
+}
 
 /** The latest change first. */
 function newestFirst(a: InboxItem, b: InboxItem): number {
@@ -449,10 +519,11 @@ function newestFirst(a: InboxItem, b: InboxItem): number {
 }
 
 /**
- * The list from every plan's items: each item the latest changed first,
- * under its plan or in one run, the plans in the order their latest item
- * changed. Needs you lists only what waits on the developer, and the item
- * chosen where one is given. Note that the rows a list draws are given none,
+ * The list from every task's items: each item the latest changed first,
+ * under its plan, under the person whose agent asks it, or in one run, the
+ * tasks in the order their latest item changed and the people as
+ * `personGroups` orders them. Needs you lists only what needs the reader,
+ * and the item chosen where one is given. Note that the rows a list draws are given none,
  * so a settled item leaves a list filtered to exclude it, while the steps
  * through the list are given the item the pane shows, which keeps its place
  * among them so K, J, and Next still reach the rows either side of it.
@@ -463,29 +534,38 @@ export function inboxList(
     readonly grouping: InboxGrouping;
     readonly waitingOnly: boolean;
     readonly chosen: string | undefined;
+    /** The signed-in account's id, whose own open items alone need them; none counts every item as theirs. */
+    readonly readerId: string | undefined;
   },
 ): InboxListView {
+  const { readerId } = view;
   const shows = (item: InboxItem) =>
-    !view.waitingOnly || item.status === INBOX_STATUS.OPEN || item.id === view.chosen;
+    !view.waitingOnly || needsReader(item, readerId) || item.id === view.chosen;
   const groups = tasks
     .map(({ holder, items }) => ({ holder, items: items.filter(shows).toSorted(newestFirst) }))
     .filter((group) => group.items.length > 0)
     .toSorted((a, b) => (b.items[0]?.updatedAt ?? 0) - (a.items[0]?.updatedAt ?? 0));
-  if (view.grouping === INBOX_GROUPING.TASK) return { grouping: INBOX_GROUPING.TASK, groups };
+  if (view.grouping === INBOX_GROUPING.TASK) {
+    return { grouping: INBOX_GROUPING.TASK, groups, readerId };
+  }
   const items = groups
     .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
     .toSorted((a, b) => newestFirst(a.item, b.item));
-  return { grouping: INBOX_GROUPING.NEWEST, items };
+  if (view.grouping === INBOX_GROUPING.NEWEST) {
+    return { grouping: INBOX_GROUPING.NEWEST, items, readerId };
+  }
+  return { grouping: INBOX_GROUPING.PERSON, groups: personGroups(items, readerId), readerId };
 }
 
-/** Whether any plan's item needs the developer, listed or filtered out. */
-export function anyNeedsYou(tasks: readonly InboxGroup[]): boolean {
-  return tasks.some(({ items }) => items.some((item) => item.status === INBOX_STATUS.OPEN));
+/** Whether any task's item needs the reader, listed or filtered out. */
+export function anyNeedsYou(tasks: readonly InboxGroup[], readerId: string | undefined): boolean {
+  return tasks.some(({ items }) => items.some((item) => needsReader(item, readerId)));
 }
 
 /** Every item the list draws, in the order it draws them. */
 export function listedItems(view: InboxListView): readonly InboxListed[] {
   if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
+  if (view.grouping === INBOX_GROUPING.PERSON) return view.groups.flatMap(({ items }) => items);
   return view.groups.flatMap(({ holder, items }) => items.map((item) => ({ holder, item })));
 }
 
@@ -509,6 +589,11 @@ function rowedItems(
   chosen: string | undefined,
 ): readonly InboxListed[] {
   if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
+  if (view.grouping === INBOX_GROUPING.PERSON) {
+    return view.groups.flatMap(({ key, items }) =>
+      folded(key) ? items.filter(({ item }) => item.id === chosen) : items,
+    );
+  }
   return view.groups.flatMap(({ holder, items }) => {
     const shut = folded(holderKey(holder));
     return items.filter((item) => !shut || item.id === chosen).map((item) => ({ holder, item }));
@@ -527,7 +612,7 @@ export function inboxSteps(
   return { at: at + 1, total: rowed.length, previous: rowed[at - 1], next: rowed[at + 1] };
 }
 
-/** The first row after the chosen one whose item needs the developer, in the list's order, wrapping round to its top, a folded group's left out; none where nothing else does. */
+/** The first row after the chosen one whose item needs the reader, in the list's order, wrapping round to its top, a folded group's left out; none where nothing else does. */
 export function nextNeedingYou(
   view: InboxListView,
   chosen: string | undefined,
@@ -536,14 +621,14 @@ export function nextNeedingYou(
   const listed = rowedItems(view, folded, chosen);
   const at = listed.findIndex(({ item }) => item.id === chosen);
   return [...listed.slice(at + 1), ...listed.slice(0, Math.max(at, 0))].find(
-    ({ item }) => item.status === INBOX_STATUS.OPEN && item.id !== chosen,
+    ({ item }) => needsReader(item, view.readerId) && item.id !== chosen,
   );
 }
 
-/** The item that stands chosen where none is: the first listed that waits, else the first listed. */
+/** The item that stands chosen where none is: the first listed that needs the reader, else the first listed. */
 export function firstChoice(view: InboxListView): InboxListed | undefined {
   const listed = listedItems(view);
-  return listed.find(({ item }) => item.status === INBOX_STATUS.OPEN) ?? listed[0];
+  return listed.find(({ item }) => needsReader(item, view.readerId)) ?? listed[0];
 }
 
 /** How many lines of the file a code block's card draws above and below the lines it points at. */
@@ -586,8 +671,8 @@ export function codeWindow(block: InboxCodeBlock): TaskFileRequest {
 
 /**
  * Why a code block's lines are not read at all, or nothing where they are
- * read: the plan reads its own repository alone, which the agent's
- * repository was when it started but may not be once the plan names
+ * read: the task reads its own repository alone, which the agent's
+ * repository was when it started but may not be once the task names
  * another, and lines that run backwards or past the bound are no window
  * the File tab's read takes. Note that GitHub spells a repository's name in
  * any case.

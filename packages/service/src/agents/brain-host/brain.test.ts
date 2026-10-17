@@ -55,10 +55,10 @@ import type { BrainHostSeams } from "./production.js";
 import { memoryRelayState, type RelayStateStore } from "./relay.js";
 
 /**
- * The planning model as the hosted brain runs it, end to end in one process:
- * a plan's conversation opened and attached, a session admitted for it, the
- * scripted fixture model handed the planning instructions, the saved document
- * as its standing context, and the planning tools, and each of its steps
+ * The brain as the hosted brain runs it, end to end in one process:
+ * a task's conversation opened and attached, a session admitted for it, the
+ * scripted fixture model handed the brain's instructions, the saved document
+ * as its standing context, and the brain's tools, and each of its steps
  * carried as eve carries them, the tool calls through the host's `runTool`
  * and every event through the relay into the store. What a caller reads
  * afterwards (the window's `readTask`, the next turn's standing context, a
@@ -84,7 +84,7 @@ const SAVED: PlanDocument = { body: SAVED_TEXT, assumptions: [] };
 
 const CORRECTION = "Any member should be able to invite, not only admins.";
 
-/** The repository the reading scenarios' plan is about, and the installation connected to the plan's workspace that reaches it. */
+/** The repository the reading scenarios' task is about, and the installation connected to the task's workspace that reaches it. */
 const RELAY = { owner: "acme", name: "relay", defaultBranch: "main" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 const RELAY_INSTALLATION = { id: 11, login: RELAY.owner, repositories: [RELAY] } as const;
@@ -130,7 +130,7 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** A plan with a saved document and its conversation opened, as the Plans tab would leave it. */
+/** A task with a saved document and its conversation opened, as the Tasks tab would leave it. */
 const savedTaskWithConversation = () =>
   Effect.gen(function* () {
     const userId = yield* openUser;
@@ -377,7 +377,7 @@ function handedDocument(context: string): PlanDocument {
     : readDocument(lines[at + 1]);
 }
 
-/** The document the Plans tab opens, failing the test where the plan does not open. */
+/** The document the Tasks tab opens, failing the test where the task does not open. */
 const windowDocument = (userId: string, taskId: string) =>
   Effect.map(readTask(userId, taskId), (opened) =>
     Option.match(opened, {

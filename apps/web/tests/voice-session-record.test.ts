@@ -22,7 +22,7 @@ import { Effect, Schema } from "effect";
  * promises through a door, which is what the service's own session effect
  * does with them.
  *
- * Synthetic fixtures: no real account, plan, or live session anywhere.
+ * Synthetic fixtures: no real account, task, or live session anywhere.
  */
 
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
@@ -56,7 +56,7 @@ const readVoiceSession = (liveSessionId: string) =>
     (rows) => rows.map((row) => decodeVoiceSessionRow(row)),
   );
 
-/** A call registered about the plan, started at the instant given, with the segments said on it in order. */
+/** A call registered about the task, started at the instant given, with the segments said on it in order. */
 const callWith = (
   input: { userId: string; taskId: string; startedAt: number },
   segments: ReadonlyArray<readonly [VoiceSegmentRole, string]>,

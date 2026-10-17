@@ -1,9 +1,8 @@
-import type { TaskAgentLine } from "@luke/features/task-wire";
 import {
   CHAT_PLACE,
-  type ChatNames,
   type ChatPlace,
   type ChatRailRow,
+  chatNames,
   chatRail,
   FOR_YOU,
 } from "@luke/ui/chat-model";
@@ -99,17 +98,10 @@ export function DesktopChat({
   const openLink = useOpenLink();
   const read = view.chat;
   const listed = tasks.tasks;
-  const names = useMemo((): ChatNames => {
-    const lines: TaskAgentLine[] = [
-      ...listed.flatMap((task) => task.agents?.agents ?? []),
-      ...(read?.agents ?? []),
-    ];
-    return {
-      agents: new Map(lines.map((line) => [line.id, line])),
-      plans: new Map(listed.map((task) => [task.id, task.name])),
-      selfName: accountName,
-    };
-  }, [listed, read, accountName]);
+  const names = useMemo(
+    () => chatNames(listed, read?.agents ?? [], accountName),
+    [listed, read, accountName],
+  );
   if (read === undefined) {
     return (
       <div className="chat-view">

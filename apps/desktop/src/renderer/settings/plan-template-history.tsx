@@ -102,7 +102,7 @@ export function TemplateVersionHistory({
   const { act } = useAct();
   const toast = useToast();
   const steps = useStepOverTemplate(history, onExit);
-  // The history's reads name a plan, and the template is the account's one, so the id they carry is no one's.
+  // The history's reads name a task, and the template is the account's one, so the id they carry is no one's.
   const source = useMemo(
     (): PlanHistorySource => ({
       readPage: (_template, before) =>

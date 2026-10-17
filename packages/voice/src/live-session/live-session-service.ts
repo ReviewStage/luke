@@ -130,7 +130,7 @@ const SETTLED_STEP_GENERAL_NOTE = "Luke finished a step";
 /**
  * How often a running ask's settled steps reach the voice as quiet progress:
  * no sooner than `GAP_MS` after the exchange's last thinking note, and at most
- * `PER_EXCHANGE` times, so a planning call that reads the repository for ten
+ * `PER_EXCHANGE` times, so a brain call that reads the repository for ten
  * minutes leaves the voice a handful of facts rather than one per command.
  * A step settled inside the gap is counted in the next note the run earns.
  */
@@ -146,7 +146,7 @@ function progressNote(step: string | undefined, settled: number): string {
 }
 
 /**
- * A question the planning model queued, as the voice is handed it: spoken
+ * A question the brain queued, as the voice is handed it: spoken
  * commentary, as the delegation guide has a result the voice should say.
  * The service hands one at a time, so the note asks for this one alone.
  */
@@ -163,7 +163,7 @@ function codePlace(ref: CodeRef): string {
 }
 
 /**
- * Code the planning model put on the developer's screen, as the voice is
+ * Code the brain put on the developer's screen, as the voice is
  * handed it: context it keeps without saying, so Luke can point at a line
  * by its number the way a person sharing a screen would.
  */
@@ -173,7 +173,7 @@ function codeOnScreenNote(ref: CodeRef): string {
 
 /**
  * How long after its delegation a run may still end the call. The voice
- * says its goodbye and delegates in the same breath, so the planning model's
+ * says its goodbye and delegates in the same breath, so the brain's
  * `end_call` lands while the goodbye plays; one that comes later than this
  * answers a goodbye the developer has had time to talk past, and the call
  * stays up rather than hanging up on whatever came since.
@@ -258,10 +258,10 @@ export interface LiveSessionServiceOptions {
   report: (message: string) => void;
   /** What the standing session's voice and brain are doing, told whole on a change alone. */
   onStatus?: (status: LiveSessionStatus) => void;
-  /** Code the planning model named is to go on the developer's screen now, as Luke starts to speak. */
+  /** Code the brain named is to go on the developer's screen now, as Luke starts to speak. */
   onCode?: (shown: TaskShownCode) => void;
   /**
-   * The developer said they are done and the planning model asked to end
+   * The developer said they are done and the brain asked to end
    * the call: the peer hangs up once Luke's goodbye has played, through the
    * developer's own hang-up. Told at most once per run.
    */
@@ -274,7 +274,7 @@ export interface LiveSessionServiceOptions {
  * What the standing session is doing beside its live status. The voice is in
  * one of its two waits: handing off from the delegation until the brain takes
  * the ask or refuses it, and about to answer from words queued for Luke until
- * his next spoken fragment. The planner stands while an exchange of the
+ * his next spoken fragment. The brain stands while an exchange of the
  * session is open, with the command or tool of the call it has pending. Both
  * are absent once the session ends.
  */
@@ -296,7 +296,7 @@ interface RetainedDelegation {
   offsetMs: number;
 }
 
-/** A question the planning model queued, waiting in its session until the voice is handed it. */
+/** A question the brain queued, waiting in its session until the voice is handed it. */
 interface HeldQuestion {
   readonly question: string;
   readonly recommendation: string;
@@ -349,7 +349,7 @@ interface StandingSession {
   /** The voice's wait, where it is in one; see `LiveSessionStatus`. */
   voicePhase: VoicePhase | undefined;
   /**
-   * Code the planning model named, held until Luke next starts to say words
+   * Code the brain named, held until Luke next starts to say words
    * queued for him, so it goes on screen as he talks about it; the newest
    * replaces any still held.
    */
@@ -357,7 +357,7 @@ interface StandingSession {
     | { readonly shown: TaskShownCode; readonly delegationId: LiveDelegationId }
     | undefined;
   /**
-   * The questions the planning model queued that the voice has not been
+   * The questions the brain queued that the voice has not been
    * handed yet, oldest first, and whether the voice holds one the developer
    * has not answered. Note that the voice is handed one at a time and the
    * next once the developer delegates again, because a voice handed the
@@ -397,7 +397,7 @@ interface StandingSession {
  * the brain finishes and whose reply is never spoken, so only the newest
  * request's result is said and it is said under its own delegation id, as
  * the delegation guide has outdated results ignored. The questions a
- * silenced run queues are still handed on, because they are the plan's next
+ * silenced run queues are still handed on, because they are the task's next
  * questions rather than an answer to the outdated request.
  */
 interface Exchange {
@@ -830,7 +830,7 @@ export class LiveSessionService {
    * because the instruction cancels no backend work: no reply of an exchange
    * delegated before the press is spoken, and each run still under way is
    * cancelled. The questions those runs queued are still handed on, as the
-   * plan's next ones, for after the developer speaks. Answers whether a
+   * task's next ones, for after the developer speaks. Answers whether a
    * session was there to tell; the microphone is the peer's to mute and is
    * not touched here.
    */
@@ -1405,9 +1405,9 @@ export class LiveSessionService {
 
   /**
    * Tells `onStatus` what the standing session is doing. Note that we derive
-   * the planner from `#exchanges` rather than counting opens and closes,
+   * the brain from `#exchanges` rather than counting opens and closes,
    * because an exchange of a session already over is still held until its
-   * runs end, and it must not stand as the next session's planner.
+   * runs end, and it must not stand as the next session's brain.
    */
   #reportStatus(): void {
     const session = this.#standing?.ended === false ? this.#standing : undefined;
@@ -1465,7 +1465,7 @@ export class LiveSessionService {
         exchange.progressNotes += 1;
         this.#think(exchange, progressNote(event.step, event.settled));
         return;
-      // A queued question is no action's result, so it waits on no settle, and it is the plan's next
+      // A queued question is no action's result, so it waits on no settle, and it is the task's next
       // question rather than the reply, so a silenced run still queues it.
       case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED: {
         const session = this.#sessionOf(exchange);
@@ -1591,7 +1591,7 @@ export class LiveSessionService {
     ) {
       this.#speakSentence(exchange, RUN_END_NOTE[exchange.end]);
     }
-    // Told after the note is queued, so the planner gives way to Luke about to say it in one change.
+    // Told after the note is queued, so the brain gives way to Luke about to say it in one change.
     this.#reportStatus();
   }
 

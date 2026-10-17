@@ -72,7 +72,7 @@ test("the microphone asks for the permission first, then for a plan, and then ta
     }),
     { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false },
   );
-  // The plan's own call standing unheard is muted, Luke speaking over it or not.
+  // The task's own call standing unheard is muted, Luke speaking over it or not.
   for (const voiceStatus of [LIVE_STATUS.MUTED, LIVE_STATUS.SPEAKING]) {
     assert.deepEqual(microphoneButton({ ...input, callTaskId: INVITES, voiceStatus }), {
       press: MICROPHONE_PRESS.TALK,
@@ -80,7 +80,7 @@ test("the microphone asks for the permission first, then for a plan, and then ta
       muted: true,
     });
   }
-  // A call still connecting, or another plan's muted call, is not this plan muted.
+  // A call still connecting, or another task's muted call, is not this task muted.
   assert.equal(
     microphoneButton({ ...input, callTaskId: INVITES, voiceStatus: LIVE_STATUS.CONNECTING }).muted,
     false,
@@ -93,7 +93,7 @@ test("the microphone asks for the permission first, then for a plan, and then ta
     }).muted,
     false,
   );
-  // A desk call or another plan's call heard is one the press hangs up, not one it mutes.
+  // A desk call or another task's call heard is one the press hangs up, not one it mutes.
   for (const callTaskId of [undefined, "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"]) {
     assert.equal(
       microphoneButton({ ...input, listening: true, callTaskId }).label,
@@ -102,7 +102,7 @@ test("the microphone asks for the permission first, then for a plan, and then ta
   }
 });
 
-/** A plan's row of the list on a repository, last updated at `updatedAt`. */
+/** A task's row of the list on a repository, last updated at `updatedAt`. */
 function _onRepository(name: string, repository: string | null, updatedAt: number) {
   return { id: name, workspaceId: "workspace-personal", name, createdAt: 1, updatedAt, repository };
 }

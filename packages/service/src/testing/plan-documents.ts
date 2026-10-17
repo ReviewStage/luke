@@ -1,5 +1,5 @@
 import { Database } from "@luke/database/core/query";
-import { task } from "@luke/database/schemas/plan";
+import { task } from "@luke/database/schemas/task";
 import { eq, sql } from "drizzle-orm";
 
 /**

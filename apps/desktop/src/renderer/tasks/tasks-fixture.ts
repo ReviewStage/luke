@@ -31,15 +31,15 @@ import {
 } from "./use-side-panel";
 
 /**
- * planning-fixture.ts -- the synthetic plans a fixture run's Plans tab draws in place of the service's.
+ * tasks-fixture.ts -- the synthetic tasks a fixture run's Tasks tab draws in place of the service's.
  *
- * A fixture run signs in to nothing and reads no plan, so the Plans tab
+ * A fixture run signs in to nothing and reads no task, so the Tasks tab
  * would show only its signed-out line. It draws the synthetic list instead,
  * which is what the expanded capture in `scripts/evidence.sh` shows now that
- * the panel opens on Plans, and under the planning profile it also opens the
- * reference journey's plan from `docs/TASKS.md`, a draft of the default
+ * the panel opens on Tasks, and under the tasks profile it also opens the
+ * reference journey's task from `docs/TASKS.md`, a draft of the default
  * template partway through with Luke working on the call about it, which is
- * what the planning capture shows. Every name and repository here is
+ * what the tasks capture shows. Every name and repository here is
  * invented; nothing is read from an account.
  */
 
@@ -47,9 +47,9 @@ import {
  * The fixture account's workspaces: its first one, named for the account as
  * the service names it, which the sidebar lists, with the account's own
  * GitHub connected, and Acme, a team's it administers, whose GitHub organization is connected, so the captures
- * draw the sidebar's switcher with every item. Each workspace's plans are
+ * draw the sidebar's switcher with every item. Each workspace's tasks are
  * about repositories its own GitHub reaches, as the service keeps them, so
- * no plan here is one stranded in a workspace that cannot reach it.
+ * no task here is one stranded in a workspace that cannot reach it.
  */
 const FIXTURE_FIRST: Workspace = {
   id: "workspace-personal",
@@ -69,7 +69,7 @@ const FIXTURE_TEAM: Workspace = {
 const FIXTURE_WORKSPACES: readonly Workspace[] = [FIXTURE_FIRST, FIXTURE_TEAM];
 
 /**
- * The reference journey's plan partway through its conversation: the
+ * The reference journey's task partway through its conversation: the
  * context, the goal, an approach with the pending-membership design settled,
  * its interfaces, one alternative weighed, one hard part, an open question,
  * and its assumptions, with every other section still holding the default
@@ -155,7 +155,7 @@ function fixtureRepository(owner: string, name: string, updatedAt: string) {
   };
 }
 
-/** The repositories each fixture workspace's GitHub reaches: the ones its plans are about. */
+/** The repositories each fixture workspace's GitHub reaches: the ones its tasks are about. */
 const FIXTURE_REPOSITORIES = new Map([
   [
     FIXTURE_FIRST.id,
@@ -354,7 +354,7 @@ const FIXTURE_SHOWN_CODE: readonly TaskCodeShowing[] = [
 
 const { USER, ASSISTANT } = TRANSCRIPT_SPEAKER;
 
-/** What was said on the fixture plan's one earlier call, as the record answers it: each line a message named by its place, and by the row the voice wrote for it. */
+/** What was said on the fixture task's one earlier call, as the record answers it: each line a message named by its place, and by the row the voice wrote for it. */
 const FIXTURE_TRANSCRIPT: TaskTranscript = {
   calls: [
     {
@@ -389,7 +389,7 @@ const FIXTURE_TRANSCRIPT: TaskTranscript = {
 };
 
 /**
- * The open plan mid-call, the planning model running a repository command
+ * The open task mid-call, the brain running a repository command
  * while the notetaker writes, so the capture shows both of the status row's
  * lines.
  */
@@ -403,7 +403,7 @@ const FIXTURE_OPEN_TASK: TasksView = {
 };
 
 /**
- * What Luke drew for the fixture's plan, in the vocabulary his
+ * What Luke drew for the fixture's task, in the vocabulary his
  * `draw_on_board` call sends, not yet on the board: the capture shows the
  * canvas converting it with Excalidraw's own converter, as a Mac does the
  * first time it reads a new drawing.
@@ -473,7 +473,7 @@ const FIXTURE_BOARD: Board = {
   drawing: { number: 1, elements: FIXTURE_DRAWING },
 };
 
-/** The open plan on its whiteboard, as the tasks-board profile captures it. */
+/** The open task on its whiteboard, as the tasks-board profile captures it. */
 const FIXTURE_OPEN_BOARD: TasksView = { ...FIXTURE_OPEN_TASK, board: FIXTURE_BOARD };
 
 /** A call of the fixture's turns, as the AI SDK journals it: answered with `output`, or running where it has none. */
@@ -501,7 +501,7 @@ function fixtureCommand(id: string, command: string, stdout?: string) {
 const FIXTURE_LIVE_SESSION = "6b8d0f2a-4c6e-4b8d-9f1a-3c5e7a9b1d2f";
 
 /**
- * What Luke's planning model did on the fixture's calls: an earlier turn
+ * What Luke's brain did on the fixture's calls: an earlier turn
  * that read the members code and answered, and the turn standing now, which
  * handed a comparison to the worker and is reading on while it runs.
  * Synthetic throughout: no real repository, command output, or page.
@@ -590,10 +590,10 @@ const FIXTURE_WORK: readonly TaskWorkTurn[] = [
   },
 ];
 
-/** The open plan mid-call on its work, as the tasks-work profile captures it. */
+/** The open task mid-call on its work, as the tasks-work profile captures it. */
 const FIXTURE_OPEN_WORK: TasksView = { ...FIXTURE_OPEN_TASK, work: FIXTURE_WORK };
 
-/** The side panels the fixture profiles open their plan with. */
+/** The side panels the fixture profiles open their task with. */
 const FIXTURE_CODE_PANEL: SidePanelState = {
   open: true,
   tabs: SIDE_PANEL_TABS,
@@ -606,7 +606,7 @@ const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: fals
 
 /**
  * The call a fixture run's status row and transcript read: listening, about
- * the fixture's open plan, with what was said on it so far.
+ * the fixture's open task, with what was said on it so far.
  */
 export const FIXTURE_TASKS_CALL: Pick<VoiceView, "voiceStatus" | "callTaskId" | "callTranscript"> =
   {
@@ -634,8 +634,8 @@ export const FIXTURE_TASKS_CALL: Pick<VoiceView, "voiceStatus" | "callTaskId" | 
   };
 
 /**
- * The plans a fixture run draws: the list with its first plan open under the
- * planning profile, the list alone under any other, and nothing for a live
+ * The tasks a fixture run draws: the list with its first task open under the
+ * tasks profile, the list alone under any other, and nothing for a live
  * run, which draws what the host read.
  */
 export function fixtureTasksView(run: {
@@ -651,8 +651,8 @@ export function fixtureTasksView(run: {
 }
 
 /**
- * The side panel a fixture run opens its plan with: on the code Luke has on
- * screen under the planning profile, on the whiteboard under the
+ * The side panel a fixture run opens its task with: on the code Luke has on
+ * screen under the tasks profile, on the whiteboard under the
  * tasks-board profile, on the call under the tasks-transcript and
  * tasks-work profiles, the latter with Luke at work on it, and closed
  * under any other. Nothing for a live

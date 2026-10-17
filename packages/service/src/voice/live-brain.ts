@@ -200,7 +200,7 @@ const RUN_END_OF_TURN_END = {
 /**
  * The stream's event as the service hears it, under the ask's id rather than
  * the turn's; code is told with its call, its turn, and `shownAt`, when the
- * turn began, as the plan's work reads them back.
+ * turn began, as the task's work reads them back.
  */
 function runEventOf(event: TurnEvent, runId: string, shownAt: number): LiveBrainRunEvent {
   switch (event.kind) {
@@ -331,7 +331,7 @@ function delegatedOf(journal: StoredUIMessage | undefined): boolean {
     .some((part) => BRAIN_DELEGATION_TOOLS.has(storedToolName(part)));
 }
 
-/** The calls about the plan's questions rather than its work. */
+/** The calls about the task's questions rather than its work. */
 const QUESTION_TOOL_NAMES: ReadonlySet<string> = new Set([
   QUEUE_QUESTION_TOOL.name,
   WITHDRAW_QUESTION_TOOL.name,
@@ -340,7 +340,7 @@ const QUESTION_TOOL_NAMES: ReadonlySet<string> = new Set([
 /**
  * The turn's settled calls, oldest first, as the kind of step each was: a
  * repository command as a repository read, and every other call as no named
- * kind. A queued or withdrawn question is the plan's next question and no
+ * kind. A queued or withdrawn question is the task's next question and no
  * step of the work, so it is not counted. Note that we read which tool was called and
  * nothing of its input or output, so a settled step tells the voice no
  * command and no line the repository holds.
@@ -381,7 +381,7 @@ function cancelOf(outcome: StopOutcome): LiveBrainCancel {
 export interface HostedLiveBrainOptions {
   /** The account the voice session was opened for, resolved at the handshake: every ask is admitted as theirs. */
   readonly accountId: string;
-  /** The conversation every ask lands in: the plan's, the same one its record writes, under the member who opened it. */
+  /** The conversation every ask lands in: the task's, the same one its record writes, under the member who opened it. */
   readonly conversation: ConversationTarget;
   /** The ask door's seams: the ask record, eve under the deployment principal for this account, and the clock. */
   readonly asks: AskSeams;
@@ -414,7 +414,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   const bounds = { ...LIVE_BRAIN_FOLLOW_BOUNDS, ...options.bounds };
   const listeners = new Set<(event: LiveBrainRunEvent) => void>();
   const workListeners = new Set<(work: TaskWorkTurn) => void>();
-  /** Each followed ask by its task revision, so the newest of several is known. */
+  /** Each followed ask by its ask revision, so the newest of several is known. */
   const followed = new Map<string, number>();
   /** How far each turn a recovered run is on was told by the connection before, as the record holds it. */
   const recoveredSeq = new Map<string, number>();
@@ -698,7 +698,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       [turn.id],
     );
     told.asked = asked.get(turn.id) ?? [];
-    // A planning call's turns call the planning tools, so the journal is read
+    // A task call's turns call the brain's tools, so the journal is read
     // under every tool a hosted conversation's rows may name.
     const journal = yield* options.store.messages.byClientId(
       options.conversation.userId,
@@ -713,7 +713,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     }
     const record = journal.value[0];
     const message = record?.message;
-    // Note that the time a call's code is told under is its journal's, which is what the plan's work reads back.
+    // Note that the time a call's code is told under is its journal's, which is what the task's work reads back.
     const shownAt = (record?.createdAt ?? turn.startedAt ?? turn.queuedAt).getTime();
     told.delegated ||= delegatedOf(message);
     const events = projectTurnEvents(turn, message);

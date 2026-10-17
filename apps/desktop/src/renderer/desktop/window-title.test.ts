@@ -8,7 +8,7 @@ import { useWindowTitle } from "./window-title";
 
 /**
  * window-title.test.ts -- the window is called by what it shows: the open
- * plan and its workspace, the workspace alone at home, and Luke while
+ * task and its workspace, the workspace alone at home, and Luke while
  * nothing is signed in.
  */
 
