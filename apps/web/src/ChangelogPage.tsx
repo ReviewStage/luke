@@ -9,7 +9,7 @@ import {
   parseReleases,
   type Release,
 } from "./changelog-releases";
-import { GitHubMark, REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome";
+import { GitHubMark, REPOSITORY_URL, SITE_PAGE, SiteFooter, SiteHeader } from "./SiteChrome";
 
 /**
  * The changelog's pages and its per-release pages, drawn from CHANGELOG.md
@@ -229,11 +229,11 @@ function SingleRelease({
 export function ChangelogPage({ view }: { readonly view: ChangelogView }): React.JSX.Element {
   return (
     <>
-      <SiteHeader />
+      <SiteHeader current={SITE_PAGE.CHANGELOG} />
 
       {/* Wider than the shell: the rail and its gutter sit beside the body,
           which keeps the shell's own document measure. */}
-      <main className="mx-auto w-full max-w-[860px] px-6 max-[520px]:px-4">
+      <main className="mx-auto w-full max-w-[860px] px-6">
         {view.kind === CHANGELOG_VIEW.PAGE ? (
           <PageOfReleases view={view} />
         ) : (
@@ -241,7 +241,7 @@ export function ChangelogPage({ view }: { readonly view: ChangelogView }): React
         )}
       </main>
 
-      <SiteFooter />
+      <SiteFooter current={SITE_PAGE.CHANGELOG} />
     </>
   );
 }

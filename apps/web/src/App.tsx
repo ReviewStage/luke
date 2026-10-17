@@ -1,18 +1,22 @@
 import { captureSiteEvent, SITE_EVENT } from "./analytics";
 import { DemoVideo } from "./DemoVideo";
-import { DMG_URL, GitHubMark, REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome";
+import {
+  DMG_URL,
+  GitHubMark,
+  REPOSITORY_URL,
+  SITE_PAGE,
+  SiteFooter,
+  SiteHeader,
+} from "./SiteChrome";
 
 export function App(): React.JSX.Element {
   return (
     <div className="min-h-screen">
-      <SiteHeader />
+      <SiteHeader current={SITE_PAGE.HOME} />
 
       <main className="shell">
         {/* The copy runs left, the way a page of prose does. The demo is wider
             than the column and centers itself on the page. */}
-        {/* The footer's hairline draws itself a space-5 above the footer's own
-            box, inside this section's bottom padding, so the padding must keep
-            at least that much clearance or the rule lands across the demo. */}
         <section className="pt-12 pb-16 max-[520px]:pt-8 max-[520px]:pb-10">
           {/* Fixed rather than fluid, with one step down: at 2.25rem the line
               needs about 490px, so it steps before the column can squeeze it
@@ -52,7 +56,7 @@ export function App(): React.JSX.Element {
         </section>
       </main>
 
-      <SiteFooter />
+      <SiteFooter current={SITE_PAGE.HOME} />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { marked } from "marked";
 import privacyMarkdown from "../../../PRIVACY.md?raw";
-import { SiteFooter, SiteHeader } from "./SiteChrome";
+import { SITE_PAGE, SiteFooter, SiteHeader } from "./SiteChrome";
 
 /**
  * PRIVACY.md at the repo root is the only place this text is written — it
@@ -14,7 +14,7 @@ const privacyHtml = marked.parse(privacyMarkdown, { async: false }) as string;
 export function PrivacyPage(): React.JSX.Element {
   return (
     <>
-      <SiteHeader />
+      <SiteHeader current={SITE_PAGE.PRIVACY} />
 
       <main className="shell">
         <article
@@ -23,7 +23,7 @@ export function PrivacyPage(): React.JSX.Element {
         />
       </main>
 
-      <SiteFooter />
+      <SiteFooter current={SITE_PAGE.PRIVACY} />
     </>
   );
 }
