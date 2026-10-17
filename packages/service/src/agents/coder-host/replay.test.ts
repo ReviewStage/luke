@@ -37,6 +37,7 @@ const source: CodingAgent = {
   prompt: null,
   repository: "acme/app",
   branch: null,
+  startBranch: null,
   title: "Build the store",
   archivedAt: null,
   archivedBy: null,
