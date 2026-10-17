@@ -127,6 +127,7 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
           lastRunVersionFile.update(() => ({ version }));
         },
       },
+      report: config.report,
     });
 
     // The timed check and the first check are handles the quit takes back: a check firing into a process already draining reads the

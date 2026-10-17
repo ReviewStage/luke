@@ -52,7 +52,9 @@ fi
 # host is meant to load in a browser tab: their graphs name no `node:` module,
 # no `ws`, and no `Buffer` or `process` global, and what needs one sits behind
 # `@luke/host/node`. The walk stays inside the package, as the one above does,
-# so a package the host imports is held to this by its own door, not here.
+# so what the host reaches through another package is unchecked here: today
+# `@luke/credentials`' loopback sign-in still reaches `node:http` and
+# `node:crypto`, until sign-in moves behind a tag of its own.
 node --input-type=module -e '
   import { readFile } from "node:fs/promises";
   import path from "node:path";
@@ -68,7 +70,7 @@ node --input-type=module -e '
       root: "packages/host/src",
       entries: ["index.ts", "effect/index.ts"],
       forbidden: /^(node:|ws$|@effect\/platform-node)/,
-      globals: /\b(Buffer|process)\.\w/,
+      globals: /\b(Buffer|process)\.\w+/,
     },
   ];
   let failed = false;

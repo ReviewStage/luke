@@ -108,7 +108,7 @@ export class ShutdownSignal extends Context.Service<ShutdownSignal, ShutdownSign
   "@luke/host/ShutdownSignal",
 ) {}
 
-/** Every seam tag a host composition stands on. */
+/** Every seam tag the host's kernel stands on; the assembly adds `HostSockets`. */
 export type HostSeamTags =
   | StateRoot
   | RunMode
