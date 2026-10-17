@@ -180,6 +180,27 @@ export function agentListCallIds(conversation: TaskConversation): readonly strin
   );
 }
 
+/**
+ * The answered starts of the open plan's work by which Luke made a new
+ * task, by call id, so the tasks are read again as one lands and the new
+ * task stands in the sidebar; none where the plan has had no turn or its
+ * work is unread.
+ */
+export function newTaskCallIds(conversation: TaskConversation): readonly string[] {
+  const start = `${TOOL_PART_TYPE_PREFIX}${AGENT_TOOL.START_AGENT}`;
+  return (conversation?.messages ?? []).flatMap((message) =>
+    message.parts.flatMap((part) =>
+      isRecord(part) &&
+      part.type === start &&
+      isWireString(part.toolCallId) &&
+      isRecord(part.output) &&
+      isRecord(part.output.newTask)
+        ? [part.toolCallId]
+        : [],
+    ),
+  );
+}
+
 /** A call's state as the agent tab marks it, in the AI SDK's words: running only while it still moves. */
 function toolStateOf(call: WorkCallRow): ToolState {
   if (call.running) return TOOL_STATE.INPUT_AVAILABLE;

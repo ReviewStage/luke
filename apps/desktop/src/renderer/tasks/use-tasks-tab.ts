@@ -152,7 +152,7 @@ import {
   useSidePanel,
 } from "./use-side-panel";
 import { sayRestored } from "./version-view";
-import { agentListCallIds, workerCallIds, workRowsOf } from "./work-model";
+import { agentListCallIds, newTaskCallIds, workerCallIds, workRowsOf } from "./work-model";
 
 /**
  * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's read of the plans as the tab shows.
@@ -1207,6 +1207,20 @@ export function useTasksTab(input: {
     startsSeen.current = { planId: taskId, ids: new Set(startedByLuke) };
     if (landed) readAgents();
   }, [startedByLuke, viewed.activeTaskId, readAgents]);
+  // A start of Luke's that made a new task adds it to the sidebar only once the tasks are read
+  // again, as one lands in the work of the plan it was made on.
+  const newTasksByLuke = useMemo(() => newTaskCallIds(viewed.conversation), [viewed.conversation]);
+  const newTasksSeen = useRef<{ planId: string | undefined; ids: ReadonlySet<string> }>({
+    planId: undefined,
+    ids: new Set(),
+  });
+  useEffect(() => {
+    const seen = newTasksSeen.current;
+    const taskId = viewed.activeTaskId;
+    const landed = seen.planId === taskId && newTasksByLuke.some((callId) => !seen.ids.has(callId));
+    newTasksSeen.current = { planId: taskId, ids: new Set(newTasksByLuke) };
+    if (landed) tell(ACT_KIND.TASKS_REFRESH);
+  }, [newTasksByLuke, viewed.activeTaskId, tell]);
   // A file's tab is held to the files Luke showed on the plan the same way.
   const files = useMemo(
     () => shownFiles(viewed.shownCode ?? []).map((ref) => ref.path),

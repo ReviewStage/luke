@@ -10,7 +10,7 @@ import { hostTurnId, sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { writePage } from "@luke/database/models/plan-pages";
-import { openTaskConversation } from "@luke/database/models/task-store";
+import { listTasks, openTaskConversation, readTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
@@ -394,6 +394,46 @@ test("a member speaking in the plan conversation a teammate opened messages the 
     await database.run(sentLineStands(opener, agent.conversationId, sentLineId("call-1"))),
     true,
   );
+});
+
+test("Luke makes the new task a start names for the member speaking, in the call's task's workspace and on its repository, and starts on it; a call on a task naming no repository makes none", async () => {
+  const opener = await database.createUser();
+  const member = await database.createUser();
+  const task = await taskConversation(opener, RELAY_FULL_NAME);
+  await database.run(joinWorkspace(task.workspaceId, member));
+  const eve = await fakeCoderEve(task.workspaceId);
+  const acting = brainHost({
+    ...seams,
+    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    eveOrigin: () => EVE_ORIGIN,
+  });
+  const call = await callerOn(acting, task, eve.services, CATALOG, member);
+
+  const started = await call(
+    START_AGENT_TOOL.name,
+    { newTask: "Expiry", prompt: TASK },
+    "call-new",
+  );
+  const agent = startedAgentOf(started);
+  assert.ok(isRecord(started.newTask) && isWireString(started.newTask.id), JSON.stringify(started));
+  const made = Option.getOrThrow(await database.run(readTask(member, started.newTask.id)));
+  assert.deepEqual(
+    [made.ownerId, made.task.workspaceId, made.task.repository, made.task.name],
+    [member, task.workspaceId, RELAY_FULL_NAME, "Expiry"],
+  );
+  const stored = Option.getOrThrow(await database.run(readCodingAgent(member, agent.id)));
+  assert.equal(stored.taskId, made.task.id);
+  assert.equal(eve.sent.length, 1);
+
+  const bare = await taskConversation(opener);
+  const onBare = await callerOn(acting, bare, eve.services, CATALOG);
+  assert.deepEqual(
+    await onBare(START_AGENT_TOOL.name, { newTask: "Nowhere", prompt: TASK }, "call-bare"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.NO_REPOSITORY },
+  );
+  const listed = await database.run(listTasks(opener));
+  assert.equal(listed.filter((each) => each.name === "Nowhere").length, 0);
+  assert.equal(eve.sent.length, 1);
 });
 
 test("Luke's agent tools reach every agent of the task's workspace: a list names each agent's task, narrowed to this task or another by its id, archived ones marked; another task's agent, a teammate's, is read and messaged; an archived agent takes no message, and another workspace's agent is none of these", async () => {
