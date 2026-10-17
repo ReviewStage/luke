@@ -1588,3 +1588,57 @@ test("auto-merge is offered while checks run, and turned off once on; a merge qu
   const conflicted = await draw(merging(MERGE_STATE.CONFLICTS));
   assert.deepEqual(boxPresses(conflicted), []);
 });
+
+test("a merge asked about merges the head it was asked about, though a read landing under the question names a newer one", async () => {
+  let reads = 0;
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () => {
+        reads += 1;
+        const headSha = reads === 1 ? "c0ffee1" : "beef002";
+        return Promise.resolve({
+          pullRequest: {
+            ...PULL_REQUEST,
+            merge: MERGE_STATE.CLEAN,
+            merging: { ...MERGING, headSha },
+          },
+        });
+      },
+    }),
+  );
+  await pressBox(tab, "Squash and merge");
+  const dialog =
+    document.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]') ??
+    assert.fail("the merge is asked about");
+  assert.match(dialog.textContent ?? "", /at commit c0ffee1/u);
+
+  act(() =>
+    (
+      tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
+      assert.fail("the bar has a ⋯")
+    ).click(),
+  );
+  const refresh =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === "Refresh pull request",
+    ) ?? assert.fail("the ⋯ offers Refresh");
+  await act(async () => refresh.click());
+  await settle();
+  assert.ok(reads > 1, "a newer head was read under the question");
+
+  const merge =
+    [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        '[role="dialog"] button, [role="alertdialog"] button',
+      ),
+    ].find((each) => each.textContent === "Squash and merge") ??
+    assert.fail("the dialog still offers the merge");
+  act(() => merge.click());
+  await settle();
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      { action: PULL_REQUEST_ACTION.MERGE, method: MERGE_METHOD.SQUASH, headSha: "c0ffee1" },
+    ],
+  ]);
+});

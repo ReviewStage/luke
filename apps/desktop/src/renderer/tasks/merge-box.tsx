@@ -190,12 +190,15 @@ export function MergeActions({
 }): React.JSX.Element | null {
   const { merging } = pullRequest;
   const [method, choose] = useMergeMethod(repository, merging?.methods ?? []);
-  const confirm = useConfirmDialog({ subject: true, surfaceOpen: true }, async () => {
-    if (merging !== undefined && method !== undefined) {
-      await writes.write({ action: PULL_REQUEST_ACTION.MERGE, method, headSha: merging.headSha });
-    }
-    return { status: ACTION_RESULT_STATUS.ACCEPTED };
-  });
+  // The merge asked about, as it stood when Merge was pressed: a read landing under the question never changes what it merges.
+  const [asked, setAsked] = useState<{ method: MergeMethod; headSha: string } | undefined>();
+  const confirm = useConfirmDialog(
+    { subject: asked !== undefined, surfaceOpen: true },
+    async () => {
+      if (asked !== undefined) await writes.write({ action: PULL_REQUEST_ACTION.MERGE, ...asked });
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    },
+  );
   if (merging === undefined || pullRequest.state !== PULL_REQUEST_STATE.OPEN) return null;
   const action = mergeActionOf(pullRequest.merge, merging);
   const busy = writes.pending !== undefined;
@@ -246,7 +249,14 @@ export function MergeActions({
         : null}
       {action === MERGE_ACTION.MERGE && method !== undefined ? (
         <span className="merge-box-split">
-          {press(METHOD_WORDS[method], confirm.ask, true)}
+          {press(
+            METHOD_WORDS[method],
+            () => {
+              setAsked({ method, headSha });
+              confirm.ask();
+            },
+            true,
+          )}
           {picker}
         </span>
       ) : null}
@@ -261,15 +271,15 @@ export function MergeActions({
           {picker}
         </span>
       ) : null}
-      {method === undefined ? null : (
+      {asked === undefined ? null : (
         <ConfirmDialog
           confirm={confirm}
           question={{
             title: `Merge pull request #${pullRequest.number}?`,
-            body: `GitHub merges it into ${pullRequest.base} as you. A merge can't be undone from here.`,
-            verb: METHOD_WORDS[method],
+            body: `GitHub merges it into ${pullRequest.base} as you, at commit ${asked.headSha.slice(0, 7)}. A merge can't be undone from here.`,
+            verb: METHOD_WORDS[asked.method],
             running: "Merging",
-            tone: DIALOG_TONE.PRIMARY,
+            tone: DIALOG_TONE.DANGER,
           }}
         />
       )}
