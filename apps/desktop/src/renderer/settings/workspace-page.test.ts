@@ -337,7 +337,11 @@ beforeEach(() => {
   githubRepositories = [];
   Object.defineProperty(window, "luke", {
     configurable: true,
-    value: { act: answer, recordSurfaceEvent: () => undefined },
+    value: {
+      onAutomations: () => () => undefined,
+      act: answer,
+      recordSurfaceEvent: () => undefined,
+    },
   });
 });
 

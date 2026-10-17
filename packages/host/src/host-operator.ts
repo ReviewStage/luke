@@ -10,6 +10,8 @@ import {
   type AutomationChangeParams,
   type AutomationCreateParams,
   type AutomationDeletedView,
+  type AutomationFollow,
+  type AutomationFollowed,
   type AutomationIdParams,
   type AutomationListParams,
   type AutomationListView,
@@ -18,6 +20,7 @@ import {
   type AutomationRunView,
   type AutomationView,
   automationDeletedViewSchema,
+  automationFollowedSchema,
   automationListViewSchema,
   automationRunsViewSchema,
   automationRunViewSchema,
@@ -509,6 +512,12 @@ export interface HostOperator {
   automationRuns(params: AutomationIdParams): Effect.Effect<AutomationRunsView>;
   /** A webhook's secret minted again; the automation and the new secret, for the asking window alone to show once, or why there is none. */
   automationNewWebhookSecret(params: AutomationIdParams): Effect.Effect<AutomationView>;
+  /** A workspace's automations, or an automation's runs, followed from now until let go, heard through `onAutomationsChanged`. */
+  automationsFollow(scope: AutomationFollow): Effect.Effect<void>;
+  /** A followed list or history let go: nothing more is heard of it until it is followed again. */
+  automationsUnfollow(scope: AutomationFollow): Effect.Effect<void>;
+  /** A followed list or history as it now stands, each time it moves while followed, for as long as the subscription stands. */
+  onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
   /** One workspace's issues, standing or archived; or why there are none. */
   issueList(params: IssueListParams): Effect.Effect<IssueListView>;
   /** One issue; or why there is none. */
@@ -1497,6 +1506,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, params),
         automationAnswer(automationViewSchema),
+      ),
+    automationsFollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_FOLLOW, scope)),
+    automationsUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.AUTOMATIONS_UNFOLLOW, scope)),
+    onAutomationsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.AUTOMATIONS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(automationFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
       ),
     issueList: (params) =>
       Effect.map(client.call(GATEWAY_METHOD.ISSUES_LIST, params), issueAnswer(issueListViewSchema)),

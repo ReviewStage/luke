@@ -95,6 +95,7 @@ beforeEach(() => {
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
+      onAutomations: () => () => undefined,
       recordSurfaceEvent: () => undefined,
       act: (request: Act): Promise<ActOutcome> => {
         if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {

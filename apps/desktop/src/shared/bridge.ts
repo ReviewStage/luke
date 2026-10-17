@@ -6,6 +6,7 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
 } from "@luke/features/analytics";
+import { type AutomationFollowed, automationFollowedSchema } from "@luke/features/automation-view";
 import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-grant";
 import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
@@ -199,6 +200,21 @@ export const BRIDGE = {
     channel: "app:lifecycle",
     args: noArgs,
     result: result<string>(isWireString),
+  }),
+  /**
+   * A workspace's automations, or an automation's runs, that this window
+   * follows, as they now stand: sent to the windows that follow them alone,
+   * each time they move and once as a window starts following one already
+   * standing, rather than as a slice of the document, which reaches every
+   * window on every change.
+   */
+  onAutomations: entry({
+    kind: "subscribe",
+    channel: "app:automations",
+    args: noArgs,
+    result: result<AutomationFollowed>((value) =>
+      Result.isSuccess(readEither(automationFollowedSchema, { excess: EXCESS_KEYS.DROP })(value)),
+    ),
   }),
   /** A command chosen from the menu bar, for the focused window to run as its shortcut would. */
   onMenuCommand: entry({

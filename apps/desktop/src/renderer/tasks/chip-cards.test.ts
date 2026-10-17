@@ -213,6 +213,7 @@ async function drawn(text: string): Promise<HTMLElement> {
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
+      onAutomations: () => () => undefined,
       recordSurfaceEvent: () => undefined,
       onAppState: () => () => undefined,
       requestAppState: () => Promise.resolve(STATE),

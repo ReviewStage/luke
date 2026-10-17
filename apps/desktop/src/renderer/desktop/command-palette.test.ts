@@ -500,6 +500,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
+      onAutomations: () => () => undefined,
       recordSurfaceEvent: () => undefined,
       act: (request: Act): Promise<ActOutcome> => {
         if (request.kind !== ACT_KIND.AUTOMATIONS_LIST) {
@@ -910,6 +911,7 @@ function installClipboard(): string[] {
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
+      onAutomations: () => () => undefined,
       act: (request: Act): Promise<ActOutcome> => {
         if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
@@ -1181,6 +1183,7 @@ test("People lists the listed workspace's members by name and role, the reader a
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
+      onAutomations: () => () => undefined,
       recordSurfaceEvent: () => undefined,
       act: (request: Act): Promise<ActOutcome> =>
         Promise.resolve(

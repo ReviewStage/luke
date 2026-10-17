@@ -16,6 +16,7 @@ import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
 import { automationActRows } from "./automation-acts";
+import { automationFollowActRows } from "./automation-follow-acts";
 import { avatarActRows, avatarReports } from "./avatar-acts";
 import { codingAgentActRows } from "./coding-agent-acts";
 import { integrationActRows } from "./integration-acts";
@@ -166,6 +167,14 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     ...integrationActRows({ host: operator.host }),
     ...automationActRows({ host: operator.host }),
+    ...automationFollowActRows({
+      host: operator.host,
+      deliver: (sender, changed) => {
+        if (!sender.isDestroyed()) sender.send(channels.onAutomations, changed);
+      },
+      whenGone: whenPageGone,
+      run,
+    }),
     ...issueActRows({ host: operator.host }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
