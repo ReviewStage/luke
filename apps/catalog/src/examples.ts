@@ -1,3 +1,4 @@
+import { ANCHORED_POPOVER_EXAMPLE } from "./examples/anchored-popover";
 import { ARTWORK_EXAMPLE } from "./examples/artwork";
 import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { BADGES_EXAMPLE } from "./examples/badges";
@@ -7,6 +8,7 @@ import { CHIPS_EXAMPLE } from "./examples/chips";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
+import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
@@ -33,6 +35,7 @@ export interface Example {
 
 export const EXAMPLES: readonly Example[] = [
   ARTWORK_EXAMPLE,
+  ANCHORED_POPOVER_EXAMPLE,
   TYPOGRAPHY_EXAMPLE,
   LAYOUT_EXAMPLE,
   BADGES_EXAMPLE,
@@ -43,6 +46,7 @@ export const EXAMPLES: readonly Example[] = [
   TEXT_FIELDS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
+  LIST_ROW_EXAMPLE,
   SEGMENTED_EXAMPLE,
   SETTINGS_SECTION_EXAMPLE,
   SPINNERS_EXAMPLE,
