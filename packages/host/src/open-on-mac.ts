@@ -17,7 +17,7 @@ import path from "node:path";
  * terminal: once the shell exits or the terminal is closed or hung up, the
  * script removes it, and every open first sweeps away the worktrees of
  * earlier terminals that ended without removing theirs, each known by the
- * process that made it no longer running. Anything left uncommitted or
+ * process that made it, told by its id and start time, no longer running. Anything left uncommitted or
  * unpushed in a worktree goes with it. The script deletes itself as it
  * starts. Every value in it is quoted for the shell, never spliced in bare.
  */
@@ -47,9 +47,15 @@ export function worktreesFolder(stateRoot: string, repository: string): string {
   return path.join(stateRoot, WORKTREES_FOLDER, ...repositoryFolders(repository));
 }
 
-/** A branch as the start of a folder name: every character but a letter, a digit, a dot, an underscore, or a hyphen made a hyphen, so none reaches outside the folder. */
+/** How much of a branch's name starts its worktree's folder name, well inside a file name's 255 bytes with the random suffix after it. */
+const BRANCH_FOLDER_NAME_LENGTH = 64;
+
+/** A branch as the start of a folder name: every character but a letter, a digit, a dot, an underscore, or a hyphen made a hyphen, so none reaches outside the folder, and cut to a bounded length. */
 function branchFolderName(branch: string): string {
-  return branch.replaceAll(/[^\w.-]/gu, "-").replace(/^\.+/u, "-");
+  return branch
+    .replaceAll(/[^\w.-]/gu, "-")
+    .replace(/^\.+/u, "-")
+    .slice(0, BRANCH_FOLDER_NAME_LENGTH);
 }
 
 /** The script, its values quoted, that brings the branch into a fresh worktree of Luke's clone, runs the command there where there is one, opens a shell, and removes the worktree once the terminal ends. */
@@ -88,10 +94,14 @@ export function openOnMacScript(input: {
     `branch=${shellQuoted(input.branch)}`,
     `https=${shellQuoted(remotes.https)}`,
     `ssh=${shellQuoted(remotes.ssh)}`,
+    // A process told by its id and its start time, so an id the system hands on to another process is not taken for it.
+    "process_identity() {",
+    '  printf \'%s %s\\n\' "$1" "$(ps -o lstart= -p "$1" 2>/dev/null)"',
+    "}",
     // A worktree's folder holds only what Git checks out; the process that made it is written beside it, in `<folder>.pid`.
     'mkdir -p "$worktrees"',
     `worktree="$(mktemp -d "$worktrees/"${shellQuoted(branchFolderName(input.branch))}".XXXXXX")" || worktree=`,
-    'if [ -n "$worktree" ]; then echo "$$" > "$worktree.pid"; fi',
+    'if [ -n "$worktree" ]; then process_identity "$$" > "$worktree.pid"; fi',
     "removed() {",
     '  rm -rf "$1"',
     '  rm -f "$1.pid"',
@@ -110,8 +120,9 @@ export function openOnMacScript(input: {
     '  for pid_file in "$worktrees"/*.pid; do',
     '    [ -f "$pid_file" ] || continue',
     '    [ "$pid_file" = "$worktree.pid" ] && continue',
-    '    pid="$(cat "$pid_file" 2>/dev/null)"',
-    '    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then continue; fi',
+    '    recorded="$(cat "$pid_file" 2>/dev/null)"',
+    '    pid="${recorded%% *}"',
+    '    if [ -n "$pid" ] && [ "$(process_identity "$pid")" = "$recorded" ]; then continue; fi',
     '    removed "${pid_file%.pid}"',
     "  done",
     "}",
@@ -136,19 +147,21 @@ export function openOnMacScript(input: {
     'if [ -n "$worktree" ] && [ -e "$worktree/.git" ]; then',
     '  cd "$worktree"',
     '  echo "▸ $branch in $(pwd), a worktree removed when this terminal ends"',
-    "else",
-    '  if [ -d "$clone" ]; then cd "$clone"; fi',
-    '  echo "▸ $branch not checked out; this shell is in $(pwd)"',
-    "fi",
     // Note that Ctrl-C ends the command or reaches the shell, never this script, so the shell still opens and the worktree is still removed.
-    "trap : INT",
+    "  trap : INT",
     ...(input.command == null
       ? []
       : [
-          `command=${shellQuoted(input.command)}`,
-          'echo "▸ Running $command"',
-          '"${SHELL:-/bin/zsh}" -l -c "$command" || true',
+          `  command=${shellQuoted(input.command)}`,
+          '  echo "▸ Running $command"',
+          '  "${SHELL:-/bin/zsh}" -l -c "$command" || true',
         ]),
+    "else",
+    // Note that the run command is never run without the branch checked out; the shell alone opens, to look into why.
+    '  if [ -d "$clone" ]; then cd "$clone"; fi',
+    '  echo "▸ $branch not checked out; this shell is in $(pwd)"',
+    "  trap : INT",
+    "fi",
     // Note that the shell is waited on rather than exec'd, so the worktree is removed once it exits.
     '"${SHELL:-/bin/zsh}" -l',
     "",

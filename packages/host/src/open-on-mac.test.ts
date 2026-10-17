@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { temporaryDirectory } from "@luke/runtime/testing";
@@ -150,9 +150,11 @@ test("a worktree left by a terminal that is gone is swept, and one still open is
   const open = path.join(worktrees, "luke-fix-relay.open");
   git(clone, ["worktree", "add", "--quiet", "--detach", left, "origin/luke/fix-relay"]);
   git(clone, ["worktree", "add", "--quiet", "--detach", open, "origin/luke/fix-relay"]);
-  const ended = spawnSync("/bin/sh", ["-c", "exit 0"]).pid;
-  writeFileSync(`${left}.pid`, `${ended}\n`);
-  writeFileSync(`${open}.pid`, `${process.pid}\n`);
+  // The ended terminal's id is this test's own, as a system that handed it on would, but its start time is not.
+  const started = (pid: number) =>
+    execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8" }).trimEnd();
+  writeFileSync(`${left}.pid`, `${process.pid} Thu Jan  1 00:00:00 1970\n`);
+  writeFileSync(`${open}.pid`, `${process.pid} ${started(process.pid)}\n`);
 
   run(scratch, shell, script);
 
@@ -194,13 +196,38 @@ test("a branch that cannot be fetched is said, and the shell still opens, in Luk
       clone,
       worktrees,
       branch: "luke/gone",
+      command: "touch ran",
       remotes: { https: origin, ssh: origin },
     }),
   );
 
   assert.match(printed, /Could not bring luke\/gone onto this Mac/u);
+  assert.doesNotMatch(printed, /Running/u, "the run command waits for a checkout");
   assert.equal(shellOpenedIn(scratch), clone);
   assert.deepEqual(readdirSync(worktrees), []);
+  assert.equal(existsSync(path.join(clone, "ran")), false);
+});
+
+test("a branch with a name as long as Git allows is checked out", async (t) => {
+  const { scratch, origin, shell, state } = await fixture(t);
+  const branch = `luke/${"a".repeat(240)}`;
+  git(origin, ["checkout", "--quiet", "-b", branch]);
+  git(origin, ["commit", "--quiet", "--allow-empty", "-m", "long"]);
+  const head = git(origin, ["rev-parse", "HEAD"]);
+
+  run(
+    scratch,
+    shell,
+    openOnMacScript({
+      repository: "acme/app",
+      clone: cloneFolder(state, "acme/app"),
+      worktrees: worktreesFolder(state, "acme/app"),
+      branch,
+      remotes: { https: origin, ssh: origin },
+    }),
+  );
+
+  assert.equal(shellSawHead(scratch), head);
 });
 
 test("a run command runs as written in the worktree, quotes and dollars and all, before the shell opens", async (t) => {
