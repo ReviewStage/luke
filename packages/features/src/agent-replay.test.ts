@@ -96,6 +96,15 @@ test("a note behind no marker after a replay, as agents started before the marke
   });
 });
 
+test("a marked note after a replay whose marker does not add up leaves the message whole rather than reading it as an unmarked note", () => {
+  const damaged = firstMessageText("Fix it.", replay, "Carry on.").replace(
+    "other-files=0 chars=9 -->",
+    "other-files=0 chars=1 -->",
+  );
+
+  assert.deepEqual(firstMessageParts(damaged), { brief: damaged });
+});
+
 test("a replay with no note and no fork reads back without either", () => {
   const continued: Replay = {
     agentId: SOURCE,
