@@ -43,7 +43,7 @@ export const LiveSealing = Context.Reference<Option.Option<LiveSealer>>(
 );
 
 /** The database a connection string names, which Realtime binds each sealed read to. */
-function databaseNameOf(url: Redacted.Redacted): Option.Option<string> {
+export function databaseNameOf(url: Redacted.Redacted): Option.Option<string> {
   try {
     const name = decodeURIComponent(new URL(Redacted.value(url)).pathname.slice(1));
     return name === "" ? Option.none() : Option.some(name);

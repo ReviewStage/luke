@@ -12,7 +12,8 @@ import {
   type PlanCommentStartRequest,
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
-import { Effect, Option } from "effect";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient } from "effect/sql";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
@@ -22,6 +23,8 @@ import {
   PLAN_COMMENT_OUTCOME,
   type PlanCommentOutcome,
   type PlanCommentWriterRef,
+  planCommentStamps,
+  planCommentStampsLiveStatement,
   readPlanCommentThreads,
   startPlanCommentThread,
 } from "../plan-comments.js";
@@ -155,6 +158,37 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
         );
 
         assert.equal(anchoredIn(PLAN_TEXT, started), "single-use link");
+      }),
+  );
+
+  it.effect(
+    "the statement Realtime wakes a held read of the threads on delivers where each thread stands as the held read's stamps say, to a member and to no one else",
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const { owner, teammate, outsider, taskId } = yield* openSharedPlan;
+        threadOf(
+          yield* startPlanCommentThread(
+            member(owner),
+            taskId,
+            startOn(PLAN_TEXT, "teammate", "Or a guest?"),
+          ),
+        );
+        const StampRows = Schema.Array(
+          Schema.Struct({
+            id: Schema.String,
+            revision: Schema.Number,
+            status: Schema.String,
+            updatedAt: Schema.Number,
+          }),
+        );
+        for (const reader of [owner, teammate, outsider]) {
+          const statement = Option.getOrThrow(planCommentStampsLiveStatement(reader, taskId));
+          const rows = yield* Schema.decodeUnknownEffect(StampRows)(
+            yield* sql.unsafe(statement.sql, [...statement.params]),
+          );
+          assert.deepEqual(rows, yield* planCommentStamps(reader, taskId));
+        }
       }),
   );
 

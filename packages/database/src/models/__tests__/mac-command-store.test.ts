@@ -3,12 +3,14 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { MacCommandResult } from "@luke/features/mac-command-wire";
 import { Clock, Effect, Option } from "effect";
+import { SqlClient } from "effect/sql";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   claimMacCommands,
   macCommandResult,
+  macCommandSettledLiveStatement,
   queueMacCommand,
   settleMacCommand,
 } from "../mac-command-store.js";
@@ -75,6 +77,27 @@ it.layer(getTestDB())("the Mac command store", (it) => {
         assert.equal(settledAgain, false, "the first result stands");
         assert.deepEqual(yield* macCommandResult(owner, queued.id), Option.some(RESULT));
         assert.deepEqual(yield* macCommandResult(other, queued.id), Option.none());
+      }),
+  );
+  it.effect(
+    "the statement Realtime wakes a waiting call on says the command settled once it does, and reads nothing of another account's",
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const { owner, other } = yield* openAccounts;
+        const since = yield* now;
+        const queued = command();
+        yield* queueMacCommand(owner, queued);
+        const rows = (userId: string) => {
+          const statement = Option.getOrThrow(macCommandSettledLiveStatement(userId, queued.id));
+          return sql.unsafe(statement.sql, [...statement.params]);
+        };
+
+        assert.deepEqual(yield* rows(owner), [{ id: queued.id, settled: false }]);
+        yield* claimMacCommands(owner, since);
+        assert.ok(yield* settleMacCommand(owner, queued.id, RESULT));
+        assert.deepEqual(yield* rows(owner), [{ id: queued.id, settled: true }]);
+        assert.deepEqual(yield* rows(other), []);
       }),
   );
 });

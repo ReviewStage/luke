@@ -1,9 +1,10 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readBoardImage } from "@luke/database/models/board-store";
+import { boardImageLiveStatement, readBoardImage } from "@luke/database/models/board-store";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
-import { Duration, Effect, Option, Schedule, Schema } from "effect";
+import { Duration, Effect, Option, Schema } from "effect";
 import type { ToolModelOutput } from "eve/tools";
+import { lookedUntil } from "../http/held-read.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";
 
 /**
@@ -92,10 +93,11 @@ export function runLookAtBoard(
       reason: LOOK_AT_BOARD_REFUSAL.UNREADABLE,
     });
   }
-  const awaited = readBoardImage(binding.userId, binding.taskId).pipe(
-    Effect.repeat({ schedule: Schedule.spaced(BOARD_LOOK_WAIT.POLL), until: Option.isSome }),
-    Effect.timeoutOption(BOARD_LOOK_WAIT.DEADLINE),
-    Effect.map(Option.flatten),
+  const awaited = lookedUntil(
+    readBoardImage(binding.userId, binding.taskId),
+    BOARD_LOOK_WAIT.POLL,
+    BOARD_LOOK_WAIT.DEADLINE,
+    Option.toArray(boardImageLiveStatement(binding.userId, binding.taskId)),
   );
   return awaited.pipe(
     Effect.map(
