@@ -17,7 +17,9 @@
     border-bottom-right-radius: 0;
   }
 
+  /* The list is its options' offset parent, which keeping the active one in view reads. */
   .luke-combobox-list {
+    position: relative;
     display: flex;
     max-height: 280px; /* off-scale: seven rows and a heading */
     flex-direction: column;
@@ -90,6 +92,16 @@
     padding-left: var(--luke-space-12);
     color: var(--luke-color-text-subtle);
     font-size: var(--luke-type-caption-size);
+  }
+
+  /* A detail gives way to the name before the name gives way to it, cut
+     short where the row runs out, since the name is what tells options apart. */
+  .luke-combobox-option-detail {
+    display: block;
+    min-width: 0;
+    flex: 0 1000 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* A hint keeps a menu's distance from what stands before it, as a chord does. */

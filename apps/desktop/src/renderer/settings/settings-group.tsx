@@ -9,21 +9,16 @@ import { useId } from "react";
  * rows with a hairline between each and the next. A page that is one group
  * passes no name: the page's own title already says what the rows are. A
  * named group is a region named by its heading, so a reader moving by
- * landmark hears what the rows are for before reaching them. A group of one
- * control that is its own frame, a text area, stands it under the name
- * without the card, so no frame is drawn within a frame.
+ * landmark hears what the rows are for before reaching them.
  */
 export function SettingsGroup({
   title,
   anchor,
-  framed = true,
   children,
 }: {
   title?: string | undefined;
   /** The id a Settings link or a search result lands on: worn by the whole group. */
   anchor?: string;
-  /** Whether the children stand in the card; false for one control that draws its own frame. */
-  framed?: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
   const headingId = useId();
@@ -38,7 +33,7 @@ export function SettingsGroup({
           {title}
         </h2>
       ) : null}
-      {framed ? <div className="settings-card">{children}</div> : children}
+      <div className="settings-card">{children}</div>
     </section>
   );
 }

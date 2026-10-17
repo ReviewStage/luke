@@ -2,15 +2,18 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { sweepAbandonedTurns, TURN_ABANDON } from "@luke/database/models/abandoned-turns";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
+import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { sandboxTerminalLease } from "@luke/database/schemas/sandbox-terminal-lease";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB } from "@luke/database/testing";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
-import { inArray } from "drizzle-orm";
-import { Duration, Effect, Layer } from "effect";
+import { eq, inArray } from "drizzle-orm";
+import { Clock, Duration, Effect, Layer } from "effect";
+import { TestClock } from "effect/testing";
 import { SessionSandboxes, type SessionSandboxesService } from "../agents/session-sandboxes.js";
 import { SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
 import { sweepTerminalLeases, TERMINAL_LEASE_SWEEP } from "./terminal-lease-sweep.js";
@@ -50,7 +53,16 @@ const openAgent = (turn?: TurnStatus) =>
         .insert(turns)
         .values({ userId, conversationId: row.id, origin: TURN_ORIGIN.TYPED, status: turn });
     }
-    return { conversationId: row.id, sessionId };
+    return { userId, conversationId: row.id, sessionId };
+  });
+
+/** The cron's two sweeps in its order at the test clock's instant: the turns past their bounds settled, then the lapsed leases taken. */
+const cronSweep = (layer: Layer.Layer<SessionSandboxes>) =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const writer = yield* storeWriter({ tools: {} });
+    yield* sweepAbandonedTurns({ writer }, { now });
+    return yield* sweepTerminalLeases(new Date(now)).pipe(Effect.provide(layer));
   });
 
 /** A Vercel Sandbox that stops what it is asked to, refusing the sessions named and dying under the ones named lost, and keeps what it was asked. */
@@ -112,6 +124,64 @@ it.layer(getTestDB())("the terminal lease sweep", (it) => {
           yield* standingAmong(ids),
           [working.conversationId, recent.conversationId].sort(),
         );
+      }),
+  );
+
+  it.effect(
+    "a lease whose agent's Stop eve never confirmed is swept once the turn settles as cancelled, and a turn running inside its bounds keeps its own",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        // Note that the clock is moved only by adjustment from where the test clock starts, because a jump of years fires every timer the Postgres client armed in between.
+        const start = yield* Clock.currentTimeMillis;
+        const hourAgo = new Date(start - 60 * 60_000);
+        const stopped = yield* openAgent();
+        const working = yield* openAgent();
+        const turnIds = { stopped: randomUUID(), working: randomUUID() };
+        for (const [agent, id] of [
+          [stopped, turnIds.stopped],
+          [working, turnIds.working],
+        ] as const) {
+          yield* db.insert(turns).values({
+            id,
+            userId: agent.userId,
+            conversationId: agent.conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status: TURN_STATUS.RUNNING,
+            queuedAt: hourAgo,
+            startedAt: hourAgo,
+          });
+          yield* holdSandbox(agent.conversationId, new Date(start - 10 * 60_000));
+        }
+        // The Stop a Continue asks of its source, whose session died in a deploy, so no end follows.
+        yield* db
+          .update(turns)
+          .set({ cancelRequestedAt: new Date(start) })
+          .where(eq(turns.id, turnIds.stopped));
+        const vercel = scriptedSandboxes();
+
+        yield* TestClock.adjust(Duration.millis(TURN_ABANDON.CANCEL_AFTER_MS - 1));
+        yield* cronSweep(vercel.layer);
+        const mine = new Set([stopped.sessionId, working.sessionId]);
+        const askedWithinBound = vercel.stopAsked.filter((id) => mine.has(id));
+        yield* TestClock.adjust(Duration.millis(2));
+        yield* cronSweep(vercel.layer);
+        const status = (id: string) =>
+          Effect.map(
+            db.select({ status: turns.status }).from(turns).where(eq(turns.id, id)),
+            (rows) => rows[0]?.status,
+          );
+
+        assert.deepEqual(askedWithinBound, [], "eve may still confirm the Stop");
+        assert.equal(yield* status(turnIds.stopped), TURN_STATUS.CANCELLED);
+        assert.deepEqual(
+          vercel.stopAsked.filter((id) => mine.has(id)),
+          [stopped.sessionId],
+        );
+        assert.equal(yield* status(turnIds.working), TURN_STATUS.RUNNING);
+        assert.deepEqual(yield* standingAmong([stopped.conversationId, working.conversationId]), [
+          working.conversationId,
+        ]);
       }),
   );
 
