@@ -37,10 +37,12 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { stateWith } from "#testing/app-state";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   QUIET_COMPOSER,
@@ -202,69 +204,66 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   standing = "acme/relay";
   told.length = 0;
   installScrollIntoView();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        told.push(request);
-        return Promise.resolve(
-          request.kind === ACT_KIND.INTEGRATIONS_STATUS
+  fakeAppPlatform(DESKTOP_LINKS);
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      told.push(request);
+      return Promise.resolve(
+        request.kind === ACT_KIND.INTEGRATIONS_STATUS
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: {
+                integrations: LINEAR_CONNECTED,
+              },
+            }
+          : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
             ? {
                 status: ACT_OUTCOME_STATUS.DONE,
                 value: {
-                  integrations: LINEAR_CONNECTED,
+                  tools: [
+                    { name: "list_issues", description: "List the team's issues." },
+                    { name: "get_issue", description: "Read one issue." },
+                    { name: "list/issues", description: "A name no mention can carry." },
+                    {
+                      name: "list\ud800",
+                      description: "A name that is no string of characters.",
+                    },
+                    { name: "..", description: "A name an address resolves away." },
+                  ],
                 },
               }
-            : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
-              ? {
-                  status: ACT_OUTCOME_STATUS.DONE,
-                  value: {
-                    tools: [
-                      { name: "list_issues", description: "List the team's issues." },
-                      { name: "get_issue", description: "Read one issue." },
-                      { name: "list/issues", description: "A name no mention can carry." },
-                      {
-                        name: "list\ud800",
-                        description: "A name that is no string of characters.",
-                      },
-                      { name: "..", description: "A name an address resolves away." },
-                    ],
-                  },
-                }
-              : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-                ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-                : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+            : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+              ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+              : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+                ? {
+                    status: ACT_OUTCOME_STATUS.DONE,
+                    value: {
+                      agents: workspaceAnswer(request.payload),
+                    },
+                  }
+                : request.kind === ACT_KIND.TASKS_TREE
                   ? {
                       status: ACT_OUTCOME_STATUS.DONE,
                       value: {
-                        agents: workspaceAnswer(request.payload),
+                        folder: {
+                          path: "",
+                          repository: standing,
+                          branch: "main",
+                          entries: TREES.get(standing) ?? [],
+                          truncated: false,
+                        },
                       },
                     }
-                  : request.kind === ACT_KIND.TASKS_TREE
-                    ? {
-                        status: ACT_OUTCOME_STATUS.DONE,
-                        value: {
-                          folder: {
-                            path: "",
-                            repository: standing,
-                            branch: "main",
-                            entries: TREES.get(standing) ?? [],
-                            truncated: false,
-                          },
-                        },
-                      }
-                    : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-        );
-      },
-      recordSurfaceEvent: ignore,
+                  : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+      );
     },
   });
 });
@@ -943,19 +942,16 @@ test("a section's address pasted whole into the box on a plan's page is drawn as
 });
 
 test("a page's address pasted in the app's own scheme is called by the name the window holds, an agent's it holds none for by its kind, and a file of the plan's repository pastes as words", async () => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      onAppState: () => () => undefined,
-      requestAppState: () =>
-        Promise.resolve(
-          stateWith(
-            {},
-            { tasks: { ...IDLE_TASKS_VIEW, pages: [{ ...PAGE, version: 1, at: 1_000 }] } },
-          ),
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    onAppState: () => () => undefined,
+    requestAppState: () =>
+      Promise.resolve(
+        stateWith(
+          {},
+          { tasks: { ...IDLE_TASKS_VIEW, pages: [{ ...PAGE, version: 1, at: 1_000 }] } },
         ),
-    },
+      ),
   });
   const { container, sent } = await box(planPage([]));
   const page = encodeMention({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE.id }, PLACE);

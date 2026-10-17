@@ -9,7 +9,7 @@ import {
   indexAnimationAssets,
 } from "@luke/ui/admin-animations";
 import { useEffect, useRef } from "react";
-import { PageHeader, type ViewerAccount } from "../chrome/page-header";
+import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 
 /**
  * The committed motion SVGs, inlined into the bundle at build time. The glob
@@ -128,8 +128,7 @@ export function AnimationsScreen({
   }, []);
 
   return (
-    <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
-      <PageHeader title="Animations" account={account} onSignOut={onSignOut} controls={null} />
+    <AdminPage title="Animations" account={account} onSignOut={onSignOut} controls={null}>
       <div
         ref={previewsRef}
         className="mt-8 grid gap-4 min-[560px]:grid-cols-2 min-[880px]:grid-cols-3"
@@ -138,6 +137,6 @@ export function AnimationsScreen({
           <AnimationCard key={entry.motion} entry={entry} />
         ))}
       </div>
-    </main>
+    </AdminPage>
   );
 }

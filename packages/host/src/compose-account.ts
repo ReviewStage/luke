@@ -33,7 +33,7 @@ import type { Composer } from "./composer.js";
 import { agentTraceDirectory } from "./devtrace/trace-directory.js";
 import { AgentTraceWriter } from "./devtrace/trace-writer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import { AppIdentity, Environment } from "./effect/seams.js";
+import { AppIdentity, Environment, SignInConsent } from "./effect/seams.js";
 
 const ACCOUNT_CLIENT_ID = "luke-desktop";
 
@@ -92,12 +92,19 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
 ): Effect.fn.Return<
   AccountComposer,
   never,
-  HostKernelTag | Environment | AppIdentity | FileSystem.FileSystem | Path.Path | Scope.Scope
+  | HostKernelTag
+  | Environment
+  | AppIdentity
+  | SignInConsent
+  | FileSystem.FileSystem
+  | Path.Path
+  | Scope.Scope
 > {
   const { settings, openSocket } = dependencies;
   const kernel = yield* HostKernelTag;
   const environment = yield* Environment;
   const identity = yield* AppIdentity;
+  const consent = yield* SignInConsent;
   const { runMode, report } = kernel;
   const late = yield* lateService<AccountLinks>();
 
@@ -120,6 +127,8 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
     requiresAccount: runMode.requiresAccount,
     openExternal: (url) => kernel.openExternalThroughNode(url),
+    openConsent: consent.open,
+    report,
     startCapabilities: Effect.flatMap(late.value, (links) => links.startCapabilities),
     stopCapabilities: Effect.flatMap(late.value, (links) => links.stopCapabilities),
   });

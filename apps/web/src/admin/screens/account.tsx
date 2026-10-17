@@ -8,7 +8,7 @@ import { UsageChart } from "../charts/usage-chart";
 import { AdminErrorCard, Centered, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { PLAIN_BUTTON, RefreshFailureNotice, WindowSwitcher } from "../chrome/controls";
 import { AccountActivityNote } from "../chrome/notes";
-import { AccountAvatar, PageHeader, type ViewerAccount } from "../chrome/page-header";
+import { AccountAvatar, AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
 import { accountReadPath, plainLeftClick, tabHref } from "../routing";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
@@ -109,14 +109,12 @@ export function AccountScreen({
           : formatNumber(activity.currentStreakDays);
 
       return frame(
-        <main className="mx-auto max-w-[1040px] px-4 py-8 min-[520px]:px-6 min-[720px]:py-10">
-          <PageHeader
-            title="Account"
-            account={account}
-            onSignOut={signOut}
-            controls={<WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />}
-          />
-
+        <AdminPage
+          title="Account"
+          account={account}
+          onSignOut={signOut}
+          controls={<WindowSwitcher value={windowDays} onChange={onWindowDaysChange} />}
+        >
           <RefreshFailureNotice
             failure={state.refreshFailure}
             refreshing={refreshing}
@@ -232,7 +230,7 @@ export function AccountScreen({
             </div>
             <AccountActivityNote />
           </div>
-        </main>,
+        </AdminPage>,
       );
     }
   }

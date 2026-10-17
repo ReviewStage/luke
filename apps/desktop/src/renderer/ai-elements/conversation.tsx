@@ -138,9 +138,17 @@ export function ConversationContent({
   );
 }
 
-/** What the log says instead of messages: a wait, or the one line the caller draws. */
-export function ConversationEmptyState({ children }: { children: ReactNode }): ReactNode {
-  return <div className="conversation-empty">{children}</div>;
+/** What the log says instead of messages: a wait, or the line the caller draws, on a wider measure where `wide` says so. */
+export function ConversationEmptyState({
+  wide = false,
+  children,
+}: {
+  wide?: boolean;
+  children: ReactNode;
+}): ReactNode {
+  return (
+    <div className={cn("conversation-empty", wide && "conversation-empty-wide")}>{children}</div>
+  );
 }
 
 /**

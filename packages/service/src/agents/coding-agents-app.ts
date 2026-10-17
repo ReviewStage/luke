@@ -52,7 +52,9 @@ import {
   inboxAnswerMessage,
   inboxAnswerRequestSchema,
   inboxCursorSchema,
+  inboxMessageRequestSchema,
   inboxReplyRefusal,
+  inboxThreadMessage,
 } from "@luke/features/inbox-wire";
 import { modelChoiceSchema } from "@luke/features/models-wire";
 import {
@@ -103,10 +105,13 @@ import {
 import { logStoreFailure } from "../http/store-failure.js";
 import {
   answerInboxItem,
+  INBOX_MESSAGE_OUTCOME,
+  postInboxMessage,
   readInboxAttachment,
   readInboxItem,
   type StoredInboxItem,
   withdrawInboxAnswer,
+  withdrawInboxMessage,
 } from "../inbox/inbox-store.js";
 import type { ModelCatalog, ModelChoiceRefused } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
@@ -128,9 +133,11 @@ import {
 } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import {
+  continuedByOf,
   type EveReach,
   eveFor,
   standingsOf,
+  statusOf,
   stoppedForGood,
   stoppedTurn,
   summaryOf,
@@ -273,6 +280,8 @@ const AGENTS_PATH = {
   INBOX_OF_AGENT: "/api/agents/inbox",
   /** POST answers one inbox item; the rewrite moves the path's item id into the `id` query. */
   INBOX_ITEM: "/api/inbox/item",
+  /** POST writes a member's message on one inbox item's thread; the rewrite moves the path's item id into the `id` query. */
+  INBOX_MESSAGES: "/api/inbox/messages",
   /** GET reads what waits on the developer across the account's tasks past `after`. */
   INBOX: "/api/inbox",
   /** GET serves one attachment of an inbox item, an image block's picture; the rewrite moves the item id into the `id` query and the attachment id into `attachment`. */
@@ -490,13 +499,13 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     }),
   );
   if (!created) {
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(agent) });
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
   }
   const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
     agent: codingAgentSummary(
       agent,
-      { turn: undefined, lineAwaits: false },
+      { turn: undefined, awaitingLineAt: undefined },
       yield* Clock.currentTimeMillis,
       names,
     ),
@@ -530,10 +539,14 @@ const taskAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/taskAgentsEndpoint")(f
   );
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
   const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
+  const continuedBy = yield* continuedByOf(
+    userId,
+    agents.map((agent) => agent.id),
+  );
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     agents: agents.map((agent) =>
-      codingAgentSummary(agent, standing(agent.conversationId), now, names),
+      codingAgentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id)),
     ),
   });
 });
@@ -579,10 +592,14 @@ const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEn
   );
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
   const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
+  const continuedBy = yield* continuedByOf(
+    userId,
+    agents.map((agent) => agent.id),
+  );
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     agents: agents.map((agent) =>
-      codingAgentSummary(agent, standing(agent.conversationId), now, names),
+      codingAgentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id)),
     ),
   });
 });
@@ -618,7 +635,7 @@ const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     sender: { kind: MESSAGE_SENDER.MEMBER, userId },
   });
   return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, {
-    agent: yield* summaryOf(agent),
+    agent: yield* summaryOf(userId, agent),
   });
 });
 
@@ -723,7 +740,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     );
     if (Option.isNone(renamed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(renamed.value),
+      agent: yield* summaryOf(userId, renamed.value),
     });
   }
   const archive = readEither(codingAgentArchiveRequestSchema)(body);
@@ -736,7 +753,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     const changed = yield* hostedStoreOrUnavailable(archiveCodingAgent(userId, agent.id, archived));
     if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(changed.value),
+      agent: yield* summaryOf(userId, changed.value),
     });
   }
   const pin = readEither(codingAgentPinRequestSchema)(body);
@@ -746,7 +763,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     );
     if (Option.isNone(pinned)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(pinned.value),
+      agent: yield* summaryOf(userId, pinned.value),
     });
   }
   const servers = readEither(codingAgentServersRequestSchema)(body);
@@ -756,7 +773,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     );
     if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(changed.value),
+      agent: yield* summaryOf(userId, changed.value),
     });
   }
   const asked = readEither(modelChoiceSchema)(body);
@@ -767,7 +784,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
   );
   if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agent: yield* summaryOf(changed.value),
+    agent: yield* summaryOf(userId, changed.value),
   });
 });
 
@@ -779,12 +796,19 @@ const agentEndpoint = /* @__PURE__ */ Effect.fn("web/agentEndpoint")(function* (
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.GET) return yield* changeEndpoint(seams, writer);
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { agent } = yield* reachedAgent(seams, request);
+  const { userId, agent } = yield* reachedAgent(seams, request);
   const standing = yield* standingsOf([agent.conversationId]);
   const names = yield* hostedStoreOrUnavailable(readAccountNames(pageAccounts(agent)));
+  const continuedBy = yield* continuedByOf(userId, [agent.id]);
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agent: codingAgentPage(agent, standing(agent.conversationId), now, names),
+    agent: codingAgentPage(
+      agent,
+      standing(agent.conversationId),
+      now,
+      names,
+      continuedBy(agent.id),
+    ),
   });
 });
 
@@ -798,9 +822,9 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { agent } = yield* reachedAgent(seams, request);
+  const { userId, agent } = yield* reachedAgent(seams, request);
   yield* stoppedTurn(seams, writer, request, agent);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(agent) });
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
 });
 
 /** What the agent published, from the instance's kept answers, its failures as the refusals a route answers. */
@@ -810,7 +834,7 @@ const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentPullRequestAnswer, HostedRefusal, AgentsServices> {
   // Whether the agent has ended is part of the key, so the first ask after its turn ends reads GitHub afresh.
-  const { status } = yield* summaryOf(agent);
+  const status = yield* statusOf(agent);
   const ended = status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
   return yield* Cache.get(published, new PublishedKey({ userId, agentId: agent.id, ended })).pipe(
     Effect.catch((failure) => {
@@ -1324,6 +1348,72 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
   return inboxAnswered(taken, true);
 });
 
+/** A message is its words and the files a message may carry: the words' bound at JSON's widest escape, the files, and room for the key. */
+const MAXIMUM_INBOX_MESSAGE_BODY_BYTES =
+  6 * INBOX_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 2_048;
+
+/**
+ * POST writes a member's message on the thread of one item of the account's
+ * workspaces, open or settled, whichever member started its agent, and
+ * answers with the item as it then stands. The message is written first,
+ * with its files, moving the item's last change and nothing else of it,
+ * and then handed to the agent as one of the developer's messages, under
+ * its own lead and its files with it, through the one steer path
+ * (`coder-host/steer.ts`), which opens a turn for an agent that stopped as
+ * a message typed in its tab does. A hand-off that fails, is interrupted,
+ * or dies takes the message back off the thread, so the thread never shows
+ * a message the agent was not told, where this send wrote it; a message sent again under its key is the one already
+ * written and handed off again, which the steer's own key makes reach the
+ * agent once, and another message under a key already taken, by another
+ * member or with other words or files, is refused. An agent whose session has ended for good can
+ * hear nothing again, so its item keeps the message.
+ */
+const inboxMessageEndpoint = /* @__PURE__ */ Effect.fn("web/inboxMessageEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const itemId = yield* idOf(request);
+  const userId = yield* resolvedUserId(seams, request);
+  const body = yield* readJsonBodyEffect(MAXIMUM_INBOX_MESSAGE_BODY_BYTES);
+  const asked = readEither(inboxMessageRequestSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { text, clientKey, attachments = [] } = asked.success;
+  const posted = yield* hostedStoreOrUnavailable(
+    postInboxMessage(userId, itemId, { text, clientKey, files: attachments }),
+  );
+  if (Option.isNone(posted)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const { item, outcome } = posted.value;
+  if (outcome === INBOX_MESSAGE_OUTCOME.KEY_REUSED) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  // Note that a repeat leaves the message standing on failure, because the write that wrote it decides whether it stays.
+  const unheard =
+    outcome === INBOX_MESSAGE_OUTCOME.WRITTEN
+      ? withdrawInboxMessage(userId, itemId, clientKey)
+      : Effect.void;
+  const handedOver = Effect.gen(function* () {
+    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
+    if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
+    const eve = yield* eveFor(seams, request);
+    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+      text: inboxThreadMessage(item, text),
+      attachments,
+      clientKey,
+      sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+    });
+  });
+  yield* handedOver.pipe(
+    Effect.catchIf(retiredRefusal, () => Effect.void),
+    Effect.onError(() => unheard.pipe(Effect.tapError(logStoreFailure), Effect.ignore)),
+  );
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { item });
+});
+
 /**
  * The item with the answer standing on it under the request's key: taken
  * now where the item is open at the revision named and takes the answer,
@@ -1432,6 +1522,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.INBOX_ITEM,
           hostedRefusing(inboxAnswerEndpoint(seams, writer)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.INBOX_MESSAGES,
+          hostedRefusing(inboxMessageEndpoint(seams, writer)),
         ),
         HttpRouter.add(ANY_METHOD, AGENTS_PATH.INBOX, hostedRefusing(accountInboxEndpoint(seams))),
         HttpRouter.add(

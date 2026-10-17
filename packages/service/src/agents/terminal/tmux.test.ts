@@ -57,7 +57,7 @@ test("a list reads back a tab's shells oldest first, named and marked running as
     "",
   ].join("\n");
 
-  assert.deepEqual(terminalsOf({ exitCode: 0, stdout }), [
+  assert.deepEqual(terminalsOf({ exitCode: 0, stdout, stderr: "" }), [
     { id: SHELL_A, title: "zsh", command: "zsh", cwd: "/workspace/repository", running: false },
     {
       id: SHELL_B,
@@ -72,9 +72,9 @@ test("a list reads back a tab's shells oldest first, named and marked running as
 test("a title or folder with spaces is read back whole, and a list that failed is none at all", () => {
   const stdout = listed(`luke-${SHELL_A}`, 100, "dev  server", "node", "/workspace/my app");
 
-  assert.deepEqual(terminalsOf({ exitCode: 0, stdout }), [
+  assert.deepEqual(terminalsOf({ exitCode: 0, stdout, stderr: "" }), [
     { id: SHELL_A, title: "dev  server", command: "node", cwd: "/workspace/my app", running: true },
   ]);
-  assert.deepEqual(terminalsOf({ exitCode: 0, stdout: "" }), []);
-  assert.equal(terminalsOf({ exitCode: 1, stdout: "" }), undefined);
+  assert.deepEqual(terminalsOf({ exitCode: 0, stdout: "", stderr: "" }), []);
+  assert.equal(terminalsOf({ exitCode: 1, stdout: "", stderr: "" }), undefined);
 });

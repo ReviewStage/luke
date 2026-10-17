@@ -27,6 +27,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lte,
   or,
   type SQL,
   sql,
@@ -160,6 +161,8 @@ export interface CodingAgent {
   readonly repository: string;
   /** The branch checked out in the sandbox as the last turn ended; null before one ends or where the checkout stood detached. */
   readonly branch: string | null;
+  /** The branch the agent's checkout is cloned at, as its starter named it; null for the repository's default branch. */
+  readonly startBranch: string | null;
   /** The agent's title as its tab shows it; null falls back to the model's name. */
   readonly title: string | null;
   /** When the developer archived the agent; null while it is not. */
@@ -232,6 +235,8 @@ export type NewCodingAgent = CodingAgentPlace & {
   /** The model's whole window, the long one, where the Start names none. */
   readonly contextWindow?: ContextWindow | undefined;
   readonly repository: string;
+  /** The branch the agent's checkout is cloned at; none for the repository's default branch. */
+  readonly startBranch?: string | undefined;
   /** The MCP servers the draft switched off before it started; none where the Start names none. */
   readonly disabledServers?: readonly string[] | undefined;
   /** The MCP servers the prompt mentions, which the first turn is handed whatever the switches say; none where it mentions none. */
@@ -255,6 +260,7 @@ const CODING_AGENT_COLUMNS = {
   prompt: codingAgent.prompt,
   repository: codingAgent.repository,
   branch: codingAgent.branch,
+  startBranch: codingAgent.startBranch,
   title: codingAgent.title,
   archivedAt: codingAgent.archivedAt,
   archivedBy: codingAgent.archivedBy,
@@ -301,6 +307,8 @@ const StartedFromColumnSchema = Schema.NullOr(
   Schema.Struct({
     agentId: Schema.String,
     messageId: Schema.optionalKey(Schema.String),
+    messageSteps: Schema.optionalKey(Schema.Number),
+    messageStepParts: Schema.optionalKey(Schema.Number),
     steps: Schema.Number,
     totalSteps: Schema.Number,
     branch: Schema.optionalKey(Schema.String),
@@ -335,6 +343,7 @@ const CodingAgentRowSchema = Schema.Struct({
   prompt: Schema.NullOr(Schema.String),
   repository: Schema.String,
   branch: Schema.NullOr(Schema.String),
+  startBranch: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
   archivedBy: ArchivedByColumnSchema,
@@ -454,6 +463,7 @@ const insertAgent = SqlSchema.findOne({
     planSnapshot: Schema.NullOr(Schema.String),
     prompt: Schema.NullOr(Schema.String),
     repository: Schema.String,
+    startBranch: Schema.NullOr(Schema.String),
     disabledServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     mentionedServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     now: Schema.Date,
@@ -479,6 +489,7 @@ const insertAgent = SqlSchema.findOne({
           prompt: write.prompt,
           repository: write.repository,
           repositories: [write.repository],
+          startBranch: write.startBranch,
           disabledServers: write.disabledServers,
           mentionedServers: write.mentionedServers,
           idempotencyKey: write.idempotencyKey,
@@ -919,6 +930,47 @@ const findPublishedAgentsById = SqlSchema.findAll({
     ),
 });
 
+const findStartedFrom = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentIds: Schema.Array(Schema.String),
+    perSource: Schema.Number,
+  }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    title: Schema.NullOr(Schema.String),
+    startedFrom: StartedFromColumnSchema,
+  }),
+  execute: ({ userId, agentIds, perSource }) =>
+    Database.use((db) => {
+      // Each source's own oldest are kept, so a source started from many hides none of another's.
+      const ranked = db
+        .select({
+          id: codingAgent.id,
+          title: codingAgent.title,
+          startedFrom: codingAgent.startedFrom,
+          createdAt: codingAgent.createdAt,
+          rank: sql<number>`row_number() over (partition by (${codingAgent.startedFrom}->>'agentId') order by ${codingAgent.createdAt}, ${codingAgent.id})`.as(
+            "rank",
+          ),
+        })
+        .from(codingAgent)
+        .where(
+          and(
+            // Note that the source is matched on the expression its index is built on.
+            inArray(sql`(${codingAgent.startedFrom}->>'agentId')`, [...agentIds]),
+            agentReachableBy(userId),
+          ),
+        )
+        .as("ranked");
+      return db
+        .select({ id: ranked.id, title: ranked.title, startedFrom: ranked.startedFrom })
+        .from(ranked)
+        .where(lte(ranked.rank, perSource))
+        .orderBy(asc(ranked.createdAt), asc(ranked.id));
+    }),
+});
+
 const findAgentsOnBranches = SqlSchema.findAll({
   Request: Schema.Struct({
     repository: Schema.String,
@@ -1104,6 +1156,7 @@ export function createCodingAgent(
           planSnapshot: started.planSnapshot,
           prompt: started.prompt,
           repository: started.repository,
+          startBranch: started.startBranch ?? null,
           disabledServers: storedServers(started.disabledServers ?? []),
           mentionedServers: storedServers(started.mentionedServers ?? []),
           now,
@@ -1250,6 +1303,44 @@ export function listPublishedCodingAgentsById(
   return Effect.map(findPublishedAgentsById({ userId, agentIds }), (rows) =>
     rows.map(({ published, ...agent }) => ({ agent, published })),
   );
+}
+
+/** How many agents started from one agent its summary names, the oldest first. */
+const CONTINUATIONS_PER_AGENT = 20;
+
+/** One agent started from another: its id, its title, null before it has one, and the message it forked the other at where it was forked rather than continued. */
+export interface CodingAgentStartedFromIt {
+  readonly agentId: string;
+  readonly title: string | null;
+  readonly messageId?: string;
+}
+
+/**
+ * The agents started from each agent named, archived or not, oldest first
+ * and at most `CONTINUATIONS_PER_AGENT` of each, by the id of the agent
+ * they were started from; one of a workspace the account is not in is left
+ * out. None asked, none read.
+ */
+export function continuationsOf(
+  userId: string,
+  agentIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, readonly CodingAgentStartedFromIt[]>> {
+  if (agentIds.length === 0) return Effect.succeed(new Map());
+  const perSource = CONTINUATIONS_PER_AGENT;
+  return Effect.map(findStartedFrom({ userId, agentIds, perSource }), (rows) => {
+    const bySource = new Map<string, CodingAgentStartedFromIt[]>();
+    for (const { id, title, startedFrom } of rows) {
+      if (startedFrom === null) continue;
+      const each = bySource.get(startedFrom.agentId) ?? [];
+      each.push(
+        startedFrom.messageId === undefined
+          ? { agentId: id, title }
+          : { agentId: id, title, messageId: startedFrom.messageId },
+      );
+      bySource.set(startedFrom.agentId, each);
+    }
+    return bySource;
+  });
 }
 
 /** The pull request from the agent's branch as GitHub just answered, or null where it answered none; nothing written for an agent of a workspace the account is not in. */
@@ -1823,7 +1914,12 @@ export function delegationStartsOf(
  * a member by their account's id and the name it holds now, or nobody where
  * their account is gone; Luke; an automation by the name its run kept; or
  * GitHub by the login the line kept; or another coding agent by the name
- * its send kept.
+ * its send kept, and the model it ran on then, which its harness is read
+ * off, where the line kept one, and the agent itself, by its id and the
+ * task it works on, where the line kept it and it still stands. Note that
+ * the model is only ever the one the line kept, never the agent's now,
+ * because a byline names who sent it as it was, whatever the agent runs on
+ * since.
  */
 export type LineSent =
   | {
@@ -1833,7 +1929,18 @@ export type LineSent =
   | { readonly kind: typeof MESSAGE_SENDER.LUKE }
   | { readonly kind: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string }
   | { readonly kind: typeof MESSAGE_SENDER.GITHUB; readonly login: string }
-  | { readonly kind: typeof MESSAGE_SENDER.AGENT; readonly name: string };
+  | {
+      readonly kind: typeof MESSAGE_SENDER.AGENT;
+      readonly name: string;
+      readonly model: string | undefined;
+      readonly agent: SendingAgent | undefined;
+    };
+
+/** The coding agent that sent a line, as it stands now: its id, and the task it works on, none for one on no task. */
+interface SendingAgent {
+  readonly id: string;
+  readonly taskId: string | undefined;
+}
 
 /** A line's sender as its row keeps it, with the member's account where it still stands. */
 const LineSenderRowSchema = Schema.Struct({
@@ -1842,6 +1949,9 @@ const LineSenderRowSchema = Schema.Struct({
   memberId: Schema.NullOr(Schema.String),
   memberName: Schema.NullOr(Schema.String),
   senderName: Schema.NullOr(Schema.String),
+  senderModel: Schema.NullOr(Schema.String),
+  agentId: Schema.NullOr(Schema.String),
+  agentTaskId: Schema.NullOr(Schema.String),
 });
 
 const findLineSenders = SqlSchema.findAll({
@@ -1860,9 +1970,13 @@ const findLineSenders = SqlSchema.findAll({
           memberId: user.id,
           memberName: user.name,
           senderName: messages.senderName,
+          senderModel: messages.senderModel,
+          agentId: codingAgent.id,
+          agentTaskId: codingAgent.taskId,
         })
         .from(messages)
         .leftJoin(user, eq(user.id, messages.senderUserId))
+        .leftJoin(codingAgent, eq(codingAgent.id, messages.senderAgentId))
         .where(
           and(
             inArray(messages.id, [...messageIds]),
@@ -1898,7 +2012,15 @@ function lineSentOf(row: typeof LineSenderRowSchema.Type): LineSent | undefined 
     case MESSAGE_SENDER.AGENT:
       return row.senderName === null
         ? undefined
-        : { kind: MESSAGE_SENDER.AGENT, name: row.senderName };
+        : {
+            kind: MESSAGE_SENDER.AGENT,
+            name: row.senderName,
+            model: row.senderModel ?? undefined,
+            agent:
+              row.agentId === null
+                ? undefined
+                : { id: row.agentId, taskId: row.agentTaskId ?? undefined },
+          };
   }
 }
 

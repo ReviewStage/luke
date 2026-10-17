@@ -1,3 +1,5 @@
+import { ChartFrameSkeleton } from "./charts/chart-frame";
+
 /**
  * The first load's stand-in: the page's own layout with bones where the data
  * will land, so the answer replaces the skeleton without moving what the
@@ -15,7 +17,7 @@
  * time, so a section added to a page is a line here, not a page-shaped copy
  * that drifts from the page the moment either moves.
  */
-export function Skeleton({
+function Skeleton({
   className,
   circle = false,
 }: {
@@ -125,15 +127,10 @@ function SkeletonStatCard({ grouped }: { grouped: boolean }): React.JSX.Element 
   );
 }
 
+/** Only the sign-in methods chart has no trend across from its heading. */
 function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <SkeletonLine box="h-4" bone="h-3 w-36" />
-        <SkeletonLine box="h-4" bone="h-3 w-56" />
-      </div>
-      <Skeleton className={`w-full ${plot}`} />
-    </div>
+    <ChartFrameSkeleton aside={plot !== SKELETON_PLOT.SIGN_IN_METHODS} legend={false} plot={plot} />
   );
 }
 
@@ -142,17 +139,7 @@ function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element 
  * and seven day rows with the grid's own gaps.
  */
 function SkeletonCalendarCard(): React.JSX.Element {
-  return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <div className="mb-4">
-        <SkeletonLine box="h-4" bone="h-3 w-52" />
-      </div>
-      <Skeleton className="h-[156px] w-full" />
-      <div className="mt-4">
-        <SkeletonLine box="h-4" bone="h-3 w-96 max-w-full" />
-      </div>
-    </div>
-  );
+  return <ChartFrameSkeleton aside={false} legend plot="h-[156px]" />;
 }
 
 function SkeletonAccountsTable({
@@ -232,7 +219,9 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
       return (
         <div
           className={
-            shape.plots.length > 1 ? "grid gap-3 min-[720px]:grid-cols-[1.6fr_1fr]" : undefined
+            shape.plots.length > 1
+              ? "grid gap-3 min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
+              : undefined
           }
         >
           {shape.plots.map((plot) => (

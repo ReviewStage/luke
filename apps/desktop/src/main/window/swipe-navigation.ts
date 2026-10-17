@@ -11,9 +11,9 @@
  * overlay holding the keyboard holds off as it holds off ⌘[ and ⌘].
  */
 
+import { channels } from "@luke/host/bridge";
+import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
 import type { Event, WebContents } from "electron";
-import { channels } from "#shared/bridge";
-import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 
 /** The directions Electron names a swipe by. */
 const SWIPE_DIRECTION = {

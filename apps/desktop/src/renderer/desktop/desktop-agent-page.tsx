@@ -1,16 +1,16 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, IconButton, useMenu } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { appPlatform } from "../app-platform";
 import { AutomationDirectory } from "../automation-directory";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { FindScope } from "../find-in-tab";
@@ -174,7 +174,7 @@ export function DesktopAgentPage({
   agentId: string;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AGENT_PAGE, tasks.agentView.onClose);
-  const { act, tell } = useAct();
+  const { act } = useAct();
   const views = useTabViews();
   const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
@@ -292,7 +292,7 @@ export function DesktopAgentPage({
     if (agentRepository === undefined) return;
     const place = { workspace: listed?.slug ?? workspaceId ?? "", repository: agentRepository };
     const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
-    tell(ACT_KIND.GITHUB_OPEN, { url });
+    appPlatform().openGitHub(url);
   };
   // What an `@` offers once the read named the agent's workspace and repository, which its files are read through.
   const mentions =

@@ -15,6 +15,7 @@
 
 import type { AppInboxTask } from "@luke/host/app-state";
 import { useEffect, useRef } from "react";
+import { appBridge } from "../app-bridge";
 import { TOAST_HOLD, TOAST_TONE, useToast, useWithdrawToast } from "../toast";
 import { appStateNow } from "../use-app-state";
 
@@ -44,7 +45,7 @@ export function useInboxToasts(
   const told = useRef(new Map<string, { taskId: string; heard: number }>());
   useEffect(
     () =>
-      window.luke.onInboxItemOpened(({ taskId, itemId, words, detail }) => {
+      appBridge().onInboxItemOpened(({ taskId, itemId, words, detail }) => {
         told.current.set(itemId, { taskId, heard: appStateNow()?.version ?? -1 });
         toast({
           words,

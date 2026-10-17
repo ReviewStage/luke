@@ -14,8 +14,7 @@ import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Scope } from "effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import type * as HttpClient from "effect/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
@@ -53,20 +52,25 @@ const UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
 
 export function composeIntegrations(
   dependencies: IntegrationsDependencies,
-): Effect.Effect<IntegrationsComposer, never, Scope.Scope> {
-  return Effect.sync(() => composed(dependencies));
+): Effect.Effect<IntegrationsComposer, never, Scope.Scope | HttpClient.HttpClient> {
+  return Effect.gen(function* () {
+    return composed(dependencies, yield* HttpClient.HttpClient);
+  });
 }
 
 /** The composer's one table, built from its seams; nothing here starts anything. */
-function composed(dependencies: IntegrationsDependencies): IntegrationsComposer {
+function composed(
+  dependencies: IntegrationsDependencies,
+  http: HttpClient.HttpClient,
+): IntegrationsComposer {
   const { kernel, account, client, openExternal } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
-  /** The service asked behind the gate, over the ambient fetch client. */
+  /** The service asked behind the gate, over the host's own HTTP client. */
   const asked = <Answer>(
     call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
   ): Effect.Effect<Answer | typeof UNANSWERED> =>
-    gate() ? Effect.provide(call, FetchHttpClient.layer) : Effect.succeed(UNANSWERED);
+    gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
 
   type Params = Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0];
 

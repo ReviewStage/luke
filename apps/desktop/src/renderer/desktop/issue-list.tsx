@@ -103,14 +103,15 @@ export function IssueList({
           className="home-section"
           aria-label={ISSUE_STATUS_WORDS[group.status]}
         >
-          <header className="issue-group-head">
-            <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED}>
+          {/* Note that the count stands inside the heading, so a reader moving by headings hears it. */}
+          <h2 className="issue-group-head">
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED}>
               {ISSUE_STATUS_WORDS[group.status]}
             </Text>
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
               {group.issues.length}
             </Text>
-          </header>
+          </h2>
           <ul className="sidebar-tasks">
             {group.issues.map((issue) => (
               <IssueRow
