@@ -87,10 +87,19 @@ test("a line's grace counts from when the turn it was sent during ended, since n
   );
 });
 
-test("a line older than the newest turn's start that the turn never took reads the agent as that turn ended", () => {
+test("a line older than the newest turn's queueing that the turn never took reads the agent as that turn ended", () => {
   const settled = turn({ queuedAt: 4_000, startedAt: 4_500, settledAt: 9_000 });
   const awaitingLineAt = new Date(3_000);
   expect(codingAgentStatusOf(settled, { createdAt: STARTED, now: 9_001, awaitingLineAt })).toBe(
     CODING_AGENT_STATUS.COMPLETED,
   );
+});
+
+test("a line sent while the newest turn was queued, and never taken, reads the agent failed past the grace from that turn's end", () => {
+  const settled = turn({ queuedAt: 4_000, startedAt: 6_000, settledAt: 9_000 });
+  const awaitingLineAt = new Date(5_000);
+  const at = (now: number) =>
+    codingAgentStatusOf(settled, { createdAt: STARTED, now, awaitingLineAt });
+  expect(at(9_000 + LINE_GRACE_MS)).toBe(CODING_AGENT_STATUS.RUNNING);
+  expect(at(9_001 + LINE_GRACE_MS)).toBe(CODING_AGENT_STATUS.FAILED);
 });

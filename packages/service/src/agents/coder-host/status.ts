@@ -40,7 +40,7 @@ import { CODER, CODER_REFUSAL } from "./bounds.js";
  * rather than watching it run forever. Failed rather than as the newest
  * turn says, because the line went unanswered, and a settled agent would
  * offer neither Continue nor any word of why. A line older than the newest
- * turn's start that the turn never took awaits nothing either: that turn
+ * turn's queueing that the turn never took awaits nothing either: that turn
  * was its, and ended without the store hearing it received. A failed turn
  * is also read for why, as one of the wire's fixed words: the sweep's own
  * word for a turn it settled, else the host's refusal sentences where the
@@ -98,11 +98,13 @@ function turnRuns(turn: CodingAgentLatestTurn): boolean {
 /**
  * Where the newest line awaiting a turn stands. A turn still running takes
  * it, so it awaits. With none running, a line written before the newest
- * turn began was that turn's, which ended without the store hearing it
- * received, so it awaits nothing. Else it awaits for the grace, counted
- * from when it was written or the newest turn ended, whichever came later,
- * since that is how long it has stood with nothing running to take it, and
- * is unanswered past it.
+ * turn was queued was that turn's opener, written under the lock before
+ * eve's first write of the turn (`steer.ts`), and the turn ended without the
+ * store hearing it received, so it awaits nothing; a line written once the
+ * turn was queued was a steer to it and still counts. Else it awaits for
+ * the grace, counted from when it was written or the newest turn ended,
+ * whichever came later, since that is how long it has stood with nothing
+ * running to take it, and is unanswered past it.
  */
 function lineStandingOf(
   turn: CodingAgentLatestTurn | undefined,
@@ -111,7 +113,7 @@ function lineStandingOf(
   const line = standing.awaitingLineAt?.getTime();
   if (line === undefined) return LINE_STANDING.NONE;
   if (turn !== undefined && turnRuns(turn)) return LINE_STANDING.AWAITS;
-  if (turn !== undefined && line < (turn.startedAt ?? turn.queuedAt).getTime()) {
+  if (turn !== undefined && line < turn.queuedAt.getTime()) {
     return LINE_STANDING.NONE;
   }
   const since = Math.max(line, turn?.settledAt?.getTime() ?? 0);

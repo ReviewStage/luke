@@ -858,7 +858,7 @@ export function latestTurnsOfReached(
 
 const AwaitingLinesRowSchema = Schema.Struct({
   conversationId: Schema.String,
-  newestAt: Schema.Date,
+  newestAt: InstantColumnSchema,
 });
 
 /**
