@@ -1,4 +1,5 @@
 import type { AdminDailyUsage } from "@luke/service/admin/admin-metrics";
+import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "@luke/ui/activity-calendar";
 import { formatNumber, formatTooltipDay } from "@luke/ui/admin-format";
 import { partialDayKey } from "@luke/ui/daily-series";
@@ -115,7 +116,8 @@ interface CalendarTooltipAnchor {
  * grid's dashed border, because a fade here would pose as a quiet day. A
  * hovered or focused cell answers at once with the charts' own tooltip —
  * one element the whole grid shares, anchored to the card and clamped to
- * its edges.
+ * its edges. The weekday and month labels are captions, as the other
+ * charts' axis ticks are.
  */
 export function ActivityCalendar({
   daily,
@@ -224,17 +226,18 @@ export function ActivityCalendar({
           >
             <div aria-hidden="true" />
             {CALENDAR_WEEKDAY_LABELS.map((label) => (
-              <div
-                key={label}
-                className="self-center font-mono text-[10px] leading-none text-muted-foreground uppercase"
-              >
-                {label}
+              <div key={label} className="self-center">
+                <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                  {label}
+                </Text>
               </div>
             ))}
             {weeks.map((week, weekIndex) => (
               <Fragment key={week.weekStart}>
-                <div className="font-mono text-[10px] leading-4 whitespace-nowrap text-muted-foreground uppercase">
-                  {months[weekIndex]}
+                <div className="whitespace-nowrap">
+                  <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                    {months[weekIndex]}
+                  </Text>
                 </div>
                 {week.days.map((day, slot) =>
                   day === undefined ? (
