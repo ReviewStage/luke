@@ -36,7 +36,7 @@ const KEYFRAME_SESSIONS_PATH = "/v1/sessions";
  * Keyframe's id for each stock avatar a Mac may choose, as Keyframe's avatar
  * library lists them for `persona-1.5-live`
  * (https://docs.keyframelabs.com/guides/resources/avatar-library). The
- * default is the deployment's own persona, so it is not here.
+ * deployment's own persona, which a start naming none asks for, is not here.
  */
 export const KEYFRAME_STOCK_PERSONA_ID = {
   [VIDEO_AVATAR.ATLAS]: "81b834ee-8aaa-4796-861e-5b206f6e1bff",
@@ -47,7 +47,7 @@ export const KEYFRAME_STOCK_PERSONA_ID = {
   [VIDEO_AVATAR.LYRA]: "b6dad089-2dd4-4012-9f6c-53b8aec8d4f5",
   [VIDEO_AVATAR.ORION]: "9b3988bd-8b4e-43ca-aef2-90da70dba2c0",
   [VIDEO_AVATAR.SELENE]: "37fc1a9e-144e-4447-8df1-f4cb4dd76914",
-} as const satisfies Record<Exclude<VideoAvatar, typeof VIDEO_AVATAR.DEFAULT>, string>;
+} as const satisfies Record<VideoAvatar, string>;
 
 /** The status Keyframe answers when no avatar worker is free, beside the 429 of a plan's concurrency. */
 const SERVICE_UNAVAILABLE = 503;

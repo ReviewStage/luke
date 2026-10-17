@@ -49,7 +49,7 @@ import {
   chaseView,
   type UnitView,
 } from "./task-reveal";
-import { agoText, useMinute } from "./task-time";
+import { agoText, momentText, sinceText, useMinute } from "./task-time";
 import { PlanTitle } from "./task-title";
 import { useOpenLink } from "./use-open-link";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing";
@@ -70,9 +70,11 @@ import { NO_LOOKS, type TaskLooks } from "./use-task-looks";
  * card (`edit-ref.tsx`), whose call it was on where Luke wrote it on one,
  * and how long ago, moved on once a minute. The time opens the plan's
  * version history, where each earlier version is. Each section says the
- * same of the save that last changed it, quietly, while the pointer or the
- * keyboard is on it, leading with the writer's face, and its time opens the
- * version history on the revision that save made. The words before the
+ * same of the save that last changed it in fewer letters, quietly, while the
+ * pointer or the keyboard is on it: the writer's face, whose card names them,
+ * and the time, "2h", at the end of a heading that always keeps room for
+ * them, so they never stand over its words. Its time opens the version
+ * history on the revision that save made. The words before the
  * first heading have no heading's line for it to stand at, so they carry no
  * line in the text, where it would stand over their words or a picture; a
  * picture of the plan, opened over the window, says who last changed its
@@ -184,35 +186,42 @@ type ShowHistory = (save: number | undefined) => void;
 /**
  * How long ago an edit was, in a line naming it, as the press that opens the
  * version history on it where the window offers one, and as words otherwise.
- * `label` is what the press is called. Note that the press stops there,
- * because a click into a section opens its editor.
+ * `label` is what the press is called. `short` says it in a row's few
+ * letters, "2h", a date without its year, with the full moment on hover,
+ * for a section's byline, which keeps to a fixed room. Note that the press
+ * stops there, because a click into a section opens its editor.
  */
 function EditTime({
   at,
   now,
   label,
   onShow,
+  short = false,
 }: {
   at: number;
   now: number;
   label: string;
   onShow: (() => void) | undefined;
+  short?: boolean;
 }): React.JSX.Element {
-  const ago = agoText(at, now);
-  if (onShow === undefined) return <span>{ago}</span>;
-  return (
-    <button
-      type="button"
-      className="plan-edit-link"
-      aria-label={label}
-      onClick={(event) => {
-        event.stopPropagation();
-        onShow();
-      }}
-    >
-      {ago}
-    </button>
-  );
+  const words = short ? sinceText(at, now, { year: false }) : agoText(at, now);
+  const time =
+    onShow === undefined ? (
+      <span>{words}</span>
+    ) : (
+      <button
+        type="button"
+        className="plan-edit-link"
+        aria-label={label}
+        onClick={(event) => {
+          event.stopPropagation();
+          onShow();
+        }}
+      >
+        {words}
+      </button>
+    );
+  return short ? <Tooltip label={momentText(at)}>{time}</Tooltip> : time;
 }
 
 /**
@@ -301,29 +310,33 @@ interface SectionMarks {
 }
 
 /**
- * The section's quiet line: who last changed the section under `heading`,
- * on their face, and when, "[Luke] Luke during Charles Pan’s call · 2h ago",
- * shown while the pointer or the keyboard is on it; none where no save has,
- * or for the words before the first heading, which have no heading's line
- * for it to stand at. Where the window offers the version history, the time
- * opens it on the revision that save made.
+ * The section's quiet line: the face of who last changed the section under
+ * `heading`, hanging their card, which names them and whose call it was,
+ * and when in a row's few letters, "[Luke] 2h", shown while the pointer or
+ * the keyboard is on it, at the end of a heading that keeps room for it;
+ * none where no save has, or for the words before the first heading, which
+ * have no heading's line for it to stand at. Where the window offers the
+ * version history, the time opens it on the revision that save made.
  */
 function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | null {
   if (heading === "") return null;
   const edit = marks.edits.get(heading);
   if (edit === undefined) return null;
   const { onShowHistory, place } = marks;
-  const ago = agoText(edit.at, place.now);
-  const named = heading === "" ? `Edited ${ago}` : `${heading}: edited ${ago}`;
+  const named = `${heading}: edited ${agoText(edit.at, place.now)}`;
   return (
     <span className="plan-unit-byline actor-line">
-      {edit.actor === PLAN_ACTOR.EARLIER ? "Edited" : <EditedBy edit={edit} place={place} />}
-      {" · "}
+      {edit.actor === PLAN_ACTOR.EARLIER ? (
+        "Edited"
+      ) : (
+        <EditedBy edit={edit} place={place} faceOnly />
+      )}{" "}
       <EditTime
         at={edit.at}
         now={place.now}
         label={`${named}. Show version history`}
         onShow={onShowHistory === undefined ? undefined : () => onShowHistory(edit.at)}
+        short
       />
     </span>
   );
@@ -672,9 +685,8 @@ function DocumentUnit({
  * as the plan template is: the page's actions end the title's line, and the
  * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
  * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
- * none are. `crumb`, where given, stands over the "Edited by" line and
- * says where the plan lives (`task-crumb.tsx`). `readMark` is whether the
- * plan is marked unread, which the title's ⋯ offers to flip.
+ * none are. `readMark` is whether the plan is marked unread, which the
+ * title's ⋯ offers to flip.
  */
 export function PlanBody({
   task,
@@ -689,7 +701,6 @@ export function PlanBody({
   sectionLinks,
   reader = NO_READER,
   agents,
-  crumb,
 }: {
   task: Task;
   live: boolean;
@@ -710,8 +721,6 @@ export function PlanBody({
   reader?: TaskReader;
   /** The plan's coding agents, among which an agent's edit is found and opened; without them, an agent is named alone. */
   agents?: EditAgents;
-  /** Where the plan lives and who can edit it, over the "Edited by" line; a Settings page draws none. */
-  crumb?: React.ReactNode;
 }): React.JSX.Element {
   const { views, behind, jumps } = useTaskChase(task, live, reader);
   const editable = onEdit !== undefined;
@@ -902,7 +911,6 @@ export function PlanBody({
             : undefined
         }
       >
-        {page === undefined ? crumb : null}
         {page === undefined ? editedNote : null}
         <ChangedLine looks={looks} marks={marks} />
         <div className={BODY_CLASS}>

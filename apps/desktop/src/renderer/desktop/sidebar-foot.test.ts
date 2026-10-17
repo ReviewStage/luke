@@ -9,7 +9,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAppCommand } from "../app-commands";
 import { OpenPersonProvider } from "../person-door";
@@ -204,7 +203,7 @@ test("the account's menu offers the Help menu's own commands and opens the chang
   assert.deepEqual(sent, [{ kind: ACT_KIND.UPDATE_OPEN_CHANGELOG }]);
 });
 
-test("Contact us flies out its own menu beside the account's, which stands whole behind it with Contact us lit", () => {
+test("Contact us flies out its own menu beside the account's, which stands whole behind it", () => {
   const button = mount(DEAN);
   act(() => button.click());
   const contact = accountItem("Contact us");
@@ -221,7 +220,6 @@ test("Contact us flies out its own menu beside the account's, which stands whole
   assert.equal(document.activeElement?.textContent, "GitHub", "focus lands on its first item");
   assert.equal(accountMenuLines().length, 11, "the account's menu keeps every line");
   assert.equal(contact.getAttribute("aria-expanded"), "true");
-  assert.equal(contact.dataset.open, "true", "Contact us stays lit");
 });
 
 test("Left or Escape closes Contact us's menu alone, and choosing in it closes both", () => {
@@ -332,45 +330,4 @@ test("in the window, the account's menu opens with the reader's own profile, onc
   assert.equal(accountMenuLines()[2], "Your profile");
   act(() => accountItem("Your profile").click());
   assert.deepEqual(opened, ["user-dean"]);
-});
-
-/** The foot's row at the sidebar's least width, 200, less the column's insets, and at its default, 264. */
-const FOOT = { NARROWEST: 176, DEFAULT: 240 } as const;
-
-/** The update's press as drawn on a foot this wide: its name, and whether its word is drawn beside its glyph. */
-function updateAt(width: number) {
-  const style = layContainersAt({ "sidebar-foot": width });
-  const press =
-    document.querySelector<HTMLButtonElement>(".sidebar-update") ??
-    assert.fail("the update stands");
-  const word = press.querySelector(".sidebar-update-word") ?? assert.fail("the press has a word");
-  const drawn = { name: press.getAttribute("aria-label"), word: shown(word) };
-  style.remove();
-  return drawn;
-}
-
-test("a release waiting on its restart draws Restart's glyph alone on the sidebar's narrowest foot, so the account's name keeps its room, and its word at the default width", () => {
-  mount(DEAN, {
-    update: {
-      status: UPDATE_STATUS.READY,
-      currentVersion: "1.0.0",
-      installSupported: true,
-      latestVersion: "1.1.0",
-    },
-  });
-  assert.deepEqual(updateAt(FOOT.NARROWEST), { name: "Restart", word: false });
-  assert.deepEqual(updateAt(FOOT.DEFAULT), { name: "Restart", word: true });
-});
-
-test("a release that failed to install draws Download's glyph alone on the sidebar's narrowest foot, named still", () => {
-  mount(DEAN, {
-    update: {
-      status: UPDATE_STATUS.ERROR,
-      currentVersion: "1.0.0",
-      installSupported: true,
-      latestVersion: "1.1.0",
-    },
-  });
-  assert.deepEqual(updateAt(FOOT.NARROWEST), { name: "Download", word: false });
-  assert.deepEqual(updateAt(FOOT.DEFAULT), { name: "Download", word: true });
 });

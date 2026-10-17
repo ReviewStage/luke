@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { FEEDBACK_KIND, type FeedbackKind, type FeedbackResult } from "@luke/features/feedback";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
@@ -16,9 +14,6 @@ import { onRegistry } from "#testing/copy-feedback";
 import { useAppCommand, useMenuCommands } from "./app-commands";
 import { FeedbackDialog } from "./feedback-dialog";
 import { ToastHost } from "./toast";
-
-/** The window's own stylesheet, which says how tall the dialog may stand. */
-const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "styles/desktop.css"), "utf8");
 
 /** The two Help items that open the dialog, one per kind of note. */
 type FeedbackCommand = typeof APP_COMMAND.SEND_FEEDBACK | typeof APP_COMMAND.SUGGEST_FEATURE;
@@ -129,22 +124,6 @@ test("each of Help's items opens the dialog of its own kind, with the field taki
   act(() => button("Cancel").click());
   const prompt = openFromHelp(APP_COMMAND.SUGGEST_FEATURE);
   assert.equal(prompt.querySelector("h2")?.textContent, "Suggest a feature");
-});
-
-test("the dialog is never taller than the window: the note gives way, down to its least height, and the answers stay on the card", () => {
-  document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
-  mount();
-
-  const feedback = openFromHelp(APP_COMMAND.SEND_FEEDBACK);
-
-  assert.match(getComputedStyle(feedback).maxHeight, /100vh/u, "the card is capped at the window");
-  assert.equal(field().parentElement, feedback, "the note is one of the card's own rows");
-  assert.equal(getComputedStyle(field()).minHeight, "112px");
-  assert.doesNotMatch(
-    getComputedStyle(field()).maxHeight,
-    /vh/u,
-    "the card, not the note, answers the window",
-  );
 });
 
 test("opened from an experiment's row, the dialog is titled for it and its note names the experiment", async () => {

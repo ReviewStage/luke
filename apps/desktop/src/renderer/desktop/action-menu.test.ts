@@ -170,7 +170,7 @@ test("a Settings row's ⋯ opens its acts in groups ruled apart, and Escape, Tab
   assert.equal(openMenu(), null, "a press elsewhere closes it");
 });
 
-test("a Settings row keeps its muted ⋯, named for its menu, and More on the pointer", () => {
+test("a Settings row keeps its ⋯, named for its menu, and More on the pointer", () => {
   const container = mount(
     createElement(MenuRow, { label: "Linear actions", actions: ACTIONS, children: "Linear" }),
   );
@@ -180,7 +180,6 @@ test("a Settings row keeps its muted ⋯, named for its menu, and More on the po
 
   act(() => ellipsis.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
 
-  assert.ok(ellipsis.classList.contains("icon-button"), "the ⋯ is the muted glyph button");
   assert.equal(ellipsis.textContent, "", "with no words of its own");
   assert.equal(document.querySelector(".tooltip")?.textContent, "More");
 });

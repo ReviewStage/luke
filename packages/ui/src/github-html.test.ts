@@ -6,7 +6,8 @@ import { githubShapes, wholeRendering } from "./github-html.js";
  * github-html.test.ts -- GitHub's rendering reaches the window's HTML steps
  * whole, and what GitHub dresses its way is reshaped into what the window
  * draws its own: a highlighted block into a fenced one in its language, and
- * a diagram into a fenced mermaid block of its source. The trees are as the parse leaves them.
+ * a diagram into a fenced mermaid block of its source, and a themed picture
+ * into its `<img>` alone. The trees are as the parse leaves them.
  */
 
 /** A node of the parsed tree, as the step reads it. */
@@ -65,5 +66,23 @@ test("a diagram becomes a fenced mermaid block of its source", () => {
         ]),
       ]),
     ]),
+  ]);
+});
+
+test("a themed picture keeps its image alone, so no source names an address the window would read itself", () => {
+  const badge = element("img", { src: "https://camo.githubusercontent.com/light", alt: "Review" });
+  const picture = element("picture", {}, [
+    element("source", {
+      media: "(prefers-color-scheme: dark)",
+      srcSet: ["https://camo.githubusercontent.com/dark"],
+    }),
+    element("source", {
+      media: "(prefers-color-scheme: light)",
+      srcSet: ["https://camo.githubusercontent.com/light"],
+    }),
+    badge,
+  ]);
+  assert.deepEqual(shaped(element("a", { href: "https://example.com/review" }, [picture])), [
+    element("a", { href: "https://example.com/review" }, [element("picture", {}, [badge])]),
   ]);
 });

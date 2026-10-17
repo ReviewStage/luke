@@ -22,9 +22,10 @@ import { useFileViewSettings } from "./file-view-settings";
  * or saved is the file as it holds it, its long lines uncut, rather than
  * the lines the tab draws, which the service cuts.
  *
- * An agent's Changes tab hangs the same menu with its own actions over the
- * same two settings (`LinesMenu`), so a diff's lines are numbered and
- * wrapped as every File tab's are.
+ * An agent's Files changed view hangs the same menu with its own actions
+ * over the same two settings (`LinesMenu`), so a diff's lines are numbered
+ * and wrapped as every File tab's are, and adds the diff's own two under
+ * them (`DiffLooks`).
  */
 
 /** What the menu says where the file's text could not be read, or the service will not carry it whole. */
@@ -34,15 +35,19 @@ const REFUSED = "This file is too large to copy whole. Open it on GitHub instead
 /**
  * The ⋯ at the end of a bar over lines: the actions given, then, under a
  * rule, the File tabs' two settings as checks, which every run of lines
- * drawn in the panel's code type follows.
+ * drawn in the panel's code type follows, and any settings of the bar's own
+ * after them.
  */
 export function LinesMenu({
   label,
   actions,
+  looks = [],
 }: {
   /** What the ⋯ and its menu are called. */
   label: string;
   actions: readonly MenuAction[];
+  /** Settings only this bar's lines follow, as checks under the File tabs' own. */
+  looks?: readonly MenuAction[];
 }): React.JSX.Element {
   const menu = useMenu(true);
   const { settings, change } = useFileViewSettings();
@@ -53,14 +58,15 @@ export function LinesMenu({
         label: "Line numbers",
         icon: <ListOrderedIcon aria-hidden="true" />,
         checked: settings.lineNumbers,
-        onSelect: () => change({ lineNumbers: !settings.lineNumbers }),
+        onSelect: () => change("lineNumbers", !settings.lineNumbers),
       },
       {
         label: "Word wrap",
         icon: <WrapTextIcon aria-hidden="true" />,
         checked: settings.wordWrap,
-        onSelect: () => change({ wordWrap: !settings.wordWrap }),
+        onSelect: () => change("wordWrap", !settings.wordWrap),
       },
+      ...looks,
     ],
   ];
 

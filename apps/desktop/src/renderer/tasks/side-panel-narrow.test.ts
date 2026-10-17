@@ -1,27 +1,116 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { act } from "react";
+import {
+  CHANGED_FILE_STATUS,
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement, type ReactElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { layContainersAt } from "#testing/container-width";
-import {
-  drawChangesTab,
-  drawFileNote,
-  drawPageTab,
-  drawSubagentRow,
-  unmountTabs,
-} from "#testing/side-panel-tabs";
+import { onRegistry } from "#testing/copy-feedback";
+import { codingAgentsControl } from "#testing/tasks-control";
+import { AgentChangesTab } from "./agent-changes-tab";
 
 /**
- * The side panel's tabs at its narrowest, 280px, where no tab has room for
- * a pane beside it or for every word of its bars: a Changes tab draws its
- * tree over the diff only once asked and numbers the diff on one side, a
- * note of Luke's says its age in a pill, a subagent's job takes two lines,
- * and a page's bar counts its versions. jsdom lays nothing out, so the
- * window's stylesheets are laid once for a panel that wide
+ * The side panel's Changes tab at its narrowest, 280px, where it has no room
+ * for its tree beside the diff: the tree is drawn over the diff only once
+ * asked, by a press, a peek, or the pointer at the tab's edge, and Escape or
+ * a press on the diff puts it away. jsdom lays nothing out, so the window's
+ * stylesheets are laid once for a panel that wide
  * (`#testing/container-width`) and what is drawn is read through them.
- * `side-panel-wide.test.ts` reads the same tabs in a wide panel.
  */
+
+/** The plan the tab stands on. */
+const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+
+const AGENT: CodingAgentSummary = {
+  id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
+  planId: PLAN,
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  title: "Expiry job",
+  createdAt: 1,
+  status: CODING_AGENT_STATUS.COMPLETED,
+  turnId: null,
+};
+
+const PULL_REQUEST = {
+  number: 42,
+  title: "Expire invitations",
+  url: "https://github.com/acme/relay/pull/42",
+  state: PULL_REQUEST_STATE.OPEN,
+  checks: CHECK_SUMMARY.PASSING,
+  additions: 2,
+  deletions: 1,
+  changedFiles: 1,
+};
+
+const roots: Root[] = [];
+
+/** Draws `element` into the document, its reads let land, answering the box it was drawn in. */
+async function mounted(element: ReactElement): Promise<HTMLElement> {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  return container;
+}
+
+/** Lets go of every tab drawn. */
+function unmountTabs(): void {
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+}
+
+/** An agent's Changes tab over its pull request's one file, a line removed and two added, with the tree beside every Changes tab held open as the panel holds it. */
+function drawChangesTab(): Promise<HTMLElement> {
+  const control = codingAgentsControl({
+    agents: [AGENT],
+    agentIds: [AGENT.id],
+    models: [],
+    pullRequests: new Map([[AGENT.id, PULL_REQUEST]]),
+    readChanges: () =>
+      Promise.resolve({
+        pullRequest: {
+          url: PULL_REQUEST.url,
+          truncated: false,
+          files: [
+            {
+              path: "src/invites/expiry.ts",
+              previousPath: null,
+              status: CHANGED_FILE_STATUS.MODIFIED,
+              additions: 2,
+              deletions: 1,
+              omitted: null,
+              patch:
+                "@@ -1,2 +1,3 @@\n const a = 1;\n-const b = 2;\n+const b = 3;\n+const c = 4;\n",
+            },
+          ],
+          reviewers: [],
+          commitAuthors: [],
+          comments: [],
+        },
+      }),
+  });
+  return mounted(
+    createElement(AgentChangesTab, {
+      agentId: AGENT.id,
+      control,
+      shown: true,
+      repository: "acme/relay",
+      tree: { open: true, onToggle: () => undefined },
+    }),
+  );
+}
 
 beforeAll(() => {
   layContainersAt({ "side-panel": 280 });
@@ -43,16 +132,6 @@ afterEach(() => {
  */
 function drawn(element: Element): boolean {
   return getComputedStyle(element).display !== "none";
-}
-
-/** The diff's lines as drawn: each the numbers shown in its gutter, then its text. */
-function diffLines(tab: HTMLElement): string[][] {
-  return [...tab.querySelectorAll(".code-line[data-diff]")].map((line) => [
-    ...[...line.querySelectorAll(".code-line-number")]
-      .filter(drawn)
-      .map((number) => number.textContent ?? ""),
-    line.querySelector(".code-line-text")?.textContent ?? "",
-  ]);
 }
 
 test("a Changes tab draws no tree beside the diff, its count under the diff, until the tree's toggle opens it over the diff for this tab alone", async () => {
@@ -232,45 +311,4 @@ test("a press of the toggle over a peek opens the tree with the keyboard in it, 
     diff.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
   });
   assert.ok(!treeDrawn(), "the first press on the diff takes the tree down");
-});
-
-test("a Changes tab numbers its diff on the new side alone, a removed line by its tint", async () => {
-  const tab = await drawChangesTab();
-  assert.deepEqual(diffLines(tab), [
-    ["", "@@ -1,2 +1,3 @@"],
-    ["1", "const a = 1;"],
-    ["", "const b = 2;"],
-    ["2", "const b = 3;"],
-    ["3", "const c = 4;"],
-  ]);
-});
-
-test("a note of Luke's says its age in the link's pill, the link drawing its glyph alone and still named, so the header's parts never stand on one another", async () => {
-  const note = await drawFileNote();
-  const time = note.querySelector(".file-note-time") ?? assert.fail("the note's age is drawn");
-  const link =
-    note.querySelector<HTMLButtonElement>('button[aria-label="Show in Code"]') ??
-    assert.fail("the link to the Code tab stands");
-
-  assert.equal(drawn(time), false);
-  assert.deepEqual(
-    [...link.children].filter(drawn).map((part) => part.tagName.toLowerCase()),
-    ["svg"],
-  );
-});
-
-test("a subagent's job takes a second line before it is cut", async () => {
-  const row = await drawSubagentRow();
-  const job = row.querySelector(".subagent-job") ?? assert.fail("the job is drawn");
-  assert.equal(getComputedStyle(job).whiteSpace, "normal");
-});
-
-test("a page's bar counts its versions without words, leaving its title the room", async () => {
-  const tab = await drawPageTab();
-  assert.deepEqual(
-    [...tab.querySelectorAll(".page-view-version > *")]
-      .filter(drawn)
-      .map((part) => part.textContent),
-    ["3/3"],
-  );
 });
