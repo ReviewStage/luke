@@ -62,6 +62,15 @@ export function useOpenTask(): ((mention: PlanMention) => void) | undefined {
   );
 }
 
+/** The window's opener for a place in Luke, as a link to it would open it, one of an agent's messages among them; nothing outside the window. */
+export function useOpenPlace(): ((place: LinkPlace) => void) | undefined {
+  const open = useContext(OpenLinkContext);
+  return useMemo(
+    () => (open === undefined ? undefined : (place: LinkPlace) => open({ workspace: "", place })),
+    [open],
+  );
+}
+
 /**
  * Whether a link is one the window opens. Note that it asks the two acts'
  * own schemas, because an address both refuse would be drawn as a press
