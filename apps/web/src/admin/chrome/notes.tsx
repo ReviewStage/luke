@@ -1,21 +1,31 @@
+import { TEXT_TONE, Text } from "@luke/ui";
 import { formatNumber } from "@luke/ui/admin-format";
+
+/** A note under the section it explains, in the muted body role. */
+function SectionNote({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className="mt-3">
+      <Text tone={TEXT_TONE.MUTED}>{children}</Text>
+    </div>
+  );
+}
 
 export function RetentionNote(): React.JSX.Element {
   return (
-    <p className="mt-3 text-sm text-muted-foreground">
+    <SectionNote>
       Each cell is the share of one UTC week's signups that spent hosted voice or attention that
       many weeks after signup. Wk 0 is the signup week, and dashed cells are still accruing. Local
       use of the desktop app writes no row here, so a cohort that never touched the hosted tier
       reads the same as one that left.
-    </p>
+    </SectionNote>
   );
 }
 
 export function TopAccountsNote(): React.JSX.Element {
   return (
-    <p className="mt-3 text-sm text-muted-foreground">
+    <SectionNote>
       An active day is a UTC day the account spent hosted voice or attention.
-    </p>
+    </SectionNote>
   );
 }
 
