@@ -1,6 +1,7 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { updateInSidebar } from "@luke/settings/update-row";
@@ -35,6 +36,7 @@ import { runAppCommand } from "../app-commands";
 import { appPlatform } from "../app-platform";
 import { useOpenPerson } from "../person-door";
 import { Tooltip } from "../tooltip";
+import { useCapability } from "../use-app-state";
 import { ActionMenu, type MenuEntry } from "./action-menu";
 
 /**
@@ -76,7 +78,8 @@ function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Ele
  */
 function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Element | null {
   const { update } = updates;
-  if (!updateInSidebar(update)) return null;
+  const offered = useCapability(HOST_CAPABILITY.UPDATES);
+  if (!offered || !updateInSidebar(update)) return null;
   if (update.status === UPDATE_STATUS.READY) {
     return (
       <Tooltip label={`Restart to update to ${update.latestVersion}`}>

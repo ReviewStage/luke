@@ -14,6 +14,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ellipsized } from "#testing/action-label";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_CAPABILITIES } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { settingsPageOf } from "./pages";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
@@ -51,6 +52,7 @@ const SETTINGS: SettingsPanelProps = {
     onOpenSettings: ignore,
     onTest: ignore,
   },
+  capabilities: DESKTOP_CAPABILITIES,
   updates: {
     update: {
       status: UPDATE_STATUS.IDLE,

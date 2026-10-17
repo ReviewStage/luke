@@ -26,6 +26,7 @@ import {
   ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark } from "@luke/ui";
@@ -36,6 +37,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
+import { DESKTOP_CAPABILITIES, handCapabilities } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -346,6 +348,7 @@ beforeEach(() => {
   macRepositories = [];
   githubRepositories = [];
   fakeAppBridge({ act: answer });
+  handCapabilities(DESKTOP_CAPABILITIES);
 });
 
 afterEach(() => {
@@ -1809,6 +1812,17 @@ test("in the window, each member's ⋯ opens their profile first, in the workspa
   await chooseAction(memberNamed(page, "Sam"), "Open profile");
 
   assert.deepEqual(opened, [[MEMBER.userId, "Sam", ACME.id]]);
+});
+
+test("on a platform without this Mac's terminal, the Workspace page draws no Repositories group beside its Integrations", async () => {
+  githubRepositories = ["acme/app"];
+  handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.MAC_TERMINAL));
+  const { page } = await mount(ACME);
+  const group = (section: string) =>
+    page.querySelector(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${section}"]`);
+
+  assert.equal(group(SETTINGS_SECTION.GITHUB_REPOSITORIES) !== null, true, "the page is drawn");
+  assert.equal(group(SETTINGS_SECTION.MAC_REPOSITORIES) !== null, false);
 });
 
 test("the Repositories group lists the workspace's repositories and those set here, and saves a command typed on this Mac", async () => {

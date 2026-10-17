@@ -47,6 +47,7 @@
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import type { HostCapability } from "@luke/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import {
   APP_COMMAND,
@@ -85,7 +86,7 @@ import { appCommandOffered, runAppCommand, useAppCommand, useOverlayHold } from 
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { Highlighted } from "../search-field";
-import { settingsPageOf } from "../settings/pages";
+import { settingsPageOf, settingsPageShown } from "../settings/pages";
 import {
   landOnSettingsRow,
   resultPageWord,
@@ -729,9 +730,12 @@ function agentPinRows(
   ];
 }
 
-/** Every Settings page, in the sidebar's order, under its own glyph and name. */
-function settingsPageRows(open: (page: SettingsView) => void): readonly PaletteRow[] {
-  return SETTINGS_PAGE_LIST.map((page) => {
+/** Every Settings page this platform offers, in the sidebar's order, under its own glyph and name. */
+function settingsPageRows(
+  capabilities: readonly HostCapability[],
+  open: (page: SettingsView) => void,
+): readonly PaletteRow[] {
+  return SETTINGS_PAGE_LIST.filter((page) => settingsPageShown(page, capabilities)).map((page) => {
     const { title, icon } = settingsPageOf(page);
     return {
       icon,
@@ -891,6 +895,8 @@ export function CommandPalette({
   /** What the settings pages draw now, which the Settings rows are; the page a row lands on is shown through `onViewChange`. */
   settings: {
     rows: SettingsSearchInput | undefined;
+    /** What the platform offers, which decides the Settings pages listed, whether or not the rows have been read. */
+    capabilities: readonly HostCapability[];
     onViewChange: (view: SettingsView) => void;
   };
   /** Lists everything in the task's repository in one read, which the Files rows are. */
@@ -1085,7 +1091,10 @@ export function CommandPalette({
         ...agentPinRows(plans, choose),
       ],
     ],
-    [PALETTE_FILTER.SETTINGS]: () => [settingsPageRows(openPage), settingRows(settings.rows, land)],
+    [PALETTE_FILTER.SETTINGS]: () => [
+      settingsPageRows(settings.capabilities, openPage),
+      settingRows(settings.rows, land),
+    ],
   } as const satisfies Record<PaletteKind, () => readonly (readonly PaletteRow[])[]>;
   // Note that a file found opens through the panel's one door for a file
   // named in place: the tab it has, as it stands, or a new one at the strip's end.

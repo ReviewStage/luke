@@ -20,7 +20,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
-import { handState, stateWith } from "#testing/app-state";
+import { DESKTOP_CAPABILITIES, handState, stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "#testing/document-task";
 import { tasksControl } from "#testing/tasks-control";
@@ -64,6 +64,7 @@ const SETTINGS: SettingsPanelProps = {
     onOpenSettings: ignore,
     onTest: ignore,
   },
+  capabilities: DESKTOP_CAPABILITIES,
   updates: {
     update: {
       status: UPDATE_STATUS.IDLE,

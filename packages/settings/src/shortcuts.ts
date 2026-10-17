@@ -15,6 +15,7 @@
  */
 
 import { isWireString, type UnparsedWireValue } from "@luke/wire";
+import { HOST_CAPABILITY, type HostCapability } from "./capabilities.js";
 import {
   EXPERIMENT,
   type Experiment,
@@ -276,6 +277,12 @@ export interface AppShortcut {
    * another command.
    */
   experiment?: Experiment;
+  /**
+   * The platform capability the command's feature stands on. Where the
+   * platform does not offer it, the command is in no list, as a gated
+   * experiment's is not.
+   */
+  capability?: HostCapability;
 }
 
 /**
@@ -349,10 +356,12 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.TOGGLE_MICROPHONE]: {
     label: "Toggle microphone",
     chord: { key: SHORTCUT_KEY.M, shift: true },
+    capability: HOST_CAPABILITY.VOICE,
   },
   [APP_COMMAND.TOGGLE_SPEAKER]: {
     label: "Toggle speaker",
     chord: { key: SHORTCUT_KEY.S, shift: true },
+    capability: HOST_CAPABILITY.VOICE,
   },
   [APP_COMMAND.MOVE_TAB_LEFT]: {
     label: "Move tab left",
@@ -446,7 +455,11 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.BACK]: { label: "Back", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },
   [APP_COMMAND.FORWARD]: { label: "Forward", chord: { key: SHORTCUT_KEY.CLOSE_BRACKET } },
   [APP_COMMAND.COMMAND_PALETTE]: { label: "Command palette", chord: { key: SHORTCUT_KEY.K } },
-  [APP_COMMAND.SHOW_TERMINAL]: { label: "Show terminal", chord: { key: SHORTCUT_KEY.J } },
+  [APP_COMMAND.SHOW_TERMINAL]: {
+    label: "Show terminal",
+    chord: { key: SHORTCUT_KEY.J },
+    capability: HOST_CAPABILITY.TERMINALS,
+  },
   [APP_COMMAND.MENTION_LINES]: {
     label: "Mention lines in agent",
     chord: { key: SHORTCUT_KEY.K, option: true },
@@ -563,21 +576,31 @@ export const KEYED_COMMANDS: readonly KeyedCommand[] = APP_COMMANDS.filter(isKey
 
 /**
  * Whether a keyed command stands in the window's lists for the account's
- * experiments: every command does but a gated feature's while its
- * experiment is off.
+ * experiments and the platform's capabilities: every command does but a
+ * gated feature's while its experiment is off, and a platform feature's
+ * where the platform does not offer it.
  */
-export function shortcutShown(command: KeyedCommand, experiments: ExperimentChoices): boolean {
+export function shortcutShown(
+  command: KeyedCommand,
+  experiments: ExperimentChoices,
+  capabilities: readonly HostCapability[],
+): boolean {
   const shortcut: AppShortcut = APP_SHORTCUTS[command];
-  return shortcut.experiment === undefined || experimentOn(experiments, shortcut.experiment);
+  const experimentStands =
+    shortcut.experiment === undefined || experimentOn(experiments, shortcut.experiment);
+  const capabilityStands =
+    shortcut.capability === undefined || capabilities.includes(shortcut.capability);
+  return experimentStands && capabilityStands;
 }
 
-/** The shortcut groups with only the commands that stand for the account's experiments, as every list of them reads them. */
+/** The shortcut groups with only the commands that stand for the account's experiments and the platform's capabilities, as every list of them reads them. */
 export function shownShortcutGroups(
   experiments: ExperimentChoices,
+  capabilities: readonly HostCapability[],
 ): readonly { readonly title: string; readonly commands: readonly KeyedCommand[] }[] {
   return APP_SHORTCUT_GROUPS.map((group) => ({
     ...group,
-    commands: group.commands.filter((command) => shortcutShown(command, experiments)),
+    commands: group.commands.filter((command) => shortcutShown(command, experiments, capabilities)),
   })).filter((group) => group.commands.length > 0);
 }
 

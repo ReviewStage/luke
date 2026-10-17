@@ -13,7 +13,7 @@
  */
 
 import { channels } from "@luke/host/bridge";
-import { type ExperimentChoices, NO_EXPERIMENTS } from "@luke/settings";
+import { type ExperimentChoices, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -297,17 +297,21 @@ function gated(
   return kept.filter((_item, at) => !strandedSeparator(kept, at));
 }
 
-/** What the menu bar is drawn from: the update item, the experiments the account has on, and the developer tools. */
+/** What the menu bar is drawn from: the update item, the experiments the account has on, what the platform offers, and the developer tools. */
 interface MenuBarState {
   readonly update: UpdateMenu | undefined;
   readonly experiments: ExperimentChoices;
+  readonly capabilities: readonly HostCapability[];
   readonly developerTools: DeveloperToolsMenu | undefined;
 }
 
-/** One change to what the menu bar is drawn from: a new update item (or none), the account's experiments, or the windows' developer tools. */
+/** One change to what the menu bar is drawn from: a new update item (or none), the account's experiments and the platform's capabilities as the document carries them, or the windows' developer tools. */
 export type MenuBarChange =
   | { readonly update: UpdateMenu | undefined }
-  | { readonly experiments: ExperimentChoices }
+  | {
+      readonly experiments: ExperimentChoices;
+      readonly capabilities: readonly HostCapability[];
+    }
   | { readonly developerTools: DeveloperToolsMenu };
 
 /**
@@ -328,6 +332,7 @@ export function menuBarDrawer(
   let state: MenuBarState = {
     update: undefined,
     experiments: NO_EXPERIMENTS,
+    capabilities: [],
     developerTools: undefined,
   };
   let drawn = false;
@@ -336,7 +341,8 @@ export function menuBarDrawer(
     const moved =
       next.update !== state.update ||
       next.developerTools !== state.developerTools ||
-      JSON.stringify(next.experiments) !== JSON.stringify(state.experiments);
+      JSON.stringify(next.experiments) !== JSON.stringify(state.experiments) ||
+      JSON.stringify(next.capabilities) !== JSON.stringify(state.capabilities);
     if (drawn && !moved) return;
     state = next;
     drawn = true;
@@ -344,7 +350,7 @@ export function menuBarDrawer(
       appMenuTemplate(
         build.appName,
         state.update,
-        (command) => shortcutShown(command, state.experiments),
+        (command) => shortcutShown(command, state.experiments, state.capabilities),
         build.packaged ? undefined : state.developerTools,
       ),
     );

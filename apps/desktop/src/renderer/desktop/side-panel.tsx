@@ -12,6 +12,7 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CollapseIcon,
@@ -127,6 +128,7 @@ import {
   workRowsOf,
 } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
+import { useCapability } from "../use-app-state";
 import { paneTiming } from "./pane-motion";
 import {
   type AddEntry,
@@ -1776,11 +1778,12 @@ export function SidePanel({
   const changes = panel.changes.filter((each) =>
     drawsChanges(each, { taskAgents: agents.agentIds }),
   );
-  // An agent's Terminal tab stands while the agent is the task's, as its Changes tab does, and never beside the Inbox.
-  const terminals =
-    holder === SIDE_PANEL_HOLDER.INBOX
-      ? NO_TERMINALS
-      : panel.terminals.filter((each) => drawsTerminal(each, { taskAgents: agents.agentIds }));
+  // An agent's Terminal tab stands while the agent is the task's, as its Changes tab does, and never beside the Inbox or where the platform runs no terminals.
+  const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);
+  const terminalsHere = terminalsOffered && holder !== SIDE_PANEL_HOLDER.INBOX;
+  const terminals = !terminalsHere
+    ? NO_TERMINALS
+    : panel.terminals.filter((each) => drawsTerminal(each, { taskAgents: agents.agentIds }));
   // A page's tab stands while the plan lists the page.
   const taskPages = pages ?? NO_PAGES;
   const pageTabs = panel.pages.flatMap((tab) => {
@@ -1827,8 +1830,8 @@ export function SidePanel({
     files: offered,
     changes: changesOffers(agents, changes),
     pages: taskPages,
-    // Note that the Inbox's panel offers no Terminal, since it draws none.
-    ...(holder === SIDE_PANEL_HOLDER.INBOX
+    // Note that a panel that draws no Terminal, the Inbox's among them, offers none.
+    ...(!terminalsHere
       ? undefined
       : {
           terminals: {

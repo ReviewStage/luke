@@ -65,6 +65,7 @@ import { OpenSettingsProvider } from "./open-settings";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { OpenPersonProvider } from "./person-door";
 import { applySessionReplay } from "./session-replay";
+import { shownSettingsView } from "./settings/pages";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast";
@@ -308,12 +309,14 @@ export function App(): React.JSX.Element {
     settingsShown: tab === PANEL_TAB.SETTINGS,
   });
   linkWorkspace.current = settingsWorkspace.link;
+  // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
+  const shownView = shownSettingsView(settingsView, state?.run.capabilities ?? []);
   // The links the window can copy now: ⌥⌘C copies the first, and ⌘K offers each (`links-at-hand.ts`).
   const copyLink = useCopyLink(
     tasks,
     tab === PANEL_TAB.SETTINGS
       ? {
-          view: settingsView,
+          view: shownView,
           workspace: tasks.workspaces.find((each) => each.id === settingsWorkspace.shownId),
         }
       : undefined,
@@ -480,7 +483,7 @@ export function App(): React.JSX.Element {
     known: state !== undefined && !accountGated,
     tab,
     onTabChange: changeTab,
-    settingsView,
+    settingsView: shownView,
     onSettingsViewChange: setSettingsView,
     tasks,
   });
@@ -741,7 +744,7 @@ export function App(): React.JSX.Element {
                                   };
                                 }
                               },
-                              view: settingsView,
+                              view: shownView,
                               onViewChange: setSettingsView,
                               microphone,
                               notifications: {
@@ -754,6 +757,7 @@ export function App(): React.JSX.Element {
                               settings,
                               shortcuts,
                               workspace,
+                              capabilities: state.run.capabilities,
                             }}
                           />
                         </MessageRevealProvider>
@@ -783,8 +787,10 @@ export function App(): React.JSX.Element {
                             settings,
                             microphone,
                             account: state.account,
+                            capabilities: state.run.capabilities,
                             workspace,
                           }),
+                          capabilities: state.run.capabilities,
                           onViewChange: setSettingsView,
                         }}
                         readFiles={(planId) =>

@@ -120,7 +120,7 @@ function fakeHost() {
 
 function fixture() {
   return Effect.gen(function* () {
-    const state = new AppStateStore(initialAppState(RUN, false), Context.empty());
+    const state = new AppStateStore(initialAppState(RUN, false, []), Context.empty());
     const { host, move, grant, setVideo, restarts } = yield* fakeHost();
     /** What reached the panel's page: each grant handed over, each feed and view signal relayed; and what reached the call window's. */
     const grants: (AvatarGrant | undefined)[] = [];
