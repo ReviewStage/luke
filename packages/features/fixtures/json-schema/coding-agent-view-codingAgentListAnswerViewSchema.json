@@ -206,6 +206,32 @@
                   "totalSteps"
                 ],
                 "additionalProperties": false
+              },
+              "continuedBy": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "agentId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 36
+                    },
+                    "forked": {
+                      "type": "boolean"
+                    },
+                    "messageId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 36
+                    }
+                  },
+                  "required": [
+                    "agentId",
+                    "forked"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [

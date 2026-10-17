@@ -128,9 +128,11 @@ import {
 } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import {
+  continuedByOf,
   type EveReach,
   eveFor,
   standingsOf,
+  statusOf,
   stoppedForGood,
   stoppedTurn,
   summaryOf,
@@ -490,7 +492,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     }),
   );
   if (!created) {
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(agent) });
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
   }
   const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
@@ -530,10 +532,14 @@ const taskAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/taskAgentsEndpoint")(f
   );
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
   const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
+  const continuedBy = yield* continuedByOf(
+    userId,
+    agents.map((agent) => agent.id),
+  );
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     agents: agents.map((agent) =>
-      codingAgentSummary(agent, standing(agent.conversationId), now, names),
+      codingAgentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id)),
     ),
   });
 });
@@ -579,10 +585,14 @@ const workspaceAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/workspaceAgentsEn
   );
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
   const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
+  const continuedBy = yield* continuedByOf(
+    userId,
+    agents.map((agent) => agent.id),
+  );
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     agents: agents.map((agent) =>
-      codingAgentSummary(agent, standing(agent.conversationId), now, names),
+      codingAgentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id)),
     ),
   });
 });
@@ -618,7 +628,7 @@ const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     sender: { kind: MESSAGE_SENDER.MEMBER, userId },
   });
   return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, {
-    agent: yield* summaryOf(agent),
+    agent: yield* summaryOf(userId, agent),
   });
 });
 
@@ -723,7 +733,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     );
     if (Option.isNone(renamed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(renamed.value),
+      agent: yield* summaryOf(userId, renamed.value),
     });
   }
   const archive = readEither(codingAgentArchiveRequestSchema)(body);
@@ -736,7 +746,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     const changed = yield* hostedStoreOrUnavailable(archiveCodingAgent(userId, agent.id, archived));
     if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(changed.value),
+      agent: yield* summaryOf(userId, changed.value),
     });
   }
   const pin = readEither(codingAgentPinRequestSchema)(body);
@@ -746,7 +756,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     );
     if (Option.isNone(pinned)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(pinned.value),
+      agent: yield* summaryOf(userId, pinned.value),
     });
   }
   const servers = readEither(codingAgentServersRequestSchema)(body);
@@ -756,7 +766,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     );
     if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(changed.value),
+      agent: yield* summaryOf(userId, changed.value),
     });
   }
   const asked = readEither(modelChoiceSchema)(body);
@@ -767,7 +777,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
   );
   if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agent: yield* summaryOf(changed.value),
+    agent: yield* summaryOf(userId, changed.value),
   });
 });
 
@@ -779,12 +789,19 @@ const agentEndpoint = /* @__PURE__ */ Effect.fn("web/agentEndpoint")(function* (
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.GET) return yield* changeEndpoint(seams, writer);
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { agent } = yield* reachedAgent(seams, request);
+  const { userId, agent } = yield* reachedAgent(seams, request);
   const standing = yield* standingsOf([agent.conversationId]);
   const names = yield* hostedStoreOrUnavailable(readAccountNames(pageAccounts(agent)));
+  const continuedBy = yield* continuedByOf(userId, [agent.id]);
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agent: codingAgentPage(agent, standing(agent.conversationId), now, names),
+    agent: codingAgentPage(
+      agent,
+      standing(agent.conversationId),
+      now,
+      names,
+      continuedBy(agent.id),
+    ),
   });
 });
 
@@ -798,9 +815,9 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { agent } = yield* reachedAgent(seams, request);
+  const { userId, agent } = yield* reachedAgent(seams, request);
   yield* stoppedTurn(seams, writer, request, agent);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(agent) });
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
 });
 
 /** What the agent published, from the instance's kept answers, its failures as the refusals a route answers. */
@@ -810,7 +827,7 @@ const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentPullRequestAnswer, HostedRefusal, AgentsServices> {
   // Whether the agent has ended is part of the key, so the first ask after its turn ends reads GitHub afresh.
-  const { status } = yield* summaryOf(agent);
+  const status = yield* statusOf(agent);
   const ended = status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
   return yield* Cache.get(published, new PublishedKey({ userId, agentId: agent.id, ended })).pipe(
     Effect.catch((failure) => {

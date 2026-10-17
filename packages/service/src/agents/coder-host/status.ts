@@ -1,4 +1,8 @@
-import type { CodingAgent, CodingAgentLatestTurn } from "@luke/database/models/coding-agent-store";
+import type {
+  CodingAgent,
+  CodingAgentLatestTurn,
+  CodingAgentStartedFromIt,
+} from "@luke/database/models/coding-agent-store";
 import type { StoredArchive, StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import {
@@ -248,12 +252,13 @@ function archivedByOf(
   };
 }
 
-/** What every read of one agent says of it but its task, its status read at `now`. */
+/** What every read of one agent says of it but its task, its status read at `now`, and the agents started from it where any was. */
 function summaryFields(
   agent: CodingAgent,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
+  continuedBy: readonly CodingAgentStartedFromIt[],
 ): Omit<CodingAgentSummary, "id" | "planId"> {
   const starter = names.get(agent.userId);
   const summary: Omit<CodingAgentSummary, "id" | "planId"> = {
@@ -284,6 +289,15 @@ function summaryFields(
       ? undefined
       : { automationName: agent.automationOrigin.name }),
     ...(agent.startedFrom === null ? undefined : { from: agent.startedFrom }),
+    ...(continuedBy.length === 0
+      ? undefined
+      : {
+          continuedBy: continuedBy.map((each) => ({
+            agentId: each.agentId,
+            forked: each.messageId !== undefined,
+            ...(each.messageId === undefined ? undefined : { messageId: each.messageId }),
+          })),
+        }),
   };
   const started = codingAgentRunStartedAt(standing.turn, {
     createdAt: agent.createdAt,
@@ -295,16 +309,22 @@ function summaryFields(
 
 /**
  * One agent as the tabs draw it, on a task or with none, its status read at
- * `now`, and the member who started it named by `names`, the accounts' names
- * by id, where theirs stands.
+ * `now`, the member who started it named by `names`, the accounts' names
+ * by id, where theirs stands, and the agents started from it, none where
+ * the read names none.
  */
 export function codingAgentSummary(
   agent: CodingAgent,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
+  continuedBy: readonly CodingAgentStartedFromIt[] = [],
 ): CodingAgentSummary {
-  return { id: agent.id, planId: agent.taskId, ...summaryFields(agent, standing, now, names) };
+  return {
+    id: agent.id,
+    planId: agent.taskId,
+    ...summaryFields(agent, standing, now, names, continuedBy),
+  };
 }
 
 /**
@@ -354,17 +374,18 @@ export function pageAccounts(agent: CodingAgent): readonly string[] {
     : summaryAccounts(agent);
 }
 
-/** One agent as its own page reads it, on a task or with none, its status read at `now`. */
+/** One agent as its own page reads it, on a task or with none, its status read at `now`, with the agents started from it. */
 export function codingAgentPage(
   agent: CodingAgent,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
+  continuedBy: readonly CodingAgentStartedFromIt[] = [],
 ): CodingAgentPage {
   return {
     id: agent.id,
     planId: agent.taskId,
-    ...summaryFields(agent, standing, now, names),
+    ...summaryFields(agent, standing, now, names, continuedBy),
     automationId: agent.automationId,
     ...(agent.automationOrigin === null
       ? undefined

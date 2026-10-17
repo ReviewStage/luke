@@ -491,9 +491,13 @@ function describeFailure(failure: CheckoutFailure): string {
   return failure._tag === "CheckoutRefused" ? failure.reason : failure._tag;
 }
 
-/** Whether the agent is asked for its title as this event is relayed: the developer's words received, so a long first turn is named as it starts, and a turn's end, which reads the answer too. */
+/** Whether the agent is asked for its title as this event is relayed: the developer's words received, so a long first turn is named as it starts, and a turn's end, which reads the answer too, a failed one's among them, so an agent whose first turn fails is still named. */
 function asksTitle(event: MessageStreamEvent): boolean {
-  return event.type === "message.received" || event.type === "turn.completed";
+  return (
+    event.type === "message.received" ||
+    event.type === "turn.completed" ||
+    event.type === "turn.failed"
+  );
 }
 
 /** The host over the deployment's seams. */

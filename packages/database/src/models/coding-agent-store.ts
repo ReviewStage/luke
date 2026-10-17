@@ -927,6 +927,30 @@ const findPublishedAgentsById = SqlSchema.findAll({
     ),
 });
 
+const findStartedFrom = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentIds: Schema.Array(Schema.String),
+    limit: Schema.Number,
+  }),
+  Result: Schema.Struct({ id: Schema.String, startedFrom: StartedFromColumnSchema }),
+  execute: ({ userId, agentIds, limit }) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id, startedFrom: codingAgent.startedFrom })
+        .from(codingAgent)
+        .where(
+          and(
+            // Note that the source is matched on the expression its index is built on.
+            inArray(sql`(${codingAgent.startedFrom}->>'agentId')`, [...agentIds]),
+            agentReachableBy(userId),
+          ),
+        )
+        .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id))
+        .limit(limit),
+    ),
+});
+
 const findAgentsOnBranches = SqlSchema.findAll({
   Request: Schema.Struct({
     repository: Schema.String,
@@ -1259,6 +1283,44 @@ export function listPublishedCodingAgentsById(
   return Effect.map(findPublishedAgentsById({ userId, agentIds }), (rows) =>
     rows.map(({ published, ...agent }) => ({ agent, published })),
   );
+}
+
+/** How many agents started from one agent its summary names, the oldest first. */
+const CONTINUATIONS_PER_AGENT = 20;
+
+/** One agent started from another: its id, and the message it forked the other at where it was forked rather than continued. */
+export interface CodingAgentStartedFromIt {
+  readonly agentId: string;
+  readonly messageId?: string;
+}
+
+/**
+ * The agents started from each agent named, archived or not, oldest first
+ * and at most `CONTINUATIONS_PER_AGENT` of each, by the id of the agent
+ * they were started from; one of a workspace the account is not in is left
+ * out. None asked, none read.
+ */
+export function continuationsOf(
+  userId: string,
+  agentIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, readonly CodingAgentStartedFromIt[]>> {
+  if (agentIds.length === 0) return Effect.succeed(new Map());
+  const limit = agentIds.length * CONTINUATIONS_PER_AGENT;
+  return Effect.map(findStartedFrom({ userId, agentIds, limit }), (rows) => {
+    const bySource = new Map<string, CodingAgentStartedFromIt[]>();
+    for (const { id, startedFrom } of rows) {
+      if (startedFrom === null) continue;
+      const each = bySource.get(startedFrom.agentId) ?? [];
+      if (each.length === CONTINUATIONS_PER_AGENT) continue;
+      each.push(
+        startedFrom.messageId === undefined
+          ? { agentId: id }
+          : { agentId: id, messageId: startedFrom.messageId },
+      );
+      bySource.set(startedFrom.agentId, each);
+    }
+    return bySource;
+  });
 }
 
 /** The pull request from the agent's branch as GitHub just answered, or null where it answered none; nothing written for an agent of a workspace the account is not in. */

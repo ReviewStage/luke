@@ -31,6 +31,7 @@ import {
   archiveCodingAgent,
   archiveIdleCodingAgent,
   archiveUnmovedCodingAgent,
+  continuationsOf,
   createCodingAgent,
   delegationsOf,
   IDLE_ARCHIVE,
@@ -1006,6 +1007,65 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
           Option.getOrThrow(yield* readCodingAgent(starter, forked.id)).startedFrom,
           startedFrom,
         );
+      }),
+  );
+
+  it.effect(
+    "an agent's continues and forks are read by its id oldest first, an archived one among them, by a teammate as by its starter, and by no outsider",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        const plan = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const startOn = (
+          by: string,
+          createdAt: string,
+          startedFrom?: { agentId: string; messageId?: string },
+        ) =>
+          Effect.gen(function* () {
+            const { agent } = Option.getOrThrow(
+              yield* createCodingAgent(by, {
+                taskId: plan.id,
+                planSnapshot: "# Billing",
+                prompt: null,
+                idempotencyKey: randomUUID(),
+                model: "anthropic/claude-opus-5.5",
+                effort: "high",
+                repository: "acme/api",
+                ...(startedFrom === undefined
+                  ? undefined
+                  : { startedFrom: { ...startedFrom, steps: 3, totalSteps: 3 } }),
+              }),
+            );
+            yield* Database.use((db) =>
+              db
+                .update(codingAgent)
+                .set({ createdAt: new Date(createdAt) })
+                .where(eq(codingAgent.id, agent.id)),
+            );
+            return agent.id;
+          });
+        const source = yield* startOn(starter, "2026-10-17T10:00:00Z");
+        const messageId = randomUUID();
+        const fork = yield* startOn(teammate, "2026-10-17T10:02:00Z", {
+          agentId: source,
+          messageId,
+        });
+        const continued = yield* startOn(starter, "2026-10-17T10:01:00Z", { agentId: source });
+        const again = yield* startOn(starter, "2026-10-17T10:03:00Z", { agentId: continued });
+        yield* archiveCodingAgent(starter, continued, true);
+
+        const expected = new Map([
+          [source, [{ agentId: continued }, { agentId: fork, messageId }]],
+          [continued, [{ agentId: again }]],
+        ]);
+        const asked = [source, continued, again];
+        assert.deepEqual(yield* continuationsOf(starter, asked), expected);
+        assert.deepEqual(yield* continuationsOf(teammate, asked), expected);
+        assert.deepEqual(yield* continuationsOf(outsider, asked), new Map());
       }),
   );
 });
