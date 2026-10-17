@@ -97,7 +97,7 @@ test("Enter answers onEnter, except the Enter that commits an input method's com
   assert.equal(page.querySelector("output")?.textContent, "1");
 });
 
-test("Escape answers onEscape and is kept from the page, except the Escape an input method's composition takes", () => {
+test("Escape answers onEscape, except the Escape an input method's composition takes, and every one is kept from the page", () => {
   const escapes: string[] = [];
   const page = render(
     createElement(
@@ -130,7 +130,7 @@ test("Escape answers onEscape and is kept from the page, except the Escape an in
     window.removeEventListener("keydown", listen);
   }
   assert.deepEqual(escapes, ["name", "notes"]);
-  assert.deepEqual(pageEscapes, [true, true, false, false]);
+  assert.deepEqual(pageEscapes, [true, true, true, true]);
 });
 
 test("a text area holds the many lines its caller holds and hands back every change", () => {

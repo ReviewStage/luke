@@ -1409,7 +1409,7 @@ test("Escape keeps a new page whose schedule was changed, though nothing was typ
   assert.equal(places.length, 1);
 });
 
-test("Escape while writing the prompt lets go of the caret and keeps the press from the page", async () => {
+test("Escape while writing the prompt lets go of the caret and keeps the press from the page, composing or not", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
   const prompt =
@@ -1417,6 +1417,18 @@ test("Escape while writing the prompt lets go of the caret and keeps the press f
     assert.fail("no prompt");
   type(prompt, "Triage the issues opened overnight.");
   act(() => prompt.focus());
+
+  const cancel = new KeyboardEvent("keydown", {
+    key: "Escape",
+    bubbles: true,
+    cancelable: true,
+    isComposing: true,
+  });
+  act(() => {
+    prompt.dispatchEvent(cancel);
+  });
+  assert.equal(cancel.defaultPrevented, true, "an input method's Escape does not leave the page");
+  assert.equal(document.activeElement, prompt, "the input method's cancel keeps the caret");
 
   const press = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
   act(() => {
