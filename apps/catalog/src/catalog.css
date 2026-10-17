@@ -122,7 +122,7 @@ body {
   padding: var(--luke-space-24) var(--luke-page-inset) var(--luke-space-64);
 }
 
-.catalog-example > h1 {
+.catalog-example-title {
   margin: 0 0 var(--luke-space-24);
   font-size: var(--luke-type-title-size);
   line-height: var(--luke-type-title-leading);
@@ -287,6 +287,20 @@ body {
 
 .catalog-settings-narrow {
   max-width: 320px;
+}
+
+/* The window or pane a settings page fills: a fixed height, so the page
+   scrolls inside it, and a dashed edge showing where the page's own edge is. */
+.catalog-settings-frame {
+  width: 100%;
+  max-width: 880px;
+  height: 480px;
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-settings-frame-narrow {
+  max-width: 400px;
 }
 
 /* The tooltip example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
