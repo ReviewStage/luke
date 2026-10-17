@@ -110,6 +110,21 @@ export type StepView =
 /** The most links of a `from` chain a brief's source is looked for along, so a chain that loops ends. */
 const MAX_CHAIN = 32;
 
+/**
+ * How many of the replay's newest steps the opened card draws at first, and
+ * how many more each press of its earlier-steps row draws. Note that twenty
+ * is about two screens of the panel's rows, most of them a call's folded
+ * line, which holds the last exchange a continuation picks up from, while a
+ * replay of thousands draws no more than that until the reader asks.
+ */
+export const REPLAY_PAGE = 20;
+
+/** The steps the card draws once opened: from which of the kept steps, which is also how many earlier ones are not yet drawn, and how many of those the row above them draws next. */
+export interface ReplayPage {
+  readonly from: number;
+  readonly next: number;
+}
+
 /** An agent's opening, read out of its first message: the brief as a message of its own, the replay, and the note as a line of its own where one was written. */
 export interface ReplayOpening {
   /** The first message with only the brief for its words, and its files kept. */
@@ -147,6 +162,13 @@ function withWords(
 const TEXT_FILE_TYPE = "text/plain";
 
 /**
+ * Each first message's opening as it was read, so a render reads a message
+ * once rather than parsing the whole replay again: a transcript's messages
+ * are the same objects until a read hands new ones, which then read afresh.
+ */
+const OPENINGS = new WeakMap<CodingAgentMessage, ReplayOpening | undefined>();
+
+/**
  * The first message's files parted between the brief and the note: the
  * note's are the last of each group the service hands files in, text files
  * and the rest, as many as its marker counts, since the brief's go first.
@@ -168,12 +190,8 @@ function filesOf(message: CodingAgentMessage, noteFiles: NoteFiles) {
   };
 }
 
-/**
- * The opening of an agent started from another, read from its first
- * message; nothing where the message holds no replay that adds up, which
- * is then drawn as any first message is.
- */
-export function replayOpening(first: CodingAgentMessage): ReplayOpening | undefined {
+/** The opening read afresh from the first message. */
+function readOpening(first: CodingAgentMessage): ReplayOpening | undefined {
   const parts = firstMessageParts(messageWords(first));
   if (parts.replay === undefined) return undefined;
   const files = filesOf(first, parts.note?.files ?? { text: 0, other: 0 });
@@ -185,6 +203,19 @@ export function replayOpening(first: CodingAgentMessage): ReplayOpening | undefi
         ? undefined
         : { ...withWords(first, parts.note.text, files.note), id: NOTE_LINE_ID },
   };
+}
+
+/**
+ * The opening of an agent started from another, read from its first
+ * message; nothing where the message holds no replay that adds up, which
+ * is then drawn as any first message is. The same message answers the same
+ * opening, read once (`OPENINGS`).
+ */
+export function replayOpening(first: CodingAgentMessage): ReplayOpening | undefined {
+  if (OPENINGS.has(first)) return OPENINGS.get(first);
+  const opening = readOpening(first);
+  OPENINGS.set(first, opening);
+  return opening;
 }
 
 /** The words the card's summary leads with: a fork's where the replay was cut at a message, a continue's otherwise. */
@@ -218,6 +249,18 @@ export function summaryLine(replay: Replay): string | undefined {
 /** The lede the card's body opens on, naming the source by its tab's name. */
 export function replayLede(source: string): string {
   return `What this agent was handed of ${source}'s work, as it was sent.`;
+}
+
+/** The steps drawn of `kept` once `shown` of the newest are: never fewer than one page, nor more than are kept. */
+export function replayPage(kept: number, shown: number): ReplayPage {
+  const from = Math.max(0, kept - Math.max(shown, REPLAY_PAGE));
+  return { from, next: Math.min(REPLAY_PAGE, from) };
+}
+
+/** What the row before the drawn steps says: how many earlier steps a press draws, and of how many where more stand: "Show 20 of 180 earlier steps", "Show 3 earlier steps". */
+export function earlierStepsLine(page: ReplayPage): string {
+  if (page.next < page.from) return `Show ${page.next} of ${page.from} earlier steps`;
+  return page.next === 1 ? "Show 1 earlier step" : `Show ${page.next} earlier steps`;
 }
 
 /**

@@ -44,6 +44,9 @@ import { OpenLinkProvider } from "./use-open-link";
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
+const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+/** When the new agent's first message was sent. */
+const SENT_AT = Date.UTC(2026, 9, 14, 15, 42);
 const FORKED_AT = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 function summary(overrides: Partial<CodingAgentSummary> & { id: string }): CodingAgentSummary {
@@ -106,12 +109,23 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The new agent's tab drawn with its first message as given, every tab and place it opens recorded. */
-async function drawn(agent: CodingAgentSummary, first: string, source = SOURCE, listed = true) {
+/** The new agent's tab drawn with its first message as given, sent when given, every tab and place it opens recorded. */
+async function drawn(
+  agent: CodingAgentSummary,
+  first: string,
+  source = SOURCE,
+  listed = true,
+  sentAt?: number,
+) {
   const opened: ToolTarget[] = [];
   const places: LinkPlace[] = [];
   const messages: readonly CodingAgentMessage[] = [
-    { id: "first", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: first }] },
+    {
+      id: "first",
+      role: MESSAGE_ROLE.USER,
+      parts: [{ type: "text", text: first }],
+      ...(sentAt === undefined ? undefined : { sentAt }),
+    },
     { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text: "On it." }] },
   ];
   // Note that only the first read answers, because a read past the cursor waits on the service.
@@ -186,6 +200,33 @@ function headOf(container: Element): string {
   return (head?.textContent ?? "").replace(/\s+/gu, " ").trim();
 }
 
+/** The line under the replay card as a reader reads it: whom it names, if anyone, and the moment its time stands for. */
+function cardMeta(container: Element): { sender: string | undefined; at: string | undefined } {
+  const meta = container.querySelector("[data-replay-card] ~ .message-meta");
+  assert.ok(meta !== null);
+  return {
+    sender: meta.querySelector(".message-sender .actor-ref-name")?.textContent ?? undefined,
+    at: meta.querySelector("time")?.getAttribute("dateTime") ?? undefined,
+  };
+}
+
+/** A replay of `count` steps, the agent's words each, numbered from the oldest. */
+function longReplay(count: number, overrides: Partial<Replay> = {}): Replay {
+  const steps: Replay["steps"] = Array.from({ length: count }, (_, at) => ({
+    kind: REPLAY_STEP_KIND.SAID,
+    summary: `Said: Step ${at + 1}.`,
+    words: `Step ${at + 1}.`,
+  }));
+  return replay({ steps, totalSteps: count, ...overrides });
+}
+
+/** The steps the opened card draws, by their words. */
+function drawnSteps(container: Element): string[] {
+  return [...container.querySelectorAll("[data-replay-step]")].map((step) =>
+    (step.textContent ?? "").trim(),
+  );
+}
+
 test("an agent continued from another opens on the plan's card, the folded Continued card under who started it, and the note as the developer's line, with no marker drawn", async () => {
   const agent = summary({
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
@@ -205,11 +246,8 @@ test("an agent continued from another opens on the plan's card, the folded Conti
     /Invite flow/u,
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
-  // The line under the card names who started the agent.
-  assert.equal(
-    cards[1]?.querySelector(".message-meta .actor-ref-name")?.textContent,
-    "Dean Stratakos",
-  );
+  // The reader started it, and the message's time is unknown, so the card names nobody under it.
+  assert.equal(cards[1]?.querySelector(":scope > .message-meta"), null);
   // The note is the developer's own bubble after the card.
   const bubbles = [...container.querySelectorAll(".is-user")].filter(
     (each) => !each.classList.contains("agent-origin"),
@@ -437,4 +475,135 @@ test("a replayed line is named under its sender as a transcript names one: Luke,
     ["", "Ana Ruiz"],
     ["", "Charles Pan"],
   ]);
+});
+
+test("the line under the card says when the reader's own agent was started, naming nobody, as the reader's own lines are", async () => {
+  const agent = summary({
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    brief: CODING_AGENT_BRIEF.PLAN,
+  });
+  const { container } = await drawn(
+    agent,
+    firstMessageText("# Invite flow", replay(), undefined),
+    SOURCE,
+    true,
+    SENT_AT,
+  );
+  assert.deepEqual(cardMeta(container), {
+    sender: undefined,
+    at: new Date(SENT_AT).toISOString(),
+  });
+  assert.doesNotMatch(
+    container.querySelector("[data-replay-card] ~ .message-meta")?.textContent ?? "",
+    /You|·/u,
+  );
+});
+
+test("the line under the card names a teammate who started the agent by their face and name, then when, as a teammate's line is", async () => {
+  const agent = summary({
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    brief: CODING_AGENT_BRIEF.PLAN,
+    startedBy: CHARLES,
+  });
+  const { container } = await drawn(
+    agent,
+    firstMessageText("# Invite flow", replay(), undefined),
+    SOURCE,
+    true,
+    SENT_AT,
+  );
+  assert.deepEqual(cardMeta(container), {
+    sender: "Charles Pan",
+    at: new Date(SENT_AT).toISOString(),
+  });
+  assert.match(
+    container.querySelector("[data-replay-card] ~ .message-meta .message-sent-at")?.textContent ??
+      "",
+    /^·/u,
+  );
+});
+
+test("opened, a long replay draws its newest twenty steps under a row that draws twenty more a press, until every step is drawn and the keys land on them", async () => {
+  const agent = summary({
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    brief: CODING_AGENT_BRIEF.PLAN,
+  });
+  const { container } = await drawn(
+    agent,
+    firstMessageText("# Invite flow", longReplay(45), undefined),
+  );
+  press(container.querySelector("[data-replay-card] > summary"));
+  await settle();
+  const numbered = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, at) => `Step ${from + at}.`);
+  assert.deepEqual(drawnSteps(container), numbered(26, 45));
+  const row = () => container.querySelector("[data-replay-earlier]");
+  assert.equal(row()?.textContent, "Show 20 of 25 earlier steps");
+  // The row stands over the steps it draws more of.
+  const first = container.querySelector("[data-replay-step]");
+  assert.ok(first !== null && row() !== null);
+  assert.ok((row()?.compareDocumentPosition(first) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  press(row());
+  assert.deepEqual(drawnSteps(container), numbered(6, 45));
+  assert.equal(row()?.textContent, "Show 5 earlier steps");
+
+  press(row());
+  assert.deepEqual(drawnSteps(container), numbered(1, 45));
+  assert.equal(row(), null);
+  // The row went with the last page, and the keys stand on the steps it drew rather than on nothing.
+  assert.equal(document.activeElement, container.querySelector("[data-replay-steps]"));
+  // The replay kept every step, so none is said to be left out.
+  assert.doesNotMatch(
+    container.querySelector("[data-replay-card] .disclosure-body")?.textContent ?? "",
+    /left out/u,
+  );
+});
+
+test("Luke's summary and the steps left out stand over the earlier-steps row, which pages only the steps the replay kept", async () => {
+  const agent = summary({
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    brief: CODING_AGENT_BRIEF.PLAN,
+  });
+  const { container } = await drawn(
+    agent,
+    firstMessageText(
+      "# Invite flow",
+      longReplay(30, {
+        summary: { text: "Read the invite code and its tests.", steps: 100 },
+        totalSteps: 140,
+      }),
+      undefined,
+    ),
+  );
+  assert.equal(headOf(container), "Continued from Wire the start from field · 30 of 140 steps");
+  press(container.querySelector("[data-replay-card] > summary"));
+  await settle();
+  const body = container.querySelector("[data-replay-card] .disclosure-body");
+  const summaryRow = body?.querySelector("[data-replay-summary]");
+  const left = [...(body?.querySelectorAll("p") ?? [])].find((each) =>
+    /left out/u.test(each.textContent ?? ""),
+  );
+  const row = body?.querySelector("[data-replay-earlier]");
+  const step = body?.querySelector("[data-replay-step]");
+  assert.equal(
+    left?.textContent,
+    "10 earlier steps were left out to keep the replay within its size limit.",
+  );
+  assert.equal(row?.textContent, "Show 10 earlier steps");
+  const order = [summaryRow, left, row, step];
+  for (const [at, element] of order.entries()) {
+    const next = order[at + 1];
+    if (next === undefined) continue;
+    assert.ok(element instanceof Element && next instanceof Element);
+    assert.ok(element.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING);
+  }
+  press(row);
+  assert.equal(body?.querySelectorAll("[data-replay-step]").length, 30);
+  // Every kept step drawn, the summary and the line saying what was left out still stand as they did.
+  assert.equal(
+    body?.querySelector("[data-replay-summary]")?.textContent,
+    "Summary of 100 earlier steps (written by Luke)",
+  );
+  assert.match(body?.textContent ?? "", /10 earlier steps were left out/u);
 });
