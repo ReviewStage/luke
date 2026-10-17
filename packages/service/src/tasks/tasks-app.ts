@@ -70,6 +70,7 @@ import type { GitHubApp } from "../github/github-app.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
+  HOSTED_BYTES_HEADERS,
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedJsonResponse,
@@ -264,17 +265,6 @@ const FILE_QUERY = {
 
 /** The query naming one picture of the plan by its id. */
 const ATTACHMENT_QUERY = "attachment";
-
-/**
- * The headers a picture's bytes are served under beside their type: the
- * browser is told not to sniff them for another type, since the type is
- * what the service sniffed them to be as they were kept, and nothing on the
- * way may keep a copy, since the bytes are a workspace's own.
- */
-const PICTURE_HEADERS = {
-  "x-content-type-options": "nosniff",
-  "cache-control": "private, no-store",
-} as const;
 
 /** A start or a change is a name and a repository's name at most, so a body past this is neither. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
@@ -1158,7 +1148,7 @@ const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/planAttachmentEndpoint
   return HttpServerResponse.uint8Array(found.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,
     contentType: found.value.contentType,
-    headers: PICTURE_HEADERS,
+    headers: HOSTED_BYTES_HEADERS,
   });
 });
 

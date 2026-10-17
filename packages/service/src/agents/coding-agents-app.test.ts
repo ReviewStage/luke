@@ -278,6 +278,22 @@ const CHAT = "/api/workspaces/chat";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 
+/** Where the group serves an image an agent's pull request's overview names. */
+const AGENT_GITHUB_IMAGE = "/api/agents/github-image";
+
+/**
+ * The policy every byte the group serves is answered under: a page a browser
+ * opens from them runs no script, loads nothing, and stands in an origin of
+ * its own, so an SVG's markup never acts as this origin under the browser's
+ * session cookie.
+ */
+const SANDBOXED_BYTES = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+
+/** An SVG a repository might hold, with a script in it that must never run as a page of the service. */
+const SCRIPTED_SVG = new TextEncoder().encode(
+  '<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("/api/plans")</script></svg>',
+);
+
 /** The installation ids handed out so far: one installation stands for one workspace, so each task's workspace connects its own. */
 let installationsConnected = 0;
 
@@ -534,6 +550,7 @@ function request(
     archived?: string | undefined;
     attachment?: string;
     picture?: string;
+    src?: string;
   } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
@@ -543,6 +560,7 @@ function request(
   if (init.call !== undefined) url.searchParams.set("call", init.call);
   if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
   if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
+  if (init.src !== undefined) url.searchParams.set("src", init.src);
   return new Request(url, {
     method: init.method ?? "GET",
     headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
@@ -1278,6 +1296,40 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         yield* TestClock.adjust(Duration.hours(1));
         assert.deepEqual(yield* overview(), cold);
         assert.equal(reachRequests(github.sent.slice(later), installation.id).repositoryMints, 1);
+      }),
+  );
+
+  it.effect(
+    "an SVG of the agent's own repository that its pull request's overview names is served as its bytes, sandboxed so it never runs as a page of the service",
+    () =>
+      Effect.gen(function* () {
+        const contents = `/repos/${RELAY_FULL_NAME}/contents/docs/diagram.svg`;
+        const { owner, task, ask, fetch } = yield* openTask({
+          github: (sent) =>
+            new URL(sent.url).pathname === contents
+              ? new Response(SCRIPTED_SVG, {
+                  headers: { "content-type": "application/vnd.github.raw" },
+                })
+              : undefined,
+        });
+        const { agent } = yield* startedAgent(owner, task.id, ask);
+
+        const served = yield* fetch(
+          request(AGENT_GITHUB_IMAGE, owner, {
+            id: agent.id,
+            src: `https://raw.githubusercontent.com/${RELAY_FULL_NAME}/main/docs/diagram.svg`,
+          }),
+        );
+
+        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(served.headers.get("content-type"), "image/svg+xml");
+        assert.equal(served.headers.get("content-security-policy"), SANDBOXED_BYTES);
+        assert.equal(served.headers.get("x-content-type-options"), "nosniff");
+        assert.equal(served.headers.get("cache-control"), "private, no-store");
+        assert.deepEqual(
+          new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())),
+          SCRIPTED_SVG,
+        );
       }),
   );
 });
@@ -3751,7 +3803,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
-    "an item's attachment is served as its bytes under the type the service kept, not to be sniffed and not to be cached, to the item's account alone: another account, no bearer, another item, and a name that is no attachment are refused",
+    "an item's attachment is served as its bytes under the type the service kept, not to be sniffed, not to be cached, and never to run as a page, to the item's account alone: another account, no bearer, another item, and a name that is no attachment are refused",
     () =>
       Effect.gen(function* () {
         const { owner, other, fetch, ask, post, read } = yield* openInbox();
@@ -3779,6 +3831,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal(served.headers.get("content-type"), INBOX_IMAGE_TYPE.PNG);
         assert.equal(served.headers.get("x-content-type-options"), "nosniff");
         assert.equal(served.headers.get("cache-control"), "private, no-store");
+        assert.equal(served.headers.get("content-security-policy"), SANDBOXED_BYTES);
         assert.deepEqual(new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())), PNG);
 
         assert.deepEqual(
@@ -3823,7 +3876,7 @@ const picture = (mark: number) => ({
 
 it.layer(getTestDB())("an agent's pictures", (it) => {
   it.effect(
-    "a picture a tool answered an agent or its worker is served as its bytes, not to be sniffed and not to be cached, to whoever may read the agent, and through its own transcript alone",
+    "a picture a tool answered an agent or its worker is served as its bytes, not to be sniffed, not to be cached, and never to run as a page, to whoever may read the agent, and through its own transcript alone",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask, fetch } = yield* openTask();
@@ -3857,6 +3910,7 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         assert.equal(served.headers.get("content-type"), INBOX_IMAGE_TYPE.PNG);
         assert.equal(served.headers.get("x-content-type-options"), "nosniff");
         assert.equal(served.headers.get("cache-control"), "private, no-store");
+        assert.equal(served.headers.get("content-security-policy"), SANDBOXED_BYTES);
         assert.deepEqual(
           new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())),
           picture(1).bytes,

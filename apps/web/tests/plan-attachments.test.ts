@@ -56,6 +56,7 @@ interface Answered {
   readonly status: number;
   readonly contentType: string | null;
   readonly cache: string | null;
+  readonly policy: string | null;
   readonly bytes: Uint8Array;
 }
 
@@ -95,6 +96,7 @@ const ask = (request: Request) =>
       status: response.status,
       contentType: response.headers.get("content-type"),
       cache: response.headers.get("cache-control"),
+      policy: response.headers.get("content-security-policy"),
       bytes,
     } satisfies Answered;
   });
@@ -152,6 +154,8 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
         assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
         assert.equal(served.contentType, PICTURE_TYPE.PNG);
         assert.equal(served.cache, "private, no-store");
+        // Note that a page a browser opens from the bytes runs no script and stands in an origin of its own.
+        assert.equal(served.policy, "default-src 'none'; style-src 'unsafe-inline'; sandbox");
         assert.deepEqual([...served.bytes], [...PNG_BYTES]);
         assert.equal(
           (yield* ask(read(taskId, answer.id, outsider))).status,
