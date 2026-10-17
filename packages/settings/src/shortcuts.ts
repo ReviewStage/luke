@@ -642,6 +642,21 @@ export function shortcutAria(chord: ShortcutChord): string {
 }
 
 /**
+ * The fields of a `KeyboardEvent` a chord is matched against, so this
+ * vocabulary reaches no DOM and a test needs none.
+ */
+interface ShortcutKeyPress {
+  /** `KeyboardEvent.key`: the character the press makes. */
+  key: string;
+  /** `KeyboardEvent.code`: the physical key, unmoved by the modifiers held. */
+  code: string;
+  altKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+}
+
+/**
  * Whether a key press is the chord: Command, unless the chord goes without, and exactly the chord's other
  * modifiers, and the key. The character is read where it can be,
  * which is what the menu bar matches too, and the physical key where Option
@@ -649,7 +664,7 @@ export function shortcutAria(chord: ShortcutChord): string {
  * either character, Shift held or not, because which of the two needs Shift
  * is the keyboard layout's to say.
  */
-function shortcutMatches(chord: ShortcutChord, event: KeyboardEvent): boolean {
+function shortcutMatches(chord: ShortcutChord, event: ShortcutKeyPress): boolean {
   if (event.metaKey === commandless(chord)) return false;
   if (event.ctrlKey !== (chord.control === true)) return false;
   const shiftFree = chord.key.unshifted !== undefined;
@@ -663,7 +678,7 @@ function shortcutMatches(chord: ShortcutChord, event: KeyboardEvent): boolean {
 /** The command whose chord a key press is, among those given, or nothing. */
 export function commandForKey(
   commands: readonly KeyedCommand[],
-  event: KeyboardEvent,
+  event: ShortcutKeyPress,
 ): KeyedCommand | undefined {
   return commands.find((command) => shortcutMatches(APP_SHORTCUTS[command].chord, event));
 }
