@@ -344,16 +344,16 @@ export function agentStateWords(status: CodingAgentStatus): string | undefined {
 /**
  * Whether an agent's transcript is read on the held long-poll now: only
  * while its tab is on screen and the agent may still write. A tab hidden,
- * a plan left, and an agent that ended each stop the reads.
+ * a task left, and an agent that ended each stop the reads.
  */
 export function followsAgent(input: { shown: boolean; status: CodingAgentStatus }): boolean {
   return input.shown && agentStillWriting(input.status);
 }
 
-/** What the Start button says while it cannot start: the plan names no repository yet. */
+/** What the Start button says while it cannot start: the task names no repository yet. */
 export const START_NEEDS_REPOSITORY = "Choose a repository first.";
 
-/** Why Start, and a draft's first message, cannot run on an archived plan. */
+/** Why Start, and a draft's first message, cannot run on an archived task. */
 export const START_ARCHIVED = "Unarchive the task to start a coding agent.";
 
 /** What the refusals a Start and a message meet alike say, worded once. */
@@ -390,7 +390,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
   }
 }
 
-/** What the toast says when a Start the developer left the plan behind did not start; the plan's own note says why. */
+/** What the toast says when a Start the developer left the task behind did not start; the task's own note says why. */
 export const START_FAILED_AWAY = "The coding agent could not be started.";
 
 /** What the toast says when the service did not stop an agent. */
@@ -417,7 +417,7 @@ const UNARCHIVED_WORDS = {
 /** What a refused archive says of an agent still starting, or with a message awaiting its turn, which has no turn to stop yet. */
 export const ARCHIVE_NOT_READY = "The agent is still starting its turn. Try again in a moment.";
 
-/** What the toast says once an agent's archive, or its undoing, landed or was refused, by which way it was asked, as a plan's do (`MARK_UNDOS`). */
+/** What the toast says once an agent's archive, or its undoing, landed or was refused, by which way it was asked, as a task's do (`MARK_UNDOS`). */
 export function archiveWords(archived: boolean): {
   readonly done: string;
   readonly refused: string;
@@ -447,10 +447,10 @@ function callFailure(text: string): Failure {
  * A repository out of reach, said by why with the repository named, and
  * the press that mends it: GitHub connected, or connected again, in
  * Settings; the repository given to Luke on GitHub; another repository
- * chosen; or the plan moved to the workspace whose GitHub reaches it. A
+ * chosen; or the task moved to the workspace whose GitHub reaches it. A
  * service that said nothing more says the bare sentence, which Retry
- * answers, and so does an agent with no plan wherever the remedy is pressed
- * on the plan: only giving the repository to Luke on GitHub is not.
+ * answers, and so does an agent with no task wherever the remedy is pressed
+ * on the task: only giving the repository to Luke on GitHub is not.
  */
 function unreachedFailure(
   unreached: RepositoryUnreached | undefined,
@@ -527,7 +527,7 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
   }
 }
 
-/** What a message that did not reach the agent says under the composer, and what mends it, on a plan or, for an agent with none, where the remedy needs no plan. */
+/** What a message that did not reach the agent says under the composer, and what mends it, on a task or, for an agent with none, where the remedy needs no task. */
 export function messageFailureNote(refused: RefusedCall, taskId: string | null): Failure {
   return refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
     ? unreachedFailure(refused.unreached, taskId)
@@ -1107,7 +1107,7 @@ export function agentListCallIds(messages: readonly CodingAgentMessage[]): reado
     );
 }
 
-/** Whether a call is a delegation to a worker, a coding agent's or the planning model's, which the tab draws as a subagent's row rather than a call's. */
+/** Whether a call is a delegation to a worker, a coding agent's or the brain's, which the tab draws as a subagent's row rather than a call's. */
 export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
   return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;
 }

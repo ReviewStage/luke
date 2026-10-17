@@ -12,14 +12,14 @@ import {
 } from "./brain-host/eve-sessions.js";
 
 /**
- * retire-sessions.ts -- the eve sessions Luke lets go of, retired for good: a plan's at its delete, an account's at its deletion.
+ * retire-sessions.ts -- the eve sessions Luke lets go of, retired for good: a task's at its delete, an account's at its deletion.
  *
  * A session retired ends its workflow run, a turn under way and the workers
  * it handed out with it, and takes nothing again, so Vercel Workflow can
  * let its history go and its sandbox can be deleted with nothing left to
  * resume it. The reset has to be asked while the session's conversation
  * still stands, because eve's door admits no one to the session of a
- * cleared conversation; so a plan's delete retires its sessions before it
+ * cleared conversation; so a task's delete retires its sessions before it
  * clears them, and an account's deletion before the account goes. Each is
  * asked as the developer, over the bearer the request carried.
  *
@@ -41,7 +41,7 @@ export type EveAt = (
   mount: EveMount,
 ) => Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>;
 
-/** The eve service a conversation's session runs under: a coding agent's under the coder mount, every other under the planning brain's. */
+/** The eve service a conversation's session runs under: a coding agent's under the coder mount, every other under the brain's. */
 function mountOf(session: StandingSession): EveMount {
   return session.kind === CONVERSATION_KIND.CODING_AGENT ? EVE_MOUNT.CODER : EVE_MOUNT.TASKS;
 }

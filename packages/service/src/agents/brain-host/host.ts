@@ -73,9 +73,9 @@ import { carryStop } from "./stop-carrier.js";
  * turn opens with, the tools it is offered and what they reach, the model
  * with the meter in front of it, and the relay from eve's stream into the
  * store's writer, which is the sole consumer and the only thing that writes
- * a message row. A conversation is a plan's: its turns run under the
- * planning model's instructions, its saved document as the standing context,
- * and the planning tools (`brain.ts`), and every write runs under the
+ * a message row. A conversation is a task's: its turns run under the
+ * brain's instructions, its saved document as the standing context,
+ * and the brain's tools (`brain.ts`), and every write runs under the
  * conversation the session was admitted for. A worker is named from the
  * task it is handed by the same small call that names a coding agent
  * (`coder-host/title.ts`), on its child conversation.
@@ -146,7 +146,7 @@ export interface BrainHost extends HostAdmission {
   turnOf(auth: SessionAuth, sessionId: string, eveTurnId: string): HostedTurn | undefined;
   /** The prompt a session runs under, with the hash its turns are recorded under; the text itself is stored nowhere. */
   prompt(): HostedSessionPrompt;
-  /** The standing context one turn opens with: the plan's name and saved document, as data. */
+  /** The standing context one turn opens with: the task's name and saved document, as data. */
   standingContext(admitted: AdmittedConversation): HostEffect<string>;
   /** The conversation so far, for a session opened over a conversation with words already said; nothing otherwise. */
   seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
@@ -189,9 +189,9 @@ export interface BrainHost extends HostAdmission {
    */
   titleChild(session: SessionContext["session"]): HostEffect<void>;
   /**
-   * The skills the plan's repository keeps, offered to the session as it
+   * The skills the task's repository keeps, offered to the session as it
    * starts (`../agent-runtime/skills.ts`), each body saying where it stands
-   * in the repository `run_in_repository` reads; none for a plan with no
+   * in the repository `run_in_repository` reads; none for a task with no
    * repository, one the App does not reach, or a read that failed.
    */
   skills(
@@ -211,7 +211,7 @@ export interface BrainHost extends HostAdmission {
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
 
-/** The body a planning skill loads as: where it stands in the plan's repository, which \`run_in_repository\` reads, and then its own words. */
+/** The body a brain skill loads as: where it stands in the task's repository, which \`run_in_repository\` reads, and then its own words. */
 function brainSkillMarkdown(skill: RepositorySkill): string {
   return `This skill is \`${skill.folder}/SKILL.md\` in the task's repository; read the files it names with \`run_in_repository\`, relative to \`${skill.folder}/\`.\n\n${skill.markdown}`;
 }
@@ -263,7 +263,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       : { apiKey: access.apiKey, modelId: named.modelId };
   };
 
-  /** The plan the admitted conversation belongs to, as the caller reaches it now; nothing once it is deleted or out of reach. */
+  /** The task the admitted conversation belongs to, as the caller reaches it now; nothing once it is deleted or out of reach. */
   const taskOf = (admitted: AdmittedConversation) =>
     Effect.map(
       readTaskOfConversation(admitted.caller, admitted.target.conversationId),
@@ -272,7 +272,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
   /**
    * Relays one event of a session's stream into the conversation and turn
-   * kind the caller admitted it under: the planning session's own, or a
+   * kind the caller admitted it under: the brain session's own, or a
    * subagent's child conversation.
    */
   const relayEvent = (
@@ -389,13 +389,13 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         if (Result.isFailure(standing)) {
           return { status: ACTION_RESULT_STATUS.REJECTED, reason: standing.failure };
         }
-        // The plan is found again as the call runs, so a plan deleted mid-turn saves nothing.
-        // The caller is who acts: the plan, its repository, the research meter, and the agents are
+        // The task is found again as the call runs, so a task deleted mid-turn saves nothing.
+        // The caller is who acts: the task, its repository, the research meter, and the agents are
         // reached and paid for as the member speaking, whoever opened the conversation.
         const { caller } = standing.success;
         const task = yield* taskOf(standing.success);
         // A message to a coding agent reaches its session as the deployment acting for the
-        // caller, as a Stop does above: the planning session holds no bearer of the caller's.
+        // caller, as a Stop does above: the brain session holds no bearer of the caller's.
         const secret = seams.deploymentSecret();
         const origin = seams.eveOrigin();
         const eve = yield* eveSessionsComposer;
@@ -409,7 +409,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
             ? undefined
             : {
                 task: { userId: caller, taskId: task.task.id },
-                // The repository as the row holds it now, so a plan given one mid-conversation reads it on its next call.
+                // The repository as the row holds it now, so a task given one mid-conversation reads it on its next call.
                 repository: {
                   task: { userId: caller, taskId: task.task.id },
                   repository: task.task.repository,
@@ -472,7 +472,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         const task = yield* taskOf(admitted);
         const repository = task?.task.repository ?? null;
         if (task === undefined || repository === null) return [];
-        // The repository is read through the plan's workspace installation, as every planning read of it is.
+        // The repository is read through the task's workspace installation, as every brain read of it is.
         return yield* repositorySkills(
           { userId: admitted.caller, conversationId: admitted.target.conversationId },
           taskWorkspace(admitted.caller, task.task.id),
@@ -486,7 +486,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         const found = yield* delegatedChildOf(session);
         if (Option.isNone(found)) return;
         const { caller, parent, child } = found.value;
-        // The title is metered to the member the worker acts for, as the planner's own steps are.
+        // The title is metered to the member the worker acts for, as the brain's own steps are.
         const model = seams.titleModel(caller);
         if (model === undefined) return;
         // Note that the task named is the child's first, whichever task woke this, because a

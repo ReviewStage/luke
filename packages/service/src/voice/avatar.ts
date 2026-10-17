@@ -7,7 +7,7 @@
  * minted for this ask alone, since a grant joins once and is never kept, or
  * `avatar.unavailable` with why. A start names the avatar the developer
  * chose by its key, and this mints that stock persona, or the deployment's
- * own where it names none or the default. The grant goes to the device socket and
+ * own where it names none. The grant goes to the device socket and
  * nowhere else; the one word the log keeps of it is the host of the room.
  *
  * Each session Keyframe mints is a `voice_avatar_sessions` row, opened only
@@ -27,7 +27,7 @@ import {
   openAvatarSession,
 } from "@luke/database/models/voice-avatar-sessions";
 import { AVATAR_END_REASON, type AvatarEndReason } from "@luke/database/voice-vocabulary";
-import { VIDEO_AVATAR, type VideoAvatar } from "@luke/features/video-avatar";
+import type { VideoAvatar } from "@luke/features/video-avatar";
 import { catchAllButInterrupt, serialQueue } from "@luke/runtime/effect";
 import { Clock, Effect, Option, Result, type Scope } from "effect";
 import {
@@ -71,9 +71,9 @@ export interface AvatarProvider {
   readonly personaId: string;
 }
 
-/** Keyframe's persona for the avatar a start asked for: the deployment's own for the default. */
-function personaOf(avatar: VideoAvatar, provider: AvatarProvider): string {
-  return avatar === VIDEO_AVATAR.DEFAULT ? provider.personaId : KEYFRAME_STOCK_PERSONA_ID[avatar];
+/** Keyframe's persona for the avatar a start asked for: the deployment's own where it named none. */
+function personaOf(avatar: VideoAvatar | undefined, provider: AvatarProvider): string {
+  return avatar === undefined ? provider.personaId : KEYFRAME_STOCK_PERSONA_ID[avatar];
 }
 
 export interface CallAvatarOptions {
@@ -177,7 +177,7 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
       log({ event: LOG_EVENT.AVATAR_STARTED, host: new URL(frame.serverUrl).host });
     });
 
-  const answerStart = (requestId: string, asked: VideoAvatar) =>
+  const answerStart = (requestId: string, asked: VideoAvatar | undefined) =>
     Effect.gen(function* () {
       if (!(yield* options.deviceOpen)) return;
       if (provider === undefined) {
@@ -224,7 +224,7 @@ export const callAvatar = /* @__PURE__ */ Effect.fnUntraced(function* (
     request: (frame) => {
       queue.offerUnsafe(
         frame.type === VOICE_SERVICE_FRAME.AVATAR_START
-          ? answerStart(frame.requestId, frame.avatar ?? VIDEO_AVATAR.DEFAULT)
+          ? answerStart(frame.requestId, frame.avatar)
           : written(answerStop(frame)),
       );
     },

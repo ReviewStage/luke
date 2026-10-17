@@ -52,8 +52,8 @@ import { useTabViews } from "./strip-tabs";
  * desktop-agent-page.tsx -- one agent's page: an agent an automation started with no plan, drawn in the plan's place as the task column draws an agent's tab.
  *
  * An agent an automation's run starts belongs to the workspace rather than
- * to a plan, so there is no plan's column for its tab to stand in. Its page
- * stands where the plan would, beside the sidebar, as the Inbox does, and
+ * to a task, so there is no task's column for its tab to stand in. Its page
+ * stands where the task would, beside the sidebar, as the Inbox does, and
  * draws the task column's own agent pane (`main-tabs.tsx`'s `AgentPane`):
  * its transcript, its composer, its model and servers, and what it
  * published, at the document's reading width, each through the same
@@ -84,7 +84,7 @@ import { useTabViews } from "./strip-tabs";
 /** What the page says where the agent could not be read. */
 const NOT_READ = "This agent could not be read.";
 
-/** Nothing to do, for the doors a plan's column opens and this page does not have. */
+/** Nothing to do, for the doors a task's column opens and this page does not have. */
 const nothing = (): void => undefined;
 
 /** No tab arrived anything: arrivals are a plan's. */
@@ -208,9 +208,9 @@ export function DesktopAgentPage({
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
   useTaskAgentsFollow(tasks, agentId, agent);
-  // Note that the models come from the open plan's agents where this page has not read them, so
+  // Note that the models come from the open task's agents where this page has not read them, so
   // the agent is named alike in both; and that an archived agent, which takes no message, is
-  // brought back by its own Unarchive, there being no plan to bring back with it.
+  // brought back by its own Unarchive, there being no task to bring back with it.
   const { onArchive } = agents;
   const toast = useToast();
   // An Unarchive refused says why, as any other refusal of the agent's does.
@@ -275,7 +275,7 @@ export function DesktopAgentPage({
   const openChanges = (changed: string) =>
     showPullRequest(sidePanel, control, changed, PULL_REQUEST_VIEW.FILES);
   const openPullRequest = (published: string) =>
-    showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.OVERVIEW);
+    showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION);
   const shown = tasks.shown && !sidePanel.fullScreen;
   const cards = taskCards({
     agents: control,

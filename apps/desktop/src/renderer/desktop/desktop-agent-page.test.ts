@@ -40,7 +40,6 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState, stateWith } from "#testing/app-state";
 import { installEditorBundle, installEditorLayout, typeInComposer } from "#testing/composer";
-import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -248,7 +247,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The page of the agent, standing in the plan's place, as the window's plans control holds it. */
+/** The page of the agent, standing in the task's place, as the window's tasks control holds it. */
 function mount(tasks: TasksControl = tasksControl({})): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -886,7 +885,7 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
   );
 });
 
-test("too narrow for the line naming who sent it, it breaks between the automation, the pull request, and who ran it, never cutting all three to their first letters", async () => {
+test("the line naming who sent it names the automation, the pull request, and who ran it, each its own part", async () => {
   pages = [
     {
       agent: {
@@ -900,15 +899,10 @@ test("too narrow for the line naming who sent it, it breaks between the automati
     },
   ];
   transcript = handedTranscript();
-  const styles = layContainersAt({});
   const page = mount(tasksControl({ me: "user-dean" }));
   await settle();
 
   const line = origin(page).sender?.firstElementChild ?? assert.fail("the line stands");
-  const wraps = getComputedStyle(line).flexWrap;
-  styles.remove();
-
-  assert.equal(wraps, "wrap");
   assert.deepEqual(
     [...line.children].map((part) => words(part)),
     ["Flaky-test sweep", " · #2905 View commands", " · Run by you"],

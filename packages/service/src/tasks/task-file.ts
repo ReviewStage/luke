@@ -26,16 +26,16 @@ import {
 } from "./shown-file.js";
 
 /**
- * task-file.ts -- a whole file of a plan's repository for the Mac's File tab, read a window at a time from GitHub as it stands now or at a commit.
+ * task-file.ts -- a whole file of a task's repository for the Mac's File tab, read a window at a time from GitHub as it stands now or at a commit.
  *
- * The Code tab shows the lines `show_code` read from the planning session's
+ * The Code tab shows the lines `show_code` read from the brain session's
  * checkout; the File tab opens the whole file they came from. Outside a
- * planning turn there is no handle on that session's sandbox, so the file is
+ * brain turn there is no handle on that session's sandbox, so the file is
  * read from GitHub instead, at the head of the repository's default branch,
- * through the same reach the checkout is made through: the plan is read under
- * the account first, so a plan another account owns reads as no plan, then
- * the Luke GitHub App confirms the installation of the plan's workspace
- * reaches the plan's repository and mints a token for that one repository
+ * through the same reach the checkout is made through: the task is read under
+ * the account first, so a task another account owns reads as no task, then
+ * the Luke GitHub App confirms the installation of the task's workspace
+ * reaches the task's repository and mints a token for that one repository
  * with contents read (`github-app.ts`'s `repositoryReadToken`). The token is used for the one
  * read and goes nowhere else: not into the answer, a log line, or a trace.
  * What is shown is decided by the rule `show_code` is held to
@@ -75,9 +75,9 @@ function reachRefusal(failure: GitHubWorkspaceReadFailure): Effect.Effect<TaskFi
 }
 
 /**
- * The window of the file the request names, of the plan's repository as
+ * The window of the file the request names, of the task's repository as
  * GitHub holds it now or at the commit it names, or why it is not shown; nothing where the account
- * owns no such plan.
+ * owns no such task.
  */
 export function readTaskFile(
   userId: string,
@@ -103,14 +103,14 @@ export function readTaskFile(
   });
 }
 
-/** The App's reach of a plan's repository: its token and the repository as GitHub confirmed it, or why it was not reached. */
+/** The App's reach of a task's repository: its token and the repository as GitHub confirmed it, or why it was not reached. */
 type TaskRepositoryReach =
   | { readonly reached: GitHubRepositoryToken }
   | { readonly refused: TaskFileRefused };
 
 /**
- * The Luke GitHub App's reach of the plan's repository through the
- * installation of the plan's workspace: a token for that one repository
+ * The Luke GitHub App's reach of the task's repository through the
+ * installation of the task's workspace: a token for that one repository
  * with contents read, and the repository as GitHub confirmed it, or the
  * refusal a failed reach answers. The File tab's file and its tree's
  * folders are both read through it.

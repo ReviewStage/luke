@@ -16,7 +16,7 @@ import type { CodingAgentsControl } from "./use-coding-agents";
 import type { SidePanelControl } from "./use-side-panel";
 
 /**
- * terminal-commands.tsx -- Show terminal (⌘J) and New terminal while a plan is drawn: which agent each means by the rules, its Terminal tab shown, and the picker where the rules ask.
+ * terminal-commands.tsx -- Show terminal (⌘J) and New terminal while a task is drawn: which agent each means by the rules, its Terminal tab shown, and the picker where the rules ask.
  *
  * Both commands are offers on the window's one keymap (`app-commands.ts`), so
  * the menu bar and ⌘K run them as ⌘J does. Each decides the agent
@@ -72,7 +72,7 @@ export function TerminalCommands({
   const [asking, setAsking] = useState<Asking | undefined>(undefined);
   const open = useOpenTerminal(sidePanel, onShown);
   const run = (ask: TerminalAsk) => {
-    // A plan whose agents are not read yet asks, rather than offer to start one it may not need.
+    // A task whose agents are not read yet asks, rather than offer to start one it may not need.
     if (agents.agents === undefined && here === undefined) {
       return setAsking({ ask, chosen: undefined });
     }

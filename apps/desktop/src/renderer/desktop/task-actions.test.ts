@@ -57,17 +57,17 @@ const SHARED_TASK: Task = {
   lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by: DEAN, at: 120_000, duringCall: false },
 };
 
-/** What the plan actions asked of the tab, by the plan each named. */
+/** What the task actions asked of the tab, by the task each named. */
 interface Asked {
   opened: string[];
-  /** Each plan whose page Open on GitHub asked for. */
+  /** Each task whose page Open on GitHub asked for. */
   openedOnGitHub: string[];
-  /** Each plan whose chip Change repository… asked open. */
+  /** Each task whose chip Change repository… asked open. */
   changed: string[];
   deleted: string[];
-  /** Each rename asked, as the plan and the name it was given. */
+  /** Each rename asked, as the task and the name it was given. */
   renamed: string[][];
-  /** Each pin or archive asked, as the plan and what was asked of it. */
+  /** Each pin or archive asked, as the task and what was asked of it. */
   marked: [string, TaskMark][];
 }
 
@@ -85,7 +85,7 @@ beforeEach(installScrollIntoView);
 
 afterEach(unmountAll);
 
-/** The open plan's tab, every per-plan press recorded; `PLAN` is open and `OTHER` beside it in the list. */
+/** The open task's tab, every per-task press recorded; `PLAN` is open and `OTHER` beside it in the list. */
 function openTab(
   repositories: Readonly<Record<string, string>> = {},
   deletes: () => Promise<ActionResult> = () =>
@@ -266,7 +266,7 @@ test("the plan's name reaches the recording only as masked text, never in an att
   }
 });
 
-/** The open plan's tab on `tab`, `SHARED_PLAN` open as `me` reads it and `OTHER` beside it in the list. */
+/** The open task's tab on `tab`, `SHARED_PLAN` open as `me` reads it and `OTHER` beside it in the list. */
 function sharedTab(me: string, tab: MainTab = MAIN_TAB.PLAN): TasksControl {
   const base = tasksControl();
   return tasksControl({
@@ -308,7 +308,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   assert.deepEqual(menuFooter(), ["Created by you", "Last edited by Dean Stratakos"]);
   unmountAll();
 
-  // A plan the window has not opened, from a service that named no creator, says only when it was saved.
+  // A task the window has not opened, from a service that named no creator, says only when it was saved.
   const { asked } = openTab();
   rightClick(mountSidebarTask(sharedTab(DEAN.userId), OTHER, asked), 40, 60);
   assert.deepEqual(menuFooter(), ["Created by someone", "Last edited"]);
@@ -383,7 +383,7 @@ const STAGE: Workspace = {
   memberCount: 6,
 };
 
-/** Dean's plan in his own workspace on a repository only Stage's GitHub reaches: stranded there. */
+/** Dean's task in his own workspace on a repository only Stage's GitHub reaches: stranded there. */
 const STRANDED: TaskSummary = {
   ...OTHER,
   repository: "acme-corp/relay",

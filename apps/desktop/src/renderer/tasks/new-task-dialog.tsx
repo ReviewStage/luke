@@ -20,11 +20,11 @@ import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import type { TasksControl } from "./use-tasks-tab";
 
 /**
- * new-task-dialog.tsx -- New plan as a small modal over the window: the plan's name, the GitHub repository it is about, Cancel and Create task.
+ * new-task-dialog.tsx -- New task as a small modal over the window: the task's name, the GitHub repository it is about, Cancel and Create task.
  *
  * The window asks the way Linear's and Notion's "New …" ask: it dims over
  * whatever stood open, and a card holds the one field and the repository
- * chip. Its title says where the plan will start, "New plan in Acme", the
+ * chip. Its title says where the task will start, "New task in Acme", the
  * workspace a chip there that chooses another, as Linear's team chip and
  * GitHub's Owner do; the repository chip then lists that workspace's
  * repositories. Both chips are the app's one picker, Settings' bordered chip
@@ -38,12 +38,12 @@ import type { TasksControl } from "./use-tasks-tab";
  * line, so Return creates the plan with any modifier held; Escape, Cancel, and a press on the dimmed window put the
  * card away with nothing started, its words with it. Nothing typed here
  * reaches the model as conversation. The repository starts on the one the
- * press chose (a repository group's +), else the one the newest plan in the
+ * press chose (a repository group's +), else the one the newest task in the
  * workspace was about, either only where the workspace's GitHub reaches it;
  * the chip offers the other recent ones, a search over every repository the
  * workspace's GitHub reaches, and the page where the developer chooses which
  * ones Luke can see. A workspace with no GitHub connected offers none, and
- * the plan starts with none, to be given one later. A
+ * the task starts with none, to be given one later. A
  * refusal keeps the card with the reason under the field, and Create task
  * can be pressed again; a plan started closes the card and opens as the
  * host's open plan, its call with it. The Plan switch at the title's end starts
@@ -88,7 +88,7 @@ const PLANNING_NOTE = {
 const NO_WORKSPACE_MATCH = "No workspaces match";
 
 /**
- * The title's workspace: the one the plan starts in, by its tile and name, a
+ * The title's workspace: the one the task starts in, by its tile and name, a
  * press away from the picker's menu of every workspace the account is in,
  * the one chosen checked; nothing before the workspaces are read.
  */
@@ -208,7 +208,7 @@ function IssueOption({
 function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.JSX.Element {
   const [name, setName] = useState("");
   const [chosen, setChosen] = useState<string | null | undefined>(newTask.preset?.repository);
-  // The workspace the plan starts in: the one listed, until the title's chip chooses another.
+  // The workspace the task starts in: the one listed, until the title's chip chooses another.
   const [workspaceId, setWorkspaceId] = useState(newTask.workspaceId);
   const startsIn = workspaceId ?? newTask.workspaceId;
   const repositories = newTask.repositoriesIn(startsIn);
@@ -268,7 +268,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
   };
 
   // Return starts what is highlighted, and Command-Return the name as typed;
-  // with no issues standing, Return creates the plan with any modifier held,
+  // with no issues standing, Return creates the task with any modifier held,
   // since the name has no second line to begin. The arrows wrap through the
   // issues and the typed name's row after them.
   const fieldKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -439,7 +439,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
   );
 }
 
-/** The card over the window while New plan is asked, in the window's one modal frame (`../modal-shell.tsx`); nothing otherwise. */
+/** The card over the window while New task is asked, in the window's one modal frame (`../modal-shell.tsx`); nothing otherwise. */
 export function NewTaskDialog({
   newTask,
 }: {

@@ -38,14 +38,14 @@ import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 
 /**
- * The coding agents of an account's plans, through the store's public
+ * The coding agents of an account's tasks, through the store's public
  * functions against a real dialect. What is held to is the shape a Start
  * relies on: one Start is one agent with one `coding_agent` conversation,
  * a retry carrying the same key is that agent and not a second, the tabs
- * read a plan's agents in the order they were started, and nothing of a
- * plan another account owns is read or written.
+ * read a task's agents in the order they were started, and nothing of a
+ * task another account owns is read or written.
  *
- * Synthetic accounts, plans, repositories, and keys throughout.
+ * Synthetic accounts, tasks, repositories, and keys throughout.
  */
 
 const openUser = Effect.gen(function* () {
@@ -55,7 +55,7 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** An account with one plan started. */
+/** An account with one task started. */
 const openTask = Effect.gen(function* () {
   const userId = yield* openUser;
   const task = yield* startTask(userId, { name: "Teammate invitations" });

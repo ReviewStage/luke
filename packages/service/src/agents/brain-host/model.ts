@@ -11,7 +11,7 @@ import type { OpenAiAccess } from "./production.js";
  * How the hosted brain reaches its model: as a coding agent's step reaches
  * its own (`../coder-host/model.ts`), the brain's model and effort handed to
  * the provider on Luke's own key, which carries the account's daily meter
- * (`../agent-runtime/meter.ts`). The planning model and its workers alike
+ * (`../agent-runtime/meter.ts`). The brain and its workers alike
  * run on that one path, so a worker's model and effort are asked for,
  * recorded, and drawn as an agent's worker's are.
  */

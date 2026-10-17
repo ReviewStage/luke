@@ -20,7 +20,7 @@ import {
 import { CODER } from "./bounds.js";
 
 /**
- * inbox-page.ts -- a plan's inbox as the desktop reads it, and what waits across the account: each held open while nothing changed since the reader's cursor.
+ * inbox-page.ts -- a task's inbox as the desktop reads it, and what waits across the account: each held open while nothing changed since the reader's cursor.
  *
  * The cursor is a digest of where every item stands (`http/held-read.ts`),
  * so a post, a close, an answer, and a new item each move it, and a reader
@@ -33,16 +33,16 @@ import { CODER } from "./bounds.js";
  * asks again.
  *
  * The account's read is the same hold over the account's open items, the
- * desktop's one read that stands whichever plan is open: it is what says an
- * item landed while the developer was elsewhere. It names every plan holding
+ * desktop's one read that stands whichever task is open: it is what says an
+ * item landed while the developer was elsewhere. It names every task holding
  * an item too, settled ones included, read once per answer rather than on
- * each look: a plan's list moves with its open items, since every item
+ * each look: a task's list moves with its open items, since every item
  * opens before it settles, and what moves it alone, such as an archive, is
  * answered at the hold's end at the latest. Note that it looks every
  * `ACCOUNT_INBOX_POLL` rather than `MESSAGES_POLL`, because a desktop holds
  * it for as long as it is signed in rather than while a tab is on screen.
- * The open items of agents with no plan, and the automations holding them,
- * ride beside the plans' under keys of their own, and move the same cursor.
+ * The open items of agents with no task, and the automations holding them,
+ * ride beside the tasks' under keys of their own, and move the same cursor.
  * So does the newest run of each of the account's own automations that
  * failed to start in the last `FAILED_RUN_WINDOW`, which is no item, but
  * is what its owner is told of whichever plan is open.
@@ -97,7 +97,7 @@ export function agentInboxPast(
   );
 }
 
-/** The plan's inbox as it stands, held while its cursor is still the reader's. */
+/** The task's inbox as it stands, held while its cursor is still the reader's. */
 export function taskInboxPast(
   userId: string,
   taskId: string,

@@ -31,10 +31,10 @@ import {
 } from "./task-work.js";
 
 /**
- * task-work-store.ts -- a plan's Work tab read back from the record, a page of turns at a time, and every code Luke showed on it.
+ * task-work-store.ts -- a task's Work tab read back from the record, a page of turns at a time, and every code Luke showed on it.
  *
- * Every planning turn runs in the conversation the plan names, and the
- * relay journals each as eve runs it, so the plan's work is that
+ * Every brain turn runs in the conversation the task names, and the
+ * relay journals each as eve runs it, so the task's work is that
  * conversation's turns, newest first a page at a time, each projected from
  * its row and its journal exactly as a call tells it live
  * (`tasks/task-work.ts`), a worker's session and its title read from its
@@ -42,8 +42,8 @@ import {
  * read from the rows the turn holds. The code is every answered `show_code` call in
  * the conversation's journals, oldest first, read by the same rule that puts
  * a call's code on screen (`show-code.ts`), so nothing the call refused,
- * and no secret file, is read back. The plan is read under the account
- * first, so a plan of a workspace the account is not in reads as no plan,
+ * and no secret file, is read back. The task is read under the account
+ * first, so a task of a workspace the account is not in reads as no task,
  * exactly as in `task-store.ts`; its conversation is then read under the
  * member who opened it, whose conversation it is, so every member reads the
  * same work. Nothing is written here.
@@ -132,12 +132,12 @@ const allShownCode = Effect.fnUntraced(function* (userId: string, conversationId
 });
 
 /**
- * A page of the plan's work as the Work and Code tabs draw it: the newest
+ * A page of the task's work as the Work and Code tabs draw it: the newest
  * turns queued before the turn `before` names, or the newest of all, those
  * that wrote anything, oldest first, with the turn the next older page is
  * read before where one stands; and on the newest page, every code shown on
- * the plan. No turn for a plan whose planning model never ran, and nothing
- * where the account reaches no such plan. A journal this build cannot read
+ * the task. No turn for a task whose brain never ran, and nothing
+ * where the account reaches no such task. A journal this build cannot read
  * leaves its turn out rather than the whole page.
  */
 export function readTaskWork(
@@ -183,7 +183,7 @@ export function readTaskWork(
   });
 }
 
-/** Every code shown on the plan, oldest first, as the Code tab draws it, read under the member who opened the plan's conversation; nothing where the account reaches no such plan, and none for a plan whose planning model never ran. */
+/** Every code shown on the task, oldest first, as the Code tab draws it, read under the member who opened the task's conversation; nothing where the account reaches no such task, and none for a task whose brain never ran. */
 export function readTaskCode(
   userId: string,
   taskId: string,

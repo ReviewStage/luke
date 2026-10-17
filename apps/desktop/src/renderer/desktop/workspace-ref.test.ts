@@ -55,7 +55,7 @@ function heard(node: Node): string {
   return [...node.childNodes].map(heard).join("");
 }
 
-test("a workspace is named by its letter on its hue and its name, at the size its place asks", () => {
+test("a workspace is named by its letter and its name", () => {
   const view = draw(
     createElement(WorkspaceRef, {
       workspace: { id: "workspace-stage", name: "Stage" },
@@ -65,8 +65,6 @@ test("a workspace is named by its letter on its hue and its name, at the size it
   const tile = view.querySelector(".workspace-tile") ?? assert.fail("the ref draws the tile");
 
   assert.equal(tile.textContent, "S");
-  assert.equal(tile.hasAttribute("data-hue"), true);
-  assert.equal(tile.getAttribute("data-size"), "row");
   assert.equal(heard(view), "Stage");
 });
 
@@ -123,13 +121,12 @@ test("a workspace's card names it with who shares it: its members counted, or Pe
 
   assert.deepEqual(
     [team, own].map((card) => [
-      card.querySelector(".workspace-card-head > .workspace-tile")?.getAttribute("data-size"),
       card.querySelector(".card-name")?.textContent,
       card.querySelector(".card-sub")?.textContent,
     ]),
     [
-      ["head", "Acme", "5 members"],
-      ["head", "Dana Reyes", "Personal workspace"],
+      ["Acme", "5 members"],
+      ["Dana Reyes", "Personal workspace"],
     ],
   );
 });

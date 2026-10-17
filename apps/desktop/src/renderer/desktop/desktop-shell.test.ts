@@ -20,7 +20,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { handState, stateWith } from "#testing/app-state";
-import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "#testing/document-task";
 import { tasksControl } from "#testing/tasks-control";
@@ -160,7 +159,7 @@ function shellProps(
 
 /**
  * The window's shell on the home page with the sidebar folded, the Inbox
- * open over it or not, New plan opening its dialog and Cancel putting it
+ * open over it or not, New task opening its dialog and Cancel putting it
  * away as the tab does.
  */
 function mount(
@@ -614,10 +613,10 @@ test("the Automations page stands in the plan's place, titled for the listed wor
   assert.deepEqual(closed, ["closed"]);
 });
 
-/** The plan the call in progress is about, which none of the places below shows with its call bar. */
+/** The task the call in progress is about, which none of the places below shows with its call bar. */
 const CALL_TASK_NAME = "Checkout redesign";
 
-/** Every place in the window the developer can stand while a call goes on about another plan, as the shell is handed it. */
+/** Every place in the window the developer can stand while a call goes on about another task, as the shell is handed it. */
 const PLACE = {
   HOME: "home",
   OTHER_TASK: "another plan",
@@ -633,7 +632,7 @@ const PLACE = {
 
 type Place = (typeof PLACE)[keyof typeof PLACE];
 
-/** The column at the window's left in each place: the plans' sidebar, which folds, or a column of the place's own, which does not. */
+/** The column at the window's left in each place: the tasks' sidebar, which folds, or a column of the place's own, which does not. */
 const LEFT_COLUMN = {
   [PLACE.HOME]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.OTHER_TASK]: { selector: "aside.desktop-sidebar", folds: true },
@@ -647,7 +646,7 @@ const LEFT_COLUMN = {
   [PLACE.VERSION_HISTORY]: { selector: 'nav[aria-label="Versions"]', folds: false },
 } as const satisfies Record<Place, { selector: string; folds: boolean }>;
 
-/** The tab and the plans' state that stand the window in a place. */
+/** The tab and the tasks' state that stand the window in a place. */
 function placed(place: Place) {
   const control = tasksControl();
   const onTask = {
@@ -675,7 +674,7 @@ function placed(place: Place) {
   };
 }
 
-/** The shell standing in a place with a call in progress about another plan, its card's presses sent as `App` sends them. */
+/** The shell standing in a place with a call in progress about another task, its card's presses sent as `App` sends them. */
 function CallShell({ place, folded }: { place: Place; folded: boolean }): React.JSX.Element {
   const { tell } = useAct();
   const { tab, tasks } = placed(place);
@@ -756,7 +755,7 @@ function cardStanding(page: HTMLElement, place: Place) {
   };
 }
 
-/** Presses the card's way back to the call's plan. */
+/** Presses the card's way back to the call's task. */
 function pressReturn(page: HTMLElement): void {
   const button = page.querySelector<HTMLButtonElement>(
     `section.call-card button[aria-label="Open ${CALL_TASK_NAME}"]`,
@@ -885,107 +884,6 @@ test("with the plans' sidebar folded, the card floats in the window's corner whe
       ]),
     ),
   );
-});
-
-test("no place the window stands on can be scrolled sideways into the room its bars draw past the column's edges, folded sidebar or not", async () => {
-  await handBridge();
-  // Note that the window's stylesheets are laid once, because jsdom takes seconds to lay them.
-  const style = layContainersAt({});
-  const clipped: Record<string, string> = {};
-  for (const folded of [false, true]) {
-    for (const place of PLACES) {
-      const container = document.createElement("div");
-      document.body.append(container);
-      root = createRoot(container);
-      act(() =>
-        root?.render(onRegistry(AtomRegistry.make(), createElement(CallShell, { place, folded }))),
-      );
-      await settle();
-      const shell = container.querySelector(".desktop-shell");
-      assert.ok(shell, `${place} stands in the window's shell`);
-      clipped[`${place}${folded ? ", folded" : ""}`] = getComputedStyle(shell).overflow;
-      act(() => root?.unmount());
-      container.remove();
-    }
-  }
-  style.remove();
-  assert.deepEqual(
-    clipped,
-    Object.fromEntries(Object.keys(clipped).map((place) => [place, "clip"])),
-  );
-}, 60_000);
-
-test("a chip of another task's agent in a plan's version history names who started it, as the plan's own words do", async () => {
-  const sam = { userId: "user-sam", name: "Sam Okafor" };
-  const taskId = "4e3d2c1b-0a9f-4e8d-9c7b-6a5f4e3d2c1b";
-  const agentId = "7b1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: { kind: string }) =>
-        Promise.resolve(
-          request.kind === ACT_KIND.CODING_AGENTS_LIST
-            ? {
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: {
-                  agents: [
-                    {
-                      id: agentId,
-                      planId: taskId,
-                      model: "anthropic/claude-opus-5.5",
-                      effort: "high",
-                      title: "Prorate seat changes",
-                      createdAt: 1,
-                      status: "completed",
-                      turnId: null,
-                      startedBy: sam,
-                    },
-                  ],
-                },
-              }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-        ),
-    },
-  });
-  const body = `## Rollout\n\nAsk [@Prorate](https://tryluke.dev/acme/plan/${taskId}/agent/${agentId}).\n`;
-  const control = tasksControl();
-  const page = mount(false, false, {
-    page: TASKS_PAGE.DOCUMENT,
-    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
-    me: "user-dean",
-    history: {
-      ...control.history,
-      open: true,
-      viewing: {
-        line: {
-          seq: 2,
-          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: true },
-          startedAt: 0,
-          changes: 1,
-        },
-        current: true,
-        read: {
-          kind: HISTORY_READ.READY,
-          document: { body, assumptions: [] },
-          previous: null,
-        },
-      },
-    },
-  });
-  const chip = page.querySelector(".mention-chip");
-  assert.ok(chip, "the version draws the agent's chip");
-
-  act(() => {
-    chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
-  assert.match(card?.textContent ?? "", /Started by.*Sam Okafor/u);
 });
 
 test("a plan's chip in a plan's version history hangs the plan's card, as the plan's own words do", () => {

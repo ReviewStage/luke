@@ -16,6 +16,7 @@ import {
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
 } from "./integrations/integration-connect.js";
+import { sentryLogger } from "./observability/sentry.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
 
 /**
@@ -36,9 +37,10 @@ const webConfigProvider = ConfigProvider.layer(Effect.sync(() => ConfigProvider.
  * handed rendered as fields rather than folded into the message. v4 states the
  * whole active set of loggers rather than swapping one out of it, so the
  * tracer's logger is named beside the JSON one: it is what puts a line on the
- * span it was written under, the one trace surface the service keeps.
+ * span it was written under. The third sends every line to Sentry's logs
+ * (`observability/sentry.ts`), which the runtime's edge starts.
  */
-const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger]);
+const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryLogger]);
 
 /**
  * The services every web function's and every agent's effects run against. A

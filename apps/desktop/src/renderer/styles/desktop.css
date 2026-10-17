@@ -7860,10 +7860,11 @@ button.automation-run:hover {
 /* Dialog parts ---------------------------------------------------------------- */
 
 /* The title, body, and answers of the window's dialogs not yet on
-   `@luke/ui`'s `ConfirmDialog` (New task, Send feedback, Move plan), in
-   `@luke/ui`'s shared dialog (`luke-dialog`). Its body (a list of choices, a
-   note being written) is the part that gives way and scrolls, so its title
-   and its answers stay on screen however short the window is. */
+   `@luke/ui`'s `ConfirmDialog` (New task, Send feedback, Move to
+   workspace), in `@luke/ui`'s shared dialog (`luke-dialog`). Its body (a
+   list of choices, a note being written) is the part that gives way and
+   scrolls, so its title and its answers stay on screen however short the
+   window is. */
 .confirm-dialog-title {
   margin: 0;
   font-size: 15px;

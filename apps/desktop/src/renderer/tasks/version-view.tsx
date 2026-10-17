@@ -36,7 +36,7 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * A version is drawn under the plan's name, as
  * the plan's own tab draws it. The first version has nothing before it, so
  * it is drawn with nothing marked. A section opened from its revision's
- * list is drawn alone, without the plan's name over it, marked as the whole
+ * list is drawn alone, without the task's name over it, marked as the whole
  * version marks it, and a version still being read stands as
  * quiet blocks in the page's shape (`skeleton.tsx`). Restoring asks first,
  * in the window's dialog with the accent rather than red, since a restore is
@@ -84,7 +84,7 @@ const CHANGE_CLASS = {
   [VERSION_CHANGE.CHANGED]: " version-changed",
 } as const;
 
-/** The version's text under the plan's name, each unit drawn as it stands against what it is compared with. */
+/** The version's text under the task's name, each unit drawn as it stands against what it is compared with. */
 function VersionBody({
   diff,
   title,
@@ -253,15 +253,15 @@ export function VersionView({
   viewing: ViewedVersion;
   /** The restore's question, held by the history around the page (`useVersionRestore`). */
   restore: DialogConfirm;
-  /** Whether the version may be restored: not while the plan is archived. */
+  /** Whether the version may be restored: not while the task is archived. */
   restorable?: boolean;
-  /** The plan's name, which every version is drawn under. */
+  /** The task's name, which every version is drawn under. */
   title?: string | undefined;
   /** What the versions are of, as the restore's question names it. */
   noun?: string;
-  /** The one unit of the version to draw, alone and without the plan's title, as a section opened from its revision's list; the whole version without one. */
+  /** The one unit of the version to draw, alone and without the task's title, as a section opened from its revision's list; the whole version without one. */
   section?: number | undefined;
-  /** The plan the versions are of, which their mentions are read against; none for the account's template. */
+  /** The task the versions are of, which their mentions are read against; none for the account's template. */
   task?: MentionedTask | undefined;
 }): React.JSX.Element {
   const { line } = viewing;

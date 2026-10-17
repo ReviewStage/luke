@@ -49,9 +49,9 @@ import { TaskStatusMark, taskCardOf } from "./task-card";
 import { TaskNameField, useTaskRename } from "./task-name-field";
 
 /**
- * plan-actions.tsx -- one plan's actions, offered alike from the toolbar's ⋯ button and from a right-click on the plan in the sidebar.
+ * task-actions.tsx -- one task's actions, offered alike from the toolbar's ⋯ button and from a right-click on the task in the sidebar.
  *
- * Both doors open the same menu over the same plan, so a plan in the list can
+ * Both doors open the same menu over the same task, so a task in the list can
  * be acted on without being opened first. The menu is the window's own (`action-menu.tsx`),
  * so both doors draw it the same way and Permanently delete can be drawn red.
  *
@@ -61,20 +61,20 @@ import { TaskNameField, useTaskRename } from "./task-name-field";
  * to Mark as read on a task already unread. Rename edits the
  * name where the door draws it: the sidebar's row turns into a field, and
  * the toolbar's ⋯ opens its title as one. Version history
- * opens the plan's versions over the whole window, opening the plan first
+ * opens the plan's versions over the whole window, opening the task first
  * where it is not the open one, the one item that moves it. Pin and Archive
- * move the plan in the sidebar at once, and each is undone from the same
+ * move the task in the sidebar at once, and each is undone from the same
  * menu; a sidebar row also offers both as buttons at its end on hover.
  * Move to workspace opens a dialog listing the account's other workspaces
- * and what the move does (`move-task-dialog.tsx`), offered on a plan the
+ * and what the move does (`move-task-dialog.tsx`), offered on a task the
  * reader started.
  * Permanently delete cannot be undone, so choosing it asks first in a dialog
- * over the window that names the plan and offers Archive as the way to keep
+ * over the window that names the task and offers Archive as the way to keep
  * it, whichever door it was chosen from. Under the items, pressed by nothing,
- * the menu says who created the plan and who last edited it, and when.
+ * the menu says who created the task and who last edited it, and when.
  */
 
-/** A plan as the list or the open document holds it, archived or not; nothing for a plan neither holds. */
+/** A task as the list or the open document holds it, archived or not; nothing for a task neither holds. */
 export function taskOf(tasks: TasksControl, planId: string): TaskSummary | undefined {
   const listed = [...tasks.tasks, ...tasks.archived].find((plan) => plan.id === planId);
   if (listed !== undefined) return listed;
@@ -84,7 +84,7 @@ export function taskOf(tasks: TasksControl, planId: string): TaskSummary | undef
     : undefined;
 }
 
-/** One way a plan can be moved in the sidebar, as the menu and the row's own buttons both offer it. */
+/** One way a task can be moved in the sidebar, as the menu and the row's own buttons both offer it. */
 interface PlaceMark {
   mark: TaskMark;
   label: string;
@@ -92,8 +92,8 @@ interface PlaceMark {
 }
 
 /**
- * Pin and Archive, each offered as whichever way the plan is not yet. An
- * archived plan offers no pin, because the sidebar draws it among the
+ * Pin and Archive, each offered as whichever way the task is not yet. An
+ * archived task offers no pin, because the sidebar draws it among the
  * archived whether or not it is pinned.
  */
 function placeMarks(task: TaskSummary): PlaceMark[] {
@@ -108,7 +108,7 @@ function placeMarks(task: TaskSummary): PlaceMark[] {
   ];
 }
 
-/** Pin and Archive as the menu's items; nothing for a plan neither the list nor the document holds. */
+/** Pin and Archive as the menu's items; nothing for a task neither the list nor the document holds. */
 function placeActions(tasks: TasksControl, task: TaskSummary | undefined): MenuAction[] {
   if (task === undefined) return [];
   return placeMarks(task).map(({ mark, label, icon }) => ({
@@ -121,10 +121,10 @@ function placeActions(tasks: TasksControl, task: TaskSummary | undefined): MenuA
 /**
  * Pin and Archive at a sidebar row's end, standing in the time's place while
  * the row is hovered or reached from the keyboard. Rested on, the row hangs
- * the plan's card beside it (`task-card.tsx`): its name in full, its
+ * the task's card beside it (`task-card.tsx`): its name in full, its
  * repository, and its agents and pull requests, read from the list's row. Each runs what its menu
- * item runs, and only the open plan's Archive names ⇧⌘A, because the chord
- * archives the open plan rather than the row under the pointer. They are the
+ * item runs, and only the open task's Archive names ⇧⌘A, because the chord
+ * archives the open task rather than the row under the pointer. They are the
  * row's siblings rather than inside it, so a press on one opens nothing, but
  * part of the row to its card, which stands while the pointer is on them and
  * goes as one is pressed (`Tooltip`'s `cardRegion`).
@@ -242,8 +242,8 @@ function taskActionGroups(
  * The menu's quiet foot, as Notion, Linear, and Google Docs end a document's
  * menu: "Created by [Charles] Charles Pan · 3d ago" and "Last edited by
  * [you] you · 2h ago", each person on their face hanging their card. The
- * last editor is named only for the plan the window has open, whose newest
- * revision it holds, as its "Edited by" line names them; another plan is
+ * last editor is named only for the task the window has open, whose newest
+ * revision it holds, as its "Edited by" line names them; another task is
  * said only by when it was last saved, and one nobody has saved since it
  * started says only who created it. Nothing here is a press: the menu's
  * items are.
@@ -290,9 +290,9 @@ function TaskMenuFooter({
 }
 
 /**
- * The question Permanently delete asks, naming the plan. Deleting a plan
+ * The question Permanently delete asks, naming the task. Deleting a task
  * removes its document and its board and clears the conversation its
- * transcript is read from, which nothing in the app brings back, so a plan
+ * transcript is read from, which nothing in the app brings back, so a task
  * not yet archived is pointed at Archive, which keeps all of it.
  */
 function deleteQuestion(name: string, archived: boolean): DialogQuestion {
@@ -306,11 +306,11 @@ function deleteQuestion(name: string, archived: boolean): DialogQuestion {
 }
 
 /**
- * One plan's menu and its delete question, held for whichever door offers
+ * One task's menu and its delete question, held for whichever door offers
  * them. Neither outlives the tab going off screen, the menu does not
- * outlive its door, and the question does not outlive the plan: each is
+ * outlive its door, and the question does not outlive the task: each is
  * taken down in the render that finds it gone, so neither is left standing
- * over another surface, over a plan deleted elsewhere, or waiting for the
+ * over another surface, over a task deleted elsewhere, or waiting for the
  * next time the panel opens.
  */
 function useTaskMenu(
@@ -361,11 +361,11 @@ function useTaskMenu(
 }
 
 /**
- * The open plan's ⋯ button in the toolbar, and the menu it drops, drawn
- * while the plan's own tab is chosen, because the menu is the plan's and not
- * an agent's. It is also what offers the open plan's Archive and Permanently
- * delete shortcuts, on every tab of the plan, so each runs exactly as its
- * menu item would: Permanently delete still asks first, and an archived plan
+ * The open task's ⋯ button in the toolbar, and the menu it drops, drawn
+ * while the task's own tab is chosen, because the menu is the task's and not
+ * an agent's. It is also what offers the open task's Archive and Permanently
+ * delete shortcuts, on every tab of the task, so each runs exactly as its
+ * menu item would: Permanently delete still asks first, and an archived task
  * has no Archive to offer.
  */
 export function TaskActions({
@@ -378,7 +378,7 @@ export function TaskActions({
   task: TaskSummary;
   /** Whether the ⋯ button is drawn: the shortcuts and the delete question stand either way. */
   button: boolean;
-  /** Opens the toolbar's title as the plan's name field. */
+  /** Opens the toolbar's title as the task's name field. */
   onRename: () => void;
 }): React.JSX.Element {
   // Note that the open plan is unread only by a mark by hand, since its saves are seen as they land.
@@ -416,10 +416,10 @@ export function TaskActions({
 }
 
 /**
- * A plan in the sidebar, pinned, listed, or archived alike: its name, in the
- * body's weight unless the plan is unread, and at the row's end how long ago
+ * A task in the sidebar, pinned, listed, or archived alike: its name, in the
+ * body's weight unless the task is unread, and at the row's end how long ago
  * it was last updated, led by one mark for a repository that belongs to
- * another workspace, an agent at work, or a pull request (`plan-card.tsx`),
+ * another workspace, an agent at work, or a pull request (`task-card.tsx`),
  * the first named in the row's card, before that a pencil while a draft
  * waits in one of its boxes and it is not the plan open, whose boxes show
  * their own words (`draft-mark.tsx`), and before that, on a task
@@ -449,11 +449,11 @@ export function SidebarTask({
 }: {
   tasks: TasksControl;
   task: TaskSummary;
-  /** Whether this is the plan the work column is showing. */
+  /** Whether this is the task the work column is showing. */
   current: boolean;
   /** Whether the plan is open in the window, so its drafts are in reach and unmarked; a row the sidebar does not mark may be, as one opened from a pin, and is its own mark unless said. */
   open?: boolean;
-  /** Whether the plan was saved since the developer last looked at it on this Mac. */
+  /** Whether the task was saved since the developer last looked at it on this Mac. */
   unread: boolean;
   /** The time the row's last update is counted back from. */
   now: number;

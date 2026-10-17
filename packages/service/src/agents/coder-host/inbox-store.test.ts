@@ -44,12 +44,12 @@ import { accountInboxPast } from "./inbox-page.js";
  * same key writes it again and opens it, a close takes it back, an answer
  * is taken only at the revision it names while the item is open and can be
  * withdrawn under its key, a read keeps every open item however many others
- * changed, every member of the plan's workspace reads and answers the items
- * of an agent any of them started, an agent with no plan posts to its
- * workspace's members as one on a plan does to its plan's, and nothing of
+ * changed, every member of the task's workspace reads and answers the items
+ * of an agent any of them started, an agent with no task posts to its
+ * workspace's members as one on a task does to its task's, and nothing of
  * a workspace the account is not in is read or written.
  *
- * Synthetic accounts, plans, and words throughout.
+ * Synthetic accounts, tasks, and words throughout.
  */
 
 const openUser = Effect.gen(function* () {
@@ -59,7 +59,7 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** An account with one plan and one agent started on it, and the workspace the plan is in. */
+/** An account with one task and one agent started on it, and the workspace the task is in. */
 const openAgentIn = Effect.gen(function* () {
   const userId = yield* openUser;
   const task = yield* startTask(userId, { name: "Teammate invitations" });
@@ -89,7 +89,7 @@ const SETTINGS: InboxPost = {
 /** The reply a task takes: done. */
 const DONE = { reply: INBOX_REPLY.DONE } as const;
 
-/** A workspace automation of the account's on a plan of the workspace, which its runs start agents beside. */
+/** A workspace automation of the account's on a task of the workspace, which its runs start agents beside. */
 const openAutomation = (userId: string, workspaceId: string) =>
   Effect.gen(function* () {
     const task = yield* startTask(userId, { name: "Flaky tests" });
@@ -107,7 +107,7 @@ const openAutomation = (userId: string, workspaceId: string) =>
     return Option.getOrThrow(made).id;
   });
 
-/** An account's workspace with one agent started in it on no plan, as an automation's run starts one, by an automation of the account's where asked. */
+/** An account's workspace with one agent started in it on no task, as an automation's run starts one, by an automation of the account's where asked. */
 const openTasklessAgentOf = (byAutomation: boolean) =>
   Effect.gen(function* () {
     const userId = yield* openUser;

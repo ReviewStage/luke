@@ -52,7 +52,7 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
 /**
  * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members, its invitations, its integrations, and the way out of it.
  *
- * The page shows the workspace the plans' sidebar lists and no other, so
+ * The page shows the workspace the tasks' sidebar lists and no other, so
  * there is one choice of workspace in the window: a Settings link that names
  * another lists it in the sidebar first. It is drawn in the shape of the
  * other Settings pages, one kind of thing to a group. Its first row is the
@@ -136,7 +136,7 @@ const READ_FAILED = {
 
 /**
  * What the leave says: the row's line, and the dialog's body and what it
- * names as staying and stopping. Plans and agents are the workspace's; an
+ * names as staying and stopping. Tasks and agents are the workspace's; an
  * agent's every step runs as its starter, read through their membership, so
  * one still working when its starter leaves stops at its next step, and a
  * run of an automation starts as its creator, so one whose creator left
@@ -1301,7 +1301,7 @@ function identityLine(workspace: Workspace): string {
  * The page's first row, drawn as Profile's account row is: the workspace's
  * tile, its name, who shares it and the reader's role in one line, then for
  * an owner or an admin Rename, and the photo's acts in its ⋯. Rename opens
- * the name in place on its own line, as the sidebar renames a plan, and
+ * the name in place on its own line, as the sidebar renames a task, and
  * Return or a press elsewhere sends what was typed with its ends trimmed,
  * while Escape, an empty name, or the same one renames nothing; an account's
  * first workspace is named by its owner's account name, so it offers no

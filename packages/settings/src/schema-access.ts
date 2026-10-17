@@ -188,7 +188,7 @@ interface SchemaSettingRow {
   /** Whether the stored value differs from the default, which earns the mark. */
   changed: boolean;
   /** The pop-up's own current token and options, for a choice row. */
-  control?: { value: string; options: readonly SettingOption[] };
+  control?: { value: string; options: readonly SettingOption[]; search?: string | undefined };
 }
 
 /**
@@ -225,7 +225,11 @@ export function settingRowsForPage(
       changed: stored !== definition.default,
       ...(control
         ? {
-            control: { value: control.value(stored), options: control.options(view) },
+            control: {
+              value: control.value(stored),
+              options: control.options(view),
+              search: control.search,
+            },
           }
         : undefined),
     }));

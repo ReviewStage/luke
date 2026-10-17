@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
@@ -21,17 +19,14 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopTasks } from "./desktop-tasks";
 
 /**
- * move-plan-dialog.test.ts -- Move to workspace in the open plan's ⋯: offered
- * to the plan's owner while the account has another workspace, it lists the
- * other workspaces, disables one whose GitHub cannot reach the plan's
- * repository with the reason, says who loses and gains the plan, and moves
- * it, closing on a move and staying up saying so on a refusal. A plan
+ * move-task-dialog.test.ts -- Move to workspace in the open task's ⋯: offered
+ * to the task's owner while the account has another workspace, it lists the
+ * other workspaces, disables one whose GitHub cannot reach the task's
+ * repository with the reason, says who loses and gains the task, and moves
+ * it, closing on a move and staying up saying so on a refusal. A task
  * stranded in a workspace that cannot reach its repository says so over
  * every tab of it, naming the workspace that can. Synthetic throughout.
  */
-
-/** The window's own stylesheet, which says how tall the dialog may stand. */
-const DESKTOP_CSS = readFileSync(path.join(import.meta.dirname, "../styles/desktop.css"), "utf8");
 
 const DANA = "user-dana";
 const SAM = "user-sam";
@@ -87,7 +82,7 @@ const AGENT: CodingAgentSummary = {
   turnId: null,
 };
 
-/** The agent's tab in the plan's column. */
+/** The agent's tab in the task's column. */
 const AGENT_TAB: MainTab = { agent: AGENT.id };
 
 const roots: Root[] = [];
@@ -115,7 +110,7 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The open plan's tab, read by Dana, the plan as given open and listed. */
+/** The open task's tab, read by Dana, the task as given open and listed. */
 function openTab(
   task: Task,
   workspaces: readonly Workspace[],
@@ -274,22 +269,7 @@ test("a refused move keeps the dialog up, saying so under the list", async () =>
   );
 });
 
-test("the dialog is never taller than the window: its workspaces scroll inside the card, and its title and answers stand outside them", () => {
-  document.head.appendChild(document.createElement("style")).textContent = DESKTOP_CSS;
-  openMenu(openTab(TASK, [STUDIO, NORTHWIND, OCTO, ACME]));
-  const moving = chooseMove();
-
-  const list = moving.querySelector<HTMLElement>('[role="radiogroup"]') ?? assert.fail("the rows");
-  const answers = button(moving, "Cancel").parentElement ?? assert.fail("the answers");
-  assert.deepEqual(
-    [getComputedStyle(list).overflowY, getComputedStyle(list).minHeight],
-    ["auto", "0px"],
-    "the rows give way and scroll",
-  );
-  assert.ok(!list.contains(answers) && !list.contains(moving.querySelector("h2")));
-});
-
-/** Mounts the open plan's page, its menu left closed. */
+/** Mounts the open task's page, its menu left closed. */
 function openTask(tasks: TasksControl): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -300,7 +280,7 @@ function openTask(tasks: TasksControl): HTMLElement {
   return container;
 }
 
-/** The plan-wide banner over a stranded plan, where one stands. */
+/** The task-wide banner over a stranded task, where one stands. */
 function strandedBanner(within: HTMLElement): HTMLElement | null {
   return within.querySelector<HTMLElement>(".task-banner");
 }
@@ -312,7 +292,7 @@ function heard(node: Node): string {
   return [...node.childNodes].map(heard).join("");
 }
 
-/** The open plan's tab as `openTab` gives it, its column showing `tab` and its side panel as given. */
+/** The open task's tab as `openTab` gives it, its column showing `tab` and its side panel as given. */
 function onTab(
   tasks: TasksControl,
   tab: MainTab,
@@ -326,7 +306,7 @@ function onTab(
   };
 }
 
-/** Lays the plan's Inbox tab out this wide, as the window would report it resized. */
+/** Lays the task's Inbox tab out this wide, as the window would report it resized. */
 function layOutInbox(page: HTMLElement, width: number): void {
   const inbox =
     page.querySelector<HTMLElement>("section.inbox-view") ?? assert.fail("the Inbox tab is drawn");

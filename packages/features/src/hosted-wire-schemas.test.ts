@@ -30,6 +30,7 @@ import * as planCommentWire from "./plan-comment-wire.js";
 import * as planDocumentTemplate from "./plan-document-template.js";
 import * as planEdit from "./plan-edit.js";
 import * as providerKeyWire from "./provider-key-wire.js";
+import * as pullRequestWriteWire from "./pull-request-write-wire.js";
 import * as repositoryReachWire from "./repository-reach-wire.js";
 import * as serviceWire from "./service-wire.js";
 import * as taskWire from "./task-wire.js";
@@ -121,7 +122,11 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentPullRequestSchema: codingAgentWire.codingAgentPullRequestSchema,
     codingAgentPullRequestAnswerSchema: codingAgentWire.codingAgentPullRequestAnswerSchema,
     codingAgentChangesAnswerSchema: codingAgentWire.codingAgentChangesAnswerSchema,
-    codingAgentOverviewAnswerSchema: codingAgentWire.codingAgentOverviewAnswerSchema,
+    codingAgentOverviewPullRequestAnswerSchema:
+      codingAgentWire.codingAgentOverviewPullRequestAnswerSchema,
+    codingAgentOverviewChecksAnswerSchema: codingAgentWire.codingAgentOverviewChecksAnswerSchema,
+    codingAgentOverviewConversationAnswerSchema:
+      codingAgentWire.codingAgentOverviewConversationAnswerSchema,
     codingAgentCallIdSchema: codingAgentWire.codingAgentCallIdSchema,
     codingAgentDelegationInputSchema: codingAgentWire.codingAgentDelegationInputSchema,
     codingAgentDelegationOutputSchema: codingAgentWire.codingAgentDelegationOutputSchema,
@@ -188,7 +193,16 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentPullRequestParamsSchema: codingAgentView.codingAgentPullRequestParamsSchema,
     codingAgentPullRequestAnswerViewSchema: codingAgentView.codingAgentPullRequestAnswerViewSchema,
     codingAgentChangesAnswerViewSchema: codingAgentView.codingAgentChangesAnswerViewSchema,
-    codingAgentOverviewAnswerViewSchema: codingAgentView.codingAgentOverviewAnswerViewSchema,
+    codingAgentOverviewPullRequestAnswerViewSchema:
+      codingAgentView.codingAgentOverviewPullRequestAnswerViewSchema,
+    codingAgentOverviewChecksAnswerViewSchema:
+      codingAgentView.codingAgentOverviewChecksAnswerViewSchema,
+    codingAgentOverviewConversationAnswerViewSchema:
+      codingAgentView.codingAgentOverviewConversationAnswerViewSchema,
+    codingAgentPullRequestActionParamsSchema:
+      codingAgentView.codingAgentPullRequestActionParamsSchema,
+    codingAgentPullRequestWriteAnswerViewSchema:
+      codingAgentView.codingAgentPullRequestWriteAnswerViewSchema,
     codingAgentGitHubImageParamsSchema: codingAgentView.codingAgentGitHubImageParamsSchema,
     githubImageTypeSchema: codingAgentView.githubImageTypeSchema,
     codingAgentGitHubImageViewSchema: codingAgentView.codingAgentGitHubImageViewSchema,
@@ -381,6 +395,10 @@ const EFFECT_MODULE_SCHEMAS = {
     providerKeysAnswerSchema: providerKeyWire.providerKeysAnswerSchema,
     providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
+  "pull-request-write-wire": {
+    pullRequestActionRequestSchema: pullRequestWriteWire.pullRequestActionRequestSchema,
+    pullRequestWriteAnswerSchema: pullRequestWriteWire.pullRequestWriteAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof pullRequestWriteWire>,
   "repository-reach-wire": {
     repositoryUnreachedSchema: repositoryReachWire.repositoryUnreachedSchema,
     repositoryNotReachableSchema: repositoryReachWire.repositoryNotReachableSchema,
