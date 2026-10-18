@@ -81,11 +81,11 @@ import {
   runInRepository,
 } from "../repository-shell.js";
 import {
+  type BrainChatCall,
   type ChatSince,
-  type PlannerChatCall,
-  runPlannerPost,
-  runPlannerRead,
-  runPlannerResolve,
+  runBrainPost,
+  runBrainRead,
+  runBrainResolve,
 } from "./chat.js";
 
 /**
@@ -247,7 +247,7 @@ On a request to stop an agent ("stop the agent", "it's going the wrong way, stop
 
 ### The task's chat
 
-The task's workspace has a chat, where its coding agents, the developer's team, and you talk; you speak there as @luke, and the task has a channel of its own, where its agents post. What was said there since your last turn is handed to you under [chat since the last task call], and is read by then. When the developer asks you to tell the team or the task's agents something they should all see ("post in the channel that we're moving to Postgres", "tell everyone the API is frozen"), post it with post_chat, in the task's channel unless they name another channel or a member, then say briefly in your return what you posted. A message for one agent's session alone is message_coding_agent, as above. On a status question, read the task's channel with read_chat beside the agents themselves, and fold what was said there into the sentence or two you return; never read the chat out. A question for the developer on this call is queue_question, never a post: an ask in chat is for the room to answer later, and you resolve one of yours with resolve_ask once it no longer matters.
+The task's workspace has a chat, where its coding agents, the developer's team, and you talk; you speak there as @luke, and the task has a channel of its own, where its agents post. What was said there since your last turn is handed to you under [chat since the last call], and is read by then. When the developer asks you to tell the team or the task's agents something they should all see ("post in the channel that we're moving to Postgres", "tell everyone the API is frozen"), post it with post_chat, in the task's channel unless they name another channel or a member, then say briefly in your return what you posted. A message for one agent's session alone is message_coding_agent, as above. On a status question, read the task's channel with read_chat beside the agents themselves, and fold what was said there into the sentence or two you return; never read the chat out. A question for the developer on this call is queue_question, never a post: an ask in chat is for the room to answer later, and you resolve one of yours with resolve_ask once it no longer matters.
 
 Never put a credential, token, or key into a message to an agent, a chat post, any tool's input, or your return, and never repeat one you see in an agent's transcript or the chat.
 
@@ -350,7 +350,7 @@ const TASK_MARKER = "[task]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
 const LINEAR_ISSUE_MARKER = "[linear issue the task was started from]";
-const CHAT_SINCE_MARKER = "[chat since the last task call]";
+const CHAT_SINCE_MARKER = "[chat since the last call]";
 /** The marker the sections the developer last wrote ride behind, which the brain and the notetaker are each told to keep as written. */
 export const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
 
@@ -476,7 +476,7 @@ export interface BrainCall {
   readonly repository: RepositoryCall;
   readonly research: ResearchCall;
   readonly agents: CodingAgentCall;
-  readonly chat: PlannerChatCall | undefined;
+  readonly chat: BrainChatCall | undefined;
 }
 
 /** One tool a brain turn is offered: its declaration, and the call it carries under the task the conversation belongs to. */
@@ -517,7 +517,7 @@ type BrainToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | 
  * hangs up once the developer is done, carried as `queue_question` is by its
  * journaled call (`end-call.ts`).
  * Every read's result goes back to the model as data, a look's as an image
- * (`planningModelOutput`).
+ * (`tasksModelOutput`).
  */
 const BRAIN_TOOLS: readonly BrainTool[] = [
   {
@@ -613,15 +613,15 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   },
   {
     ...CHAT_TOOLS.POST,
-    run: (call, input) => (call.chat === undefined ? chatOff : runPlannerPost(call.chat, input)),
+    run: (call, input) => (call.chat === undefined ? chatOff : runBrainPost(call.chat, input)),
   },
   {
     ...CHAT_TOOLS.READ,
-    run: (call, input) => (call.chat === undefined ? chatOff : runPlannerRead(call.chat, input)),
+    run: (call, input) => (call.chat === undefined ? chatOff : runBrainRead(call.chat, input)),
   },
   {
     ...CHAT_TOOLS.RESOLVE,
-    run: (call, input) => (call.chat === undefined ? chatOff : runPlannerResolve(call.chat, input)),
+    run: (call, input) => (call.chat === undefined ? chatOff : runBrainResolve(call.chat, input)),
   },
   {
     ...END_CALL_TOOL,
