@@ -5,16 +5,31 @@ import {
 } from "@luke/features/analytics";
 import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
 import { feedbackDeliveryFromEnvironment } from "@luke/features/feedback";
+import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
 import { type RunMode, sentryReportingEnabled } from "@luke/host";
 import type { EffectDesktopService } from "@luke/host/desktop-service";
+import type { SentryEnvironment } from "@luke/host/sentry-environment";
 import * as Sentry from "@sentry/electron/main";
 import { Effect } from "effect";
+import {
+  eventWithoutAccessTokens,
+  transactionWithoutAccessTokens,
+  withoutAccessTokens,
+} from "#shared/sentry-breadcrumbs";
 import type { DesktopConfig } from "./desktop-config";
 
 /** How long the quit waits for a queued crash report to leave; a flush must not hold a quit. */
 const CRASH_REPORT_FLUSH_MS = 2_000;
 
 declare const PACKAGED_SENTRY_DSN: string;
+/**
+ * `Luke@X.Y.Z`, the release `build.mjs` uploads this bundle's source maps
+ * under, baked from that same string. Note that the SDK's own default is the
+ * app's name, which is `Luke Dev` or `Luke Test` outside a Developer ID
+ * build, so a report from one would name a release no map was uploaded to;
+ * which build it was is the environment's to say instead.
+ */
+declare const PACKAGED_SENTRY_RELEASE: string;
 
 /**
  * Crash reporting, begun at the entry rather than inside `start`: Electron
@@ -23,16 +38,21 @@ declare const PACKAGED_SENTRY_DSN: string;
  * ordering this owes is the paths' — the reporter writes its own state under
  * Luke's `userData` — so the entry calls this immediately after moving them
  * and before anything else of the composition exists.
+ *
+ * Main reports on behalf of every renderer, so what leaves goes through the
+ * same token filters as the preload's and the renderers' own.
  */
-export function initializeCrashReporting(runMode: RunMode): void {
+export function initializeCrashReporting(runMode: RunMode, environment: SentryEnvironment): void {
   Sentry.init({
     dsn: PACKAGED_SENTRY_DSN,
     enabled: sentryReportingEnabled(runMode.sendsNetwork, PACKAGED_SENTRY_DSN),
-    // Set tracesSampleRate to 1.0 to capture 100% of transactions for
-    // performance monitoring, as Sentry's Electron guide does. Sentry
-    // recommends adjusting this value in production.
-    tracesSampleRate: 1.0,
+    release: PACKAGED_SENTRY_RELEASE,
+    environment,
+    tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
     integrations: [Sentry.startupTracingIntegration()],
+    beforeBreadcrumb: withoutAccessTokens,
+    beforeSend: eventWithoutAccessTokens,
+    beforeSendTransaction: transactionWithoutAccessTokens,
   });
 }
 

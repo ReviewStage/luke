@@ -906,10 +906,11 @@ yours.
 sends Sentry reports of unhandled exceptions in its Electron main, preload,
 and renderer code, process-session status, and native minidumps when an
 Electron main, renderer, or GPU process crashes. It also sends performance
-traces: how long Luke took to start, how each window's page loaded, and the
-requests each made. Luke uses Sentry's default data collection, so reports
-and traces carry the exception message and code path, breadcrumbs (among them
-messages Luke wrote to its console and the addresses of requests it made),
+traces for about one launch or page load in ten: how long Luke took to start,
+how each window's page loaded, and the requests each made. Luke uses Sentry's
+default data collection, so reports and traces carry the exception message
+and code path, breadcrumbs (among them messages Luke wrote to its console and
+the addresses of requests it made),
 the headers, bodies, and query parameters of requests Luke made, Electron,
 operating-system, runtime, and device context, and your Mac's IP address.
 Sentry replaces a value whose name looks like a credential, such as an
