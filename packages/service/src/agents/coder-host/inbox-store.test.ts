@@ -213,27 +213,27 @@ it.layer(getTestDB())("the inbox store", (it) => {
     "the live statements of the account's read deliver the rows its held read answers, under the keys the wire reads them by, to every member it answers and to no one else",
     () =>
       Effect.gen(function* () {
-        const onPlan = yield* openAgentIn;
+        const onTask = yield* openAgentIn;
         const { agent: taskless, workspaceId } = yield* openTasklessAgentOf(true);
         const teammate = yield* openUser;
         yield* joinWorkspace(workspaceId, teammate);
-        yield* joinWorkspace(onPlan.workspaceId, teammate);
+        yield* joinWorkspace(onTask.workspaceId, teammate);
         const outsider = yield* openUser;
         yield* openWorkspace(outsider);
-        const first = yield* postInboxItem(onPlan.agent, SETTINGS);
+        const first = yield* postInboxItem(onTask.agent, SETTINGS);
         assert.ok(Result.isSuccess(first));
         assert.ok(
-          Result.isSuccess(yield* postInboxItem(onPlan.agent, { ...SETTINGS, key: "second" })),
+          Result.isSuccess(yield* postInboxItem(onTask.agent, { ...SETTINGS, key: "second" })),
         );
         assert.ok(Result.isSuccess(yield* postInboxItem(taskless, SETTINGS)));
         // Read by the agent's starter and not by the teammate, so the two read it apart.
-        assert.equal(yield* markInboxItemRead(onPlan.agent.userId, first.success.id), true);
+        assert.equal(yield* markInboxItemRead(onTask.agent.userId, first.success.id), true);
 
         // Chat on for everyone but the taskless agent's starter: an open ask the plan's agent
         // posts in its channel, a direct message to the teammate they were told of, and the
         // starter told of the ask itself, which waits once.
-        const owner = onPlan.agent.userId;
-        const workspace = onPlan.workspaceId;
+        const owner = onTask.agent.userId;
+        const workspace = onTask.workspaceId;
         for (const each of [owner, teammate, outsider]) {
           yield* writeAccountPreferences(each, { experiments: { [EXPERIMENT.CHAT]: true } });
         }
@@ -247,10 +247,10 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const agentMember = Option.getOrThrow(
           yield* ensureMember(owner, workspace, {
             kind: MEMBER_KIND.AGENT,
-            agentId: onPlan.agent.agentId,
+            agentId: onTask.agent.agentId,
           }),
         );
-        const channel = Option.getOrThrow(yield* ensureTaskChannel(owner, onPlan.agent.taskId));
+        const channel = Option.getOrThrow(yield* ensureTaskChannel(owner, onTask.agent.taskId));
         const asked = Result.getOrThrow(
           yield* postAsk(owner, workspace, {
             authorMemberId: agentMember.id,
