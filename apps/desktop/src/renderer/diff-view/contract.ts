@@ -130,11 +130,20 @@ export interface DiffListFile {
   readonly lead: boolean;
 }
 
+/** Lines lit in one file of a list: the file, by its path, and the lines. */
+export interface DiffListSelection {
+  readonly path: string;
+  readonly selection: DiffSelection;
+}
+
 /**
  * What the view hands the bundle for a list of files: the files in order,
  * how to draw them, the element each file's header is drawn in and each
  * note, both kept by the view and filled by it, and the door told which file
- * stands at the top of the list as it scrolls.
+ * stands at the top of the list as it scrolls. Where lines may be commented
+ * on, `onComment` is told the lines a press of the gutter's + picked, on a
+ * file that draws lines of its own, and `selected` lights the lines being
+ * commented on; with no `onComment` the gutter offers nothing.
  */
 export interface DiffListProps {
   readonly files: readonly DiffListFile[];
@@ -142,6 +151,23 @@ export interface DiffListProps {
   readonly renderHeader: (path: string) => HTMLElement;
   readonly renderAnnotation: (path: string, key: string) => HTMLElement;
   readonly onTopFile: (path: string) => void;
+  readonly onComment?: ((picked: DiffListSelection) => void) | undefined;
+  readonly selected?: DiffListSelection | undefined;
+}
+
+/** Whether two lists light the same lines of the same file, or both none. */
+export function sameListSelection(
+  a: DiffListSelection | undefined,
+  b: DiffListSelection | undefined,
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return (
+    a.path === b.path &&
+    a.selection.start === b.selection.start &&
+    a.selection.side === b.selection.side &&
+    a.selection.end === b.selection.end &&
+    a.selection.endSide === b.selection.endSide
+  );
 }
 
 /** The list as mounted: drawn again for new props, scrolled to a file's header, and taken down. */

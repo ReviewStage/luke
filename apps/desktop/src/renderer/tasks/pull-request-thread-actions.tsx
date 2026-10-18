@@ -161,13 +161,9 @@ export function ThreadActions({ thread }: { thread: ReviewThread }): React.JSX.E
       ) : null}
       <div className="pull-request-thread-actions-row">
         {replying ? null : (
-          <button
-            type="button"
-            className="pull-request-thread-reply-open"
-            onClick={() => setReplying(true)}
-          >
+          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setReplying(true)}>
             {THREAD_WORDS.REPLY_OPEN}
-          </button>
+          </Button>
         )}
         <Button
           variant={BUTTON_VARIANT.OUTLINE}

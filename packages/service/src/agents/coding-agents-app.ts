@@ -84,7 +84,9 @@ import {
 import { githubReadOrRefusal, logGitHubReadFailure } from "../github/github-refusal.js";
 import { pullRequestMerging } from "../github/pull-request-merging.js";
 import {
+  addLineComment,
   commentOnPullRequest,
+  discardPendingReview,
   type GitHubWriteFailure,
   mergePullRequest,
   pullRequestNodeId,
@@ -113,6 +115,7 @@ import {
   pullRequestFiles,
   pullRequestOverview,
   pullRequestReviewOptions,
+  viewerPendingReviewOf,
   viewerReactionsOf,
 } from "../github/pull-requests.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -1022,7 +1025,7 @@ const overviewPart = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
       }
     }),
   );
-  // Note that a part may carry what is the reader's own, such as the reactions they gave, which every hosted answer's `private, no-store` keeps from anyone else.
+  // Note that a part may carry what is the reader's own, such as the reactions they gave or the review they hold pending, which every hosted answer's `private, no-store` keeps from anyone else.
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest: part });
 });
 
@@ -1101,6 +1104,12 @@ const memberReactions = (userId: string, repository: string, number: number) =>
     token === undefined ? Effect.succeed(undefined) : viewerReactionsOf(token, repository, number),
   );
 
+/** The review the member holds pending on the pull request, read on their own token; none where they hold none, or no sign-in GitHub takes. */
+const memberPendingReview = (userId: string, repository: string, number: number) =>
+  Effect.flatMap(memberReadToken(userId), (token) =>
+    token === undefined ? Effect.succeed(null) : viewerPendingReviewOf(token, repository, number),
+  );
+
 /**
  * GET reads the agent's pull request's conversation: its comments, its
  * reviews and their threads, and where each reviewer stands by their
@@ -1111,14 +1120,24 @@ const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
   "web/agentOverviewConversationEndpoint",
 )(function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
   return yield* overviewPart(seams, published, (token, agent, pullRequest, userId) =>
-    Effect.flatMap(
-      pullRequestConversation(
-        token,
-        agent.repository,
-        pullRequest,
-        memberReactions(userId, agent.repository, pullRequest.number),
+    Effect.map(
+      Effect.all(
+        [
+          Effect.flatMap(
+            pullRequestConversation(
+              token,
+              agent.repository,
+              pullRequest,
+              memberReactions(userId, agent.repository, pullRequest.number),
+            ),
+            (read) => namedOverviewConversation(agent, pullRequest.number, read),
+          ),
+          memberPendingReview(userId, agent.repository, pullRequest.number),
+        ],
+        { concurrency: "unbounded" },
       ),
-      (read) => namedOverviewConversation(agent, pullRequest.number, read),
+      ([conversation, pendingReview]) =>
+        conversation === null ? null : { ...conversation, pendingReview },
     ),
   );
 });
@@ -1181,6 +1200,12 @@ function writeOf(
         content: GRAPHQL_REACTION_OF[request.content],
         add: request.action === PULL_REQUEST_ACTION.ADD_REACTION,
       });
+    case PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT: {
+      const { action: _action, ...comment } = request;
+      return addLineComment(token, id, comment);
+    }
+    case PULL_REQUEST_ACTION.DISCARD_REVIEW:
+      return discardPendingReview(token, id);
     case PULL_REQUEST_ACTION.MARK_FILE_VIEWED:
     case PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED:
       return setFileViewed(

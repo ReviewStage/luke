@@ -8,9 +8,15 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { updateInSidebar } from "@luke/settings/update-row";
 import {
+  BUTTON_SHAPE,
+  BUTTON_SIZE,
+  BUTTON_VARIANT,
+  type ButtonVariant,
   ConfirmDialog,
   DIALOG_TONE,
   ExternalIcon,
+  FoldingButton,
+  type FoldingButtonHint,
   GearIcon,
   IconButton,
   KeyboardIcon,
@@ -34,6 +40,7 @@ import {
   NewspaperIcon,
   UserRoundIcon,
 } from "lucide-react";
+import { useMemo } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand } from "../app-commands";
 import { useOpenPerson } from "../person-door";
@@ -71,14 +78,53 @@ function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Ele
 }
 
 /**
+ * One of the release's presses: a compact round pill, its glyph then its one word,
+ * which a narrow foot folds to the glyph alone, named still. Its hint says
+ * what a press does whether its word is drawn or not, since the word alone
+ * says less.
+ */
+function UpdatePill({
+  word,
+  hint,
+  icon,
+  variant,
+  onClick,
+}: {
+  word: string;
+  hint: string;
+  icon: React.JSX.Element;
+  variant: ButtonVariant;
+  onClick: () => void;
+}): React.JSX.Element {
+  const saying = useMemo<FoldingButtonHint>(
+    () =>
+      ({ children }) => <Tooltip label={hint}>{children}</Tooltip>,
+    [hint],
+  );
+  return (
+    <span className="sidebar-update">
+      <FoldingButton
+        label={word}
+        icon={icon}
+        variant={variant}
+        shape={BUTTON_SHAPE.ROUND}
+        size={BUTTON_SIZE.COMPACT}
+        onClick={onClick}
+        hint={saying}
+      />
+    </span>
+  );
+}
+
+/**
  * A newer release with something to press, between the account and the
  * gear: Restart, the very act Settings' Restart to update runs, once the
- * release is downloaded; or, once installing it failed, the download from
- * the releases page that Settings offers in its place, in the failure's red,
- * its hint saying what went wrong. One word each, so the account's name
- * keeps its room, and a narrow sidebar draws the glyph alone, named still
- * and its hint saying the rest. It draws nothing in any other state, so the
- * row carries no control with nothing to do.
+ * release is downloaded, on the working blue's wash: news, not urgency; or,
+ * once installing it failed, the download from the releases page that
+ * Settings offers in its place, on the failure's red, its hint saying what
+ * went wrong. One word each, so the account's name keeps its room. It
+ * draws nothing in any other state, so the row carries no control with
+ * nothing to do.
  */
 function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Element | null {
   const { update } = updates;
@@ -86,34 +132,25 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
   if (!offered || !updateInSidebar(update)) return null;
   if (update.status === UPDATE_STATUS.READY) {
     return (
-      <Tooltip label={`Restart to update to ${update.latestVersion}`}>
-        <button
-          type="button"
-          className="sidebar-update"
-          aria-label="Restart"
-          onClick={updates.onInstall}
-        >
-          <UpdateIcon />
-          <span className="sidebar-update-word">Restart</span>
-        </button>
-      </Tooltip>
+      <UpdatePill
+        word="Restart"
+        hint={`Restart to update to ${update.latestVersion}`}
+        icon={<UpdateIcon />}
+        variant={BUTTON_VARIANT.WORKING_TINT}
+        onClick={updates.onInstall}
+      />
     );
   }
   // The sidebar carries a failure only once a release was named.
   if (update.status !== UPDATE_STATUS.ERROR || update.latestVersion === undefined) return null;
   return (
-    <Tooltip label={`Couldn't install ${update.latestVersion}. Download it from GitHub.`}>
-      <button
-        type="button"
-        className="sidebar-update"
-        data-failed="true"
-        aria-label="Download"
-        onClick={updates.onOpenLatest}
-      >
-        <span className="sidebar-update-word">Download</span>
-        <ExternalIcon />
-      </button>
-    </Tooltip>
+    <UpdatePill
+      word="Download"
+      hint={`Couldn't install ${update.latestVersion}. Download it from GitHub.`}
+      icon={<ExternalIcon />}
+      variant={BUTTON_VARIANT.DANGER_TINT}
+      onClick={updates.onOpenLatest}
+    />
   );
 }
 

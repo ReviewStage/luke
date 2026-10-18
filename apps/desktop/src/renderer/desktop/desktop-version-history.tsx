@@ -23,6 +23,7 @@ import {
   RetryRowLabel,
   Skeleton,
   SkeletonRegion,
+  TEXT_BUTTON_LINES,
   TextButton,
   useMenu,
 } from "@luke/ui";
@@ -385,14 +386,16 @@ function LogSkeleton(): React.JSX.Element {
 
 /**
  * The foot of the list while an older page stands: read on its press, and
- * offered again after a read that failed. Note that it is a row rather than
- * `@luke/ui`'s Button, because its failure and Retry run to two lines in a
- * column the sidebar's width, which a control's one line would cut short.
+ * offered again after a read that failed. Note that it is a text button
+ * rather than `@luke/ui`'s Button, because its failure and Retry run to two
+ * lines in a column the sidebar's width, which a control's one line would
+ * cut short.
  */
 function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.Element {
   const [reading, setReading] = useState(false);
   const [failed, setFailed] = useState(false);
   const read = () => {
+    if (reading) return;
     setReading(true);
     onRead().then(
       (landed) => {
@@ -406,15 +409,17 @@ function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.E
     );
   };
   return (
-    <button type="button" className="version-earlier" disabled={reading} onClick={read}>
-      <BusyLabel busy={reading} label="Loading older versions">
-        {failed ? (
-          <RetryRowLabel failure="Could not read older versions." />
-        ) : (
-          "Show older versions"
-        )}
-      </BusyLabel>
-    </button>
+    <p className="version-earlier">
+      <TextButton lines={TEXT_BUTTON_LINES.TWO} onClick={read}>
+        <BusyLabel busy={reading} label="Loading older versions">
+          {failed ? (
+            <RetryRowLabel failure="Could not read older versions." />
+          ) : (
+            "Show older versions"
+          )}
+        </BusyLabel>
+      </TextButton>
+    </p>
   );
 }
 

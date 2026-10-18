@@ -7,6 +7,7 @@ import {
   type CodingAgentChangedFile,
   type CodingAgentChangesPeople,
   type CodingAgentPullRequest,
+  DIFF_SIDE,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
 import { imageTypeOfPath } from "@luke/features/github-image";
@@ -14,6 +15,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { appPlatform } from "@luke/panel/app-platform";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
+  Button,
   Checkbox,
   CopyIcon,
   DownloadIcon,
@@ -23,6 +25,7 @@ import {
   HoverCard,
   HoverCardHead,
   HoverCardNote,
+  IconButton,
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
@@ -38,7 +41,12 @@ import {
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCopyToast } from "../copy-feedback";
-import { DIFF_SELECTION_SIDE, type DiffSelection, FILE_NOTE_LINE } from "../diff-view/contract";
+import {
+  DIFF_SELECTION_SIDE,
+  type DiffListSelection,
+  type DiffSelection,
+  FILE_NOTE_LINE,
+} from "../diff-view/contract";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
@@ -48,6 +56,7 @@ import {
   CHANGES_WORDS,
   changedFolders,
   changeMarks,
+  commentLines,
   fileNotice,
   filePatch,
   headerPatch,
@@ -66,6 +75,7 @@ import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, usePaneRoom } from "./file-view";
 import { useFileViewSettings } from "./file-view-settings";
 import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff";
+import { LineComment, type PendingReview } from "./line-comment";
 import { PullRequestMark } from "./pull-request-mark";
 import { OpenedBy, PullRequestPeople, ReviewersLine } from "./pull-request-people";
 import { PullRequestWriteNote } from "./pull-request-writes";
@@ -315,13 +325,15 @@ function AboveThreads({
  * draw, or a changed image drawn as its pictures (`image-diff.tsx`), stands
  * as what is drawn in the place of its lines alone (`lead`), across its
  * width: why it has none, or the pictures, and every one of its review
- * threads.
+ * threads. A comment being written on its lines stands under the last of
+ * them.
  */
 function entryOf(
   file: CodingAgentChangedFile,
   list: ChangesList,
   threads: ChangesThreads | undefined,
   images: ImageSides | undefined,
+  comment: DiffNote | undefined,
 ): DiffListEntry {
   const path = file.path;
   const image = imageTypeOfPath(path) === undefined || images === undefined ? undefined : images;
@@ -368,6 +380,7 @@ function entryOf(
       content: <AboveThreads above={unplaced} threads={threads} />,
     });
   }
+  if (comment !== undefined) notes.push(comment);
   const collapsed = list.collapsed(path);
   return {
     path,
@@ -395,6 +408,79 @@ function entryOf(
     ),
     notes,
   };
+}
+
+/** The key a comment being written stands under its lines by; a review thread's note is keyed by its page, which this never is. */
+const COMMENT_KEY = "line-comment";
+
+/** Where the lines a comment is on are lit and its note drawn: under the last of them, on the side that one counts on. */
+const COMMENT_SIDE = {
+  [DIFF_SIDE.LEFT]: DIFF_SELECTION_SIDE.DELETIONS,
+  [DIFF_SIDE.RIGHT]: DIFF_SELECTION_SIDE.ADDITIONS,
+} as const;
+
+/** What the list is handed of commenting: where the gutter's + opens a comment, and the one open, its lines lit and its note. */
+interface ListCommenting {
+  readonly open: (picked: DiffListSelection) => void;
+  readonly note:
+    | { readonly path: string; readonly picked: DiffListSelection; readonly content: DiffNote }
+    | undefined;
+}
+
+/** How Files changed comments on lines, where its Pull request tab lets it: the member's pending review, which names the offers, and what reads the tab again once GitHub answered. */
+export interface LineComments {
+  readonly pending: PendingReview;
+  readonly onWritten: () => void;
+}
+
+/**
+ * The comment being written on lines of the files, one at a time as
+ * GitHub's own diff opens one, and each file's words kept for it while the
+ * tab stands; none open until the gutter's + picks lines GitHub would take
+ * a comment on (`commentLines`).
+ */
+function useListCommenting(
+  agentId: string,
+  files: readonly CodingAgentChangedFile[],
+  headSha: string | undefined,
+  comments: LineComments | undefined,
+  onRefresh: () => void,
+): ListCommenting | undefined {
+  const [picked, setPicked] = useState<DiffListSelection | undefined>(undefined);
+  const [words, setWords] = useState<ReadonlyMap<string, string>>(new Map());
+  const open = useCallback(
+    (next: DiffListSelection) => {
+      const file = files.find((each) => each.path === next.path);
+      if (file !== undefined && commentLines(file, next.selection) !== undefined) setPicked(next);
+    },
+    [files],
+  );
+  if (comments === undefined) return undefined;
+  const file = picked === undefined ? undefined : files.find((each) => each.path === picked.path);
+  const lines =
+    file === undefined || picked === undefined ? undefined : commentLines(file, picked.selection);
+  if (picked === undefined || lines === undefined) return { open, note: undefined };
+  const { path } = picked;
+  const content: DiffNote = {
+    key: COMMENT_KEY,
+    side: COMMENT_SIDE[lines.side],
+    line: lines.line,
+    content: (
+      <LineComment
+        agentId={agentId}
+        path={path}
+        lines={lines}
+        headSha={headSha}
+        pending={comments.pending}
+        body={words.get(path) ?? ""}
+        onBody={(body) => setWords((was) => new Map(was).set(path, body))}
+        onClose={() => setPicked(undefined)}
+        onWritten={comments.onWritten}
+        onRefresh={onRefresh}
+      />
+    ),
+  };
+  return { open, note: { path, picked, content } };
 }
 
 /** A file's Viewed box at the end of its header, GitHub's own, as the member's marks hold it; V does the same for the file the keys stand on. */
@@ -425,14 +511,11 @@ function SourceToggle({
   const label = source ? LIST_WORDS.SHOW_IMAGE : LIST_WORDS.SHOW_SOURCE;
   return (
     <Tooltip label={label}>
-      <button
-        type="button"
-        className="icon-button diff-list-source"
-        aria-label={label}
+      <IconButton
+        icon={source ? <ImageIcon aria-hidden="true" /> : <CodeIcon aria-hidden="true" />}
+        label={label}
         onClick={onToggle}
-      >
-        {source ? <ImageIcon aria-hidden="true" /> : <CodeIcon aria-hidden="true" />}
-      </button>
+      />
     </Tooltip>
   );
 }
@@ -465,19 +548,18 @@ function FoldAllButton({ list }: { list: ChangesList }): React.JSX.Element {
   const label = list.allCollapsed ? LIST_WORDS.EXPAND_ALL : LIST_WORDS.COLLAPSE_ALL;
   return (
     <Tooltip label={label} chord={FOLD_CHORD.ALL}>
-      <button
-        type="button"
-        className="icon-button"
-        aria-label={label}
+      <IconButton
+        icon={
+          list.allCollapsed ? (
+            <ChevronsUpDownIcon aria-hidden="true" />
+          ) : (
+            <ChevronsDownUpIcon aria-hidden="true" />
+          )
+        }
+        label={label}
         disabled={list.kept.length === 0}
         onClick={list.toggleAll}
-      >
-        {list.allCollapsed ? (
-          <ChevronsUpDownIcon aria-hidden="true" />
-        ) : (
-          <ChevronsDownUpIcon aria-hidden="true" />
-        )}
-      </button>
+      />
     </Tooltip>
   );
 }
@@ -487,6 +569,7 @@ function FilesList({
   list,
   threads,
   images,
+  commenting,
   filterShown,
   roomy,
   boxRef,
@@ -495,6 +578,8 @@ function FilesList({
   threads: ChangesThreads | undefined;
   /** Where the pull request's changed images are read, drawn as pictures; none draws them as binary files. */
   images: ImageSides | undefined;
+  /** The comment being written, and where the gutter's + opens one; none offers no +. */
+  commenting: ListCommenting | undefined;
   /** Whether the tree, whose search is the filter, is drawn, so the filter is in sight. */
   filterShown: boolean;
   roomy: boolean;
@@ -509,20 +594,28 @@ function FilesList({
           <p className="m-0">
             {LIST_WORDS.FILTERED} “<bdi>{query}</bdi>”
           </p>
-          <button type="button" className="toolbar-button" onClick={() => list.onQuery("")}>
-            {LIST_WORDS.CLEAR_FILTER}
-          </button>
+          <Button onClick={() => list.onQuery("")}>{LIST_WORDS.CLEAR_FILTER}</Button>
         </div>
       )}
       {list.kept.length === 0 ? (
         <p className="side-panel-empty">{LIST_WORDS.NONE_KEPT}</p>
       ) : (
         <PierreDiffList
-          entries={list.kept.map((file) => entryOf(file, list, threads, images))}
+          entries={list.kept.map((file) =>
+            entryOf(
+              file,
+              list,
+              threads,
+              images,
+              commenting?.note?.path === file.path ? commenting.note.content : undefined,
+            ),
+          )}
           look={look}
           door={list.door}
           onTopFile={list.onTopFile}
           boxRef={boxRef}
+          onComment={commenting?.open}
+          selected={commenting?.note?.picked}
         />
       )}
     </section>
@@ -603,6 +696,7 @@ export function AgentChangesTab({
   repository,
   tree,
   threads,
+  lineComments,
 }: {
   agentId: string;
   control: CodingAgentsControl;
@@ -614,6 +708,8 @@ export function AgentChangesTab({
   tree: { readonly open: boolean; readonly onToggle: () => void };
   /** The pull request's review threads, drawn on their lines in each file's diff; none draws none. */
   threads?: ChangesThreads | undefined;
+  /** How a comment on lines is made, where the tab lets one be; none offers no comment. */
+  lineComments?: LineComments | undefined;
 }): React.JSX.Element {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
@@ -653,6 +749,17 @@ export function AgentChangesTab({
     [closeOver, go],
   );
   const shownFile = changed.files.find((file) => file.path === list.current) ?? changed.files[0];
+  const refresh = () => {
+    ask();
+    threads?.refresh?.();
+  };
+  const commenting = useListCommenting(
+    agentId,
+    changed.files,
+    pullRequest?.headSha,
+    lineComments,
+    refresh,
+  );
   // A failure gives way to the wait as soon as it is asked again; files drawn stand until the answer lands.
   if (answer === undefined || (out && "failure" in answer)) {
     return <SpinnerRegion label={CHANGES_WORDS.READING} />;
@@ -717,15 +824,7 @@ export function AgentChangesTab({
           <>
             <DiffSettingsButton roomy={roomy} />
             <FoldAllButton list={list} />
-            <ChangesMenu
-              file={shownFile}
-              reading={out}
-              onRefresh={() => {
-                ask();
-                threads?.refresh?.();
-              }}
-              roomy={roomy}
-            />
+            <ChangesMenu file={shownFile} reading={out} onRefresh={refresh} roomy={roomy} />
           </>
         }
         tree={room.toggles}
@@ -742,6 +841,7 @@ export function AgentChangesTab({
           list={list}
           threads={threads}
           images={imagesOf(agentId, pullRequest, reads.current.count)}
+          commenting={commenting}
           filterShown={room.drawn}
           roomy={roomy}
           boxRef={setDiffBox}

@@ -363,7 +363,9 @@ test("an update ready to install offers Restart in the sidebar on the desktop, a
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
-    const shown = document.querySelector('.sidebar-update[aria-label="Restart"]') !== null;
+    const shown = [...document.querySelectorAll("button")].some(
+      (button) => button.textContent === "Restart",
+    );
     for (const root of roots.splice(0)) act(() => root.unmount());
     return shown;
   };

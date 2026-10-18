@@ -1,5 +1,6 @@
 import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
+import { IconButton } from "@luke/ui";
 import { ChevronRightIcon } from "lucide-react";
 import {
   type ReactNode,
@@ -338,15 +339,12 @@ export function FileHead({
     >
       <div className="diff-list-head-row">
         <Tooltip label={label} chord={FOLD_CHORD.ONE}>
-          <button
-            type="button"
-            className="icon-button diff-list-fold"
-            aria-label={label}
+          <IconButton
+            icon={<ChevronRightIcon className="diff-list-fold" aria-hidden="true" />}
+            label={label}
             aria-expanded={!collapsed}
             onClick={onToggle}
-          >
-            <ChevronRightIcon aria-hidden="true" />
-          </button>
+          />
         </Tooltip>
         <Tooltip label={STATUS_WORDS[file.status]}>
           <span className="file-view-status" data-status={file.status}>
