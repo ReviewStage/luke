@@ -106,7 +106,9 @@
 
   /* Note that the picture is hidden rather than absent until it has loaded,
      because the letter must stand while it loads and where it fails, and
-     the picture must not paint a broken frame over it. */
+     the picture must not paint a broken frame over it. A server-rendered
+     picture stands visible until the page takes it over, so a page read
+     without scripts shows it. */
   .luke-avatar-picture {
     position: absolute;
     inset: 0;

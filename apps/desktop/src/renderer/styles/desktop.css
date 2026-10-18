@@ -962,7 +962,7 @@ button.sidebar-section-head-name:hover {
    A square's corner is a share of its edge, as the Avatar's is. */
 .actor-mark {
   /* Note that a working glyph takes the share of the face a glyph does. */
-  --state-glyph-size: 100%;
+  --state-glyph-size: 62%;
 
   position: relative;
   display: inline-grid;
@@ -5791,7 +5791,7 @@ button.automation-run:hover {
    wears: Luke's face in his blue, as he is drawn everywhere. */
 .chat-mark {
   /* Note that a working glyph takes the share of the square a glyph does. */
-  --state-glyph-size: 100%;
+  --state-glyph-size: 62%;
 
   display: inline-grid;
   flex: none;

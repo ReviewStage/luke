@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useState, useSyncExternalStore } from "react";
 import { identityHue, identityLetter } from "../../actor-model.js";
 import { UserIcon } from "../../face/glyphs.js";
 
@@ -80,6 +80,11 @@ function standIn(glyph: ReactNode, letter: string): ReactNode {
   );
 }
 
+/** Nothing to listen to: whether the page has been taken over never changes once it has. */
+function noChange(): () => void {
+  return () => {};
+}
+
 /** A picture the browser had already drawn before the page took it over, as a server-rendered page's may, which sends no load event of its own. */
 function alreadyLoaded(img: HTMLImageElement | null): boolean {
   return img !== null && img.complete && img.naturalWidth > 0;
@@ -104,6 +109,12 @@ function AvatarDisc({
   const named =
     decorative || letter === "" ? { "aria-hidden": true } : { role: "img", "aria-label": name };
   const lettered = !shown && glyph === undefined && letter !== "";
+  // Note that a server-rendered picture is not hidden until the page takes it over, because a page read without scripts must still show it.
+  const client = useSyncExternalStore(
+    noChange,
+    () => true,
+    () => false,
+  );
   return (
     <span
       className="luke-avatar"
@@ -122,7 +133,7 @@ function AvatarDisc({
           alt=""
           referrerPolicy="no-referrer"
           draggable={false}
-          data-loaded={String(shown)}
+          data-loaded={client ? String(shown) : undefined}
           ref={(img) => {
             if (picture === PICTURE.LOADING && alreadyLoaded(img)) setPicture(PICTURE.LOADED);
           }}
