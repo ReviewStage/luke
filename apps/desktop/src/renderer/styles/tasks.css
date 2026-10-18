@@ -1881,43 +1881,6 @@ button.file-ref:hover .file-ref-path {
   margin-top: var(--luke-space-12);
 }
 
-.pull-request-state {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: var(--luke-space-2) var(--boxed-inset);
-  border: 1px solid color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
-  border-radius: var(--luke-radius-full);
-  background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);
-  color: var(--pull-request-tone);
-  font-weight: var(--luke-weight-semibold);
-}
-
-/* The pill as the press that opens what may be done from where the pull
-   request stands (`pull-request-writes.tsx`): its tone deepens under the
-   pointer, and a chevron says it opens. */
-.pull-request-state-button {
-  font: inherit;
-  font-weight: var(--luke-weight-semibold);
-  cursor: default;
-}
-
-.pull-request-state-button:not(:disabled):hover,
-.pull-request-state-button[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--pull-request-tone) 20%, transparent);
-}
-
-.pull-request-state-button:disabled {
-  opacity: 0.7;
-}
-
-.pull-request-state-chevron {
-  width: 12px;
-  height: 12px;
-  margin-inline-start: calc(-1 * var(--luke-space-2));
-}
-
 /* Where GitHub did not take the last change: a line under the bar, at the
    content inset, its dismissal at the row's end. */
 .pull-request-write-note {
@@ -3968,21 +3931,8 @@ button.skill-chip:hover,
   display: flex;
 }
 
-.agent-composer-actions .agent-composer-more,
-.agent-model-chip .harness-mark {
+.agent-composer-actions .agent-composer-more {
   display: none;
-}
-
-/* Too narrow for the published chips' words: each draws its mark alone,
-   its label and hint still naming it. */
-@container composer (max-width: 519px) {
-  .agent-composer :is(.agent-published-chip, .agent-changes-chip) > .luke-chip {
-    padding: 0 var(--luke-space-8);
-  }
-
-  .agent-composer :is(.agent-published-chip, .agent-changes-chip) .luke-chip-name {
-    display: none;
-  }
 }
 
 /* Too narrow for every press: the ⋯ takes in the Changes chip, the MCP
@@ -4004,21 +3954,6 @@ button.skill-chip:hover,
 
   .agent-composer-actions .agent-composer-more {
     display: inline-flex;
-  }
-}
-
-/* Too narrow for the model's words: the chip draws its harness's mark
-   alone, where it has one, its label and hint still naming the choice. */
-@container composer (max-width: 299px) {
-  .agent-composer .agent-model-chip .harness-mark {
-    display: block;
-  }
-
-  .agent-composer
-    .agent-model-chip
-    .luke-chip:has(.harness-mark)
-    :is(.luke-chip-name, .settings-chevron) {
-    display: none;
   }
 }
 
@@ -5262,15 +5197,11 @@ button.agent-ref:hover .agent-ref-name {
   display: contents;
 }
 
-.agent-published-chip > .luke-chip {
-  font-variant-numeric: tabular-nums;
-}
-
 /* A pull request's colour for where it stands, in GitHub's colours: open in
    the success green, a draft in the muted ink, merged in the merged purple,
-   closed in the danger red. Its mark wears it (`pull-request-mark.tsx`),
-   and so does the chip naming it, as its tint, its edge, and its words;
-   the mark alone turns red once its checks failed. */
+   closed in the danger red. Its mark wears it (`pull-request-mark.tsx`); a
+   chip naming it wears the shared palette's tone for it
+   (`PULL_REQUEST_TONE`); the mark alone turns red once its checks failed. */
 [data-pull-request-state="open"] {
   --pull-request-tone: var(--luke-color-complete);
 }
@@ -5322,26 +5253,6 @@ button.agent-ref:hover .agent-ref-name {
 
 .issue-mark[data-issue-state="not-planned"] {
   color: var(--luke-color-text-subtle);
-}
-
-.agent-published-chip[data-pull-request-state] > .luke-chip {
-  border-color: color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
-  background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);
-  --luke-chip-ink: var(--pull-request-tone);
-  font-weight: 600;
-}
-
-.agent-published-chip[data-pull-request-state] > .luke-chip:hover,
-.agent-published-chip[data-pull-request-state][data-menu-open="true"] > .luke-chip {
-  background: color-mix(in srgb, var(--pull-request-tone) 22%, transparent);
-  --luke-chip-ink: var(--pull-request-tone);
-}
-
-/* A branch reads in the code face, as a terminal would print it. */
-.agent-published-chip[data-branch] .luke-chip-name {
-  max-width: 180px;
-  font-family: var(--luke-font-mono);
-  font-size: 11.5px; /* off-scale: a branch's name in the code face */
 }
 
 /* The pull request's row at a finished transcript's end: a boxed line, the

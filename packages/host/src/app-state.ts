@@ -200,6 +200,16 @@ interface AppNotificationsSlice {
 }
 
 /**
+ * Whether this machine has a network, as its platform last answered
+ * (`client/network-watch.ts`): online until a probe says otherwise. An
+ * answer of offline is a reliable one; online says nothing of whether the
+ * service itself answers.
+ */
+interface AppNetworkSlice {
+  online: boolean;
+}
+
+/**
  * Everything main keeps of what the host tells it and what this machine
  * answers for itself: one document, read whole and replaced a slice at a
  * time, so the state a window is handed and the state main answers a call
@@ -229,6 +239,7 @@ export interface AppState {
   codingAgents: AppCodingAgentsSlice;
   inbox: AppInboxSlice;
   notifications: AppNotificationsSlice;
+  network: AppNetworkSlice;
   sessionReplay: AppSessionReplaySlice;
 }
 
