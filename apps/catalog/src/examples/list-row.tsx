@@ -1,11 +1,23 @@
-import { EllipsisIcon, IconButton, List, ListRow, PencilIcon, TrashIcon, UserIcon } from "@luke/ui";
+import {
+  EllipsisIcon,
+  IconButton,
+  LIST_DENSITY,
+  LIST_VARIANT,
+  List,
+  ListRow,
+  PencilIcon,
+  Switch,
+  TrashIcon,
+  UserIcon,
+} from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * list-row.tsx -- a list's rows with their metadata and acts lined up, the
- * one open now, rows that open nothing, and long words in a narrow column.
+ * one open now, rows that open nothing, rows in a card and compact, and long
+ * words in a narrow column.
  */
 
 const MEMBERS = [
@@ -34,6 +46,36 @@ function Members(): React.JSX.Element {
   );
 }
 
+const AUTOMATIONS = [
+  { id: "sweep", name: "Nightly sweep", trigger: "Every day at 09:00", next: "Tomorrow" },
+  { id: "review", name: "Code review", trigger: "When a pull request is opened", next: "On event" },
+] as const;
+
+/** Rows edge to edge in a card, each with a switch beside its press. */
+function Automations(): React.JSX.Element {
+  const [on, setOn] = useState<Record<string, boolean>>({ sweep: true, review: false });
+  return (
+    <List label="Automations" variant={LIST_VARIANT.CARD}>
+      {AUTOMATIONS.map((automation) => (
+        <ListRow
+          key={automation.id}
+          title={automation.name}
+          description={automation.trigger}
+          meta={on[automation.id] === true ? automation.next : "Off"}
+          onPress={() => undefined}
+          actions={
+            <Switch
+              checked={on[automation.id] === true}
+              label={`Turn on ${automation.name}`}
+              onChange={(checked) => setOn((all) => ({ ...all, [automation.id]: checked }))}
+            />
+          }
+        />
+      ))}
+    </List>
+  );
+}
+
 function ListRows(): React.JSX.Element {
   return (
     <>
@@ -50,6 +92,24 @@ function ListRows(): React.JSX.Element {
               title="Release notes"
               description="Finished without changes"
               meta="Yesterday"
+            />
+          </List>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="list-row-card" title="Rows in a card">
+        <div className="catalog-column">
+          <Automations />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="list-row-compact" title="Compact rows">
+        <div className="catalog-narrow">
+          <List label="Runs" density={LIST_DENSITY.COMPACT}>
+            <ListRow title="Fix the flaky test" description="Working" meta="2m" current />
+            <ListRow
+              title="Scheduled run"
+              description="Finished"
+              meta="1d"
+              onPress={() => undefined}
             />
           </List>
         </div>
