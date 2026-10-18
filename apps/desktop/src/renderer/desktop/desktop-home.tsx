@@ -31,6 +31,7 @@ import {
   type InboxListed,
   NEEDS_YOU,
   needsReader,
+  waitsOnReader,
 } from "../tasks/inbox-model";
 import { RelativeTime } from "../tasks/relative-time";
 import { useMinute } from "../tasks/task-time";
@@ -357,10 +358,13 @@ export function DesktopHome({
   useRowKeys(column, tasks.shown);
   if (!tasks.listRead && !tasks.listFailed) return <HomeSkeleton tasks={tasks} />;
   // Only an account with no task in any workspace, and nothing an agent with
-  // no task waits on, is new; a workspace of its own with none still says
-  // what needs it elsewhere.
+  // no task waits on it for, is new; a workspace of its own with none still
+  // says what needs it elsewhere, while a teammate's agent's question, which
+  // waits on the teammate and which Home does not list, leaves it new.
   const fresh =
-    tasks.tasks.length === 0 && tasks.archived.length === 0 && tasks.inboxTaskless.length === 0;
+    tasks.tasks.length === 0 &&
+    tasks.archived.length === 0 &&
+    !tasks.inboxTaskless.some((each) => waitsOnReader(each, tasks.me));
   if (!tasks.listFailed && fresh) return <Welcome tasks={tasks} />;
   return (
     // The Inbox's agent cards name who started each agent, and Recent's rows

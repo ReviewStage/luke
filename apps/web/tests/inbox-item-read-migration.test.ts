@@ -6,7 +6,7 @@ import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrato
 import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
-import { joinWorkspace, startTask, unmigratedPgliteSqlClient } from "@luke/database/testing";
+import { joinWorkspace, openWorkspace, unmigratedPgliteSqlClient } from "@luke/database/testing";
 import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { postInboxItem, readInboxItem } from "@luke/service/inbox/inbox-store";
 import { Effect, Layer, Option, Result } from "effect";
@@ -52,7 +52,9 @@ it.effect(
         yield* runWebMigrations(yield* foldersBefore);
         yield* openUser("dean");
         yield* openUser("charles");
-        const task = yield* startTask("dean", { name: "Teammate invitations" });
+        // The task is written as the schema of then holds it, since the store writes columns later migrations add.
+        const task = { id: randomUUID(), workspaceId: yield* openWorkspace("dean") };
+        yield* sql`insert into task (id, user_id, organization_id, name, document) values (${task.id}, 'dean', ${task.workspaceId}, 'Teammate invitations', '')`;
         yield* joinWorkspace(task.workspaceId, "charles");
         const started = Option.getOrThrow(
           yield* createCodingAgent("dean", {

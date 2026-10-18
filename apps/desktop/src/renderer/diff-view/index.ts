@@ -161,11 +161,11 @@ const LOOK_CSS = `
     display: none;
   }
   ::highlight(find-match) {
-    background-color: var(--find-match);
+    background-color: var(--luke-color-find-match);
   }
   ::highlight(find-current) {
-    background-color: var(--find-current);
-    color: var(--find-current-text);
+    background-color: var(--luke-color-find-current);
+    color: var(--luke-color-on-find-current);
   }
 }
 `;

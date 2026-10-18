@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
  * Every wait is drawn with this one ring, so a region still reading, a menu
  * still listing, and a button whose press is out read as one object. The
  * ring is an arc in the ink around it over a faint track, and holds still on
- * `--loop-motion` under reduced motion and a capture run, still reading as a
+ * `--luke-loop-motion` under reduced motion and a capture run, still reading as a
  * wait. Its words are said to a reader alone, in a fixed phrase ("Loading
  * transcript"), from a status line that stands from the start, empty until
  * the ring shows, because a reader announces a line filling more surely than

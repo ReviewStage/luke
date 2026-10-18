@@ -146,7 +146,7 @@
     font: inherit;
     font-size: var(--luke-type-body-size);
     text-align: left;
-    transition: background-color var(--duration-hover, 0s) ease;
+    transition: background-color var(--luke-duration-hover) ease;
   }
 
   .luke-hover-card-row[data-look="detail"] {

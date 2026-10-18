@@ -7,6 +7,7 @@ import {
   ConfirmDialog,
   DIALOG_TONE,
   OneLine,
+  PROVIDER_MARK_SIZE,
   ProviderMark,
   SettingsRow,
   SettingsSection,
@@ -60,7 +61,7 @@ export function AccountSection({
           description={
             <span className="account-provider">
               Signed in with
-              <ProviderMark provider={account.provider} />
+              <ProviderMark provider={account.provider} size={PROVIDER_MARK_SIZE.CAPTION} />
               {account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}
             </span>
           }

@@ -1413,6 +1413,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("repository" in request ? { repository: request.repository } : undefined),
           ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
           ...("linearIssueId" in request ? { linearIssueId: request.linearIssueId } : undefined),
+          ...("issueId" in request ? { issueId: request.issueId } : undefined),
           ...("planning" in request ? { planning: request.planning } : undefined),
         }),
         (answer): TasksStartAnswer =>

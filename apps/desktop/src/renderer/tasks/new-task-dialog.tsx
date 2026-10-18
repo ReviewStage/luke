@@ -92,6 +92,12 @@ import type { TasksControl } from "./use-tasks-tab";
  * held, since the name has no second line to begin.
  * With no issue matching, or no Linear connected, or its issues not read,
  * the field is the plain name it always was.
+ *
+ * Opened from one of the workspace's own issues (its Start task…), the card
+ * says so in its title, its name starts as the issue's title, it starts in
+ * the issue's workspace and no other, and its name searches no Linear; the
+ * task it starts is linked to that issue, which the issue's page lists it
+ * under.
  */
 
 /** Create task's chord: Return alone, from the name field. */
@@ -108,6 +114,12 @@ const NAME_PLACEHOLDER = {
   PLAIN: "Task name (optional)",
   LINEAR: "Task name, or search Linear issues",
 } as const;
+
+/** The card's title, before the workspace's chip: the issue it starts from where there is one, and "in" where the chip stands after it. */
+function newTaskHeading(issue: string | undefined, inWorkspace: boolean): string {
+  const heading = issue === undefined ? "New task" : `New task from ${issue}`;
+  return inWorkspace ? `${heading} in` : heading;
+}
 
 /** What the Plan switch's description says the start will do, by its state. */
 const PLANNING_NOTE = {
@@ -255,10 +267,15 @@ function useLinearSearch(
  * workspace's last one used stands.
  */
 function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.JSX.Element {
-  const [name, setName] = useState("");
+  // The workspace's own issue the task starts from, where the card was opened on one: it names the task, and its workspace is the one the task starts in.
+  const from = newTask.preset?.issue;
+  const [name, setName] = useState(from?.title ?? "");
   const [chosen, setChosen] = useState<string | null | undefined>(newTask.preset?.repository);
-  // The workspace the task starts in: the one listed, until the title's chip chooses another.
-  const [workspaceId, setWorkspaceId] = useState(newTask.workspaceId);
+  // The workspace the task starts in: the one listed, or the issue's, until the title's chip chooses another.
+  const [workspaceId, setWorkspaceId] = useState(from?.workspaceId ?? newTask.workspaceId);
+  // Note that a task from one of the workspace's issues starts from that issue alone, so its name searches no Linear.
+  const linearIssuesIn: TasksControl["newTask"]["linearIssuesIn"] =
+    from === undefined ? newTask.linearIssuesIn : () => undefined;
   const startsIn = workspaceId ?? newTask.workspaceId;
   const repositories = newTask.repositoriesIn(startsIn);
   const workspace = newTask.workspaces.find((each) => each.id === startsIn);
@@ -273,9 +290,9 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
   const [planning, setPlanning] = useNewTaskPlanning();
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
-  const searchesLinear = newTask.linearIssuesIn(startsIn) !== undefined;
-  const issues = useLinearIssues(newTask.linearIssuesIn, startsIn);
-  const [searched, searchLinear] = useLinearSearch(newTask.linearIssuesIn);
+  const searchesLinear = linearIssuesIn(startsIn) !== undefined;
+  const issues = useLinearIssues(linearIssuesIn, startsIn);
+  const [searched, searchLinear] = useLinearSearch(linearIssuesIn);
   // What Linear found for the name as it now stands is offered whatever it
   // holds; what it found for an earlier name stands with the issues read,
   // offered only where it holds the words, until the newer search answers.
@@ -310,7 +327,10 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
     setStarting(true);
     setNote(undefined);
     newTask
-      .start(taskName, repository, startsIn, planning, issue?.id)
+      .start(taskName, repository, startsIn, planning, {
+        ...(issue === undefined ? undefined : { linearIssueId: issue.id }),
+        ...(from === undefined ? undefined : { issueId: from.id }),
+      })
       .then(setNote)
       .finally(() => setStarting(false));
   };
@@ -334,12 +354,12 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
         <div className="new-task-head">
           <div className="new-task-title">
             <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
-              {startsIn === undefined ? "New task" : "New task in"}
+              {newTaskHeading(from?.identifier, startsIn !== undefined)}
             </Text>
             <WorkspaceChip
               workspaces={newTask.workspaces}
               chosen={startsIn}
-              disabled={starting}
+              disabled={starting || from !== undefined}
               onChoose={(chosenId) => {
                 setWorkspaceId(chosenId);
                 setHighlight(0);

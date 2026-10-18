@@ -33,8 +33,8 @@
     font-weight: var(--luke-weight-semibold);
     -webkit-app-region: no-drag;
     transition:
-      background-color var(--duration-hover) ease,
-      opacity var(--duration-hover) ease;
+      background-color var(--luke-duration-hover) ease,
+      opacity var(--luke-duration-hover) ease;
   }
 
   .luke-provider-button:hover:not(:disabled) {
@@ -59,9 +59,9 @@
     opacity: 0.4;
   }
 
-  /* The provider's own mark, at the size its guidelines draw beside a label,
-     and the ring that stands in its place while its sign-in is waited on. */
-  .luke-provider-button :is(.provider-mark, .luke-provider-button-wait) {
+  /* The ring that stands in the mark's place while its sign-in is waited on,
+     at the mark's own size (`PROVIDER_MARK_SIZE.ICON`). */
+  .luke-provider-button-wait {
     width: 16px;
     height: 16px;
     flex: 0 0 auto;
@@ -88,6 +88,6 @@
     line-height: var(--luke-type-caption-leading);
     white-space: nowrap;
     pointer-events: none;
-    transition: opacity var(--duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) ease;
   }
 }

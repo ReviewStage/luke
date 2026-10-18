@@ -13,7 +13,7 @@
     border: 1px solid var(--luke-color-border);
     border-radius: var(--luke-radius-8);
     background: var(--luke-color-surface);
-    transition: border-color var(--duration-hover) ease;
+    transition: border-color var(--luke-duration-hover) ease;
   }
 
   .luke-attachment-chip[data-image="true"] {
@@ -39,7 +39,7 @@
     font: inherit;
     font-size: var(--luke-type-caption-size);
     text-align: left;
-    transition: background-color var(--duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) ease;
   }
 
   /* A thumbnail's place holds a picture, or a wait or a failure's glyph at
@@ -69,7 +69,7 @@
     height: 100%;
     border-radius: 7px;
     object-fit: cover;
-    transition: filter var(--duration-hover) ease;
+    transition: filter var(--luke-duration-hover) ease;
   }
 
   button.luke-attachment-chip-face:hover img {
@@ -107,7 +107,7 @@
     background: var(--luke-color-overlay) padding-box;
     box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
     color: var(--luke-color-text-muted);
-    transition: color var(--duration-hover) ease;
+    transition: color var(--luke-duration-hover) ease;
   }
 
   .luke-attachment-chip-remove:hover:not(:disabled) {

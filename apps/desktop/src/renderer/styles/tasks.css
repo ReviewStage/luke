@@ -66,7 +66,7 @@
 
 .plan-body {
   font-size: var(--luke-type-caption-size);
-  line-height: 1.5;
+  line-height: var(--luke-type-reading-leading);
 }
 
 /* A plan is a document rather than a message, so its sections breathe. Every
@@ -709,7 +709,7 @@
     overflow-clip-margin: var(--luke-focus-ring-room);
     color: var(--luke-color-text);
     font-size: var(--luke-type-body-size);
-    line-height: 1.625;
+    line-height: var(--luke-type-reading-leading);
   }
 
   /* Note that the rhythm between a message's blocks weighs nothing, so a
@@ -1496,7 +1496,7 @@
   gap: var(--luke-space-8);
   padding: 0 var(--luke-space-12) 0 var(--luke-space-6);
   background: var(--luke-color-surface);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   white-space: nowrap;
 }
 
@@ -1543,7 +1543,7 @@
   margin: 0;
   padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) 38px;
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* A changed image in Files changed's list (image-diff.tsx), under its
@@ -1584,7 +1584,7 @@
 
 .image-diff-side > figcaption {
   color: var(--luke-color-text-muted);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .image-diff-picture,
@@ -1631,7 +1631,7 @@
 .image-diff-note {
   margin: 0;
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The tree's search field and its filter, in one row over the tree. */
@@ -1947,7 +1947,7 @@
   min-height: 96px;
   max-height: 240px;
   overflow-y: auto;
-  padding: 9px 11px;
+  padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-10);
 }
@@ -1997,10 +1997,10 @@
   margin-top: var(--luke-space-2);
   padding: 0 var(--luke-space-6);
   border: 1px solid var(--luke-color-border);
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: transparent;
   color: var(--luke-color-text-muted);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .pull-request-stack:hover {
@@ -2036,12 +2036,12 @@
   overflow: hidden;
   padding: 1px var(--luke-space-8);
   border: 1px solid var(--label-edge-dark, var(--luke-color-border));
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: var(--label-fill-dark, transparent);
   color: var(--label-words-dark, var(--luke-color-text-muted));
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.45;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-caption-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2095,7 +2095,7 @@
   width: 10px;
   height: 10px;
   border: 1px solid var(--luke-color-border);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: var(--label-dot, transparent);
 }
 
@@ -2359,7 +2359,7 @@
   min-width: 0;
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
-  line-height: 1.55;
+  line-height: var(--luke-type-reading-leading);
   user-select: text;
 }
 
@@ -2611,10 +2611,10 @@
   gap: var(--luke-space-4);
   padding: var(--luke-space-2) var(--luke-space-8);
   border: 1px solid var(--luke-color-border);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  line-height: 1.3;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .pull-request-reaction-count {
@@ -2986,7 +2986,7 @@ ol.transcript-list {
   color: var(--luke-color-text);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
-  line-height: 1.625;
+  line-height: var(--luke-type-reading-leading);
   overflow-wrap: anywhere;
   user-select: text;
   white-space: pre-wrap;
@@ -3149,7 +3149,7 @@ ol.transcript-list {
   color: var(--luke-color-danger-text);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
-  line-height: 1.625;
+  line-height: var(--luke-type-reading-leading);
   overflow-wrap: anywhere;
   user-select: text;
   white-space: pre-wrap;
@@ -4118,9 +4118,8 @@ ol.transcript-list {
 /* The Inbox's answer box draws the same card and field
    (`inbox-answer-box.tsx`): its + stands at the foot's left as the agent
    box's does, and its quiet line beside it is cut short before its
-   microphone and presses are, and goes once the card is too narrow for
-   both, when the microphone goes too and the presses tighten and, still
-   too wide, stack at the right rather than run past the card. */
+   microphone and Send are, and goes once the card is too narrow for
+   both, when the microphone goes too. */
 .inbox-answer-tools {
   flex: 1 1 0;
 }
@@ -4156,14 +4155,6 @@ ol.transcript-list {
   color: var(--luke-color-attention);
 }
 
-.inbox-presses {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--luke-space-8) var(--luke-control-gap);
-}
-
 /* A box answered in words alone holds its round Send at the field's end
    once the card is narrow, so the field keeps to one line and the thread
    above it keeps its room. */
@@ -4174,34 +4165,25 @@ ol.transcript-list {
 @container composer (max-width: 299px) {
   .inbox-answer-foot .inbox-answer-quiet,
   .inbox-answer .dictate-button,
-  .inbox-answer:not([data-presses]) .inbox-answer-tools {
+  .inbox-answer:not([data-named-send]) .inbox-answer-tools {
     display: none;
   }
 
-  .inbox-answer:not([data-presses]) .agent-composer-input {
+  .inbox-answer:not([data-named-send]) .agent-composer-input {
     padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6))
       var(--luke-space-12) var(--luke-space-12);
   }
 
-  .inbox-answer:not([data-presses]) .agent-composer-placeholder {
+  .inbox-answer:not([data-named-send]) .agent-composer-placeholder {
     padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6)) 0
       var(--luke-space-12);
   }
 
-  .inbox-answer:not([data-presses]) > .inbox-answer-foot {
+  .inbox-answer:not([data-named-send]) > .inbox-answer-foot {
     position: absolute;
     right: var(--luke-space-6);
     bottom: var(--luke-space-6);
     padding: 0;
-  }
-
-  .inbox-presses {
-    min-width: 0;
-    flex: 1 1 auto;
-  }
-
-  .inbox-presses > button {
-    padding-inline: var(--luke-space-8);
   }
 }
 
@@ -4989,16 +4971,10 @@ ol.transcript-list {
   border-bottom: 1px solid var(--luke-color-border);
 }
 
-.agent-servers-page-head .provider-mark {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: none;
-}
-
 .agent-servers-page-title {
   overflow: hidden;
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-section-size);
   font-weight: var(--luke-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5630,8 +5606,8 @@ button.picture-frame {
   inset: 0;
   display: grid;
   place-items: center;
-  background: var(--picture-veil);
-  color: var(--picture-veil-ink);
+  background: var(--luke-color-veil);
+  color: var(--luke-color-on-veil);
   font-size: var(--luke-type-dialog-size);
   font-weight: var(--luke-weight-semibold);
 }

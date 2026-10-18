@@ -910,6 +910,14 @@ svg.working-mark[viewBox] {
   --face-motion: paused;
   --loop-motion: paused;
   --scroll-glide: auto;
+  /* The shared components' own names for the same motion (`@luke/ui`'s
+     tokens), held still with the rest. */
+  --luke-duration-exit: 0s;
+  --luke-duration-quick: 0s;
+  --luke-duration-fast: 0s;
+  --luke-duration-hover: 0s;
+  --luke-duration-pane: 0s;
+  --luke-loop-motion: paused;
 }
 
 /* Reduced motion is answered at the tokens rather than element by element: a
