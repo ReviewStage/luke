@@ -7,7 +7,7 @@ import {
 } from "@luke/database/models/asks";
 import type { HostedStore } from "@luke/database/models/hosted-store";
 import { hostTurnId } from "@luke/database/models/ids";
-import type { StoredTurnRecord } from "@luke/database/models/message-reads";
+import { latestTurnsOf, type StoredTurnRecord } from "@luke/database/models/message-reads";
 import {
   conversationReachableBy,
   recordedRuntimeSession,
@@ -403,4 +403,18 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("web/stopAsk")(function* (
   const stamped = yield* seams.writer.requestTurnCancel(target, { turnId: turn.id, at });
   if (Result.isFailure(stamped)) return Result.fail({ refusal: STOP_REFUSAL.NOT_FOUND });
   return Result.succeed({ status: turn.status, cancelRequestedAt: at.getTime() });
+});
+
+/** Stops a conversation's newest turn, the one eve may be running, under its owner; nothing where it has none. */
+export const stopConversation = /* @__PURE__ */ Effect.fn("web/stopConversation")(function* (
+  seams: StopSeams,
+  ownerId: string,
+  conversationId: string,
+): Effect.fn.Return<
+  StopOutcome | undefined,
+  QueryError | EffectSchema.SchemaError,
+  DatabaseServices
+> {
+  const newest = (yield* latestTurnsOf(ownerId, [conversationId])).get(conversationId);
+  return newest === undefined ? undefined : yield* stopAsk(seams, ownerId, newest.id);
 });

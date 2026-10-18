@@ -4,7 +4,8 @@ import { runModeFor } from "@luke/host";
 import { type ActRows, type ActSender, createActRouter } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { AppStateStore, initialAppState } from "@luke/host/client";
-import { VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
+import { LIVE_STATUS } from "@luke/live";
+import { IDLE_VOICE_VIEW, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import type { WireRecord } from "@luke/wire";
 import { Context, Effect, Option } from "effect";
 import type { WebContents } from "electron";
@@ -89,6 +90,10 @@ function fixture() {
         Effect.sync(() => {
           liveCalls.push("stop");
           return true;
+        }),
+      tasksStopWork: (taskId: string) =>
+        Effect.sync(() => {
+          liveCalls.push(`stopWork:${taskId}`);
         }),
     },
     liveDiagnostics: () => Effect.succeedNone,
@@ -187,4 +192,38 @@ it.effect("the five live session acts reach the host from the voice window alone
     });
     assert.equal(f.liveCalls.length, 5);
   }),
+);
+
+const OPEN_TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const CALL_TASK = "0c4b6d1e-8a2f-4e3b-9c5d-6f7a8b9c0d1e";
+
+it.effect("stopping Luke with no call up stops his turn on the open task and tells no call", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    f.state.update({ tasks: { ...f.state.snapshot().tasks, activeTaskId: OPEN_TASK } });
+    yield* f.perform(f.voiceSender, { kind: ACT_KIND.LUKE_STOP, payload: {} });
+    assert.deepEqual(f.liveCalls, [`stopWork:${OPEN_TASK}`]);
+    assert.deepEqual(f.sentToVoice, []);
+  }),
+);
+
+it.effect(
+  "stopping Luke on a call tells the call to stop and stops his turn on the call's task",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      f.state.update({
+        tasks: { ...f.state.snapshot().tasks, activeTaskId: OPEN_TASK },
+        voice: {
+          ...f.state.snapshot().voice,
+          view: { ...IDLE_VOICE_VIEW, voiceStatus: LIVE_STATUS.LISTENING, callTaskId: CALL_TASK },
+        },
+      });
+      yield* f.perform(f.voiceSender, { kind: ACT_KIND.LUKE_STOP, payload: {} });
+      assert.deepEqual(f.liveCalls, [`stopWork:${CALL_TASK}`]);
+      assert.deepEqual(
+        f.sentToVoice.map((sent) => sent.payload),
+        [{ command: VOICE_COMMAND.STOP_SPEAKING }],
+      );
+    }),
 );
