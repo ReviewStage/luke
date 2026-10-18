@@ -61,7 +61,8 @@
         "src/ui-messages/index.ts",
         "src/testing/index.ts",
         "src/effect/index.ts",
-        "src/analytics/index.ts"
+        "src/analytics/index.ts",
+        "src/factory-world-wire.ts"
       ],
       "project": ["src/**"]
     },

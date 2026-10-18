@@ -27,7 +27,7 @@ export const PULL_REQUEST_AREA_BOUNDS = {
 } as const;
 
 /** How many directories deep a file is counted: deep enough to tell a package's modules apart. */
-export const AREA_DEPTH = 4;
+const AREA_DEPTH = 4;
 
 /** The two area paths that are no directory under the root. */
 export const AREA_PATH = {
@@ -37,7 +37,11 @@ export const AREA_PATH = {
   REST: "",
 } as const;
 
-/** One directory a pull request touched: its path from the root, and the lines added and removed in it. */
+/**
+ * One directory a pull request touched: its path from the root, and the lines added and removed in it.
+ *
+ * @public Read by the service's stored pull request and the world's view model, which land above this contract.
+ */
 export const pullRequestAreaSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   additions: countedNumber,
