@@ -1987,7 +1987,7 @@ function dragCard(page: HTMLElement, issueId: string, to: { x: number; y: number
       marked:
         page.querySelector<HTMLElement>("[data-drop-target='true']")?.dataset.issueColumn ??
         undefined,
-      carried: page.querySelector(".issue-board > [data-carried]") !== null,
+      carried: document.querySelector("[data-carried] .issue-board .sidebar-task-item") !== null,
     };
     window.dispatchEvent(pointer("pointerup", to.x, to.y));
   });
@@ -2013,7 +2013,7 @@ test("a Todo card dragged onto Done is carried there, Done marked as where it la
     ["Canceled", []],
   ]);
   assert.equal(
-    page.querySelectorAll("[data-carried], [data-dragging], [data-drop-target]").length,
+    document.querySelectorAll("[data-carried], [data-dragging], [data-drop-target]").length,
     0,
   );
   assert.deepEqual(opened, [], "the drop opens nothing");
