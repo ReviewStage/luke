@@ -203,6 +203,16 @@ function answerOf(request: Act): ActOutcome {
         ? { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }
         : { status: DONE, value: { tools } };
     }
+    // A rename names the account anew, which the next read of the integrations says.
+    case ACT_KIND.INTEGRATIONS_RENAME: {
+      const { connection, label } = request.payload;
+      accounts = accounts.map((account) =>
+        account.connection === connection ? { ...account, label } : account,
+      );
+      const renamed =
+        accounts.find((account) => account.connection === connection) ?? assert.fail("no account");
+      return { status: DONE, value: { account: renamed } };
+    }
     default:
       return { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT };
   }
@@ -1167,6 +1177,58 @@ test("two accounts at a provider stand as two rows named by their labels, each o
       (name) => name.textContent === "Notion · Account 3",
     ),
   );
+});
+
+test("an account renamed from its row's ⋯ is named in place: Escape keeps its name, and Return asks for the new one", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  accounts = [
+    { provider: notion, connection: "notion", label: "Acme", status: INTEGRATION_STATUS.CONNECTED },
+    {
+      provider: notion,
+      connection: "notion-2",
+      label: "Personal",
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+  ];
+  const page = await mount();
+  const rowOf = (label: string) =>
+    [...page.querySelectorAll(".luke-settings-row")].find((row) =>
+      row.querySelector('[id$="label"]')?.textContent?.startsWith(`Notion · ${label}`),
+    ) ?? assert.fail(`Notion · ${label} has a row`);
+  const field = () =>
+    page.querySelector<HTMLInputElement>('input[aria-label="Notion · Acme account name"]');
+  const press = (key: string) =>
+    act(() => {
+      (field() ?? assert.fail("the name's field is open")).dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+      );
+    });
+  const renames = () =>
+    sent
+      .filter((request) => request.kind === ACT_KIND.INTEGRATIONS_RENAME)
+      .map((request) => request.payload);
+
+  await choose(rowOf("Acme"), "Rename");
+  const opened = field() ?? assert.fail("Rename opens the name's field");
+  assert.equal(document.activeElement, opened);
+  assert.equal(opened.value, "Acme");
+  press("Escape");
+  await settle();
+  assert.equal(field(), null);
+  assert.deepEqual(renames(), []);
+
+  await choose(rowOf("Acme"), "Rename");
+  const typing = field() ?? assert.fail("Rename opens the name's field again");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(typing, "Work");
+    typing.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  press("Enter");
+  await settle();
+  assert.equal(field(), null);
+  assert.deepEqual(renames(), [{ provider: notion, connection: "notion", label: "Work" }]);
+  assert.ok(rowOf("Work"), "the row says the new name");
 });
 
 test("an added account whose first sign-in Connect refused keeps its row with the reason and Try again, which signs in a new account", async () => {

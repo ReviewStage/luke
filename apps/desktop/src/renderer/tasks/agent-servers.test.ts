@@ -346,7 +346,9 @@ test("on a server's page the arrows move the highlight, and Enter opens the tool
     ],
   );
   assert.equal(
-    container.querySelector(".agent-servers-menu")?.getAttribute("aria-label"),
+    document.getElementById(
+      container.querySelector('[role="dialog"]')?.getAttribute("aria-labelledby") ?? "",
+    )?.textContent,
     "Read project",
   );
   assert.equal(document.activeElement, page.querySelector(".integration-tool-detail-body"));

@@ -8,6 +8,7 @@ import {
   CloseIcon,
   ConfirmDialog,
   IconButton,
+  InlineEdit,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
@@ -20,7 +21,6 @@ import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { ActionMenu } from "../desktop/action-menu";
 import type { FloatingBox } from "../desktop/hover-pane";
-import { TaskNameField } from "../desktop/task-name-field";
 import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject } from "./agent-ref";
 import { agentStillWriting } from "./coding-agent-model";
@@ -93,14 +93,14 @@ function ShellRow({
         leading={<TerminalIcon />}
         title={
           renaming ? (
-            <TaskNameField
-              name={shell.title}
-              className="terminal-shell-field"
+            <InlineEdit
+              value={shell.title}
               label="Shell name"
+              editing
               maxLength={TITLE_MAX}
-              onEnd={({ name }) => {
+              onEnd={({ value }) => {
                 setRenaming(false);
-                if (name !== undefined) session.onRename(shell.id, name);
+                if (value !== undefined) session.onRename(shell.id, value);
               }}
             />
           ) : (
