@@ -92,7 +92,7 @@ function DataTableHeading<Row, Key extends string>({
   const direction = sort?.key === column.key ? sort.direction : undefined;
   if (!onSort || column.sortable !== true) {
     return (
-      <th className="luke-data-table-cell" data-kind={kind}>
+      <th className="luke-data-table-cell" data-kind={kind} aria-sort={direction}>
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
           {column.label}
         </Text>

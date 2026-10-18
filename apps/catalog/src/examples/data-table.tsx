@@ -1,4 +1,6 @@
 import {
+  BUTTON_VARIANT,
+  Button,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
   DataTable,
@@ -93,7 +95,19 @@ function SortedRuns(): React.JSX.Element {
     <Stack gap={GAP.CONTROL}>
       <DataTable
         label="Runs"
-        columns={COLUMNS}
+        columns={COLUMNS.map((column) =>
+          // Note that the run's name is a button, so a keyboard opens the row the pointer presses.
+          column.key === "name"
+            ? {
+                ...column,
+                cell: (run: Run) => (
+                  <Button variant={BUTTON_VARIANT.QUIET} onClick={() => setOpened(run.name)}>
+                    {run.name}
+                  </Button>
+                ),
+              }
+            : column,
+        )}
         rows={rows}
         rowKey={(run) => run.id}
         empty="No runs yet."

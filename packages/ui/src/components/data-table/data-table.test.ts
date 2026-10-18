@@ -14,11 +14,11 @@ import {
 /**
  * data-table.test.ts -- a table reads as its headings over its rows, named
  * for what it holds; a sortable heading is a button whose press the caller
- * hears, its cell announcing the order chosen, and a table that sorts
- * nothing offers no button; a press on a row opens it, while a press on a
- * control in its cells answers for that control alone; a mark column's
- * heading is read, not drawn; and no rows show the empty line in place of
- * the table. Synthetic runs.
+ * hears, its cell announcing the order chosen; a table that sorts nothing
+ * offers no button, though it still announces an order it was given; a
+ * press on a row opens it, while a press on a control in its cells answers
+ * for that control alone; a mark column's heading is read, not drawn; and
+ * no rows show the empty line in place of the table. Synthetic runs.
  */
 
 declare global {
@@ -173,6 +173,23 @@ test("a table that sorts nothing offers no heading to press", () => {
   );
 
   expect(container.querySelector("th button")).toBeNull();
+});
+
+test("a table sorted by its caller, offering no sort, still announces the order its rows are in", () => {
+  const container = draw(
+    createElement(DataTable<Run, RunKey>, {
+      label: "Runs",
+      columns: columns([]),
+      rows: RUNS,
+      rowKey: (run) => run.id,
+      empty: "No runs yet.",
+      sort: { key: "minutes", direction: SORT_DIRECTION.DESCENDING },
+    }),
+  );
+
+  expect(container.querySelector("th button")).toBeNull();
+  expect(heading(container, "Minutes").getAttribute("aria-sort")).toBe("descending");
+  expect(heading(container, "Run").hasAttribute("aria-sort")).toBe(false);
 });
 
 test("a press on a row opens it, and a press on a control in its cells is that control's alone", () => {
