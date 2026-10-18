@@ -143,7 +143,11 @@ import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/mode
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { PULL_REQUEST_WRITE_BOUNDS, REACTION } from "@luke/features/pull-request-write-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import { TASK_LIST_ARCHIVED, taskListAnswerSchema } from "@luke/features/task-wire";
+import {
+  TASK_LIST_ARCHIVED,
+  taskListAnswerSchema,
+  taskStartAnswerSchema,
+} from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -952,6 +956,158 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         ]);
         // The default stands: nothing was chosen.
         assert.equal(yield* readAccountPreferences(owner), undefined);
+      }),
+  );
+
+  it.effect(
+    "a task's start naming an agent makes the task with an empty plan and starts the agent on it with the prompt, opening its session as the developer",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, eve, ask } = yield* openTask();
+        const prompt = "Expire invitations after a week.";
+
+        const started = yield* ask(
+          request(TASKS, owner, {
+            method: "POST",
+            body: {
+              workspaceId: task.workspaceId,
+              repository: RELAY_FULL_NAME,
+              agent: { idempotencyKey: randomUUID(), prompt },
+            },
+          }),
+        );
+
+        const { plan, agent, agentRefusal } = readAnswer(
+          taskStartAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          started,
+        );
+        assert.equal(agentRefusal, undefined);
+        assert.ok(agent !== undefined);
+        assert.notEqual(plan.id, task.id);
+        assert.equal(plan.repository, RELAY_FULL_NAME);
+        assert.equal(plan.document.body, "");
+        assert.equal(agent.planId, plan.id);
+        assert.equal(agent.brief, CODING_AGENT_BRIEF.PROMPT);
+        assert.equal(agent.status, CODING_AGENT_STATUS.STARTING);
+        assert.deepEqual(
+          eve.opened.map((opened) => [opened.authorization, opened.message.message]),
+          [[`Bearer ${owner}`, prompt]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a task's start retried under its agent's key answers the task and the agent the first made, and starts neither again; the key named for another workspace is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, eve, ask } = yield* openTask();
+        const team = yield* openWorkspace(owner);
+        const body = {
+          name: "Invitation expiry",
+          workspaceId: task.workspaceId,
+          repository: RELAY_FULL_NAME,
+          agent: { idempotencyKey: randomUUID(), prompt: "Expire invitations after a week." },
+        };
+        const startOnce = (status: number) =>
+          Effect.map(ask(request(TASKS, owner, { method: "POST", body })), (answered) =>
+            readAnswer(taskStartAnswerSchema, status, answered),
+          );
+
+        const first = yield* startOnce(HOSTED_HTTP_STATUS.CREATED);
+        const again = yield* startOnce(HOSTED_HTTP_STATUS.OK);
+        const elsewhere = yield* ask(
+          request(TASKS, owner, { method: "POST", body: { ...body, workspaceId: team } }),
+        );
+        const listed = readAnswer(
+          taskListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(TASKS, owner)),
+        );
+
+        assert.equal(again.plan.id, first.plan.id);
+        assert.equal(again.agent?.id, first.agent?.id);
+        assert.deepEqual(
+          elsewhere,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.equal(eve.opened.length, 1);
+        assert.deepEqual(
+          listed.plans.filter((each) => each.name === body.name).map((each) => each.id),
+          [first.plan.id],
+        );
+      }),
+  );
+
+  it.effect(
+    "a task's start whose agent eve does not take answers the task it made with the agent's refusal, and the task stands",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask({ eve: fakeEve({ reachable: false }) });
+
+        const started = readAnswer(
+          taskStartAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            request(TASKS, owner, {
+              method: "POST",
+              body: {
+                workspaceId: task.workspaceId,
+                repository: RELAY_FULL_NAME,
+                agent: { idempotencyKey: randomUUID(), prompt: "Expire invitations." },
+              },
+            }),
+          ),
+        );
+        const opened = yield* ask(request(TASK, owner, { id: started.plan.id }));
+
+        assert.equal(started.agent, undefined);
+        assert.deepEqual(started.agentRefusal, { error: HOSTED_API_ERROR.UNAVAILABLE });
+        assert.equal(opened.status, HOSTED_HTTP_STATUS.OK);
+      }),
+  );
+
+  it.effect(
+    "a task's start naming an agent is refused with nothing made where it names no repository, as an agent's Start on such a task is, or asks for planning beside it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, eve, ask } = yield* openTask();
+        const agent = { idempotencyKey: randomUUID(), prompt: "Expire invitations." };
+        const startWith = (body: WireBoundaryInput) =>
+          ask(request(TASKS, owner, { method: "POST", body }));
+
+        const answered = [
+          yield* startWith({ name: "No repository", workspaceId: task.workspaceId, agent }),
+          yield* startWith({
+            name: "Null repository",
+            workspaceId: task.workspaceId,
+            repository: null,
+            agent,
+          }),
+          yield* startWith({
+            name: "Planned",
+            workspaceId: task.workspaceId,
+            repository: RELAY_FULL_NAME,
+            planning: true,
+            agent,
+          }),
+        ];
+        const listed = readAnswer(
+          taskListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(TASKS, owner)),
+        );
+
+        assert.deepEqual(answered, [
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        ]);
+        assert.deepEqual(
+          listed.plans.map((each) => each.id),
+          [task.id],
+        );
+        assert.deepEqual(eve.opened, []);
       }),
   );
 

@@ -1,0 +1,545 @@
+{
+  "type": "object",
+  "properties": {
+    "plan": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "updatedAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "repository": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 140
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "openedAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "pinnedAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "pinPosition": {
+          "type": "string"
+        },
+        "archivedAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "ownerId": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "object",
+          "properties": {
+            "userId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "userId",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "issueId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "document": {
+          "type": "object",
+          "properties": {
+            "body": {
+              "type": "string",
+              "maxLength": 200000
+            },
+            "assumptions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 200
+            }
+          },
+          "required": [
+            "body",
+            "assumptions"
+          ],
+          "additionalProperties": false
+        },
+        "agentEdits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "agentId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "at": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "agentId",
+              "label",
+              "at"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 50
+        },
+        "lastEdit": {
+          "type": "object",
+          "properties": {
+            "actor": {
+              "type": "string",
+              "enum": [
+                "developer",
+                "notetaker",
+                "agent",
+                "earlier"
+              ]
+            },
+            "by": {
+              "type": "object",
+              "properties": {
+                "userId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "userId",
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "agentId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            "at": {
+              "type": "number",
+              "minimum": 0
+            },
+            "duringCall": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "actor",
+            "at",
+            "duringCall"
+          ],
+          "additionalProperties": false
+        },
+        "sectionEdits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "section": {
+                "type": "string",
+                "maxLength": 1000
+              },
+              "actor": {
+                "type": "string",
+                "enum": [
+                  "developer",
+                  "notetaker",
+                  "agent",
+                  "earlier"
+                ]
+              },
+              "by": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "userId",
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "agentId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              "at": {
+                "type": "number",
+                "minimum": 0
+              },
+              "duringCall": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "section",
+              "actor",
+              "at",
+              "duringCall"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 500
+        }
+      },
+      "required": [
+        "id",
+        "workspaceId",
+        "name",
+        "createdAt",
+        "updatedAt",
+        "repository",
+        "document"
+      ],
+      "additionalProperties": false
+    },
+    "agent": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "planId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "effort": {
+          "type": "string"
+        },
+        "contextWindow": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "long"
+          ]
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "starting",
+            "running",
+            "completed",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "turnId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "runStartedAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "brief": {
+          "type": "string",
+          "enum": [
+            "plan",
+            "task"
+          ]
+        },
+        "archivedAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "archivedBy": {
+          "type": "object",
+          "properties": {
+            "by": {
+              "type": "string",
+              "enum": [
+                "member",
+                "luke",
+                "agent"
+              ]
+            },
+            "member": {
+              "type": "object",
+              "properties": {
+                "userId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "userId",
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "agent": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 36
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "by"
+          ],
+          "additionalProperties": false
+        },
+        "disabledServers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "maxItems": 32
+        },
+        "startedBy": {
+          "type": "object",
+          "properties": {
+            "userId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "userId",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "automationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "automationName": {
+          "type": "string"
+        },
+        "from": {
+          "type": "object",
+          "properties": {
+            "agentId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            "messageId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            "messageSteps": {
+              "type": "number",
+              "minimum": 0
+            },
+            "messageStepParts": {
+              "type": "number",
+              "minimum": 0
+            },
+            "steps": {
+              "type": "number",
+              "minimum": 0
+            },
+            "totalSteps": {
+              "type": "number",
+              "minimum": 0
+            },
+            "branch": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "agentId",
+            "steps",
+            "totalSteps"
+          ],
+          "additionalProperties": false
+        },
+        "continuedBy": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "agentId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "forked": {
+                "type": "boolean"
+              },
+              "messageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              }
+            },
+            "required": [
+              "agentId",
+              "title",
+              "forked"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "id",
+        "planId",
+        "model",
+        "effort",
+        "title",
+        "createdAt",
+        "status",
+        "turnId"
+      ],
+      "additionalProperties": false
+    },
+    "agentRefusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "plan"
+  ],
+  "additionalProperties": false
+}
