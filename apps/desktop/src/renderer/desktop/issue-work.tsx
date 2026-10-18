@@ -11,7 +11,8 @@ import type { MenuAction } from "./action-menu";
  * Start task… opens New task on the issue, named by its title and in its
  * workspace, and the task it starts is linked to the issue
  * (`new-task-dialog.tsx`). The issue's page lists the tasks of the listed
- * workspace started from it, newest started first, each a chip that opens
+ * workspace started from it, archived ones among them, newest started first
+ * whatever the sidebar's pins put first, each a chip that opens
  * its task; an issue no task was started from lists none and draws no row.
  * The Issues page hands these doors down once, so a card's menu, a row's,
  * and the issue's own page offer the same ones.

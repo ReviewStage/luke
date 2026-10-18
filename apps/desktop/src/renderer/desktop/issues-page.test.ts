@@ -180,8 +180,9 @@ let heldCreates: (() => void)[] | undefined;
 let changeRefused = false;
 /** Every text copied, in order. */
 let copied: string[] = [];
-/** The listed workspace's tasks, as the tab holds them. */
+/** The listed workspace's tasks, as the tab holds them, and its archived ones. */
 let tasksListed: TaskSummary[] = [];
+let tasksArchived: TaskSummary[] = [];
 /** Every issue New task was opened on, in order. */
 let newTasksFrom: NewTaskIssue[] = [];
 /** Every task opened, in order. */
@@ -204,6 +205,7 @@ beforeEach(() => {
   changeRefused = false;
   copied = [];
   tasksListed = [];
+  tasksArchived = [];
   newTasksFrom = [];
   tasksOpened = [];
   editors.length = 0;
@@ -317,6 +319,7 @@ function Pages({
     workspace,
     me: READER,
     tasks: tasksListed,
+    archived: tasksArchived,
     onNewTaskFrom: (from) => newTasksFrom.push(from),
     onSelect: (taskId) => tasksOpened.push(taskId),
     issuesView: {
@@ -2022,13 +2025,13 @@ test("a card is sent the status of the column it is let go over, though the last
 });
 
 /** A task of the listed workspace, started from the issue given where one is. */
-function task(id: string, name: string, issueId?: string): TaskSummary {
+function task(id: string, name: string, issueId?: string, createdAt = 1): TaskSummary {
   return {
     id,
     workspaceId: WORKSPACE.id,
     name,
-    createdAt: 1,
-    updatedAt: 1,
+    createdAt,
+    updatedAt: createdAt,
     repository: null,
     ...(issueId === undefined ? undefined : { issueId }),
   };
@@ -2070,10 +2073,10 @@ test("a card's menu offers Start task… for its own issue", async () => {
 test("an issue's page lists the tasks started from it, and none of another issue's, each opening its task", async () => {
   standing = [issue(1), issue(2)];
   tasksListed = [
-    task("task-newer", "Fix login, again", issue(1).id),
-    task("task-other", "Fix logout", issue(2).id),
-    task("task-plain", "Tidy"),
-    task("task-older", "Fix login", issue(1).id),
+    task("task-newer", "Fix login, again", issue(1).id, 2),
+    task("task-other", "Fix logout", issue(2).id, 2),
+    task("task-plain", "Tidy", undefined, 2),
+    task("task-older", "Fix login", issue(1).id, 1),
   ];
   const page = await openIssue(issue(1).id);
 
@@ -2088,4 +2091,17 @@ test("an issue no task was started from draws no row of tasks", async () => {
   const page = await openIssue(issue(1).id);
 
   assert.equal(workOf(page), undefined);
+});
+
+test("an issue's page lists its archived tasks too, and its tasks newest started first whatever the sidebar's pins put first", async () => {
+  standing = [issue(1)];
+  // The sidebar's order: a pinned task, the oldest, ahead of a newer one.
+  tasksListed = [
+    { ...task("task-pinned", "First try", issue(1).id, 1), pinnedAt: 5 },
+    task("task-newest", "Third try", issue(1).id, 3),
+  ];
+  tasksArchived = [{ ...task("task-archived", "Second try", issue(1).id, 2), archivedAt: 4 }];
+  const page = await openIssue(issue(1).id);
+
+  assert.deepEqual(workOf(page), ["Third try", "Second try", "First try"]);
 });

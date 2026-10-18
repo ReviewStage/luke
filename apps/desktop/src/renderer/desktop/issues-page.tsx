@@ -4,6 +4,7 @@ import {
   type IssueView,
 } from "@luke/features/issue-view";
 import type { Issue, IssueStatus } from "@luke/features/issue-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -417,6 +418,16 @@ function IssuePage({
 }
 
 /**
+ * The listed workspace's tasks started from the issue, the archived ones
+ * among them, newest started first whatever the sidebar's pins put first.
+ */
+function tasksStartedFrom(issueId: string, listed: TasksControl["listed"]): TaskSummary[] {
+  return [...listed.tasks, ...listed.archived]
+    .filter((task) => task.issueId === issueId)
+    .sort((one, other) => other.createdAt - one.createdAt || other.id.localeCompare(one.id));
+}
+
+/**
  * The window's Issues pages, in the plan's place: the list, or one issue's.
  * The list is read once for both, so an issue opened from it draws at once
  * and a change is in the list the moment it lands; going back from an
@@ -431,7 +442,7 @@ export function IssuesPage({ tasks }: { tasks: TasksControl }): React.JSX.Elemen
         identifier,
         title: issue.title,
       }),
-    tasksOf: (issueId) => tasks.listed.tasks.filter((task) => task.issueId === issueId),
+    tasksOf: (issueId) => tasksStartedFrom(issueId, tasks.listed),
     onOpenTask: tasks.onSelect,
   };
   // Every Copy link on these pages is written under the listed workspace, whose issues they are.
