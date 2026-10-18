@@ -249,6 +249,8 @@ async function narrowTaskInbox(
   width = 700,
   /** What the read held open past the first answers, where a test settles it; else it stays open. */
   later: Promise<CodingAgentInboxAnswerView> = new Promise(() => undefined),
+  /** What the first read answers, where a test holds it open; else the items given. */
+  first: Promise<CodingAgentInboxAnswerView> = Promise.resolve({ items, cursor: "1" }),
 ) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -282,7 +284,7 @@ async function narrowTaskInbox(
               agentIds: ["8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"],
               readInbox: ({ after }) =>
                 after === INBOX_CURSOR_START
-                  ? Promise.resolve({ items, cursor: "1" })
+                  ? first
                   : after === "1"
                     ? later
                     : new Promise(() => undefined),
@@ -456,6 +458,26 @@ function heldAnswer(): HeldAnswer {
     },
   };
 }
+
+test("while a task's Inbox is first read, its list stands placeholder rows under a status saying the inbox is being read, with no ring in its corner; once the read lands, the items stand", async () => {
+  const read = heldAnswer();
+  const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
+  const inbox = await narrowTaskInbox([], false, 1_200, undefined, read.promise);
+  const list = document.querySelector<HTMLElement>(".inbox-tasks");
+  assert.ok(list, "the list is drawn");
+  const wait = list.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
+  assert.equal(wait?.textContent, "Reading your inbox…");
+  assert.ok(
+    (wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0,
+    "placeholder rows stand in the items' place",
+  );
+  assert.equal(list.querySelector(".luke-spinner"), null, "no ring stands in the list's corner");
+
+  await read.settle({ items: [asked], cursor: "1" });
+  assert.equal(list.querySelector('[aria-busy="true"]'), null);
+  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
+  inbox.unmount();
+});
 
 test("with Needs you on, the item a task's Inbox chose for itself stays shown once it is answered, though it leaves the list, which then says nothing needs you", async () => {
   window.localStorage.clear();
