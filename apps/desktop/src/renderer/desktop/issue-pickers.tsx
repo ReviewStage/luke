@@ -22,6 +22,7 @@ import {
 import type { MenuRow } from "../searchable-menu";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
+import { Tooltip } from "../tooltip";
 
 /**
  * issue-pickers.tsx -- an issue's status and priority as glyphs, and the two chips that change them.
@@ -75,10 +76,12 @@ export function PriorityMark({ priority }: { priority: IssuePriority }): React.J
   if (glyph === null) return null;
   const words = ISSUE_PRIORITY_WORDS[priority];
   return (
-    <span className="issue-priority-mark" data-priority={priority} title={words}>
-      {glyph}
-      <span className="visually-hidden">{words}</span>
-    </span>
+    <Tooltip label={words}>
+      <span className="issue-priority-mark" data-priority={priority}>
+        {glyph}
+        <span className="visually-hidden">{words}</span>
+      </span>
+    </Tooltip>
   );
 }
 

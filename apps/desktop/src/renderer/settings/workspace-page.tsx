@@ -28,6 +28,9 @@ import {
   ChipName,
   ConfirmDialog,
   FormField,
+  INLINE_EDIT_LOOK,
+  InlineEdit,
+  type InlineEditEnd,
   ProviderMark,
   SettingsRow,
   SettingsSection,
@@ -56,7 +59,6 @@ import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu } from "../desktop/action-menu";
-import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
 import { sharedWords } from "../desktop/workspace-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { encodeImage } from "../feedback-images";
@@ -1257,7 +1259,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
           confirm={disconnect}
           question={{
             title: `Disconnect Linear from ${workspace.name}?`,
-            body: "Nobody in the workspace can start a plan from an issue until Linear is connected again.",
+            body: "Nobody in the workspace can start a task from an issue until Linear is connected again.",
             verb: "Disconnect",
             running: "Disconnecting",
           }}
@@ -1388,7 +1390,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
     refocus.current = false;
     button.current?.focus();
   }, [editing, renaming]);
-  const end = ({ name, byKey }: NameEdit) => {
+  const end = ({ value: name, byKey }: InlineEditEnd) => {
     refocus.current = byKey;
     setEditing(false);
     if (name === undefined) return;
@@ -1476,16 +1478,15 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         actions={actions}
         row={{
           leading: <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />,
-          label: editing ? (
-            <TaskNameField
-              name={workspace.name}
-              className="settings-input workspace-name-input"
+          label: (
+            <InlineEdit
+              value={workspace.name}
               label="Workspace name"
+              editing={editing}
               maxLength={WORKSPACE_BOUNDS.MAX_NAME_CHARS}
+              look={INLINE_EDIT_LOOK.INPUT}
               onEnd={end}
             />
-          ) : (
-            workspace.name
           ),
           description: identityLine(workspace),
           control: (

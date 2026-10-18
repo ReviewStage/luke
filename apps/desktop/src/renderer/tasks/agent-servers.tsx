@@ -23,6 +23,7 @@ import {
   IconButton,
   McpIcon,
   POPOVER_ALIGN,
+  POPOVER_PANEL_LOOK,
   ProviderMark,
   SearchIcon,
   Spinner,
@@ -48,6 +49,7 @@ import { useIntegrationGrant } from "../integration-grant";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
+import { PopoverPanel } from "../popover-panel";
 import { Highlighted } from "../search-field";
 import { Tooltip } from "../tooltip";
 
@@ -56,8 +58,8 @@ import { Tooltip } from "../tooltip";
  *
  * Between the model chip and the context ring stands the MCP mark. A press
  * opens a popover from the button's trailing edge, as the model menu and
- * the context popover hang from theirs (`@luke/ui`'s `AnchoredPopover`), drawn
- * as the searchable menu is: a search field first, then the servers under
+ * the context popover hang from theirs (`@luke/ui`'s `AnchoredPopover` and
+ * `PopoverPanel`, a menu's), drawn as the searchable menu is: a search field first, then the servers under
  * Connected and Not connected (`agent-servers-model.ts`), and Manage in
  * Settings pinned at the foot. A connected server's row names how many
  * tools it offers and ends with this agent's switch; one whose server
@@ -431,9 +433,8 @@ function ServersPopover({
     closeTool();
   };
 
-  const onKey = (event: React.KeyboardEvent) => {
-    if (event.key !== "Escape") return;
-    event.stopPropagation();
+  // Escape goes back one level, and closes the popover only from its home.
+  const dismiss = () => {
     if (tool !== undefined) closeTool();
     else if (page !== undefined) back();
     else onClose();
@@ -670,44 +671,43 @@ function ServersPopover({
   );
 
   return (
-    <div
+    <PopoverPanel
       id={id}
-      className="menu-surface searchable-menu agent-servers-menu"
-      role="dialog"
-      aria-label={
+      look={POPOVER_PANEL_LOOK.MENU}
+      title={
         tool !== undefined
           ? toolTitle(tool)
           : page !== undefined
             ? `${page.name} tools`
             : SERVERS_LABEL
       }
-      // Note that the dialog takes the focus a press on its words would
-      // otherwise hand to the page, because focus leaving the popover closes
-      // it: a press that selects a tool's description must not.
-      tabIndex={-1}
-      onKeyDown={onKey}
-      onBlur={(event) => onLeave(event.relatedTarget)}
+      onDismiss={dismiss}
+      onLeave={onLeave}
     >
-      {page !== undefined && tool !== undefined
-        ? toolPage(page, tool)
-        : page !== undefined
-          ? serverPage(page)
-          : home}
-      <div className="task-compose-menu-foot">
-        <button
-          type="button"
-          className="menu-item agent-servers-manage"
-          onMouseDown={keepFieldFocus}
-          onClick={() => {
-            onClose();
-            servers.onOpenSettings();
-          }}
-        >
-          <GearIcon />
-          <span className="task-compose-menu-name">{SERVERS_SETTINGS}</span>
-        </button>
+      {/* Note that the searchable menu's own class rides a box drawn as its
+          contents, because its rows' highlight is that menu's. */}
+      <div className="searchable-menu agent-servers-menu">
+        {page !== undefined && tool !== undefined
+          ? toolPage(page, tool)
+          : page !== undefined
+            ? serverPage(page)
+            : home}
+        <div className="task-compose-menu-foot">
+          <button
+            type="button"
+            className="menu-item agent-servers-manage"
+            onMouseDown={keepFieldFocus}
+            onClick={() => {
+              onClose();
+              servers.onOpenSettings();
+            }}
+          >
+            <GearIcon />
+            <span className="task-compose-menu-name">{SERVERS_SETTINGS}</span>
+          </button>
+        </div>
       </div>
-    </div>
+    </PopoverPanel>
   );
 }
 

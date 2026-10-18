@@ -793,7 +793,7 @@ export const TARGET_HINT = {
   [TOOL_TARGET.PLAN]: "Open the plan",
   [TOOL_TARGET.SHOWN_CODE]: "Open the file",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
-  [TOOL_TARGET.CHAT]: "Open the plan's chat",
+  [TOOL_TARGET.CHAT]: "Open the task's chat",
 } as const satisfies Record<ToolTarget["kind"], string>;
 
 /** A call as its target is read from it: the tool, the call's id, and its input and answer. */

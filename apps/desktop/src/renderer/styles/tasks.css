@@ -57,7 +57,7 @@
   --accent: var(--voice-luke);
   flex: 1;
   min-height: 0;
-  padding: 10px 2px 12px;
+  padding: var(--luke-space-12) var(--luke-space-2) var(--luke-space-12);
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-user-select: text;
@@ -65,7 +65,7 @@
 }
 
 .plan-body {
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
   line-height: 1.5;
 }
 
@@ -118,7 +118,7 @@
   box-sizing: border-box;
   width: 9px;
   height: 9px;
-  margin-left: 6px;
+  margin-left: var(--luke-space-6);
   border: 1.5px solid color-mix(in srgb, var(--accent) 25%, transparent);
   border-top-color: var(--accent);
   border-radius: 50%;
@@ -140,27 +140,8 @@
   position: absolute;
   z-index: -1;
   inset: -2px;
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: color-mix(in srgb, var(--accent) 18%, transparent);
-  animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
-  content: "";
-  pointer-events: none;
-}
-
-/* A run a link named in an automation's runs (automation-runs-panel.tsx):
-   lit once, as a fresh edit of the plan is, and marked current. Note that it
-   names Luke's own ink, because no `--accent` is set above an automation. */
-[data-run-linked] {
-  position: relative;
-  isolation: isolate;
-}
-
-[data-run-linked]::before {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  border-radius: var(--luke-control-radius);
-  background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
   animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
   content: "";
   pointer-events: none;
@@ -177,7 +158,7 @@
   position: absolute;
   z-index: -1;
   inset: -4px;
-  border-radius: 8px;
+  border-radius: var(--luke-radius-8);
   background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
   animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
   content: "";
@@ -272,8 +253,8 @@
   overflow: clip;
   overflow-clip-margin: var(--focus-ring-room);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--duration-hover) ease;
@@ -318,12 +299,12 @@
   margin-block: -0.075em;
   padding: 0.075em var(--luke-space-6) 0.075em var(--luke-space-4);
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text);
   cursor: pointer;
   font: inherit;
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
   line-height: 1.2;
   vertical-align: baseline;
   white-space: nowrap;
@@ -388,7 +369,7 @@
   padding-left: var(--luke-space-4);
   border-left: 1px solid var(--luke-color-border-strong);
   color: var(--luke-color-text-muted);
-  font-weight: 400;
+  font-weight: var(--luke-weight-regular);
 }
 
 .mention-chip[data-state="gone"] {
@@ -496,7 +477,7 @@
   position: absolute;
   z-index: -1;
   inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: color-mix(in srgb, var(--accent) 9%, transparent);
   content: "";
   pointer-events: none;
@@ -511,7 +492,7 @@
   height: 22px; /* off-scale: the line's room under "Edited by", which the button overhangs */
   align-items: center;
   gap: var(--luke-space-6);
-  margin: -6px 0 12px;
+  margin: calc(-1 * var(--luke-space-6)) 0 var(--luke-space-12);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -542,7 +523,7 @@
   position: absolute;
   z-index: -1;
   inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
   content: "";
   pointer-events: none;
@@ -623,9 +604,9 @@
 .plan-document-text a.plan-mention-link {
   padding: 0 var(--luke-space-4);
   color: inherit;
-  border-radius: 5px;
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
   text-decoration: none;
   box-decoration-break: clone;
 }
@@ -693,21 +674,8 @@
   justify-content: space-between;
   margin-bottom: var(--luke-space-8);
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-.plan-diagram-toggle {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  font-weight: 500;
-}
-
-.plan-diagram-toggle:hover {
-  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .plan-diagram-picture {
@@ -721,7 +689,7 @@
 .plan-diagram-failed {
   margin: 0 0 var(--luke-space-8);
   color: var(--luke-color-danger-text);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* In the editor the fence stays code, and its diagram stands under it,
@@ -817,6 +785,302 @@
   }
 }
 
+/* A transcript's messages (../ai-elements/message.tsx) and the quiet lines
+   between them (working-time.tsx, call-card.tsx, inbox-pane.tsx). They sit in
+   the components layer, as the frame above does, so a surface's own rule for
+   a message (`.agent-origin`, `.agent-turn-foot > [data-worked]`) still says
+   the last word, as it did over the utilities these replaced. */
+@layer components {
+  .transcript-message {
+    position: relative;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: var(--luke-space-4);
+  }
+
+  .transcript-message.is-user {
+    max-width: 95%;
+    margin-left: auto;
+    align-items: flex-end;
+    justify-content: flex-end;
+  }
+
+  /* A reply is reading text, so it keeps a reading leading rather than the
+     body role's. It clips past the keyboard's ring rather than at its edge,
+     so a fold, a tool line, or a chip it holds keeps its ring. */
+  .message-content {
+    min-width: 0;
+    max-width: 100%;
+    overflow: clip;
+    overflow-clip-margin: var(--focus-ring-room);
+    color: var(--luke-color-text);
+    font-size: var(--luke-type-body-size);
+    line-height: 1.625;
+  }
+
+  /* Note that the rhythm between a message's blocks weighs nothing, so a
+     block's own margin, a quiet line's or a note's, still wins. */
+  :where(.message-content > :not(:last-child)) {
+    margin-block: 0 var(--luke-space-8);
+  }
+
+  .transcript-message.is-user .message-content {
+    width: fit-content;
+    padding: var(--luke-space-8) var(--luke-space-12);
+    border-radius: var(--luke-radius-14);
+    background: var(--luke-color-fill-strong);
+  }
+
+  .message-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-space-2);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-quick) var(--spring);
+  }
+
+  .message-actions[data-placement="floating"] {
+    position: absolute;
+    top: calc(-1 * var(--luke-space-8));
+    right: 0;
+    z-index: 10;
+    padding: var(--luke-space-2);
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-radius-6);
+    background: var(--luke-color-overlay);
+    box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
+  }
+
+  .message-actions:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  @media (hover: hover) {
+    .transcript-message:hover .message-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  /* A working line and the line a finished turn or a call ends on: the
+     caption type, muted, its words selectable. */
+  .status-line {
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    user-select: text;
+  }
+
+  .status-line:is([data-worked], [data-call-ended]) {
+    width: fit-content;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .status-line[data-worked] {
+    margin-block: var(--luke-space-8) 0;
+  }
+
+  /* Only its top margin is cleared, because the conversation's gap below it
+     is a bottom margin. */
+  .status-line[data-working] {
+    margin-top: 0;
+  }
+
+  .status-line[data-working]:last-child {
+    margin-bottom: 0;
+  }
+
+  .working-time {
+    color: var(--luke-color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .working-time-after {
+    margin-left: var(--luke-space-6);
+  }
+
+  /* How long ago a thread's line says something happened. */
+  .thread-time {
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* The Inbox's thread, scrolling inside the room its pane leaves it. */
+  .inbox-board {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--luke-space-12);
+    overflow-y: auto;
+    padding-top: var(--luke-section-gap);
+  }
+
+  /* Words with a light passing along them (../ai-elements/shimmer.tsx): the
+     muted gray with the highlight in the text's own ink. Its duration is a
+     literal as DESIGN.md allows a loop with no end of its own, because it
+     answers `--loop-motion` with its play state. */
+  .shimmer {
+    display: inline-block;
+    background-image: linear-gradient(
+      90deg,
+      var(--luke-color-text-muted) 0%,
+      var(--luke-color-text-muted) 40%,
+      var(--luke-color-text) 50%,
+      var(--luke-color-text-muted) 60%,
+      var(--luke-color-text-muted) 100%
+    );
+    background-size: 300% 100%;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 2s linear infinite;
+    animation-play-state: var(--loop-motion);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% center;
+  }
+
+  to {
+    background-position: 0% center;
+  }
+}
+
+/* A fold among a transcript's rows, a turn's calls or a replay's summary
+   (transcript-blocks.tsx, replay-card.tsx), in the caption type, and the one
+   quiet line that opens it, or that draws a replay's earlier steps, its
+   glyphs the control icon. */
+.transcript-fold {
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.transcript-fold-line {
+  display: flex;
+  height: var(--luke-control-height);
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  margin: 0;
+  padding: 0 var(--luke-space-4);
+  border: 0;
+  border-radius: var(--luke-radius-6);
+  background: transparent;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.transcript-fold-line:hover {
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
+}
+
+.transcript-fold-line > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
+}
+
+/* A turn's calls, opened, in from the line's chevron. */
+.turn-fold-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  margin-left: var(--luke-space-24);
+  padding-top: var(--luke-space-4);
+}
+
+/* A replay card's head: what it is, the source's chip, and how many steps,
+   on one line that gives way at its end. */
+.replay-card-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--luke-space-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-summary-body {
+  padding: var(--luke-space-4);
+}
+
+.replay-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+  outline: none;
+}
+
+/* A replay card's foot: the branch, the pull request, and the way to the
+   whole transcript, over a dashed rule. */
+.replay-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4) var(--luke-space-12);
+  padding-top: var(--luke-space-8);
+  border-top: 1px dashed var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.replay-foot > * {
+  min-width: 0;
+}
+
+/* A message's actions, their glyphs the control icon whichever way each is
+   drawn, a copy's glyph inside its own swap. */
+.message-actions svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+/* An Inbox item's words and what was filled in, which a reader may select
+   and copy; what was filled in keeps the lines it was typed on. */
+.inbox-words {
+  margin: 0;
+  user-select: text;
+}
+
+.inbox-lines {
+  white-space: pre-line;
+}
+
+/* A link the window does not open: its address beside its label, to copy. */
+.inbox-link-address {
+  color: var(--luke-color-text-muted);
+  user-select: text;
+}
+
+/* A typed field of an Inbox form: its name over its box. */
+.inbox-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+}
+
+/* A code card's failure stands at its foot, so it draws no rule under it. */
+.code-card > .file-tab-notice {
+  border-bottom: 0;
+}
+
 /* The Code and Call tabs' logs, whose calls each open at a checkpoint stuck
    to the log's top (../ai-elements/checkpoint.tsx): the fade starts beneath
    the checkpoint's band, so the time stands whole and what scrolls under it
@@ -849,7 +1113,7 @@
   padding: var(--luke-space-12) 0 var(--luke-space-8);
   background: var(--desktop-well);
   color: var(--luke-color-text-muted);
-  font-size: 11.5px; /* off-scale: a divider's quiet words */
+  font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
 }
 
@@ -885,7 +1149,7 @@
   --focus-ring-offset: var(--focus-ring-inset);
   overflow: hidden;
   border: 1px solid var(--luke-color-border);
-  border-radius: 10px; /* off-scale: a card a step rounder than its controls */
+  border-radius: var(--luke-radius-10);
   background: var(--code-ground);
 }
 
@@ -900,7 +1164,7 @@
   padding-left: var(--luke-space-12);
   border-bottom: 1px solid var(--luke-color-border);
   background: var(--luke-color-fill-hover);
-  font-size: 11.5px; /* off-scale: the code's own type */
+  font-size: var(--luke-type-caption-size);
 }
 
 /* A file named in place (file-ref.tsx): its type's icon at the size the
@@ -1175,7 +1439,7 @@ button.file-ref:hover .file-ref-path {
   padding: var(--luke-space-2) var(--luke-space-4);
   overflow: hidden;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--luke-radius-6);
   background: none;
   color: var(--luke-color-text-muted);
   font: inherit;
@@ -1469,7 +1733,7 @@ button.file-ref:hover .file-ref-path {
   flex: 0 0 auto;
   color: var(--luke-color-attention);
   font-family: var(--luke-font-mono);
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .file-view-status[data-status="added"] {
@@ -1485,47 +1749,11 @@ button.file-ref:hover .file-ref-path {
 }
 
 /* The Files changed bar's diff settings (diff-settings.tsx): the button,
-   and under it a popover in the context popover's look, its rows the
-   settings page's own, scrolling within the room the panel leaves. */
+   and under it `@luke/ui`'s popover panel, its rows the settings page's
+   own, set apart in groups by a rule. */
 .diff-settings {
   position: relative;
   display: flex;
-}
-
-.diff-settings-popover {
-  display: flex;
-  max-height: min(560px, 70vh);
-  flex-direction: column;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-12) var(--luke-space-16) var(--luke-space-16);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-menu-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: 0 12px 32px var(--luke-color-shadow);
-  color: var(--luke-color-text);
-  font-size: 12.5px;
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.diff-settings-popover:focus-visible {
-  outline: none; /* no ring: a popover holding focus for its controls */
-}
-
-.diff-settings-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-right: calc(-1 * var(--luke-space-8));
-}
-
-.diff-settings-title {
-  margin: 0;
-  font-size: var(--luke-type-section-size);
-  font-weight: 600;
 }
 
 .diff-settings-group {
@@ -1568,8 +1796,8 @@ button.file-ref:hover .file-ref-path {
   margin: 0;
   padding: var(--luke-space-12);
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* Pierre's tree draws in a shadow root of its own, which inherits these:
@@ -1592,8 +1820,8 @@ button.file-ref:hover .file-ref-path {
   --trees-focus-ring-color-override: var(--luke-color-focus-ring);
   --trees-focus-ring-width-override: var(--focus-ring-width);
   --trees-focus-ring-offset-override: var(--focus-ring-inset);
-  --trees-font-family-override: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-  --trees-font-size-override: 12.5px;
+  --trees-font-family-override: var(--luke-font-sans);
+  --trees-font-size-override: var(--luke-type-caption-size);
   --trees-git-added-color-override: var(--luke-color-complete);
   --trees-git-modified-color-override: var(--luke-color-attention);
   --trees-git-deleted-color-override: var(--luke-color-danger-text);
@@ -1635,7 +1863,7 @@ button.file-ref:hover .file-ref-path {
 .file-tree-host > .file-tree-cut {
   flex: none;
   border-top: 1px solid var(--luke-color-border);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The line under a change set's tree counting its files (file-tree-pane.tsx),
@@ -1646,7 +1874,7 @@ button.file-ref:hover .file-ref-path {
   padding: var(--luke-space-6) var(--luke-space-12);
   border-top: 1px solid var(--luke-color-border);
   color: var(--luke-color-text-muted);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* Why the file is not drawn, standing over the lines Luke showed of it. */
@@ -1657,8 +1885,8 @@ button.file-ref:hover .file-ref-path {
   padding: var(--luke-space-8) var(--luke-space-12);
   border-bottom: 1px solid var(--luke-color-border);
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .file-tab-notice > p {
@@ -1677,8 +1905,8 @@ button.file-ref:hover .file-ref-path {
   padding: var(--luke-space-8) var(--luke-space-12);
   border-bottom: 1px solid var(--luke-color-border);
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* A reviewer's standing, in GitHub's colours: approved green, changes asked
@@ -1826,8 +2054,8 @@ button.file-ref:hover .file-ref-path {
   background: none;
   color: var(--luke-color-text-muted);
   font: inherit;
-  font-size: 13px;
-  font-weight: 560;
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
   white-space: nowrap;
   transition:
     color var(--duration-hover) ease,
@@ -1854,9 +2082,9 @@ button.file-ref:hover .file-ref-path {
 
 .pull-request-tab-count {
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
-  font-weight: 400;
+  font-weight: var(--luke-weight-regular);
 }
 
 .pull-request-tab-count[data-check-summary] {
@@ -1906,7 +2134,7 @@ button.file-ref:hover .file-ref-path {
   gap: var(--luke-space-6) var(--luke-space-16);
   padding: var(--luke-space-8) var(--column-inset) 0;
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .side-panel-content .pull-request-filters {
@@ -1943,7 +2171,7 @@ button.file-ref:hover .file-ref-path {
   padding: var(--luke-space-4) var(--column-inset) var(--luke-space-4) var(--content-inset);
   border-bottom: 1px solid var(--luke-color-border);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .pull-request-write-note .failure-note-words {
@@ -1964,45 +2192,6 @@ button.file-ref:hover .file-ref-path {
   display: flex;
 }
 
-/* Never taller than the room its side of the press leaves (`@luke/ui`'s
-   `AnchoredPopover` sets it as `--luke-popover-room`), scrolling within it,
-   so a short window keeps Submit in reach. */
-.pull-request-review-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-12);
-  max-height: var(--luke-popover-room, none);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: var(--luke-space-12) var(--luke-space-16) var(--luke-space-16);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-menu-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: var(--menu-shadow);
-  color: var(--luke-color-text);
-  font-size: 12.5px;
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.pull-request-review-panel:focus-visible {
-  outline: none; /* no ring: a popover holding focus for its controls */
-}
-
-.pull-request-review-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-right: calc(-1 * var(--luke-space-8));
-}
-
-.pull-request-review-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-}
-
 .pull-request-review-lead {
   margin: calc(-1 * var(--luke-space-8)) 0 0;
   color: var(--luke-color-text-muted);
@@ -2013,10 +2202,6 @@ button.file-ref:hover .file-ref-path {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-8);
-}
-
-.pull-request-review-panel > * {
-  flex-shrink: 0;
 }
 
 .pull-request-review-field,
@@ -2037,7 +2222,7 @@ button.file-ref:hover .file-ref-path {
   overflow-y: auto;
   padding: 9px 11px;
   border: 1px solid var(--luke-color-border);
-  border-radius: 10px;
+  border-radius: var(--luke-radius-10);
 }
 
 .pull-request-review-preview > p:only-child {
@@ -2073,7 +2258,7 @@ button.file-ref:hover .file-ref-path {
 }
 
 .pull-request-review-event input {
-  margin: 2px 0 0;
+  margin: var(--luke-space-2) 0 0;
   accent-color: var(--luke-color-accent);
 }
 
@@ -2085,13 +2270,13 @@ button.file-ref:hover .file-ref-path {
 }
 
 .pull-request-review-event-label {
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .pull-request-review-note {
   margin: 0;
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .pull-request-review-note .failure-note-words {
@@ -2112,7 +2297,7 @@ button.file-ref:hover .file-ref-path {
   overflow: hidden;
   color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2145,15 +2330,15 @@ button.file-ref:hover .file-ref-path {
 .pull-request-title {
   margin: 0;
   color: var(--luke-color-text);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.35;
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-semibold);
+  line-height: var(--luke-type-dialog-leading);
   user-select: text;
 }
 
 .pull-request-number {
   color: var(--luke-color-text-subtle);
-  font-weight: 400;
+  font-weight: var(--luke-weight-regular);
 }
 
 /* Who opened it and its reviewers, in the Changes tab's voice, standing on
@@ -2179,7 +2364,7 @@ button.file-ref:hover .file-ref-path {
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
   color: var(--luke-color-text);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .pull-request-merge > svg {
@@ -2211,19 +2396,19 @@ button.file-ref:hover .file-ref-path {
   gap: var(--luke-space-6);
   margin: 0 0 var(--luke-space-6);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .pull-request-count {
   color: var(--luke-color-text-subtle);
   font-variant-numeric: tabular-nums;
-  font-weight: 400;
+  font-weight: var(--luke-weight-regular);
 }
 
 .pull-request-none {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* A part of the overview still being read: its blocks in the type its
@@ -2276,7 +2461,7 @@ button.file-ref:hover .file-ref-path {
   border-top: 1px solid var(--luke-color-border);
   background: none;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   text-align: center;
   transition:
     background-color var(--duration-hover) ease,
@@ -2301,7 +2486,7 @@ button.file-ref:hover .file-ref-path {
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
-  border-radius: 4px;
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-hover);
   object-fit: cover;
 }
@@ -2316,7 +2501,7 @@ button.file-ref:hover .file-ref-path {
   border: 0;
   background: none;
   color: var(--luke-color-text);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
   text-align: left;
 }
 
@@ -2374,7 +2559,7 @@ button.pull-request-check:hover {
 .pull-request-words {
   min-width: 0;
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   line-height: 1.55;
   user-select: text;
 }
@@ -2397,7 +2582,7 @@ button.pull-request-check:hover {
   padding: var(--luke-space-8) var(--boxed-inset);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* A task list stands as GitHub draws one: its boxes in the bullets' place. */
@@ -2418,7 +2603,7 @@ button.pull-request-check:hover {
   display: inline-block;
   max-width: 100%;
   height: auto;
-  border-radius: var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
   vertical-align: middle;
 }
 
@@ -2426,7 +2611,7 @@ button.pull-request-check:hover {
   display: inline-block;
   width: min(100%, 240px);
   aspect-ratio: 16 / 10;
-  border-radius: var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-hover);
   vertical-align: middle;
 }
@@ -2465,7 +2650,7 @@ button.pull-request-check:hover {
   gap: var(--luke-space-8);
   padding: var(--luke-space-6) var(--boxed-inset);
   color: var(--luke-color-text);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
   transition: background-color var(--duration-hover) ease;
 }
 
@@ -2500,13 +2685,13 @@ button.pull-request-check:hover {
    name wears (desktop.css's `.actor-bot`). */
 .pull-request-thread-label {
   flex: 0 0 auto;
-  padding: 0 5px; /* off-scale */
-  border-radius: 4px;
+  padding: 0 var(--luke-space-6);
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text-muted);
-  font-size: 10.5px;
-  font-weight: 500;
-  line-height: 16px;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* The preview (file-diff.tsx) stands in the box rather than filling a tab. */
@@ -2564,7 +2749,7 @@ button.pull-request-check:hover {
   background: var(--luke-color-input);
   color: var(--luke-color-text-subtle);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
   text-align: start;
   cursor: text;
 }
@@ -2601,7 +2786,7 @@ button.pull-request-check:hover {
 .pull-request-thread-note {
   margin: 0;
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .pull-request-thread-note .failure-note-words {
@@ -2621,7 +2806,7 @@ button.pull-request-check:hover {
   border: 0;
   background: none;
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   text-decoration: underline;
 }
 
@@ -2629,13 +2814,13 @@ button.pull-request-check:hover {
   margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .file-tab-edge {
   display: block;
   width: 100%;
-  padding: var(--luke-space-4) 0 var(--luke-space-4) 48px;
+  padding: var(--luke-space-4) 0 var(--luke-space-4) var(--luke-space-48);
   border: 0;
   background: none;
   color: var(--luke-color-text-subtle);
@@ -2728,7 +2913,7 @@ button.pull-request-check:hover {
 .file-note-author {
   flex: 0 0 auto;
   color: var(--voice-luke);
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .file-note-lines,
@@ -2826,7 +3011,7 @@ button.pull-request-check:hover {
   padding: var(--luke-space-6) 0;
   color: var(--code-text);
   font-family: var(--luke-font-mono);
-  font-size: 11.5px; /* off-scale: the code's own type */
+  font-size: var(--luke-type-caption-size);
   line-height: 1.6;
   -webkit-user-select: text;
   user-select: text;
@@ -2909,7 +3094,7 @@ button.pull-request-check:hover {
 }
 
 .transcript-heading:where([data-level="2"]) {
-  font-size: 14px; /* off-scale: a step between the dialog's heading and the body */
+  font-size: var(--luke-type-section-size);
 }
 
 .transcript-list {
@@ -2944,11 +3129,19 @@ ol.transcript-list {
   overflow: auto;
   color: var(--luke-color-text);
   font-family: var(--luke-font-mono);
-  font-size: 11.5px; /* off-scale: the Code tab cards' type */
+  font-size: var(--luke-type-caption-size);
   line-height: 1.625;
   overflow-wrap: anywhere;
   user-select: text;
   white-space: pre-wrap;
+}
+
+/* Where a transcript line's words start: past a call's line inset, its 16px
+   icon seat, and the gap after it. What opens under a line (a call's body,
+   a model's reasoning, a todo list, a subagent's failure, a call's pictures)
+   is set in to it, so it stands under the words rather than the icon. */
+:root {
+  --transcript-gutter: calc(var(--luke-space-4) + 16px + var(--luke-icon-gap));
 }
 
 /* A tool call (../ai-elements/tool.tsx): one line, opening its body under
@@ -2956,7 +3149,7 @@ ol.transcript-list {
    subject, and working mark keep, its label in the full ink over it; a
    hover fill says the line opens. */
 .tool {
-  font-size: 12.5px; /* off-scale: a transcript's call line */
+  font-size: var(--luke-type-caption-size);
 }
 
 .tool-line {
@@ -2982,7 +3175,7 @@ ol.transcript-list {
 .tool-opening {
   width: 100%;
   background: transparent;
-  font-size: 12.5px; /* off-scale: a call's line */
+  font-size: var(--luke-type-caption-size);
   text-align: left;
 }
 
@@ -3044,16 +3237,16 @@ ol.transcript-list {
 
 .tool-subject[data-code] {
   font-family: var(--luke-font-mono);
-  font-size: 11.5px; /* off-scale: the Code tab cards' type */
+  font-size: var(--luke-type-caption-size);
 }
 
 .tool-place {
   flex-shrink: 0;
   padding-inline: var(--luke-space-4);
   border: 1px solid var(--luke-color-border);
-  border-radius: 4px; /* off-scale: a quiet tag's corner */
+  border-radius: var(--luke-radius-6);
   color: var(--luke-color-text-muted);
-  font-size: 11px; /* off-scale: a quiet tag's type */
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The body under an open line, set in past its icon: a card holding the
@@ -3062,7 +3255,7 @@ ol.transcript-list {
 .tool-body {
   --focus-ring-offset: var(--focus-ring-inset);
 
-  margin: var(--luke-space-4) 0 var(--luke-space-4) 28px; /* off-scale: past the line's inset and icon */
+  margin: var(--luke-space-4) 0 var(--luke-space-4) var(--transcript-gutter);
   overflow: hidden;
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-8);
@@ -3099,7 +3292,7 @@ ol.transcript-list {
   padding: var(--luke-space-8) var(--luke-space-12);
   color: var(--luke-color-danger-text);
   font-family: var(--luke-font-mono);
-  font-size: 11.5px; /* off-scale: the Code tab cards' type */
+  font-size: var(--luke-type-caption-size);
   line-height: 1.625;
   overflow-wrap: anywhere;
   user-select: text;
@@ -3115,7 +3308,7 @@ ol.transcript-list {
   border-top: 1px solid var(--luke-color-border);
   background: transparent;
   color: var(--luke-color-text-muted);
-  font-size: 11.5px; /* off-scale: the Code tab cards' type */
+  font-size: var(--luke-type-caption-size);
   text-align: left;
   transition: color var(--duration-quick) var(--spring);
 }
@@ -3138,7 +3331,7 @@ ol.transcript-list {
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-8);
   background: var(--luke-color-fill-hover);
-  font-size: 12.5px; /* off-scale: a call's line, which it sits among */
+  font-size: var(--luke-type-caption-size);
 }
 
 .plan-card-head {
@@ -3212,7 +3405,7 @@ ol.transcript-list {
    cut to the line. Open, its words sit under the line's, set in past the
    brain, in the muted ink, keeping their own breaks and wrapping anywhere. */
 .reasoning {
-  font-size: 12.5px; /* off-scale: a call's line, which it sits among */
+  font-size: var(--luke-type-caption-size);
 }
 
 .reasoning-line {
@@ -3253,7 +3446,7 @@ ol.transcript-list {
 }
 
 .reasoning-body {
-  margin: var(--luke-space-4) 0 0 28px; /* off-scale: past the line's inset and brain */
+  margin: var(--luke-space-4) 0 0 var(--transcript-gutter);
   color: var(--luke-color-text-muted);
 }
 
@@ -3307,7 +3500,7 @@ ol.transcript-list {
   overscroll-behavior-x: contain;
   color: var(--code-text);
   font-family: var(--luke-font-mono);
-  font-size: 11.5px; /* off-scale: the Code tab cards' type */
+  font-size: var(--luke-type-caption-size);
   line-height: 1.6;
   overflow-wrap: normal;
   tab-size: 2;
@@ -3321,7 +3514,7 @@ ol.transcript-list {
 /* An inline span of code: the blocks' type on a subtle fill, no edge. */
 .transcript-inline-code {
   padding: 0.1em 0.35em;
-  border-radius: 4px; /* off-scale: a corner in step with the words' own size */
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
   font-family: var(--luke-font-mono);
   font-size: 0.9em;
@@ -3418,7 +3611,7 @@ ol.transcript-list {
    but its last, which the reset below takes, so a failure's press never
    touches the pull request's row under it. */
 [role="log"] > :is(.agent-end, .agent-end-line):not(:last-child) {
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--luke-space-12);
 }
 
 /* The end line: a failure's mark, its words, then what the turn cost after
@@ -3430,13 +3623,13 @@ ol.transcript-list {
 .agent-end-line {
   margin: 0;
   color: var(--luke-color-text-subtle);
-  font-size: 12.5px;
-  line-height: 18px; /* off-scale: the transcript's meta line */
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .agent-end-line > .failed-mark {
   margin-right: var(--luke-space-4);
-  vertical-align: -3px; /* off-scale: centres a 14px mark on 12.5px words */
+  vertical-align: -3px; /* off-scale: centres a 14px mark on 12px words */
 }
 
 .agent-end-line[data-failed] > .agent-end-words {
@@ -3481,10 +3674,13 @@ ol.transcript-list {
   gap: var(--luke-space-4);
   margin: 0;
   color: var(--luke-color-text-subtle);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .agent-continued > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
   align-self: center;
 }
 
@@ -3517,10 +3713,16 @@ ol.transcript-list {
 .agent-undelivered {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--luke-space-4);
   margin: 0;
   color: var(--luke-color-danger-text);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
+}
+
+.agent-undelivered > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
 }
 
 .is-user:has(> .agent-undelivered) > :not(.agent-undelivered, .message-meta) {
@@ -3558,10 +3760,16 @@ ol.transcript-list {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: var(--luke-space-4);
   margin: var(--luke-space-2) 0 0;
   color: var(--luke-color-text-subtle);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
+}
+
+.agent-forked-to > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
 }
 
 .agent-forked-to-item {
@@ -3586,7 +3794,7 @@ ol.transcript-list {
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-8);
   color: var(--luke-color-text-muted);
-  font-size: 12.5px; /* off-scale: a transcript's meta line */
+  font-size: var(--luke-type-caption-size);
 }
 
 .draft-fork-glyph {
@@ -3649,7 +3857,7 @@ button.draft-fork-quote:hover {
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-8);
   background: var(--luke-color-fill-hover);
-  font-size: 12.5px; /* off-scale: a call's line, which it sits among */
+  font-size: var(--luke-type-caption-size);
 }
 
 .todos-dock-head {
@@ -3707,7 +3915,7 @@ button.draft-fork-quote:hover {
    row's text column, past the line's inset and icon, and selectable as a
    call's body is; a failure is said under it. */
 .todos-body {
-  margin: var(--luke-space-2) 0 var(--luke-space-4) 28px; /* off-scale: past the line's inset and icon */
+  margin: var(--luke-space-2) 0 var(--luke-space-4) var(--transcript-gutter);
   user-select: text;
 }
 
@@ -3841,7 +4049,7 @@ button.draft-fork-quote:hover {
   width: 100%;
   flex-direction: column;
   border: 1px solid var(--luke-color-border);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--desktop-sidebar);
 }
 
@@ -3904,15 +4112,15 @@ button.draft-fork-quote:hover {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 0 16px 12px;
+  gap: var(--luke-space-8);
+  padding: 0 var(--luke-space-16) var(--luke-space-12);
 }
 
 .agent-composer-note {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-left: 4px;
+  gap: var(--luke-space-8);
+  padding-left: var(--luke-space-4);
 }
 
 /* The box's field (`composer-field.tsx`): its editor in the body type, one
@@ -3986,7 +4194,7 @@ button.draft-fork-quote:hover {
    it is a button drawing its words in the bubble's type, which opens the
    same file. */
 .skill-chip {
-  border-radius: 4px;
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
   box-shadow: 0 0 0 2px var(--luke-color-fill-strong);
 }
@@ -4046,7 +4254,7 @@ button.skill-chip:hover,
   flex: 0 1 auto;
   min-width: 0;
   align-items: center;
-  gap: 4px;
+  gap: var(--luke-space-4);
 }
 
 /* The composer answers its card's width, not the window's, so it holds in
@@ -4118,6 +4326,10 @@ button.skill-chip:hover,
   display: flex;
   flex: 1 1 0;
   min-width: 0;
+  padding-inline: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .inbox-answer-actions {
@@ -4125,7 +4337,7 @@ button.skill-chip:hover,
   flex: 0 1 auto;
   min-width: 0;
   align-items: center;
-  gap: 4px;
+  gap: var(--luke-space-4);
 }
 
 .inbox-answer-quiet [data-inbox-quiet] {
@@ -4136,10 +4348,11 @@ button.skill-chip:hover,
 }
 
 .inbox-presses {
+  display: flex;
   flex: none;
   flex-wrap: wrap;
   justify-content: flex-end;
-  row-gap: var(--luke-space-8);
+  gap: var(--luke-space-8) var(--luke-control-gap);
 }
 
 /* A box answered in words alone holds its round Send at the field's end
@@ -4157,12 +4370,13 @@ button.skill-chip:hover,
   }
 
   .inbox-answer:not([data-presses]) .agent-composer-input {
-    padding: var(--luke-space-12) calc(30px + 2 * var(--luke-space-6)) var(--luke-space-12)
-      var(--luke-space-12);
+    padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6))
+      var(--luke-space-12) var(--luke-space-12);
   }
 
   .inbox-answer:not([data-presses]) .agent-composer-placeholder {
-    padding: var(--luke-space-12) calc(30px + 2 * var(--luke-space-6)) 0 var(--luke-space-12);
+    padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6)) 0
+      var(--luke-space-12);
   }
 
   .inbox-answer:not([data-presses]) > .inbox-answer-foot {
@@ -4245,13 +4459,13 @@ button.skill-chip:hover,
 .composer-quote {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  margin: 4px 0;
+  gap: var(--luke-space-8);
+  margin: var(--luke-space-4) 0;
   padding-left: 0.8em;
   border-left: 3px solid var(--luke-color-border-strong);
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
-  line-height: 20px;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-body-leading);
   user-select: none;
 }
 
@@ -4284,7 +4498,7 @@ button.skill-chip:hover,
 .reply-to-selection {
   position: fixed;
   z-index: var(--z-menu);
-  padding: 2px;
+  padding: var(--luke-space-2);
   translate: -50% -100%;
   -webkit-app-region: no-drag;
 }
@@ -4297,7 +4511,7 @@ button.skill-chip:hover,
   height: 26px;
   padding: 0 var(--luke-space-8);
   color: var(--luke-color-text);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .reply-to-selection .toolbar-button svg {
@@ -4312,14 +4526,14 @@ button.skill-chip:hover,
 .attached-files {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--luke-space-8);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .agent-composer .attached-files {
-  padding: 12px 12px 0;
+  padding: var(--luke-space-12) var(--luke-space-12) 0;
 }
 
 .is-user > .attached-files {
@@ -4335,7 +4549,7 @@ button.skill-chip:hover,
   max-width: min(220px, 100%);
   height: 48px;
   border: 1px solid var(--luke-color-border);
-  border-radius: 8px;
+  border-radius: var(--luke-radius-8);
   background: var(--luke-color-surface);
   transition: border-color var(--duration-hover) ease;
 }
@@ -4345,12 +4559,12 @@ button.skill-chip:hover,
   min-width: 0;
   flex: 1 1 auto;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px 0 10px;
-  border-radius: 7px;
+  gap: var(--luke-space-8);
+  padding: 0 var(--luke-space-12);
+  border-radius: var(--luke-radius-8);
   background: none;
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
@@ -4380,7 +4594,7 @@ button.attached-file-face:hover {
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: 7px;
+  border-radius: var(--luke-radius-8);
   object-fit: cover;
   transition: filter var(--duration-hover) ease;
 }
@@ -4685,7 +4899,7 @@ button.attached-file-face:hover img {
 .continued-composer > .banner-row {
   padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
-  border-radius: 12px; /* off-scale: the composer card's corner */
+  border-radius: var(--luke-radius-14);
   background: var(--desktop-sidebar);
 }
 
@@ -4885,18 +5099,8 @@ button.attached-file-face:hover img {
   line-height: var(--luke-type-caption-leading);
 }
 
-.terminal-shell-field {
-  min-width: 0;
+.terminal-shell > .luke-inline-edit {
   flex: 1;
-  padding: 1px var(--luke-space-4);
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-input);
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
 }
 
 .terminal-shell-mark {
@@ -4925,7 +5129,7 @@ button.attached-file-face:hover img {
   visibility: visible;
 }
 
-.terminal-shell:has(.terminal-shell-field) .terminal-shell-kill {
+.terminal-shell:has(> .luke-inline-edit) .terminal-shell-kill {
   visibility: hidden;
 }
 
@@ -5099,6 +5303,12 @@ button.agent-ref:hover .agent-ref-name {
   max-height: clamp(160px, 100vh - 320px, 400px);
 }
 
+/* The searchable menu's class rides a box drawn as its contents
+   (`agent-servers.tsx`), so its rows lie in `@luke/ui`'s panel. */
+.luke-popover-panel > .agent-servers-menu {
+  display: contents;
+}
+
 .agent-servers-row[data-opens="true"] {
   cursor: default;
 }
@@ -5110,7 +5320,7 @@ button.agent-ref:hover .agent-ref-name {
 .agent-servers-count {
   flex: none;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -5150,7 +5360,7 @@ button.agent-ref:hover .agent-ref-name {
   flex: 1 1 auto;
   overflow: hidden;
   color: var(--luke-color-attention);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -5172,7 +5382,7 @@ button.agent-ref:hover .agent-ref-name {
 .agent-servers-hit .integration-tool-id {
   flex: 0 1 auto;
   color: var(--luke-color-text);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* A server's page, in the popover's place: back (`@luke/ui`'s IconButton),
@@ -5198,7 +5408,7 @@ button.agent-ref:hover .agent-ref-name {
   overflow: hidden;
   color: var(--luke-color-text);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -5256,39 +5466,6 @@ button.agent-ref:hover .agent-ref-name {
 /* The popover hangs above the ring as the model menu does above its chip,
    at its width, on the menu's own surface; each part of the context wears
    one colour on the bar and on its legend row's square. */
-.agent-context-popover {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-12) var(--luke-space-16) var(--luke-space-16);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-menu-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: var(--menu-shadow);
-  color: var(--luke-color-text);
-  font-size: 12.5px;
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.agent-context-popover:focus-visible {
-  outline: none; /* no ring: a popover holding focus for its controls */
-}
-
-.agent-context-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-right: calc(-1 * var(--luke-space-8));
-}
-
-.agent-context-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-}
-
 .agent-context-summary {
   display: flex;
   justify-content: space-between;
@@ -5298,7 +5475,7 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 .agent-context-full {
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .agent-context-total {
@@ -5310,7 +5487,7 @@ button.agent-ref:hover .agent-ref-name {
   height: 6px;
   overflow: hidden;
   gap: var(--luke-space-2);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: var(--luke-color-fill-strong);
 }
 
@@ -5363,22 +5540,22 @@ button.agent-ref:hover .agent-ref-name {
 .agent-context-note {
   margin: 0;
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
-.agent-context-popover [data-part="system-prompt"] {
+.agent-context [data-part="system-prompt"] {
   --context-part: var(--luke-color-merged);
 }
 
-.agent-context-popover [data-part="tool-definitions"] {
+.agent-context [data-part="tool-definitions"] {
   --context-part: var(--luke-color-working);
 }
 
-.agent-context-popover [data-part="brief"] {
+.agent-context [data-part="brief"] {
   --context-part: var(--luke-color-complete);
 }
 
-.agent-context-popover [data-part="conversation"] {
+.agent-context [data-part="conversation"] {
   --context-part: var(--luke-color-text-muted);
 }
 
@@ -5469,7 +5646,7 @@ button.agent-ref:hover .agent-ref-name {
   background: none;
   color: var(--luke-color-text);
   overflow: hidden;
-  font-size: 12.5px; /* off-scale: a transcript's call line */
+  font-size: var(--luke-type-caption-size);
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
@@ -5547,8 +5724,8 @@ button.agent-ref:hover .agent-ref-name {
   padding: 0;
   background: none;
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   text-align: left;
   transition: color var(--duration-hover) ease;
 }
@@ -5582,8 +5759,8 @@ svg.lucide {
   border-radius: var(--luke-radius-6);
   background: none;
   color: var(--luke-color-text-muted);
-  font-size: 12.5px; /* off-scale: a transcript's call line */
-  line-height: 1.5;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
@@ -5624,9 +5801,9 @@ button.subagent-line:hover {
 /* Why a call failed, under the job, past the line's 4px padding, mark, and
    gap. */
 .subagent-error {
-  margin: var(--luke-space-4) 0 0 28px; /* off-scale: past the line's inset and icon */
+  margin: var(--luke-space-4) 0 0 var(--transcript-gutter);
   color: var(--luke-color-danger-text);
-  font-size: 12.5px; /* off-scale: a transcript's call line */
+  font-size: var(--luke-type-caption-size);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -5701,7 +5878,7 @@ button.inbox-option:hover:not(:disabled) {
 .inbox-picked {
   margin-left: var(--luke-space-8);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   white-space: nowrap;
 }
 
@@ -5742,12 +5919,12 @@ button.inbox-option:hover:not(:disabled) {
   flex: none;
   margin-top: 3px;
   padding: 0 var(--luke-space-6);
-  border-radius: 4px;
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-accent);
   color: var(--luke-color-on-accent);
-  font-size: 10.5px;
-  font-weight: 560;
-  line-height: 16px;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .inbox-recommended[data-settled="true"] {
@@ -5879,10 +6056,10 @@ button.picture-frame {
   display: flex;
   width: max-content;
   align-items: center;
-  gap: 2px;
-  padding: 3px;
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-2);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 9px;
+  border-radius: var(--luke-radius-8);
   background: var(--luke-color-overlay);
   box-shadow: 0 6px 18px var(--luke-color-shadow-deep);
   translate: 0 calc(-100% - var(--luke-space-8));
@@ -5897,12 +6074,12 @@ button.picture-frame {
   gap: var(--luke-space-4);
   padding: 0 var(--luke-space-8);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: transparent;
   color: var(--luke-color-text);
   font: inherit;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 /* With no room above the picture inside the plan's scroller, as at its top,
@@ -5940,7 +6117,7 @@ button.picture-frame {
   width: min(360px, 100%);
   gap: var(--luke-space-6);
   margin: var(--luke-space-6) 0 var(--luke-space-12);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .picture-describe label {
@@ -5950,17 +6127,17 @@ button.picture-frame {
 
 .picture-describe-label {
   color: var(--luke-color-text-muted);
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .picture-describe-field {
-  padding: 6px 9px;
+  padding: var(--luke-space-6) var(--luke-space-8);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 7px;
+  border-radius: var(--luke-radius-8);
   background: var(--desktop-well);
   color: var(--luke-color-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 /* A picture waiting on its upload: the Mac's own bytes at half strength,
@@ -5976,8 +6153,8 @@ button.picture-frame {
   gap: var(--luke-space-6);
   margin-top: var(--luke-space-6);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .picture-status.failure-note {
@@ -6001,7 +6178,7 @@ button.picture-frame {
 .picture-set-tiles {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--luke-space-6);
 }
 
 .picture-set-tile {
@@ -6059,14 +6236,14 @@ button.picture-frame {
   place-items: center;
   background: var(--picture-veil);
   color: var(--picture-veil-ink);
-  font-size: 17px;
-  font-weight: 600;
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* The pictures an integration's call answered: the message box's chips,
    set in under the row's words, a picture not kept saying so. */
 .call-pictures {
-  margin: 2px 0 6px 28px;
+  margin: var(--luke-space-2) 0 var(--luke-space-6) var(--transcript-gutter);
 }
 
 .call-picture[data-state] .attached-file-face {
@@ -6116,6 +6293,6 @@ button.picture-frame {
 /* A form's text field takes Settings' well, but in the card's body type:
    Settings' tracking is for a key's characters, not an answer's words. */
 .inbox-field-input {
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   letter-spacing: 0;
 }
