@@ -1,4 +1,11 @@
-import { GAP, SearchField, type SearchTally, Stack } from "@luke/ui";
+import {
+  GAP,
+  SEARCH_FIELD_LOOK,
+  SearchField,
+  type SearchFieldLook,
+  type SearchTally,
+  Stack,
+} from "@luke/ui";
 import { type ReactNode, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -6,7 +13,7 @@ import { CatalogSection } from "../section";
 /**
  * search-fields.tsx -- a SearchField empty with its chord, holding a query
  * with its clear, with a tally of its results and of none, and in a narrow
- * column with a long query.
+ * column with a long query; and as a menu's head row.
  */
 
 /** A search the example holds the query of, as a caller would. */
@@ -17,6 +24,7 @@ function Held({
   tally,
   shortcut,
   clears = false,
+  look,
 }: {
   start: string;
   label: string;
@@ -24,6 +32,7 @@ function Held({
   tally?: SearchTally;
   shortcut?: ReactNode;
   clears?: boolean;
+  look?: SearchFieldLook;
 }): React.JSX.Element {
   const [query, setQuery] = useState(start);
   return (
@@ -36,6 +45,7 @@ function Held({
       {...(tally === undefined ? undefined : { tally })}
       {...(clears ? { onClear: () => setQuery("") } : undefined)}
       onEscape={() => setQuery("")}
+      look={look}
     />
   );
 }
@@ -77,6 +87,16 @@ function SearchFields(): React.JSX.Element {
             label="Search"
             placeholder="Search"
             clears
+          />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="search-menu" title="A menu's head row">
+        <div className="catalog-popover catalog-column">
+          <Held
+            start=""
+            label="Search models"
+            placeholder="Search models"
+            look={SEARCH_FIELD_LOOK.MENU}
           />
         </div>
       </CatalogSection>

@@ -3,14 +3,17 @@
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";
-import { Menu, type MenuEntry, useMenu } from "./menu.js";
+import { MENU_ITEM_MARK, Menu, type MenuEntry, MenuItem, useMenu } from "./menu.js";
 
 /**
  * menu.test.ts -- a menu behaves as a system menu does: its button opens it
  * with focus on its first item, the arrows pass over an item that does not
  * apply now, a submenu opens beside its item and closes alone, choosing an
  * item acts, and Escape, Tab, or a press elsewhere closes it, the keys
- * handing focus back to what opened it.
+ * handing focus back to what opened it. An item steered from a field, as
+ * a searchable menu's pinned rows are, is a switch for a setting and says
+ * whether the list it opens stands, keeps a press from taking the focus,
+ * and takes no press where it does not apply now.
  */
 
 declare global {
@@ -317,4 +320,67 @@ test("the menu key or Shift-F10 on a row opens its menu under it on the first it
     row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
   });
   expect(openMenu()).not.toBeNull();
+});
+
+/** Pinned rows steered from a field: Effort, opening its list, a Fast switch, and a dimmed Long context. */
+function mountSteered(chosen: Chosen) {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const steered = (id: string, extra: { expanded?: boolean } = {}) => ({
+    id,
+    highlighted: id === "effort",
+    onHover: () => chosen.push(`hover ${id}`),
+    ...extra,
+  });
+  act(() =>
+    root.render(
+      createElement(
+        Fragment,
+        null,
+        createElement(MenuItem, {
+          action: { label: "Effort", hint: "High", opens: true, onSelect: () => undefined },
+          steered: steered("effort", { expanded: true }),
+          onChoose: () => chosen.push("effort"),
+        }),
+        createElement(MenuItem, {
+          action: {
+            label: "Fast",
+            checked: false,
+            mark: MENU_ITEM_MARK.SWITCH,
+            onSelect: () => undefined,
+          },
+          steered: steered("fast"),
+          onChoose: () => chosen.push("fast"),
+        }),
+        createElement(MenuItem, {
+          action: { label: "Long context", disabled: true, onSelect: () => undefined },
+          steered: steered("long"),
+          onChoose: () => chosen.push("long"),
+        }),
+      ),
+    ),
+  );
+  return (id: string) => document.getElementById(id) ?? expect.fail(id);
+}
+
+test("an item steered from a field is a switch for a setting, says its list stands, keeps the focus, and a dimmed one takes no press", () => {
+  const chosen: Chosen = [];
+  const item = mountSteered(chosen);
+  const mousedown = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+  act(() => {
+    item("fast").dispatchEvent(mousedown);
+    item("fast").click();
+    item("long").dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+    item("long").click();
+    item("effort").dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+  });
+
+  expect(item("fast").getAttribute("role")).toBe("switch");
+  expect(item("fast").getAttribute("aria-checked")).toBe("false");
+  expect(item("effort").getAttribute("aria-expanded")).toBe("true");
+  expect(item("effort").textContent).toBe("EffortHigh");
+  expect(item("long").getAttribute("aria-disabled")).toBe("true");
+  expect(mousedown.defaultPrevented).toBe(true);
+  expect(chosen).toEqual(["fast", "hover effort"]);
 });

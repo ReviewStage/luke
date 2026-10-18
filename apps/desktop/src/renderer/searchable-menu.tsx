@@ -1,6 +1,22 @@
 import { APP_SHORTCUTS, type KeyedCommand } from "@luke/settings/shortcuts";
-import { CheckIcon, ChevronRightIcon, SearchIcon, SwitchMark, useComboboxField } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
+import {
+  type ComboboxGroup,
+  ComboboxList,
+  type ComboboxOption,
+  comboboxOptionId,
+  LIST_DENSITY,
+  List,
+  ListRow,
+  MENU_ITEM_MARK,
+  MenuItem,
+  SEARCH_FIELD_LOOK,
+  SearchField,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useComboboxField,
+} from "@luke/ui";
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Shortcut } from "./shortcut";
 import { Tooltip } from "./tooltip";
@@ -12,8 +28,8 @@ import { Tooltip } from "./tooltip";
  * opens and filtering as it is typed in; under it the rows, each an icon,
  * a name, a muted detail where the row has one, the shortcut that does the
  * same where there is one, and an end slot the check stands in where it is
- * the one chosen; a name or a detail cut short by the menu's width fades
- * out at its end rather than ending in an ellipsis, in a list that scrolls past a bounded height, the rows
+ * the one chosen; a name or a detail cut short by the menu's width ends
+ * in an ellipsis, in a list that scrolls past a bounded height, the rows
  * of a section under its heading; and under the list, pinned where the scrolling cannot
  * take them, the rows the owner wants always on screen, such as the page
  * on GitHub or the effort an agent will run at. A pinned row is a press of
@@ -34,7 +50,9 @@ import { Tooltip } from "./tooltip";
  * names the highlighted one to assistive technology by
  * `aria-activedescendant`, each row holding an id of its place. The keys
  * are `@luke/ui`'s `useComboboxField`, the one `Combobox` reads, so keys an
- * input method is composing with move and pick nothing here either. A
+ * input method is composing with move and pick nothing here either; the
+ * field is its `SearchField`, the lists its `ComboboxList`, and the pinned
+ * rows its `MenuItem`s, steered from the field. A
  * list too short to search is drawn with no field, the list itself
  * holding focus, naming the highlight, and reading the same keys. The owner says
  * what to list, what to say in the list's place while there is nothing to
@@ -86,11 +104,9 @@ interface Submenu {
 export interface FootRow {
   id: string;
   label: string;
-  icon?: React.ReactNode;
-  /** Muted words at the row's end, before its mark: the effort chosen now. */
+  icon?: React.JSX.Element;
+  /** Muted words at the row's end, before a submenu's chevron: the effort chosen now. */
   detail?: string | undefined;
-  /** A mark in the row's end slot: the arrow out on a row that leaves the app. A submenu row draws its own chevron. */
-  mark?: React.ReactNode;
   onPress?: () => void;
   submenu?: Submenu;
   /** A switch at the row's end, which a press turns; the menu stays open. */
@@ -176,95 +192,98 @@ function highlightOver(input: {
   return input.first;
 }
 
-/** What a row prints before its end slot: why it cannot be picked, its shortcut, or nothing. */
-function RowHint({ row }: { row: MenuRow }): React.JSX.Element | null {
-  if (row.disabled !== undefined) {
-    return <span className="menu-item-hint">{row.disabled}</span>;
-  }
-  if (row.command === undefined) return null;
-  return <Shortcut chord={APP_SHORTCUTS[row.command].chord} className="menu-item-hint" />;
+/** What a row prints at its end: why it cannot be picked now, its shortcut, or nothing. */
+function rowHint(row: MenuRow): React.ReactNode {
+  if (row.disabled !== undefined) return row.disabled;
+  if (row.command === undefined) return undefined;
+  return <Shortcut chord={APP_SHORTCUTS[row.command].chord} />;
 }
 
-/** Words in a row cut short by its width, marked so desktop.css fades them out at their end. */
-function RowWords(props: { className: string; children: React.ReactNode }): React.JSX.Element {
-  const [words, clipped] = useClipped();
+/**
+ * The matching rows as the list's options, a run under each heading. A
+ * menu with a row chosen keeps every row's check room, so their hints end
+ * in one line; one with none chosen keeps none.
+ */
+function optionGroups(rows: readonly MenuRow[], value: string | undefined): ComboboxGroup[] {
+  return sectionsOf(rows).map((section) => ({
+    label: section.heading,
+    options: section.rows.map(({ row }) => ({
+      id: row.id,
+      label: row.label,
+      icon: row.icon,
+      detail: row.detail,
+      hint: rowHint(row),
+      disabled: row.disabled !== undefined,
+      current: value === undefined ? undefined : row.id === value,
+    })),
+  }));
+}
+
+/** A submenu's rows as its list's options, the chosen one checked. */
+function submenuOptions(open: Submenu): ComboboxOption[] {
+  return open.rows.map((row) => ({
+    id: row.id,
+    label: row.label,
+    icon: row.icon,
+    detail: row.detail,
+    current: row.id === open.value,
+  }));
+}
+
+/** One muted line pressed by nothing, under the pinned rows or a submenu's. */
+function FootNote({ words }: { words: string }): React.JSX.Element {
   return (
-    <span ref={words} className={props.className} data-overflow={String(clipped)}>
-      {props.children}
-    </span>
-  );
-}
-
-/** A row's mark, in the glyph slot every menu's rows share; none where the row has no mark. */
-function RowGlyph({ icon }: { icon: React.ReactNode }): React.JSX.Element | null {
-  if (icon === undefined || icon === null) return null;
-  return <span className="menu-item-glyph">{icon}</span>;
-}
-
-/** The inside of every row: the mark, the name, the detail, the hint, and the end slot, which is drawn whether or not it holds anything so the names line up. */
-function RowBody(props: {
-  icon: React.ReactNode;
-  label: string;
-  detail: React.ReactNode;
-  hint?: React.ReactNode;
-  end: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <>
-      <RowGlyph icon={props.icon} />
-      <RowWords className="task-compose-menu-name">{props.label}</RowWords>
-      {props.detail !== undefined ? (
-        <RowWords className="task-compose-menu-detail">{props.detail}</RowWords>
-      ) : null}
-      {props.hint}
-      <span className="menu-item-end">{props.end}</span>
-    </>
+    <div className="task-compose-menu-foot-note">
+      <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+        {words}
+      </Text>
+    </div>
   );
 }
 
 /**
- * A menu's rows drawn in place rather than dropped: each a button of its own
- * in the page's order, in a row's look, under its section's heading as the
- * menu heads it, with no search and no highlight of its own, as the side
- * panel's well offers what its "+" offers with every tab closed.
+ * A menu's rows drawn in place rather than dropped: each a row of its own
+ * in the page's order, under its section's heading as the menu heads it,
+ * with no search and no highlight of its own, as the side panel's well
+ * offers what its "+" offers with every tab closed.
  */
 export function MenuRowList({
+  label,
   rows,
   onPick,
 }: {
+  /** What the rows are, for assistive technology, where they stand under no heading. */
+  label: string;
   rows: readonly MenuRow[];
   onPick: (id: string) => void;
 }): React.JSX.Element {
   return (
     <>
       {sectionsOf(rows).map((section) => {
-        const buttons = section.rows.map(({ row }) => (
-          <button
-            key={row.id}
-            type="button"
-            className="menu-item"
-            disabled={row.disabled !== undefined}
-            onClick={() => onPick(row.id)}
-          >
-            <RowBody
-              icon={row.icon}
-              label={row.label}
-              detail={row.detail}
-              hint={<RowHint row={row} />}
-              end={null}
-            />
-          </button>
-        ));
         const first = section.rows[0]?.row.id;
-        return section.heading === undefined ? (
-          <Fragment key={first}>{buttons}</Fragment>
-        ) : (
-          <section key={first} aria-label={section.heading}>
-            <div className="menu-heading" aria-hidden="true">
-              {section.heading}
-            </div>
-            {buttons}
-          </section>
+        return (
+          <Fragment key={first}>
+            {section.heading === undefined ? null : (
+              <div className="menu-row-list-heading" aria-hidden="true">
+                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+                  {section.heading}
+                </Text>
+              </div>
+            )}
+            <List label={section.heading ?? label} density={LIST_DENSITY.DENSE}>
+              {section.rows.map(({ row }) => (
+                <ListRow
+                  key={row.id}
+                  leading={row.icon}
+                  title={row.label}
+                  description={row.detail}
+                  meta={rowHint(row)}
+                  disabled={row.disabled !== undefined}
+                  onPress={() => onPick(row.id)}
+                />
+              ))}
+            </List>
+          </Fragment>
         );
       })}
     </>
@@ -357,12 +376,6 @@ export function SearchableMenu(props: {
     if (!leaving) (field.current ?? list.current)?.focus();
   }, [leaving]);
 
-  // The row the arrows reach is brought into the bounded list's view.
-  useEffect(() => {
-    const row = list.current?.querySelector<HTMLElement>('[aria-selected="true"]');
-    row?.scrollIntoView({ block: "nearest" });
-  }, [at]);
-
   // A submenu opens to the right and down from its row, and turns to the
   // left or stands up where the window ends before it does, measured
   // before it is painted, and again as the pointer moves it to another
@@ -404,9 +417,9 @@ export function SearchableMenu(props: {
   ];
   // Every row's id is its place: an option's in the list, a pinned row's
   // under it, an option's in the open submenu.
-  const optionId = (index: number) => `${listId}-option-${index}`;
+  const optionId = (index: number) => comboboxOptionId(listId, index);
   const footRowId = (index: number) => `${footId}-row-${index}`;
-  const subOptionId = (index: number) => `${submenuId}-option-${index}`;
+  const subOptionId = (index: number) => comboboxOptionId(submenuId, index);
   // Note that the field, or the list where there is none, names the
   // highlighted row, because focus stays there and a reader would otherwise
   // hear nothing as the arrows move. The field may name a submenu or a
@@ -463,13 +476,22 @@ export function SearchableMenu(props: {
       }
     },
   });
-  // Enter on a button in the foot is that button's own press; from the field
-  // or the list it picks the highlighted row, and goes no further either way,
-  // so a form around the menu never takes it as its own submit.
+  // Enter on a control of the note or the foot is that control's own press,
+  // and every other key heard there steers the rows as the field's would;
+  // the field and the list hear their own keys.
   const onKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Enter" && event.target !== field.current && event.target !== list.current)
-      return;
+    if (event.target === field.current || event.target === list.current) return;
+    if (event.key === "Enter") return;
     keys.onKeyDown(event);
+  };
+
+  // The pointer over a pinned row highlights it, and opens its submenu, or
+  // closes the one standing beside another row.
+  const hoverFoot = (row: FootRow, index: number) => {
+    if (index === footAt && (open !== undefined || row.submenu === undefined)) return;
+    setHighlight(matches.length + index);
+    if (row.submenu === undefined) setSubmenu(undefined);
+    else openSubmenu();
   };
 
   const root =
@@ -489,187 +511,92 @@ export function SearchableMenu(props: {
       onBlur={(event) => props.onLeave(event.relatedTarget)}
     >
       {searching ? (
-        <div className="task-compose-menu-search">
-          <SearchIcon />
-          <input
-            ref={field}
-            type="text"
-            {...keys.field}
-            aria-label={props.placeholder}
-            spellCheck={false}
-            placeholder={props.placeholder}
-            value={query}
-            onChange={(event) => {
-              const typed = event.currentTarget.value;
-              setQuery(typed);
-              // The first match that may be picked takes the highlight; with
-              // none, nothing does, so Enter picks nothing.
-              const first = firstOpen(matchingRows(rows, typed));
-              moveTo(first === NOWHERE ? undefined : first);
-            }}
-          />
-        </div>
+        <SearchField
+          ref={field}
+          look={SEARCH_FIELD_LOOK.MENU}
+          label={props.placeholder ?? props.label}
+          placeholder={props.placeholder}
+          value={query}
+          combobox={keys}
+          onChange={(typed) => {
+            setQuery(typed);
+            // The first match that may be picked takes the highlight; with
+            // none, nothing does, so Enter picks nothing.
+            const first = firstOpen(matchingRows(rows, typed));
+            moveTo(first === NOWHERE ? undefined : first);
+          }}
+        />
       ) : null}
-      {/* Note that a press on a row is kept from taking focus, because the
-          field is where the keys are read and a pick closes the menu anyway. */}
-      <div
+      <ComboboxList
         ref={list}
         id={listId}
-        className="task-compose-menu-list"
-        role="listbox"
-        aria-label={props.label}
-        aria-activedescendant={searching ? undefined : listActive}
-        tabIndex={searching ? undefined : -1}
-        onMouseDown={(event) => event.preventDefault()}
-      >
-        {sectionsOf(matches).map((section) => {
-          const options = section.rows.map(({ row, index }) => (
-            <button
-              key={row.id}
-              id={optionId(index)}
-              type="button"
-              role="option"
-              tabIndex={-1}
-              className="menu-item"
-              aria-selected={index === at}
-              aria-disabled={row.disabled === undefined ? undefined : "true"}
-              aria-current={row.id === value ? "true" : undefined}
-              onMouseMove={() => {
-                if (row.disabled === undefined) moveTo(index);
-              }}
-              onClick={() => {
-                if (row.disabled === undefined) onPick(row.id);
-              }}
-            >
-              <RowBody
-                icon={row.icon}
-                label={row.label}
-                detail={row.detail}
-                hint={<RowHint row={row} />}
-                end={row.id === value ? <CheckIcon /> : null}
-              />
-            </button>
-          ));
-          const first = section.rows[0]?.row.id;
-          return section.heading === undefined ? (
-            <Fragment key={first}>{options}</Fragment>
-          ) : (
-            // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
-            <div key={first} role="group" aria-label={section.heading}>
-              <div className="menu-heading" aria-hidden="true">
-                {section.heading}
-              </div>
-              {options}
-            </div>
-          );
-        })}
-        {props.note}
-        {matches.length === 0 && props.note === undefined ? (
-          <p className="task-compose-menu-note">{props.noMatch}</p>
-        ) : null}
-      </div>
+        label={props.label}
+        groups={optionGroups(matches, value)}
+        active={at}
+        onActiveChange={moveTo}
+        onChoose={(index) => onPick(matches[index]?.id ?? "")}
+        steer={searching ? undefined : keys}
+        note={props.note}
+        empty={props.note === undefined ? props.noMatch : undefined}
+      />
       {footed ? (
         <div id={footId} className="task-compose-menu-foot">
           {foot.map((row, index) => {
-            const id = footRowId(index);
-            // What every pinned row's button shares; a switch row adds its role on top.
-            const shared = {
-              id,
-              type: "button",
-              tabIndex: -1,
-              className: "menu-item",
-              "aria-disabled": row.disabled === undefined ? undefined : "true",
-              "data-highlighted": index === footAt ? "true" : undefined,
-              onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
-              onMouseMove: () => {
-                if (row.disabled !== undefined) return;
-                if (index === footAt && (open !== undefined || row.submenu === undefined)) return;
-                setHighlight(matches.length + index);
-                if (row.submenu === undefined) setSubmenu(undefined);
-                else openSubmenu();
-              },
-              onClick: () => pressFoot(row),
-            } as const;
-            const button =
-              row.toggle === undefined ? (
-                <button
-                  {...shared}
-                  data-submenu={row.submenu === undefined ? undefined : "true"}
-                  aria-haspopup={row.submenu === undefined ? undefined : "listbox"}
-                  aria-expanded={
-                    row.submenu === undefined ? undefined : index === footAt && open !== undefined
-                  }
-                >
-                  <RowBody
-                    icon={row.icon}
-                    label={row.label}
-                    detail={row.detail}
-                    end={row.submenu === undefined ? row.mark : <ChevronRightIcon />}
-                  />
-                </button>
-              ) : (
-                <button {...shared} role="switch" aria-checked={row.toggle.on}>
-                  <RowGlyph icon={row.icon} />
-                  <span className="task-compose-menu-name">{row.label}</span>
-                  <span className="task-compose-menu-switch">
-                    <SwitchMark checked={row.toggle.on} />
-                  </span>
-                </button>
-              );
-            return (
-              <div key={row.id} className="task-compose-menu-branch">
-                {row.disabled === undefined ? (
-                  button
-                ) : (
-                  <Tooltip label={row.disabled}>{button}</Tooltip>
-                )}
+            const item = (
+              <MenuItem
+                action={{
+                  label: row.label,
+                  ...(row.icon === undefined ? undefined : { icon: row.icon }),
+                  hint: row.detail,
+                  onSelect: () => pressFoot(row),
+                  disabled: row.disabled !== undefined,
+                  checked: row.toggle?.on,
+                  mark: row.toggle === undefined ? undefined : MENU_ITEM_MARK.SWITCH,
+                  opens: row.submenu !== undefined,
+                }}
+                steered={{
+                  id: footRowId(index),
+                  highlighted: index === footAt,
+                  expanded: index === footAt && open !== undefined,
+                  onHover: () => hoverFoot(row, index),
+                }}
+                onChoose={() => pressFoot(row)}
+              />
+            );
+            const branch = (
+              <div className="task-compose-menu-branch">
+                {item}
                 {index === footAt && open !== undefined ? (
                   <div
                     ref={panel}
-                    id={submenuId}
                     className="menu-surface task-compose-submenu"
-                    role="listbox"
-                    aria-label={open.label}
                     data-side={place.side}
                     data-stand={place.stand}
-                    onMouseDown={(event) => event.preventDefault()}
                   >
-                    {open.rows.map((sub, subIndex) => (
-                      <button
-                        key={sub.id}
-                        id={subOptionId(subIndex)}
-                        type="button"
-                        role="option"
-                        tabIndex={-1}
-                        className="menu-item"
-                        aria-selected={subIndex === subAt}
-                        aria-current={sub.id === open.value ? "true" : undefined}
-                        onMouseMove={() => setSubmenu({ moved: subIndex })}
-                        onClick={() => open.onPick(sub.id)}
-                      >
-                        <RowBody
-                          icon={sub.icon}
-                          label={sub.label}
-                          detail={sub.detail}
-                          end={sub.id === open.value ? <CheckIcon /> : null}
-                        />
-                      </button>
-                    ))}
-                    {open.note === undefined ? null : (
-                      <p className="task-compose-menu-foot-note" data-submenu-note="">
-                        {open.note}
-                      </p>
-                    )}
+                    <ComboboxList
+                      id={submenuId}
+                      label={open.label}
+                      groups={[{ options: submenuOptions(open) }]}
+                      active={subAt}
+                      onActiveChange={(moved) => setSubmenu({ moved })}
+                      onChoose={(_index, option) => open.onPick(option.id)}
+                    />
+                    {open.note === undefined ? null : <FootNote words={open.note} />}
                   </div>
                 ) : null}
               </div>
             );
+            // A row that cannot be pressed says why on hover, from around it,
+            // since the item takes no handlers but its own.
+            return row.disabled === undefined ? (
+              <Fragment key={row.id}>{branch}</Fragment>
+            ) : (
+              <Tooltip key={row.id} label={row.disabled}>
+                {branch}
+              </Tooltip>
+            );
           })}
-          {props.footNote === undefined ? null : (
-            <p className="task-compose-menu-foot-note" data-foot-note="">
-              {props.footNote}
-            </p>
-          )}
+          {props.footNote === undefined ? null : <FootNote words={props.footNote} />}
         </div>
       ) : null}
     </div>

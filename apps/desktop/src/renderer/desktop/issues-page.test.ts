@@ -431,7 +431,7 @@ function picked(page: HTMLElement, label: string): string | undefined {
 function pick(page: HTMLElement, label: string, option: string): void {
   act(() => picker(page, label).click());
   const row = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
-    (each) => each.querySelector(".task-compose-menu-name")?.textContent === option,
+    (each) => each.querySelector(".luke-combobox-option-label")?.textContent === option,
   );
   assert.ok(row, `no ${option} in ${label}`);
   act(() => row.click());

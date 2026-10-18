@@ -274,7 +274,7 @@ test("a / opens the repository's skills over the caret, the keys move through th
   await settle();
   const rows = () =>
     [...box.container.querySelectorAll('[role="listbox"] [role="option"]')].map((row) => ({
-      name: row.querySelector(".task-compose-menu-name")?.textContent,
+      name: row.querySelector(".luke-combobox-option-label")?.textContent,
       chosen: row.getAttribute("aria-selected"),
     }));
   assert.deepEqual(rows(), [

@@ -288,8 +288,8 @@ test("the panel's + lists each agent's terminal under Terminal, says how it stan
   );
   assert.deepEqual(
     rows.map((row) => [
-      row.querySelector(".task-compose-menu-name")?.textContent,
-      row.querySelector(".menu-item-hint") !== null,
+      row.querySelector(".luke-combobox-option-label")?.textContent,
+      row.querySelector(".luke-combobox-option-hint") !== null,
     ]),
     [
       ["Invite flow", false],

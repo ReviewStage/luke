@@ -1,4 +1,14 @@
-import { ALIGN, GAP, Stack, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  ALIGN,
+  ComboboxList,
+  comboboxOptionId,
+  GAP,
+  Stack,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import {
   holdsSlashWord,
   matchingSkills,
@@ -102,33 +112,21 @@ function offered(read: SkillsRead | undefined, trigger: ComposerTrigger | undefi
   return matchingSkills(read.skills, trigger.query);
 }
 
-/** The line the list shows where it offers no row. */
-function MenuNote({ read }: { read: SkillsRead | undefined }): React.JSX.Element {
-  if (read === undefined)
-    return <p className="task-compose-menu-note">{SKILL_MENU_NOTE.READING}</p>;
-  if ("unread" in read) {
-    return <p className="task-compose-menu-note">{read.unread}</p>;
-  }
-  if (read.skills.length > 0) {
-    return <p className="task-compose-menu-note">{SKILL_MENU_NOTE.NO_MATCH}</p>;
-  }
+/** What the list says where it offers no row. */
+function MenuNote({ read }: { read: SkillsRead | undefined }): React.ReactNode {
+  if (read === undefined) return SKILL_MENU_NOTE.READING;
+  if ("unread" in read) return read.unread;
+  if (read.skills.length > 0) return SKILL_MENU_NOTE.NO_MATCH;
   return (
-    <div className="task-compose-menu-note">
-      <Stack gap={GAP.TIGHT} align={ALIGN.CENTER}>
-        <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.SUBTLE}>
-          {SKILL_MENU_NOTE.NONE}
-        </Text>
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-          {SKILL_MENU_NOTE.NONE_HINT}
-        </Text>
-      </Stack>
-    </div>
+    <Stack gap={GAP.TIGHT} align={ALIGN.CENTER}>
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.SUBTLE}>
+        {SKILL_MENU_NOTE.NONE}
+      </Text>
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+        {SKILL_MENU_NOTE.NONE_HINT}
+      </Text>
+    </Stack>
   );
-}
-
-/** One row's id, under the list's own, which the field names as the row the keys would choose. */
-function optionId(listId: string, index: number): string {
-  return `${listId}-${index}`;
 }
 
 /** The list itself: a row per skill offered, the highlighted one washed, or the line saying why there is none. */
@@ -150,34 +148,25 @@ function SkillMenu({
   onHover: (index: number) => void;
   onChoose: (skill: SkillOption) => void;
 }): React.JSX.Element {
+  const options = rows.map((skill) => ({
+    id: skill.name,
+    label: skillWord(skill.name),
+    detail: skill.description,
+  }));
   return (
     <div className="menu-surface searchable-menu skill-menu" style={place}>
-      {/* Note that a press on a row keeps the caret in the box, where the keys are read. */}
-      <div
+      <ComboboxList
         id={id}
-        className="task-compose-menu-list"
-        role="listbox"
-        aria-label={SKILL_MENU_LABEL}
-        onMouseDown={(event) => event.preventDefault()}
-      >
-        {rows.map((skill, index) => (
-          <button
-            key={skill.name}
-            id={optionId(id, index)}
-            type="button"
-            role="option"
-            tabIndex={-1}
-            className="menu-item"
-            aria-selected={index === at}
-            onMouseMove={() => onHover(index)}
-            onClick={() => onChoose(skill)}
-          >
-            <span className="task-compose-menu-name">{skillWord(skill.name)}</span>
-            <span className="skill-menu-description">{skill.description}</span>
-          </button>
-        ))}
-        {rows.length === 0 ? <MenuNote read={read} /> : null}
-      </div>
+        label={SKILL_MENU_LABEL}
+        groups={[{ options }]}
+        active={at}
+        onActiveChange={onHover}
+        onChoose={(index) => {
+          const skill = rows[index];
+          if (skill !== undefined) onChoose(skill);
+        }}
+        note={rows.length === 0 ? <MenuNote read={read} /> : undefined}
+      />
     </div>
   );
 }
@@ -349,7 +338,7 @@ export function useSkillPicker({
       "aria-expanded": String(menu !== null),
       "aria-controls": menu === null ? undefined : listId,
       "aria-activedescendant":
-        menu === null || rows.length === 0 ? undefined : optionId(listId, at),
+        menu === null || rows.length === 0 ? undefined : comboboxOptionId(listId, at),
     },
     names,
     onTrigger: setTrigger,
