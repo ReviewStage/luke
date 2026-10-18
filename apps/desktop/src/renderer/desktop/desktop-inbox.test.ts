@@ -34,7 +34,11 @@ import {
 } from "@luke/features/inbox-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
-import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import {
+  WORKSPACE_ROLE,
+  type Workspace,
+  type WorkspaceMember,
+} from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { appBridge } from "@luke/panel/app-bridge";
@@ -215,6 +219,8 @@ let imageReads: (() => void)[] = [];
 let readMarks: string[] = [];
 /** Whether the service refuses a read mark, as one for an item it no longer holds. */
 let readMarkRefused = false;
+/** The listed workspace's members, as a read of them answers. */
+let members: readonly WorkspaceMember[] = [];
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -249,6 +255,7 @@ beforeEach(() => {
   imageReads = [];
   readMarks = [];
   readMarkRefused = false;
+  members = [];
   fakeAppBridge({
     act: (request: Act) => {
       const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
@@ -293,6 +300,12 @@ beforeEach(() => {
             },
           },
         });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: members });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
@@ -509,10 +522,10 @@ function chooseView(page: HTMLElement, submenu: string, choice: string): void {
   act(() => viewItem(choice).click());
 }
 
-/** The item of the menus open now whose words are `label`, a choice or a submenu. */
+/** The item of the menus open now whose words end in `label`, a choice or a submenu, after any face's initial. */
 function viewItem(label: string): HTMLElement {
-  const item = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].findLast(
-    (each) => each.textContent === label,
+  const item = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].findLast((each) =>
+    each.textContent?.endsWith(label),
   );
   assert.ok(item, `the menu offers ${label}`);
   return item;
@@ -4222,7 +4235,7 @@ test("Mark all as read in the view's menu, under Group by, marks every unread it
     act(() => options.click());
     return menuWords();
   };
-  assert.deepEqual(openOptions(), ["Group by", "—", "Mark all as read"]);
+  assert.deepEqual(openOptions(), ["Group by", "Sort", "—", "Whose", "—", "Mark all as read"]);
   act(() => menuItem("Mark all as read").click());
   await settle();
   assert.deepEqual(readMarks, ["all:workspace-acme"]);
@@ -4506,4 +4519,151 @@ test("a message the service took stays the last word on its item's row once anot
   await settle();
   assert.equal(readTitle(page), "Expire after 7 days?");
   assert.equal(rowLines(page, "How is a failed email retried?")[1], said);
+});
+
+/** The workspace the Whose tests list, shared with Charles, and its members as read. */
+const SHARED_WORKSPACE: Workspace = { ...ACME, memberCount: 2 };
+const SHARED_MEMBERS: readonly WorkspaceMember[] = [
+  { ...READER, email: "dana@example.com", role: WORKSPACE_ROLE.OWNER },
+  { ...TEAMMATE, email: "charles@example.com", role: WORKSPACE_ROLE.MEMBER },
+];
+
+/** The chip over the list saying whose items it holds, as a reader meets it: its words and its ×'s name; none where none stands. */
+function whoseChip(page: HTMLElement): readonly (string | null | undefined)[] | null {
+  const chip = page.querySelector(".inbox-tasks-chips .luke-chip");
+  if (chip === null) return null;
+  return [
+    chip.querySelector(".luke-chip-name")?.textContent,
+    chip.querySelector("button")?.getAttribute("aria-label"),
+  ];
+}
+
+test("Whose in the view's menu lists one teammate's items, by their face and name, or the reader's own as Mine; a chip over the list says so, the tabs count only theirs, the choice outlives a relaunch, and the chip's × lists everyone's again", async () => {
+  listedWorkspace = SHARED_WORKSPACE;
+  members = SHARED_MEMBERS;
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
+  let { page } = mount();
+  await settle();
+  assert.equal(whoseChip(page), null, "everyone's items stand under no chip");
+  const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  act(() => options?.click());
+  act(() => viewItem("Whose").click());
+  assert.deepEqual(
+    ["Everyone", "Mine", "Charles Pan"].map((each) => viewItem(each).getAttribute("aria-checked")),
+    ["true", "false", "false"],
+  );
+  assert.ok(
+    viewItem("Charles Pan").querySelector('.actor-mark[data-kind="person"]'),
+    "a teammate is offered by their face",
+  );
+  act(() => viewItem("Charles Pan").click());
+  await settle();
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "Alert at 80%?"]);
+  assert.deepEqual(whoseChip(page), ["Charles Pan", "Show everyone's items"]);
+  assert.deepEqual(showTabs(page), ["Needs you 0", "Unread 0", "All open 1", "[Everything 1]"]);
+
+  act(() => root?.unmount());
+  root = undefined;
+  ({ page } = mount());
+  await settle();
+  assert.deepEqual(whoseChip(page), ["Charles Pan", "Show everyone's items"]);
+
+  chooseView(page, "Whose", "Mine");
+  assert.deepEqual(whoseChip(page)?.[0], "Mine");
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+
+  const clear = page.querySelector<HTMLButtonElement>(".inbox-tasks-chips .luke-chip button");
+  assert.ok(clear, "the chip offers its ×");
+  act(() => clear.click());
+  assert.equal(whoseChip(page), null);
+  assert.deepEqual(showTabs(page), ["Needs you 1", "Unread 0", "All open 2", "[Everything 3]"]);
+});
+
+test("a teammate chosen in Whose with nothing in the tab shown says so, and offers everyone's items again where no tab holds any of theirs", async () => {
+  listedWorkspace = SHARED_WORKSPACE;
+  members = SHARED_MEMBERS;
+  const { page } = mount();
+  await settle();
+  chooseView(page, "Whose", "Charles Pan");
+  assert.deepEqual(listed(page), []);
+  assert.deepEqual(needsYouEmpty(page), [
+    "Nothing here",
+    "Nothing in the Inbox is theirs",
+    "Show everyone's",
+  ]);
+  const everyone = page.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button");
+  act(() => everyone?.click());
+  assert.equal(whoseChip(page), null);
+  assert.equal(listed(page).length, 5);
+});
+
+test("grouped by status, what needs you stands under the attention mark, then what waits on a teammate, then what is answered, each folding as a task's group does, a folded group counting what in it needs you and its rows passed over by K and J", async () => {
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
+  const { page } = mount();
+  await settle();
+  chooseView(page, "Group by", "Status");
+  assert.deepEqual(listed(page), [
+    "# Needs you",
+    "▸ *Expire after 7 days?",
+    "# Waiting on others",
+    "Alert at 80%?",
+    "# Answered",
+    "How is a failed email retried?",
+  ]);
+  const header = (name: string) =>
+    [
+      ...page.querySelectorAll<HTMLButtonElement>(
+        ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+      ),
+    ].find((each) => heardName(each) === name);
+  assert.ok(
+    header("Needs you")?.closest(".sidebar-repository-header")?.querySelector(".attention-mark"),
+    "Needs you's group wears the attention mark",
+  );
+  act(() => header("Waiting on others")?.click());
+  act(() => header("Needs you")?.click());
+  assert.deepEqual(listed(page), [
+    "# Needs you",
+    "# Waiting on others",
+    "# Answered",
+    "How is a failed email retried?",
+  ]);
+  assert.equal(header("Needs you")?.textContent, "Needs you1 needs you");
+  const keys = standKeymap();
+  pressKey("j");
+  assert.equal(readTitle(page), "How is a failed email retried?", "J passes over the folded rows");
+  act(() => keys.unmount());
+});
+
+test("sorted by waiting longest from the view's menu, the open items stand first, the one posted longest ago first, the answered ones after them, and the choice outlives a relaunch", async () => {
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, postedAt: 500 }, RETRY]);
+  inboxes.set(INVITES.id, [{ ...EXPIRY, postedAt: 900 }]);
+  let { page } = mount();
+  await settle();
+  chooseView(page, "Group by", "None");
+  assert.deepEqual(listed(page), [
+    "How is a failed email retried?",
+    "*Expire after 7 days?",
+    "▸ *Alert at 80%?",
+  ]);
+  chooseView(page, "Sort", "Waiting longest");
+  assert.deepEqual(listed(page), [
+    "▸ *Alert at 80%?",
+    "*Expire after 7 days?",
+    "How is a failed email retried?",
+  ]);
+  act(() => root?.unmount());
+  root = undefined;
+  ({ page } = mount());
+  await settle();
+  assert.deepEqual(listed(page), [
+    "▸ *Alert at 80%?",
+    "*Expire after 7 days?",
+    "How is a failed email retried?",
+  ]);
 });

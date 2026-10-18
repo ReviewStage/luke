@@ -33,6 +33,7 @@ import {
   firstChoice,
   INBOX_HOLDER,
   INBOX_SHOW,
+  INBOX_WHOSE,
   type InboxCounts,
   type InboxGroup,
   type InboxHolder,
@@ -61,7 +62,7 @@ import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks"
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel";
 import { useTaskInbox } from "../tasks/use-task-inbox";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab";
-import { type InboxShowChoice, useInboxTaskFolds, useInboxViewChoices } from "./folded-groups";
+import { type InboxViewChoices, useInboxTaskFolds, useInboxViewChoices } from "./folded-groups";
 import {
   COLUMN,
   SIDE_PANEL_HOLDER,
@@ -84,8 +85,10 @@ import { taskCardOf } from "./task-card";
  * workspace the sidebar lists that main says holds one (the switcher counts
  * what waits in the others), needing the developer or settled, each task read whole
  * as main says it changed (`use-inbox-items.ts`), under its task, its
- * person, or in one run, what needs them, what is unread, every open item,
- * or everything, as the developer last chose; Needs
+ * person, its status, or in one run, the latest first or the longest
+ * waiting first, what needs them, what is unread, every open item, or
+ * everything, of everyone's, theirs, or one teammate's, as the developer
+ * last chose; Needs
  * you is the Inbox's one name for an item not yet answered
  * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
  * same items. A press on a row chooses it, and the pane beside the
@@ -145,8 +148,8 @@ function ListNote({
   empty: boolean;
   /** Whether the list stands alone, the Inbox too narrow for the pane beside it. */
   alone: boolean;
-  /** The tab shown, where it leaves out every item the Inbox holds, for its empty state to show another. */
-  filteredOut: InboxShowChoice | undefined;
+  /** The tab shown and whose items, where they leave out every item the Inbox holds, for its empty state to show another. */
+  filteredOut: InboxViewChoices | undefined;
   /** How many items each tab lists, for the empty state to offer one that lists something. */
   counts: InboxCounts;
   /** Asks for the list, so the tab its empty state shows leaves it standing. */
@@ -163,7 +166,7 @@ function ListNote({
   if (!empty) return null;
   if (reading) return <InboxListSkeleton />;
   if (filteredOut !== undefined)
-    return <ShowEmpty show={filteredOut} counts={counts} onList={onList} />;
+    return <ShowEmpty show={filteredOut} counts={counts} whose={filteredOut} onList={onList} />;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
   if (alone) return <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>;
   return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
@@ -309,10 +312,12 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     },
   });
   const entries = marks.groups;
-  const counts = inboxCounts(entries, tasks.me);
+  const counts = inboxCounts(entries, tasks.me, choices.whose);
   const filter = {
     grouping: choices.grouping,
     show: choices.show,
+    sort: choices.sort,
+    whose: choices.whose,
     readerId: tasks.me,
   };
   // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
@@ -321,7 +326,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   const chosen = listedItems(steps).find(({ item }) => item.id === asked?.itemId);
   // Note that a tab leaving out every item listed is said apart from an Inbox holding none.
   const filteredOut =
-    choices.show !== INBOX_SHOW.ALL &&
+    (choices.show !== INBOX_SHOW.ALL || choices.whose.kind !== INBOX_WHOSE.EVERYONE) &&
     listedItems(list).length === 0 &&
     entries.some(({ items }) => items.length > 0);
   // Note that a chosen item whose task or agent is listed but not read yet keeps its place, because

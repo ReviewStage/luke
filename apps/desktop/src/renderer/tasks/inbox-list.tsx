@@ -5,6 +5,9 @@ import { useMinute } from "@luke/panel/tasks/task-time";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
+  CHIP_LOOK,
+  Chip,
+  ChipName,
   DocumentIcon,
   EmptyState,
   IconButton,
@@ -31,13 +34,19 @@ import {
   personActor,
 } from "@luke/ui/actor-model";
 import {
+  ArrowDownNarrowWideIcon,
   CheckCheckIcon,
+  CircleCheckIcon,
+  CircleDotIcon,
+  ClockIcon,
   FactoryIcon,
+  HourglassIcon,
   InboxIcon,
   ListIcon,
   MailIcon,
   MailOpenIcon,
   SlidersHorizontalIcon,
+  UserIcon,
   UsersIcon,
 } from "lucide-react";
 import { useCallback, useId, useLayoutEffect, useRef } from "react";
@@ -53,6 +62,7 @@ import {
   type InboxShowChoice,
   type InboxTaskFolds,
   type InboxViewChoices,
+  type InboxWhoseChoice,
   useInboxListWidth,
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
@@ -69,11 +79,15 @@ import {
   listHeadControl,
 } from "./inbox-columns";
 import {
+  EVERYONES,
   holderKey,
   holderName,
   INBOX_GROUPING,
   INBOX_HOLDER,
   INBOX_SHOW,
+  INBOX_SORT,
+  INBOX_STATUS_GROUP,
+  INBOX_WHOSE,
   type InboxCounts,
   type InboxGrouping,
   type InboxHolder,
@@ -81,7 +95,11 @@ import {
   type InboxListView,
   type InboxPersonGroup,
   type InboxShow,
+  type InboxSort,
   type InboxStarter,
+  type InboxStatusGroup,
+  type InboxStatusGroupKind,
+  type InboxWhose,
   inboxPreview,
   isUnread,
   NEEDS_YOU,
@@ -123,13 +141,18 @@ import { cardTitle } from "./tool-call-model";
  * menu mark it read or unread (`use-inbox-read-marks.ts`). A folded task
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers the view's
- * menu: Group by, by task, by person, or None, one run the latest changed
- * first, the choice checked, and under it Mark all as read, which clears
- * the dots alone. Under the head stand the tabs that choose what the list
- * holds, each counting its own: Needs you, the reader's own open items,
+ * menu: Group by, by task, by person, by status (what needs the developer
+ * under the attention mark, what waits on others, what is answered, each
+ * folding as a task's group does), or None, one run; Sort, the latest
+ * activity first or the open items waiting longest first; Whose, everyone's
+ * items, the developer's own, or one teammate's by face and name, which a
+ * chip over the list then says, its × listing everyone's again; each
+ * choice checked, and under them Mark all as read, which clears the dots
+ * alone. Under the head stand the tabs that choose what the list
+ * holds, each counting its own of whose items Whose lists: Needs you, the reader's own open items,
  * its count in the attention mark's orange while anything needs them;
- * Unread, anyone's; All open; and Everything, settled items too. Both
- * choices are kept across launches. Grouped by person, each person's items
+ * Unread, anyone's; All open; and Everything, settled items too. Every
+ * choice is kept across launches. Grouped by person, each person's items
  * stand under their face, the reader's own first as You. Grouped by
  * anything but task, a row names its task in a chip before its preview,
  * since no task's header stands over it. Where the tab leaves out every
@@ -197,15 +220,14 @@ const SHOW_TAB_WORDS = [
 
 /**
  * What the list says where its tab leaves out every item it holds: a title,
- * and the line under it. Everything leaves out nothing, so it says only
- * that nothing needs the developer.
+ * and the line under it. Everything leaves out only what Whose does.
  */
 const SHOW_EMPTY = {
   [INBOX_SHOW.NEEDS_YOU]: { title: NEEDS_YOU.NONE, body: NEEDS_YOU.ANSWERED },
   [INBOX_SHOW.UNREAD]: { title: "Nothing unread", body: "You've read everything" },
   [INBOX_SHOW.OPEN]: { title: "Nothing open", body: "Every item is answered" },
-  [INBOX_SHOW.ALL]: { title: NEEDS_YOU.NONE, body: undefined },
-} as const satisfies Record<InboxShow, { title: string; body: string | undefined }>;
+  [INBOX_SHOW.ALL]: { title: "Nothing here", body: "Nothing in the Inbox is theirs" },
+} as const satisfies Record<InboxShow, { title: string; body: string }>;
 
 /** What the empty state's press says, by the tab it shows instead. */
 const SHOW_INSTEAD = {
@@ -213,12 +235,29 @@ const SHOW_INSTEAD = {
   [INBOX_SHOW.ALL]: "Show everything",
 } as const;
 
-/** The tab an empty tab offers instead: All open from Needs you or Unread where anything is open, else Everything; none from Everything. */
+/** The tab an empty tab offers instead: All open from Needs you or Unread where anything is open, else Everything where it holds anything; none from Everything, nor where nothing is there to show. */
 function insteadOf(show: InboxShow, counts: InboxCounts): keyof typeof SHOW_INSTEAD | undefined {
   if (show === INBOX_SHOW.ALL) return undefined;
   if (show !== INBOX_SHOW.OPEN && counts[INBOX_SHOW.OPEN] > 0) return INBOX_SHOW.OPEN;
-  return INBOX_SHOW.ALL;
+  return counts[INBOX_SHOW.ALL] > 0 ? INBOX_SHOW.ALL : undefined;
 }
+
+/** What the empty state's press says where it lists everyone's items again, Whose having left out every item. */
+const SHOW_EVERYONES = "Show everyone's";
+
+/** What each status group is called, and its glyph, a list grouped by status heading it. */
+const STATUS_WORDS = {
+  [INBOX_STATUS_GROUP.NEEDS_YOU]: NEEDS_YOU.LABEL,
+  [INBOX_STATUS_GROUP.WAITING]: "Waiting on others",
+  [INBOX_STATUS_GROUP.ANSWERED]: "Answered",
+} as const satisfies Record<InboxStatusGroupKind, string>;
+
+/** What the view's submenu of sorts and of whose items are called. */
+const SORT_BY = "Sort";
+const WHOSE = "Whose";
+
+/** What the chip over the list says its × does. */
+const CLEAR_WHOSE = "Show everyone's items";
 
 /** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */
 function waitingOn(starter: Actor): string {
@@ -569,6 +608,43 @@ function HolderHeader({
 }
 
 /**
+ * A status's group header: Needs you by the attention mark, Waiting on
+ * others by the hourglass, and Answered by a check. A press folds the
+ * group, as every group header's does.
+ */
+function StatusHeader({
+  status,
+  folded,
+  count,
+  onToggle,
+}: {
+  status: InboxStatusGroupKind;
+  folded: boolean;
+  count: number;
+  onToggle: () => void;
+}): React.JSX.Element {
+  const glyph =
+    status === INBOX_STATUS_GROUP.NEEDS_YOU ? (
+      <AttentionMark />
+    ) : status === INBOX_STATUS_GROUP.WAITING ? (
+      <HourglassIcon />
+    ) : (
+      <CircleCheckIcon />
+    );
+  return (
+    <SidebarGroupHeader
+      glyph={glyph}
+      name={STATUS_WORDS[status]}
+      folded={folded}
+      count={count}
+      noun={NEEDS_YOU.COUNT}
+      steady
+      onToggle={onToggle}
+    />
+  );
+}
+
+/**
  * A person's group header: their face and name, the reader's own as You, a
  * member who left on the quiet outline, as the sidebar's group by creator
  * heads its groups. A press folds the group, as every group header's does.
@@ -608,36 +684,112 @@ function PersonHeader({
   );
 }
 
-/** The head's button that drops the menu of how the list groups its items, each choice checked in its submenu, and Mark all as read under them. */
+/** Whose's choices: Everyone, then Mine, then each teammate the workspace lists by face and name, the choice checked. */
+function whoseEntries(
+  whose: InboxWhose,
+  onWhose: (whose: InboxWhose) => void,
+  reader: ReturnType<typeof useMemberDirectory>,
+  readerId: string | undefined,
+): MenuAction[] {
+  const you = reader.readerId ?? readerId;
+  const me = reader.members?.find((member) => member.userId === you);
+  const others = (reader.members ?? []).filter((member) => member.userId !== you);
+  return [
+    {
+      label: "Everyone",
+      icon: <UsersIcon />,
+      checked: whose.kind === INBOX_WHOSE.EVERYONE,
+      onSelect: () => onWhose(EVERYONES),
+    },
+    {
+      label: "Mine",
+      icon:
+        me === undefined ? (
+          <UserIcon />
+        ) : (
+          <ActorMark actor={memberActor(me, you)} size={ACTOR_SIZE.INLINE} />
+        ),
+      checked: whose.kind === INBOX_WHOSE.MINE,
+      onSelect: () => onWhose({ kind: INBOX_WHOSE.MINE }),
+    },
+    ...others.map((member) => ({
+      label: member.name,
+      icon: <ActorMark actor={memberActor(member, you)} size={ACTOR_SIZE.INLINE} />,
+      checked: whose.kind === INBOX_WHOSE.PERSON && whose.userId === member.userId,
+      onSelect: () =>
+        onWhose({ kind: INBOX_WHOSE.PERSON, userId: member.userId, name: member.name }),
+    })),
+  ];
+}
+
+/**
+ * The head's button that drops the view's menu: Group by and Sort, each a
+ * submenu with its choice checked; Whose, Everyone, Mine, or a teammate by
+ * face and name; and Mark all as read at its foot.
+ */
 function ViewOptions({
   shown,
-  grouping,
-  onGrouping,
+  choices,
+  readerId,
   readAll,
 }: {
   shown: boolean;
-  grouping: InboxGrouping;
-  onGrouping: (grouping: InboxGrouping) => void;
+  choices: InboxViewChoices;
+  readerId: string | undefined;
   readAll: InboxReadAll | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
+  const reader = useMemberDirectory();
   const groupBy = (label: string, icon: React.JSX.Element, value: InboxGrouping): MenuAction => ({
     label,
     icon,
-    checked: grouping === value,
-    onSelect: () => onGrouping(value),
+    checked: choices.grouping === value,
+    onSelect: () => choices.onGrouping(value),
   });
-  const choices: MenuEntry[] = [
+  const sortBy = (label: string, icon: React.JSX.Element, value: InboxSort): MenuAction => ({
+    label,
+    icon,
+    checked: choices.sort === value,
+    onSelect: () => choices.onSort(value),
+  });
+  const view: MenuEntry[] = [
     {
       label: GROUP_BY,
       icon: <ListIcon />,
       items: [
         groupBy("Task", <DocumentIcon />, INBOX_GROUPING.TASK),
         groupBy("Person", <UsersIcon />, INBOX_GROUPING.PERSON),
+        groupBy("Status", <CircleDotIcon />, INBOX_GROUPING.STATUS),
         groupBy("None", <ListIcon />, INBOX_GROUPING.NONE),
       ],
     },
+    {
+      label: SORT_BY,
+      icon: <ArrowDownNarrowWideIcon />,
+      items: [
+        sortBy("Latest activity", <ClockIcon />, INBOX_SORT.LATEST),
+        sortBy("Waiting longest", <HourglassIcon />, INBOX_SORT.WAITING),
+      ],
+    },
   ];
+  const whose: MenuEntry[] = [
+    {
+      label: WHOSE,
+      icon: <UsersIcon />,
+      items: whoseEntries(choices.whose, choices.onWhose, reader, readerId),
+    },
+  ];
+  const markAll: MenuEntry[] =
+    readAll === undefined
+      ? []
+      : [
+          {
+            label: MARK_ALL_READ,
+            icon: <CheckCheckIcon />,
+            disabled: !readAll.unread,
+            onSelect: readAll.onMarkAll,
+          },
+        ];
   return (
     <>
       <Tooltip label={VIEW_OPTIONS}>
@@ -647,25 +799,55 @@ function ViewOptions({
         <ActionMenu
           label={VIEW_OPTIONS}
           menu={menu.drawn}
-          groups={
-            readAll === undefined
-              ? [choices]
-              : [
-                  choices,
-                  [
-                    {
-                      label: MARK_ALL_READ,
-                      icon: <CheckCheckIcon />,
-                      disabled: !readAll.unread,
-                      onSelect: readAll.onMarkAll,
-                    },
-                  ],
-                ]
-          }
+          groups={[view, whose, markAll].filter((group) => group.length > 0)}
           onClose={menu.close}
         />
       )}
     </>
+  );
+}
+
+/**
+ * The chip over the list while Whose leaves out anyone's items: Mine by the
+ * reader's face, or the teammate's face and name, and a × that lists
+ * everyone's again (`@luke/ui`'s removable filter chip, as the sidebar's
+ * Created by stands over its tasks).
+ */
+function WhoseChip({
+  whose,
+  readerId,
+}: {
+  whose: InboxWhoseChoice;
+  readerId: string | undefined;
+}): React.JSX.Element | null {
+  const { members, former, readerId: known } = useMemberDirectory();
+  const reader = known ?? readerId;
+  const chosen = whose.whose;
+  if (chosen.kind === INBOX_WHOSE.EVERYONE) return null;
+  const me = members?.find((member) => member.userId === reader);
+  const actor: Actor | undefined =
+    chosen.kind === INBOX_WHOSE.PERSON
+      ? personActor(chosen, members, reader, former)
+      : me === undefined
+        ? undefined
+        : memberActor(me, reader);
+  return (
+    <div className="inbox-tasks-chips">
+      <Chip
+        look={CHIP_LOOK.FILTER}
+        removeLabel={CLEAR_WHOSE}
+        onRemove={() => whose.onWhose(EVERYONES)}
+      >
+        {actor === undefined ? <UserIcon /> : <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
+        <ChipName>
+          {chosen.kind === INBOX_WHOSE.MINE
+            ? "Mine"
+            : actor === undefined
+              ? chosen.name
+              : actorName(actor)}
+        </ChipName>
+      </Chip>
+    </div>
   );
 }
 
@@ -726,29 +908,44 @@ function ShowTabs({
 export function ShowEmpty({
   show,
   counts,
+  whose,
   onList,
 }: {
   show: InboxShowChoice;
   counts: InboxCounts;
+  /** Whose items the window's Inbox lists, which offers everyone's again where no tab holds any of theirs; none on a task's own. */
+  whose?: InboxWhoseChoice | undefined;
   /** Asks the Inbox for its list, so the item chosen once the rows return does not stand in their place. */
   onList: () => void;
 }): React.JSX.Element {
   const { title, body } = SHOW_EMPTY[show.show];
   const instead = insteadOf(show.show, counts);
+  const everyone =
+    instead === undefined && whose !== undefined && whose.whose.kind !== INBOX_WHOSE.EVERYONE
+      ? whose
+      : undefined;
   return (
     <EmptyState
       icon={<InboxIcon />}
       title={title}
       action={
-        instead === undefined
-          ? undefined
-          : {
+        instead !== undefined
+          ? {
               label: SHOW_INSTEAD[instead],
               onClick: () => {
                 onList();
                 show.onShow(instead);
               },
             }
+          : everyone !== undefined
+            ? {
+                label: SHOW_EVERYONES,
+                onClick: () => {
+                  onList();
+                  everyone.onWhose(EVERYONES);
+                },
+              }
+            : undefined
       }
     >
       {body}
@@ -810,7 +1007,15 @@ export function InboxListSkeleton({
  * sidebar folds, the name moving to the list's middle, clear of the
  * sidebar's toggle, and the button keeping to the list's edge.
  */
-function ListHead({ head, ids }: { head: InboxListHead; ids: ShowTabIds }): React.JSX.Element {
+function ListHead({
+  head,
+  ids,
+  readerId,
+}: {
+  head: InboxListHead;
+  ids: ShowTabIds;
+  readerId: string | undefined;
+}): React.JSX.Element {
   const { shown, show, view, counts } = head;
   return (
     <>
@@ -822,14 +1027,15 @@ function ListHead({ head, ids }: { head: InboxListHead; ids: ShowTabIds }): Reac
           {view === undefined ? null : (
             <ViewOptions
               shown={shown}
-              grouping={view.choices.grouping}
-              onGrouping={view.choices.onGrouping}
+              choices={view.choices}
+              readerId={readerId}
               readAll={head.readAll}
             />
           )}
         </div>
       </header>
       <ShowTabs show={show} counts={counts} ids={ids} />
+      {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
     </>
   );
 }
@@ -954,6 +1160,20 @@ export function InboxList({
   );
   const needingYou = (items: readonly InboxItem[]) =>
     items.filter((item) => needsReader(item, view.readerId)).length;
+  const statusSection = ({ key, status, items }: InboxStatusGroup) => {
+    const folded = head.view?.folds.folded(key) ?? false;
+    return (
+      <div key={key} className="sidebar-repository">
+        <StatusHeader
+          status={status}
+          folded={folded}
+          count={needingYou(items.map(({ item }) => item))}
+          onToggle={() => head.view?.folds.toggle(key)}
+        />
+        {folded ? null : <ul className="sidebar-tasks">{items.map(row)}</ul>}
+      </div>
+    );
+  };
   const personSection = ({ key, starter, items }: InboxPersonGroup) => {
     const folded = head.view?.folds.folded(key) ?? false;
     return (
@@ -979,7 +1199,7 @@ export function InboxList({
       onBlur={rowFocus.onBlur}
       style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
-      <ListHead head={head} ids={{ tabs, panel }} />
+      <ListHead head={head} ids={{ tabs, panel }} readerId={readerId} />
       <div
         id={panel}
         className="inbox-tasks-scroll scroll-fade-top"
@@ -990,6 +1210,8 @@ export function InboxList({
           <ul className="sidebar-tasks">{view.items.map(row)}</ul>
         ) : view.grouping === INBOX_GROUPING.PERSON ? (
           view.groups.map(personSection)
+        ) : view.grouping === INBOX_GROUPING.STATUS ? (
+          view.groups.map(statusSection)
         ) : (
           view.groups.map(({ holder, items }) => {
             const key = holderKey(holder);
