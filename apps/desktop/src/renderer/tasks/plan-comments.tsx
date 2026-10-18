@@ -13,7 +13,7 @@ import {
   type PlanCommentWriter,
 } from "@luke/features/plan-comment-wire";
 import type { PlanSection } from "@luke/features/plan-document";
-import { ActorLine, ActorMark, ActorRef } from "@luke/panel/actor-ref";
+import { ActorMark, ActorRef } from "@luke/panel/actor-ref";
 import { useSideBundles } from "@luke/panel/bundle-loader";
 import { useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
@@ -62,7 +62,6 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   ArrowUpIcon,
-  AtSignIcon,
   CheckIcon,
   CircleCheckIcon,
   MessageSquareIcon,
@@ -145,7 +144,6 @@ const COMMENT_WORDS = {
   GONE: "Original content deleted",
   RESOLVED_IT: "resolved this",
   REOPENED_IT: "reopened this",
-  ASKED: "asked",
   EDITED: "edited",
   OPEN_THREAD: "Open thread",
   SHOW_WORDS: "Show in the plan",
@@ -233,7 +231,7 @@ function writtenByReader(entry: PlanCommentEntry, me: string | undefined): boole
   );
 }
 
-/** A line of what happened to a thread: who asked whom, who resolved or reopened it. */
+/** A line of what happened to a thread, drawn as a comment's head is: its writer, what they did, and when, level with every name above it. */
 function EventLine({
   entry,
   agents,
@@ -243,42 +241,19 @@ function EventLine({
   agents: EditAgents | undefined;
   now: number;
 }): React.JSX.Element {
-  const asked = entry.asked;
-  const glyph =
-    entry.kind === PLAN_COMMENT_ENTRY.ASKED ? (
-      <AtSignIcon aria-hidden="true" />
-    ) : entry.kind === PLAN_COMMENT_ENTRY.RESOLVED ? (
-      <CircleCheckIcon aria-hidden="true" />
-    ) : (
-      <RotateCcwIcon aria-hidden="true" />
-    );
   return (
     <div className="comment-event" data-kind={entry.kind}>
-      <span className="comment-event-glyph">{glyph}</span>
-      <ActorLine>
+      <div className="comment-head">
         <WriterRef writer={entry.writer} agents={agents} />
-        {entry.kind === PLAN_COMMENT_ENTRY.ASKED ? (
-          <>
-            {` ${COMMENT_WORDS.ASKED} `}
-            {asked === undefined ? null : (
-              <WriterRef
-                writer={{
-                  actor: asked.actor,
-                  ...(asked.agentId === undefined ? undefined : { agentId: asked.agentId }),
-                }}
-                agents={agents}
-              />
-            )}
-          </>
-        ) : entry.kind === PLAN_COMMENT_ENTRY.RESOLVED ? (
-          ` ${COMMENT_WORDS.RESOLVED_IT}`
-        ) : (
-          ` ${COMMENT_WORDS.REOPENED_IT}`
-        )}
-      </ActorLine>
-      <span className="comment-time comment-event-time">
-        <RelativeTime at={entry.at} now={now} ago />
-      </span>
+        <span className="comment-event-words">
+          {` ${entry.kind === PLAN_COMMENT_ENTRY.RESOLVED ? COMMENT_WORDS.RESOLVED_IT : COMMENT_WORDS.REOPENED_IT}`}
+        </span>
+        <span className="comment-head-end">
+          <span className="comment-time">
+            <RelativeTime at={entry.at} now={now} ago />
+          </span>
+        </span>
+      </div>
     </div>
   );
 }
@@ -915,7 +890,8 @@ function ThreadCard({
             now={now}
             lead={entry.id === first?.id ? head : undefined}
           />
-        ) : (
+        ) : // Note that who a thread was sent to is the mention in its words, so the line an ask writes is the service's to keep and none to draw.
+        entry.kind === PLAN_COMMENT_ENTRY.ASKED ? null : (
           <EventLine key={entry.id} entry={entry} agents={doors.agents} now={now} />
         ),
       )}

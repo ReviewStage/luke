@@ -5917,48 +5917,18 @@ button.picture-frame {
   height: 26px;
 }
 
+/* What happened to a thread, a line drawn as a comment's head: its writer
+   level with every name above it, what they did in the quiet ink, and the
+   time at the row's end. */
 .comment-event {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  margin: var(--luke-space-6) 0 var(--luke-space-2);
-  color: var(--luke-color-text-muted);
-  font-size: 12px;
+  padding: var(--luke-space-4) 0;
 }
 
-.comment-event-time {
-  margin-left: auto;
-  padding-left: var(--luke-space-6);
-}
-
-/* What happened, by its glyph at the comments' writers' marks' width, so
-   the line reads under their names as one of the thread's own. */
-.comment-event-glyph {
-  display: inline-grid;
-  width: 16px;
-  height: 16px;
+.comment-event-words {
   flex: none;
-  place-items: center;
-  margin-right: 5px; /* off-scale: as an actor's mark's gap to its name */
-  color: var(--luke-color-text-subtle);
-}
-
-.comment-event-glyph svg {
-  width: 13px;
-  height: 13px;
-}
-
-/* Who sent a thread to whom: the line wraps between its names rather than
-   cutting the first one short, and a name cut at all is cut alone, within
-   the card's width. */
-.comment-event > .actor-words {
-  flex-wrap: wrap;
-  row-gap: var(--luke-space-2);
-}
-
-.comment-event > .actor-words > * {
-  flex-shrink: 0;
-  max-width: 100%;
+  color: var(--luke-color-text-muted);
+  font-weight: 400;
+  white-space: pre;
 }
 
 .comment-note {

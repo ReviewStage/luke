@@ -800,7 +800,7 @@ test("in the Comments tab a thread's quote stands under its first comment's writ
   assert.equal(card?.firstElementChild?.classList.contains("comment-entry"), true);
 });
 
-test("a thread's resolve reads as its writer's own line, glyph first, and an empty tab says how a thread starts", () => {
+test("a thread's resolve reads as its writer's own line, drawn as a comment's head, and an empty tab says how a thread starts", () => {
   const resolved = threadOn(ID.RESOLVED, "teammate", "A guest, too?", {
     status: PLAN_COMMENT_STATUS.RESOLVED,
     entries: [
@@ -821,6 +821,32 @@ test("a thread's resolve reads as its writer's own line, glyph first, and an emp
   assert.ok(container.querySelector(".luke-empty-state")?.textContent?.includes("No comments"));
   act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Resolved"]')?.click());
   const event = container.querySelector<HTMLElement>(".comment-event[data-kind='resolved']");
-  assert.ok(event?.querySelector(".comment-event-glyph svg"));
+  assert.ok(
+    event?.firstElementChild?.classList.contains("comment-head"),
+    "drawn as a comment's head",
+  );
   assert.ok(event?.textContent?.includes("Dean Stratakos resolved this"));
+});
+
+test("the line a thread's ask leaves is not drawn, since the mention in its words says who was asked", () => {
+  const asked = threadOn(ID.OPEN, "**single-use link** that expires", "Should this be a setting?", {
+    entries: [
+      ...threadOn(ID.OPEN, "**single-use link** that expires", "Should this be a setting?").entries,
+      {
+        id: `${ID.OPEN.slice(0, -4)}cccc`,
+        kind: PLAN_COMMENT_ENTRY.ASKED,
+        writer: {
+          actor: PLAN_COMMENT_ACTOR.MEMBER,
+          by: { userId: "u-dean", name: "Dean Stratakos" },
+        },
+        asked: { actor: PLAN_COMMENT_ACTOR.LUKE },
+        at: 2,
+      },
+    ],
+  });
+  const { container } = drawn("tab", [asked]);
+
+  const card = container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`);
+  assert.ok(card);
+  assert.equal(card.querySelectorAll(".comment-event").length, 0);
 });
