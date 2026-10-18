@@ -38,7 +38,7 @@ function Spinners(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="spinner-region" title="A region still being read">
         <div className="catalog-frame catalog-region">
-          <SpinnerRegion label="Loading plans" />
+          <SpinnerRegion label="Loading tasks" />
         </div>
       </CatalogSection>
       <CatalogSection id="spinner-busy" title="A control's words giving way">

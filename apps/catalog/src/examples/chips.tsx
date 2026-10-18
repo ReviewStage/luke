@@ -21,7 +21,7 @@ import { CatalogSection } from "../section";
  * its mark alone; a name in the code face; and a removable filter.
  */
 
-const FILTERS = ["All", "Plans", "Agents", "Files"] as const;
+const FILTERS = ["All", "Tasks", "Agents", "Files"] as const;
 
 /** A row of filter chips, the pressed one moving to whichever is pressed. */
 function FilterRow(): React.JSX.Element {

@@ -29,7 +29,7 @@ import { CatalogSection } from "../section";
  * ErrorState. Every name is made up.
  */
 
-const PLANS = [
+const TASKS = [
   { id: "launch", name: "Launch checklist", detail: "Edited by Ada Lovelace", when: "2h ago" },
   { id: "billing", name: "Billing migration", detail: "Edited by Grace Hopper", when: "Yesterday" },
   {
@@ -53,40 +53,40 @@ type Scope = (typeof SCOPES)[number]["value"];
 
 const STATES = Object.values(COLLECTION_STATE).map((state) => ({ value: state, label: state }));
 
-function Plans({ state }: { state: CollectionState }): React.JSX.Element {
+function Tasks({ state }: { state: CollectionState }): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<Scope>("all");
   const [open, setOpen] = useState<string>("billing");
   return (
     <CollectionPage
-      title="Plans"
+      title="Tasks"
       description="Everything planned in this workspace."
       actions={
         <Button variant={BUTTON_VARIANT.PRIMARY} icon={<PlusIcon />}>
-          New plan
+          New task
         </Button>
       }
       filters={
         <>
-          <TextField label="Search plans" placeholder="Search" value={query} onChange={setQuery} />
+          <TextField label="Search tasks" placeholder="Search" value={query} onChange={setQuery} />
           <Segmented<Scope> legend="Show" options={SCOPES} value={scope} onChange={setScope} />
         </>
       }
       state={state}
-      loadingLabel="Reading plans"
-      empty={<p>No plans yet. Start one by talking it through.</p>}
-      error={<p role="alert">Plans could not be read. Try again in a moment.</p>}
+      loadingLabel="Reading tasks"
+      empty={<p>No tasks yet. Start one by talking it through.</p>}
+      error={<p role="alert">Tasks could not be read. Try again in a moment.</p>}
     >
-      <List label="Plans">
-        {PLANS.map((plan) => (
+      <List label="Tasks">
+        {TASKS.map((task) => (
           <ListRow
-            key={plan.id}
-            title={plan.name}
-            description={plan.detail}
-            meta={plan.when}
-            current={open === plan.id ? LIST_ROW_CURRENT.ITEM : undefined}
-            onPress={() => setOpen(plan.id)}
-            actions={<IconButton icon={<EllipsisIcon />} label={`More for ${plan.name}`} />}
+            key={task.id}
+            title={task.name}
+            description={task.detail}
+            meta={task.when}
+            current={open === task.id ? LIST_ROW_CURRENT.ITEM : undefined}
+            onPress={() => setOpen(task.id)}
+            actions={<IconButton icon={<EllipsisIcon />} label={`More for ${task.name}`} />}
           />
         ))}
       </List>
@@ -94,40 +94,40 @@ function Plans({ state }: { state: CollectionState }): React.JSX.Element {
   );
 }
 
-/** The window's toolbar over the plans, holding their title and the act to make one. */
+/** The window's toolbar over the tasks, holding their title and the act to make one. */
 function Toolbar(): React.JSX.Element {
   return (
     <header className="catalog-window-toolbar">
-      <h1 className="catalog-window-toolbar-title">Plans</h1>
+      <h1 className="catalog-window-toolbar-title">Tasks</h1>
       <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PlusIcon />}>
-        New plan
+        New task
       </Button>
     </header>
   );
 }
 
-function PlansUnderToolbar({ state }: { state: CollectionState }): React.JSX.Element {
+function TasksUnderToolbar({ state }: { state: CollectionState }): React.JSX.Element {
   const [query, setQuery] = useState("");
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
-      label="Plans"
+      label="Tasks"
       toolbar={<Toolbar />}
       filters={
-        <TextField label="Search plans" placeholder="Search" value={query} onChange={setQuery} />
+        <TextField label="Search tasks" placeholder="Search" value={query} onChange={setQuery} />
       }
       state={state}
-      loadingLabel="Reading plans"
-      empty={<p>No plans yet. Start one by talking it through.</p>}
-      error={<p role="alert">Plans could not be read. Try again in a moment.</p>}
+      loadingLabel="Reading tasks"
+      empty={<p>No tasks yet. Start one by talking it through.</p>}
+      error={<p role="alert">Tasks could not be read. Try again in a moment.</p>}
     >
-      <List label="Plans">
-        {PLANS.map((plan) => (
+      <List label="Tasks">
+        {TASKS.map((task) => (
           <ListRow
-            key={plan.id}
-            title={plan.name}
-            description={plan.detail}
-            meta={plan.when}
+            key={task.id}
+            title={task.name}
+            description={task.detail}
+            meta={task.when}
             onPress={() => undefined}
           />
         ))}
@@ -136,22 +136,22 @@ function PlansUnderToolbar({ state }: { state: CollectionState }): React.JSX.Ele
   );
 }
 
-/** The plans as a board under the toolbar, its columns across the room. */
+/** The tasks as a board under the toolbar, its columns across the room. */
 function Board(): React.JSX.Element {
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
       width={PAGE_WIDTH.FULL}
-      label="Plans"
+      label="Tasks"
       toolbar={<Toolbar />}
       state={COLLECTION_STATE.READY}
-      loadingLabel="Reading plans"
+      loadingLabel="Reading tasks"
     >
       <div className="catalog-board">
         {STAGES.map((stage, column) => (
           <div key={stage} className="catalog-board-column">
             <List label={stage}>
-              <ListRow title={stage} description={PLANS[column]?.name} onPress={() => undefined} />
+              <ListRow title={stage} description={TASKS[column]?.name} onPress={() => undefined} />
             </List>
           </div>
         ))}
@@ -171,7 +171,7 @@ function SwitchedUnderToolbar(): React.JSX.Element {
         onChange={setState}
       />
       <div className="catalog-screen catalog-screen-collection">
-        <PlansUnderToolbar state={state} />
+        <TasksUnderToolbar state={state} />
       </div>
     </div>
   );
@@ -188,7 +188,7 @@ function Switched(): React.JSX.Element {
         onChange={setState}
       />
       <div className="catalog-screen catalog-screen-collection">
-        <Plans state={state} />
+        <Tasks state={state} />
       </div>
     </div>
   );
@@ -203,10 +203,10 @@ function CollectionPages(): React.JSX.Element {
       <CatalogSection id="collection-page-phone" title="A phone's width, loading and ready">
         <div className="catalog-screens">
           <div className="catalog-screen catalog-screen-phone catalog-screen-collection">
-            <Plans state={COLLECTION_STATE.LOADING} />
+            <Tasks state={COLLECTION_STATE.LOADING} />
           </div>
           <div className="catalog-screen catalog-screen-phone catalog-screen-collection">
-            <Plans state={COLLECTION_STATE.READY} />
+            <Tasks state={COLLECTION_STATE.READY} />
           </div>
         </div>
       </CatalogSection>

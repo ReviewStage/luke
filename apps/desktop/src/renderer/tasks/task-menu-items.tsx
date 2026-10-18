@@ -7,7 +7,7 @@ import { LINK_COPY } from "../copy-feedback";
 import type { MenuAction } from "../desktop/action-menu";
 
 /**
- * plan-menu-items.tsx -- the items a plan's ⋯ menu and the ⋯ beside its title both offer: Copy link, Mark as unread, Rename, and Version history.
+ * task-menu-items.tsx -- the items a task's ⋯ menu and the ⋯ beside its title both offer: Copy link, Mark as unread, Rename, and Version history.
  *
  * Each menu says what pressing one does where it is drawn, so the sidebar's
  * Rename edits the row and the title's edits the title, but both draw the

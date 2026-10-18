@@ -133,11 +133,11 @@ function ConfirmDialogs(): React.JSX.Element {
           }}
         />
         <Asking
-          label="Delete plan…"
+          label="Delete task…"
           question={{
             title:
               "Delete “Quarterly planning for the platform team’s migration to the new build system”?",
-            body: "The plan, its tasks, and every agent’s transcript under it go for good. Anyone in the workspace who opened it sees it gone the next time they look, and links to it from other plans, from Linear issues, and from pull requests stop resolving.",
+            body: "The task, its plan, and every agent’s transcript under it go for good. Anyone in the workspace who opened it sees it gone the next time they look, and links to it from other tasks, from Linear issues, and from pull requests stop resolving.",
             verb: "Delete",
             running: "Deleting",
           }}

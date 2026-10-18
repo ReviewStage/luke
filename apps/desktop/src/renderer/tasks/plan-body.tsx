@@ -51,7 +51,7 @@ import {
   type UnitView,
 } from "./task-reveal";
 import { agoText, momentText, sinceText, useMinute } from "./task-time";
-import { PlanTitle } from "./task-title";
+import { TaskTitle } from "./task-title";
 import { useOpenLink } from "./use-open-link";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks";
@@ -976,11 +976,11 @@ export function PlanBody({
               titleMenu,
             )
           ) : page === undefined ? (
-            attributed(<PlanTitle name={task.name} />, null, titleMenu)
+            attributed(<TaskTitle name={task.name} />, null, titleMenu)
           ) : (
             <header className="task-page-head">
               <div className="task-title-line">
-                <PlanTitle name={task.name} />
+                <TaskTitle name={task.name} />
                 {page.actions}
               </div>
               {editedNote}

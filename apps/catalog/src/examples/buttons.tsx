@@ -58,7 +58,7 @@ function Buttons(): React.JSX.Element {
       <CatalogSection id="buttons-glyph" title="With a glyph">
         <Inline>
           <Button variant={BUTTON_VARIANT.PRIMARY} icon={<PlusIcon />}>
-            New plan
+            New task
           </Button>
           <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PlusIcon />}>
             Invite
@@ -72,7 +72,7 @@ function Buttons(): React.JSX.Element {
         <Inline>
           <IconButton icon={<EllipsisIcon />} label="More" />
           <IconButton icon={<SidebarIcon />} label="Sidebar" pressed />
-          <IconButton icon={<PlusIcon />} label="New plan" variant={BUTTON_VARIANT.OUTLINE} />
+          <IconButton icon={<PlusIcon />} label="New task" variant={BUTTON_VARIANT.OUTLINE} />
           <IconButton icon={<TrashIcon />} label="Delete" disabled />
           <IconButton icon={<EllipsisIcon />} label="Loading" busy busyLabel="Loading" />
         </Inline>
