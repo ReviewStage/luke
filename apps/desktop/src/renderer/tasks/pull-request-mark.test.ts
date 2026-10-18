@@ -13,14 +13,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { PullRequestLine } from "../desktop/task-card";
 import { ChangesCard } from "./agent-changes-tab";
-import { PublishedChip, PublishedRow } from "./agent-published";
+import { PublishedRow } from "./agent-published";
 import { agentSubject, NOTHING_HELD } from "./agent-ref";
 
 /**
  * pull-request-mark.test.ts -- a pull request reads the same wherever the
- * window draws it: a sidebar task's card, its agent's chip, the row a
- * transcript ends on, and its Changes tab's card each wear one mark saying
- * the words a reader who cannot see it hears.
+ * window draws it: a sidebar task's card, the row pinned over its agent's
+ * box, and its Changes tab's card each wear one mark saying the words a
+ * reader who cannot see it hears.
  */
 
 const AGENT: CodingAgentSummary = {
@@ -57,13 +57,13 @@ function places(drawn: CodingAgentPullRequest): ReadonlyMap<string, ReactElement
   return new Map<string, ReactElement>([
     ["plan card", createElement(PullRequestLine, { pullRequest: drawn, onOpenGitHub: ignore })],
     [
-      "agent chip",
-      createElement(PublishedChip, {
-        published: { repository: "acme/relay", branch: "invites", pullRequest: drawn },
+      "pinned row",
+      createElement(PublishedRow, {
+        pullRequest: drawn,
+        branch: "invites",
         doors: { openGitHub: ignore, copy: ignore },
       }),
     ],
-    ["transcript row", createElement(PublishedRow, { pullRequest: drawn, openGitHub: ignore })],
     [
       "Changes card",
       createElement(ChangesCard, {
@@ -94,18 +94,6 @@ test("a closed pull request whose checks failed says so wherever it is drawn", (
   const drawn = places(pullRequest(PULL_REQUEST_STATE.CLOSED, CHECK_SUMMARY.FAILING));
   const expected = "Pull request #42, closed, checks failing";
   for (const [place, element] of drawn) assert.equal(markOf(element), expected, place);
-});
-
-test("the agent's chip, which names the pull request in words of its own, says its checks failed too", () => {
-  const chip = places(pullRequest(PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.FAILING)).get(
-    "agent chip",
-  );
-  assert.ok(chip !== undefined);
-  const page = new DOMParser().parseFromString(renderToStaticMarkup(chip), "text/html");
-  assert.equal(
-    page.querySelector("button")?.getAttribute("aria-label"),
-    "Pull request #42, open, checks failing",
-  );
 });
 
 test("a merged pull request says so wherever it is drawn, its checks unsaid", () => {

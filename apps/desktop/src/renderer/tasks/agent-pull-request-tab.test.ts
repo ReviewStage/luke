@@ -1605,9 +1605,13 @@ function writeReview(panel: HTMLElement, words: string): void {
 /** Chooses what the review says by its label, and submits it. */
 async function submitReview(panel: HTMLElement, label: string): Promise<void> {
   const choice =
-    [...panel.querySelectorAll("label")].find((each) => each.textContent?.startsWith(label)) ??
+    [
+      ...panel.querySelectorAll<HTMLButtonElement>(
+        '[aria-label="What the review says"] [role="radio"]',
+      ),
+    ].find((each) => each.textContent?.startsWith(label)) ??
     assert.fail(`the panel offers ${label}`);
-  act(() => choice.querySelector("input")?.click());
+  act(() => choice.click());
   const submit =
     [...panel.querySelectorAll("button")].find((each) => each.textContent === "Submit review") ??
     assert.fail("the panel submits");
@@ -1626,10 +1630,10 @@ test("Review opens a panel whose choice and words are submitted for the agent as
     }),
   );
   const panel = openReview(tab);
-  assert.deepEqual(words(panel, ".pull-request-review-event-label"), [
-    "Comment",
-    "Approve",
-    "Request changes",
+  assert.deepEqual(words(panel, '[aria-label="What the review says"] [role="radio"]'), [
+    "CommentSubmit general feedback without approval.",
+    "ApproveApprove this pull request.",
+    "Request changesSubmit feedback that must be addressed.",
   ]);
 
   writeReview(panel, "Ship it once **CI** is green.");
@@ -1650,8 +1654,11 @@ test("Review opens a panel whose choice and words are submitted for the agent as
   const reopened = openReview(tab);
   assert.equal(reopened.querySelector("textarea")?.value, "", "the submitted words are let go");
   assert.equal(
-    reopened.querySelector<HTMLInputElement>("input:checked")?.value,
-    REVIEW_EVENT.COMMENT,
+    reopened
+      .querySelector('[aria-label="What the review says"] [aria-checked="true"]')
+      ?.textContent?.startsWith("Comment"),
+    true,
+    "a fresh review says Comment",
   );
 });
 
