@@ -66,7 +66,7 @@ function mount(tasks: Partial<TasksControl>) {
     );
   render(true);
   return {
-    switcher: () => container.querySelector<HTMLButtonElement>(".sidebar-workspace-toggle"),
+    switcher: () => container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]'),
     fold: () => render(false),
   };
 }

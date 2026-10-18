@@ -106,13 +106,13 @@ export function useInboxItems(input: {
   );
   // Note that only a task still listed fails the list, because one another workspace listed is not drawn.
   const pending = holdings.some(
-    ({ taskId: planId, updatedAt }) => reads.get(planId)?.at !== updatedAt && !failed.has(planId),
+    ({ taskId, updatedAt }) => reads.get(taskId)?.at !== updatedAt && !failed.has(taskId),
   );
   // Note that a plan main lists no more has no newer read on its way, so its last read stands.
   const current = new Set(
-    [...reads].flatMap(([planId, read]) => {
-      const holding = holdings.find((each) => each.taskId === planId);
-      return holding === undefined || holding.updatedAt === read.at ? [planId] : [];
+    [...reads].flatMap(([taskId, read]) => {
+      const holding = holdings.find((each) => each.taskId === taskId);
+      return holding === undefined || holding.updatedAt === read.at ? [taskId] : [];
     }),
   );
   return {

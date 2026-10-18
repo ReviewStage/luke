@@ -333,11 +333,11 @@ export function App(): React.JSX.Element {
   const showAgentPage = useRef(tasks.agentView.onOpen);
   showAgentPage.current = tasks.agentView.onOpen;
   const openAgent = useCallback(
-    ({ taskId: planId, agentId }: AgentPlace) =>
+    ({ taskId, agentId }: AgentPlace) =>
       guardLeave(() => {
         changeTab(PANEL_TAB.TASKS);
-        if (planId === null) showAgentPage.current(agentId);
-        else showAgent.current(planId, agentId);
+        if (taskId === null) showAgentPage.current(agentId);
+        else showAgent.current(taskId, agentId);
       })(),
     [changeTab, guardLeave],
   );
@@ -389,10 +389,10 @@ export function App(): React.JSX.Element {
   showTask.current = tasks.onShowTask;
   useEffect(
     () =>
-      appBridge().onShowTask(({ taskId: planId }) =>
+      appBridge().onShowTask(({ taskId }) =>
         guardLeave(() => {
           changeTab(PANEL_TAB.TASKS);
-          showTask.current(planId);
+          showTask.current(taskId);
         })(),
       ),
     [changeTab, guardLeave],
@@ -430,10 +430,10 @@ export function App(): React.JSX.Element {
   const showInbox = useRef(tasks.onShowInbox);
   showInbox.current = tasks.onShowInbox;
   const openInbox = useCallback(
-    (planId: string) =>
+    (taskId: string) =>
       guardLeave(() => {
         changeTab(PANEL_TAB.TASKS);
-        showInbox.current(planId);
+        showInbox.current(taskId);
       })(),
     [changeTab, guardLeave],
   );
@@ -793,8 +793,8 @@ export function App(): React.JSX.Element {
                           capabilities: state.run.capabilities,
                           onViewChange: setSettingsView,
                         }}
-                        readFiles={(planId) =>
-                          act(ACT_KIND.TASKS_TREE, { planId, path: "", recursive: true })
+                        readFiles={(taskId) =>
+                          act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })
                         }
                       />
                     </div>

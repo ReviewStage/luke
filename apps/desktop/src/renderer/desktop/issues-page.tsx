@@ -154,7 +154,7 @@ function listState(read: ReturnType<typeof useIssues>["read"], onBoard: boolean)
 /** The list's page: the listed workspace's issues by status, a new one a press away. */
 function ListPage({
   root,
-  plans,
+  plans: tasks,
   issues,
   focused,
   layout,
@@ -178,14 +178,14 @@ function ListPage({
   /** Opens the card with a board column's status chosen; none while no workspace is listed. */
   onComposeIn: ((status: IssueStatus) => void) | undefined;
 }): React.JSX.Element {
-  const view = plans.issuesView;
+  const view = tasks.issuesView;
   useAppCommand(APP_COMMAND.EXIT_ISSUES, view.onClose);
   const now = useMinute();
-  const workspace = plans.workspace;
+  const workspace = tasks.workspace;
   const { read, reload } = issues;
   const onBoard = layout === ISSUES_LAYOUT.BOARD;
-  useRowKeys(root, plans.shown && !onBoard);
-  useBoardKeys(root, plans.shown && onBoard);
+  useRowKeys(root, tasks.shown && !onBoard);
+  useBoardKeys(root, tasks.shown && onBoard);
   const open = (issue: Issue) => view.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId: issue.id });
   const said = useChangeSaid();
   const change = (issue: Issue, asked: IssueChange) => {
@@ -214,7 +214,7 @@ function ListPage({
           </div>
           <div className="desktop-toolbar-actions">
             <SendFeedbackButton experiment={EXPERIMENT.ISSUES} />
-            <ViewOptions shown={plans.shown} layout={layout} onLayout={onLayout} />
+            <ViewOptions shown={tasks.shown} layout={layout} onLayout={onLayout} />
             <Button
               variant={BUTTON_VARIANT.OUTLINE}
               icon={<PlusIcon />}
@@ -242,7 +242,7 @@ function ListPage({
           workspaceName={workspaceName}
           now={now}
           focused={focused}
-          shown={plans.shown}
+          shown={tasks.shown}
           onOpen={open}
           onCompose={onComposeIn}
           onChange={change}
@@ -254,7 +254,7 @@ function ListPage({
             workspaceName={workspaceName}
             now={now}
             focused={focused}
-            shown={plans.shown}
+            shown={tasks.shown}
             onOpen={open}
             onChange={change}
           />
@@ -342,7 +342,7 @@ function DetailFrame({
  * it goes back to already holds what was kept.
  */
 function DetailPage({
-  plans,
+  plans: tasks,
   issueId,
   issues,
   onBack,
@@ -363,8 +363,8 @@ function DetailPage({
   // Note that an issue of a workspace other than the one listed is no issue of this page, as a link to one is not.
   const listedElsewhere =
     issue !== undefined &&
-    plans.workspace !== undefined &&
-    issue.workspaceId !== plans.workspace.id;
+    tasks.workspace !== undefined &&
+    issue.workspaceId !== tasks.workspace.id;
   if (issue === undefined || listedElsewhere) {
     const failure = listedElsewhere
       ? ISSUE_CALL_FAILURE.NOT_FOUND
@@ -376,10 +376,10 @@ function DetailPage({
 
   return (
     // The workspace's members, read for the issue's creator: their picture, and You for the reader's own.
-    <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+    <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
       <IssueDetail
         issue={issue}
-        workspaceName={plans.workspace?.name ?? ""}
+        workspaceName={tasks.workspace?.name ?? ""}
         onChange={onChange}
         onBack={onBack}
       />
@@ -393,19 +393,19 @@ function DetailPage({
  * and a change is in the list the moment it lands; going back from an
  * issue hands its row the keyboard.
  */
-export function IssuesPage({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
+export function IssuesPage({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   // Every Copy link on these pages is written under the listed workspace, whose issues they are.
   return (
-    <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
-      <IssuesPages tasks={plans} />
+    <LinkWorkspaceProvider value={tasks.workspace?.slug ?? tasks.workspace?.id}>
+      <IssuesPages tasks={tasks} />
     </LinkWorkspaceProvider>
   );
 }
 
 /** The Issues pages themselves, under the workspace their links are written in. */
-function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
-  const view = plans.issuesView;
-  const workspace = plans.workspace;
+function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+  const view = tasks.issuesView;
+  const workspace = tasks.workspace;
   const issues = useIssues(workspace?.id);
   const [cameFrom, setCameFrom] = useState<string | undefined>(undefined);
   const [composing, setComposing] = useState<Composing | undefined>(undefined);
@@ -450,7 +450,7 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
       {place.kind === ISSUES_PAGE.LIST ? (
         <ListPage
           root={pages}
-          plans={plans}
+          plans={tasks}
           issues={issues}
           focused={cameFrom}
           layout={layout}
@@ -468,7 +468,7 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
         // Keyed by the issue, so another issue's page holds nothing of the last's.
         <DetailPage
           key={place.issueId}
-          plans={plans}
+          plans={tasks}
           issueId={place.issueId}
           issues={issues}
           onBack={back}

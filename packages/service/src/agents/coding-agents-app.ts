@@ -40,6 +40,7 @@ import {
   codingAgentRenameRequestSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
 import {
@@ -983,18 +984,29 @@ const overviewPart = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest: part });
 });
 
+/** Whether the pull request was open as last read, which is when the stack it stands in is worth a read of GitHub's open pull requests. */
+function stackable(pullRequest: CodingAgentPullRequest): boolean {
+  return (
+    pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT
+  );
+}
+
 /**
  * GET reads the agent's pull request itself: its description, branches,
- * mergeability, who opened it, and who it asks for a review, its people
- * named against the workspace's members (`github-people.ts`), with who its
- * row says it writes as; none where the repository no longer holds it.
+ * mergeability, who opened it, who it asks for a review, its labels, and,
+ * while it was open as last read, the stack it stands in, its people named
+ * against the workspace's members and its stack by their agents
+ * (`github-people.ts`), with who its row says it writes as; none where the
+ * repository no longer holds it.
  */
 const overviewPullRequestEndpoint = /* @__PURE__ */ Effect.fn(
   "web/agentOverviewPullRequestEndpoint",
 )(function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
   return yield* overviewPart(seams, published, (token, agent, pullRequest) =>
-    Effect.flatMap(pullRequestOverview(token, agent.repository, pullRequest.number), (read) =>
-      Option.isNone(read) ? Effect.succeed(null) : namedOverviewPullRequest(agent, read.value),
+    Effect.flatMap(
+      pullRequestOverview(token, agent.repository, pullRequest.number, stackable(pullRequest)),
+      (read) =>
+        Option.isNone(read) ? Effect.succeed(null) : namedOverviewPullRequest(agent, read.value),
     ),
   );
 });
