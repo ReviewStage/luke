@@ -31,14 +31,18 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
+  Badge,
+  Button,
   CopyIcon,
   EmptyState,
   ErrorState,
+  IconButton,
   LIST_DENSITY,
   LIST_VARIANT,
   List,
   ListRow,
   ProviderMark,
+  SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
   Switch,
@@ -361,9 +365,7 @@ function PullRequestMenu({
   return (
     <>
       <Tooltip label={label}>
-        <button type="button" className="icon-button" aria-label={label} {...menu.trigger()}>
-          <EllipsisIcon />
-        </button>
+        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
@@ -455,14 +457,11 @@ function PullRequestBar({
               <PullRequestReview writes={review} />
             ) : null}
             <Tooltip label="Open on GitHub">
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Open on GitHub"
+              <IconButton
+                icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+                label="Open on GitHub"
                 onClick={() => appPlatform().openGitHub(published.url)}
-              >
-                <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
-              </button>
+              />
             </Tooltip>
             <PullRequestMenu url={published.url} reading={reading} onRefresh={onRefresh} />
           </div>
@@ -633,15 +632,13 @@ function Checks({
             </List>
           </div>
           {folds ? (
-            <button
-              type="button"
-              className="pull-request-checks-fold"
+            <Button
               aria-expanded={unfolded}
               aria-controls={listId}
               onClick={() => setUnfolded((was) => !was)}
             >
               {unfolded ? PULL_REQUEST_WORDS.SHOW_LESS : PULL_REQUEST_WORDS.showAll(checks.length)}
-            </button>
+            </Button>
           ) : null}
         </>
       )}
@@ -717,7 +714,11 @@ function GitHubPicture({
     return <img className="pull-request-picture" src={state.url} alt={alt} />;
   }
   if (state.kind === PICTURE_STATE.READING) {
-    return <span className="pull-request-picture-waiting" role="img" aria-label={alt} />;
+    return (
+      <span className="pull-request-picture-waiting" role="img" aria-label={alt}>
+        <Skeleton shape={SKELETON_SHAPE.BLOCK} />
+      </span>
+    );
   }
   return <GitHubPictureLink src={src} alt={alt} />;
 }
@@ -792,9 +793,7 @@ function ThreadCard({
           </Tooltip>
           {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}
           {labels.map((label) => (
-            <span key={label} className="pull-request-thread-label">
-              {label}
-            </span>
+            <Badge key={label}>{label}</Badge>
           ))}
           <FoldChevron />
         </FoldSummary>

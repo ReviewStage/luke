@@ -97,7 +97,7 @@ const SUMMARY_PINNED_KEY = "luke.summary-pinned";
 /**
  * The least width of the task's column, in CSS pixels, at which the summary
  * can stand pinned rather than as a rail: the document's measure and its page
- * insets either side (desktop.css's `--reading-width`, 720, and
+ * insets either side (`@luke/ui`'s `--luke-page-measure`, 720, and
  * `--luke-page-inset`, 40) beside the column's own `--summary-width`, 240, so
  * making room for it never reads the document under its measure. Note that
  * the column is measured whole, the summary included, and the side panel

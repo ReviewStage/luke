@@ -11,7 +11,7 @@
 
 @layer components {
   .luke-collection-page {
-    --luke-collection-page-width: 720px;
+    --luke-collection-page-width: var(--luke-page-measure);
     --luke-collection-page-inset: var(--luke-page-inset);
     container-type: inline-size;
     display: flex;

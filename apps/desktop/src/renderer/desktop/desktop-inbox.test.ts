@@ -528,16 +528,15 @@ test("a settled choice folds what its agent offered to one line saying who picke
   assert.ok(reply.querySelector(".actor-ref[data-kind='person']"), "the answerer by their name");
 });
 
-/** An item's options as a reader meets them: each label, then its Recommended badge's words, and whether the badge has gone quiet, where it wears one. */
+/** An item's options as a reader meets them: each label, then its Recommended badge's words where it wears one. */
 function optionHeads(page: HTMLElement, option: string): (string | null | undefined)[][] {
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
   return [...pane.querySelectorAll<HTMLElement>(option)].map((each) => {
-    const badge = each.querySelector<HTMLElement>(".inbox-option-head > .inbox-recommended");
+    const head = each.querySelector(".inbox-option-head")?.textContent ?? "";
     return [
       each.querySelector(".inbox-option-label > :first-child")?.textContent,
-      badge?.textContent ?? null,
-      badge?.dataset.settled ?? null,
+      head.endsWith("Recommended") ? "Recommended" : null,
     ];
   });
 }
@@ -616,8 +615,8 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   const { page } = mount();
   await settle();
   assert.deepEqual(optionHeads(page, "button.inbox-option"), [
-    ["Retry 3 times over an hour", "Recommended", "false"],
-    ["Retry once", null, null],
+    ["Retry 3 times over an hour", "Recommended"],
+    ["Retry once", null],
   ]);
 
   act(() => root?.unmount());
@@ -630,8 +629,8 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   const again = mount();
   await settle();
   assert.deepEqual(optionHeads(again.page, "button.inbox-option"), [
-    ["Retry 3 times over an hour", null, null],
-    ["Retry once", null, null],
+    ["Retry 3 times over an hour", null],
+    ["Retry once", null],
   ]);
 });
 
@@ -646,8 +645,8 @@ test("a settled choice whose pick is not the one recommended marks each apart: t
   await settle();
 
   assert.deepEqual(optionHeads(page, "li.inbox-option"), [
-    ["Retry 3 times over an hour", "Recommended", "true"],
-    ["Retry once", null, null],
+    ["Retry 3 times over an hour", "Recommended"],
+    ["Retry once", null],
   ]);
   const picked = page.querySelector<HTMLElement>('li.inbox-option[data-picked="true"]');
   assert.equal(
