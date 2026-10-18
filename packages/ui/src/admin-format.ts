@@ -57,16 +57,19 @@ export function formatTooltipDay(day: string, partialDay: string | undefined): s
   return day === partialDay ? `${formatDayTick(day)} (so far today)` : formatDayTick(day);
 }
 
-const TREND_TONE = {
-  UP: "text-complete",
-  DOWN: "text-attention",
-  FLAT: "text-muted-foreground",
+/** Which way a run moved against the one before it; the page that draws it picks the ink. */
+export const TREND_DIRECTION = {
+  UP: "up",
+  DOWN: "down",
+  FLAT: "flat",
 } as const;
 
-export function trendTone(trend: Trend): string {
-  if (trend.recent > trend.prior) return TREND_TONE.UP;
-  if (trend.recent < trend.prior) return TREND_TONE.DOWN;
-  return TREND_TONE.FLAT;
+export type TrendDirection = (typeof TREND_DIRECTION)[keyof typeof TREND_DIRECTION];
+
+export function trendDirection(trend: Trend): TrendDirection {
+  if (trend.recent > trend.prior) return TREND_DIRECTION.UP;
+  if (trend.recent < trend.prior) return TREND_DIRECTION.DOWN;
+  return TREND_DIRECTION.FLAT;
 }
 
 /**

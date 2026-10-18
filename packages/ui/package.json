@@ -14,7 +14,6 @@
     "./admin-format": "./src/admin-format.js",
     "./daily-series": "./src/daily-series.js",
     "./chart": "./src/chart/chart.js",
-    "./theme.css": "./src/theme.css",
     "./tokens.css": "./src/tokens/tokens.css",
     "./styles.css": "./src/styles.css",
     "./search-tokens": "./src/search-tokens.js",
