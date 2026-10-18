@@ -5,6 +5,7 @@ import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/cod
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { Task } from "@luke/features/task-wire";
 import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
+import { SIDE_PANEL_TAB, type SidePanelTab } from "@luke/panel/tasks/use-side-panel";
 import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -17,7 +18,6 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel";
 import { DesktopTasks } from "./desktop-tasks";
 
 /**

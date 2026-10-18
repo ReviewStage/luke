@@ -3,6 +3,7 @@ import type {
   ComposerEditorHandle,
   ComposerTrigger,
 } from "@luke/panel/plan-editor/contract";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   ALIGN,
   ComboboxList,
@@ -29,7 +30,6 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Tooltip } from "../tooltip";
 import { SkillCard } from "./skill-ref";
 
 /**

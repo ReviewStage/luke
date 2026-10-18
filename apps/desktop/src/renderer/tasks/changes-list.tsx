@@ -6,6 +6,7 @@ import {
   startsCollapsed,
   treeOrder,
 } from "@luke/panel/tasks/changes-model";
+import { Tooltip } from "@luke/panel/tooltip";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import { IconButton } from "@luke/ui";
 import { ChevronRightIcon } from "lucide-react";
@@ -19,7 +20,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
 import type { DiffListDoor } from "./diff-list";
 

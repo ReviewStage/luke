@@ -53,7 +53,7 @@
     "apps/desktop/src/main/window/voice-window.ts",
     "packages/panel/src/feedback-images.ts",
     "packages/panel/src/luke-face-mood.ts",
-    "apps/desktop/src/renderer/use-caption-presentation.ts",
+    "packages/panel/src/use-caption-presentation.ts",
     "apps/web/src/admin/use-admin-read.ts",
     "packages/service/src/testing/voice-fakes.ts"
   ]

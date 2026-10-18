@@ -5,12 +5,17 @@ import { useAct } from "@luke/panel/act";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { appPlatform } from "@luke/panel/app-platform";
 import { AutomationDirectory } from "@luke/panel/automation-directory";
+import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { ActionMenu } from "@luke/panel/desktop/action-menu";
+import { FindScope } from "@luke/panel/find-in-tab";
 import { MemberDirectory } from "@luke/panel/member-directory";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
 import { SpinnerRegion } from "@luke/panel/spinner";
 import { WordsWorkspace } from "@luke/panel/tasks/use-link-standing";
 import { OpenHereProvider, openPullRequestsHere } from "@luke/panel/tasks/use-open-link";
+import { PULL_REQUEST_VIEW } from "@luke/panel/tasks/use-side-panel";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
+import { Tooltip } from "@luke/panel/tooltip";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -19,8 +24,6 @@ import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
-import { FindScope } from "../find-in-tab";
 import { usePageWorkspace } from "../links-at-hand";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { SkillFiles } from "../tasks/skill-chip";
@@ -32,10 +35,7 @@ import {
 } from "../tasks/task-mentions";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { useCodingAgents } from "../tasks/use-coding-agents";
-import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
-import { Tooltip } from "../tooltip";
-import { ActionMenu } from "./action-menu";
 import { AgentPane } from "./main-tabs";
 import {
   COLUMN,

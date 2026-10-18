@@ -1,12 +1,12 @@
 import { ISSUE_PRIORITY_WORDS, ISSUE_STATUS_WORDS } from "@luke/features/issue-list-model";
 import { ISSUE_STATUS_ORDER, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { ActionMenu, type MenuAction, type MenuEntry } from "@luke/panel/desktop/action-menu";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog, type useMenu } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ArchiveIcon } from "lucide-react";
-import { useCopyLinkItem } from "../copy-link-item";
-import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { PRIORITY_ORDER, PriorityGlyph, StatusGlyph } from "./issue-pickers";
 import { useStartItems } from "./issue-work";
 

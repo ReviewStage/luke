@@ -3,6 +3,7 @@ import {
   REVIEW_EVENT,
   type ReviewEvent,
 } from "@luke/features/pull-request-write-wire";
+import { PopoverPanel } from "@luke/panel/popover-panel";
 import {
   AnchoredPopover,
   BUTTON_VARIANT,
@@ -18,7 +19,6 @@ import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { PopoverPanel } from "../popover-panel";
 import type { PendingReview } from "./line-comment";
 import { MarkdownField } from "./markdown-field";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes";

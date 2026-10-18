@@ -1,13 +1,13 @@
-import { LinkIcon } from "lucide-react";
-import type { ReactNode } from "react";
 import {
   MESSAGE_ACTIONS_PLACEMENT,
   MessageAction,
   MessageActions,
   type MessageActionsPlacement,
-} from "../ai-elements/message";
-import { CopyGlyph, copyHint, LINK_COPY, useCopyFeedback } from "../copy-feedback";
-import { useCopyLink } from "../copy-link-item";
+} from "@luke/panel/ai-elements/message";
+import { CopyGlyph, copyHint, LINK_COPY, useCopyFeedback } from "@luke/panel/copy-feedback";
+import { useCopyLink } from "@luke/panel/copy-link-item";
+import { LinkIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { ForkMessageAction } from "./fork-action";
 import type { ForkCut } from "./fork-model";
 import { useMessagePlace } from "./message-links";

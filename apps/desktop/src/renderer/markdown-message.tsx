@@ -1,3 +1,4 @@
+import { TextLink } from "@luke/panel/text-link";
 import { PROSE_CLASS } from "@luke/ui";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
@@ -7,7 +8,6 @@ import { createContext, type ReactNode, useContext, useMemo, useRef } from "reac
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PlanDiagram } from "./plan-diagram";
-import { TextLink } from "./text-link";
 
 const SAFE_LINK = /^https?:\/\//i;
 

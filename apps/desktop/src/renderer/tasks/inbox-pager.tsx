@@ -1,11 +1,11 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { Shortcut } from "@luke/panel/shortcut";
+import { Tooltip } from "@luke/panel/tooltip";
 import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { IconButton, LIST_VARIANT, List, ListRow, type ListRowHint } from "@luke/ui";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { cloneElement } from "react";
-import { Tooltip } from "../tooltip";
 import { type InboxListed, type InboxListView, inboxSteps, nextNeedingYou } from "./inbox-model";
 import { cardTitle } from "./tool-call-model";
 

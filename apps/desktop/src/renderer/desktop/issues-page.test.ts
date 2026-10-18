@@ -19,6 +19,7 @@ import {
   type PlanEditorPlacement,
   type PlanEditorProps,
 } from "@luke/panel/plan-editor/contract";
+import { type SidePanelControl, useSidePanel } from "@luke/panel/tasks/use-side-panel";
 import { lineWords } from "@luke/panel/testing/actor-line";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -36,7 +37,6 @@ import { playMotions } from "#testing/pane-motion";
 import { landedBundles, onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
 import { type SideBundles, sideBundles } from "../bundle-loader";
-import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel";
 import { ISSUES_PAGE, type IssuesPlace, type NewTaskIssue } from "../tasks/use-tasks-tab";
 import { IssuesPage } from "./issues-page";
 

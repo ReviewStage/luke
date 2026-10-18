@@ -4,8 +4,12 @@ import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { AttentionMark } from "@luke/panel/attention-mark";
+import { WorkspaceRef } from "@luke/panel/desktop/workspace-ref";
 import { useCreator, useMemberDirectory } from "@luke/panel/member-directory";
+import { useActorDoor } from "@luke/panel/person-door";
 import { RepositoryPicture } from "@luke/panel/repository-picture";
+import { GLYPH_STATE, StateGlyph } from "@luke/panel/state-glyph";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import {
   HOVER_CARD_ROW_LOOK,
@@ -20,15 +24,11 @@ import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { repositoryPageUrl } from "@luke/ui/tasks-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { useActorDoor } from "../person-door";
-import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { agentTabLabel, pullRequestNumberLabel } from "../tasks/coding-agent-model";
 import { PullRequestMark } from "../tasks/pull-request-mark";
-import { RelativeTime } from "../tasks/relative-time";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { strandedHome } from "./move-task-dialog";
-import { WorkspaceRef } from "./workspace-ref";
 
 /**
  * task-card.tsx -- a sidebar task's agents at a glance: the one mark at its row's end, and the card its row hangs while the pointer rests on it.

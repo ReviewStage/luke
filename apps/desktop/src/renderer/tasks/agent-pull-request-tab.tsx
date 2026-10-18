@@ -33,6 +33,8 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { Fold, FoldBody, FoldSummary } from "@luke/panel/ai-elements/fold";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useCopyToast } from "@luke/panel/copy-feedback";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { threadPreview } from "@luke/panel/tasks/changes-model";
 import {
   type ConversationFiltersControl,
@@ -43,8 +45,12 @@ import {
 } from "@luke/panel/tasks/conversation-filters";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { PullRequestLabels } from "@luke/panel/tasks/pull-request-labels";
+import { PullRequestStack } from "@luke/panel/tasks/pull-request-stack";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
+import { PULL_REQUEST_VIEW, type PullRequestView } from "@luke/panel/tasks/use-side-panel";
+import { Tooltip } from "@luke/panel/tooltip";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   AVATAR_SHAPE,
@@ -95,9 +101,6 @@ import {
   XIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
-import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { Tooltip } from "../tooltip";
 import {
   AgentChangesTab,
   type ChangesThreads,
@@ -123,7 +126,6 @@ import {
 } from "./pull-request-pickers";
 import { Reactions } from "./pull-request-reactions";
 import { PullRequestReview } from "./pull-request-review";
-import { PullRequestStack } from "./pull-request-stack";
 import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions";
 import {
   PullRequestStateMenu,
@@ -132,7 +134,6 @@ import {
   type PullRequestWrites,
   usePullRequestWrites,
 } from "./pull-request-writes";
-import { RelativeTime } from "./relative-time";
 import {
   type GitHubPictureDrawer,
   GitHubPictureLink,
@@ -140,7 +141,6 @@ import {
   TranscriptWords,
 } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 import { useWorkingNow, workingTime } from "./working-time";
 
 /**

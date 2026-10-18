@@ -4,6 +4,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
 import { Shortcut } from "@luke/panel/shortcut";
 import { useNewTaskPlanning } from "@luke/panel/tasks/new-task-planning";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   SHORTCUT_KEY,
   type ShortcutChord,
@@ -26,7 +27,6 @@ import {
 import { taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
 import { useId, useRef, useState } from "react";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row";
-import { Tooltip } from "../tooltip";
 import { LINEAR_CHORD, LinearIssueChip } from "./linear-issue-chip";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import type { TasksControl } from "./use-tasks-tab";

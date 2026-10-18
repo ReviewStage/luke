@@ -10,6 +10,8 @@ import {
   toolSummary,
   toolTitle,
 } from "@luke/features/integration-tool-model";
+import { Highlighted } from "@luke/panel/search-field";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   ArrowLeftIcon,
   BADGE_TONE,
@@ -27,8 +29,6 @@ import {
 } from "@luke/ui";
 import { cloneElement, createContext, useContext } from "react";
 import { MarkdownMessage } from "./markdown-message";
-import { Highlighted } from "./search-field";
-import { Tooltip } from "./tooltip";
 
 /**
  * integration-tool-list.tsx -- one integration's tools as a list draws them, and one tool's page, in the MCP popover and in Settings › Integrations alike.

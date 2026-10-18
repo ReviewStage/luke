@@ -3,10 +3,22 @@ import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { AttentionMark } from "@luke/panel/attention-mark";
 import { useAutomation } from "@luke/panel/automation-directory";
+import { useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { ActionMenu, type MenuAction, type MenuEntry } from "@luke/panel/desktop/action-menu";
+import { SidebarGroupHeader } from "@luke/panel/desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "@luke/panel/desktop/use-resizable-edge";
 import { DraftMark } from "@luke/panel/draft-mark";
 import { useMemberDirectory } from "@luke/panel/member-directory";
+import {
+  INBOX_COLUMNS,
+  type InboxColumnsShown,
+  type InboxRowPresses,
+  listHeadControl,
+} from "@luke/panel/tasks/inbox-columns";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
+import { markReadItem } from "@luke/panel/tasks/task-menu-items";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
@@ -60,8 +72,6 @@ import {
 import { useCallback, useId, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { useInboxItemDrafted } from "../composer-drafts";
-import { useCopyLinkItem } from "../copy-link-item";
-import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
 import {
   INBOX_LIST_WIDTH,
@@ -71,16 +81,8 @@ import {
   type InboxWhoseChoice,
   useInboxListWidth,
 } from "../desktop/folded-groups";
-import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
-import { Tooltip } from "../tooltip";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
 import { providerOf } from "./coding-agent-model";
-import {
-  INBOX_COLUMNS,
-  type InboxColumnsShown,
-  type InboxRowPresses,
-  listHeadControl,
-} from "./inbox-columns";
 import {
   EVERYONES,
   holderKey,
@@ -112,8 +114,6 @@ import {
 } from "./inbox-model";
 import { RowMedia, type RowMediaReads, useRowMediaReads } from "./inbox-row-media";
 import { ReadAgentModel } from "./mentioned-agent-card";
-import { RelativeTime } from "./relative-time";
-import { markReadItem } from "./task-menu-items";
 import { cardTitle } from "./tool-call-model";
 
 /**

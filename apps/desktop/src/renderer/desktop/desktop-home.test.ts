@@ -22,6 +22,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { commandKeyshortcuts } from "@luke/panel/tooltip";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -31,7 +32,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
-import { commandKeyshortcuts } from "../tooltip";
 import { DesktopHome } from "./desktop-home";
 import { ListedAutomations } from "./listed-automations";
 

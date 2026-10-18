@@ -16,6 +16,7 @@ import {
 } from "@luke/features/mention-link";
 import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
 import { planSections } from "@luke/features/plan-document";
+import { InlineRef } from "@luke/panel/inline-ref";
 import { usePerson } from "@luke/panel/member-directory";
 import type { HeadingsChange, MentionNode } from "@luke/panel/plan-editor/contract";
 import { IssueMark } from "@luke/panel/tasks/issue-mark";
@@ -55,7 +56,6 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { InlineRef } from "../inline-ref";
 import type { LinkDrawer } from "../markdown-message";
 import {
   AutomationChipCard,

@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { lineWords } from "@luke/panel/testing/actor-line";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
@@ -12,7 +13,6 @@ import { afterEach, test, vi } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
 import { SidebarTask } from "../desktop/task-actions";
 import { PlanBody } from "./plan-body";
-import { RelativeTime } from "./relative-time";
 
 /**
  * relative-time.test.ts -- a save's age reads the same on the task's own

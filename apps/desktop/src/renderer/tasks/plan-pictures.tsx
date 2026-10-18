@@ -7,7 +7,9 @@ import {
 import { planSections } from "@luke/features/plan-document";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { PictureBlock } from "@luke/panel/picture-block";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
+import { TextLink } from "@luke/panel/text-link";
 import { PICTURE_STATE, type PictureAnswer, pictureNow, usePicture } from "@luke/ui/picture-cache";
 import { ImageIcon } from "lucide-react";
 import {
@@ -20,8 +22,6 @@ import {
   useState,
 } from "react";
 import type { PictureDrawer } from "../markdown-message";
-import { PictureBlock } from "../picture-block";
-import { TextLink } from "../text-link";
 import { AttachmentViewer } from "./attachment-viewer";
 
 /**

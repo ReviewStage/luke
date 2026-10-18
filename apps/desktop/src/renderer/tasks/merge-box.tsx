@@ -12,6 +12,7 @@ import {
   type MergeMethod,
   PULL_REQUEST_ACTION,
 } from "@luke/features/pull-request-write-wire";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import {
   BUTTON_VARIANT,
   Button,
@@ -26,7 +27,6 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Schema } from "effect";
 import { GitMergeIcon } from "lucide-react";
 import { useState } from "react";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { readKept, writeKept } from "../desktop/folded-groups";
 import type { PullRequestWrites } from "./pull-request-writes";
 

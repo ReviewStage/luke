@@ -55,6 +55,7 @@ import { type GitHubConnectControl, GitHubConnectProvider } from "@luke/panel/gi
 import { MemberDirectory } from "@luke/panel/member-directory";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
+import { PULL_REQUEST_VIEW, type PullRequestView } from "@luke/panel/tasks/use-side-panel";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handSettings } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -74,7 +75,6 @@ import { AgentPullRequestTab } from "./agent-pull-request-tab";
 import { TAB_KIND, tabLook } from "./tab-look";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 
 /**
  * agent-pull-request-tab.test.ts -- an agent's Pull request tab draws its

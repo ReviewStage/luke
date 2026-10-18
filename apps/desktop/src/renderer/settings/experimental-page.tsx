@@ -1,6 +1,7 @@
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { useOpenFeedback } from "@luke/panel/open-feedback";
+import { SwitchRow } from "@luke/panel/settings/switch-row";
 import type { SettingsWrites } from "@luke/panel/settings/writes";
 import {
   EXPERIMENT,
@@ -25,7 +26,6 @@ import {
 } from "@luke/ui";
 import { FlaskConicalIcon } from "lucide-react";
 import { SchemaSettingRows } from "./schema-rows";
-import { SwitchRow } from "./switch-row";
 
 /**
  * experimental-page.tsx -- Settings › Experimental: a switch for each feature the account can try before it is finished, or the empty state between them.

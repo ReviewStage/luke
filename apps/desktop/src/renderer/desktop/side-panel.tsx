@@ -15,15 +15,43 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { paneTiming } from "@luke/panel/desktop/pane-motion";
+import { TabStrip } from "@luke/panel/desktop/tab-strip";
 import {
   EDGE_SIDE,
   type ResizableEdgeProps,
   useResizableEdge,
 } from "@luke/panel/desktop/use-resizable-edge";
+import { FindScope } from "@luke/panel/find-in-tab";
 import { drawnVisibly, focusSeek } from "@luke/panel/focus-seek";
+import { type MenuRow, MenuRowList } from "@luke/panel/searchable-menu";
 import { SpinnerRegion } from "@luke/panel/spinner";
+import {
+  GLYPH_STATE,
+  type GlyphState,
+  glyphStateWords,
+  stateEndMark,
+} from "@luke/panel/state-glyph";
 import { PullRequestsOnGitHub } from "@luke/panel/tasks/use-open-link";
+import {
+  type DrawnTabs,
+  drawsChanges,
+  drawsSubagent,
+  drawsTerminal,
+  type FileHistoryStep,
+  type FixedSidePanelTab,
+  isPinnable,
+  type OpenFile,
+  PULL_REQUEST_VIEW,
+  type PullRequestView,
+  SIDE_PANEL_TAB,
+  SIDE_PANEL_TABS,
+  SIDE_PANEL_WIDTH,
+  type SidePanelControl,
+  type SidePanelTab,
+} from "@luke/panel/tasks/use-side-panel";
+import { Tooltip } from "@luke/panel/tooltip";
 import { useCapability } from "@luke/panel/use-app-state";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -69,11 +97,7 @@ import {
   useState,
 } from "react";
 import { CallTabVideo } from "../call/panel-avatar";
-import { useCopyLinkItem } from "../copy-link-item";
-import { FindScope } from "../find-in-tab";
 import { panelTabPlace } from "../links-at-hand";
-import { type MenuRow, MenuRowList } from "../searchable-menu";
-import { GLYPH_STATE, type GlyphState, glyphStateWords, stateEndMark } from "../state-glyph";
 import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab";
 import { AgentPullRequestTab } from "../tasks/agent-pull-request-tab";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
@@ -109,23 +133,6 @@ import {
 import type { TranscriptReader } from "../tasks/use-agent-transcript";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import {
-  type DrawnTabs,
-  drawsChanges,
-  drawsSubagent,
-  drawsTerminal,
-  type FileHistoryStep,
-  type FixedSidePanelTab,
-  isPinnable,
-  type OpenFile,
-  PULL_REQUEST_VIEW,
-  type PullRequestView,
-  SIDE_PANEL_TAB,
-  SIDE_PANEL_TABS,
-  SIDE_PANEL_WIDTH,
-  type SidePanelControl,
-  type SidePanelTab,
-} from "../tasks/use-side-panel";
-import {
   type TaskConversation,
   type WorkTurnRow,
   type WorkWorkerBlock,
@@ -136,7 +143,6 @@ import {
   workFailed,
   workRowsOf,
 } from "../tasks/work-model";
-import { Tooltip } from "../tooltip";
 import {
   type AddEntry,
   AddTabButton,
@@ -150,7 +156,6 @@ import {
   useTranscriptCopier,
   type WorkerStandings,
 } from "./strip-tabs";
-import { TabStrip } from "./tab-strip";
 
 /**
  * side-panel.tsx -- the open task's side panel at the window's right: its toggle, its tabs and their "+", its full-screen button, the tab shown, and the edge it is resized by.
