@@ -27,7 +27,7 @@
 }
 
 .settings-card > .settings-row {
-  min-height: var(--settings-row-height);
+  min-height: var(--luke-settings-row-min-height);
   padding: var(--luke-space-12) var(--luke-space-16);
 }
 
@@ -39,7 +39,7 @@
    failed and its Retry, or the rows on their way. */
 .settings-card-line {
   display: flex;
-  min-height: var(--settings-row-height);
+  min-height: var(--luke-settings-row-min-height);
   align-items: center;
   gap: var(--luke-space-8);
   margin: 0;
@@ -559,7 +559,7 @@
    being typed into is, and saying what to do: nobody has to guess the next
    keystroke is being listened for. */
 .shortcut-field[aria-pressed="true"] {
-  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
   outline-offset: -1px;
 }
 

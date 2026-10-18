@@ -57,7 +57,7 @@ export function MessageContent({ children, className, ...props }: MessageContent
   return (
     <div
       className={cn(
-        "min-w-0 max-w-full space-y-2 overflow-clip [overflow-clip-margin:var(--focus-ring-room)] text-[13px] leading-relaxed text-foreground",
+        "min-w-0 max-w-full space-y-2 overflow-clip [overflow-clip-margin:var(--luke-focus-ring-room)] text-[13px] leading-relaxed text-foreground",
         "group-[.is-user]:w-fit group-[.is-user]:rounded-xl group-[.is-user]:bg-secondary group-[.is-user]:px-[11px] group-[.is-user]:py-[7px]",
         className,
       )}

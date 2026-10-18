@@ -72,7 +72,7 @@
 .sign-in-provider[data-primary="true"] {
   background: var(--luke-color-text);
   box-shadow: none;
-  color: var(--luke-color-ground);
+  color: var(--luke-color-ink-inverse);
 }
 
 .sign-in-provider[data-primary="true"]:hover:not(:disabled) {

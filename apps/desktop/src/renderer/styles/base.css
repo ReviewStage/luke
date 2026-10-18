@@ -23,23 +23,8 @@
      read from here, so the two can never disagree about who has the turn. */
   --voice-developer: #7fe0ac;
   --voice-luke: var(--luke-color-working);
-  /* How thick the keyboard's ring is and how far it stands off the control's
-     edge; its colour is the palette's accent. The reach is how far the ring
-     stands past the control's
-     edge: a scroller pads by it, so the ring of a row laid edge to edge in
-     it is not clipped. A box that clips what it holds keeps the ring whole
-     one of two ways. One whose clip is only there to hold in what runs long
-     clips past the ring, `overflow: clip` with `overflow-clip-margin` the
-     room; note that the room names its box, because Chromium drops a bare
-     `calc()` there and clips at the edge after all. One whose clip is an
-     edge it draws, a card, sets the offset to the inset for everything in
-     it, so the ring is drawn inside the control, on the card's side of the
-     edge. */
-  --focus-ring-width: 2px;
-  --focus-ring-offset: 1px;
-  --focus-ring-inset: calc(-1 * var(--focus-ring-width));
-  --focus-ring-reach: calc(var(--focus-ring-width) + var(--focus-ring-offset));
-  --focus-ring-room: padding-box var(--focus-ring-reach);
+  /* The keyboard's ring, how thick and how far off the edge, is the
+     profile's `--luke-focus-ring-*` (`tokens/profiles.css`). */
   /* The caption strip's ground, opaque because the document scrolls on beneath it. */
   --surface-caption: #16161b;
   /* The code on screen, in the ground and inks of the theme the host colours
@@ -68,7 +53,7 @@
      canvas, which reads none of this itself, so the bundle reads each one
      off the host and draws again when the appearance flips
      (`terminal/terminal-theme.ts`). */
-  --terminal-ground: var(--desktop-well);
+  --terminal-ground: var(--luke-color-well);
   --terminal-text: var(--code-text);
   --terminal-cursor: var(--code-text);
   --terminal-selection: rgba(56, 139, 253, 0.4);
@@ -366,8 +351,8 @@
     [role="menuitemcheckbox"],
     [tabindex]:not([tabindex="-1"])
   ):focus-visible:not(:has(> [data-focus-ring])) {
-    outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: var(--focus-ring-offset);
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: var(--luke-focus-ring-offset);
   }
 
   /* A control whose drawn shape is a part of it, a picture tile's picture
@@ -379,8 +364,8 @@
   }
 
   :root[data-keyboard="true"] :focus-visible > [data-focus-ring] {
-    outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: var(--focus-ring-offset);
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: var(--luke-focus-ring-offset);
   }
 
   /* The keyboard scrolls a control in with its ring's reach to spare, so a
@@ -402,7 +387,7 @@
     [role="menuitemcheckbox"],
     [tabindex]:not([tabindex="-1"])
   ) {
-    scroll-margin: var(--focus-ring-reach);
+    scroll-margin: var(--luke-focus-ring-reach);
   }
 
   :root:not([data-keyboard="true"])
@@ -418,8 +403,8 @@
      caret without ringing the composer around it. */
   :is(textarea, [contenteditable], input:not([type="checkbox"])):focus-visible,
   .field-well:has(:is(textarea, [contenteditable], input):not(.menu-surface *):focus-visible) {
-    outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: calc(var(--focus-ring-width) / -2);
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: calc(var(--luke-focus-ring-width) / -2);
   }
 }
 
