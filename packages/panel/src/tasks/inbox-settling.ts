@@ -4,7 +4,7 @@ import { INBOX_STATUS, type InboxItem, type InboxReply } from "@luke/features/in
 import type { AppInboxTask, AppInboxTasklessItem } from "@luke/host/app-state";
 import { Atom } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useMemo } from "react";
-import { appStateNow } from "../use-app-state";
+import { appStateNow } from "../use-app-state.js";
 
 /**
  * inbox-settling.ts -- the window's own answers and messages, laid over every read of the Inbox until a read holds the item changed since.

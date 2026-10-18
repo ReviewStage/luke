@@ -9,6 +9,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { useAct } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useSettledReads } from "@luke/panel/tasks/inbox-settling";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { type OpenHere, OpenHereProvider, useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { useTasklessInboxItems } from "@luke/panel/tasks/use-taskless-inbox-items";
@@ -45,7 +46,6 @@ import {
 } from "../tasks/inbox-model";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager";
 import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane";
-import { useSettledReads } from "../tasks/inbox-settling";
 import { SkillFiles } from "../tasks/skill-chip";
 import {
   type TasklessPlace,

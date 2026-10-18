@@ -4,8 +4,8 @@ import {
 } from "@luke/features/coding-agent-view";
 import { INBOX_CURSOR_START, type InboxItem } from "@luke/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
+import { useSettledReads } from "@luke/panel/tasks/inbox-settling";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSettledReads } from "./inbox-settling";
 import type { InboxReader } from "./use-task-inbox";
 
 /**

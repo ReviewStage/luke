@@ -10,6 +10,7 @@ import {
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { type SettledWaiting, useSettledWaiting } from "@luke/panel/tasks/inbox-settling";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
@@ -85,7 +86,6 @@ import { RepositoryPicture } from "../repository-picture";
 import { Shortcut } from "../shortcut";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model";
-import { type SettledWaiting, useSettledWaiting } from "../tasks/inbox-settling";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel";
 import { useUnreadTasks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";

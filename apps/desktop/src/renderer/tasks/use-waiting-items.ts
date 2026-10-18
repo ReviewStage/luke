@@ -1,6 +1,7 @@
 import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { useSettledReads } from "@luke/panel/tasks/inbox-settling";
 import { useTasklessInboxItems } from "@luke/panel/tasks/use-taskless-inbox-items";
 import { useCallback, useMemo } from "react";
 import {
@@ -11,7 +12,6 @@ import {
   taskHolder,
   tasklessGroups,
 } from "./inbox-model";
-import { useSettledReads } from "./inbox-settling";
 import { useInboxItems } from "./use-inbox-items";
 import type { TasksControl } from "./use-tasks-tab";
 

@@ -19,6 +19,7 @@ import {
   inboxAnswerHeard,
   knownBlock,
 } from "@luke/features/inbox-wire";
+import { useInboxSettler, useSettledItems } from "@luke/panel/tasks/inbox-settling";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -37,7 +38,6 @@ import {
   inboxMessageOf,
   inboxReply,
 } from "./inbox-model";
-import { useInboxSettler, useSettledItems } from "./inbox-settling";
 
 /**
  * use-task-inbox.ts -- the open task's inbox as one control: its items, read on the service's held long-poll while the window shows the tasks, and the answers on their way back.
