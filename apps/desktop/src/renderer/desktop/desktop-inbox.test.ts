@@ -994,7 +994,7 @@ test("a settled approval or to-do still folds what it offered to one line, and i
     id: string,
     title: string,
     response: InboxItem["response"],
-    reply: InboxItem["answer"],
+    reply: NonNullable<InboxItem["answer"]>,
   ) => ({
     ...item(id, title, 6_000),
     response,
