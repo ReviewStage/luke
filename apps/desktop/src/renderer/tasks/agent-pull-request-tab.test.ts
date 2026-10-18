@@ -412,9 +412,19 @@ async function drawn(
 function option(tab: HTMLElement, name: string): HTMLButtonElement {
   return (
     [...tab.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
-      (each) => each.querySelector(".pull-request-tab-label")?.textContent === name,
+      (each) => each.textContent?.startsWith(name) === true,
     ) ?? assert.fail(`the row offers ${name}`)
   );
+}
+
+/** What the tab named as given counts beside its name, its words after the name. */
+function tabCount(tab: HTMLElement, name: string): string {
+  return (option(tab, name).textContent ?? "").slice(name.length);
+}
+
+/** How the Checks tab's glyph says its checks went, in its words. */
+function checksGlyph(tab: HTMLElement): string | null | undefined {
+  return option(tab, "Checks").querySelector('[role="img"]')?.getAttribute("aria-label");
 }
 
 /** The tab named as given chosen, and what it reads landed. */
@@ -428,6 +438,11 @@ function waiting(tab: HTMLElement): string[] {
   return [...tab.querySelectorAll('[aria-busy="true"]')]
     .filter((each) => each.closest("[hidden]") === null)
     .map((each) => each.textContent ?? "");
+}
+
+/** What the bar says of where the pull request stands: its first control's words. */
+function standing(tab: HTMLElement): string | undefined {
+  return tab.querySelector(".pull-request-bar")?.firstElementChild?.textContent ?? undefined;
 }
 
 /** The words of every element the selector names, in order. */
@@ -451,7 +466,7 @@ function threadLabels(thread: HTMLElement): string[] {
 test("the tab draws the pull request as a page: its standing and branches, whether it merges, its checks with failures first, its description, and its conversation in time order", async () => {
   const tab = await draw(controlAnswering());
 
-  assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Open");
+  assert.equal(standing(tab), "Open");
   assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← luke/expiry-job");
   assert.equal(tab.querySelector(".pull-request-title")?.textContent, "Expire invitations #42");
   assert.equal(
@@ -1070,19 +1085,18 @@ test("opened on its files, as the Changes chip opens it, the header stands above
 
 test("each tab counts what Luke holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files the lines published", async () => {
   const tab = await draw(controlAnswering());
-  const count = (name: string) => option(tab, name).querySelector(".pull-request-tab-count");
-  assert.equal(count("Conversation")?.textContent, "2");
+  assert.equal(tabCount(tab, "Conversation"), "2");
   assert.equal(
-    count("Checks")?.querySelector('[role="img"]')?.getAttribute("aria-label"),
+    checksGlyph(tab),
     "failing",
     "how the checks went, as published, stands before they are read",
   );
-  assert.equal(count("Checks")?.textContent, "", "how many waits on their read");
-  assert.equal(count("Files changed")?.textContent, "+4 −1");
+  assert.equal(tabCount(tab, "Checks"), "", "how many waits on their read");
+  assert.equal(tabCount(tab, "Files changed"), "+4 −1");
 
   await choose(tab, "Checks");
-  assert.equal(count("Checks")?.textContent, "1", "beside a failure, how many failed");
-  assert.equal(count("Checks")?.getAttribute("data-check-summary"), CHECK_SUMMARY.FAILING);
+  assert.equal(tabCount(tab, "Checks"), "1", "beside a failure, how many failed");
+  assert.equal(checksGlyph(tab), "failing");
 
   act(() => option(tab, "Checks").focus());
   act(() => {
@@ -1110,10 +1124,8 @@ test("the Checks tab counts what its glyph says: beside a wait how many still ru
     controlAnswering({ checks: () => Promise.resolve({ pullRequest: running }) }),
   );
   await choose(waits, "Checks");
-  const countOf = (tab: HTMLElement) =>
-    option(tab, "Checks").querySelector(".pull-request-tab-count");
-  assert.equal(countOf(waits)?.getAttribute("data-check-summary"), CHECK_SUMMARY.PENDING);
-  assert.equal(countOf(waits)?.textContent, "2");
+  assert.equal(checksGlyph(waits), "running");
+  assert.equal(tabCount(waits, "Checks"), "2");
 
   act(() => root?.unmount());
   const passing: CodingAgentOverviewChecks = {
@@ -1127,8 +1139,8 @@ test("the Checks tab counts what its glyph says: beside a wait how many still ru
     controlAnswering({ checks: () => Promise.resolve({ pullRequest: passing }) }),
   );
   await choose(passed, "Checks");
-  assert.equal(countOf(passed)?.getAttribute("data-check-summary"), CHECK_SUMMARY.PASSING);
-  assert.equal(countOf(passed)?.textContent, "3");
+  assert.equal(checksGlyph(passed), "passing");
+  assert.equal(tabCount(passed, "Checks"), "3");
 });
 
 test("a check that ran for no time, skipped or cancelled before it began, says no duration", async () => {
@@ -1165,7 +1177,7 @@ test("a merged pull request says so on the bar, as its overview read it, says no
       PULL_REQUEST_STATE.OPEN,
     ),
   );
-  assert.match(tab.querySelector(".pull-request-bar")?.textContent ?? "", /Merged/u);
+  assert.equal(standing(tab), "Merged");
   assert.equal(tab.querySelector(".pull-request-merge"), null);
   assert.deepEqual(words(tab, ".pull-request-none"), [
     "No description provided.",
@@ -1185,7 +1197,7 @@ test("where what the agent published is not read, the bar still says where the p
     pullRequests: new Map(),
   };
   const tab = await draw(control);
-  assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Open");
+  assert.equal(standing(tab), "Open");
   const github =
     tab.querySelector<HTMLButtonElement>('.pull-request-bar [aria-label="Open on GitHub"]') ??
     assert.fail("the bar opens the pull request on GitHub");
@@ -1221,16 +1233,13 @@ test("the bar, the title, and the files' count stand from what Luke holds before
     tab.querySelector<HTMLElement>(`[aria-label="${title}"]`) ??
     assert.fail(`the ${title} section stands`);
 
-  assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Open");
+  assert.equal(standing(tab), "Open");
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
     "Expire invitations #42",
     "the title is what Luke held of the pull request",
   );
-  assert.equal(
-    option(tab, "Files changed").querySelector(".pull-request-tab-count")?.textContent,
-    "+4 −1",
-  );
+  assert.equal(tabCount(tab, "Files changed"), "+4 −1");
   assert.deepEqual(waiting(tab), [
     "Reading pull request",
     "Reading description",
@@ -1419,7 +1428,9 @@ test("the bar wears what was published of the checks only for the pull request t
     }),
   };
   const tab = await draw(control);
-  const mark = tab.querySelector(".pull-request-state [aria-label]") ?? assert.fail("a mark");
+  const mark =
+    tab.querySelector(".pull-request-bar")?.firstElementChild?.querySelector("[aria-label]") ??
+    assert.fail("a mark");
   assert.match(mark.getAttribute("aria-label") ?? "", /43/u);
   assert.doesNotMatch(
     mark.getAttribute("aria-label") ?? "",
@@ -1428,12 +1439,15 @@ test("the bar wears what was published of the checks only for the pull request t
   );
 });
 
+/** The bar's pill, its first control, as a press; nothing where it is no press. */
+function pillPress(tab: HTMLElement): HTMLButtonElement | undefined {
+  const first = tab.querySelector(".pull-request-bar")?.firstElementChild;
+  return first instanceof HTMLButtonElement ? first : undefined;
+}
+
 /** The bar's pill, as a press. */
 function pill(tab: HTMLElement): HTMLButtonElement {
-  return (
-    tab.querySelector<HTMLButtonElement>("button.pull-request-state") ??
-    assert.fail("the pill is a press that opens what may be done")
-  );
+  return pillPress(tab) ?? assert.fail("the pill is a press that opens what may be done");
 }
 
 /** Opens the pill's menu and presses its item of the words given. */
@@ -1516,8 +1530,8 @@ test("a member GitHub would not take as signed in is offered to sign in with Git
         Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED } }),
     }),
   );
-  assert.equal(merged.querySelector("button.pull-request-state"), null);
-  assert.match(merged.querySelector(".pull-request-bar")?.textContent ?? "", /Merged/u);
+  assert.ok(pillPress(merged) === undefined, "a merged pull request's pill is no press");
+  assert.equal(standing(merged), "Merged");
 });
 
 test("a change GitHub refused says so in GitHub's own words until dismissed, and the pull request is read again in case it moved", async () => {

@@ -7,15 +7,12 @@ import {
   Dialog,
   type DialogConfirm,
   ErrorState,
-  TEXT_ELEMENT,
-  TEXT_VARIANT,
-  Text,
   useConfirmDialog,
 } from "@luke/ui";
 import { CONFIRM_STAGE, confirmAsked } from "@luke/ui/confirm-state";
 import { strandedTaskHome, workspaceReaches } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useId, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "./workspace-ref";
 
@@ -186,7 +183,6 @@ function MoveTaskCard({
   const moving = stage === CONFIRM_STAGE.ACTING;
   const first = useRef<HTMLButtonElement | null>(null);
   const cancel = useRef<HTMLButtonElement | null>(null);
-  const titleId = useId();
   const dismiss = () => {
     if (moving) return;
     confirm.keep();
@@ -195,15 +191,28 @@ function MoveTaskCard({
   return (
     <Dialog
       size={DIALOG_SIZE.CONFIRM}
-      labelledBy={titleId}
+      title={`Move “${task.name}” to another workspace`}
       busy={moving}
       initialFocus={chosen === undefined ? cancel : first}
       onDismiss={dismiss}
+      actions={
+        <>
+          <Button ref={cancel} variant={BUTTON_VARIANT.QUIET} disabled={moving} onClick={dismiss}>
+            Cancel
+          </Button>
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            disabled={chosen === undefined}
+            busy={moving}
+            busyLabel="Moving"
+            onClick={() => confirm.run()}
+          >
+            {chosen === undefined ? "Move" : `Move to ${chosen.name}`}
+          </Button>
+        </>
+      }
     >
       <div className="move-dialog">
-        <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
-          Move “{task.name}” to another workspace
-        </Text>
         <WorkspaceChoices
           workspaces={workspaces}
           personalId={personalId}
@@ -221,20 +230,6 @@ function MoveTaskCard({
           </ul>
         )}
         {rejection !== undefined && !moving ? <ErrorState>{rejection}</ErrorState> : null}
-        <div className="move-dialog-actions">
-          <Button ref={cancel} disabled={moving} onClick={dismiss}>
-            Cancel
-          </Button>
-          <Button
-            variant={BUTTON_VARIANT.PRIMARY}
-            disabled={chosen === undefined}
-            busy={moving}
-            busyLabel="Moving"
-            onClick={() => confirm.run()}
-          >
-            {chosen === undefined ? "Move" : `Move to ${chosen.name}`}
-          </Button>
-        </div>
       </div>
     </Dialog>
   );

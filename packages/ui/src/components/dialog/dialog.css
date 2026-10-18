@@ -2,13 +2,14 @@
    the window's drag strip alike, so it claims its own presses back from the
    frame. Its motion is spent from the motion tokens, which reduced motion
    and a capture run already hold still. The card is never taller than the
-   window less its margins: what it holds is what gives way and scrolls. */
+   window less its margins: what it holds is what gives way and scrolls, its
+   title and its foot staying on screen. */
 
 @layer components {
   .luke-dialog-backdrop {
     box-sizing: border-box;
     position: fixed;
-    z-index: var(--z-dialog, 30);
+    z-index: var(--luke-z-dialog);
     inset: 0;
     display: grid;
     place-items: center;
@@ -55,6 +56,29 @@
     gap: 0;
     padding: 0;
     overflow: hidden;
+  }
+
+  /* The foot: a tool of the dialog's own at its start, the answers at its
+     end at a common width, so a short verb is not a smaller target than
+     Cancel beside it. */
+  .luke-dialog-foot {
+    display: flex;
+    min-width: 0;
+    flex-shrink: 0;
+    align-items: center;
+    gap: var(--luke-dialog-action-gap);
+    margin-top: var(--luke-space-12);
+  }
+
+  .luke-dialog-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: var(--luke-dialog-action-gap);
+    margin-left: auto;
+  }
+
+  .luke-dialog-actions > .luke-button {
+    min-width: var(--luke-dialog-action-width);
   }
 
   /* A drag the dimmed window would take rings the card that will take it. */

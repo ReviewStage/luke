@@ -1,6 +1,7 @@
 import {
   AVATAR_SIZE,
   Avatar,
+  IconButtonLink,
   PublicPage,
   PublicSection,
   TEXT_FONT,
@@ -100,43 +101,22 @@ function FounderSocials({
   readonly socials: Founder["socials"];
 }): React.JSX.Element {
   return (
-    /* The negative margin pulls the icons' padding back so the marks line up
-       with the name above them rather than sitting inset from it. */
-    <div className="-ml-1.5 mt-3 flex items-center gap-1">
-      <SocialLink href={socials.linkedin} label={`${name} on LinkedIn`}>
-        <LinkedInMark />
-      </SocialLink>
-      <SocialLink href={socials.x} label={`${name} on X`}>
-        <XMark />
-      </SocialLink>
+    /* The negative margin pulls the links' 44px squares back so the marks
+       line up with the name above them rather than sitting inset from it. */
+    <div className="-my-2 -ml-3.5 mt-1 flex items-center">
+      <IconButtonLink
+        href={socials.linkedin}
+        icon={<LinkedInMark />}
+        label={`${name} on LinkedIn`}
+        newTab
+      />
+      <IconButtonLink href={socials.x} icon={<XMark />} label={`${name} on X`} newTab />
     </div>
   );
 }
 
-function SocialLink({
-  href,
-  label,
-  children,
-}: {
-  readonly href: string;
-  readonly label: string;
-  readonly children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <a
-      aria-label={label}
-      className="inline-flex items-center rounded-md p-1.5 text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
-      href={href}
-      rel="noreferrer"
-      target="_blank"
-    >
-      {children}
-    </a>
-  );
-}
-
-/* Both marks are inlined for the same reason the GitHub mark is: the page
-   fetches no icon at runtime, and `currentColor` leaves the color to the link. */
+/* Both marks are inlined so the page fetches no icon at runtime, and
+   `currentColor` leaves the color to the link, which also sizes them. */
 const LINKEDIN_MARK_PATH =
   "M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.063 2.063 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z";
 
@@ -145,7 +125,7 @@ const X_MARK_PATH =
 
 function LinkedInMark(): React.JSX.Element {
   return (
-    <svg className="block size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d={LINKEDIN_MARK_PATH} />
     </svg>
   );
@@ -153,7 +133,7 @@ function LinkedInMark(): React.JSX.Element {
 
 function XMark(): React.JSX.Element {
   return (
-    <svg className="block size-[14px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d={X_MARK_PATH} />
     </svg>
   );
