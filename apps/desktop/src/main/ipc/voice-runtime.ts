@@ -5,6 +5,7 @@ import { channels } from "@luke/host/bridge";
 import type { AppStateStore } from "@luke/host/client";
 import type { HostOperator } from "@luke/host/host-operator";
 import { type LiveDiagnostics, liveExchangeActive } from "@luke/live";
+import { callInProgress, IDLE_VOICE_VIEW, VOICE_COMMAND } from "@luke/voice/voice-view";
 import { Effect, Option } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
 import type { ReportHandlers } from "../bridge-host";
@@ -24,6 +25,7 @@ type LiveSessionActs = Pick<
   | "reportLiveTransport"
   | "reportLiveActivity"
   | "stopSpeaking"
+  | "tasksStopWork"
 >;
 
 export interface VoiceRuntimeDependencies {
@@ -47,8 +49,24 @@ type VoiceRuntimeActKind =
   | typeof ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT
   | typeof ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY
   | typeof ACT_KIND.VOICE_STOP_SPEAKING
+  | typeof ACT_KIND.LUKE_STOP
   | typeof ACT_KIND.VOICE_DIAGNOSTICS
   | typeof ACT_KIND.MICROPHONE_OPEN_SETTINGS;
+
+/** Stop Luke on a task (`LUKE_STOP`): a call about it is told to stop, as the stop key always told it, and his turn on it is stopped on the service, call or no call. */
+function stopLuke(dependencies: VoiceRuntimeDependencies, named: string | undefined) {
+  const snapshot = dependencies.state.snapshot();
+  const view = snapshot.voice.view ?? IDLE_VOICE_VIEW;
+  const callTask = callInProgress(view) ? view.callTaskId : undefined;
+  const taskId = named ?? callTask ?? snapshot.tasks.activeTaskId;
+  if (taskId === undefined) return Effect.void;
+  if (callTask === taskId) {
+    dependencies.voiceWindow
+      .current()
+      ?.webContents.send(channels.onVoiceCommand, { command: VOICE_COMMAND.STOP_SPEAKING });
+  }
+  return dependencies.liveSession.tasksStopWork(taskId);
+}
 
 export function voiceRuntimeActRows(
   dependencies: VoiceRuntimeDependencies,
@@ -91,6 +109,8 @@ export function voiceRuntimeActRows(
     // panel has no session to stop and is answered false.
     [ACT_KIND.VOICE_STOP_SPEAKING]: (_payload, { voice }) =>
       voice ? liveSession.stopSpeaking() : Effect.succeed(false),
+    [ACT_KIND.LUKE_STOP]: ({ taskId }, { voice, panel, call }) =>
+      voice || panel || call ? stopLuke(dependencies, taskId) : Effect.void,
     [ACT_KIND.VOICE_DIAGNOSTICS]: () =>
       Effect.map(dependencies.liveDiagnostics(), Option.getOrUndefined),
     [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: () =>

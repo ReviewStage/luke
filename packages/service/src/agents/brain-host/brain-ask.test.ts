@@ -24,7 +24,14 @@ import { Effect, Option, PartitionedSemaphore, Result, Schema, Stream } from "ef
 import { afterAll, test } from "vitest";
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
-import { ASK_REFUSAL, type AskInput, acceptAsk, STOP_REFUSAL, stopAsk } from "./brain-ask.js";
+import {
+  ASK_REFUSAL,
+  type AskInput,
+  acceptAsk,
+  STOP_REFUSAL,
+  stopAsk,
+  stopConversation,
+} from "./brain-ask.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_FIRST_TURN_ID,
@@ -391,6 +398,20 @@ test("a Stop on another account's id is refused as not found, and one on a turn 
   );
   const [row] = await database.run(database.store.turns.named(unrecordedOwner, [orphan]));
   assert.equal(row?.cancelRequestedAt, null);
+});
+
+test("stopping a conversation cancels its running turn through eve under its owner; a stranger stops nothing", async () => {
+  const owner = await database.createUser();
+  const stranger = await database.createUser();
+  const h = harness();
+  const seams = { store: database.store, asks: h.asks, writer, eve: h.eve };
+  const recorded = await conversation(owner, { runtimeSessionId: mintSession() });
+  await turnRow(owner, recorded, { eveTurnId: "turn_1" });
+  h.eve.activeTurn = "turn_1";
+
+  assert.equal(await database.run(stopConversation(seams, stranger, recorded)), undefined);
+  await database.run(stopConversation(seams, owner, recorded));
+  assert.deepEqual(h.eve.cancelledTurns, ["turn_1"]);
 });
 
 test("a member's ask in the plan conversation a teammate opened is recorded under the teammate and reaches eve; a stranger's in the same conversation is refused as not found", async () => {

@@ -165,6 +165,8 @@ interface FakeService extends TasksClient {
   history: PlanRevisionsAnswer | undefined;
   /** The older pages of the history, by the revision each is read before. */
   olderHistory: Record<number, PlanRevisionsAnswer>;
+  /** Every task whose work a Stop reached the service for, in order. */
+  stops: string[];
   /** Each revision the service holds, by its number, which a restore puts back as the task's document. */
   revisions: Record<number, PlanRevisionAnswer["revision"]>;
   /** Every version of every page the service holds, for any task. */
@@ -332,6 +334,11 @@ function fakeService(tasks: Task[]): FakeService {
           candidate.id === taskId ? restored : candidate,
         );
         return restored;
+      }),
+    stops: [],
+    stopWork: (taskId) =>
+      Effect.sync(() => {
+        service.stops.push(taskId);
       }),
     editAnswer: undefined,
     pins: [],
@@ -2616,4 +2623,13 @@ it.effect(
       );
       yield* after;
     }),
+);
+
+it.effect("stopping Luke reaches the service for the task named", () =>
+  Effect.gen(function* () {
+    const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+    const { call } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.TASKS_STOP_WORK, { taskId: INVITES });
+    assert.deepEqual(service.stops, [INVITES]);
+  }),
 );

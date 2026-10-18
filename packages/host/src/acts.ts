@@ -624,6 +624,8 @@ export const ACT_KIND = {
   VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
   VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
   VOICE_STOP_SPEAKING: "voice.stopSpeaking",
+  /** Stop Luke, the stop key's and the Call tab's Stop's one action: on the task named, else the call's, else the open one. */
+  LUKE_STOP: "luke.stop",
   VOICE_DIAGNOSTICS: "voice.diagnostics",
   MICROPHONE_REQUEST: "microphone.request",
   /**
@@ -1687,6 +1689,11 @@ export const ACT = {
       Result.isSuccess(readEither(EffectSchema.Boolean)(value)),
     ),
     refusal: "Could not tell Luke to stop speaking on this system.",
+  },
+  [ACT_KIND.LUKE_STOP]: {
+    payload: record({ taskId: EffectSchema.optionalKey(EffectSchema.NonEmptyString) }),
+    result: answersNothing,
+    refusal: "Could not stop Luke on this system.",
   },
   [ACT_KIND.VOICE_DIAGNOSTICS]: {
     payload: noPayload,
