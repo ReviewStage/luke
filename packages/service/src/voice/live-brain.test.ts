@@ -514,11 +514,14 @@ it.live(
           sentry,
         ),
       );
-      const listened: string[] = [];
-      f.eve.stream = (sessionId) => {
-        listened.push(sessionId);
-        return Stream.die(new RangeError("the stream broke"));
-      };
+      const attached = yield* Deferred.make<void>();
+      f.eve.stream = () =>
+        Stream.unwrap(
+          Effect.as(
+            Deferred.succeed(attached, undefined),
+            Stream.die(new RangeError("the stream broke")),
+          ),
+        );
       const accepted = yield* Effect.promise(() => database.run(reported(f, spokenAsk("q"))));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
@@ -529,8 +532,7 @@ it.live(
         model: "scripted-model",
         state: memoryRelayState(),
       };
-      for (let look = 0; look < 200 && listened.length === 0; look += 1)
-        yield* Effect.sleep(POLL_MS);
+      yield* Deferred.await(attached);
       yield* Effect.promise(() => play(spokenTurn(FIRST_EVE_TURN, NOW), standing));
       yield* f.arrived(5);
       assert.equal(f.events.at(-1)?.kind, LIVE_BRAIN_RUN_EVENT.ENDED);

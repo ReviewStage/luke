@@ -7,6 +7,7 @@ import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
 import { Deferred, Effect, Exit, Layer, Option, Result, Scope } from "effect";
+import { SqlError, UnknownError } from "effect/sql/SqlError";
 import type { SessionAuth, SessionContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import type { WebAgentRun } from "../../run.js";
@@ -147,7 +148,14 @@ test("a child's task that fails on its own fiber after the hook answered is repo
     skills: () => Effect.succeed([]),
     childTasked: () =>
       Effect.ensuring(
-        Effect.fail(new TypeError("the child's title could not be written")),
+        Effect.fail(
+          new SqlError({
+            reason: new UnknownError({
+              cause: new Error("the child's title could not be written"),
+              message: "The store refused the write",
+            }),
+          }),
+        ),
         Deferred.succeed(tasked, undefined),
       ),
   });
@@ -168,5 +176,5 @@ test("a child's task that fails on its own fiber after the hook answered is repo
   const types = sentOfType(sentry.sent, "event").map(
     (item) => item.payload.exception?.values.at(-1)?.type,
   );
-  assert.deepEqual(types, ["TypeError"]);
+  assert.deepEqual(types, ["effect/sql/SqlError"]);
 });
