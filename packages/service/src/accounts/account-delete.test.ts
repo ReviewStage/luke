@@ -20,6 +20,7 @@ import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { HTTP_METHOD, type WireBoundaryInput } from "@luke/wire";
+import { noNetwork } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
@@ -30,7 +31,6 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
-import { noNetwork } from "../testing/no-network.js";
 import { accountApp } from "./account-app.js";
 
 /**
