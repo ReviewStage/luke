@@ -23,8 +23,9 @@ import { IconButton } from "../button/button.js";
  * owner, who decides what it costs (closing, or going back a page), never
  * while an input method composes. Focus moving anywhere outside the panel
  * is handed to the owner too, who closes unless that is still its own, the
- * button that opened it among them. Its height is bounded by the room its
- * side of the button leaves (`--luke-popover-room`), and it scrolls within.
+ * button that opened it among them. A card's height is bounded by the room
+ * its side of the button leaves (`--luke-popover-room`), and it scrolls
+ * within; a menu scrolls its own list.
  */
 
 /** How the panel is drawn: a card with its head, or a menu's surface whose content is edge to edge. */
