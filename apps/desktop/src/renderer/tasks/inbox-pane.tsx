@@ -24,7 +24,9 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BADGE_TONE,
   BackIcon,
+  Badge,
   ChevronRightIcon,
   ErrorState,
   FoldingButton,
@@ -475,8 +477,8 @@ function Blocks({
 /**
  * An option's head: its label, what is said of it beside the label, and,
  * where the agent recommended it, a badge at the option's top right, so it
- * stands in one place however the label wraps. The badge is filled with
- * the accent while the item waits and steps back to the quiet badge once
+ * stands in one place however the label wraps. The badge wears the
+ * working tone while the item waits and steps back to the quiet badge once
  * it is settled, when the recommendation is history rather than a call to
  * act. It is drawn inside the option alone, so wherever an option is drawn
  * it wears it.
@@ -501,9 +503,7 @@ function OptionHead({
         {children}
       </span>
       {recommended ? (
-        <span className="inbox-recommended" data-settled={String(settled)}>
-          Recommended
-        </span>
+        <Badge tone={settled ? BADGE_TONE.NEUTRAL : BADGE_TONE.WORKING}>Recommended</Badge>
       ) : null}
     </span>
   );
@@ -564,6 +564,11 @@ function FieldName({ field }: { field: InboxField }): React.JSX.Element {
   );
 }
 
+/** What a field says under its control where it must be filled. */
+function requiredWords(field: InboxField): string | undefined {
+  return field.required === true ? "Required" : undefined;
+}
+
 /** One field of a form: the control Settings draws for its type, holding what the developer put in it. */
 function InboxFormField({
   field,
@@ -582,32 +587,36 @@ function InboxFormField({
   switch (field.type) {
     case INBOX_FIELD.TEXT:
       return (
-        <FormField label={<FieldName field={field} />}>
-          {(control) => (
-            <TextField
-              field={control}
-              maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
-              value={value === undefined ? "" : String(value)}
-              disabled={disabled}
-              onChange={(typed) => set(typed === "" ? undefined : typed)}
-            />
-          )}
-        </FormField>
+        <div data-inbox-field={field.type}>
+          <FormField label={field.label} description={requiredWords(field)}>
+            {(control) => (
+              <TextField
+                field={control}
+                maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+                value={value === undefined ? "" : String(value)}
+                disabled={disabled}
+                onChange={(typed) => set(typed === "" ? undefined : typed)}
+              />
+            )}
+          </FormField>
+        </div>
       );
     case INBOX_FIELD.NUMBER:
       return (
-        <FormField label={<FieldName field={field} />}>
-          {(control) => (
-            <TextField
-              field={control}
-              type={TEXT_FIELD_TYPE.NUMBER}
-              maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
-              value={value === undefined ? undefined : Number(value)}
-              disabled={disabled}
-              onChange={set}
-            />
-          )}
-        </FormField>
+        <div data-inbox-field={field.type}>
+          <FormField label={field.label} description={requiredWords(field)}>
+            {(control) => (
+              <TextField
+                field={control}
+                type={TEXT_FIELD_TYPE.NUMBER}
+                maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+                value={value === undefined ? undefined : Number(value)}
+                disabled={disabled}
+                onChange={set}
+              />
+            )}
+          </FormField>
+        </div>
       );
     case INBOX_FIELD.SELECT:
       return (

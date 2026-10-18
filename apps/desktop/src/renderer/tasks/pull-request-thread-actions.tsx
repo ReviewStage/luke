@@ -3,7 +3,7 @@ import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_BOUNDS,
 } from "@luke/features/pull-request-write-wire";
-import { TextArea } from "@luke/ui";
+import { BUTTON_VARIANT, Button, TextArea } from "@luke/ui";
 import { CircleCheckIcon, RotateCcwIcon } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes";
@@ -32,14 +32,14 @@ import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-write
 const THREAD_WORDS = {
   REPLY_OPEN: "Reply…",
   REPLY: "Reply",
-  REPLYING: "Replying…",
+  REPLYING: "Replying",
   REPLY_FIELD: "Reply",
   REPLY_PLACEHOLDER: "Reply in Markdown…",
   CANCEL: "Cancel",
   RESOLVE: "Resolve conversation",
-  RESOLVING: "Resolving…",
+  RESOLVING: "Resolving conversation",
   UNRESOLVE: "Unresolve conversation",
-  UNRESOLVING: "Unresolving…",
+  UNRESOLVING: "Unresolving conversation",
 } as const;
 
 /** Which agent's pull request a tab's threads are on, and what to read again once one changes. */
@@ -101,18 +101,18 @@ function ReplyForm({
         onSubmit={send}
       />
       <div className="pull-request-thread-reply-foot">
-        <button type="button" className="toolbar-button" disabled={busy} onClick={onCancel}>
+        <Button disabled={busy} onClick={onCancel}>
           {THREAD_WORDS.CANCEL}
-        </button>
-        <button
-          type="button"
-          className="primary-button"
-          disabled={blank || busy}
-          aria-busy={sending}
+        </Button>
+        <Button
+          variant={BUTTON_VARIANT.PRIMARY}
+          disabled={blank || (busy && !sending)}
+          busy={sending}
+          busyLabel={THREAD_WORDS.REPLYING}
           onClick={send}
         >
-          {sending ? THREAD_WORDS.REPLYING : THREAD_WORDS.REPLY}
-        </button>
+          {THREAD_WORDS.REPLY}
+        </Button>
       </div>
     </div>
   );
@@ -164,20 +164,22 @@ export function ThreadActions({ thread }: { thread: ReviewThread }): React.JSX.E
             {THREAD_WORDS.REPLY_OPEN}
           </button>
         )}
-        <button
-          type="button"
-          className="toolbar-button bordered-button pull-request-thread-resolve"
-          disabled={out !== undefined}
-          aria-busy={out === resolveAction}
+        <Button
+          variant={BUTTON_VARIANT.OUTLINE}
+          icon={
+            thread.resolved ? (
+              <RotateCcwIcon aria-hidden="true" />
+            ) : (
+              <CircleCheckIcon aria-hidden="true" />
+            )
+          }
+          disabled={out !== undefined && out !== resolveAction}
+          busy={out === resolveAction}
+          busyLabel={resolveWords(thread.resolved, true)}
           onClick={() => writes.write({ action: resolveAction, threadId: id })}
         >
-          {thread.resolved ? (
-            <RotateCcwIcon aria-hidden="true" />
-          ) : (
-            <CircleCheckIcon aria-hidden="true" />
-          )}
-          {resolveWords(thread.resolved, out === resolveAction)}
-        </button>
+          {resolveWords(thread.resolved, false)}
+        </Button>
       </div>
       <PullRequestWriteNote writes={writes} className="pull-request-thread-note" />
     </div>
