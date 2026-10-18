@@ -2,10 +2,17 @@ import type { GitHubRepository } from "@luke/features";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { CHIP_LOOK, Chip, type ChipLook, ChipName, GearIcon, ProviderMark } from "@luke/ui";
+import {
+  CHIP_LOOK,
+  Chip,
+  type ChipLook,
+  ChipName,
+  ErrorState,
+  GearIcon,
+  ProviderMark,
+} from "@luke/ui";
 import { repositoryFailureNote } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
-import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
 import { RepositoryPicture } from "../repository-picture";
@@ -261,15 +268,9 @@ export function RepositoryChip(props: {
     props.value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
   const note =
     failure !== undefined ? (
-      <>
-        <p className="task-compose-menu-note" role="alert">
-          {repositoryFailureNote(failure)}
-        </p>
-        <button type="button" className="menu-item" onClick={read}>
-          <RotateCwIcon aria-hidden="true" />
-          <span className="task-compose-menu-name">Retry</span>
-        </button>
-      </>
+      <div className="task-compose-menu-note">
+        <ErrorState onRetry={read}>{repositoryFailureNote(failure)}</ErrorState>
+      </div>
     ) : listed !== undefined && !listed.installed ? (
       // Only an owner or an admin can connect the workspace's GitHub, so a member is told to ask.
       <>

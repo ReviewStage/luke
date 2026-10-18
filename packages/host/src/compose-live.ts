@@ -131,7 +131,7 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
         // no call about one task is created while another is on screen.
         if (request.taskId !== dependencies.activeTaskId()) {
           return yield* Effect.fail(
-            new RefusedRefusal({ message: "the plan is not the one the panel has open" }),
+            new RefusedRefusal({ message: "the task is not the one the panel has open" }),
           );
         }
         const created = yield* service.createSession(request.sdp, request.taskId);

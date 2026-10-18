@@ -9,16 +9,17 @@
  * one set.
  */
 
-import { GAP, Skeleton, Stack, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
-
-/**
- * Note that a card keeps its content's width, with no `min-w-0`, because its
- * figure never breaks: a row or a track sized by its content widens for the
- * figure, and the label wraps, rather than the card squeezing the number
- * apart. A track that starts at zero holds the card to it, and the figure
- * then overflows the card whole.
- */
-const METRIC_CARD = "rounded-lg border border-border bg-card px-5 py-4";
+import {
+  CARD_PADDING,
+  Card,
+  GAP,
+  Skeleton,
+  Stack,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 
 /**
  * A card inside a StatGroup leaves its edge to the group's, and once the
@@ -49,6 +50,34 @@ const SKELETON_HINT_WIDTH = "128px";
 const SECTION_HEADING = "mt-12 mb-4";
 
 /**
+ * A metric's frame: a card of its own, or a cell of a StatGroup's. Note that
+ * a card keeps its content's width, with no `min-w-0`, because its figure
+ * never breaks: a row or a track sized by its content widens for the figure,
+ * and the label wraps, rather than the card squeezing the number apart. A
+ * track that starts at zero holds the card to it, and the figure then
+ * overflows the card whole.
+ */
+function MetricFrame({
+  grouped,
+  title,
+  children,
+}: {
+  grouped: boolean;
+  title?: string | undefined;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return grouped ? (
+    <div className={METRIC_CARD_GROUPED} title={title}>
+      {children}
+    </div>
+  ) : (
+    <Card padding={CARD_PADDING.COMPACT} title={title}>
+      {children}
+    </Card>
+  );
+}
+
+/**
  * A metric card's frame: `label` over `children`, the figure, with `hint`
  * under it. The label is a control's gap from the figure and the hint sits
  * close under it, as a caption does.
@@ -67,7 +96,7 @@ export function MetricCard({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className={grouped ? METRIC_CARD_GROUPED : METRIC_CARD} title={title}>
+    <MetricFrame grouped={grouped} title={title}>
       <Stack gap={GAP.CONTROL}>
         <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
           {label}
@@ -77,7 +106,7 @@ export function MetricCard({
           {hint === undefined ? null : <Text tone={TEXT_TONE.MUTED}>{hint}</Text>}
         </Stack>
       </Stack>
-    </div>
+    </MetricFrame>
   );
 }
 
@@ -117,7 +146,7 @@ export function MetricCardSkeleton({
   children?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className={grouped ? METRIC_CARD_GROUPED : METRIC_CARD}>
+    <MetricFrame grouped={grouped}>
       <Stack gap={GAP.CONTROL}>
         <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.LABEL}>
           <Skeleton width={SKELETON_LABEL_WIDTH} />
@@ -135,7 +164,7 @@ export function MetricCardSkeleton({
           ) : null}
         </Stack>
       </Stack>
-    </div>
+    </MetricFrame>
   );
 }
 
@@ -168,9 +197,11 @@ export const STAT_GROUP_COLUMNS = 3;
  */
 export function StatGroup({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
-    <div className="flex flex-col gap-px overflow-hidden rounded-lg border border-border bg-border min-[720px]:flex-row min-[720px]:flex-wrap">
-      {children}
-    </div>
+    <Card padding={CARD_PADDING.FLUSH}>
+      <div className="flex flex-col gap-px bg-border min-[720px]:flex-row min-[720px]:flex-wrap">
+        {children}
+      </div>
+    </Card>
   );
 }
 

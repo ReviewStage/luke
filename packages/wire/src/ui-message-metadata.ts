@@ -34,7 +34,7 @@ export const MessageRoleSchema = EffectSchema.Literals(Object.values(MESSAGE_ROL
 /**
  * Who wrote a message: the developer, Luke's own judgment, the voice model,
  * or a child run; or, for a line a chat notice wrote, which kind of chat
- * member posted what it tells: a coding agent, a plan's planner, or a person.
+ * member posted what it tells: a coding agent, a task's Luke, or a person.
  */
 export const MESSAGE_AUTHOR = {
   DEVELOPER: "developer",
@@ -42,7 +42,7 @@ export const MESSAGE_AUTHOR = {
   VOICE_MODEL: "voice_model",
   CHILD: "child",
   AGENT: "agent",
-  PLANNER: "planner",
+  LUKE: "planner",
   HUMAN: "human",
 } as const;
 
@@ -143,11 +143,7 @@ const SPOKEN_ASK_METADATA = SPOKEN_ASK_STRUCT.check(EffectSchema.makeFilter(cohe
  * reader that names the developer's task passes this row by.
  */
 const CHAT_NOTICE_METADATA = EffectSchema.Struct({
-  author: EffectSchema.Literals([
-    MESSAGE_AUTHOR.AGENT,
-    MESSAGE_AUTHOR.PLANNER,
-    MESSAGE_AUTHOR.HUMAN,
-  ]),
+  author: EffectSchema.Literals([MESSAGE_AUTHOR.AGENT, MESSAGE_AUTHOR.LUKE, MESSAGE_AUTHOR.HUMAN]),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.CHAT),
   chat_seq: nonNegativeInteger,
   from: identifier,

@@ -10,11 +10,24 @@ import {
   replyWords,
 } from "@luke/features/chat-wire";
 import { type InboxReadResponse, inboxReadResponseSchema } from "@luke/features/inbox-wire";
+import {
+  BUTTON_SHAPE,
+  BUTTON_TYPE,
+  BUTTON_VARIANT,
+  Button,
+  GAP,
+  IconButton,
+  LAYOUT_ELEMENT,
+  Stack,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { Option, Schema } from "effect";
 import { ArrowUpIcon, CheckIcon } from "lucide-react";
 import { useState } from "react";
-import { BusyLabel } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { EMPTY_INBOX_DRAFT, type InboxDraft, inboxReply, pressesOf } from "./inbox-model";
 import { ChoiceOptions, FormFields } from "./inbox-pane";
@@ -93,15 +106,20 @@ function Picked({ ask }: { ask: CarriedAsk }): React.JSX.Element | null {
   if (!knownResponse(response) || response.type !== CHAT_ASK.CHOICE) return null;
   const picks = ask.answer?.choices ?? [];
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="What was offered">
+    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} aria-label="What was offered">
       {response.options.map((option) => {
         const picked = picks.includes(option.label);
         return (
           <li key={option.label} className="inbox-option" data-picked={String(picked)}>
             <span>
-              <span className="font-medium">{option.label}</span>
+              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+                {option.label}
+              </Text>
               {response.recommended === option.label ? (
-                <span className="text-muted-foreground"> · Recommended</span>
+                <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+                  {" "}
+                  · Recommended
+                </Text>
               ) : null}
               {picked ? (
                 <span className="inbox-picked">
@@ -111,12 +129,14 @@ function Picked({ ask }: { ask: CarriedAsk }): React.JSX.Element | null {
               ) : null}
             </span>
             {option.detail === undefined ? null : (
-              <span className="text-muted-foreground">{option.detail}</span>
+              <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+                {option.detail}
+              </Text>
             )}
           </li>
         );
       })}
-    </ul>
+    </Stack>
   );
 }
 
@@ -140,13 +160,13 @@ function Settled({
   const values = ask.answer.values ?? [];
   return (
     <div className="chat-ask-settled" data-settled="answered">
-      <p className="m-0">
+      <Text tone={TEXT_TONE.MUTED}>
         {by === undefined ? "" : `${by}: `}
         {replyWords(ask.answer)}
         {ask.answer.note === undefined ? null : (
           <span className="chat-ask-settled-note"> {ask.answer.note}</span>
         )}
-      </p>
+      </Text>
       {/* A form's answer is what was filled in, so each field stands under the line, in the form's order. */}
       {values.length === 0 ? null : (
         <ul className="chat-ask-values">
@@ -178,43 +198,37 @@ function Presses({
   if (presses === undefined) {
     return (
       <Tooltip label="Send">
-        <button
-          type="submit"
-          className="chat-send"
-          aria-label="Send"
+        <IconButton
+          type={BUTTON_TYPE.SUBMIT}
+          icon={<ArrowUpIcon aria-hidden="true" />}
+          label="Send"
+          variant={BUTTON_VARIANT.PRIMARY}
+          shape={BUTTON_SHAPE.ROUND}
           disabled={
-            sending || inbox === undefined || inboxReply({ response: inbox }, draft) === undefined
+            !sending &&
+            (inbox === undefined || inboxReply({ response: inbox }, draft) === undefined)
           }
-        >
-          <BusyLabel busy={sending} label="Sending">
-            <ArrowUpIcon aria-hidden="true" />
-          </BusyLabel>
-        </button>
+          busy={sending}
+          busyLabel="Sending"
+        />
       </Tooltip>
     );
   }
   const { back, ahead } = presses;
   return (
     <div className="chat-ask-presses">
-      <button
-        type="button"
-        className="primary-button"
-        disabled={sending}
+      <Button
+        variant={BUTTON_VARIANT.PRIMARY}
+        busy={sending}
+        busyLabel="Sending"
         onClick={() => onAnswer(ahead.reply)}
       >
-        <BusyLabel busy={sending} label="Sending">
-          {ahead.label}
-        </BusyLabel>
-      </button>
+        {ahead.label}
+      </Button>
       {back === undefined ? null : (
-        <button
-          type="button"
-          className="toolbar-button"
-          disabled={sending}
-          onClick={() => onAnswer(back.reply)}
-        >
+        <Button disabled={sending} onClick={() => onAnswer(back.reply)}>
           {back.label}
-        </button>
+        </Button>
       )}
     </div>
   );

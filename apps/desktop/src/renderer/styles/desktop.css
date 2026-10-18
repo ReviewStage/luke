@@ -4,20 +4,6 @@
    weight. */
 
 :root {
-  /* A workspace's tile (`workspace-tile.tsx`): six muted hues, each holding
-     its white letter at AA, the only colour a workspace wears. */
-  --workspace-hue-1: #4f63b8;
-  --workspace-hue-2: #2b7f78;
-  --workspace-hue-3: #9a6a1e;
-  --workspace-hue-4: #a24a63;
-  --workspace-hue-5: #6c55b3;
-  --workspace-hue-6: #477a3a;
-  --workspace-tile-ink: #fff;
-  /* The attention mark's disc (`attention-mark.tsx`): the attention orange
-     deepened until its white exclamation holds on it, in the dark as in the
-     light, where the orange is deep already. */
-  --attention-mark-ground: #c4620c;
-  --attention-mark-ink: #fff;
   /* The veil over a picture set's last tile that counts the pictures past
      it (`.picture-set-more`), the same in either appearance, since it lies
      over a picture rather than the window. */
@@ -29,12 +15,6 @@
      shows through it. */
   --actor-tile: #2a2a30;
   --actor-tile-ink: rgba(255, 255, 255, 0.92);
-  --desktop-sidebar: #111114;
-  /* A sidebar row's words at rest, a step under the primary ink and clear of
-     the time's tertiary, so the open, hovered, and unread rows stand out by
-     going up to the primary. */
-  --sidebar-ink: rgba(255, 255, 255, 0.7);
-  --desktop-well: #0f0f12;
   /* A top row and its hairline, its middle level with the traffic lights'. */
   --desktop-bar-height: calc(2 * var(--traffic-lights-middle) + 1px);
   /* A tab's own bar under a tab strip and its hairline: a control's height
@@ -45,9 +25,12 @@
   /* The call bar's own row, which the passing notices stand clear of. */
   --call-row-height: 36px;
   /* The spacing scale, one control's box, corner, and glyph, the gaps
-     between controls and sections, a page's inset, and a menu's rows are the
-     desktop profile's roles in `@luke/ui` (`tokens/profiles.css`), read here
-     by their own names (`--luke-space-8`, `--luke-control-height`, …). Every
+     between controls, list items, and sections, a page's inset and measure, a
+     menu's rows, glyph, and shadow, the keyboard's ring, the floating layers,
+     and the window's sidebar, well, and workspace hues are the desktop
+     profile's roles in `@luke/ui` (`tokens/profiles.css`, `palettes.css`),
+     read here by their own names (`--luke-space-8`, `--luke-control-height`,
+     `--luke-color-identity-1`, …). Every
      padding, margin, and gap in the window is one of those steps or a name
      below built from them (docs/DESIGN.md). */
   /* A column's edge to the rows and controls it holds: the sidebar's rows, a
@@ -59,15 +42,6 @@
      puts them; words drawn on no row (a page's title, the transcript, the
      code's path) start there too, so a column reads down one edge. */
   --content-inset: calc(var(--column-inset) + var(--row-inset));
-  /* Between two items of a list. */
-  --list-gap: var(--luke-space-2);
-  /* Every menu and popover draws from one set: the --luke-color-overlay ground
-     inside a --luke-color-border-strong edge, this corner and shadow, and its items
-     this inset from its edge, each row this tall and its glyph this big. The
-     corner is a row's own and the inset together, so a highlighted row
-     follows the menu's curve wherever it meets it. */
-  --menu-glyph: 16px;
-  --menu-shadow: 0 12px 32px var(--luke-color-shadow);
   /* The sidebar's default width (`SIDEBAR_WIDTH.DEFAULT`), and its width as
      drawn, which the app stage carries once the developer has dragged it. */
   --sidebar-width-default: 264px;
@@ -106,8 +80,6 @@
     var(--luke-control-height) +
     var(--luke-control-gap)
   );
-  /* The measure a document is read at: about seventy characters of body text. */
-  --reading-width: 720px;
   /* The measure code is read at, a step wider than words', so a hundred
      columns stand beside their line numbers without wrapping. */
   --code-reading-width: 840px;
@@ -117,15 +89,9 @@
   --find-match: rgba(255, 214, 10, 0.3);
   --find-current: #ff9f0a;
   --find-current-text: #000;
-  /* The layers that float over the whole window, each drawn at the root of
-     the document: a menu, then a dialog and a hint on one layer, whichever
-     was drawn later on top, then the passing notice over everything. Nothing inside the window's stage reaches
-     them, since the stage is one stacking context under them all; inside it,
-     the whiteboard is a stacking context of its own (`tasks.css`). */
-  --z-menu: 20;
-  --z-dialog: 30;
-  --z-tooltip: 30;
-  --z-toast: 31;
+  /* The floating layers are `--luke-z-*`. Nothing inside the window's stage
+     reaches them, since the stage is one stacking context under them all;
+     inside it, the whiteboard is a stacking context of its own (`tasks.css`). */
 }
 
 /* In full screen macOS hides the traffic lights, so the title bar's buttons
@@ -143,17 +109,7 @@
    (`DESKTOP_WINDOW.BACKGROUND`). */
 @media (prefers-color-scheme: light) {
   :root {
-    --desktop-sidebar: #f3f3f4;
-    --sidebar-ink: rgba(0, 0, 0, 0.68);
-    --desktop-well: #f8f8f9;
     --find-match: rgba(255, 204, 0, 0.42);
-    --attention-mark-ground: #a65400;
-    --workspace-hue-1: #4a5fc0;
-    --workspace-hue-2: #23766f;
-    --workspace-hue-3: #94631a;
-    --workspace-hue-4: #a8435f;
-    --workspace-hue-5: #6a4fbd;
-    --workspace-hue-6: #3f7434;
     --actor-tile: #e8e8ec;
     --actor-tile-ink: rgba(0, 0, 0, 0.82);
   }
@@ -208,7 +164,7 @@ body,
   position: absolute;
   inset: 0;
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .desktop-stage {
@@ -280,7 +236,7 @@ body,
 .desktop-shell[data-sidebar-overlay="peek"] .desktop-sidebar,
 .desktop-shell[data-sidebar-overlay="open"] .desktop-sidebar {
   z-index: 2;
-  box-shadow: var(--menu-shadow);
+  box-shadow: var(--luke-menu-shadow);
   opacity: 1;
   transform: none;
 }
@@ -336,7 +292,7 @@ body,
 .desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-collapsed="true"]:has(.desktop-main > .chat-view)
   .title-bar-controls:not([data-edge]) {
-  --title-bar-ground: var(--desktop-sidebar);
+  --title-bar-ground: var(--luke-color-sidebar);
 }
 
 .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]:has(
@@ -344,7 +300,7 @@ body,
   )
   .title-bar-controls:not([data-edge]),
 .desktop-shell:has(.side-panel) .title-bar-controls[data-edge="end"] {
-  --title-bar-ground: var(--desktop-well);
+  --title-bar-ground: var(--luke-color-well);
 }
 
 .title-bar-controls[data-edge="end"] {
@@ -361,7 +317,7 @@ body,
    the column's own ground. At the column's least width they still end short
    of the sidebar toggle's cluster. */
 .title-bar-controls[data-edge="column"] {
-  --title-bar-ground: var(--desktop-sidebar);
+  --title-bar-ground: var(--luke-color-sidebar);
   right: var(--column-inset);
   left: auto;
 }
@@ -372,40 +328,40 @@ body,
   flex-direction: column;
   padding: 0 var(--column-inset) var(--column-inset);
   border-right: 1px solid var(--luke-color-border);
-  background: var(--desktop-sidebar);
+  background: var(--luke-color-sidebar);
 }
 
-.luke-identity {
+.sidebar-identity {
   display: flex;
   align-items: center;
   gap: var(--luke-space-12);
   padding: var(--luke-space-2) var(--row-inset) var(--luke-section-gap);
 }
 
-.luke-identity-face {
+.sidebar-identity-face {
   display: grid;
   flex: 0 0 auto;
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-fill-strong);
 }
 
-.luke-identity-face .luke-face {
+.sidebar-identity-face .luke-face {
   width: 24px;
   height: 24px;
 }
 
-.luke-identity-copy {
+.sidebar-identity-copy {
   display: flex;
   min-width: 0;
   flex-direction: column;
 }
 
-.luke-identity-name {
-  font-size: 15px;
-  font-weight: 700;
+.sidebar-identity-name {
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-bold);
   letter-spacing: -0.01em;
 }
 
@@ -419,12 +375,12 @@ body,
   align-items: center;
   gap: var(--luke-icon-gap);
   height: var(--luke-control-height);
-  margin: 0 0 var(--list-gap);
+  margin: 0 0 var(--luke-list-gap);
   padding: 0 var(--row-inset);
-  border-radius: 9px;
+  border-radius: var(--luke-control-radius);
   background: none;
-  color: var(--sidebar-ink);
-  font-size: 13px;
+  color: var(--luke-color-sidebar-ink);
+  font-size: var(--luke-type-body-size);
   transition:
     background-color var(--duration-hover) ease,
     color var(--duration-hover) ease;
@@ -471,7 +427,7 @@ body,
 .sidebar-inbox-waiting {
   margin-left: auto;
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
 }
 
@@ -513,14 +469,14 @@ body,
    the surface it sits on. */
 .workspace-tile {
   display: inline-grid;
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: 0 0 auto;
   place-items: center;
   border-radius: 4px;
-  color: var(--workspace-tile-ink);
+  color: var(--luke-color-on-identity);
   font-size: 10px;
-  font-weight: 650;
+  font-weight: var(--luke-weight-semibold);
   line-height: 1;
 }
 
@@ -545,27 +501,27 @@ body,
 }
 
 .workspace-tile[data-hue="1"] {
-  background: var(--workspace-hue-1);
+  background: var(--luke-color-identity-1);
 }
 
 .workspace-tile[data-hue="2"] {
-  background: var(--workspace-hue-2);
+  background: var(--luke-color-identity-2);
 }
 
 .workspace-tile[data-hue="3"] {
-  background: var(--workspace-hue-3);
+  background: var(--luke-color-identity-3);
 }
 
 .workspace-tile[data-hue="4"] {
-  background: var(--workspace-hue-4);
+  background: var(--luke-color-identity-4);
 }
 
 .workspace-tile[data-hue="5"] {
-  background: var(--workspace-hue-5);
+  background: var(--luke-color-identity-5);
 }
 
 .workspace-tile[data-hue="6"] {
-  background: var(--workspace-hue-6);
+  background: var(--luke-color-identity-6);
 }
 
 /* In a line of words, the tile keeps to the line's height. */
@@ -592,7 +548,7 @@ body,
   min-width: 0;
   max-width: 100%;
   align-items: center;
-  gap: 5px; /* off-scale: a 14px tile's gap to its word, an actor's alike */
+  gap: var(--luke-space-4);
   vertical-align: middle;
 }
 
@@ -620,7 +576,7 @@ body,
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 1px; /* off-scale */
+  gap: var(--luke-space-2);
 }
 
 .workspace-ref-name {
@@ -645,7 +601,7 @@ body,
 
 .workspace-ref-line {
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The sidebar's head: the workspace listed, its tile, its name in the head's
@@ -664,7 +620,7 @@ body,
   align-items: center;
   gap: var(--luke-space-12);
   padding: var(--luke-space-6) var(--row-inset);
-  border-radius: 10px;
+  border-radius: var(--luke-radius-10);
   background: none;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
@@ -686,8 +642,8 @@ body,
 
 .sidebar-workspace-toggle .workspace-ref-name {
   color: var(--luke-color-text);
-  font-size: 14px; /* off-scale: the sidebar's head, a step above its rows */
-  font-weight: 650;
+  font-size: var(--luke-type-section-size);
+  font-weight: var(--luke-weight-semibold);
   letter-spacing: -0.005em;
 }
 
@@ -724,8 +680,8 @@ body,
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  margin: calc(-1 * var(--focus-ring-reach));
-  padding: var(--focus-ring-reach);
+  margin: calc(-1 * var(--luke-focus-ring-reach));
+  padding: var(--luke-focus-ring-reach);
   overflow-y: auto;
 }
 
@@ -758,8 +714,8 @@ body,
   background: none;
   color: var(--luke-color-text-muted);
   font: inherit;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
   text-align: left;
 }
 
@@ -809,11 +765,11 @@ button.sidebar-section-head-name:hover {
   gap: var(--luke-space-4);
   padding: 0 var(--luke-space-2) 0 var(--luke-space-6);
   border: 1px solid var(--luke-color-border-selected);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: var(--luke-color-fill-selected);
   color: var(--luke-color-text);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
   -webkit-app-region: no-drag;
 }
 
@@ -835,7 +791,7 @@ button.sidebar-section-head-name:hover {
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: none;
   color: var(--luke-color-text-muted);
 }
@@ -856,15 +812,15 @@ button.sidebar-section-head-name:hover {
   margin: 0 0 var(--luke-space-4);
   padding: 0 var(--row-inset);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 .sidebar-note {
   margin: var(--luke-space-4) var(--row-inset);
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
-  line-height: 1.45;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* The task list's failure is a row of the section under Tasks' head: its
@@ -880,19 +836,19 @@ button.sidebar-section-head-name:hover {
 .sidebar-skeleton {
   display: flex;
   flex-direction: column;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
 }
 
 .sidebar-skeleton-row {
   padding: var(--luke-space-6) var(--row-inset);
-  font-size: 13px;
-  line-height: var(--sidebar-row-line);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-label-leading);
 }
 
 .sidebar-tasks {
   display: flex;
   flex-direction: column;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -904,21 +860,17 @@ button.sidebar-section-head-name:hover {
   display: block;
   width: 100%;
   padding: var(--luke-space-8) var(--row-inset);
-  border-radius: 9px;
+  border-radius: var(--luke-control-radius);
   background: none;
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
 
 /* In the sidebar a row is a control's height, as New plan's is, its line set
-   rather than left to the font, so every row of the column stands as tall
-   whatever the font measures. */
-.desktop-sidebar {
-  --sidebar-row-line: 18px;
-}
-
+   to the label's leading rather than left to the font, so every row of the
+   column stands as tall whatever the font measures. */
 .desktop-sidebar .sidebar-task-item {
-  line-height: var(--sidebar-row-line);
+  line-height: var(--luke-type-label-leading);
 }
 
 /* Note that the row's height is set rather than grown from its padding,
@@ -936,7 +888,7 @@ button.sidebar-section-head-name:hover {
 }
 
 .desktop-sidebar .sidebar-task-marks {
-  top: calc((var(--luke-control-height) - var(--sidebar-row-line)) / 2);
+  top: calc((var(--luke-control-height) - var(--luke-type-label-leading)) / 2);
 }
 
 /* A plan's row fills while the pointer is anywhere on its item, its own
@@ -1099,10 +1051,10 @@ button.sidebar-section-head-name:hover {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: 5px; /* off-scale: a 16px mark's gap to its word */
+  gap: var(--luke-space-4);
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--luke-radius-6);
   background: none;
   color: inherit;
   font: inherit;
@@ -1261,13 +1213,13 @@ ul.actor-stack {
   display: inline-grid;
   height: 18px;
   min-width: 18px;
-  padding: 0 5px; /* off-scale */
+  padding: 0 var(--luke-space-4);
   place-items: center;
-  border-radius: 9px;
+  border-radius: var(--luke-radius-full);
   background: var(--actor-tile);
   color: var(--luke-color-text-muted);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1307,13 +1259,13 @@ ul.actor-stack {
 .actor-you,
 .actor-bot {
   flex-shrink: 0;
-  padding: 0 5px; /* off-scale */
-  border-radius: 4px;
+  padding: 0 var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text-muted);
-  font-size: 10.5px;
-  font-weight: 500;
-  line-height: 16px;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .sidebar-task-name,
@@ -1327,11 +1279,11 @@ ul.actor-stack {
    what marks it. In the sidebar a read name is in the quieter ink, and the
    open one and the one under the pointer go up to the primary. */
 .sidebar-task-name {
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .desktop-sidebar :is(.sidebar-task-name, .sidebar-pinned-tab-name) {
-  color: var(--sidebar-ink);
+  color: var(--luke-color-sidebar-ink);
   transition: color var(--duration-hover) ease;
 }
 
@@ -1352,11 +1304,11 @@ ul.actor-stack {
 .sidebar-task[data-unread="true"] .sidebar-task-name,
 .tab[data-unread="true"] .tab-label {
   color: var(--luke-color-text);
-  font-weight: 680;
+  font-weight: var(--luke-weight-bold);
 }
 
 .desktop-sidebar .sidebar-task[data-unread="true"] .sidebar-task-name {
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* A sidebar plan renamed in place keeps its row: the field takes the name's
@@ -1395,7 +1347,7 @@ ul.actor-stack {
   flex: none;
   min-width: calc(2 * var(--sidebar-plan-mark) + var(--luke-space-2));
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -1498,7 +1450,7 @@ ul.actor-stack {
   height: 1lh;
   align-items: center;
   gap: var(--luke-space-2);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   opacity: 0;
 }
 
@@ -1513,7 +1465,7 @@ ul.actor-stack {
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: none;
   color: var(--luke-color-text-muted);
   transition: color var(--duration-hover) ease;
@@ -1557,10 +1509,10 @@ ul.actor-stack {
    pointer frame for frame, so its own transform eases nothing. */
 .sidebar-tasks > .sidebar-task-item[data-dragging="true"] {
   z-index: 2;
-  border-radius: 9px;
+  border-radius: var(--luke-control-radius);
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--desktop-sidebar);
+    var(--luke-color-sidebar);
   box-shadow: 0 4px 12px var(--luke-color-shadow);
   transition: none;
 }
@@ -1590,9 +1542,9 @@ ul.actor-stack {
   display: flex;
   align-items: center;
   gap: var(--luke-space-2);
-  margin-bottom: var(--list-gap);
+  margin-bottom: var(--luke-list-gap);
   padding-right: var(--luke-space-4);
-  border-radius: 9px;
+  border-radius: var(--luke-control-radius);
   transition: background-color var(--duration-hover) ease;
   -webkit-app-region: no-drag;
 }
@@ -1614,19 +1566,19 @@ ul.actor-stack {
   align-items: center;
   gap: var(--luke-icon-gap);
   padding: var(--luke-space-8) var(--row-inset);
-  border-radius: 9px;
+  border-radius: var(--luke-control-radius);
   background: none;
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
   text-align: left;
   transition: color var(--duration-hover) ease;
 }
 
 /* A header in the sidebar stands as tall as the rows under it. */
 .desktop-sidebar .sidebar-repository-toggle {
-  padding-block: calc((var(--luke-control-height) - var(--sidebar-row-line)) / 2);
-  line-height: var(--sidebar-row-line);
+  padding-block: calc((var(--luke-control-height) - var(--luke-type-label-leading)) / 2);
+  line-height: var(--luke-type-label-leading);
 }
 
 .sidebar-repository-header:hover .sidebar-repository-toggle {
@@ -1641,8 +1593,8 @@ ul.actor-stack {
    as a plan row's ring takes in its Pin and Archive. */
 :root[data-keyboard="true"]
 .sidebar-repository-header:has(> .sidebar-repository-toggle:focus-visible) {
-  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: var(--focus-ring-offset);
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+  outline-offset: var(--luke-focus-ring-offset);
 }
 
 .sidebar-repository-name {
@@ -1719,10 +1671,10 @@ ul.actor-stack {
 
 .sidebar-sections > .sidebar-sections-item[data-dragging="true"] {
   z-index: 3;
-  border-radius: 9px;
+  border-radius: var(--luke-radius-8);
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--desktop-sidebar);
+    var(--luke-color-sidebar);
   box-shadow: 0 4px 12px var(--luke-color-shadow);
   transition: none;
 }
@@ -1737,7 +1689,7 @@ ul.actor-stack {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
   place-items: center;
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   line-height: 1;
 }
 
@@ -1748,7 +1700,7 @@ ul.actor-stack {
   padding: var(--luke-space-4) var(--row-inset) var(--luke-space-6)
     calc(var(--row-inset) + var(--luke-control-icon) + var(--luke-space-8));
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .sidebar-own-section:not(:has(.sidebar-repository-glyph)) > .sidebar-section-empty {
@@ -1758,7 +1710,7 @@ ul.actor-stack {
 /* The section, or Tasks, a row is carried over is washed while it is, and a
    line stands where the row would land among a section's tasks. */
 [data-row-drop][data-drop-target="true"] {
-  border-radius: 9px;
+  border-radius: var(--luke-radius-8);
   background: var(--luke-color-fill-hover);
 }
 
@@ -1841,8 +1793,8 @@ ul.actor-stack {
   margin-bottom: var(--luke-space-4);
   padding: 0;
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 .section-icon-bar {
@@ -1853,7 +1805,7 @@ ul.actor-stack {
 }
 
 .section-icon-search {
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .section-icon-colors,
@@ -1921,14 +1873,14 @@ ul.actor-stack {
 .section-emoji-group-name {
   margin: 0 0 var(--luke-space-4);
   color: var(--luke-color-text-subtle);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 .section-icon-note {
   margin: var(--luke-space-8) 0;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .section-icon-resting {
@@ -1936,7 +1888,7 @@ ul.actor-stack {
   margin: 0;
   overflow: hidden;
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1952,7 +1904,7 @@ ul.actor-stack {
   border-radius: var(--luke-control-radius);
   background: none;
   color: var(--luke-color-text-muted);
-  font-size: 15px;
+  font-size: var(--luke-control-icon);
   line-height: 1;
   transition:
     background-color var(--duration-hover) ease,
@@ -1973,10 +1925,6 @@ ul.actor-stack {
   border-color: var(--luke-color-focus-ring);
   background: var(--luke-color-fill-hover);
   color: var(--luke-color-text);
-}
-
-.section-emoji-field {
-  font-size: 13px;
 }
 
 /* A pinned repository says so after its name, quietly, since the pin is
@@ -2000,7 +1948,7 @@ ul.actor-stack {
   flex: none;
   margin-left: calc(var(--luke-space-6) - var(--luke-icon-gap));
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   opacity: 0;
   transition: opacity var(--duration-hover) ease;
@@ -2033,7 +1981,7 @@ ul.actor-stack {
   height: 24px;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: none;
   color: var(--luke-color-text-muted);
   transition: color var(--duration-hover) ease;
@@ -2091,7 +2039,7 @@ ul.actor-stack {
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   white-space: nowrap;
 }
 
@@ -2119,11 +2067,11 @@ ul.actor-stack {
   width: 100%;
   height: 34px;
   padding: 0 var(--row-inset);
-  border-radius: 8px;
+  border-radius: var(--luke-control-radius);
   background: none;
   color: var(--luke-color-text-muted);
-  font-size: 13px;
-  font-weight: 560;
+  font-size: var(--luke-type-body-size);
+  font-weight: var(--luke-weight-semibold);
   text-align: left;
   transition:
     background-color var(--duration-hover) ease,
@@ -2167,8 +2115,8 @@ ul.actor-stack {
 .sidebar-account-name {
   min-width: 0;
   flex: 1;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--luke-type-section-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* A release with something to press, a pill between the account and the
@@ -2182,11 +2130,11 @@ ul.actor-stack {
   gap: var(--luke-space-4);
   height: 24px;
   padding: 0 var(--luke-space-8);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: color-mix(in srgb, var(--luke-color-working) 14%, transparent);
   color: var(--luke-color-working);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
   transition: background-color var(--duration-hover) ease;
   -webkit-app-region: no-drag;
@@ -2291,8 +2239,8 @@ ul.actor-stack {
   margin: 0 0 0 calc(-1 * var(--luke-space-6));
   padding-left: var(--luke-space-6);
   overflow: hidden;
-  font-size: 15px;
-  font-weight: 680;
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-bold);
   letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2317,24 +2265,24 @@ ul.actor-stack {
 }
 
 @container plan-toolbar (max-width: 480px) {
-  .start-agent .start-agent-word {
-    display: none;
-  }
-
-  .start-agent .start-agent-main {
-    width: var(--luke-control-height);
-    padding: 0;
+  .start-agent {
+    --luke-fold: folded;
   }
 }
 
 @container plan-toolbar (max-width: 320px) {
-  .start-agent .start-agent-chevron,
-  .main-tabs .retry-word {
+  .start-agent .luke-split-button > .luke-button:last-child {
     display: none;
   }
 
-  .start-agent .start-agent-main {
-    border-radius: calc(var(--luke-control-radius) - 1px);
+  /* The agents' Retry folds to its glyph (`FoldingButton`). */
+  .main-tabs {
+    --luke-fold: folded;
+  }
+
+  .start-agent .luke-split-button > .luke-button:first-child {
+    border-inline-end-width: 1px;
+    border-radius: var(--luke-control-radius);
   }
 }
 
@@ -2395,8 +2343,8 @@ ul.actor-stack {
   padding: 0 var(--luke-space-12);
   border-radius: var(--luke-control-radius);
   background: var(--button-fill);
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
   transition:
     background-color var(--duration-hover) ease,
@@ -2498,7 +2446,7 @@ ul.actor-stack {
 .quiet-button {
   padding: 0 var(--luke-space-8);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* A labelled toolbar button inside a hairline, the edge Start's split button
@@ -2538,7 +2486,7 @@ ul.actor-stack {
   height: 24px;
   padding: 0 var(--luke-space-8);
   color: var(--luke-color-text);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .failure-note-remedy :is(svg, .luke-spinner-ring) {
@@ -2550,19 +2498,11 @@ ul.actor-stack {
 
 /* A chip is `@luke/ui`'s shared control (`chip.tsx`), its looks drawn by
    `@luke/ui/styles.css`. What stays here is the window's own: the marks it
-   holds a size under the control's glyph, its menu's chevron at the size a
-   menu draws it (restated, since `.settings-chevron`'s own rule here would
-   otherwise win over the shared layer). */
+   holds a size under the control's glyph. */
 .luke-chip :is(.repository-picture, .provider-mark, .harness-mark) {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
-}
-
-.luke-chip .settings-chevron {
-  width: 12px;
-  height: 12px;
-  color: var(--luke-color-text-subtle);
 }
 
 /* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
@@ -2618,7 +2558,7 @@ ul.actor-stack {
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-menu-radius);
   background: var(--luke-color-overlay);
-  box-shadow: var(--menu-shadow);
+  box-shadow: var(--luke-menu-shadow);
   animation:
     popup-fade var(--duration-quick) var(--motion-exit) both,
     menu-drop var(--duration-fast) var(--spring-fast) both;
@@ -2642,7 +2582,7 @@ ul.actor-stack {
   border-radius: var(--luke-menu-row-radius);
   background: none;
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   text-align: left;
   white-space: nowrap;
   cursor: default;
@@ -2699,8 +2639,8 @@ ul.actor-stack {
    line down the menu. */
 .menu-item-glyph {
   display: inline-flex;
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -2716,8 +2656,8 @@ ul.actor-stack {
 .menu-item > :is(svg, .repository-picture),
 .menu-item-glyph :is(svg, .repository-picture),
 .menu-item-end > svg {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -2728,7 +2668,7 @@ ul.actor-stack {
   margin-left: auto;
   padding-left: var(--luke-space-16);
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   white-space: nowrap;
 }
 
@@ -2739,8 +2679,8 @@ ul.actor-stack {
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   margin-left: auto;
   color: var(--luke-color-text-subtle);
 }
@@ -2750,8 +2690,8 @@ ul.actor-stack {
 }
 
 .menu-item-end .credential-check {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   color: var(--luke-color-text);
 }
 
@@ -2777,18 +2717,17 @@ ul.actor-stack {
    text's colour rather than the state palette's, a chevron, and a
    repository's picture in the glyph slot. */
 .luke-menu {
-  z-index: var(--z-menu);
+  z-index: var(--luke-z-menu);
   -webkit-app-region: no-drag;
 }
 
 .luke-menu[data-layer="dialog"] {
-  z-index: calc(var(--z-dialog) + 1);
+  z-index: calc(var(--luke-z-dialog) + 1);
 }
 
-.luke-menu-item-glyph :is(svg, .repository-picture),
-.luke-menu-item-end > svg {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+.luke-menu-item-glyph .repository-picture {
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -2810,7 +2749,7 @@ ul.actor-stack {
   flex-wrap: wrap;
   margin: 0;
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-room);
+  overflow-clip-margin: var(--luke-focus-ring-room);
 }
 
 .account-menu-name,
@@ -2822,7 +2761,7 @@ ul.actor-stack {
 
 .account-menu-name {
   color: var(--luke-color-text);
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .account-menu-email {
@@ -2853,8 +2792,8 @@ ul.actor-stack {
 .desktop-empty p {
   max-width: 400px;
   margin: 0 0 var(--luke-space-8);
-  font-size: 13.5px;
-  line-height: 1.55;
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
 }
 
 /* A pane that scrolls a list lays its empty state out as a column the state
@@ -2873,8 +2812,8 @@ ul.actor-stack {
   flex: none;
   place-items: center;
   border-radius: 50%;
-  background: var(--attention-mark-ground);
-  color: var(--attention-mark-ink);
+  background: var(--luke-color-attention-fill);
+  color: var(--luke-color-on-attention);
 }
 
 .attention-mark svg {
@@ -2992,12 +2931,12 @@ ul.actor-stack {
 .document-banner {
   --banner-gap: var(--luke-space-12);
   box-sizing: border-box;
-  width: min(var(--reading-width), calc(100% - 2 * var(--luke-page-inset)));
+  width: min(var(--luke-page-measure), calc(100% - 2 * var(--luke-page-inset)));
   margin: var(--luke-space-16) auto 0;
   padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) var(--luke-space-16);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 12px;
-  background: var(--desktop-well);
+  border-radius: var(--luke-radius-14);
+  background: var(--luke-color-well);
 }
 
 .document-banner-glyph {
@@ -3039,7 +2978,7 @@ ul.actor-stack {
    Inbox's pane is laid out the same way, its thread and box at that measure. */
 .desktop-agent,
 .desktop-inbox {
-  --reading-room: calc((100% - var(--reading-width)) / 2);
+  --reading-room: calc((100% - var(--luke-page-measure)) / 2);
   position: relative;
   display: flex;
   min-height: 0;
@@ -3066,7 +3005,7 @@ ul.actor-stack {
   align-items: center;
   padding-inline: var(--luke-space-4);
   color: var(--luke-color-text-muted);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The line under a sent message's bubble: its Copy and Copy link, shown
@@ -3087,7 +3026,7 @@ ul.actor-stack {
   gap: calc(var(--luke-space-4) + var(--luke-space-2));
   padding-inline-end: var(--luke-space-4);
   color: var(--luke-color-text-muted);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -3158,7 +3097,7 @@ ul.actor-stack {
    the body as the caller sent it in the code type, broken anywhere rather
    than run past the card. */
 .agent-origin-body {
-  font-size: 12.5px; /* off-scale: a call's line, which it sits among */
+  font-size: var(--luke-type-caption-size);
 }
 
 .agent-origin-body-line {
@@ -3190,7 +3129,7 @@ ul.actor-stack {
   margin: 0;
   padding: var(--luke-space-4);
   font-family: var(--luke-font-mono);
-  font-size: 12px; /* off-scale: a call's code type */
+  font-size: var(--luke-type-caption-size);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -3214,7 +3153,7 @@ ul.actor-stack {
    the muted line it was, underlined only under the pointer or the keyboard. */
 .plan-edit-link {
   padding: 0;
-  border-radius: 4px; /* off-scale: the keyboard ring's corner around words */
+  border-radius: var(--luke-radius-6);
   background: none;
   color: inherit;
   font: inherit;
@@ -3277,7 +3216,7 @@ ul.actor-stack {
 .desktop-document .plan-edit-note,
 .desktop-document .plan-changed-note,
 .desktop-document .version-note {
-  max-width: var(--reading-width);
+  max-width: var(--luke-page-measure);
   margin-right: auto;
   margin-left: auto;
 }
@@ -3298,7 +3237,7 @@ ul.actor-stack {
 
 .desktop-document .markdown-heading[data-level="1"] {
   font-size: 1.9em;
-  font-weight: 720;
+  font-weight: var(--luke-weight-bold);
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
@@ -3333,14 +3272,14 @@ ul.actor-stack {
   padding: var(--luke-space-12) calc(var(--luke-page-inset) + var(--summary-room))
     var(--luke-space-12) var(--luke-page-inset);
   border-top: 1px solid var(--luke-color-border);
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
 }
 
 .desktop-call-bar::before {
   top: -1px;
   bottom: 0;
   border-top: 1px solid var(--luke-color-border);
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
 }
 
 /* The live captions stand just above the call bar, centred on its row, so
@@ -3389,7 +3328,7 @@ ul.actor-stack {
 .call-bar {
   container: call-bar / inline-size;
   display: flex;
-  max-width: var(--reading-width);
+  max-width: var(--luke-page-measure);
   min-height: var(--call-row-height);
   flex-wrap: wrap;
   align-items: center;
@@ -3629,8 +3568,8 @@ ul.actor-stack {
 /* The glyph is sized here, as every glyph is by what it sits in: an SVG
    with no size of its own fills the row it is in. */
 .task-compose-menu-search svg {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -3643,7 +3582,7 @@ ul.actor-stack {
   background: none;
   color: var(--luke-color-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .task-compose-menu-search input::placeholder {
@@ -3678,7 +3617,7 @@ ul.actor-stack {
   margin: 0;
   padding: var(--luke-space-4) var(--row-inset) 0;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* What stands in the list's place: one quiet line, centred, at a row or
@@ -3691,7 +3630,7 @@ ul.actor-stack {
   margin: 0;
   padding: var(--luke-space-4) var(--luke-space-12);
   color: var(--luke-color-text-subtle);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
   text-align: center;
 }
 
@@ -3789,7 +3728,7 @@ body:has(.app-stage[data-capture="true"])
 .task-compose-menu-name {
   min-width: 0;
   flex: 0 1 auto;
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
 }
 
 /* A searchable menu's words fade where they are cut rather than end in an
@@ -3804,7 +3743,7 @@ body:has(.app-stage[data-capture="true"])
 .task-compose-menu-detail {
   flex: 0 0 auto;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   white-space: nowrap;
 }
 
@@ -3824,8 +3763,8 @@ body:has(.app-stage[data-capture="true"])
 .command-palette [cmdk-group-heading] {
   padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 [role="group"]:first-child > .menu-heading,
@@ -3860,7 +3799,7 @@ body:has(.app-stage[data-capture="true"])
   width: 100%;
   min-width: 0;
   flex-direction: column;
-  gap: 1px; /* off-scale */
+  gap: var(--luke-space-2);
   padding: var(--luke-space-4) calc(var(--row-inset) + var(--luke-space-16)) var(--luke-space-4)
     var(--row-inset);
   border-radius: var(--luke-menu-row-radius);
@@ -3904,7 +3843,7 @@ button.integration-tool-head:hover,
   min-width: 0;
   color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
-  font-size: 11px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3993,7 +3932,7 @@ button.integration-tool-head:hover,
   min-width: 0;
   color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
-  font-size: 11px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
   user-select: text;
@@ -4047,12 +3986,12 @@ button.integration-tool-head:hover,
   gap: var(--luke-space-6);
   margin: 0 0 var(--luke-space-4);
   color: var(--luke-color-text-subtle);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .integration-tool-section-count {
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
   font-variant-numeric: tabular-nums;
 }
 
@@ -4081,7 +4020,7 @@ button.integration-tool-head:hover,
 .integration-tool-parameter-name {
   color: var(--luke-color-text);
   font-family: var(--luke-font-mono);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   overflow-wrap: anywhere;
   user-select: text;
 }
@@ -4089,14 +4028,14 @@ button.integration-tool-head:hover,
 .integration-tool-parameter-type {
   color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
-  font-size: 11px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .integration-tool-parameter-required {
   margin-left: auto;
   color: var(--luke-color-attention);
-  font-size: 10.5px;
-  font-weight: 560;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .integration-tool-parameter-body {
@@ -4105,8 +4044,8 @@ button.integration-tool-head:hover,
   gap: var(--luke-space-4);
   margin: 0;
   color: var(--luke-color-text-muted);
-  font-size: 11.5px;
-  line-height: 1.4;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   user-select: text;
 }
 
@@ -4124,12 +4063,12 @@ button.integration-tool-head:hover,
 
 .integration-tool-parameter-values code {
   padding: 0 var(--luke-space-4);
-  border-radius: 4px;
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
-  font-size: 10.5px;
-  line-height: 16px;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .integration-tool-parameter-values code[data-default="true"] {
@@ -4322,6 +4261,19 @@ button.integration-tool-head:hover,
   transform: translateY(-50%);
 }
 
+/* In a ListRow the dot stands in a place of its own at the end of the row's
+   metadata, kept on every row, so the times line up whether a row wears one
+   or not. */
+.inbox-row-dot-place {
+  --inbox-dot: 7px;
+
+  position: relative;
+  display: inline-block;
+  width: var(--inbox-dot);
+  height: var(--inbox-dot);
+  flex: none;
+}
+
 /* A teammate's open item waits on them, not on the reader: the dot's place
    holds a hollow ring in the time's ink, so the column still says something
    is open there without the blue that means the reader is asked. */
@@ -4346,7 +4298,7 @@ button.integration-tool-head:hover,
   margin: 0;
   color: var(--luke-color-text);
   font-size: 1.25em;
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
@@ -4359,7 +4311,7 @@ button.integration-tool-head:hover,
   gap: var(--luke-space-6);
   margin: 0;
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .inbox-subject-agent {
@@ -4425,7 +4377,7 @@ button.integration-tool-head:hover,
   position: relative;
   padding: 0 0 var(--luke-space-20) calc(20px + var(--luke-space-12));
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .inbox-thread-earlier::before {
@@ -4459,7 +4411,7 @@ button.integration-tool-head:hover,
   align-items: center;
   column-gap: var(--luke-space-6);
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The writer is named by name alone in the thread's own ink, since their
@@ -4468,8 +4420,8 @@ button.integration-tool-head:hover,
   display: flex;
   min-width: 0;
   color: var(--luke-color-text);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 .inbox-comment-name .actor-ref > .actor-mark {
@@ -4493,9 +4445,9 @@ button.integration-tool-head:hover,
   flex-direction: column;
   gap: var(--luke-space-8);
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-room);
+  overflow-clip-margin: var(--luke-focus-ring-room);
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   line-height: 1.625;
 }
 
@@ -4511,11 +4463,11 @@ button.integration-tool-head:hover,
   align-items: flex-start;
   gap: var(--luke-space-4);
   padding: 1px var(--luke-space-6); /* off-scale */
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 .inbox-pick > span,
@@ -4573,7 +4525,7 @@ button.integration-tool-head:hover,
    by the strip's gap and the breadcrumbs' chevron, and a crumb under the
    pointer's press takes the chosen tab's fill, where a tab pressed lands. */
 .inbox-crumbs ol {
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
 }
 
 /* Note that the agent's crumb gives way as the task's does, because the
@@ -4607,7 +4559,7 @@ button.integration-tool-head:hover,
   border-radius: var(--luke-control-radius);
   background: var(--luke-color-fill-hover);
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
@@ -4619,14 +4571,14 @@ button.integration-tool-head:hover,
 .inbox-next-lead {
   flex: none;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .inbox-next-title {
   overflow: hidden;
   min-width: 0;
   flex: 1;
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4644,7 +4596,7 @@ button.integration-tool-head:hover,
 .inbox-pager-count {
   margin-right: var(--luke-space-6);
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -4760,11 +4712,11 @@ button.integration-tool-head:hover,
   flex: none;
   padding: 0 var(--luke-space-6);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   color: var(--luke-color-text-muted);
-  font-size: 10.5px;
-  font-weight: 500;
-  line-height: 16px;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-caption-leading);
   letter-spacing: 0.01em;
 }
 
@@ -5249,7 +5201,7 @@ button.integration-tool-head:hover,
 }
 
 .automation-group {
-  max-width: var(--reading-width);
+  max-width: var(--luke-page-measure);
   margin-inline: auto;
 }
 
@@ -5263,7 +5215,7 @@ button.integration-tool-head:hover,
 .automation-suggestions {
   display: flex;
   width: 100%;
-  max-width: var(--reading-width);
+  max-width: var(--luke-page-measure);
   flex-direction: column;
   gap: var(--luke-space-8);
   margin-inline: auto;
@@ -5385,8 +5337,8 @@ button.integration-tool-head:hover,
 }
 
 :root[data-keyboard="true"] .automation-suggestion:focus-visible {
-  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: calc(var(--focus-ring-width) / -2);
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+  outline-offset: calc(var(--luke-focus-ring-width) / -2);
 }
 
 .automation-suggestion:disabled {
@@ -5449,7 +5401,7 @@ button.integration-tool-head:hover,
   align-items: center;
   gap: var(--luke-space-4);
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-reach);
+  overflow-clip-margin: var(--luke-focus-ring-reach);
   color: var(--luke-color-text-muted);
 }
 
@@ -5505,7 +5457,7 @@ button.integration-tool-head:hover,
 
 .automation-editor {
   display: flex;
-  max-width: var(--reading-width);
+  max-width: var(--luke-page-measure);
   flex-direction: column;
   margin-inline: auto;
   gap: var(--luke-space-12);
@@ -5545,8 +5497,8 @@ button.integration-tool-head:hover,
 }
 
 .automation-servers > .provider-mark {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
 }
 
 /* A picker here grows from a Settings picker's width to name its whole
@@ -5660,7 +5612,7 @@ button.integration-tool-head:hover,
   min-height: 0;
   flex-direction: column;
   border-right: 1px solid var(--luke-color-border);
-  background: var(--desktop-sidebar);
+  background: var(--luke-color-sidebar);
 }
 
 /* While the sidebar is folded the rail is the window's first column, so its
@@ -5680,8 +5632,8 @@ button.integration-tool-head:hover,
   margin: var(--luke-space-12) 0 var(--luke-space-4);
   padding: 0 var(--luke-space-8);
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -5703,8 +5655,8 @@ button.integration-tool-head:hover,
   flex: 1 1 0;
   overflow: hidden;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
-  font-weight: 400;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-regular);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -5712,12 +5664,12 @@ button.integration-tool-head:hover,
 .chat-rail-count {
   margin-left: auto;
   padding: 0 var(--luke-space-6);
-  border-radius: 9px;
+  border-radius: var(--luke-radius-full);
   background: var(--luke-color-fill-strong);
   color: var(--luke-color-text);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* The plan's own Chat tab fills its column as an agent's tab does, the
@@ -5737,11 +5689,11 @@ button.integration-tool-head:hover,
   height: 28px;
   flex: none;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--luke-radius-8);
   background: var(--luke-color-fill-hover);
   color: var(--luke-color-text);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-bold);
 }
 
 .chat-mark[data-size="small"] {
@@ -5775,15 +5727,15 @@ button.integration-tool-head:hover,
 
 .chat-head-title {
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .chat-head-meta {
   min-width: 0;
   overflow: hidden;
   color: var(--luke-color-text-muted);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -5808,7 +5760,7 @@ button.integration-tool-head:hover,
   display: flex;
   gap: var(--luke-space-12);
   padding: var(--luke-space-8) var(--luke-space-12);
-  border-radius: 10px;
+  border-radius: var(--luke-radius-10);
 }
 
 .chat-reply {
@@ -5846,18 +5798,18 @@ button.integration-tool-head:hover,
 }
 
 .chat-author {
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .chat-handle {
   color: var(--luke-color-text-muted);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .chat-where,
 .chat-time {
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   white-space: nowrap;
 }
 
@@ -5871,10 +5823,10 @@ button.integration-tool-head:hover,
   margin: 0;
   padding: var(--luke-space-6) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
-  border-radius: 9px;
+  border-radius: var(--luke-radius-8);
   color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .chat-code-lines,
@@ -5897,23 +5849,23 @@ button.integration-tool-head:hover,
   margin-top: var(--luke-space-4);
   padding: var(--luke-space-12) var(--luke-space-16);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-fill-hover);
 }
 
 .chat-ask-kind {
   margin: 0;
   color: var(--luke-color-attention);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 
 .chat-ask-title {
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .chat-ask-options {
@@ -5928,18 +5880,18 @@ button.integration-tool-head:hover,
 .chat-ask-option {
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
-  border-radius: 9px;
+  border-radius: var(--luke-control-radius);
   background: var(--luke-color-fill-hover);
 }
 
 .chat-ask-option-label {
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .chat-ask-recommended,
 .chat-ask-option-detail {
   color: var(--luke-color-text-muted);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .chat-ask-option-detail {
@@ -5957,8 +5909,8 @@ button.integration-tool-head:hover,
   border: 0;
   background: none;
   color: var(--voice-luke);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
 }
 
 /* The composer at a place's foot, at the stream's reading measure: the box,
@@ -5982,13 +5934,13 @@ button.integration-tool-head:hover,
   gap: var(--luke-space-8);
   padding: var(--luke-space-12);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-fill-hover);
 }
 
 .chat-composer[data-compact="true"] .chat-composer-box {
   padding: var(--luke-space-6) var(--luke-space-8);
-  border-radius: 10px;
+  border-radius: var(--luke-radius-10);
 }
 
 .chat-composer-field,
@@ -6000,7 +5952,7 @@ button.integration-tool-head:hover,
   background: none;
   color: var(--luke-color-text);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--luke-type-body-size);
   resize: none;
   outline: none; /* no ring: the box around it rings (`.field-well`) */
 }
@@ -6010,39 +5962,18 @@ button.integration-tool-head:hover,
   align-items: center;
   gap: var(--luke-space-12);
   color: var(--luke-color-text-subtle);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
+}
+
+/* The send stands at the bar's end, past its hints. */
+.chat-composer-bar > :last-child {
+  margin-inline-start: auto;
 }
 
 .chat-composer[data-compact="true"] .chat-composer-bar {
   position: absolute;
   right: var(--luke-space-8);
   bottom: 6px;
-}
-
-/* Chat's send is round rather than an icon button's square, as a chat's own
-   send is drawn everywhere, and fills with the accent once there is
-   something to send, so the one press that sends stands apart from the
-   bar's hints. */
-.chat-send {
-  display: inline-grid;
-  width: 26px;
-  height: 26px;
-  margin-left: auto;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text-muted);
-}
-
-.chat-send:not(:disabled) {
-  background: var(--luke-color-accent);
-  color: var(--luke-color-on-accent);
-}
-
-.chat-send svg {
-  width: 14px;
-  height: 14px;
 }
 
 .chat-composer-note {
@@ -6066,8 +5997,8 @@ button.integration-tool-head:hover,
   margin: var(--luke-space-4) 0 0;
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
-  border-radius: 10px;
-  background: var(--desktop-sidebar);
+  border-radius: var(--luke-radius-10);
+  background: var(--luke-color-sidebar);
 }
 
 .chat-ask-presses {
@@ -6079,7 +6010,7 @@ button.integration-tool-head:hover,
 .chat-ask-settled {
   margin: 0;
   color: var(--luke-color-text-muted);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .chat-ask-values {
@@ -6098,7 +6029,7 @@ button.integration-tool-head:hover,
   margin: var(--luke-space-8) 0;
   padding: var(--luke-space-12) var(--luke-space-16);
   border: 1px solid color-mix(in srgb, var(--voice-luke) 25%, transparent);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: color-mix(in srgb, var(--voice-luke) 5%, transparent);
 }
 
@@ -6108,12 +6039,12 @@ button.integration-tool-head:hover,
   gap: var(--luke-space-8);
   margin-bottom: var(--luke-space-6);
   color: var(--luke-color-text-muted);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 .chat-notice-from {
   color: var(--voice-luke);
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* A person's handle reads in the developer's green, as their words do on a call. */
@@ -6122,36 +6053,15 @@ button.integration-tool-head:hover,
 }
 
 .chat-notice-words {
-  font-size: 14px;
+  font-size: var(--luke-type-body-size);
 }
 
 .chat-notice-place {
   min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.chat-notice-open {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-  margin-left: auto;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text-subtle);
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.chat-notice-open:hover {
-  color: var(--luke-color-text);
-}
-
-.chat-notice-open svg {
-  width: 12px;
-  height: 12px;
 }
 
 .chat-empty {
@@ -6177,7 +6087,7 @@ button.integration-tool-head:hover,
   flex-direction: column;
   padding: 0 var(--column-inset) var(--column-inset);
   border-right: 1px solid var(--luke-color-border);
-  background: var(--desktop-sidebar);
+  background: var(--luke-color-sidebar);
 }
 
 .settings-pages-back,
@@ -6189,8 +6099,8 @@ button.integration-tool-head:hover,
 .settings-pages-title,
 .version-log-title {
   margin: 0 var(--row-inset) var(--luke-space-12);
-  font-size: 20px;
-  font-weight: 720;
+  font-size: var(--luke-type-title-size);
+  font-weight: var(--luke-weight-bold);
   letter-spacing: -0.015em;
 }
 
@@ -6275,7 +6185,7 @@ button.integration-tool-head:hover,
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-menu-radius);
   background: var(--luke-color-overlay);
-  box-shadow: var(--menu-shadow);
+  box-shadow: var(--luke-menu-shadow);
   animation:
     popup-fade var(--duration-quick) var(--motion-exit) both,
     menu-drop var(--duration-fast) var(--spring-fast) both;
@@ -6325,7 +6235,7 @@ button.integration-tool-head:hover,
 .settings-pages ul {
   display: flex;
   flex-direction: column;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -6369,7 +6279,7 @@ button.integration-tool-head:hover,
 }
 
 .template-document :is(.plan-body, .plan-edit-note) {
-  max-width: var(--settings-width);
+  max-width: var(--luke-settings-measure);
 }
 
 .task-page-head {
@@ -6404,37 +6314,13 @@ button.integration-tool-head:hover,
   scroll-margin-top: calc(var(--luke-space-32) + 3 * var(--luke-control-height));
 }
 
-/* The measure a Settings page's head and rows read at, and a row's height,
-   which an automation's page, drawn as a Settings page, takes its rows' from. */
-.settings-page,
-.automation-editor {
-  --settings-width: 640px;
-  --settings-row-height: 52px;
-}
-
 /* A Settings page has no top bar: the page names itself at the head of its
    column (`SettingsPage`), so the title-bar row above it is only the
    window's drag strip, and the page fills the room under the strip and
    scrolls in it, its top fading as `scroll-fade-top` does (`base.css`) so a
-   row scrolled up dissolves into the strip rather than being sliced off. A
-   landed search result keeps the page's inset above it rather than the
-   fade's. */
+   row scrolled up dissolves into the strip rather than being sliced off. */
 .settings-page > .luke-settings-page {
   flex: 1 1 0;
-  scroll-padding-top: var(--luke-page-inset);
-}
-
-/* The page's inset narrows under 480px (`settings-page.css`), and a landed
-   result keeps the narrower inset above it. The page cannot query its own
-   width, so the pane around it is the container. */
-.settings-page {
-  container: settings-pane / inline-size;
-}
-
-@container settings-pane (max-width: 479px) {
-  .settings-page > .luke-settings-page {
-    scroll-padding-top: var(--luke-page-inset-narrow);
-  }
 }
 
 /* The page's sections are the width its rows answer (`@container settings`
@@ -6484,7 +6370,7 @@ button.integration-tool-head:hover,
 .version-list {
   display: flex;
   flex-direction: column;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -6618,7 +6504,7 @@ button.integration-tool-head:hover,
   flex: 1;
   grid-template-columns: 100% 100%;
   grid-template-rows: minmax(0, 1fr);
-  margin-inline: calc(-1 * var(--focus-ring-reach));
+  margin-inline: calc(-1 * var(--luke-focus-ring-reach));
   overflow-x: clip;
 }
 
@@ -6629,7 +6515,7 @@ button.integration-tool-head:hover,
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  padding-inline: var(--focus-ring-reach);
+  padding-inline: var(--luke-focus-ring-reach);
   transition: transform var(--duration-pane) var(--motion-pane);
 }
 
@@ -6747,7 +6633,7 @@ button.integration-tool-head:hover,
 /* The moment's place in the toolbar while the versions are read, in the
    title's type. */
 .version-skeleton-title {
-  font-size: 15px;
+  font-size: var(--luke-type-dialog-size);
 }
 
 /* A row while the versions are read: the author's block over the summary's,
@@ -6896,7 +6782,7 @@ button.integration-tool-head:hover,
 .task-summary[data-mode="rail"],
 .task-summary[data-mode="rail"] > .task-summary-rows {
   align-items: center;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
 }
 
 .task-summary[data-mode="rail"] {
@@ -6950,7 +6836,7 @@ button.integration-tool-head:hover,
   padding: calc(var(--column-inset) - var(--card-edge)) var(--luke-menu-inset) var(--luke-space-12);
   overflow-y: auto;
   border: var(--card-edge) solid var(--luke-color-border);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-overlay);
   box-shadow: 0 16px 40px var(--luke-color-shadow);
   outline: none; /* no ring: a card holding focus for its controls */
@@ -6978,16 +6864,23 @@ button.integration-tool-head:hover,
 }
 
 .task-summary[data-mode="column"] > .task-summary-chevron {
-  --button-ground: var(--luke-color-ground);
+  --luke-button-ground: var(--luke-color-ground);
   position: sticky;
   z-index: 1;
   /* Held off the scroller's edge by the keyboard ring's reach, so its ring
      stands whole once the column is scrolled under it. */
-  top: var(--focus-ring-reach);
+  top: var(--luke-focus-ring-reach);
   flex: none;
   align-self: flex-end;
   margin-bottom: calc(-1 * (var(--luke-control-height) + var(--luke-section-gap)));
-  background-color: var(--button-ground);
+  border-radius: var(--luke-control-radius);
+  background-color: var(--luke-button-ground);
+}
+
+/* Each chevron's box is its button alone, which carries its look. */
+.task-summary-chevron,
+.task-summary-collapse {
+  display: flex;
 }
 
 .task-summary-collapse {
@@ -7003,7 +6896,7 @@ button.integration-tool-head:hover,
   mask-image: var(--scroll-fade-mask), linear-gradient(#000, #000);
   mask-position:
     0 0,
-    right var(--column-inset) top var(--focus-ring-reach);
+    right var(--column-inset) top var(--luke-focus-ring-reach);
   mask-size:
     100% 100%,
     var(--luke-control-height) var(--luke-control-height);
@@ -7012,7 +6905,7 @@ button.integration-tool-head:hover,
 
 .task-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) > .task-summary-chevron,
 .task-summary-card:hover .task-summary-collapse,
-.task-summary-collapse:focus-visible {
+.task-summary-collapse:has(:focus-visible) {
   opacity: 1;
 }
 
@@ -7035,7 +6928,7 @@ button.integration-tool-head:hover,
 .task-summary-rows {
   display: flex;
   flex-direction: column;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -7051,7 +6944,7 @@ button.integration-tool-head:hover,
   border-radius: var(--luke-control-radius);
   background: none;
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
@@ -7087,7 +6980,7 @@ button.integration-tool-head:hover,
 .task-summary-detail {
   margin-left: var(--luke-space-6);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The Inbox row's count of what waits, at its end in the quiet count a
@@ -7095,7 +6988,7 @@ button.integration-tool-head:hover,
 .inbox-row-count {
   flex: none;
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
 }
 
@@ -7107,8 +7000,8 @@ button.integration-tool-head:hover,
 
 .task-summary-rows[data-tree="true"] .task-summary-row {
   height: 24px;
-  border-radius: 5px;
-  font-size: 12.5px;
+  border-radius: var(--luke-radius-6);
+  font-size: var(--luke-type-caption-size);
 }
 
 .task-summary-rows[data-tree="true"] .task-summary-glyph svg {
@@ -7122,7 +7015,7 @@ button.integration-tool-head:hover,
    and Archive style, shown while the row is hovered or reached from the
    keyboard. */
 .task-summary-archived {
-  margin-top: var(--list-gap);
+  margin-top: var(--luke-list-gap);
 }
 
 .task-summary-archived-agent {
@@ -7173,7 +7066,7 @@ button.integration-tool-head:hover,
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--luke-color-border);
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
 }
 
 /* Full screen, the panel covers the document as well as its own room. */
@@ -7267,7 +7160,7 @@ button.integration-tool-head:hover,
   min-width: 0;
   flex: 1 1 auto;
   align-items: center;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
 }
 
 /* The "+" and the menu it drops, which hangs under it from its left edge,
@@ -7336,7 +7229,7 @@ button.integration-tool-head:hover,
   /* What the panel leaves either side of a column at each measure, read
      where it is spent: a percentage there is of the box's frame, which is
      the panel's width. */
-  --reading-room: calc((100% - var(--reading-width)) / 2);
+  --reading-room: calc((100% - var(--luke-page-measure)) / 2);
   --code-reading-room: calc((100% - var(--code-reading-width)) / 2);
   position: relative;
   /* The container every tab answers its width from (`@container
@@ -7374,8 +7267,8 @@ button.integration-tool-head:hover,
   margin: auto;
   padding: var(--luke-space-24);
   color: var(--luke-color-text-muted);
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   text-align: center;
 }
 
@@ -7402,14 +7295,19 @@ button.integration-tool-head:hover,
   --tab-widest: 200px;
   /* What the strip's fades and the pinned tab paint over the tabs passing
      beneath them: the side panel's well, or the column's ground. */
-  --strip-ground: var(--desktop-well);
+  --strip-ground: var(--luke-color-well);
   position: relative;
   display: flex;
   min-width: 0;
   flex: 0 1
-    calc(var(--tab-count, 1) * (var(--tab-widest) + var(--list-gap)) + 2 * var(--focus-ring-reach));
+    calc(
+      var(--tab-count, 1) *
+      (var(--tab-widest) + var(--luke-list-gap)) +
+      2 *
+      var(--luke-focus-ring-reach)
+    );
   align-items: center;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-behavior: var(--scroll-glide);
@@ -7417,8 +7315,8 @@ button.integration-tool-head:hover,
   /* Room above and below the tabs, given back to the row, for the shadow
      under a tab being dragged, which the strip's scrolling would clip, and
      at either end for the keyboard's ring on the first tab and the last. */
-  margin: calc(-1 * var(--luke-space-8)) calc(-1 * var(--focus-ring-reach));
-  padding: var(--luke-space-8) var(--focus-ring-reach);
+  margin: calc(-1 * var(--luke-space-8)) calc(-1 * var(--luke-focus-ring-reach));
+  padding: var(--luke-space-8) var(--luke-focus-ring-reach);
 }
 
 .main-tabs .tab-strip {
@@ -7444,16 +7342,16 @@ button.integration-tool-head:hover,
 }
 
 .tab-strip::before {
-  left: calc(-1 * var(--focus-ring-reach));
-  margin-right: calc(-1 * var(--scroll-fade) - var(--list-gap));
+  left: calc(-1 * var(--luke-focus-ring-reach));
+  margin-right: calc(-1 * var(--scroll-fade) - var(--luke-list-gap));
   background: linear-gradient(to right, var(--strip-ground), transparent);
   animation-name: strip-fade-in;
   animation-range: 0 var(--scroll-fade);
 }
 
 .tab-strip::after {
-  right: calc(-1 * var(--focus-ring-reach));
-  margin-left: calc(-1 * var(--scroll-fade) - var(--list-gap));
+  right: calc(-1 * var(--luke-focus-ring-reach));
+  margin-left: calc(-1 * var(--scroll-fade) - var(--luke-list-gap));
   background: linear-gradient(to left, var(--strip-ground), transparent);
   animation-name: strip-fade-out;
   animation-range: calc(100% - var(--scroll-fade)) 100%;
@@ -7543,8 +7441,8 @@ button.integration-tool-head:hover,
 .tab-strip .tab[data-selected="true"] {
   position: sticky;
   z-index: 2;
-  right: calc(-1 * var(--focus-ring-reach));
-  left: calc(-1 * var(--focus-ring-reach));
+  right: calc(-1 * var(--luke-focus-ring-reach));
+  left: calc(-1 * var(--luke-focus-ring-reach));
   min-width: 0;
   flex-grow: 0;
   flex-shrink: 0;
@@ -7634,7 +7532,7 @@ button.integration-tool-head:hover,
   z-index: 1;
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--desktop-well);
+    var(--luke-color-well);
   box-shadow: 0 4px 12px var(--luke-color-shadow);
   color: var(--luke-color-text);
   transition:
@@ -7736,7 +7634,7 @@ button.integration-tool-head:hover,
   border-radius: 0.36em;
   background: color-mix(in srgb, currentColor 13%, transparent);
   color: var(--luke-color-text);
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
 }
 
 /* Who opened a pull request on its card, and how long ago it moved after
@@ -7793,12 +7691,12 @@ button.integration-tool-head:hover,
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-4);
-  padding: 0 6px; /* off-scale */
+  padding: 0 var(--luke-space-6);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   color: var(--luke-color-text-muted);
-  font-size: 11px;
-  line-height: 16px; /* off-scale */
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   overflow-wrap: anywhere;
 }
 
@@ -7822,7 +7720,7 @@ button.integration-tool-head:hover,
 .card-name-link {
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--luke-radius-6);
   background: none;
   color: inherit;
   font: inherit;
@@ -7857,7 +7755,7 @@ button.integration-tool-head:hover,
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: none;
   color: var(--luke-color-text-subtle);
   opacity: 0;
@@ -7925,7 +7823,7 @@ button.integration-tool-head:hover,
 .main-tabs {
   display: flex;
   align-items: center;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
 }
 
 /* The one slot a column's bar keeps for the ⋯ that acts on its chosen tab:
@@ -7975,8 +7873,8 @@ button.integration-tool-head:hover,
    window is. */
 .confirm-dialog-title {
   margin: 0;
-  font-size: 15px;
-  font-weight: 650;
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .confirm-dialog-body {
@@ -7984,7 +7882,7 @@ button.integration-tool-head:hover,
   margin: 0;
   overflow-y: auto;
   color: var(--luke-color-text-muted);
-  line-height: 1.5;
+  line-height: var(--luke-type-body-leading);
   overflow-wrap: anywhere;
 }
 
@@ -8016,7 +7914,7 @@ button.integration-tool-head:hover,
    the pointer both move, so a hover draws nothing of its own. */
 .command-palette-backdrop {
   position: fixed;
-  z-index: var(--z-dialog);
+  z-index: var(--luke-z-dialog);
   inset: 0;
   background: var(--luke-color-scrim);
   animation: confirm-dialog-dim var(--duration-quick) ease-out;
@@ -8025,7 +7923,7 @@ button.integration-tool-head:hover,
 
 .command-palette {
   position: fixed;
-  z-index: var(--z-dialog);
+  z-index: var(--luke-z-dialog);
   top: 18vh;
   left: 50%;
   display: flex;
@@ -8068,8 +7966,8 @@ button.integration-tool-head:hover,
 }
 
 .command-palette-search svg {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -8082,7 +7980,7 @@ button.integration-tool-head:hover,
   background: none;
   color: var(--luke-color-text);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--luke-type-body-size);
 }
 
 .command-palette-search input::placeholder {
@@ -8119,7 +8017,7 @@ button.integration-tool-head:hover,
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -8138,7 +8036,7 @@ button.integration-tool-head:hover,
   flex: 0 1 auto;
   overflow: hidden;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -8154,7 +8052,7 @@ button.integration-tool-head:hover,
   padding: 0 var(--luke-space-16);
   border-top: 1px solid var(--luke-color-border);
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .command-palette-footer-hint {
@@ -8180,7 +8078,7 @@ button.integration-tool-head:hover,
   align-items: center;
   justify-content: center;
   color: var(--luke-color-text-muted);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 /* A quiet line under the rows: the Files filter saying its search is of
@@ -8197,13 +8095,7 @@ button.integration-tool-head:hover,
 
 /* Start ------------------------------------------------------------------ */
 
-/* The toolbar's Start: a split button whose main part starts an agent on
-   the account's default and whose chevron drops the model menu. The
-   labelled button and the icon button above, joined into one pill by a
-   hairline around both and between them, the way a split button is drawn
-   in every toolbar; each half keeps its own hover. Unavailable, both halves
-   say so (`aria-disabled`) and fade as a disabled button does while they
-   keep answering the pointer, so the hover can say why. */
+/* The toolbar's Start, a shared SplitButton, and the note beside it. */
 .start-agent {
   position: relative;
   display: flex;
@@ -8211,21 +8103,9 @@ button.integration-tool-head:hover,
   gap: var(--luke-control-gap);
 }
 
+/* The split button's box, which hears its presses as they pass. */
 .start-agent-split {
   display: flex;
-  align-items: center;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  -webkit-app-region: no-drag;
-}
-
-.start-agent-main {
-  border-radius: calc(var(--luke-control-radius) - 1px) 0 0 calc(var(--luke-control-radius) - 1px);
-}
-
-.start-agent-chevron {
-  border-left: 1px solid var(--luke-color-border);
-  border-radius: 0 calc(var(--luke-control-radius) - 1px) calc(var(--luke-control-radius) - 1px) 0;
 }
 
 /* The model menu hangs under the chevron, to the toolbar's right edge. */
@@ -8341,7 +8221,7 @@ button.integration-tool-head:hover,
   width: min(600px, 100%);
   flex-direction: column;
   gap: var(--luke-space-32);
-  margin: clamp(0px, 7vh, 72px) auto 0; /* off-scale */
+  margin: clamp(var(--luke-space-0), 7vh, var(--luke-space-64)) auto 0;
 }
 
 .home-head {
@@ -8365,8 +8245,8 @@ button.integration-tool-head:hover,
   margin: 0 0 var(--luke-space-2);
   padding: 0 var(--row-inset);
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* A section's note, nothing waiting or a read refused, on its rows' inset. */
@@ -8377,9 +8257,9 @@ button.integration-tool-head:hover,
 /* Needs you's count, in a group count's ink, as the sidebar's Inbox row counts it. */
 .home-section-count {
   color: var(--luke-color-text-subtle);
-  font-size: 11.5px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
 }
 
 .home-row .sidebar-task-line {
@@ -8407,7 +8287,7 @@ button.integration-tool-head:hover,
   min-width: min(16ch, 35%);
   flex: 1;
   color: var(--luke-color-text-subtle);
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -8439,9 +8319,11 @@ button.integration-tool-head:hover,
 }
 
 /* Note that the context gives way before the marks and the time, because
-   the metadata's slot clips at its end and the time is what ends it. */
+   the metadata's slot clips at its end and the time is what ends it, and
+   stops at a bound, so a long one never takes the row's title's room. */
 .home-row-meta > .home-row-context {
   min-width: 0;
+  max-width: 20ch;
   flex: 0 1 auto;
 }
 
@@ -8539,7 +8421,7 @@ button.integration-tool-head:hover,
   align-items: center;
   justify-content: center;
   margin-bottom: var(--luke-space-4);
-  border-radius: 14px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-fill-hover);
   color: var(--luke-color-text);
 }
@@ -8634,11 +8516,11 @@ button.integration-tool-head:hover,
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
   color: var(--luke-color-text);
   font: inherit;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
   transition: border-color var(--duration-hover) ease;
 }
 
@@ -8698,8 +8580,8 @@ button.integration-tool-head:hover,
   display: grid;
   min-height: 0;
   gap: var(--luke-space-2);
-  margin: calc(-1 * var(--focus-ring-reach));
-  padding: var(--focus-ring-reach);
+  margin: calc(-1 * var(--luke-focus-ring-reach));
+  padding: var(--luke-focus-ring-reach);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -8775,7 +8657,7 @@ button.integration-tool-head:hover,
    can dismiss. */
 .toast-stack {
   position: fixed;
-  z-index: var(--z-toast);
+  z-index: var(--luke-z-toast);
   right: var(--luke-space-16);
   bottom: var(--luke-space-16);
   width: min(340px, calc(100vw - 2 * var(--luke-space-16)));
@@ -8812,7 +8694,7 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
   gap: var(--luke-icon-gap);
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-overlay);
   box-shadow:
     0 1px 2px var(--luke-color-shadow-soft),
@@ -8929,7 +8811,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
 .task-card-corner,
 .task-card-more {
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -8961,12 +8843,12 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
 
 .task-card-detail {
   color: var(--luke-color-text-muted);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .task-card-line {
   color: var(--luke-color-text);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 /* A glyph takes a menu glyph's footprint, the working mark, a harness's mark
@@ -8974,15 +8856,15 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
    label starts on one edge. */
 .task-card-glyph {
   display: inline-flex;
-  width: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
   flex: none;
   justify-content: center;
-  --state-glyph-size: var(--menu-glyph);
+  --state-glyph-size: var(--luke-menu-glyph);
 }
 
 .task-card-glyph > svg {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
 }
 
 .task-card-detail .task-card-glyph > :is(.repository-picture, .provider-mark) {
@@ -9007,7 +8889,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   display: flex;
   height: 22px;
   align-items: center;
-  padding-left: calc(var(--menu-glyph) + var(--luke-icon-gap));
+  padding-left: calc(var(--luke-menu-glyph) + var(--luke-icon-gap));
 }
 
 /* A run's figures under its card's rule (`turn-card.tsx`), a turn's tokens
@@ -9018,7 +8900,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   flex-direction: column;
   gap: var(--luke-space-2);
   margin: 0;
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .run-card-figure {

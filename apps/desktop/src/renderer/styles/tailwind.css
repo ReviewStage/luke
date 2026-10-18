@@ -31,8 +31,8 @@
   --color-primary-foreground: var(--surface-fill);
   --color-border: var(--luke-color-border);
   --color-selected-edge: var(--luke-color-border-selected);
-  --color-card: var(--desktop-sidebar);
-  --color-well: var(--desktop-well);
+  --color-card: var(--luke-color-sidebar);
+  --color-well: var(--luke-color-well);
   --color-developer: var(--voice-developer);
   --color-luke: var(--voice-luke);
   --color-danger: var(--luke-color-danger-text);
@@ -42,20 +42,4 @@
      own literal. */
   --default-transition-duration: var(--duration-quick);
   --default-transition-timing-function: var(--spring);
-
-  /* The one endless loop the components run: the light passing along a
-     Shimmer's words (../ai-elements/shimmer.tsx). Its duration is a literal
-     as DESIGN.md allows a loop with no end of its own, because the element
-     that runs it answers `--loop-motion` with its play state. */
-  --animate-shimmer: shimmer 2s linear infinite;
-
-  @keyframes shimmer {
-    from {
-      background-position: 100% center;
-    }
-
-    to {
-      background-position: 0% center;
-    }
-  }
 }
