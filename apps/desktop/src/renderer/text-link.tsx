@@ -1,7 +1,7 @@
+import { opensAsLink } from "@luke/panel/tasks/use-open-link";
 import { TextLink as SharedTextLink, TEXT_LINK_LOOK } from "@luke/ui";
 import { linkFace } from "@luke/ui/link-face";
 import type { ReactNode } from "react";
-import { opensAsLink } from "./tasks/use-open-link";
 import { Tooltip } from "./tooltip";
 
 /**

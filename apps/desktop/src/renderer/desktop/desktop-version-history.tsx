@@ -5,6 +5,7 @@ import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { useFormerMembers, useWorkspaceMembers } from "@luke/panel/tasks/use-workspace-members";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import type { DialogConfirm } from "@luke/ui";
 import {
@@ -62,7 +63,6 @@ import {
   type ViewedVersion,
 } from "../tasks/use-plan-history";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { useFormerMembers, useWorkspaceMembers } from "../tasks/use-workspace-members";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/version-view";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";

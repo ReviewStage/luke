@@ -15,8 +15,8 @@ import { MENTION_KIND, type Mention } from "@luke/features/mention-link";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { createContext, useContext, useEffect, useState } from "react";
-import { useAct } from "../act";
 import { useAppState } from "../use-app-state";
 
 /**

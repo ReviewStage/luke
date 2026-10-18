@@ -1,5 +1,5 @@
+import { appBridge } from "@luke/panel/app-bridge";
 import { useRef } from "react";
-import { appBridge } from "../app-bridge";
 import type { AvatarFeedActs } from "./live-call";
 import { useVoiceSession } from "./use-voice-session";
 

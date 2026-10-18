@@ -3,6 +3,8 @@ import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { appPlatform } from "@luke/panel/app-platform";
+import { useSettingsWrites } from "@luke/panel/settings/writes";
 import { SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
 import {
   SETTINGS_PAGE_GROUP,
@@ -16,7 +18,6 @@ import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands";
-import { appPlatform } from "../app-platform";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import type { NavigationHistory } from "../navigation-history";
@@ -32,7 +33,6 @@ import {
   voicePageAttention,
 } from "../settings/settings-panel";
 import { shownWorkspace } from "../settings/workspace-page";
-import { useSettingsWrites } from "../settings/writes";
 import {
   landOnSettingsRow,
   type SettingsSearchEntry,

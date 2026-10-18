@@ -226,8 +226,11 @@ function rowLooks(column: Element): Map<string, Look> {
   assert.ok(add, "the strip's +");
   act(() => add.click());
   const rows = [...column.querySelectorAll('.tab-add-menu [role="option"]')].map((row) => {
-    const label = row.querySelector(".task-compose-menu-name")?.textContent ?? "";
-    return [label, { glyph: row.querySelector(".menu-item-glyph")?.innerHTML, label }] as const;
+    const label = row.querySelector(".luke-combobox-option-label")?.textContent ?? "";
+    return [
+      label,
+      { glyph: row.querySelector(".luke-combobox-option-glyph")?.innerHTML, label },
+    ] as const;
   });
   act(() => add.click());
   return new Map(rows);

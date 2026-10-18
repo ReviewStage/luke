@@ -112,4 +112,22 @@
     width: var(--luke-control-icon);
     height: var(--luke-control-icon);
   }
+
+  /* A menu's head row: as tall as a menu row and its inset, its words
+     inset as a row's are, and only a hairline under it; no ring, since the
+     caret is always in it while the menu stands. */
+  .luke-search-field[data-look="menu"] {
+    height: calc(var(--luke-menu-row-height) + 2 * var(--luke-space-2) + 2px);
+    padding: 0 var(--luke-space-12);
+    border: 0;
+    border-bottom: 1px solid var(--luke-color-border);
+    border-radius: 0;
+    background: none;
+    outline: none;
+  }
+
+  .luke-search-field[data-look="menu"] > svg {
+    width: var(--luke-menu-glyph);
+    height: var(--luke-menu-glyph);
+  }
 }

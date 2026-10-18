@@ -30,6 +30,9 @@ import {
 import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { appPlatform } from "@luke/panel/app-platform";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   AVATAR_SHAPE,
@@ -76,9 +79,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useId, useState } from "react";
-import { useAct } from "../act";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
-import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
@@ -95,6 +96,11 @@ import {
 import { PierreDiff, useDiffLook } from "./file-diff";
 import { useFileViewSettings } from "./file-view-settings";
 import { blockedWords, MergeActions } from "./merge-box";
+import {
+  type PullRequestComment,
+  PullRequestCommentBox,
+  usePullRequestComment,
+} from "./pull-request-comment-box";
 import { PullRequestLabels } from "./pull-request-labels";
 import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people";
 import {
@@ -123,7 +129,6 @@ import {
   TranscriptWords,
 } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { useOpenLink } from "./use-open-link";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 import { useWorkingNow, workingTime } from "./working-time";
 
@@ -1531,15 +1536,18 @@ function ConversationFilterRow({
   );
 }
 
-/** The Conversation tab: its filters, then the description, then the comments, reviews, and threads, in one scroll under them. */
+/** The Conversation tab: its filters, then the description, then the comments, reviews, and threads, in one scroll under them, and, once the conversation is read, the box a new comment is written in at its foot. */
 function ConversationView({
   agentId,
   parts,
   url,
+  comment,
 }: {
   agentId: string;
   parts: OverviewParts;
   url: string | undefined;
+  /** The comment box's words and its own change, held by the tab so the box may come and go. */
+  comment: PullRequestComment;
 }): React.JSX.Element {
   const now = useMinute();
   const picture = usePictureDrawer(agentId);
@@ -1565,6 +1573,7 @@ function ConversationView({
           now={now}
           picture={picture}
         />
+        {conversation === undefined ? null : <PullRequestCommentBox comment={comment} />}
       </div>
     </>
   );
@@ -1679,6 +1688,7 @@ export function AgentPullRequestTab({
   const writes = usePullRequestWrites(agentId, written);
   const review = usePullRequestWrites(agentId, written);
   const picture = usePictureDrawer(agentId);
+  const comment = usePullRequestComment(agentId, written);
   const options = useReviewOptions(agentId, control.readReviewOptions);
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
@@ -1724,7 +1734,12 @@ export function AgentPullRequestTab({
               aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
               hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
             >
-              <ConversationView agentId={agentId} parts={parts} url={title?.url} />
+              <ConversationView
+                agentId={agentId}
+                parts={parts}
+                url={title?.url}
+                comment={comment}
+              />
             </div>
             <div
               className="pull-request-view"

@@ -16,6 +16,7 @@ import {
 } from "@luke/features/mention-link";
 import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
 import { planSections } from "@luke/features/plan-document";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import {
   CallIcon,
   DocumentIcon,
@@ -74,7 +75,6 @@ import {
   useLinkStanding,
   useWordsWorkspaceId,
 } from "./use-link-standing";
-import { useOpenLink } from "./use-open-link";
 
 /**
  * mention-chip.tsx -- a mention drawn in words as its chip: its kind's glyph and its name, a button that opens what it names, hanging a card that says what that is, struck through where what it names is gone.

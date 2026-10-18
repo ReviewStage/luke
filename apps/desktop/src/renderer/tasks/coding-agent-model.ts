@@ -74,7 +74,13 @@ import {
 import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph";
-import { remoteCallOf, TOOL_TARGET, todosView, toolTarget } from "./tool-call-model";
+import {
+  changesSidebar,
+  remoteCallOf,
+  TOOL_TARGET,
+  todosView,
+  toolTarget,
+} from "./tool-call-model";
 
 /**
  * coding-agent-model.ts -- what the agent tabs, the Start button, and an agent's transcript draw, decided from what the service answered.
@@ -1203,17 +1209,12 @@ export function agentListCallIds(messages: readonly CodingAgentMessage[]): reado
     );
 }
 
-/** The answered starts of a transcript that made a new task, by call id: what the tasks are read again on as each lands, so the new task stands in the sidebar. */
-export function newTaskCallIds(messages: readonly CodingAgentMessage[]): readonly string[] {
+/** The answered calls of a transcript that changed the sidebar (`changesSidebar`), by call id: what the tasks are read again on as each lands, so the sidebar draws the change. */
+export function sidebarCallIds(messages: readonly CodingAgentMessage[]): readonly string[] {
   return messages
     .flatMap(agentParts)
     .flatMap((part) =>
-      part.kind === AGENT_PART.TOOL &&
-      part.tool === AGENT_TOOL.START_AGENT &&
-      isRecord(part.output) &&
-      isRecord(part.output.newTask)
-        ? [part.callId]
-        : [],
+      part.kind === AGENT_PART.TOOL && changesSidebar(part.tool, part.output) ? [part.callId] : [],
     );
 }
 

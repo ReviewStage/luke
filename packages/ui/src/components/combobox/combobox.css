@@ -22,7 +22,8 @@
   .luke-combobox-list {
     position: relative;
     display: flex;
-    max-height: 280px; /* off-scale: seven rows and a heading */
+    /* off-scale: seven rows and a heading, or the room its caller has left */
+    max-height: var(--luke-combobox-list-max, 280px);
     flex-direction: column;
     overflow-x: hidden;
     overflow-y: auto;
@@ -64,6 +65,17 @@
 
   .luke-combobox-option[aria-selected="true"] {
     background: var(--luke-color-fill-strong);
+  }
+
+  .luke-combobox-list:focus-visible {
+    outline: none; /* no ring: the active option marks it */
+  }
+
+  /* An option that cannot be chosen now is dimmed with its mark, and lit by
+     nothing. */
+  .luke-combobox-option[aria-disabled="true"] {
+    background: none;
+    opacity: 0.4;
   }
 
   .luke-combobox-option-glyph {
@@ -141,9 +153,16 @@
     margin-left: 0;
   }
 
+  /* The check of the option chosen now is the text's own colour, a choice
+     rather than a state. */
+  .luke-combobox-option[aria-current="true"] .luke-combobox-option-end {
+    color: var(--luke-color-text);
+  }
+
   /* What stands in the options' place: one quiet line, centred, at a row or
      two's height, so a list with nothing to offer never falls to a sliver. */
-  .luke-combobox-empty {
+  .luke-combobox-empty,
+  .luke-combobox-note {
     display: flex;
     min-height: 40px;
     align-items: center;
@@ -154,5 +173,11 @@
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
     text-align: center;
+  }
+
+  /* A note may hold more than a line, and a control of its own. */
+  .luke-combobox-note {
+    flex-direction: column;
+    gap: var(--luke-space-4);
   }
 }

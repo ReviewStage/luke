@@ -162,8 +162,8 @@
   bottom: calc(100% + var(--luke-space-6));
 }
 
-.settings-picker .settings-picker-menu .task-compose-menu-list {
-  max-height: min(288px, var(--settings-picker-list-max, 288px));
+.settings-picker {
+  --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
 }
 
 /* A row holding a segmented control (`@luke/ui`'s `Segmented`) wraps, so a
@@ -487,6 +487,7 @@
 .integration-tools-list {
   min-height: 0;
   padding: var(--luke-space-4);
+  overflow-x: hidden;
   overflow-y: auto;
   border-right: 1px solid var(--luke-color-border);
   overscroll-behavior: contain;

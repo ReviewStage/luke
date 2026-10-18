@@ -12,6 +12,7 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
+import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -23,7 +24,6 @@ import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { MemberDirectory } from "../member-directory";
 import { TranscriptWords } from "./transcript-blocks";
-import { OpenLinkProvider } from "./use-open-link";
 
 /**
  * place-link-chips.test.ts -- a link to a place in Luke written in words,

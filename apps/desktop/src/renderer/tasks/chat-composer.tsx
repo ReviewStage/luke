@@ -1,5 +1,5 @@
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
-import { BUTTON_SHAPE, BUTTON_VARIANT, IconButton } from "@luke/ui";
+import { BUTTON_SHAPE, BUTTON_VARIANT, ComboboxList, comboboxOptionId, IconButton } from "@luke/ui";
 import {
   type ChatMention,
   type ChatTarget,
@@ -42,11 +42,6 @@ interface Highlight {
   readonly at: number;
 }
 
-/** One row's id, under the list's own. */
-function optionId(listId: string, index: number): string {
-  return `${listId}-${index}`;
-}
-
 /** The list an `@` or `#` word opens: a row per target offered, the highlighted one washed. */
 function MentionMenu({
   id,
@@ -61,38 +56,24 @@ function MentionMenu({
   onHover: (index: number) => void;
   onChoose: (target: ChatTarget) => void;
 }): React.JSX.Element {
+  const options = rows.map((target) => ({
+    id: `${target.sigil}${target.name}`,
+    label: `${target.sigil}${target.name}`,
+    detail: target.detail,
+  }));
   return (
     <div className="menu-surface searchable-menu chat-mention-menu">
-      {/* Note that a press on a row keeps the caret in the box, where the keys are read. */}
-      <div
+      <ComboboxList
         id={id}
-        className="plan-compose-menu-list"
-        role="listbox"
-        aria-label={MENTION_MENU_LABEL}
-        onMouseDown={(event) => event.preventDefault()}
-      >
-        {rows.map((target, index) => (
-          <button
-            key={`${target.sigil}${target.name}`}
-            id={optionId(id, index)}
-            type="button"
-            role="option"
-            tabIndex={-1}
-            className="menu-item"
-            aria-selected={index === at}
-            onMouseMove={() => onHover(index)}
-            onClick={() => onChoose(target)}
-          >
-            <span className="plan-compose-menu-name">
-              {target.sigil}
-              {target.name}
-            </span>
-            {target.detail === undefined ? null : (
-              <span className="skill-menu-description">{target.detail}</span>
-            )}
-          </button>
-        ))}
-      </div>
+        label={MENTION_MENU_LABEL}
+        groups={[{ options }]}
+        active={at}
+        onActiveChange={onHover}
+        onChoose={(index) => {
+          const target = rows[index];
+          if (target !== undefined) onChoose(target);
+        }}
+      />
     </div>
   );
 }
@@ -215,7 +196,7 @@ export function ChatComposer({
     "aria-autocomplete": "list",
     "aria-expanded": listed,
     "aria-controls": listed ? listId : undefined,
-    "aria-activedescendant": listed ? optionId(listId, at) : undefined,
+    "aria-activedescendant": listed ? comboboxOptionId(listId, at) : undefined,
   } as const;
   return (
     <div className="chat-composer" data-compact={String(compact === true)}>

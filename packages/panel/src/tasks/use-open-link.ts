@@ -10,7 +10,7 @@ import {
   useContext,
   useMemo,
 } from "react";
-import { appPlatform } from "../app-platform";
+import { appPlatform } from "../app-platform.js";
 
 /**
  * use-open-link.ts -- how a link in written words opens: a transcript's, the Call tab's, an agent tab's, or an Inbox item's.

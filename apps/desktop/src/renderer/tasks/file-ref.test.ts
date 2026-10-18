@@ -134,10 +134,10 @@ test("a file's tab, its row in the panel's +, and its code card's head wear its 
   assert.ok(add, "the strip's +");
   act(() => add.click());
   const row = [...document.querySelectorAll('.tab-add-menu [role="option"]')].find(
-    (each) => each.querySelector(".task-compose-menu-name")?.textContent === "accept.ts",
+    (each) => each.querySelector(".luke-combobox-option-label")?.textContent === "accept.ts",
   );
   assert.equal(
-    row?.querySelector(".menu-item-glyph")?.innerHTML,
+    row?.querySelector(".luke-combobox-option-glyph")?.innerHTML,
     icon,
     'the "+" row wears the tab\'s icon',
   );

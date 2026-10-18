@@ -12,7 +12,7 @@ import {
 import type { AppSettingField, AppSettingValue } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import { useMemo } from "react";
-import { appBridge } from "./app-bridge";
+import { appBridge } from "./app-bridge.js";
 
 /** A kind that carries nothing is called with nothing; every other kind carries its own payload. */
 type ActArguments<Kind extends ActKind> =

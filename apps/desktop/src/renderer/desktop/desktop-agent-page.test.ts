@@ -484,7 +484,7 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
     offered,
   );
   assert.deepEqual(
-    [...well.querySelectorAll("section")].map((each) => each.getAttribute("aria-label")),
+    [...well.querySelectorAll("ul")].map((each) => each.getAttribute("aria-label")),
     headings,
   );
   assert.deepEqual(headings, ["Pull requests", "Terminal"]);

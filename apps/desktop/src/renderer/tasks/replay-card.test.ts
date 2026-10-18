@@ -18,6 +18,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/luke-link";
+import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -30,7 +31,6 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentTab, type TranscriptCards } from "./agent-tab";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
-import { OpenLinkProvider } from "./use-open-link";
 
 /**
  * replay-card.test.ts -- an agent started from another opens on the brief

@@ -1,3 +1,4 @@
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import {
   BUTTON_VARIANT,
   Button,
@@ -19,7 +20,6 @@ import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
 import { type MentionedTask, useMentionLink } from "./task-mentions";
 import { dayAndTimeText, momentText } from "./task-time";
 import { TaskTitle } from "./task-title";
-import { useOpenLink } from "./use-open-link";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 
 /**

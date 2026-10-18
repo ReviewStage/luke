@@ -548,6 +548,7 @@ body,
   flex-direction: column;
   margin: calc(-1 * var(--luke-focus-ring-reach));
   padding: var(--luke-focus-ring-reach);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -877,6 +878,7 @@ ul.actor-stack {
   gap: var(--luke-space-6);
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   list-style: none;
 }
@@ -1392,6 +1394,7 @@ ul.actor-stack {
 
 .section-icon-scroll {
   height: 220px;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -2083,11 +2086,10 @@ ul.actor-stack {
   background: var(--luke-color-fill-strong);
 }
 
-/* A list whose keys stay in its field (a picker's, the composer's `/`, and
-   ⌘K's) has one highlight, which the arrows and the pointer both move, so
-   the pointer's own hover draws nothing of its own. A pinned row carries
-   it as a data attribute, standing outside the listbox, and ⌘K's rows as
-   cmdk's. */
+/* A list whose keys stay in its field (the MCP popover's and ⌘K's) has
+   one highlight, which the arrows and the pointer both move, so the
+   pointer's own hover draws nothing of its own. The popover's rows carry
+   it as a data attribute, and ⌘K's rows as cmdk's. */
 :is(.searchable-menu, .command-palette) .menu-item:hover {
   background: none;
 }
@@ -2213,6 +2215,14 @@ ul.actor-stack {
   width: var(--luke-menu-glyph);
   height: var(--luke-menu-glyph);
   flex: 0 0 auto;
+}
+
+/* A picker's check, in a combobox option's end slot, is the text's colour
+   at the slot's size, as a menu's is, not Settings' green connected mark. */
+.luke-combobox-option-end .credential-check {
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
+  color: var(--luke-color-text);
 }
 
 /* Each a line naming an actor (`.actor-line`), whose spaces it keeps,
@@ -2823,8 +2833,8 @@ ul.actor-stack {
   bottom: calc(100% + var(--luke-space-4));
 }
 
-.repository-chip .task-compose-menu-list {
-  max-height: min(288px, var(--settings-picker-list-max, 288px));
+.repository-chip {
+  --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
 }
 
 /* A harness's mark keeps its box in a row however tight the row is, drawn
@@ -2954,13 +2964,14 @@ ul.actor-stack {
   border-top: 1px solid var(--luke-color-border);
 }
 
-/* One muted line under the pinned rows, inset as a row's words are: what
-   the agent has cost. */
+/* One muted line under the pinned rows or a submenu's, inset as a row's
+   words are: what the agent has cost. */
 .task-compose-menu-foot-note {
-  margin: 0;
   padding: var(--luke-space-4) var(--row-inset) 0;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
+}
+
+.task-compose-submenu > .task-compose-menu-foot-note {
+  padding-bottom: var(--luke-menu-inset);
 }
 
 /* What stands in the list's place: one quiet line, centred, at a row or
@@ -2977,15 +2988,6 @@ ul.actor-stack {
   text-align: center;
 }
 
-/* A switch row: the app's own switch at the row's end, drawn inside the
-   row where the row is the switch for the keyboard, or its own button where
-   the row holds other controls too (the MCP popover's). */
-.task-compose-menu-switch {
-  display: flex;
-  flex: 0 0 auto;
-  margin-left: auto;
-}
-
 /* A submenu stands beside the pinned row that opened it, its top level
    with that row's and its near edge at the menu's own; it turns to the
    menu's other side where the window ends before it does, and stands up
@@ -3000,6 +3002,7 @@ ul.actor-stack {
   top: 0;
   left: calc(100% + 9px);
   width: 200px;
+  padding: 0;
 }
 
 .task-compose-submenu[data-side="left"] {
@@ -3064,28 +3067,10 @@ ul.actor-stack {
   font-weight: var(--luke-weight-medium);
 }
 
-/* A searchable menu's words fade where they are cut rather than end in an
-   ellipsis, as a tab's label does, and so do the same rows offered in an
-   empty side panel. */
-:is(.searchable-menu, .side-panel-no-tabs) .task-compose-menu-name {
+/* The MCP popover's words fade where they are cut rather than end in an
+   ellipsis, as a tab's label does. */
+.searchable-menu .task-compose-menu-name {
   text-overflow: clip;
-}
-
-/* The detail follows the name in the list, and stands at the row's end in
-   the foot, where the row names a setting and the detail is its value. */
-.task-compose-menu-detail {
-  flex: 0 0 auto;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  white-space: nowrap;
-}
-
-.task-compose-menu-foot .task-compose-menu-detail {
-  margin-left: auto;
-}
-
-.task-compose-menu-foot .task-compose-menu-detail + .menu-item-end {
-  margin-left: 0;
 }
 
 /* The heading over a menu section's rows, a searchable menu's and ⌘K's
@@ -3211,6 +3196,7 @@ ul.actor-stack {
   flex-direction: column;
   gap: var(--luke-space-12);
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   outline: none; /* no ring: out of the tab order, focused by script so its keys scroll it */
@@ -3485,6 +3471,7 @@ ul.actor-stack {
 .inbox-tasks-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
@@ -4614,6 +4601,7 @@ ul.actor-stack {
 .automations-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--content-inset) var(--luke-space-32);
 }
@@ -4981,6 +4969,7 @@ ul.actor-stack {
   flex: 1;
   flex-direction: column;
   gap: var(--luke-space-8);
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16);
   border-left: 1px solid var(--luke-color-border);
@@ -5016,6 +5005,7 @@ ul.actor-stack {
 .chat-rail-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
@@ -5100,6 +5090,7 @@ ul.actor-stack {
 .chat-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--column-inset);
 }
@@ -5333,6 +5324,8 @@ ul.actor-stack {
 /* The list an `@` or `#` opens stands over the box at its left. */
 .chat-mention-menu {
   position: absolute;
+  /* It stands over the box, so the searchable menu's own top is let go. */
+  top: auto;
   bottom: calc(100% + var(--luke-space-4));
   left: 0;
   width: 320px;
@@ -5785,6 +5778,7 @@ ul.actor-stack {
   display: flex;
   height: 100%;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
   padding-bottom: 8vh;
 }
@@ -5893,6 +5887,7 @@ ul.actor-stack {
   flex-direction: column;
   gap: var(--luke-section-gap);
   padding: var(--column-inset);
+  overflow-x: hidden;
   overflow-y: auto;
   background: var(--luke-color-ground);
 }
@@ -5954,6 +5949,7 @@ ul.actor-stack {
   flex-direction: column;
   gap: var(--luke-section-gap);
   padding: calc(var(--column-inset) - var(--card-edge)) var(--luke-menu-inset) var(--luke-space-12);
+  overflow-x: hidden;
   overflow-y: auto;
   border: var(--card-edge) solid var(--luke-color-border);
   border-radius: var(--luke-radius-14);
@@ -6300,29 +6296,6 @@ ul.actor-stack {
   left: auto;
 }
 
-/* Nothing in the "+" is ever the one chosen, so its rows draw no end slot
-   for a check and stand inset alike at both sides, in its menu and in an
-   empty side panel alike. */
-:is(.tab-add-menu .task-compose-menu-list, .side-panel-no-tabs) .menu-item-end {
-  display: none;
-}
-
-/* A file's row keeps its name whole and cuts its folder short instead, so
-   a deep path never hides which file the row opens, and a repository's row
-   its name rather than its owner (`repository-chip.tsx`); either fades where
-   it is cut. A row with no folder gives its name the whole width. */
-:is(.tab-add-menu, .side-panel-no-tabs, .repository-chip)
-.task-compose-menu-name:has(+ .task-compose-menu-detail) {
-  flex: 0 0 auto;
-  max-width: 70%;
-}
-
-:is(.tab-add-menu, .side-panel-no-tabs, .repository-chip) .task-compose-menu-detail {
-  min-width: 0;
-  flex: 0 1 auto;
-  overflow: hidden;
-}
-
 /* With every tab closed, the panel offers all that the "+" menu offers, as
    the same rows under the same headings, at the top of its well, in a column
    300px wide at most. A plan offering more than the well holds scrolls it,
@@ -6331,6 +6304,7 @@ ul.actor-stack {
   display: flex;
   min-height: 0;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
   /* The 300px is the column's measure rather than a step of the scale. */
   padding: var(--luke-space-48)
@@ -6338,10 +6312,14 @@ ul.actor-stack {
 }
 
 /* Its "No tabs open" stands over the rows, in from the column's edge as a
-   row's words are. */
+   row's words are, and so does each section's heading. */
 .side-panel-no-tabs-line {
   margin-bottom: var(--luke-space-8);
   padding: 0 var(--row-inset);
+}
+
+.menu-row-list-heading {
+  padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
 }
 
 .side-panel-content {
@@ -6713,15 +6691,13 @@ ul.actor-stack {
 }
 
 /* A label cut short fades out over its last `--label-fade` rather than
-   ending in an ellipsis, as a browser's tab does, and so do a searchable
-   menu's words, and a subagent's job. Only a label measured cut short (use-clipped.ts) fades, so
+   ending in an ellipsis, as a browser's tab does, and so does a subagent's
+   job. Only a label measured cut short (use-clipped.ts) fades, so
    a short one ends on its last letter. The mask fades the words themselves,
    so it reads alike over every fill a tab or a row wears, at rest, hovered,
    chosen, or dragged. */
 .tab-label[data-overflow="true"],
 .task-summary-label[data-overflow="true"],
-:is(.searchable-menu, .side-panel-no-tabs) .task-compose-menu-name[data-overflow="true"],
-:is(.searchable-menu, .side-panel-no-tabs) .task-compose-menu-detail[data-overflow="true"],
 .subagent-job[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
@@ -7042,6 +7018,7 @@ ul.actor-stack {
   flex: 1 1 auto;
   min-height: 0;
   padding: var(--luke-space-6);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -7228,6 +7205,7 @@ ul.actor-stack {
 .home-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-32) var(--luke-page-inset) var(--luke-space-48);
 }
