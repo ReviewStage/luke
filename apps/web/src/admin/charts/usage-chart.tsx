@@ -11,7 +11,7 @@ import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { ChartEmpty, ChartFrame, ChartTrend } from "./chart-frame";
 
 export const USAGE_CHART = {
-  calls: { label: "Hosted calls", color: "var(--chart-1)" },
+  calls: { label: "Hosted calls", color: "var(--luke-color-chart-1)" },
 } satisfies ChartConfig;
 
 /**

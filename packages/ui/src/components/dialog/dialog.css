@@ -8,7 +8,7 @@
   .luke-dialog-backdrop {
     box-sizing: border-box;
     position: fixed;
-    z-index: var(--z-dialog, 30);
+    z-index: var(--luke-z-dialog);
     inset: 0;
     display: grid;
     place-items: center;
