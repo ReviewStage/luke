@@ -1456,13 +1456,13 @@ test("no file is read whole for an agent on no task, a head not named, or a task
     undefined,
     "another repository",
   );
-  const planless = codingAgentsControl({
+  const taskless = codingAgentsControl({
     agents: [{ ...AGENT, planId: null }],
     agentIds: [AGENT.id],
     models: [],
     readChanges: control.readChanges,
   });
-  assert.equal((await drawTab({ control: planless })).readTexts, undefined, "no task");
+  assert.equal((await drawTab({ control: taskless })).readTexts, undefined, "no task");
   commits = {};
   assert.equal((await drawTab()).readTexts, undefined, "no head");
   commits = { headSha: "a".repeat(40) };
