@@ -205,3 +205,20 @@ test("a mark the service refused is let go, and Mark all as read refused asks no
   ]);
   assert.equal(hook.rereads(), 0);
 });
+
+test("two opposite marks out at once stand as the latest made, though the held read lands the earlier one's write before the later one goes", async () => {
+  const hook = marks([item(X, false)]);
+  hook.mark(item(X, false), true);
+  await settle();
+  hook.mark(item(X, true), false);
+  // The held read lands as it stood before either write, then as the first write left it.
+  hook.read([item(X, false)]);
+  assert.deepEqual(hook.dots(), [[X, false]]);
+  await hook.sent[0]?.answer();
+  hook.read([item(X, true)]);
+  assert.deepEqual(hook.dots(), [[X, false]], "the later mark stands over the earlier one's word");
+  await settle();
+  await hook.sent[1]?.answer();
+  hook.read([item(X, false)]);
+  assert.deepEqual(hook.dots(), [[X, false]]);
+});

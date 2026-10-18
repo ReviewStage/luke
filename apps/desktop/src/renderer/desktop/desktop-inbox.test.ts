@@ -4666,6 +4666,8 @@ test("sorted by waiting longest from the view's menu, the open items stand first
     "*Expire after 7 days?",
     "How is a failed email retried?",
   ]);
+});
+
 test("an item marked read as it opened stays read once another plan's item is chosen, though the list's read of its plan, which a mark never moves, still holds it unread", async () => {
   inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, RETRY]);
   // The plan's held read wakes on the mark, as the service wakes it, holding the item read.

@@ -91,9 +91,10 @@ export function withReadMark(item: InboxItem, mark: InboxReadMark | undefined): 
   return isUnread(item) === mark.unread ? item : { ...item, unread: mark.unread };
 }
 
-/** One read or unread mark: what it says of the item as it was marked, the press that made it, and whether a held read has held the item so. */
+/** One read or unread mark: what it says of the item as it was marked, the press that made it, whether the service took it, and whether a held read has held the item so since. */
 interface Mark extends InboxReadMark {
   readonly made: symbol;
+  readonly taken: boolean;
   readonly held: boolean;
 }
 
@@ -128,6 +129,7 @@ type Change =
       };
     }
   | { readonly unmark: symbol }
+  | { readonly marked: symbol }
   | { readonly marksSeen: MarksSeen };
 
 const NOTHING_LAID: Book = { entries: new Map(), marks: new Map() };
@@ -183,7 +185,7 @@ function marksChanged(marks: ReadonlyMap<string, Mark>, change: Change): Readonl
     for (const [itemId, mark] of change.mark.marks) {
       // Note that an item marked again moves to the newest place, so the oldest marks go first.
       next.delete(itemId);
-      next.set(itemId, { ...mark, made: change.mark.made, held: false });
+      next.set(itemId, { ...mark, made: change.mark.made, taken: false, held: false });
     }
     return new Map([...next].slice(-KEPT_MARKS));
   }
@@ -193,6 +195,16 @@ function marksChanged(marks: ReadonlyMap<string, Mark>, change: Change): Readonl
     return ours.length === 0
       ? marks
       : new Map([...marks].filter(([, mark]) => mark.made !== change.unmark));
+  }
+  if ("marked" in change) {
+    const ours = [...marks].some(([, mark]) => mark.made === change.marked);
+    if (!ours) return marks;
+    return new Map(
+      [...marks].map(([itemId, mark]) => [
+        itemId,
+        mark.made === change.marked ? { ...mark, taken: true } : mark,
+      ]),
+    );
   }
   if (!("marksSeen" in change)) return marks;
   const { passed, held, overturned } = change.marksSeen;
@@ -381,7 +393,8 @@ function markedItem(
   }
   if (live && read.updatedAt === mark.updatedAt) {
     const agrees = isUnread(read) === mark.unread;
-    if (agrees && !mark.held) seen.marksHeld.add(read.id);
+    // Note that a read is taken to hold the mark only once the service took it, since one from before the write, or from an earlier mark's write, may agree by chance.
+    if (agrees && mark.taken && !mark.held) seen.marksHeld.add(read.id);
     if (!agrees && mark.held) {
       seen.marksOverturned.add(read.id);
       return item;
@@ -543,6 +556,8 @@ export interface InboxSettler {
   readonly mark: (marks: ReadonlyMap<string, InboxReadMark>) => symbol;
   /** The service did not take the press's marks, so the dots stand as the reads hold them. */
   readonly unmark: (made: symbol) => void;
+  /** The service took the press's marks, so a held read holding them from now on holds them. */
+  readonly marked: (made: symbol) => void;
 }
 
 /** The presses that lay a send over the reads, the same for the window's life. */
@@ -572,6 +587,7 @@ export function useInboxSettler(): InboxSettler {
         return made;
       },
       unmark: (made) => change({ unmark: made }),
+      marked: (made) => change({ marked: made }),
     }),
     [change],
   );

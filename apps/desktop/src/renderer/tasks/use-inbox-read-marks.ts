@@ -98,6 +98,7 @@ export function useInboxReadMarks({
           .then((answer) => {
             // Note that a mark is let go only where it still stands as it was made, so a later mark on the same item outlives an earlier one's refusal.
             if ("failure" in answer) settler.unmark(latest.made);
+            else settler.marked(latest.made);
           });
       });
     },
@@ -116,8 +117,12 @@ export function useInboxReadMarks({
         act(ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, workspaceId === undefined ? {} : { workspaceId })
           .catch(() => UNANSWERED)
           .then((answer) => {
-            if ("failure" in answer) settler.unmark(made);
-            else heard.current();
+            if ("failure" in answer) {
+              settler.unmark(made);
+              return;
+            }
+            settler.marked(made);
+            heard.current();
           }),
       );
     },
