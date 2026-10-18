@@ -233,7 +233,7 @@ const PLAN_EDIT_PART_TYPE = `tool-${AGENT_TOOL.EDIT_PLAN}`;
  * so the document is read again on every page that carries the call, which
  * the turn's later steps amend, and once more when the turn stops writing.
  */
-function pageEditsPlan(page: CodingAgentMessagesAnswer): boolean {
+function pageWritesDocument(page: CodingAgentMessagesAnswer): boolean {
   return page.messages.some((message) =>
     message.parts.some((part) => isRecord(part) && part.type === PLAN_EDIT_PART_TYPE),
   );
@@ -928,8 +928,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         wasWriting = writing;
         // Luke's plan edits land with no call standing as well as with one, so the document is
         // read again off the conversation's own follow rather than off the call's frames.
-        edited ||= pageEditsPlan(page.value);
-        if (pageEditsPlan(page.value) || (edited && !writing)) {
+        edited ||= pageWritesDocument(page.value);
+        if (pageWritesDocument(page.value) || (edited && !writing)) {
           Queue.offerUnsafe(documentReads, taskId);
         }
         if (!writing && !conversationWoken) return;
