@@ -25,7 +25,8 @@ import { bashStartingIn } from "./shell.js";
  * transcript, so it reaches the shell as nothing, and what the model is
  * offered is recorded the way the wire's schemas are. A command whose
  * outcome Vercel Sandbox's API lost, as `@vercel/sandbox` and undici throw
- * it, answers that it is unknown, and any other failure stands as eve threw it.
+ * it after the sandbox took it, answers that it is unknown; a start the sandbox
+ * refused, and any other failure, stands as eve threw it.
  */
 
 /** What eve's `bash` answers a command that finished. */
@@ -74,7 +75,10 @@ function unreached(name: string): () => never {
 }
 
 /** A sandbox as the doubles here stand for one: a real shell, or one whose API loses what it ran. */
-type SandboxDouble = ReturnType<typeof shellSandbox> | ReturnType<typeof sandboxLosing>;
+type SandboxDouble =
+  | ReturnType<typeof shellSandbox>
+  | ReturnType<typeof sandboxLosing>
+  | ReturnType<typeof sandboxRefusing>;
 
 /** The context eve calls a tool in, over the sandbox given. */
 function contextOver(sandbox: SandboxDouble): EveToolContext {
@@ -168,6 +172,20 @@ test("a command whose output Vercel answered 404 for answers that its outcome is
 test("a command whose output stream Vercel cut answers that its outcome is unknown", async () => {
   const answer = await call("/workspace/repository", sandboxLosing(streamCut()), "pnpm test");
   assert.equal(answer.status, "unknown");
+});
+
+/** A sandbox that refuses every command's start as Vercel's API refused it. */
+function sandboxRefusing(failure: Error) {
+  return {
+    spawn: async (): Promise<never> => {
+      throw failure;
+    },
+  };
+}
+
+test("a command whose start a gone sandbox refused 404 fails as eve failed it", async () => {
+  const gone = sandboxApiError(404, "Vercel Sandbox not found.");
+  await assert.rejects(call("/workspace/repository", sandboxRefusing(gone), "git push"), gone);
 });
 
 test("a failure Vercel's API did not lose a command to fails as eve failed it", async () => {

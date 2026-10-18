@@ -1,5 +1,12 @@
 import { describeWire, emitJsonSchema } from "@luke/wire/effect";
 import { Schema } from "effect";
+import type {
+  RuntimeSandboxSession,
+  RuntimeSandboxSessionFor,
+  SandboxEnvironment,
+  SandboxSession,
+  SandboxSpawnOptions,
+} from "eve/sandbox";
 import { defineTool, type ToolContext, type ToolDefinition } from "eve/tools";
 import { type BashToolInput, bash } from "eve/tools/bash";
 import { COMMAND_DESCRIPTION } from "../command-description.js";
@@ -29,9 +36,10 @@ import { COMMAND_DESCRIPTION } from "../command-description.js";
  * command that had in fact run (a push among them). Where the call fails so,
  * the shell says instead that the command's outcome was lost and may have
  * taken effect, so the model checks before it runs it again. It never runs
- * the command again, and it asks the sandbox nothing more: a probe's own
- * command is read over the same API, so its failure would prove nothing, and
- * a sandbox gone indeed fails the model's next command in eve's own words.
+ * the command again, and it asks the sandbox nothing more, since a probe's
+ * own command is read over the same API. Only a loss after the sandbox took
+ * the command is lost so: a start it refused, as a sandbox gone indeed
+ * refuses one, ran nothing, and fails in eve's own words.
  */
 
 /** eve's `bash` input as the model is offered it, with the description beside the command. */
@@ -130,10 +138,49 @@ function quoted(path: string): string {
   return `'${path.replaceAll("'", `'\\''`)}'`;
 }
 
-/** A command's failure as the shell answers it: its outcome lost where Vercel's API lost it, and eve's failure as it was thrown otherwise. */
-function lostOrThrown(cause: unknown, ctx: ToolContext): ShellOutput {
+/** Whether the sandbox took the call's command: its start answered, so what follows is reading it back. */
+interface CommandStart {
+  accepted: boolean;
+}
+
+/**
+ * The call's context with its sandbox's `spawn` watched, so the start's
+ * answer marks the command accepted. Note that eve hands a tool its context
+ * and its sandbox as plain objects of functions, so a spread of each keeps
+ * every other member as it was.
+ */
+function watchingStart(ctx: ToolContext, start: CommandStart): ToolContext {
+  const watched = <Session extends SandboxSession>(sandbox: Session): Session => ({
+    ...sandbox,
+    spawn: async (options: SandboxSpawnOptions) => {
+      const process = await sandbox.spawn(options);
+      start.accepted = true;
+      return process;
+    },
+  });
+  function getSandbox(): Promise<RuntimeSandboxSession>;
+  function getSandbox<Session extends SandboxSession>(
+    environment: SandboxEnvironment<object | undefined, Session>,
+  ): Promise<RuntimeSandboxSessionFor<Session>>;
+  async function getSandbox<Session extends SandboxSession>(
+    environment?: SandboxEnvironment<object | undefined, Session>,
+  ) {
+    return environment === undefined
+      ? watched(await ctx.getSandbox())
+      : watched(await ctx.getSandbox(environment));
+  }
+  return { ...ctx, getSandbox };
+}
+
+/**
+ * A command's failure as the shell answers it: its outcome lost where the
+ * sandbox took the command and Vercel's API then lost it on the way back,
+ * and eve's failure as it was thrown otherwise. A start the sandbox refused,
+ * a sandbox gone among them, ran nothing, and says so in eve's words.
+ */
+function lostOrThrown(cause: unknown, ctx: ToolContext, start: CommandStart): ShellOutput {
   // A call the turn cancelled, or a failure of the command's own, stands as eve threw it.
-  if (ctx.abortSignal?.aborted === true || !isOutcomeLost(cause)) throw cause;
+  if (ctx.abortSignal?.aborted === true || !start.accepted || !isOutcomeLost(cause)) throw cause;
   return { status: SHELL_STATUS.UNKNOWN, message: OUTCOME_LOST_MESSAGE };
 }
 
@@ -154,12 +201,13 @@ export function bashStartingIn(directory: string) {
     inputSchema: emitJsonSchema(SHELL_INPUT),
     outputSchema: emitJsonSchema(SHELL_OUTPUT),
     execute: (input, ctx) => {
+      const start: CommandStart = { accepted: false };
       const answer = bash.execute(
         { command: `cd ${quoted(directory)} || exit\n${input.command}` },
-        ctx,
+        watchingStart(ctx, start),
       );
       if (Symbol.asyncIterator in answer) return answer;
-      return Promise.resolve(answer).catch((cause: unknown) => lostOrThrown(cause, ctx));
+      return Promise.resolve(answer).catch((cause: unknown) => lostOrThrown(cause, ctx, start));
     },
   });
 }
