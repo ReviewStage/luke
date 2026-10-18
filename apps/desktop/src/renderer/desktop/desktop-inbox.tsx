@@ -662,6 +662,7 @@ function InboxSidePanel({
       repository={repository}
       board={undefined}
       shownCode={undefined}
+      codeFailed={undefined}
       pages={pages}
       transcript={NO_CALLS}
       work={work}

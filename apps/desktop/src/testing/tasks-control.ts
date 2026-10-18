@@ -162,6 +162,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     },
     listedAgents: { standing: [], archived: [] },
     workspaces: [],
+    workspacesFailed: false,
+    onRetryWorkspaces: ignore,
     workspace: undefined,
     onChooseWorkspace: ignore,
     onLeftWorkspace: ignore,
@@ -240,6 +242,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     unreadTabs: [],
     board: undefined,
     shownCode: undefined,
+    workFailed: false,
+    onRetryWork: ignore,
     pages: undefined,
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
     work: {

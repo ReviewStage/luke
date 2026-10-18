@@ -991,6 +991,29 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a task's work read that did not answer says so, keeping its code unread, and a refresh reads it again",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      const { call, last, told } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      assert.ok(
+        told.some((view) => view.workStatus === TASKS_READ.READING),
+        "the read says it is out",
+      );
+      assert.equal(last()?.workStatus, TASKS_READ.FAILED);
+      assert.equal(last()?.shownCode, undefined);
+
+      service.works[INVITES] = { turns: [] };
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      assert.equal(last()?.workStatus, TASKS_READ.READY);
+      assert.deepEqual(last()?.shownCode, []);
+    }),
+);
+
 it.effect("a refresh that reads what the view already holds tells the window nothing", () =>
   Effect.gen(function* () {
     const billing = task(BILLING, "Billing export", "# Billing export", 20);
@@ -1515,6 +1538,32 @@ it.effect("a workspaces read the service did not answer keeps the workspaces alr
     assert.deepEqual(last()?.tasks, []);
     assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
   }),
+);
+
+it.effect(
+  "a workspaces read that did not answer says so, and the next refresh reads them again and says them read",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.workspacesFail = true;
+      const held = yield* Deferred.make<void>();
+      service.workspacesGate = Deferred.await(held);
+      const { call, last } = yield* subject(service);
+
+      const refreshing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_REFRESH));
+      for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+      assert.equal(last()?.workspacesStatus, TASKS_READ.READING);
+      yield* Deferred.succeed(held, undefined);
+      yield* Fiber.join(refreshing);
+      assert.equal(last()?.workspacesStatus, TASKS_READ.FAILED);
+      assert.deepEqual(last()?.workspaces, []);
+
+      service.workspacesFail = false;
+      service.workspacesGate = Effect.void;
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      assert.equal(last()?.workspacesStatus, TASKS_READ.READY);
+      assert.deepEqual(last()?.workspaces, [PERSONAL]);
+    }),
 );
 
 it.effect(

@@ -403,6 +403,8 @@ export const tasksViewSchema = EffectSchema.Struct({
   listStatus: tasksReadSchema,
   /** The workspaces the account is a member of, its first one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),
+  /** Where the read of the workspaces stands, a failed one keeping those held; absent before the first is asked. */
+  workspacesStatus: EffectSchema.optionalKey(tasksReadSchema),
   /** Whether the account has GitHub connected, and its login, as last read beside the workspaces; absent before the first read lands. */
   github: EffectSchema.optionalKey(githubConnectionSchema),
   /** The repositories the account pinned in the sidebar, newest pinned first, as last read or pinned; absent before the first read lands. */
@@ -443,6 +445,8 @@ export const tasksViewSchema = EffectSchema.Struct({
   work: EffectSchema.optionalKey(EffectSchema.Array(taskWorkTurnSchema)),
   /** The turn the active task's next older page of work is read before; absent where none stands or before the first read. */
   workEarlier: EffectSchema.optionalKey(EffectSchema.String),
+  /** Where the read of the active task's newest work and code stands, a failed one keeping what is held; absent before the first is asked, and cleared with the activity. */
+  workStatus: EffectSchema.optionalKey(tasksReadSchema),
   /**
    * The active task's conversation as an agent's transcript is
    * read: the newest page read when the task opens, each page the held read

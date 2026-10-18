@@ -866,6 +866,7 @@ function PlanDocument({
                     repository={task.repository}
                     board={tasks.board}
                     shownCode={tasks.shownCode}
+                    codeFailed={tasks.workFailed ? { onRetry: tasks.onRetryWork } : undefined}
                     pages={tasks.pages}
                     transcript={tasks.transcript}
                     work={tasks.work}
