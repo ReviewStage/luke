@@ -302,6 +302,26 @@ body {
   width: 200px;
 }
 
+/* A list's foot that is itself its press, as an app draws one around
+   `RetryRowLabel`: a row in the caption's type, lit on hover. */
+.catalog-retry-row {
+  width: 100%;
+  padding: var(--luke-space-8);
+  border: 0;
+  border-radius: var(--luke-control-radius);
+  background: none;
+  color: var(--luke-color-text-muted);
+  font: inherit;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  text-align: left;
+}
+
+.catalog-retry-row:hover {
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
+}
+
 /* A dashed outline that shows the room an arrangement is given. */
 .catalog-frame {
   padding: var(--luke-space-8);
@@ -408,6 +428,36 @@ body {
   .catalog-folding-toolbar > * {
     --luke-fold: folded;
   }
+}
+
+/* A name renamed in place: the name, or its field, and Rename at its end.
+   In a well, the well is outlined and holds the field at a tab's width, as
+   a tab holds its name's field. */
+.catalog-inline-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  min-height: var(--luke-control-height);
+}
+
+.catalog-inline-edit > .luke-inline-edit {
+  flex: 1;
+}
+
+.catalog-inline-edit-well {
+  display: inline-flex;
+  padding: var(--luke-space-4) var(--luke-space-8);
+  border-radius: var(--luke-radius-6);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
+}
+
+.catalog-inline-edit-well:focus-within {
+  outline: 2px solid var(--luke-color-focus-ring);
+  outline-offset: -1px;
+}
+
+.catalog-inline-edit-well > .luke-inline-edit {
+  width: 24ch;
 }
 
 /* A bare text input standing in for a control an example holds. */

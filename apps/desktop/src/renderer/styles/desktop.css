@@ -1363,17 +1363,9 @@ ul.actor-stack {
 
 /* A sidebar plan renamed in place keeps its row: the field takes the name's
    own line and type, ringed. */
-.sidebar-task-field {
+.sidebar-task > .luke-inline-edit {
   width: calc(100% + 10px);
   margin: -2px -5px; /* off-scale */
-  padding: 1px 4px; /* off-scale */
-  border: 0;
-  border-radius: 5px;
-  background: var(--luke-color-ground);
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
-  color: var(--luke-color-text);
-  font-family: inherit;
-  font-size: var(--luke-type-body-size);
 }
 
 /* A row's first line: the plan's name, cut short where it must, and how long
@@ -2503,8 +2495,7 @@ ul.actor-stack {
    (`retry-button.tsx`) or a note's dismissal: a labelled toolbar button in
    the muted voice of the words it follows, lit like any other on hover, and
    tighter at its sides, since it stands beside words rather than in a
-   toolbar. A failed row that is itself the button draws the retry's glyph
-   and word in its own colour (`.retry-label`), its hover lighting both. */
+   toolbar. */
 .quiet-button {
   padding: 0 var(--luke-space-8);
   color: var(--luke-color-text-muted);
@@ -2533,14 +2524,6 @@ ul.actor-stack {
   height: 13px;
 }
 
-.retry-label {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--luke-space-4);
-  margin-left: var(--luke-space-4);
-  font-weight: 600;
-}
-
 /* A failure's line (`failure-note.tsx`): its words, then the press that
    mends it inside a hairline, since it is the act the line is there for,
    with Cancel or Retry quiet beside it. The press keeps the words' size and
@@ -2562,13 +2545,6 @@ ul.actor-stack {
 .failure-note-remedy :is(svg, .luke-spinner-ring) {
   width: 13px;
   height: 13px;
-}
-
-.retry-label svg {
-  width: 12px;
-  height: 12px;
-  flex: none;
-  align-self: center;
 }
 
 /* Chips ----------------------------------------------------------------------- */
@@ -7655,15 +7631,8 @@ body:has(.app-stage[data-capture="true"])
   box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
-.tab-field {
+.tab-button > .luke-inline-edit {
   width: 24ch;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  outline: none; /* no ring: its tab rings */
 }
 
 /* The × keeps none of a button's own padding, which would leave its glyph
