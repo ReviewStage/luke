@@ -3125,7 +3125,7 @@ test("an item's row reads as two lines, its title and time over the last word in
   ]);
 });
 
-test("the attention mark stands before the time on the reader's own open item alone: a teammate's open item wears their face there with no mark and no ring, a settled one wears neither, and none is drawn in the unread weight", async () => {
+test("the attention mark stands before the time on the reader's own open item alone: a teammate's open item wears their face there with no mark and no ring, saying to a reader that it waits on them, a settled one wears neither, and none is drawn in the unread weight", async () => {
   inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
   const { page } = mount();
   await settle();
@@ -3135,6 +3135,7 @@ test("the attention mark stands before the time on the reader's own open item al
     return {
       mark: meta?.querySelector(".attention-mark") !== null,
       face: meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
+      said: meta?.querySelector(".visually-hidden")?.textContent,
       dot: row.querySelector(".inbox-row-dot") !== null,
       unread: row.closest("li")?.dataset.unread === "true",
     };
@@ -3142,18 +3143,21 @@ test("the attention mark stands before the time on the reader's own open item al
   assert.deepEqual(ends("Expire after 7 days?"), {
     mark: true,
     face: undefined,
+    said: "Needs you",
     dot: false,
     unread: false,
   });
   assert.deepEqual(ends("Alert at 80%?"), {
     mark: false,
     face: "person",
+    said: "Waiting on Charles Pan",
     dot: false,
     unread: false,
   });
   assert.deepEqual(ends("How is a failed email retried?"), {
     mark: false,
     face: undefined,
+    said: undefined,
     dot: false,
     unread: false,
   });

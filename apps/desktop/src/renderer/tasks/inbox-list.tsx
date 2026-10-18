@@ -1,4 +1,4 @@
-import type { InboxItem } from "@luke/features/inbox-wire";
+import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
@@ -149,6 +149,11 @@ const NEEDS_YOU_PRESS = {
   ONLY: "Show only what needs you",
   ALL: "Show all",
 } as const;
+
+/** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */
+function waitingOn(starter: Actor): string {
+  return `Waiting on ${actorName(starter, { sentence: true })}`;
+}
 
 /** The tile of an agent the window names nothing of. */
 const UNNAMED_AGENT = {
@@ -307,6 +312,9 @@ export function InboxItemRow({
             {context === undefined ? null : <span className="home-row-context">{context}</span>}
             {starter === undefined || !face ? null : (
               <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
+            )}
+            {starter === undefined || item.status !== INBOX_STATUS.OPEN ? null : (
+              <span className="visually-hidden">{waitingOn(starter)}</span>
             )}
             {needsYou ? (
               <span className="inbox-row-attention">
