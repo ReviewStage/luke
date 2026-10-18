@@ -40,13 +40,7 @@ import { dayAndTimeText } from "../tasks/task-time";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import type { SceneHover } from "./contract";
-import {
-  PICK_KIND,
-  type PickTarget,
-  WORLD_LAYER,
-  type WorldLayer,
-  type WorldLayers,
-} from "./world";
+import { PICK_KIND, type PickTarget, WORLD_LAYER, type WorldLayer } from "./world";
 
 /**
  * world-chrome.tsx -- what every world shares over its scene, in the page's DOM: the pipeline bar whose counts switch the layers, the hover label, the card of what is selected, the time scrubber, and the way home.
@@ -107,20 +101,42 @@ function stageCount(layer: WorldLayer, counts: PipelineCounts): number {
 
 /**
  * The pipeline bar: planned, then building with those stuck beside it, then
- * shipped, and the defects that loop back to planned. Each count is a
- * toggle, pressed while its layer is drawn.
+ * shipped, and the defects that loop back to planned. Each count picks out
+ * its layer: the pointer resting on it, or the keyboard on it, draws that
+ * layer alone for as long as it stays, and a press keeps it alone, pressed,
+ * until it is pressed again or another count is. With none pressed, every
+ * layer is drawn.
  */
 export function PipelineBar({
   counts,
-  layers,
-  onToggle,
+  chosen,
+  onChoose,
+  onPreview,
 }: {
   counts: PipelineCounts;
-  layers: WorldLayers;
-  onToggle: (layer: WorldLayer) => void;
+  /** The layer pressed, drawn alone; none while every layer is drawn. */
+  chosen: WorldLayer | undefined;
+  /** A press on a count: its layer alone, or every layer again where it was the one pressed. */
+  onChoose: (layer: WorldLayer) => void;
+  /** The pointer or the keyboard came to a count, or left the bar's counts. */
+  onPreview: (layer: WorldLayer | undefined) => void;
 }): React.JSX.Element {
   return (
-    <fieldset className="factory-world-pipeline" aria-label="Layers">
+    <fieldset
+      className="factory-world-pipeline"
+      aria-label="Layers"
+      onPointerOut={(event) => {
+        if (
+          !(
+            event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)
+          )
+        )
+          onPreview(undefined);
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onPreview(undefined);
+      }}
+    >
       {STAGES.map(({ layer, name, Icon, color }, index) => (
         <span key={layer} className="factory-world-stage-slot">
           {index === 0 ? null : (
@@ -134,9 +150,12 @@ export function PipelineBar({
           )}
           <Chip
             look={CHIP_LOOK.FILTER}
-            aria-pressed={layers[layer]}
+            aria-pressed={chosen === layer}
             data-layer={layer}
-            onClick={() => onToggle(layer)}
+            data-faded={chosen !== undefined && chosen !== layer ? "" : undefined}
+            onClick={() => onChoose(layer)}
+            onPointerOver={() => onPreview(layer)}
+            onFocus={() => onPreview(layer)}
           >
             <span className="factory-world-signal" style={signalStyle(color)}>
               <Icon aria-hidden="true" />

@@ -233,12 +233,32 @@ function button(page: HTMLElement, name: string): HTMLButtonElement {
   return found;
 }
 
-/** The pipeline bar as a reader scans it: each stage's words, and whether its layer stands. */
+/** The pipeline bar as a reader scans it: each stage's words, and whether it is the one pressed. */
 function pipeline(page: HTMLElement): string[] {
   return [...page.querySelectorAll<HTMLButtonElement>(".factory-world-pipeline button")].map(
     (stage) =>
-      `${stage.textContent}${stage.getAttribute("aria-pressed") === "true" ? "" : " (off)"}`,
+      `${stage.textContent}${stage.getAttribute("aria-pressed") === "true" ? " (pressed)" : ""}`,
   );
+}
+
+/** The layers the world was last handed, those drawn by name. */
+function drawn(): string[] {
+  return Object.entries(lastState().layers)
+    .filter(([, shown]) => shown)
+    .map(([layer]) => layer);
+}
+
+/** The pointer coming to a count from outside the bar, or leaving the bar for the page. */
+function pointTo(page: HTMLElement, stage: HTMLButtonElement | undefined): void {
+  act(() => {
+    if (stage === undefined) {
+      const bar = page.querySelector(".factory-world-pipeline");
+      assert.ok(bar);
+      bar.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: page }));
+    } else {
+      stage.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: page }));
+    }
+  });
 }
 
 function hover(target: SceneHover | undefined): void {
@@ -365,15 +385,48 @@ test("the pointer resting on a zone names it in the label, and on nothing takes 
   assert.equal(page.querySelector(".factory-world-label"), null);
 });
 
-test("each count of the pipeline bar switches its layer, which the world is handed", async () => {
+test("the pointer resting on a count of the pipeline bar draws its layer alone, and leaving the bar draws every layer again", async () => {
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(drawn(), ["planned", "building", "shipped", "defects"]);
+  pointTo(page, button(page, "2Shipped"));
+  assert.deepEqual(drawn(), ["shipped"]);
+  pointTo(page, button(page, "1Planned"));
+  assert.deepEqual(drawn(), ["planned"]);
+  pointTo(page, undefined);
+  assert.deepEqual(drawn(), ["planned", "building", "shipped", "defects"]);
+  assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped", "0Defects"]);
+});
+
+test("a press on a count keeps its layer alone until it is pressed again, and another count's press moves it there", async () => {
   const { page } = mount();
   await settle();
   act(() => button(page, "2Shipped").click());
-  assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped (off)", "0Defects"]);
-  assert.equal(lastState().layers.shipped, false);
-  assert.equal(lastState().layers.building, true);
-  act(() => button(page, "2Shipped").click());
-  assert.equal(lastState().layers.shipped, true);
+  pointTo(page, undefined);
+  assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped (pressed)", "0Defects"]);
+  assert.deepEqual(drawn(), ["shipped"]);
+  // Note that resting on another count previews it, and leaving goes back to the one pressed.
+  pointTo(page, button(page, "1Building"));
+  assert.deepEqual(drawn(), ["building"]);
+  pointTo(page, undefined);
+  assert.deepEqual(drawn(), ["shipped"]);
+  act(() => button(page, "1Building").click());
+  assert.deepEqual(pipeline(page), ["1Planned", "1Building (pressed)", "2Shipped", "0Defects"]);
+  assert.deepEqual(drawn(), ["building"]);
+  act(() => button(page, "1Building").click());
+  assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped", "0Defects"]);
+  assert.deepEqual(drawn(), ["planned", "building", "shipped", "defects"]);
+});
+
+test("the keyboard on a count previews its layer as the pointer does, and leaving the bar draws every layer again", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => button(page, "1Planned").focus());
+  assert.deepEqual(drawn(), ["planned"]);
+  act(() => button(page, "0Defects").focus());
+  assert.deepEqual(drawn(), ["defects"]);
+  act(() => button(page, "0Defects").blur());
+  assert.deepEqual(drawn(), ["planned", "building", "shipped", "defects"]);
 });
 
 test("the scrubber winds the world back: before a merge it is not shipped, the world is not live, and Now brings it back", async () => {

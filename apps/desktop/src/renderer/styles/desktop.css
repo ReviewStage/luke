@@ -4222,7 +4222,8 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* The pipeline bar: planned → building → shipped, the defects' arrow
-   turning back, each count a filter chip pressed while its layer stands. */
+   turning back, each count a filter chip pressed while its layer is the one
+   drawn alone, and none pressed while every layer is. */
 .factory-world-pipeline {
   top: var(--luke-space-12);
   left: 50%;
@@ -4268,6 +4269,14 @@ body:has(.app-stage[data-capture="true"])
 .factory-world-stage-count {
   color: var(--luke-color-text);
   font-weight: var(--luke-weight-semibold);
+}
+
+/* While one count is pressed, the others' layers stand undrawn: their glyphs
+   and counts go to the quiet ink, the words staying legible, rather than the
+   chip fading, which would fade the keyboard's ring with it. */
+.factory-world-pipeline .luke-chip[data-faded] .factory-world-signal,
+.factory-world-pipeline .luke-chip[data-faded] .factory-world-stage-count {
+  color: var(--luke-color-text-subtle);
 }
 
 .factory-world-stuck {

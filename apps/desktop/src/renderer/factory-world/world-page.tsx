@@ -65,6 +65,22 @@ const ALL_LAYERS: WorldLayers = {
   [WORLD_LAYER.DEFECTS]: true,
 };
 
+/**
+ * The layers a world draws: the one the pipeline bar previews while the
+ * pointer or the keyboard rests on its count, else the one pressed, alone;
+ * every layer with neither.
+ */
+function layersShown(chosen: WorldLayer | undefined, preview: WorldLayer | undefined): WorldLayers {
+  const alone = preview ?? chosen;
+  if (alone === undefined) return ALL_LAYERS;
+  return {
+    [WORLD_LAYER.PLANNED]: alone === WORLD_LAYER.PLANNED,
+    [WORLD_LAYER.BUILDING]: alone === WORLD_LAYER.BUILDING,
+    [WORLD_LAYER.SHIPPED]: alone === WORLD_LAYER.SHIPPED,
+    [WORLD_LAYER.DEFECTS]: alone === WORLD_LAYER.DEFECTS,
+  };
+}
+
 const NO_BLAST: ReadonlyMap<string, number> = new Map();
 
 /** The signals the chrome's stylesheet draws in, from the view model's palette. */
@@ -186,7 +202,9 @@ function WorldStage({
   const [root, setRoot] = useState<HTMLElement | null>(null);
   const [selected, setSelected] = useState<PickTarget | undefined>(undefined);
   const [hover, setHover] = useState<SceneHover | undefined>(undefined);
-  const [layers, setLayers] = useState<WorldLayers>(ALL_LAYERS);
+  const [chosenLayer, setChosenLayer] = useState<WorldLayer | undefined>(undefined);
+  const [previewLayer, setPreviewLayer] = useState<WorldLayer | undefined>(undefined);
+  const layers = useMemo(() => layersShown(chosenLayer, previewLayer), [chosenLayer, previewLayer]);
   const [instant, setInstant] = useState<number | undefined>(undefined);
   const [away, setAway] = useState(false);
   const handle = useRef<FactorySceneHandle | undefined>(undefined);
@@ -241,10 +259,11 @@ function WorldStage({
     };
   }, [backOut, away, selected, home]);
 
-  const toggle = useCallback(
-    (layer: WorldLayer) => setLayers((was) => ({ ...was, [layer]: !was[layer] })),
-    [],
-  );
+  const choose = useCallback((layer: WorldLayer) => {
+    setChosenLayer((was) => (was === layer ? undefined : layer));
+    // Note that the press settles what the pointer previewed, so leaving the count shows the press, not the preview.
+    setPreviewLayer(undefined);
+  }, []);
   const hovered = hover === undefined ? undefined : namingOf(hover.target, view, asOf);
   const loadFailed = AsyncResult.isFailure(scene) || AsyncResult.isFailure(world);
   return (
@@ -265,7 +284,12 @@ function WorldStage({
       ) : (
         <SpinnerRegion label="Loading world" />
       )}
-      <PipelineBar counts={view.pipeline} layers={layers} onToggle={toggle} />
+      <PipelineBar
+        counts={view.pipeline}
+        chosen={chosenLayer}
+        onChoose={choose}
+        onPreview={setPreviewLayer}
+      />
       {away || selected !== undefined ? <HomeButton onHome={home} /> : null}
       {hover === undefined || hovered === undefined ? null : (
         <HoverLabel hover={hover} naming={hovered} />
