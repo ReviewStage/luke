@@ -25,6 +25,7 @@ import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
+import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
 import { PROGRESS_EXAMPLE } from "./examples/progress";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
@@ -87,6 +88,7 @@ export const EXAMPLES: readonly Example[] = [
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
   ONE_LINE_EXAMPLE,
+  POPOVER_PANELS_EXAMPLE,
   PROGRESS_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,

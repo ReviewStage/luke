@@ -27,6 +27,9 @@ import {
   ChipName,
   ConfirmDialog,
   FormField,
+  INLINE_EDIT_LOOK,
+  InlineEdit,
+  type InlineEditEnd,
   OneLine,
   ProviderMark,
   SettingsRow,
@@ -56,7 +59,6 @@ import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu } from "../desktop/action-menu";
-import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
 import { sharedWords } from "../desktop/workspace-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { encodeImage } from "../feedback-images";
@@ -1387,7 +1389,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
     refocus.current = false;
     button.current?.focus();
   }, [editing, renaming]);
-  const end = ({ name, byKey }: NameEdit) => {
+  const end = ({ value: name, byKey }: InlineEditEnd) => {
     refocus.current = byKey;
     setEditing(false);
     if (name === undefined) return;
@@ -1475,16 +1477,15 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         actions={actions}
         row={{
           leading: <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />,
-          label: editing ? (
-            <TaskNameField
-              name={workspace.name}
-              className="settings-input workspace-name-input"
+          label: (
+            <InlineEdit
+              value={workspace.name}
               label="Workspace name"
+              editing={editing}
               maxLength={WORKSPACE_BOUNDS.MAX_NAME_CHARS}
+              look={INLINE_EDIT_LOOK.INPUT}
               onEnd={end}
             />
-          ) : (
-            workspace.name
           ),
           description: identityLine(workspace),
           control: (
