@@ -5,6 +5,7 @@ import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { AVATARS_EXAMPLE } from "./examples/avatars";
 import { BADGES_EXAMPLE } from "./examples/badges";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
+import { CARDS_EXAMPLE } from "./examples/cards";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
@@ -59,6 +60,7 @@ export const EXAMPLES: readonly Example[] = [
   AVATARS_EXAMPLE,
   BADGES_EXAMPLE,
   BUTTONS_EXAMPLE,
+  CARDS_EXAMPLE,
   CHIPS_EXAMPLE,
   COLLECTION_PAGE_EXAMPLE,
   COMBOBOX_EXAMPLE,

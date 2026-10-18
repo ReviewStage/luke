@@ -1,6 +1,7 @@
 import type { FaceMotion } from "@luke/brand";
 import {
   ALIGN,
+  Card,
   Inline,
   JUSTIFY,
   Stack,
@@ -76,7 +77,7 @@ const PREVIEW_FRAME = "aspect-square overflow-hidden rounded-md";
 function AnimationCard({ entry }: { entry: AnimationEntry }): React.JSX.Element {
   const variants = MOTION_MARKUP.get(entry.motion);
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-card p-5">
+    <Card>
       <Stack>
         <Inline justify={JUSTIFY.BETWEEN} align={ALIGN.BASELINE}>
           <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.SECTION}>
@@ -117,7 +118,7 @@ function AnimationCard({ entry }: { entry: AnimationEntry }): React.JSX.Element 
           </Text>
         ) : null}
       </Stack>
-    </div>
+    </Card>
   );
 }
 

@@ -5,6 +5,7 @@ export * from "./components/auth-page/auth-page.js";
 export * from "./components/avatar/avatar.js";
 export * from "./components/badge/badge.js";
 export * from "./components/button/button.js";
+export * from "./components/card/card.js";
 export * from "./components/checkbox/checkbox.js";
 export * from "./components/chip/chip.js";
 export * from "./components/collection-page/collection-page.js";
