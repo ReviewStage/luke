@@ -53,14 +53,14 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { MemberDirectory } from "../member-directory";
 import { AgentComposer } from "./agent-composer";
+import type { SkillSource } from "./skill-picker";
 import {
   mentionablePullRequests,
-  PlanMentions,
-  type PlanMentionsValue,
-  planlessMentions,
+  TaskMentions,
+  type TaskMentionsValue,
+  tasklessMentions,
   useMentionAgentsReader,
-} from "./plan-mentions";
-import type { SkillSource } from "./skill-picker";
+} from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 import { OpenLinkProvider } from "./use-open-link";
@@ -281,7 +281,7 @@ async function settle(): Promise<void> {
 }
 
 /** What a task's page hands its places, every mention a chip was asked to open kept. */
-function planPage(opened: Mention[], repository = "acme/relay"): PlanMentionsValue {
+function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsValue {
   return {
     taskId: TASK_ID,
     taskName: "Invitations",
@@ -316,7 +316,7 @@ const STORE_AGENT = {
 const SELF_AGENT = { ...STORE_AGENT, id: SELF_ID, name: "Invite by email" };
 
 /** The plan's page holding its pages and agents, every link a chip was asked to open kept. */
-function taskPage(opened: Mention[] = []): PlanMentionsValue {
+function taskPage(opened: Mention[] = []): TaskMentionsValue {
   return { ...planPage(opened), pages: [PAGE], agents: [SELF_AGENT, STORE_AGENT] };
 }
 
@@ -333,20 +333,20 @@ function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource })
 }
 
 /** The node drawn on a task's page, or off any page where none is given; `redraw` draws it on the page given. */
-function drawing(node: ReactNode, page: PlanMentionsValue | undefined) {
+function drawing(node: ReactNode, page: TaskMentionsValue | undefined) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const registry = AtomRegistry.make();
-  const redraw = (on: PlanMentionsValue | undefined) =>
+  const redraw = (on: TaskMentionsValue | undefined) =>
     act(() =>
       root.render(
         onRegistry(
           registry,
           on === undefined
             ? createElement(Fragment, null, node)
-            : createElement(PlanMentions, { value: on, children: node }),
+            : createElement(TaskMentions, { value: on, children: node }),
         ),
       ),
     );
@@ -355,12 +355,12 @@ function drawing(node: ReactNode, page: PlanMentionsValue | undefined) {
 }
 
 /** The node drawn on a task's page, or off any page where none is given. */
-function drawn(node: ReactNode, page: PlanMentionsValue | undefined): HTMLElement {
+function drawn(node: ReactNode, page: TaskMentionsValue | undefined): HTMLElement {
   return drawing(node, page).container;
 }
 
 /** The box drawn, every message it sends written down. */
-async function box(page: PlanMentionsValue | undefined, skills: SkillSource = noSkills) {
+async function box(page: TaskMentionsValue | undefined, skills: SkillSource = noSkills) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
@@ -427,7 +427,7 @@ test("an @ typed in the box on a plan's page offers the plan's sections, and the
 });
 
 test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no plan's sections", async () => {
-  const page = planlessMentions(
+  const page = tasklessMentions(
     { workspace: "acme", workspaceId: "workspace-1", repository: "acme/relay" },
     ignore,
   );
@@ -777,7 +777,7 @@ test("a sent message's mention of a page or an agent is drawn as the chip that o
 /** The plan's page, its workspace's agents read through the window's own reader, the box drawn on it. */
 function WorkspacePage({ children }: { children: ReactNode }): ReactNode {
   const readAgents = useMentionAgentsReader("workspace-1", [BILLING], undefined);
-  return createElement(PlanMentions, { value: { ...taskPage(), readAgents }, children });
+  return createElement(TaskMentions, { value: { ...taskPage(), readAgents }, children });
 }
 
 /** The box on the plan's page that reads its workspace's agents, every message it sends written down. */
@@ -1077,7 +1077,7 @@ test("a bare End and Home take the highlight to the last row and the first, a mo
   assert.deepEqual(held, ["Plan", "Goal"], "a modified Home or End is the editor's");
   assert.deepEqual(last, ["Mention from", "Linear"]);
   assert.deepEqual(first, ["Plan", "Goal"]);
-  assert.equal(composerEditor(container).querySelector(".mention-chip"), null);
+  assert.equal(composerEditor(container).querySelector("[data-mention-ref]"), null);
 });
 
 test("Enter on a kind's row narrows the list to it, and ⌫ on its empty words widens it again, deleting nothing", async () => {
@@ -1229,7 +1229,7 @@ const SEATS = pullRequest(3059, "feat(billing): bill by seat", PULL_REQUEST_STAT
 const SWEEP = pullRequest(3061, "test: sweep flaky tests", PULL_REQUEST_STATE.MERGED);
 
 /** The task's page whose agents published two pull requests, one of them by an archived agent and one by two agents. */
-function publishedPage(): PlanMentionsValue {
+function publishedPage(): TaskMentionsValue {
   return {
     ...taskPage(),
     pullRequests: mentionablePullRequests({

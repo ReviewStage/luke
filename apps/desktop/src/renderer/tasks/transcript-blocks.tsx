@@ -109,9 +109,9 @@ import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
 import { linkChip } from "./mention-chip";
 import { ModelLabel } from "./model-label";
-import { useMentionDoors } from "./plan-mentions";
 import { usePlanPictureDrawer } from "./plan-pictures";
 import { SubagentMark } from "./tab-look";
+import { useMentionDoors } from "./task-mentions";
 import { cardTitle } from "./tool-call-model";
 import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,

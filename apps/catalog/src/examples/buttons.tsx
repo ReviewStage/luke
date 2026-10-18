@@ -7,6 +7,7 @@ import {
   EllipsisIcon,
   GAP,
   IconButton,
+  IconButtonLink,
   Inline,
   MicrophoneIcon,
   MicrophoneOffIcon,
@@ -25,7 +26,7 @@ import { CatalogSection } from "../section";
 /**
  * buttons.tsx -- every Button look at rest, with a glyph, unavailable,
  * unavailable but focusable, and busy; the IconButton's looks and toggle;
- * ButtonLink's looks; the round shape a call's controls take, a danger
+ * ButtonLink's looks and an IconButtonLink; the round shape a call's controls take, a danger
  * toggle off and on; and a long label in a narrow column.
  */
 
@@ -57,7 +58,7 @@ function Buttons(): React.JSX.Element {
       <CatalogSection id="buttons-glyph" title="With a glyph">
         <Inline>
           <Button variant={BUTTON_VARIANT.PRIMARY} icon={<PlusIcon />}>
-            New plan
+            New task
           </Button>
           <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PlusIcon />}>
             Invite
@@ -71,7 +72,7 @@ function Buttons(): React.JSX.Element {
         <Inline>
           <IconButton icon={<EllipsisIcon />} label="More" />
           <IconButton icon={<SidebarIcon />} label="Sidebar" pressed />
-          <IconButton icon={<PlusIcon />} label="New plan" variant={BUTTON_VARIANT.OUTLINE} />
+          <IconButton icon={<PlusIcon />} label="New task" variant={BUTTON_VARIANT.OUTLINE} />
           <IconButton icon={<TrashIcon />} label="Delete" disabled />
           <IconButton icon={<EllipsisIcon />} label="Loading" busy busyLabel="Loading" />
         </Inline>
@@ -83,6 +84,7 @@ function Buttons(): React.JSX.Element {
               {variant}
             </ButtonLink>
           ))}
+          <IconButtonLink href="#buttons-link" icon={<PlusIcon />} label="New plan" />
         </Inline>
       </CatalogSection>
       <CatalogSection id="buttons-round" title="Round, as a call's controls">

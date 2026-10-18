@@ -5,7 +5,8 @@
    row stands bare, at a menu row's height, and keeps its controls beside
    its words at any width. A list row stands in the card as a card's row
    does, shorter and with its label at body weight, a line of a reference
-   list rather than a setting. */
+   list rather than a setting. A control as wide as the row stands under
+   the words, a step further from them than the description. */
 
 @layer components {
   /* Note that the row is its own container, and its padding is its body's,
@@ -124,6 +125,11 @@
 
   .luke-settings-row-controls:empty {
     display: none;
+  }
+
+  .luke-settings-row-below {
+    min-width: 0;
+    margin-top: var(--luke-space-8);
   }
 
   /* A container query cannot read a custom property, so the contract's

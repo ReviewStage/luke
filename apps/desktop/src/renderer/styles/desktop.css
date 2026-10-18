@@ -748,62 +748,13 @@ button.sidebar-section-head-name:hover {
   pointer-events: none;
 }
 
-/* What the view filters by, under the Tasks head, each chip drawn as the
-   palette's chosen filter is, with the × that lifts it. */
+/* What the view filters by, under the Tasks head: a row of `@luke/ui`'s
+   removable filter chips (`sidebar-task-view.tsx`). */
 .sidebar-view-chips {
   display: flex;
   flex-wrap: wrap;
   gap: var(--luke-space-4);
   padding: 0 var(--luke-space-6) var(--luke-space-6);
-}
-
-.sidebar-view-chip {
-  display: inline-flex;
-  min-width: 0;
-  height: 22px; /* off-scale: a chip a row's half-step shorter than the palette's */
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: 0 var(--luke-space-2) 0 var(--luke-space-6);
-  border: 1px solid var(--luke-color-border-selected);
-  border-radius: var(--luke-radius-full);
-  background: var(--luke-color-fill-selected);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-  -webkit-app-region: no-drag;
-}
-
-.sidebar-view-chip-words {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-view-chip > svg {
-  width: 12px;
-  height: 12px;
-}
-
-.sidebar-view-chip button {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--luke-radius-full);
-  background: none;
-  color: var(--luke-color-text-muted);
-}
-
-.sidebar-view-chip button:hover {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-}
-
-.sidebar-view-chip button svg {
-  width: 12px;
-  height: 12px;
 }
 
 /* A section's name over its rows, in the headings' voice: the sidebar's
@@ -2135,6 +2086,82 @@ ul.actor-stack {
   }
 }
 
+/* The Mac offline (`offline-mark.tsx`), a pill of the release's shape in the
+   attention orange: a state to know of rather than a press, so it has no
+   hover. It fades in on the pair every arriving element rides and goes at
+   once, as the release's pill does. A narrow foot draws its glyph alone, as
+   it draws the release's, and so does a foot the release's pill stands in
+   too, so the account's name keeps a name's room beside the two. Folded, it
+   stands in the title bar beside New task as a round its glyph alone, one
+   button wide, and the toolbar's clearance grows by that button, so nothing
+   the toolbar draws starts beneath it. Over the sign-in, where nothing
+   else stands in the title bar, it keeps its word. Over a drag region, it
+   takes the pointer back so its hint can show. */
+.offline-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  align-self: center;
+  gap: var(--luke-space-4);
+  height: 24px;
+  padding: 0 var(--luke-space-8);
+  border-radius: 999px;
+  background: var(--luke-color-attention-tint);
+  color: var(--luke-color-attention);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  animation: popup-fade var(--duration-quick) var(--motion-exit) backwards;
+  -webkit-app-region: no-drag;
+}
+
+.offline-mark svg {
+  width: 13px;
+  height: 13px;
+}
+
+.desktop-shell .title-bar-controls .offline-mark {
+  width: var(--control-height);
+  height: var(--control-height);
+  justify-content: center;
+  padding: 0;
+}
+
+.desktop-shell .title-bar-controls .offline-mark-word {
+  display: none;
+}
+
+.desktop-shell[data-sidebar-collapsed="true"][data-offline="true"] {
+  --sidebar-toggle-clearance: calc(
+    var(--title-bar-left) +
+    3 *
+    var(--control-height) +
+    var(--control-gap)
+  );
+}
+
+.sidebar-account-row:has(.sidebar-update) .offline-mark {
+  aspect-ratio: 1;
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebar-account-row:has(.sidebar-update) .offline-mark-word {
+  display: none;
+}
+
+@container sidebar-foot (width < 220px) {
+  .offline-mark {
+    aspect-ratio: 1;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .offline-mark-word {
+    display: none;
+  }
+}
+
 /* Work column ------------------------------------------------------------- */
 
 .desktop-main {
@@ -2454,17 +2481,6 @@ ul.actor-stack {
 .failure-note-remedy :is(svg, .luke-spinner-ring) {
   width: 13px;
   height: 13px;
-}
-
-/* Chips ----------------------------------------------------------------------- */
-
-/* A chip is `@luke/ui`'s shared control (`chip.tsx`), its looks drawn by
-   `@luke/ui/styles.css`. What stays here is the window's own: the marks it
-   holds a size under the control's glyph. */
-.luke-chip :is(.repository-picture, .provider-mark, .harness-mark) {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
 }
 
 /* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
@@ -3371,7 +3387,7 @@ ul.actor-stack {
 /* Too narrow for both of the backend's parts: the notetaker's goes while
    Luke's stands, so what Luke is doing keeps the line. */
 @container call-bar (max-width: 479px) {
-  .call-backend-part[data-part="planner"] ~ [data-part="notes"] {
+  .call-backend-part[data-part="brain"] ~ [data-part="notes"] {
     display: none;
   }
 }
@@ -5421,21 +5437,12 @@ button.integration-tool-head:hover,
 }
 
 /* A picker here grows from a Settings picker's width to name its whole
-   value, an event's or a zone's, rather than cut it short; the time stands
-   at that same width beside them. Where the window leaves the form narrow,
-   beside the sidebar and the runs, a picker gives way to the room rather
-   than run past its card. */
+   value, an event's or a zone's, rather than cut it short (its chip's
+   `CHIP_WIDTH.MIN_FIELD`); the time stands at that same width beside them.
+   Where the window leaves the form narrow, beside the sidebar and the runs,
+   a picker gives way to the room rather than run past its card. */
 .automation-form .settings-picker {
   max-width: 100%;
-}
-
-.automation-form .repository-chip > .luke-chip,
-.automation-form .settings-picker > .luke-chip,
-.automation-form .agent-model-chip .luke-chip,
-.automation-form .automation-model-picker > .luke-chip,
-.automation-form .agent-servers > .luke-chip {
-  width: auto;
-  min-width: min(200px, 100%);
 }
 
 /* A schedule's cron or time, or a review's rules file, at a picker's width beside them. */
@@ -5591,9 +5598,9 @@ button.integration-tool-head:hover,
   font-weight: var(--luke-weight-semibold);
 }
 
-/* The plan's own Chat tab fills its column as an agent's tab does, the
+/* The task's own Chat tab fills its column as an agent's tab does, the
    channel's head standing in for the column's bar. */
-.desktop-plan-chat {
+.desktop-task-chat {
   display: flex;
   min-height: 0;
   flex: 1;
@@ -8365,12 +8372,6 @@ button.integration-tool-head:hover,
 :is(.new-issue, .new-task) .settings-picker {
   min-width: 0;
   flex-shrink: 1;
-}
-
-:is(.new-issue, .new-task) .repository-chip > .luke-chip,
-:is(.new-issue, .new-task) .settings-picker > .luke-chip {
-  width: auto;
-  max-width: 100%;
 }
 
 .dialog-name-field {

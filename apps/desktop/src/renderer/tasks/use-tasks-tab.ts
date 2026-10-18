@@ -830,7 +830,7 @@ const NO_HOLDS: TaskHolds = {};
 const NO_IDS: readonly string[] = [];
 
 /** No agent with no plan, before the list carries any. */
-const NO_PLANLESS_AGENTS: readonly TasklessAgent[] = [];
+const NO_TASKLESS_AGENTS: readonly TasklessAgent[] = [];
 
 /** What the toast says once Copy plan has put the plan on the clipboard. */
 const TASK_COPIED_NOTE = "Plan copied";
@@ -1105,7 +1105,7 @@ export function useTasksTab(input: {
     () =>
       setAgentPins((held) =>
         accountSignedIn
-          ? unsettledAgentPins(held, viewed.tasklessAgents ?? NO_PLANLESS_AGENTS)
+          ? unsettledAgentPins(held, viewed.tasklessAgents ?? NO_TASKLESS_AGENTS)
           : NO_PENDING_AGENT_PINS,
       ),
     [viewed, accountSignedIn],
@@ -1169,7 +1169,7 @@ export function useTasksTab(input: {
   // each pinned as given here until main's view carries it.
   const { tasklessAgents: planlessAgents } = tasks;
   const listedAgents = useMemo(() => {
-    const listed = agentsPinned(planlessAgents ?? NO_PLANLESS_AGENTS, agentPins).filter(
+    const listed = agentsPinned(planlessAgents ?? NO_TASKLESS_AGENTS, agentPins).filter(
       (agent) => listedWorkspaceId === undefined || agent.workspaceId === listedWorkspaceId,
     );
     return {
@@ -1441,13 +1441,13 @@ export function useTasksTab(input: {
           ? { workspaceId: listedWorkspace.id, planId: viewed.activeTaskId }
           : null;
   const chatShownWorkspace = chatShown?.workspaceId ?? null;
-  const chatShownPlan = chatShown?.planId ?? null;
+  const chatShownTask = chatShown?.planId ?? null;
   const reportedTab = useRef<
     | {
         agentId: string | null;
         inboxTaskId: string | null;
         chatShownWorkspace: string | null;
-        chatShownPlan: string | null;
+        chatShownTask: string | null;
       }
     | undefined
   >(undefined);
@@ -1457,7 +1457,7 @@ export function useTasksTab(input: {
       was?.agentId === shownAgent &&
       was.inboxTaskId === shownInbox &&
       was.chatShownWorkspace === chatShownWorkspace &&
-      was.chatShownPlan === chatShownPlan
+      was.chatShownTask === chatShownTask
     ) {
       return;
     }
@@ -1465,7 +1465,7 @@ export function useTasksTab(input: {
       agentId: shownAgent,
       inboxTaskId: shownInbox,
       chatShownWorkspace,
-      chatShownPlan,
+      chatShownTask,
     };
     tell(ACT_KIND.CODING_AGENTS_SHOWN, {
       agentId: shownAgent,
@@ -1473,9 +1473,9 @@ export function useTasksTab(input: {
       chatShown:
         chatShownWorkspace === null
           ? null
-          : { workspaceId: chatShownWorkspace, planId: chatShownPlan },
+          : { workspaceId: chatShownWorkspace, planId: chatShownTask },
     });
-  }, [shownAgent, shownInbox, chatShownWorkspace, chatShownPlan, tell]);
+  }, [shownAgent, shownInbox, chatShownWorkspace, chatShownTask, tell]);
   // Note that the Inbox's choice is remembered as it is made, so leaving the Inbox and coming back stands on it.
   useEffect(() => {
     if (inboxChosen !== undefined) {

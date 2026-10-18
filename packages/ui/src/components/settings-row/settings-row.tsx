@@ -31,6 +31,11 @@ import { type ReactNode, useId } from "react";
  * padded at the card's inline inset, ruled, and stacking under 380px as a
  * card's row is, but at a list's tighter block inset and least height and
  * with its label at body weight.
+ *
+ * A control that needs the row's whole width, such as a gallery of faces to
+ * choose among, stands under the words rather than at their end (`below`),
+ * handed the same ids, so the label still names it and the description and
+ * the error still describe it.
  */
 
 /** How a row stands: padded in a section's card, a reference list's line in one, or bare inside a surface that insets it. */
@@ -63,6 +68,7 @@ export function SettingsRow({
   leading,
   density = SETTINGS_ROW_DENSITY.CARD,
   children,
+  below,
 }: {
   label: ReactNode;
   description?: ReactNode;
@@ -72,8 +78,10 @@ export function SettingsRow({
   error?: ReactNode;
   /** How the row stands; in a section's card where none is named. */
   density?: SettingsRowDensity | undefined;
-  /** The row's controls, handed the row's ids to name and describe them by. */
-  children: (control: SettingsRowControl) => ReactNode;
+  /** The row's controls at its end, handed the row's ids to name and describe them by. */
+  children?: ((control: SettingsRowControl) => ReactNode) | undefined;
+  /** A control that takes the row's whole width under its words, handed the same ids. */
+  below?: ((control: SettingsRowControl) => ReactNode) | undefined;
 }): React.JSX.Element {
   const id = useId();
   const labelId = `${id}label`;
@@ -84,6 +92,11 @@ export function SettingsRow({
   const describedBy = [described ? descriptionId : undefined, failed ? errorId : undefined]
     .filter((part) => part !== undefined)
     .join(" ");
+  const control: SettingsRowControl = {
+    labelId,
+    "aria-describedby": describedBy === "" ? undefined : describedBy,
+    "aria-invalid": failed ? true : undefined,
+  };
   return (
     <div className="luke-settings-row" data-invalid={failed} data-density={density}>
       <div className="luke-settings-row-body">
@@ -101,14 +114,11 @@ export function SettingsRow({
               ) : null}
             </div>
           </div>
-          <div className="luke-settings-row-controls">
-            {children({
-              labelId,
-              "aria-describedby": describedBy === "" ? undefined : describedBy,
-              "aria-invalid": failed ? true : undefined,
-            })}
-          </div>
+          <div className="luke-settings-row-controls">{children?.(control)}</div>
         </div>
+        {below === undefined ? null : (
+          <div className="luke-settings-row-below">{below(control)}</div>
+        )}
         <p className="luke-settings-row-error" id={errorId} aria-live="polite">
           {failed ? error : null}
         </p>

@@ -23,8 +23,10 @@ import {
   HoverCard,
   HoverCardHead,
   INLINE_REF_LOOK,
+  TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
+  TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -47,7 +49,7 @@ import {
 } from "../ai-elements/conversation";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message";
-import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/task";
+import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
 import { appPlatform } from "../app-platform";
 import { useAutomation } from "../automation-directory";
@@ -118,7 +120,6 @@ import {
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links";
-import { useMentionDoors } from "./plan-mentions";
 import { PlanPictures } from "./plan-pictures";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
 import { briefAgent, replayOpening } from "./replay-card-model";
@@ -128,6 +129,7 @@ import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
+import { useMentionDoors } from "./task-mentions";
 import { useMinute } from "./task-time";
 import {
   calledAgent,
@@ -812,16 +814,18 @@ function OriginSubject({
   const chip = linkChip(url, words, doors);
   if (chip !== undefined) return <span className="agent-origin-chip">{chip}</span>;
   return (
-    <a
-      className="text-link agent-origin-subject"
-      href={url}
-      onClick={(event) => {
-        event.preventDefault();
-        openGitHub(url);
-      }}
-    >
-      {words}
-    </a>
+    <span className="agent-origin-subject">
+      <TextLink
+        href={url}
+        look={TEXT_LINK_LOOK.UNDERLINED}
+        onClick={(event) => {
+          event.preventDefault();
+          openGitHub(url);
+        }}
+      >
+        {words}
+      </TextLink>
+    </span>
   );
 }
 

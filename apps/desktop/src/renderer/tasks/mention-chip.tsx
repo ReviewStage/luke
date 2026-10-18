@@ -677,7 +677,7 @@ function PlaceCard({
   fallback: ReactNode;
 }): ReactNode {
   const workspaceId = useWordsWorkspaceId({
-    planId: "planId" in place ? (place.planId ?? NO_PLAN_ID) : NO_PLAN_ID,
+    planId: "planId" in place ? (place.planId ?? NO_TASK_ID) : NO_TASK_ID,
     workspace,
   });
   switch (place.kind) {
@@ -729,7 +729,7 @@ function PlaceCard({
 }
 
 /** The plan of a place that names none, which no plan's id spells. */
-const NO_PLAN_ID = "";
+const NO_TASK_ID = "";
 
 /** The kind a chip of a place in Luke carries beside a mention's kinds, for its styles and a test. */
 const MENTION_KIND_PLACE = "place";

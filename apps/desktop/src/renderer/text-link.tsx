@@ -1,5 +1,5 @@
-import { linkFace, TEXT_LINK_CLASS } from "@luke/ui/link-face";
-import { ArrowUpRightIcon } from "lucide-react";
+import { TextLink as SharedTextLink, TEXT_LINK_LOOK } from "@luke/ui";
+import { linkFace } from "@luke/ui/link-face";
 import type { ReactNode } from "react";
 import { opensAsLink } from "./tasks/use-open-link";
 import { Tooltip } from "./tooltip";
@@ -15,7 +15,9 @@ import { Tooltip } from "./tooltip";
  * link mark the same class, so a link reads alike wherever it is written.
  * Where words are their own address (`@luke/ui/link-face`), they say it as
  * a reader names a page, and the ↗ says a press leaves the window, as a
- * chip's press stays in it.
+ * chip's press stays in it. What it looks like is `@luke/ui`'s underlined
+ * TextLink; what is the window's own is here: the face, the hint, and the
+ * press that opens the address through the app rather than the page.
  *
  * A place that opens links hands `onOpen`, and the link is pressed where the
  * window opens its address at all (`opensAsLink`); a press goes no further
@@ -52,32 +54,21 @@ export function TextLink({
   onOpen?: ((href: string) => void) | undefined;
 }): React.JSX.Element {
   const face = words === undefined ? undefined : linkFace(href, words);
-  const said =
-    face?.shortened === true ? (
-      <>
-        {face.words}
-        <ArrowUpRightIcon className="text-link-out" aria-hidden="true" />
-      </>
-    ) : (
-      children
-    );
+  const opens = onOpen !== undefined && opensAsLink(href);
   return (
     <Tooltip label={hintOf(href)}>
-      {onOpen === undefined || !opensAsLink(href) ? (
-        <span className={TEXT_LINK_CLASS}>{said}</span>
-      ) : (
-        <a
-          href={href}
-          className={TEXT_LINK_CLASS}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onOpen(href);
-          }}
-        >
-          {said}
-        </a>
-      )}
+      <SharedTextLink
+        href={opens ? href : undefined}
+        look={TEXT_LINK_LOOK.UNDERLINED}
+        external={face?.shortened === true}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onOpen?.(href);
+        }}
+      >
+        {face?.shortened === true ? face.words : children}
+      </SharedTextLink>
     </Tooltip>
   );
 }

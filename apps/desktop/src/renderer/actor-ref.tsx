@@ -281,34 +281,6 @@ export function ActorMark({
 }
 
 /**
- * A face that is no actor's, drawn as a person's is: its picture on a circle
- * once it loads, and the first letter of its name on the hue read off `id`
- * until then and where it fails or there is none. For a picker whose options
- * have faces, such as the avatars Luke appears as on video, so its rows and
- * chip read as the window's other faces do. Hidden from a screen reader, as
- * every mark is, since its name stands beside it.
- */
-export function PictureMark({
-  id,
-  name,
-  pictureUrl,
-  size = ACTOR_SIZE.INLINE,
-}: {
-  /** What the hue is read off: the option's own token. */
-  id: string;
-  /** Whose letter stands until the picture loads. */
-  name: string;
-  pictureUrl: string | undefined;
-  size?: ActorSize;
-}): React.JSX.Element {
-  return (
-    <span className="actor-mark" data-kind={ACTOR_KIND.PERSON} data-size={size} aria-hidden="true">
-      <PersonDisc id={id} name={name} pictureUrl={pictureUrl} size={size} />
-    </span>
-  );
-}
-
-/**
  * What a screen reader hears of a teammate's task's creator, whose face the
  * row draws at its time: "(created by Charles Pan)". Note that a row says it
  * outside its time's slot, because the slot steps out while the row is

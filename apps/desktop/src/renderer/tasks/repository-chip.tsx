@@ -7,6 +7,7 @@ import {
   Chip,
   type ChipLook,
   ChipName,
+  type ChipWidth,
   ErrorState,
   GearIcon,
   ProviderMark,
@@ -188,6 +189,8 @@ export function RepositoryChip(props: {
   place: ChipPlace;
   /** A form row's chip: the edge its menu hangs from, the trailing one where none is named, as a Settings picker's does. */
   align?: PickerAlign | undefined;
+  /** A form row's chip: how wide it stands, its words' own width where none is named. */
+  width?: ChipWidth | undefined;
   /** A form row's chip: the ids of the row's words that describe it, its error among them while it has one. */
   describedBy?: string | undefined;
   /** A form row's chip: whether the row says its value is refused. */
@@ -310,6 +313,7 @@ export function RepositoryChip(props: {
         <Chip
           ref={trigger}
           look={PLACE_LOOK[props.place]}
+          width={props.width}
           chevron={props.place === CHIP_PLACE.FIELD}
           aria-describedby={props.describedBy}
           aria-invalid={props.invalid}

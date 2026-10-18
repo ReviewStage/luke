@@ -10,7 +10,7 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**
@@ -60,7 +60,7 @@ afterEach(() => {
 function taskPage(
   opened: Mention[],
   files: { path: string; lines: MentionLines | undefined }[],
-): PlanMentionsValue {
+): TaskMentionsValue {
   return {
     taskId: TASK_ID,
     taskName: "Invitations",
@@ -78,7 +78,7 @@ function taskPage(
 }
 
 /** The words drawn as a transcript draws them, on the task's page given or off any. */
-function drawn(page: PlanMentionsValue | undefined, text: string = WORDS): HTMLElement {
+function drawn(page: TaskMentionsValue | undefined, text: string = WORDS): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -86,7 +86,7 @@ function drawn(page: PlanMentionsValue | undefined, text: string = WORDS): HTMLE
   const words = createElement(TranscriptWords, { text });
   act(() =>
     root.render(
-      page === undefined ? words : createElement(PlanMentions, { value: page, children: words }),
+      page === undefined ? words : createElement(TaskMentions, { value: page, children: words }),
     ),
   );
   return container;

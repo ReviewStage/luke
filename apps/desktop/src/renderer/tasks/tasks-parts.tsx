@@ -71,7 +71,7 @@ function CallStatusLines({
             // Note that this keeps the system's title, because the floating call window is too short for a pill.
             <span
               className="call-backend-part"
-              data-part="planner"
+              data-part="brain"
               title={titled ? brain.action : undefined}
             >
               {BRAIN_NAME} ·{" "}

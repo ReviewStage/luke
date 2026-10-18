@@ -14,6 +14,7 @@
 @import "./components/menu/menu.css";
 @import "./components/popover-panel/popover-panel.css";
 @import "./components/text/text.css";
+@import "./components/text-link/text-link.css";
 @import "./components/attachment-chip/attachment-chip.css";
 @import "./components/avatar/avatar.css";
 @import "./components/badge/badge.css";
@@ -22,8 +23,6 @@
 @import "./components/card/card.css";
 @import "./components/folding-button/folding-button.css";
 @import "./components/chip/chip.css";
-/* After the chip's, whose width the field column sets. */
-@import "./components/select/select.css";
 @import "./components/collection-page/collection-page.css";
 @import "./components/combobox/combobox.css";
 @import "./components/confirm-dialog/confirm-dialog.css";
