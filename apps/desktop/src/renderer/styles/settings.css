@@ -755,6 +755,129 @@
   }
 }
 
+/* A choice whose every value has a face (`picture-choice-row.tsx`), under
+   its row's words: the chosen face large, as the call will show it, beside
+   every face round with its name under it, four to a line. The faces fill
+   what the stage leaves, so a wider page draws them larger. */
+.picture-choice {
+  display: grid;
+  align-items: start;
+  gap: var(--space-16);
+  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
+}
+
+.picture-choice-stage {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1;
+  border-radius: var(--control-radius);
+  background: var(--hairline);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+}
+
+.picture-choice-stage img,
+.picture-choice-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 25%;
+}
+
+/* The name over the photo's foot, on a shade that keeps it legible on any photo. */
+.picture-choice-stage-name {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: var(--space-16) var(--space-8) var(--space-6);
+  background: linear-gradient(transparent, rgb(0 0 0 / 65%));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.picture-choice-faces {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  gap: var(--space-12) var(--space-8);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.picture-choice-face {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.picture-choice-faces[aria-busy="true"] .picture-choice-face {
+  cursor: default;
+}
+
+/* Round, and ringed in the switch's accent once chosen, as a switch that is
+   on wears it. The radio itself is hidden, so the keyboard's ring is drawn
+   on the circle its face shows. */
+.picture-choice-photo {
+  overflow: hidden;
+  width: 100%;
+  max-width: 88px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--hairline);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  transition: box-shadow var(--duration-quick) var(--motion-exit);
+}
+
+.picture-choice-face:hover .picture-choice-photo {
+  box-shadow: 0 0 0 2px var(--hairline-strong);
+}
+
+.picture-choice-face:has(> :checked) .picture-choice-photo {
+  box-shadow: 0 0 0 2px var(--switch-on);
+}
+
+:root[data-keyboard="true"] .picture-choice-face:has(> :focus-visible) .picture-choice-photo {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(2px + var(--focus-ring-offset));
+}
+
+.picture-choice-name {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picture-choice-face:has(> :checked) .picture-choice-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* A narrow row stacks the stage over the faces rather than squeezing both;
+   the row is its own container (`@luke/ui`'s `settings-row.css`). */
+@container luke-settings-row (width < 480px) {
+  .picture-choice {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .picture-choice-stage {
+    width: min(100%, 200px);
+  }
+}
+
 /* A page too narrow for a row's words and its controls side by side
    stacks them, as System Settings does in a narrow window: the words, and
    the mark or face leading them, keep the row's first line, and whatever
