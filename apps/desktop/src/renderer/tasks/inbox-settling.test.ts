@@ -66,10 +66,13 @@ interface Probe {
   settler: InboxSettler | undefined;
 }
 
-function mount(): {
-  probe: Probe;
-  render: (waiting: readonly AppInboxTask[], read: readonly InboxItem[]) => void;
-} {
+/** The probe, and how the test draws it again over what main and the read say. */
+interface Mounted {
+  readonly probe: Probe;
+  readonly render: (waiting: readonly AppInboxTask[], read: readonly InboxItem[]) => void;
+}
+
+function mount(): Mounted {
   const probe: Probe = { count: 0, drawn: [], settler: undefined };
   const registry = AtomRegistry.make();
   function Page({

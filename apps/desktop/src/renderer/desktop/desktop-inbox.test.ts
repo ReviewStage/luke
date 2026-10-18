@@ -10,6 +10,7 @@ import {
 } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxMessagedView,
@@ -4176,13 +4177,16 @@ test("a row swiped right marks its item: a long swipe marks an unread item read 
   );
 });
 
+/** The answers the pane sent, and how the test answers the oldest still out, as the service would. */
+interface GatedAnswers {
+  readonly sent: CodingAgentInboxAnswerParams[];
+  readonly answer: (view: CodingAgentInboxAnsweredView) => void;
+}
+
 /** Every answer the pane sends, held until the test answers it as the service would. */
-function gatedAnswers(): {
-  sent: CodingAgentInboxAnswerParams[];
-  answer: (value: unknown) => void;
-} {
+function gatedAnswers(): GatedAnswers {
   const sent: CodingAgentInboxAnswerParams[] = [];
-  const waiting: ((value: unknown) => void)[] = [];
+  const waiting: ((view: CodingAgentInboxAnsweredView) => void)[] = [];
   const bridge = appBridge();
   fakeAppBridge({
     ...bridge,
@@ -4194,7 +4198,7 @@ function gatedAnswers(): {
       );
     },
   });
-  return { sent, answer: (value) => waiting.shift()?.(value) };
+  return { sent, answer: (view) => waiting.shift()?.(view) };
 }
 
 /** Threshold as the service answers it once the reader's note was taken. */
