@@ -129,7 +129,7 @@ export function RepositoryDetail({
  * opening their page where the window offers one.
  */
 function CreatorDetail({
-  plan,
+  plan: task,
   readerId,
   now,
 }: {
@@ -137,7 +137,7 @@ function CreatorDetail({
   readerId: string | undefined;
   now: number;
 }): React.JSX.Element {
-  const creator = useCreator(plan, readerId);
+  const creator = useCreator(task, readerId);
   const door = useActorDoor(creator);
   const left = creator.kind === ACTOR_KIND.SOMEONE && creator.reason === SOMEONE_REASON.FORMER;
   return (
@@ -147,7 +147,7 @@ function CreatorDetail({
       label={
         <>
           {`Created by ${actorName(creator, { sentence: true })}${left ? ", who left" : ""} · `}
-          <RelativeTime at={plan.createdAt} now={now} hint={false} ago />
+          <RelativeTime at={task.createdAt} now={now} hint={false} ago />
         </>
       }
       onPress={door}
@@ -334,9 +334,9 @@ export function TaskCard({
 /** Whether others share a plan's workspace, as the service counts its members; unknown from a service that counts none. */
 function sharedWorkspace(
   tasks: Pick<TasksControl, "workspaces">,
-  plan: Pick<TaskSummary, "workspaceId">,
+  task: Pick<TaskSummary, "workspaceId">,
 ): boolean | undefined {
-  const count = tasks.workspaces.find((each) => each.id === plan.workspaceId)?.memberCount;
+  const count = tasks.workspaces.find((each) => each.id === task.workspaceId)?.memberCount;
   return count === undefined ? undefined : count > 1;
 }
 

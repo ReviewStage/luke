@@ -429,26 +429,26 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
  * them, so an automation opened from it opens as it was listed, and an
  * edit is in the list the moment it lands.
  */
-export function AutomationsPage({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
+export function AutomationsPage({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   // Every Copy link on these pages is written under the listed workspace, whose automations they are.
   return (
-    <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
-      <AutomationsPages tasks={plans} />
+    <LinkWorkspaceProvider value={tasks.workspace?.slug ?? tasks.workspace?.id}>
+      <AutomationsPages tasks={tasks} />
     </LinkWorkspaceProvider>
   );
 }
 
 /** The Automations pages themselves, under the workspace their links are written in. */
-function AutomationsPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
-  const view = plans.automationsView;
-  const workspace = plans.workspace;
+function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+  const view = tasks.automationsView;
+  const workspace = tasks.workspace;
   const automations = useAutomations(workspace?.id);
   // The automation the new page made, whose page is that same editor still, so what was typed while it was made stands.
   const [made, setMade] = useState<string | undefined>(undefined);
   const back = () => view.onOpen({ kind: AUTOMATIONS_PAGE.LIST });
   const { place } = view;
   if (place.kind === AUTOMATIONS_PAGE.LIST) {
-    return <ListPage tasks={plans} automations={automations} />;
+    return <ListPage tasks={tasks} automations={automations} />;
   }
   const { read, reload } = automations;
   if (read !== undefined && "failure" in read) {
@@ -467,7 +467,7 @@ function AutomationsPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.
     );
   }
   // Note that the account's first workspace is its personal one, where everything is its own.
-  const offersOwner = workspace !== undefined && plans.workspaces[0]?.id !== workspace.id;
+  const offersOwner = workspace !== undefined && tasks.workspaces[0]?.id !== workspace.id;
   const preset = place.kind === AUTOMATIONS_PAGE.NEW ? place.preset : undefined;
   const editing = opened === undefined || opened.id === made ? AUTOMATIONS_PAGE.NEW : opened.id;
   return (
@@ -479,12 +479,12 @@ function AutomationsPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.
         preset={preset}
         workspace={workspace}
         offersOwner={offersOwner}
-        repositories={plans.newTask.repositoriesIn(workspace?.id)}
+        repositories={tasks.newTask.repositoriesIn(workspace?.id)}
         writes={automations}
         onBack={back}
-        onOpenAgent={(agentId) => plans.agentView.onOpen(agentId)}
+        onOpenAgent={(agentId) => tasks.agentView.onOpen(agentId)}
         linked={place.kind === AUTOMATIONS_PAGE.EDIT ? place : undefined}
-        leaveGuard={plans.leaveGuard}
+        leaveGuard={tasks.leaveGuard}
         onDeleted={(automationId) =>
           view.onOpen({ kind: AUTOMATIONS_PAGE.LIST, deleted: automationId })
         }

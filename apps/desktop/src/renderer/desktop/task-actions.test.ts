@@ -483,13 +483,13 @@ test("Copy link copies the plan's address on tryluke.dev, alike from the toolbar
 
 test("a task's card says who created it where others share its workspace, the reader as you, and nothing in a workspace of one", () => {
   /** The card's lines under its name, as Dean hears them with the creation's time left off. */
-  const details = (plan: TaskSummary, workspace: Workspace) => {
-    const plans = tasksControl({ me: DEAN.userId, workspaces: [workspace] });
+  const details = (task: TaskSummary, workspace: Workspace) => {
+    const tasks = tasksControl({ me: DEAN.userId, workspaces: [workspace] });
     const card = mount(
       createElement(MemberDirectory, {
         workspace: undefined,
         readerId: DEAN.userId,
-        children: taskCardOf(plans, { ...plan, workspaceId: workspace.id }, plan.updatedAt),
+        children: taskCardOf(tasks, { ...task, workspaceId: workspace.id }, task.updatedAt),
       }),
     );
     const lines = [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
@@ -511,10 +511,10 @@ test("a task's card says who created it where others share its workspace, the re
 
 test("a task's card's creator line opens the creator's page in the window, and is words outside it", () => {
   const opened: string[] = [];
-  const plans = tasksControl({ me: DEAN.userId, workspaces: [STAGE] });
+  const tasks = tasksControl({ me: DEAN.userId, workspaces: [STAGE] });
   const charles = { ...OTHER, createdAt: 60_000, ownerId: CHARLES.userId, createdBy: CHARLES };
   const drawn = (inWindow: boolean) => {
-    const card = taskCardOf(plans, { ...charles, workspaceId: STAGE.id }, charles.updatedAt);
+    const card = taskCardOf(tasks, { ...charles, workspaceId: STAGE.id }, charles.updatedAt);
     const view = mount(
       createElement(MemberDirectory, {
         workspace: undefined,
@@ -545,14 +545,14 @@ test("a task's card says you of the reader's own task outside a member directory
     members: readonly { userId: string; name: string }[] | undefined,
   ) => {
     installMembers(members);
-    const plans = tasksControl({ me: DEAN.userId, workspaces: [PERSONAL, workspace] });
+    const tasks = tasksControl({ me: DEAN.userId, workspaces: [PERSONAL, workspace] });
     const card = mount(
       members === undefined
-        ? taskCardOf(plans, mine, mine.updatedAt)
+        ? taskCardOf(tasks, mine, mine.updatedAt)
         : createElement(MemberDirectory, {
             workspace,
             readerId: DEAN.userId,
-            children: taskCardOf(plans, mine, mine.updatedAt),
+            children: taskCardOf(tasks, mine, mine.updatedAt),
           }),
     );
     await act(async () => {

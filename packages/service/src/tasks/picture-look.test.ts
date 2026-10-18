@@ -53,17 +53,17 @@ const openPicturedTasks = Effect.gen(function* () {
   const outsider = yield* openAccount;
   const workspace = yield* openWorkspace(owner);
   yield* joinWorkspace(workspace, teammate);
-  const plan = yield* createTask(owner, { organizationId: workspace, name: "Invites" });
+  const task = yield* createTask(owner, { organizationId: workspace, name: "Invites" });
   const other = yield* createTask(owner, { organizationId: workspace, name: "Billing" });
-  const kept = yield* keepPlanAttachment(teammate, plan.id, PICTURE);
+  const kept = yield* keepPlanAttachment(teammate, task.id, PICTURE);
   if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("the picture was not kept");
-  const address = planAttachmentAddress({ taskId: plan.id, attachmentId: kept.id }, "acme");
-  return { owner, outsider, planId: plan.id, otherId: other.id, attachmentId: kept.id, address };
+  const address = planAttachmentAddress({ taskId: task.id, attachmentId: kept.id }, "acme");
+  return { owner, outsider, planId: task.id, otherId: other.id, attachmentId: kept.id, address };
 });
 
 /** A look as a turn makes one: bound to the plan as the account. */
-function lookCall(userId: string, planId: string): PlanDocumentBinding {
-  return { userId, taskId: planId };
+function lookCall(userId: string, taskId: string): PlanDocumentBinding {
+  return { userId, taskId: taskId };
 }
 
 const look = (call: PlanDocumentBinding, address: string) =>
@@ -74,10 +74,10 @@ it.layer(getTestDB())("look_at_picture", (it) => {
     "a member's look hands the model the picture as an image, and the conversation keeps only that it looked",
     () =>
       Effect.gen(function* () {
-        const { owner, planId, address } = yield* openPicturedTasks;
+        const { owner, planId: taskId, address } = yield* openPicturedTasks;
         const base64 = Base64.encode(PICTURE.bytes);
 
-        const answered = yield* look(lookCall(owner, planId), address);
+        const answered = yield* look(lookCall(owner, taskId), address);
         const shown = pictureLookModelOutput(unparsedWire({ ...answered }));
         const kept = storedPictureLookOutput(unparsedWire({ ...answered }));
 
@@ -96,20 +96,26 @@ it.layer(getTestDB())("look_at_picture", (it) => {
     "a picture of another plan, one the plan does not hold, an outsider's look, and an address that is no picture's are refused, in words the model reads and keeps",
     () =>
       Effect.gen(function* () {
-        const { owner, outsider, planId, otherId, attachmentId, address } =
-          yield* openPicturedTasks;
+        const {
+          owner,
+          outsider,
+          planId: taskId,
+          otherId,
+          attachmentId,
+          address,
+        } = yield* openPicturedTasks;
         const missing = planAttachmentAddress(
-          { taskId: planId, attachmentId: randomUUID() },
+          { taskId: taskId, attachmentId: randomUUID() },
           "acme",
         );
         const pageOfTask = address.slice(0, address.indexOf("/files/"));
 
         const answers = [
           yield* look(lookCall(owner, otherId), address),
-          yield* look(lookCall(owner, planId), missing),
-          yield* look(lookCall(outsider, planId), address),
-          yield* look(lookCall(owner, planId), pageOfTask),
-          yield* runLookAtPicture(lookCall(owner, planId), unparsedWire({ attachmentId })),
+          yield* look(lookCall(owner, taskId), missing),
+          yield* look(lookCall(outsider, taskId), address),
+          yield* look(lookCall(owner, taskId), pageOfTask),
+          yield* runLookAtPicture(lookCall(owner, taskId), unparsedWire({ attachmentId })),
         ];
 
         assert.deepEqual(answers, [
@@ -129,11 +135,11 @@ it.layer(getTestDB())("look_at_picture", (it) => {
     "a turn looks at the plan's pictures as often as it asks, and every look answers the picture",
     () =>
       Effect.gen(function* () {
-        const { owner, planId, address } = yield* openPicturedTasks;
+        const { owner, planId: taskId, address } = yield* openPicturedTasks;
 
         const statuses: string[] = [];
         for (let at = 0; at < 12; at += 1) {
-          statuses.push((yield* look(lookCall(owner, planId), address)).status);
+          statuses.push((yield* look(lookCall(owner, taskId), address)).status);
         }
 
         assert.deepEqual(

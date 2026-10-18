@@ -543,14 +543,14 @@ export class HostedTaskClient {
    * included, so nothing a window draws is a type it did not expect.
    */
   readPicture(
-    planId: string,
+    taskId: string,
     attachmentId: string,
   ): Effect.Effect<TasksPictureAnswer, never, HttpClient.HttpClient> {
     const send = this.#call.send;
     return Effect.gen(function* () {
       const answer = yield* send({
         method: HTTP_METHOD.GET,
-        path: planAttachmentPath(planId, attachmentId),
+        path: planAttachmentPath(taskId, attachmentId),
       });
       if (!callAnswered(answer)) return { failure: TASK_CALL_FAILURE.UNANSWERED };
       if (!answer.response.ok) {
@@ -569,14 +569,14 @@ export class HostedTaskClient {
    * write, an archived one among them; unanswered for anything else.
    */
   keepPicture(
-    planId: string,
+    taskId: string,
     picture: string,
   ): Effect.Effect<TasksPictureKeepAnswer, never, HttpClient.HttpClient> {
     const send = this.#call.send;
     return Effect.gen(function* () {
       const answer = yield* send({
         method: HTTP_METHOD.POST,
-        path: planAttachmentsPath(planId),
+        path: planAttachmentsPath(taskId),
         body: JSON.stringify({ picture }),
       });
       if (!callAnswered(answer)) return { failure: PICTURE_KEEP_FAILURE.UNANSWERED };

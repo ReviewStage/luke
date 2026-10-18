@@ -395,12 +395,12 @@ function landsOnEmptyRoom(event: React.MouseEvent<HTMLElement>): boolean {
   return target instanceof Element && target.classList.contains(BODY_CLASS);
 }
 
-function opened(plan: Task): Chase {
-  const { body } = plan.document;
+function opened(task: Task): Chase {
+  const { body } = task.document;
   return {
-    taskId: plan.id,
+    taskId: task.id,
     body,
-    lastEditAt: plan.lastEdit?.at,
+    lastEditAt: task.lastEdit?.at,
     state: chaseOpened(body),
   };
 }

@@ -73,8 +73,8 @@ export interface CreatorGroup {
 }
 
 /** A task as a row of the list. */
-export function taskRow(plan: TaskSummary): TaskRow {
-  return { kind: TASK_ROW.TASK, plan };
+export function taskRow(task: TaskSummary): TaskRow {
+  return { kind: TASK_ROW.TASK, plan: task };
 }
 
 /** An agent with no task as a row of the list. */
@@ -93,8 +93,8 @@ export function taskRowRepository(row: TaskRow): string | null {
 }
 
 /** Who created a plan, by account id: the creator the wire names, else its owner. */
-function creatorIdOf(plan: TaskSummary): string | undefined {
-  return plan.createdBy?.userId ?? plan.ownerId;
+function creatorIdOf(task: TaskSummary): string | undefined {
+  return task.createdBy?.userId ?? task.ownerId;
 }
 
 /** Who created the row, by account id: a task's creator, or whoever started the agent, whose automation it ran on. */
@@ -111,9 +111,9 @@ function taskRowCreatorId(row: TaskRow): string | undefined {
  * and Cursor. Neither moves while an agent's turn streams, so a row holds its
  * place while the agent works.
  */
-export function taskTime(plan: TaskSummary, order: TaskOrder): number {
-  if (order === TASK_ORDER.CREATED) return plan.createdAt;
-  return Math.max(plan.updatedAt, plan.agents?.activityAt ?? 0);
+export function taskTime(task: TaskSummary, order: TaskOrder): number {
+  if (order === TASK_ORDER.CREATED) return task.createdAt;
+  return Math.max(task.updatedAt, task.agents?.activityAt ?? 0);
 }
 
 /** The time a row shows and is ordered by: its task's (`taskTime`), or its agent's start under Created and its last activity otherwise. */
@@ -138,8 +138,8 @@ export function orderTaskRows(rows: readonly TaskRow[], order: TaskOrder): TaskR
 }
 
 /** The plans in the order chosen, as their rows are ordered. */
-export function orderTasks(plans: readonly TaskSummary[], order: TaskOrder): TaskSummary[] {
-  return orderTaskRows(plans.map(taskRow), order).flatMap((row) =>
+export function orderTasks(tasks: readonly TaskSummary[], order: TaskOrder): TaskSummary[] {
+  return orderTaskRows(tasks.map(taskRow), order).flatMap((row) =>
     row.kind === TASK_ROW.TASK ? [row.plan] : [],
   );
 }

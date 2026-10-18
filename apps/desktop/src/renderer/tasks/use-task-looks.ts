@@ -174,25 +174,25 @@ function writeLooks(kept: KeptLooks): void {
  */
 function raised(raises: Readonly<Record<string, number>>, opens: boolean) {
   return (stored: Looks): Looks => {
-    const moved = Object.entries(raises).flatMap(([planId, at]) => {
-      const look = stored[planId];
+    const moved = Object.entries(raises).flatMap(([taskId, at]) => {
+      const look = stored[taskId];
       const mark = Math.max(markOf(look) ?? at, at);
       const unread = markedUnread(look) && !opens;
       if (mark === markOf(look) && unread === markedUnread(look)) return [];
       const next: Look = unread ? { at: mark, unread: true } : { at: mark, unread: false };
-      return [[planId, next] as const];
+      return [[taskId, next] as const];
     });
     return moved.length === 0 ? stored : { ...stored, ...Object.fromEntries(moved) };
   };
 }
 
 /** The marks with the plan marked unread, keeping the mark its last look left. */
-function flagged(planId: string) {
+function flagged(taskId: string) {
   return (stored: Looks): Looks => {
-    const look = stored[planId];
+    const look = stored[taskId];
     if (markedUnread(look)) return stored;
     const at = markOf(look);
-    return { ...stored, [planId]: at === undefined ? { unread: true } : { at, unread: true } };
+    return { ...stored, [taskId]: at === undefined ? { unread: true } : { at, unread: true } };
   };
 }
 
@@ -304,34 +304,34 @@ export function useTaskLooks(task: Task | undefined, readerId: string | undefine
     current = revisited(visit, task, readerId);
     setVisit(current);
   }
-  const planId = task?.id;
+  const taskId = task?.id;
   const newest = task === undefined ? undefined : newestSaveOf(task);
   const looked = useRef<string | undefined>(undefined);
 
   useEffect(() => {
-    if (planId === undefined || newest === undefined) {
+    if (taskId === undefined || newest === undefined) {
       looked.current = undefined;
       return;
     }
-    const opens = looked.current !== planId;
-    looked.current = planId;
-    keep({ change: raised({ [planId]: newest }, opens), seeded: false });
-  }, [planId, newest, keep]);
+    const opens = looked.current !== taskId;
+    looked.current = taskId;
+    keep({ change: raised({ [taskId]: newest }, opens), seeded: false });
+  }, [taskId, newest, keep]);
 
   useEffect(() => {
-    if (planId === undefined) return;
-    watch(planId);
+    if (taskId === undefined) return;
+    watch(taskId);
     return () => watch(undefined);
-  }, [planId, watch]);
+  }, [taskId, watch]);
 
   return {
     changed: current.changed,
     dismiss: () => {
       setVisit((held) =>
-        held.taskId === planId ? { ...held, mark: held.opened, changed: NOTHING_CHANGED } : held,
+        held.taskId === taskId ? { ...held, mark: held.opened, changed: NOTHING_CHANGED } : held,
       );
-      if (planId !== undefined && newest !== undefined)
-        keep({ change: raised({ [planId]: newest }, false), seeded: false });
+      if (taskId !== undefined && newest !== undefined)
+        keep({ change: raised({ [taskId]: newest }, false), seeded: false });
     },
   };
 }
@@ -363,20 +363,20 @@ export function useUnreadTasks(
     if (!seeding) return;
     const unmarked = tasks.filter((task) => looks.marks[task.id] === undefined);
     keep({
-      change: raised(Object.fromEntries(unmarked.map((plan) => [plan.id, plan.updatedAt])), false),
+      change: raised(Object.fromEntries(unmarked.map((task) => [task.id, task.updatedAt])), false),
       seeded: true,
     });
   }, [seeding, tasks, looks.marks, keep]);
 
-  return (plan) => {
+  return (task) => {
     if (staged) return false;
-    const look = looks.marks[plan.id];
+    const look = looks.marks[task.id];
     if (markedUnread(look)) return true;
     return (
       looks.seeded &&
       known &&
-      plan.id !== watched &&
-      plan.updatedAt > (markOf(look) ?? plan.createdAt)
+      task.id !== watched &&
+      task.updatedAt > (markOf(look) ?? task.createdAt)
     );
   };
 }
@@ -386,9 +386,9 @@ export interface ReadMarks {
   /** The plan the developer is looking at now, none while Settings or the Inbox covers it. */
   readonly watched: string | undefined;
   /** Whether the plan is marked unread by hand: the only way the plan being looked at is unread. */
-  readonly markedUnread: (planId: string) => boolean;
+  readonly markedUnread: (taskId: string) => boolean;
   /** Marks the plan unread until it next opens, or read, as a look at its newest save. */
-  readonly mark: (plan: Pick<TaskSummary, "id" | "updatedAt">, unread: boolean) => void;
+  readonly mark: (task: Pick<TaskSummary, "id" | "updatedAt">, unread: boolean) => void;
 }
 
 /** The marks by hand, which every menu offering Mark as unread or Mark as read writes through. */
@@ -398,10 +398,10 @@ export function useReadMarks(): ReadMarks {
   const watched = useAtomValue(watchedAtom);
   return {
     watched,
-    markedUnread: (planId) => markedUnread(looks.marks[planId]),
-    mark: (plan, unread) =>
+    markedUnread: (taskId) => markedUnread(looks.marks[taskId]),
+    mark: (task, unread) =>
       keep({
-        change: unread ? flagged(plan.id) : raised({ [plan.id]: plan.updatedAt }, true),
+        change: unread ? flagged(task.id) : raised({ [task.id]: task.updatedAt }, true),
         seeded: false,
       }),
   };

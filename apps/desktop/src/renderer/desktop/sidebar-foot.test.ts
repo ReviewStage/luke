@@ -112,7 +112,7 @@ function mount(
     ),
   );
   return (
-    container.querySelector<HTMLButtonElement>(".sidebar-account") ??
+    container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
     assert.fail("the foot draws the account's button")
   );
 }
@@ -308,7 +308,7 @@ test("a Log out that fails keeps the dialog up saying so, and the account still 
 test("signed out, the account says so and its menu names no one and offers no Log out", () => {
   const button = mount({ status: ACCOUNT_STATUS.SIGNED_OUT });
 
-  assert.equal(button.querySelector(".sidebar-account-name")?.textContent, "Not signed in");
+  assert.match(button.textContent ?? "", /Not signed in$/u);
   act(() => button.click());
   assert.deepEqual(accountMenuLines(), [
     "Settings ⌘,",
