@@ -1,11 +1,10 @@
 import { pathToFileURL } from "node:url";
 import { NodeRuntime } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
-import { runWebMigrations } from "@luke/database/core/migrator";
 import { waitingOutNeonComputeLimit } from "@luke/database/core/neon-compute-limit";
 import { databaseOverPgClient } from "@luke/database/core/query";
 import { POOL_LIMITS } from "@luke/service/db";
-import { preparePreviewDatabase } from "@luke/service/maintenance/preview-database";
+import { migrateDeploymentDatabase } from "@luke/service/maintenance/preview-database";
 import { Config, Effect, Layer } from "effect";
 
 /**
@@ -19,26 +18,15 @@ import { Config, Effect, Layer } from "effect";
  */
 const migrationConnectionString = Config.Redacted("DATABASE_URL_UNPOOLED");
 
-/**
- * The migrations, then, on a Preview, the branch of production's database made
- * the Preview's own (`@luke/service/maintenance/preview-database`, which
- * leaves every other build's database as it stands). It runs here rather than
- * with the seed because it is the same kind of work, bulk statements on the
- * direct connection Neon says admin work belongs on, and because a branch's
- * first build should migrate the whole copy before it is cut down.
- */
-const migrateAndPrepare = Effect.gen(function* () {
-  const applied = yield* runWebMigrations();
-  yield* Effect.logInfo(`Applied ${applied.length} migrations`, applied);
-  yield* preparePreviewDatabase(process.env);
-});
-
 const migrateConfiguredDatabase = Effect.gen(function* () {
   const url = yield* migrationConnectionString;
   // Note that the wait wraps the client's layer too, because Neon refuses the
   // compute as the connection opens, so each attempt needs a client of its own.
   yield* waitingOutNeonComputeLimit(
-    migrateAndPrepare.pipe(
+    // On a Preview, the step then makes the branch of production's database the
+    // Preview's own; it runs here, on the direct connection, because Neon puts
+    // bulk and admin work there rather than behind the pooler.
+    migrateDeploymentDatabase(process.env).pipe(
       Effect.provide(
         Layer.provideMerge(
           databaseOverPgClient,

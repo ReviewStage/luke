@@ -26,6 +26,7 @@
  * refusal names a connection string, which carries the database's password.
  */
 
+import { runWebMigrations } from "@luke/database/core/migrator";
 import {
   PREVIEW_FORK_OUTCOME,
   type PreviewForkCounts,
@@ -152,40 +153,57 @@ function countsLine(counts: PreviewForkCounts): string {
  * `PreviewDatabaseRefused` where the build is configured wrong. What the run
  * did goes to the build's log as counts.
  */
-export const preparePreviewDatabase = /* @__PURE__ */ Effect.fn("web/preparePreviewDatabase")(
-  function* (variables: Record<string, string | undefined>) {
-    const step = stepOf(variables);
-    if (step.kind === "leave") {
-      yield* Effect.logInfo(`Preview database left as it stands: ${step.why}`);
-      return;
-    }
-    if (step.kind === "refuse") return yield* new PreviewDatabaseRefused({ reason: step.why });
+const preparePreviewDatabase = /* @__PURE__ */ Effect.fn("web/preparePreviewDatabase")(function* (
+  variables: Record<string, string | undefined>,
+) {
+  const step = stepOf(variables);
+  if (step.kind === "leave") {
+    yield* Effect.logInfo(`Preview database left as it stands: ${step.why}`);
+    return;
+  }
+  if (step.kind === "refuse") return yield* new PreviewDatabaseRefused({ reason: step.why });
 
-    const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
-    const now = yield* Clock.currentTimeMillis;
-    const outcome = yield* preparePreviewFork(
-      { writer },
-      {
-        keepWorkspaceSlugs: step.keepWorkspaceSlugs,
-        productionEndpoint: step.productionEndpoint,
-        now,
-      },
-    );
-    switch (outcome.kind) {
-      case PREVIEW_FORK_OUTCOME.ALREADY_PREPARED:
-        yield* Effect.logInfo("Preview database already made this Preview's own");
-        return;
-      case PREVIEW_FORK_OUTCOME.NO_WORKSPACE:
-        return yield* new PreviewDatabaseRefused({
-          reason: `no workspace in this database with a slug ${PREVIEW_DATABASE_ENVIRONMENT.WORKSPACES} names has a member`,
-        });
-      case PREVIEW_FORK_OUTCOME.PRODUCTION:
-        return yield* new PreviewDatabaseRefused({
-          reason: `the database this build reached says it is production's endpoint (${PREVIEW_DATABASE_ENVIRONMENT.PRODUCTION_ENDPOINT}), which a Preview's build never cuts down`,
-        });
-      case PREVIEW_FORK_OUTCOME.PREPARED:
-        yield* Effect.logInfo(`Preview database made this Preview's own: ${countsLine(outcome)}`);
-        return;
-    }
+  const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
+  const now = yield* Clock.currentTimeMillis;
+  const outcome = yield* preparePreviewFork(
+    { writer },
+    {
+      keepWorkspaceSlugs: step.keepWorkspaceSlugs,
+      productionEndpoint: step.productionEndpoint,
+      now,
+    },
+  );
+  switch (outcome.kind) {
+    case PREVIEW_FORK_OUTCOME.ALREADY_PREPARED:
+      yield* Effect.logInfo("Preview database already made this Preview's own");
+      return;
+    case PREVIEW_FORK_OUTCOME.NO_WORKSPACE:
+      return yield* new PreviewDatabaseRefused({
+        reason: `no workspace in this database with a slug ${PREVIEW_DATABASE_ENVIRONMENT.WORKSPACES} names has a member`,
+      });
+    case PREVIEW_FORK_OUTCOME.PRODUCTION:
+      return yield* new PreviewDatabaseRefused({
+        reason: `the database this build reached says it is production's endpoint (${PREVIEW_DATABASE_ENVIRONMENT.PRODUCTION_ENDPOINT}), which a Preview's build never cuts down`,
+      });
+    case PREVIEW_FORK_OUTCOME.PREPARED:
+      yield* Effect.logInfo(`Preview database made this Preview's own: ${countsLine(outcome)}`);
+      return;
+  }
+});
+
+/**
+ * A deployment build's database step, which `apps/web/server/db/migrate.ts`
+ * runs on the direct connection: every migration the database has not
+ * recorded, then, on a Preview, the copy made the Preview's own where the
+ * variables say to. The order is the point: a branch's first build migrates
+ * the whole copy of production before it is cut down, so its migrations meet
+ * production's rows. Answers the migrations applied.
+ */
+export const migrateDeploymentDatabase = /* @__PURE__ */ Effect.fn("web/migrateDeploymentDatabase")(
+  function* (variables: Record<string, string | undefined>) {
+    const applied = yield* runWebMigrations();
+    yield* Effect.logInfo(`Applied ${applied.length} migrations`, applied);
+    yield* preparePreviewDatabase(variables);
+    return applied;
   },
 );

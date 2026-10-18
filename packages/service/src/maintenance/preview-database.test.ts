@@ -7,11 +7,11 @@ import { getTestDB } from "@luke/database/testing";
 import { eq } from "drizzle-orm";
 import { Effect, Exit } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
-import { PREVIEW_DATABASE_ENVIRONMENT, preparePreviewDatabase } from "./preview-database.js";
+import { migrateDeploymentDatabase, PREVIEW_DATABASE_ENVIRONMENT } from "./preview-database.js";
 
 /**
- * Whether a deployment's build cuts its Preview database down to the team,
- * over a real dialect: only a Preview's build with both variables set, never
+ * Whether a deployment's build step, its migrations and then the Preview's
+ * own copy, cuts its Preview database down to the team, over a real dialect: only a Preview's build with both variables set, never
  * one whose connection reaches production's endpoint, and never by naming a
  * connection string when it refuses. What the run itself keeps and removes
  * is `preview-fork.test.ts`'s.
@@ -87,7 +87,7 @@ it.layer(getTestDB())("a build that must leave its database as it stands", (it) 
           { ...preview, [PREVIEW_DATABASE_ENVIRONMENT.WORKSPACES]: " , " },
           { ...preview, [PREVIEW_DATABASE_ENVIRONMENT.PRODUCTION_ENDPOINT]: "" },
         ]) {
-          yield* preparePreviewDatabase(variables);
+          yield* migrateDeploymentDatabase(variables);
           assert.ok(yield* stands(customer));
         }
       }),
@@ -125,7 +125,7 @@ it.layer(getTestDB())("a build that must leave its database as it stands", (it) 
           },
           { ...preview, [PREVIEW_DATABASE_ENVIRONMENT.DATABASE_URL]: undefined },
         ]) {
-          const exit = yield* Effect.exit(preparePreviewDatabase(variables));
+          const exit = yield* Effect.exit(migrateDeploymentDatabase(variables));
           assert.ok(Exit.isFailure(exit));
           assert.ok(!JSON.stringify(exit).includes(PASSWORD), "a refusal names no connection");
           assert.ok(yield* stands(customer));
@@ -144,7 +144,7 @@ it.layer(getTestDB())("a build that must leave its database as it stands", (it) 
           client.withTransaction(
             Effect.gen(function* () {
               yield* client`select set_config('neon.endpoint_id', ${PRODUCTION_ENDPOINT}, true)`;
-              yield* preparePreviewDatabase(previewBuild(teamSlug));
+              yield* migrateDeploymentDatabase(previewBuild(teamSlug));
             }),
           ),
         );
@@ -157,7 +157,7 @@ it.layer(getTestDB())("a build that must leave its database as it stands", (it) 
     Effect.gen(function* () {
       const { teamSlug, customer } = yield* openTeamAndCustomer;
       const exit = yield* Effect.exit(
-        preparePreviewDatabase({
+        migrateDeploymentDatabase({
           ...previewBuild(teamSlug),
           [PREVIEW_DATABASE_ENVIRONMENT.WORKSPACES]: "missing",
         }),
@@ -172,7 +172,7 @@ it.layer(getTestDB())("a Preview's build on its own branch", (it) => {
   it.effect("cuts the copy down to the workspaces named", () =>
     Effect.gen(function* () {
       const { teamSlug, customer } = yield* openTeamAndCustomer;
-      yield* preparePreviewDatabase(previewBuild(teamSlug));
+      yield* migrateDeploymentDatabase(previewBuild(teamSlug));
       assert.equal(yield* stands(customer), false);
     }),
   );
