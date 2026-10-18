@@ -213,9 +213,15 @@ function zoneUnder(press: RowPress, list: HTMLElement): ZoneLanding | undefined 
   return { zone, id, at: landingIn(zone, press.pointer) };
 }
 
-/** The nearest element around the list that scrolls it up and down, the sidebar's column; none where nothing does. A column whose rows fit is never run along, having nowhere to go. */
-function scrollerOf(list: HTMLElement): HTMLElement | undefined {
-  for (let each = list.parentElement; each !== null; each = each.parentElement) {
+/**
+ * The nearest element around the list, within its drop scope, that scrolls
+ * it up and down: the sidebar's column. None where nothing does, as on the
+ * Issues board, whose columns scroll their own cards and whose page scrolls
+ * it sideways, neither of which a card carried to another column should
+ * run. A column whose rows fit is never run along, having nowhere to go.
+ */
+function scrollerOf(list: HTMLElement, scope: Element | null): HTMLElement | undefined {
+  for (let each = list.parentElement; each !== null && each !== scope; each = each.parentElement) {
     const { overflowY } = getComputedStyle(each);
     if (overflowY === "auto" || overflowY === "scroll") return each;
   }
@@ -580,7 +586,7 @@ export function useRowDrag(
       scope,
       carried: undefined,
       frame: undefined,
-      scroller: scrollerOf(list),
+      scroller: scrollerOf(list, scope),
     };
     begin(list, { ...pointer, listTop, at, rows, slots, gap, ...state });
   };

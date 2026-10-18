@@ -244,6 +244,18 @@ test("a row held at the foot of the column that scrolls its list runs the column
   assert.deepEqual(moves, [[0, 5]]);
 });
 
+test("a row held at the foot of a column that stands around its drop scope rather than within it runs nothing", () => {
+  const list = inColumn(100, []);
+  list.parentElement?.setAttribute("data-row-drop-scope", "");
+  act(() => {
+    grip(list, 0).dispatchEvent(at("pointerdown", 10));
+    window.dispatchEvent(at("pointermove", 95));
+    runFrames();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  });
+  assert.equal(scrolled, 0);
+});
+
 test("a column too short for both edges' reach runs only toward the nearer edge, and stands still once it can go no further", () => {
   const moves: [number, number][] = [];
   const list = inColumn(50, moves);
