@@ -14,14 +14,14 @@ import {
 } from "@luke/settings/diff-view";
 import {
   AnchoredPopover,
-  CloseIcon,
   IconButton,
   POPOVER_ALIGN,
   SETTINGS_ROW_DENSITY,
   SettingsRow,
 } from "@luke/ui";
 import { SlidersHorizontalIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { PopoverPanel } from "../popover-panel";
 import { Segmented } from "../segmented";
 import { ChangedMark } from "../settings/marks";
 import { PickerRow } from "../settings/picker-row";
@@ -262,7 +262,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
   );
 }
 
-/** The popover: its title and ×, then the rows; it takes the keyboard as it opens, so Escape and focus leaving it are heard. */
+/** The popover: its title and ×, then the rows (`PopoverPanel`). */
 function DiffSettingsPopover({
   id,
   roomy,
@@ -276,33 +276,16 @@ function DiffSettingsPopover({
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    box.current?.focus();
-  }, []);
   return (
-    <div
-      ref={box}
+    <PopoverPanel
       id={id}
-      className="diff-settings-popover"
-      role="dialog"
-      aria-label={DIFF_SETTINGS_LABEL}
-      tabIndex={-1}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
-        event.stopPropagation();
-        onClose();
-      }}
-      onBlur={(event) => onLeave(event.relatedTarget)}
+      title={DIFF_SETTINGS_LABEL}
+      closeLabel="Close"
+      onDismiss={onClose}
+      onLeave={onLeave}
     >
-      <div className="diff-settings-head">
-        <h2 className="diff-settings-title">{DIFF_SETTINGS_LABEL}</h2>
-        <Tooltip label="Close">
-          <IconButton icon={<CloseIcon />} label="Close" onClick={onClose} />
-        </Tooltip>
-      </div>
       <DiffSettingsRows roomy={roomy} />
-    </div>
+    </PopoverPanel>
   );
 }
 

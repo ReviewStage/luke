@@ -458,6 +458,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                   view={list}
                   chosen={chosen?.item.id}
                   columns={columns.shown}
+                  rows={columns.rows}
                   head={{
                     shown: tasks.shown,
                     needsYou: choices,
