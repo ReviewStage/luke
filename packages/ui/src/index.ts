@@ -35,6 +35,7 @@ export * from "./components/page-frame/page-frame.js";
 export * from "./components/pagination/pagination.js";
 export * from "./components/popover-panel/popover-panel.js";
 export * from "./components/progress/progress.js";
+export * from "./components/provider-button/provider-button.js";
 export * from "./components/public-page/public-page.js";
 export * from "./components/search-field/search-field.js";
 export * from "./components/segmented/segmented.js";

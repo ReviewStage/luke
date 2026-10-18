@@ -33,6 +33,7 @@ import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
 import { PROGRESS_EXAMPLE } from "./examples/progress";
+import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
 import { SEGMENTED_EXAMPLE } from "./examples/segmented";
@@ -106,6 +107,7 @@ export const EXAMPLES: readonly Example[] = [
   PAGINATION_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
   PROGRESS_EXAMPLE,
+  PROVIDER_BUTTONS_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,
   SEGMENTED_EXAMPLE,

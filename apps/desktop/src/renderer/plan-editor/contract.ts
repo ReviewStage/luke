@@ -25,6 +25,8 @@ export interface PlanEditorProps {
   /** Whether the editor takes the keyboard as it mounts, as a task opened by a click or a key does and a page drawing it does not. */
   readonly focus: boolean;
   readonly label: string;
+  /** What the empty text says until a word is typed; "Write the plan" where none is given. */
+  readonly placeholder?: string | undefined;
   /** The read view's own classes, so the editor's words stand where the drawn words stood. */
   readonly className: string;
   /** The text as it would be saved now, after each change. */

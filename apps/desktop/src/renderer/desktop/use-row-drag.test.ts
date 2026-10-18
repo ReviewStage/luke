@@ -121,6 +121,75 @@ test("a row held still while the sidebar scrolls beneath it lands where the scro
   assert.deepEqual(moves, [[0, 3]]);
 });
 
+/** Frames asked for, which a test runs by hand. */
+let frames: FrameRequestCallback[] = [];
+
+/** Runs the frames asked for, and those they ask for in turn, up to `most` of them. */
+function runFrames(most = 50): void {
+  for (let run = 0; run < most; run += 1) frames.shift()?.(0);
+}
+
+/**
+ * Six rows, 180 of them, in a column `height` tall that scrolls them, as far
+ * as 180 less its height; each move is reported to `moves`.
+ */
+function inColumn(height: number, moves: [number, number][]): HTMLElement {
+  frames = [];
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((frame) => frames.push(frame));
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+  const list = drawn(6, (from, to) => moves.push([from, to]));
+  const column = list.parentElement ?? assert.fail("the list stands in a column");
+  column.style.overflowY = "auto";
+  const most = 6 * ROW_HEIGHT - height;
+  Object.defineProperties(column, {
+    clientHeight: { value: height },
+    scrollHeight: { value: 6 * ROW_HEIGHT },
+    scrollTop: {
+      get: () => scrolled,
+      set: (to: number) => {
+        scrolled = Math.max(0, Math.min(most, to));
+      },
+    },
+  });
+  const laid = vi.spyOn(Element.prototype, "getBoundingClientRect");
+  const rowsLaid = laid.getMockImplementation() ?? assert.fail("the rows are laid out");
+  laid.mockImplementation(function (this: Element) {
+    return this === column ? DOMRect.fromRect({ width: 200, height }) : rowsLaid.call(this);
+  });
+  return list;
+}
+
+test("a row held at the foot of the column that scrolls its list runs the column down, and lands where that carried it", () => {
+  const moves: [number, number][] = [];
+  const list = inColumn(100, moves);
+  act(() => {
+    grip(list, 0).dispatchEvent(at("pointerdown", 10));
+    window.dispatchEvent(at("pointermove", 50));
+    runFrames();
+  });
+  assert.equal(scrolled, 0, "held away from the edges, the column stands still");
+  act(() => {
+    window.dispatchEvent(at("pointermove", 95));
+    runFrames();
+    window.dispatchEvent(at("pointerup", 95));
+  });
+  assert.equal(scrolled, 80);
+  assert.deepEqual(moves, [[0, 5]]);
+});
+
+test("a column too short for both edges' reach runs only toward the nearer edge, and stands still once it can go no further", () => {
+  const moves: [number, number][] = [];
+  const list = inColumn(50, moves);
+  act(() => {
+    grip(list, 0).dispatchEvent(at("pointerdown", 10));
+    window.dispatchEvent(at("pointermove", 20));
+    runFrames();
+  });
+  assert.equal(scrolled, 0);
+  assert.equal(frames.length, 0, "the column stands still");
+  act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+});
+
 /** Lays out every element wearing `data-box="top height"` there, 200 wide, and every other nowhere. */
 function layOutByBoxes(): void {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
