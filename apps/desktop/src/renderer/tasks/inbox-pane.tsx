@@ -1327,12 +1327,11 @@ function useAutomationCrumb(
  * The pane's path, task › agent, each crumb wearing its tab's glyph in the
  * task's column, the task's document glyph and the agent's mark: each opens
  * what it names, the task or the agent's tab, and hangs the card its
- * sidebar row or tab hangs, the task's crumb as every place naming the
- * task does (`TaskRef`). An agent with no task stands under the automation
- * that started it instead, by its clock and name, which hang its card and
- * open the automation's page where that can be opened. An agent this window does
- * not list, one started on another Mac, hangs a card saying so and still
- * opens its tab.
+ * sidebar row or tab hangs. An agent with no task stands under the
+ * automation that started it instead, by its clock and name, which hang its
+ * card and open the automation's page where that can be opened, and are
+ * words alone where it cannot. An agent this window does not list, one
+ * started on another Mac, hangs a card saying so and still opens its tab.
  */
 function Crumbs({
   holder,
