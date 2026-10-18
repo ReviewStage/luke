@@ -44,7 +44,7 @@ import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
-import { AgentRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
+import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
 import {
   INBOX_COLUMNS,
   type InboxColumnsShown,
@@ -220,11 +220,7 @@ export function ItemMark({
 }): React.JSX.Element {
   const subject = itemSubject(holder, agentId, models, readerId);
   if (subject === undefined) return <ActorMark actor={UNNAMED_AGENT} />;
-  return (
-    <AgentRef subject={subject} models={models} onOpen={undefined}>
-      <ActorMark actor={subject.tile} />
-    </AgentRef>
-  );
+  return <AgentMarkRef subject={subject} models={models} />;
 }
 
 /**

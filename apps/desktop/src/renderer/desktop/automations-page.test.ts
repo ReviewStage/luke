@@ -847,6 +847,11 @@ test("a new automation is created only once it is named and told its task, and t
   assert.deepEqual(creates, []);
   assert.match(page.textContent ?? "", /Name it\./u);
   assert.match(page.textContent ?? "", /Tell the agent what to do\./u);
+  assert.equal(
+    page.querySelector("textarea[aria-label='Prompt']")?.getAttribute("aria-invalid"),
+    "true",
+    "the prompt is marked as what stops the save",
+  );
 
   type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");

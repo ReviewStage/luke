@@ -24,7 +24,6 @@ import {
 } from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { FileDiffIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import {
   PromptInput,
@@ -44,7 +43,7 @@ import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
 import { contextHint } from "./agent-context-model";
 import { AgentModelChip } from "./agent-model-chip";
-import { ChangesChip, PublishedChip, type PublishedDoors } from "./agent-published";
+import { PublishedChip, type PublishedDoors } from "./agent-published";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
@@ -147,7 +146,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * holds in the main column and the side panel alike, the way Cursor's and
  * ChatGPT's narrow panes do (planning.css's `composer` container). As the
  * card narrows, the chips naming what the agent published draw their marks
- * alone; then a ⋯ takes in, in this order, the Changes chip, the MCP
+ * alone; then a ⋯ takes in, in this order, the MCP
  * servers, the context ring, and the microphone; then the model chip draws
  * its harness's mark alone; and last the + goes into the ⋯ too. The field
  * and the round Send or Stop always stand whole. The chips drawing their
@@ -189,7 +188,6 @@ const FOLD_WIDTH = {
 /** The presses a narrow card's ⋯ takes in, by the class each wears on the foot. */
 const OVERFLOW_PRESS = {
   ATTACH: "agent-composer-attach",
-  CHANGES: "agent-changes-chip",
   SERVERS: "agent-servers-button",
   CONTEXT: "agent-context-button",
   DICTATE: "dictate-button",
@@ -521,18 +519,6 @@ export function AgentComposer({
         onSelect: () => picker.current?.click(),
       },
     },
-    ...(published !== undefined && published.pullRequest !== null && doors.openChanges !== undefined
-      ? [
-          {
-            press: OVERFLOW_PRESS.CHANGES,
-            action: {
-              label: "Show changes",
-              icon: <FileDiffIcon aria-hidden="true" />,
-              onSelect: doors.openChanges,
-            },
-          },
-        ]
-      : []),
     {
       press: OVERFLOW_PRESS.SERVERS,
       action: { label: "MCP servers", icon: <McpIcon />, onSelect: () => setServersOpen(true) },
@@ -670,11 +656,6 @@ export function AgentComposer({
                   }}
                 />
                 <PublishedChip
-                  published={published}
-                  doors={doors}
-                  narrow={folds(FOLD_WIDTH.PUBLISHED)}
-                />
-                <ChangesChip
                   published={published}
                   doors={doors}
                   narrow={folds(FOLD_WIDTH.PUBLISHED)}

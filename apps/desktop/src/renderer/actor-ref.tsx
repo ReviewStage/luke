@@ -16,6 +16,7 @@ import {
   HoverCardHead,
   HoverCardNote,
   HoverCardRule,
+  INLINE_REF_LOOK,
   TextButton,
   WingFace,
 } from "@luke/ui";
@@ -34,6 +35,7 @@ import {
 import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words";
+import { InlineRef } from "./inline-ref";
 import { useActorDoor } from "./person-door";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph";
 import { RelativeTime } from "./tasks/relative-time";
@@ -530,7 +532,8 @@ export function actorCard(actor: Actor): ReactNode {
  * automation's page; a person, someone who left, and a GitHub account open
  * their own (`useActorDoor`); otherwise its press is the line's own. With
  * `faceOnly` the mark stands alone, its name said to a screen reader and in
- * its card, for a line too short to hold the name.
+ * its card, for a line too short to hold the name; with `nameOnly` the name
+ * stands alone, where the actor's face already stands beside the line.
  */
 export function ActorRef({
   actor,
@@ -539,6 +542,7 @@ export function ActorRef({
   sentence = false,
   possessive = false,
   faceOnly = false,
+  nameOnly = false,
 }: {
   actor: Actor;
   card?: ReactNode;
@@ -549,31 +553,26 @@ export function ActorRef({
   possessive?: boolean;
   /** Whether the mark stands without its name, which only a screen reader hears. */
   faceOnly?: boolean;
+  /** Whether the name stands without its mark, whose face the line already draws. */
+  nameOnly?: boolean;
 }): React.JSX.Element {
-  const name = actorName(actor, { sentence, possessive });
   // A person's own door, their page or GitHub's, where the place hands none.
   const door = useActorDoor(actor);
   const open = onOpen ?? door;
-  const inner = (
-    <>
-      <ActorMark actor={actor} />
-      <span className={faceOnly ? "visually-hidden" : "actor-ref-name"}>{name}</span>
-      {faceOnly ? null : <BotBadge actor={actor} />}
-      <LeftWords actor={actor} />
-    </>
-  );
   return (
-    <Tooltip label={actorName(actor)} card={card ?? actorCard(actor)}>
-      {open === undefined ? (
-        <span className="actor-ref" data-kind={actor.kind}>
-          {inner}
-        </span>
-      ) : (
-        <button type="button" className="actor-ref" data-kind={actor.kind} onClick={open}>
-          {inner}
-        </button>
-      )}
-    </Tooltip>
+    <InlineRef
+      look={INLINE_REF_LOOK.WASH}
+      glyph={nameOnly ? undefined : <ActorMark actor={actor} />}
+      label={actorName(actor, { sentence, possessive })}
+      labelHidden={faceOnly}
+      state={githubBot(actor) ? <BotBadge actor={actor} /> : undefined}
+      heard={leftWithFace(actor) ? LEFT_WORDS : undefined}
+      onPress={open === undefined ? undefined : () => open()}
+      hintLabel={actorName(actor)}
+      card={card ?? actorCard(actor)}
+      data-actor-ref=""
+      data-kind={actor.kind}
+    />
   );
 }
 

@@ -208,7 +208,7 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
-  const skill = hung(message, "button.skill-chip");
+  const skill = hung(message, "button[data-skill-ref]");
   assert.deepEqual(headOf(skill), {
     glyph: true,
     name: "/release",

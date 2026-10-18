@@ -22,6 +22,7 @@ import {
   ErrorState,
   HoverCard,
   HoverCardHead,
+  INLINE_REF_LOOK,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
@@ -53,11 +54,11 @@ import { TOOL_STATE } from "../ai-elements/tool";
 import { appPlatform } from "../app-platform";
 import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
+import { InlineRef } from "../inline-ref";
 import { useMemberDirectory, usePerson } from "../member-directory";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
-import { Tooltip } from "../tooltip";
 import { AgentComposer } from "./agent-composer";
 import {
   AgentPicturesProvider,
@@ -752,24 +753,19 @@ function PlanCard({
 
 /** A task named as the sender of its plan: its document glyph and its name as one target, hanging its card and opening its plan where the place can. */
 function TaskRef({ task, onOpen }: { task: BriefTask; onOpen?: (() => void) | undefined }) {
-  const inner = (
-    <>
-      <span className="agent-origin-glyph" aria-hidden="true">
-        <DocumentIcon />
-      </span>
-      <span className="actor-ref-name">{task.name}</span>
-    </>
-  );
   return (
-    <Tooltip label={task.name} card={task.card}>
-      {onOpen === undefined ? (
-        <span className="actor-ref">{inner}</span>
-      ) : (
-        <button type="button" className="actor-ref" data-task-ref="" onClick={onOpen}>
-          {inner}
-        </button>
-      )}
-    </Tooltip>
+    <InlineRef
+      look={INLINE_REF_LOOK.WASH}
+      glyph={
+        <span className="agent-origin-glyph">
+          <DocumentIcon />
+        </span>
+      }
+      label={task.name}
+      onPress={onOpen === undefined ? undefined : () => onOpen()}
+      card={task.card}
+      data-task-ref=""
+    />
   );
 }
 
@@ -1653,7 +1649,6 @@ export function AgentTab({
   control,
   shown,
   onOpenSubagent,
-  onOpenChanges,
   onOpenPullRequest,
   onOpenTarget,
   cards,
@@ -1673,8 +1668,6 @@ export function AgentTab({
   onOpenTarget?: DelegationDoors["onOpenTarget"];
   /** The cards its rows that open a tab hang, as those tabs hang them. */
   cards?: TranscriptCards | undefined;
-  /** Opens the agent's changes, its pull request's files, in a tab of the side panel's own. */
-  onOpenChanges?: (() => void) | undefined;
   /** Opens the agent's pull request, its checks, description, and conversation, in a tab of the side panel's own. */
   onOpenPullRequest?: (() => void) | undefined;
   /** The chat a chat notice's card reads its message from and opens in; none where the window holds none. */
@@ -1789,7 +1782,6 @@ export function AgentTab({
         doors={{
           openGitHub,
           copy: copyWithToast,
-          openChanges: onOpenChanges,
           openPullRequest: onOpenPullRequest,
         }}
         startedAt={shown ? agent.runStartedAt : undefined}
