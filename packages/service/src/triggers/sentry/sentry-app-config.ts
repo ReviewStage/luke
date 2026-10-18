@@ -24,14 +24,14 @@ export const SENTRY_APP_ENVIRONMENT = {
 } as const;
 
 /** The integration as a configured deployment holds it. */
-export interface SentryAppSettings {
+interface SentryAppSettings {
   readonly slug: string;
   readonly clientId: string;
   readonly clientSecret: Redacted.Redacted<string>;
 }
 
 /** The deployment holds no Sentry integration, or not all of it. */
-export class SentryAppNotConfigured extends Data.TaggedError("SentryAppNotConfigured")<{
+class SentryAppNotConfigured extends Data.TaggedError("SentryAppNotConfigured")<{
   /** The variables that were missing, by name alone. */
   readonly missing: readonly string[];
 }> {
@@ -48,7 +48,7 @@ export interface SentryAppService {
 export class SentryApp extends Context.Service<SentryApp, SentryAppService>()("SentryApp") {}
 
 /** The service over settings read, or over the names of what was missing. */
-export function sentryAppService(
+function sentryAppService(
   settings: SentryAppSettings | undefined,
   missing: readonly string[],
 ): SentryAppService {

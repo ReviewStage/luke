@@ -226,9 +226,6 @@ export type IntegrationTrigger = Extract<
   { kind: typeof AUTOMATION_TRIGGER.INTEGRATION }
 >;
 
-/** What an integration trigger filters its events by. */
-export type IntegrationTriggerFilters = NonNullable<IntegrationTrigger["filters"]>;
-
 /** A coding agent handed the prompt as its task, on the model and effort named, or the account's default, with the MCP servers named switched off. */
 const codingAgentActionSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(AUTOMATION_ACTION.CODING_AGENT),
@@ -253,7 +250,7 @@ export type AutomationActionJson = typeof automationActionSchema.Encoded;
  * once, past which a firing is skipped rather than queued, how many
  * runs it may start in a day, counted over the last twenty-four hours, and,
  * for an integration trigger, how many hours pass before the same subject
- * (one Sentry issue) may start another run, the default where absent.
+ * (one Sentry issue) may start another run, a day where absent.
  */
 export const automationGuardsSchema = EffectSchema.Struct({
   maxConcurrentRuns: EffectSchema.Int.check(
@@ -279,9 +276,6 @@ export const AUTOMATION_DEFAULT_GUARDS: AutomationGuards = {
   maxConcurrentRuns: 1,
   dailyRunCap: 10,
 };
-
-/** How long an integration trigger waits before the same subject fires it again, where its guards name no cooldown: a day. */
-export const AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS = 24;
 
 /** Who an automation belongs to: its owner alone, or the workspace it was made in. */
 export const AUTOMATION_SCOPE = {

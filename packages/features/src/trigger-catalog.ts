@@ -29,13 +29,13 @@ export const SENTRY_TRIGGER_EVENT = {
 export type SentryTriggerEvent = (typeof SENTRY_TRIGGER_EVENT)[keyof typeof SENTRY_TRIGGER_EVENT];
 
 /** The fields an integration trigger may filter its provider's events by. */
-export const INTEGRATION_TRIGGER_FILTER = {
+const INTEGRATION_TRIGGER_FILTER = {
   PROJECT: "project",
   ENVIRONMENT: "environment",
   LEVEL: "level",
 } as const;
 
-export type IntegrationTriggerFilter =
+type IntegrationTriggerFilter =
   (typeof INTEGRATION_TRIGGER_FILTER)[keyof typeof INTEGRATION_TRIGGER_FILTER];
 
 /** The levels Sentry gives an event, least severe first. */
@@ -47,17 +47,15 @@ export const SENTRY_LEVEL = {
   FATAL: "fatal",
 } as const;
 
-export type SentryLevel = (typeof SENTRY_LEVEL)[keyof typeof SENTRY_LEVEL];
-
 /** One field a trigger filters on: its words, and the values it may take where they are a fixed list rather than the developer's own. */
-export interface TriggerFilterField {
+interface TriggerFilterField {
   readonly field: IntegrationTriggerFilter;
   readonly words: string;
   readonly options?: readonly string[];
 }
 
 /** One event a provider delivers: its words in a list ("An alert fires"), and the sentence a run's prompt tells the agent what fired it in. */
-export interface TriggerEventEntry {
+interface TriggerEventEntry {
   readonly words: string;
   readonly sentence: string;
 }
@@ -98,11 +96,3 @@ export const TRIGGER_CATALOG = {
 } as const satisfies {
   readonly [TRIGGER_PROVIDER.SENTRY]: TriggerProviderEntry<SentryTriggerEvent>;
 };
-
-/** The catalog's entry for a provider's event. */
-export function triggerEventEntry(
-  provider: TriggerProvider,
-  event: SentryTriggerEvent,
-): TriggerEventEntry {
-  return TRIGGER_CATALOG[provider].events[event];
-}
