@@ -351,7 +351,7 @@ test("a row carried into the gap between two zones follows the pointer, and land
   assert.deepEqual(outs, []);
 });
 
-test("a row carried out of its list is held within the column that scrolls it, however far past its foot the pointer goes", () => {
+test("a row carried out of its list is held within the column that scrolls it, its rows fitting it or not, however far past its foot the pointer goes", () => {
   vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 0);
   vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
   function Column() {
@@ -381,9 +381,9 @@ test("a row carried out of its list is held within the column that scrolls it, h
   roots.push(root);
   act(() => root.render(createElement(Column)));
   layOutByBoxes();
-  // The column scrolls rows longer than it, 180 against its 100.
+  // The column's rows fit it as the press begins, so it has nothing to scroll yet.
   const column = container.firstElementChild ?? assert.fail("the column stands");
-  Object.defineProperties(column, { clientHeight: { value: 100 }, scrollHeight: { value: 180 } });
+  Object.defineProperties(column, { clientHeight: { value: 100 }, scrollHeight: { value: 100 } });
   const list = container.querySelector("ul") ?? assert.fail("the list stands");
   Object.assign(list, { setPointerCapture: () => undefined });
   let shown: string | undefined;

@@ -211,12 +211,16 @@ function zoneUnder(press: RowPress, list: HTMLElement): ZoneLanding | undefined 
   return { zone, id, at: landingIn(zone, press.pointer) };
 }
 
-/** The nearest element around the list that scrolls it up and down, the sidebar's column, as the press begins; none where nothing does. */
+/**
+ * The nearest element around the list that scrolls it up and down, the
+ * sidebar's column, whether or not its rows overflow it yet, since a row
+ * carried out of its list is held within it either way; none where nothing
+ * does. A column whose rows fit is never run along, having nowhere to go.
+ */
 function scrollerOf(list: HTMLElement): HTMLElement | undefined {
   for (let each = list.parentElement; each !== null; each = each.parentElement) {
     const { overflowY } = getComputedStyle(each);
-    const scrolls = overflowY === "auto" || overflowY === "scroll";
-    if (scrolls && each.scrollHeight > each.clientHeight) return each;
+    if (overflowY === "auto" || overflowY === "scroll") return each;
   }
   return undefined;
 }
