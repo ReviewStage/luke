@@ -1038,7 +1038,7 @@ async function storedStart(userId: string, started: WireRecord) {
   return Option.getOrThrow(await database.run(readCodingAgent(userId, started.agent.id)));
 }
 
-test("start_agent continues a teammate's agent that ended, on that agent's own task when none is named, handed its transcript and named after it; a second continue is refused naming the first, and the same call run again answers the agent it made", async () => {
+test("start_agent continues a teammate's agent that ended, on that agent's own task when none is named, handed its transcript and named after it; the same call run again answers the agent it made, and a second continue starts another, its answer, and that call's run again, naming the first", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   await database.run(fillCodingAgentTitle(teammates.userId, teammates.id, "Invoice export"));
@@ -1062,21 +1062,33 @@ test("start_agent continues a teammate's agent that ended, on that agent's own t
   assert.equal(again.agent.id, stored.id);
   const openings = eve.sent.filter((each) => each.path === "/eve/coder/v1/session").length;
 
-  const second = await call(CODER_TOOL.START_AGENT, { from }, "call-continue-again");
-  assert.equal(second.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.ok(isWireString(second.reason));
-  assert.ok(second.reason.includes(stored.id), second.reason);
-  assert.ok(
-    second.reason.includes(
-      `[@Invoice export (continued)](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${stored.id})`,
-    ),
-    second.reason,
-  );
   assert.equal(
     eve.sent.filter((each) => each.path === "/eve/coder/v1/session").length,
     openings,
-    "neither the call run again nor a second continue opens a session",
+    "the call run again opens no session",
   );
+  assert.equal(again.earlierContinuations, undefined, "the first continue names none before it");
+
+  const second = await call(CODER_TOOL.START_AGENT, { from }, "call-continue-again");
+  const secondStored = await storedStart(caller.userId, second);
+  assert.notEqual(secondStored.id, stored.id, "a second continue is an agent of its own");
+  assert.equal(secondStored.startedFrom?.agentId, teammates.id);
+  assert.equal(secondStored.taskId, tasks.billing);
+  assert.equal(
+    eve.sent.filter((each) => each.path === "/eve/coder/v1/session").length,
+    openings + 1,
+    "and opens a session of its own",
+  );
+  const first = {
+    id: stored.id,
+    mention: `[@Invoice export (continued)](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${stored.id})`,
+  };
+  assert.deepEqual(second.earlierContinuations, [first]);
+
+  const secondAgain = await call(CODER_TOOL.START_AGENT, { from }, "call-continue-again");
+  assert.ok(isRecord(secondAgain.agent), JSON.stringify(secondAgain));
+  assert.equal(secondAgain.agent.id, secondStored.id, "the call run again answers what it made");
+  assert.deepEqual(secondAgain.earlierContinuations, [first], "naming the first as it did");
 });
 
 test("start_agent forks an agent at one of its messages that read_agent names, while that agent still works, and leaves the agent going on", async () => {
