@@ -2,7 +2,8 @@
    fault's glyph in red where a row's glyph stands, the sentence in the muted
    ink of the words around it, and Retry at the row's end, its glyph alone
    where the row is narrow. Alone in a region it is `EmptyState`, and draws
-   nothing here. */
+   nothing here. A row that is itself the retry (`RetryRowLabel`) draws the
+   glyph and word after its sentence in the row's own type, held together. */
 
 @layer components {
   /* Every part stands on the row's first line, a control tall, so the glyph,
@@ -62,5 +63,20 @@
       clip-path: inset(50%);
       white-space: nowrap;
     }
+  }
+
+  .luke-retry-row-label {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--luke-space-4);
+    margin-left: var(--luke-space-4);
+    font-weight: 600;
+  }
+
+  .luke-retry-row-label svg {
+    width: 12px;
+    height: 12px;
+    flex: none;
+    align-self: center;
   }
 }

@@ -1,20 +1,19 @@
-import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { RENAME_FAILED_NOTE } from "@luke/ui/tasks-model";
 import { useLayoutEffect, useRef, useState } from "react";
 
 /**
- * task-name-field.tsx -- a name edited where it is drawn, in the sidebar's row, on the open task's tab, on an agent's, or on Settings › Workspace, the way a desktop list renames in place.
+ * task-name-field.tsx -- a name edited where it is drawn, on Settings › Workspace, an integration's account, or a shell, and the rename a task's or an agent's name asks for wherever it is edited.
  *
  * The field opens over the name with all of it selected. Return or a press
  * elsewhere keeps what was typed, and Escape keeps the name it opened on; a
  * name left empty or unchanged renames nothing. Its words are an input's
- * value, which session replay masks as it masks every input. The field and
- * the rename hook are a task's by default and an agent's where the caller
- * says so, and the field is a workspace's the same way: what differs is the
- * name said for a reader and the bound.
+ * value, which session replay masks as it masks every input. A task's and
+ * an agent's name are edited in `@luke/ui`'s `InlineEdit`, the sidebar's
+ * row and the tabs' alike, and renamed through `useTaskRename` below: what
+ * differs between them is the name said for a reader and the bound.
  */
 
-/** How an edit ended: what to rename the task to, if anything, and whether a key ended it, so focus goes back to the name. */
+/** How an edit ended: what to rename it to, if anything, and whether a key ended it, so focus goes back to the name. */
 export interface NameEdit {
   readonly name: string | undefined;
   readonly byKey: boolean;
@@ -24,15 +23,15 @@ export interface NameEdit {
 export function TaskNameField({
   name,
   className,
-  label = "Task name",
-  maxLength = TASK_BOUNDS.MAX_NAME_CHARS,
+  label,
+  maxLength,
   onEnd,
 }: {
   name: string;
   className: string;
-  /** What the field is called for a reader; a task's name unless said otherwise. */
-  label?: string;
-  maxLength?: number;
+  /** What the field is called for a reader. */
+  label: string;
+  maxLength: number;
   onEnd: (edit: NameEdit) => void;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
@@ -99,7 +98,7 @@ export function useTaskRename(
     setEditing(taskId);
   };
   // Answers whether the name asked for was taken; an edit that asks for none has nothing refused.
-  const end = ({ name }: NameEdit): Promise<boolean> => {
+  const end = (name: string | undefined): Promise<boolean> => {
     setEditing(undefined);
     if (taskId === undefined || name === undefined) return Promise.resolve(true);
     edits.current += 1;
