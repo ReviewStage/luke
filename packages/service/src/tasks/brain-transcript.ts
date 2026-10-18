@@ -327,7 +327,7 @@ const pageOfLook = (
  * running is heard at once; or the empty page and the cursor to read on
  * from once the hold is out. Between looks it waits on the `live`
  * statements where Neon Realtime watches them (the conversation's mark,
- * `planConversationLiveStatements`), and on `BRAIN_POLL` where nothing does.
+ * `taskConversationLiveStatements`), and on `BRAIN_POLL` where nothing does.
  */
 export function brainPagePast(
   target: ConversationTarget,

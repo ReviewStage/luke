@@ -1147,7 +1147,7 @@ test("a held reader watched by Realtime looks again as the conversation's mark c
     standingFor(target),
   );
   const { cursor } = await database.run(brainTurnsPage(target, undefined));
-  const { mark } = Option.getOrThrow(planConversationLiveStatements(target.userId, target.taskId));
+  const { mark } = Option.getOrThrow(taskConversationLiveStatements(target.userId, target.taskId));
 
   const answered = await database.run(
     Effect.gen(function* () {
