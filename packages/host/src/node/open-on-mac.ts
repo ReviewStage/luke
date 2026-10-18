@@ -9,11 +9,16 @@ import path from "node:path";
  * developer's login shell with their own Git login, so their credentials
  * and tools are the ones used: it clones over HTTPS, and over SSH where
  * that fails, without checking anything out; fetches the branch; makes the
- * branch's worktree the first time, detached at its head, and moves it
- * forward with a fast-forward after that, which Git refuses rather than
- * overwrite anything changed there; runs the repository's run command there
- * where this Mac has one for it; and then opens a login shell in the
- * worktree for the developer to run what they like. The script deletes
+ * branch's worktree the first time, detached at its head, and after that
+ * checks the head just fetched out over it, so a branch the agent
+ * force-pushed or rebased opens as readily as one it pushed more to, while
+ * what Git ignores there, installed dependencies and build output among it,
+ * is kept for the next run. A worktree with changes of the developer's own,
+ * a tracked file edited or a file Git does not ignore added, is left as it
+ * stands and said, rather than overwritten. The script runs the repository's
+ * run command in the worktree where this Mac has one for it and the branch
+ * was brought in, and then opens a login shell there for the developer to
+ * run what they like. The script deletes
  * itself as it starts. Every value in it is quoted for the shell, never
  * spliced in bare.
  */
@@ -103,25 +108,34 @@ export function openOnMacScript(input: {
     '    cd "$worktree"',
     // Note that a worktree keeps its own FETCH_HEAD, so it fetches the branch itself.
     '    git fetch origin "$branch"',
-    "    git merge --ff-only FETCH_HEAD",
+    '    if [ -n "$(git status --porcelain)" ]; then',
+    '      echo "▸ The worktree has changes of its own; left as it stands rather than overwritten."',
+    "      return 1",
+    "    fi",
+    // Note that a forced checkout takes the branch as it now stands, a force-push or a rebase among it, and leaves ignored files alone.
+    "    git checkout --quiet --detach --force FETCH_HEAD",
     "  else",
     '    mkdir -p "$(dirname "$worktree")"',
     '    git worktree add --detach "$worktree" FETCH_HEAD',
     "  fi",
     "}",
     // Note that a failed step is said and the shell still opens, in the worktree where it stands and the clone or home where not.
-    '( opened ) || echo "▸ Could not bring $branch onto this Mac; the shell is yours to look into it."',
+    "brought=",
+    '( opened ) && brought=1 || echo "▸ Could not bring $branch onto this Mac; the shell is yours to look into it."',
     'if [ -d "$worktree" ]; then cd "$worktree"; elif [ -d "$clone" ]; then cd "$clone"; fi',
     'echo "▸ $branch in $(pwd)"',
     ...(input.command == null
       ? []
       : [
-          `command=${shellQuoted(input.command)}`,
-          'echo "▸ Running $command"',
+          // Note that the command runs only on the branch as just brought in, never on a stale or missing checkout.
+          'if [ -n "$brought" ]; then',
+          `  command=${shellQuoted(input.command)}`,
+          '  echo "▸ Running $command"',
           // Note that Ctrl-C ends the command and not this script, so the shell after it still opens.
-          "trap : INT",
-          '"${SHELL:-/bin/zsh}" -l -c "$command" || true',
-          "trap - INT",
+          "  trap : INT",
+          '  "${SHELL:-/bin/zsh}" -l -c "$command" || true',
+          "  trap - INT",
+          "fi",
         ]),
     'exec "${SHELL:-/bin/zsh}" -l',
     "",
