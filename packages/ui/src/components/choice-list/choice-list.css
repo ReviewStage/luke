@@ -125,8 +125,8 @@
     border: 1.5px solid var(--luke-color-text-subtle);
     border-radius: var(--luke-space-4);
     transition:
-      background-color var(--duration-hover, 0s) ease,
-      border-color var(--duration-hover, 0s) ease;
+      background-color var(--luke-duration-hover) ease,
+      border-color var(--luke-duration-hover) ease;
   }
 
   .luke-choice-control[data-shape="radio"] {

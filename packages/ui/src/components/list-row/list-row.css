@@ -426,7 +426,7 @@
   }
 
   .luke-list-row[data-swipe="moving"] > .luke-list-row-swipe {
-    transition: background-color var(--duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) ease;
   }
 
   .luke-list-row[data-armed="true"] > .luke-list-row-swipe {
@@ -465,7 +465,7 @@
      the jump from the button's middle to the face's edge as the row arms
      glides rather than snaps. */
   .luke-list-row[data-swipe="moving"] .luke-list-row-swipe-label {
-    transition: transform var(--duration-hover) ease-out;
+    transition: transform var(--luke-duration-hover) ease-out;
   }
 
   .luke-list-row-swipe-label > svg {
