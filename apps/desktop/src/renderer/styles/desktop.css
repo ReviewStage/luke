@@ -1684,9 +1684,11 @@ ul.actor-stack {
    once, as the release's pill does. A narrow foot draws its glyph alone, as
    it draws the release's, and so does a foot the release's pill stands in
    too, so the account's name keeps a name's room beside the two. Folded, it
-   stands in the title bar beside New task as a round its glyph alone, one
-   button wide, and the toolbar's clearance grows by that button, so nothing
-   the toolbar draws starts beneath it. Over the sign-in, where nothing
+   stands in the title bar beside New task as its glyph alone, drawn as the
+   buttons beside it draw theirs, on no fill and one button wide, so the row
+   keeps their spacing and a heading beside it no fill to crowd; the
+   toolbar's clearance grows by that button, so nothing the toolbar draws
+   starts beneath it. Over the sign-in, where nothing
    else stands in the title bar, it keeps its word. Over a drag region, it
    takes the pointer back so its hint can show. */
 .offline-mark {
@@ -1717,6 +1719,13 @@ ul.actor-stack {
   height: var(--luke-control-height);
   justify-content: center;
   padding: 0;
+  border-radius: var(--luke-control-radius);
+  background: none;
+}
+
+.desktop-shell .title-bar-controls .offline-mark svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 .desktop-shell .title-bar-controls .offline-mark-word {
