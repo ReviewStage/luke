@@ -68,3 +68,32 @@ test("a reply whose mentioned agent could not take the thread posts, and its thr
   );
   act(() => root.unmount());
 });
+
+test("a write's answer that lands after a later revision of its thread leaves the later one", async () => {
+  let control: PlanCommentsControl | undefined;
+  let answered = 0;
+  function Probe() {
+    control = usePlanComments({
+      planId: PLAN,
+      shown: false,
+      readComments: async () => ({ threads: [], cursor: "c" }),
+      startComment: async () => ({ thread: THREAD }),
+      actOnComment: async () => {
+        answered += 1;
+        return { thread: { ...THREAD, revision: answered === 1 ? 3 : 2 } };
+      },
+    });
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() => root.render(createElement(Probe)));
+
+  for (const clientKey of ["key-1", "key-2"]) {
+    await act(async () => {
+      await control?.act(THREAD.id, { action: PLAN_COMMENT_ACTION.REPLY, clientKey, words: "Yes" });
+    });
+  }
+
+  assert.equal(control?.threads.find((thread) => thread.id === THREAD.id)?.revision, 3);
+  act(() => root.unmount());
+});

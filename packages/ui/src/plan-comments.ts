@@ -122,8 +122,11 @@ function withThread(
   threads: readonly PlanCommentThread[],
   thread: PlanCommentThread,
 ): readonly PlanCommentThread[] {
+  // Note that a write's answer may land after a read that already brought a later revision, as one whose mentions waited on the hand-over does, so the later one stays.
   return threads.some((each) => each.id === thread.id)
-    ? threads.map((each) => (each.id === thread.id ? thread : each))
+    ? threads.map((each) =>
+        each.id === thread.id && each.revision <= thread.revision ? thread : each,
+      )
     : [...threads, thread];
 }
 
