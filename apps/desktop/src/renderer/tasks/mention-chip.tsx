@@ -46,6 +46,7 @@ import type { LinkDrawer } from "../markdown-message";
 import { usePerson } from "../member-directory";
 import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
+import { useAppState } from "../use-app-state";
 import {
   AutomationChipCard,
   InboxItemChipCard,
@@ -66,7 +67,12 @@ import { PullRequestMark } from "./pull-request-mark";
 import { ServerCard } from "./server-card";
 import { AgentMark } from "./tab-look";
 import { useKnownNames } from "./use-known-names";
-import { type LinkStanding, useLinkStanding, useWordsWorkspaceId } from "./use-link-standing";
+import {
+  type ChipWhere,
+  type LinkStanding,
+  useLinkStanding,
+  useWordsWorkspaceId,
+} from "./use-link-standing";
 import { useOpenLink } from "./use-open-link";
 
 /**
@@ -256,16 +262,25 @@ function harnessMark(model: string | undefined): React.JSX.Element {
 function KnownAgentMark({
   agentId,
   taskId,
+  name,
+  where,
   known,
 }: {
   agentId: string;
   taskId: string | undefined;
+  /** The name the chip calls it by, which an agent on no task is found by. */
+  name: string;
+  /** Where the chip stands, whose workspace an agent on no task is found in. */
+  where: ChipWhere;
   known: KnownNames;
 }): React.JSX.Element {
+  const workspaceId = useWordsWorkspaceId(where);
+  const held = useAppState() !== undefined;
   const model = known.agentModels.get(agentId);
-  if (model !== undefined) return harnessMark(model);
+  // Note that nothing is read before main's document lands, because the agent may be among those it lists.
+  if (model !== undefined || !held) return harnessMark(model);
   return (
-    <ReadAgentModel agentId={agentId} taskId={taskId}>
+    <ReadAgentModel agentId={agentId} taskId={taskId} workspaceId={workspaceId} name={name}>
       {harnessMark}
     </ReadAgentModel>
   );
@@ -317,7 +332,13 @@ function MentionGlyph({
     case MENTION_KIND.AGENT: {
       const look = mention.taskId === doors.taskId ? doors.agentOf?.(mention.agentId) : undefined;
       return look === undefined ? (
-        <KnownAgentMark agentId={mention.agentId} taskId={mention.taskId} known={known} />
+        <KnownAgentMark
+          agentId={mention.agentId}
+          taskId={mention.taskId}
+          name={name}
+          where={{ planId: doors.taskId, workspace: doors.place.workspace }}
+          known={known}
+        />
       ) : (
         <ActorMark actor={look.actor} size={ACTOR_SIZE.INLINE} />
       );
@@ -606,7 +627,18 @@ function MentionChip({
 }
 
 /** The glyph a place in Luke wears, the one its tab or its row in the window wears: an agent's its harness's mark, where the window holds the agent. */
-function PlaceGlyph({ place, known }: { place: LinkPlace; known: KnownNames }): React.JSX.Element {
+function PlaceGlyph({
+  place,
+  name,
+  workspace,
+  known,
+}: {
+  place: LinkPlace;
+  name: string;
+  /** The slug of the workspace the link was written under. */
+  workspace: string;
+  known: KnownNames;
+}): React.JSX.Element {
   switch (place.kind) {
     case LINK_PLACE.TASK:
     case LINK_PLACE.VERSION:
@@ -619,7 +651,15 @@ function PlaceGlyph({ place, known }: { place: LinkPlace; known: KnownNames }): 
     case LINK_PLACE.CALL:
       return <CallIcon />;
     case LINK_PLACE.AGENT:
-      return <KnownAgentMark agentId={place.agentId} taskId={place.planId} known={known} />;
+      return (
+        <KnownAgentMark
+          agentId={place.agentId}
+          taskId={place.planId}
+          name={name}
+          where={{ planId: place.planId ?? NO_PLAN_ID, workspace }}
+          known={known}
+        />
+      );
     case LINK_PLACE.WORKER:
       return <BotIcon aria-hidden="true" />;
     case LINK_PLACE.CHANGES:
@@ -666,7 +706,7 @@ function PlaceChip({
   const openLink = useOpenLink();
   const known = useKnownNames("automationId" in place ? place.automationId : undefined);
   const { name, under } = placeChipLook(place, label, known);
-  const glyph = <PlaceGlyph place={place} known={known} />;
+  const glyph = <PlaceGlyph place={place} name={name} workspace={workspace} known={known} />;
   const own = (
     <HoverCard data-mention-card="">
       <HoverCardHead glyph={glyph} name={name} />

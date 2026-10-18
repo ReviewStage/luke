@@ -27,11 +27,13 @@ import { WordsWorkspace } from "./use-link-standing";
  * tab of, an agent on another task of the workspace or on none, in words
  * drawn off that task's page as the Inbox draws them, hangs the agent's
  * tab's own card: its name, its model, where it stands, who started it, and
- * the task it works on. Nothing is read as the chips are drawn; a hung card
- * reads its task's agents once, or, for an agent on no task, the
- * workspace's agents its written name finds, then the newest, and only then
- * says it is not found. A read that answers nothing leaves the chip's own
- * card. Synthetic workspace, tasks, and agents.
+ * the task it works on. A chip of an agent the window lists reads nothing
+ * as it is drawn; one of an agent it lists not, an archived one say, takes
+ * its card's read as it is drawn, so its mark wears its harness, and the
+ * card hung after shares it: its task's agents once, or, for an agent on
+ * no task, the workspace's agents its written name finds, then the newest,
+ * and only then says it is not found. A read that answers nothing leaves
+ * the chip's own card. Synthetic workspace, tasks, and agents.
  */
 
 const AT = 1_792_000_000_000;
@@ -161,11 +163,48 @@ function answer(request: Act): ActOutcome {
   return { status: ACT_OUTCOME_STATUS.DONE, value: undefined };
 }
 
-/** The words drawn as the Inbox draws them, off any task's page, in the workspace given. */
-async function drawn(text: string): Promise<HTMLElement> {
+/** Main's document as `STATE`, its billing row naming the prorater and its agents with no task the sweeper, as the plan list carries them. */
+const LISTING_STATE: AppStateSnapshot = {
+  ...STATE,
+  tasks: {
+    ...STATE.tasks,
+    tasks: [
+      {
+        ...BILLING,
+        agents: {
+          total: 1,
+          working: 1,
+          agents: [
+            {
+              id: PRORATE.id,
+              title: PRORATE.title,
+              model: PRORATE.model,
+              effort: PRORATE.effort,
+              status: PRORATE.status,
+            },
+          ],
+          pullRequestTotal: 0,
+          pullRequests: [],
+        },
+      },
+    ],
+    tasklessAgents: [
+      {
+        ...SWEEPER,
+        automationId: null,
+        workspaceId: ACME.id,
+        repository: "acme/relay",
+        activityAt: AT,
+      },
+    ],
+  },
+};
+
+/** The words drawn as the Inbox draws them, off any task's page, in the workspace given, main's document being `state`. */
+async function drawn(text: string, state: AppStateSnapshot = STATE): Promise<HTMLElement> {
   fakeAppBridge({
     onAppState: () => () => undefined,
-    requestAppState: () => Promise.resolve(STATE),
+    requestAppState: () => Promise.resolve(state),
     act: (request: Act): Promise<ActOutcome> => {
       told.push(request);
       return Promise.resolve(answer(request));
@@ -242,12 +281,28 @@ async function cardOf(chip: Element | undefined) {
   return look;
 }
 
-test("chips of agents off their task's page read nothing as they are drawn", async () => {
+test("chips of agents off their task's page that the window lists read nothing as they are drawn", async () => {
   await drawn(
     `${mentionOf(PRORATE, "Prorate seat changes")} and ${mentionOf(SWEEPER, "Sweep flaky tests")}`,
+    LISTING_STATE,
   );
 
   assert.deepEqual(agentReads(), []);
+});
+
+test("a chip of an agent the window lists not reads its task's agents once as it is drawn, wearing its harness, and the card hung after reads nothing more", async () => {
+  const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
+  const chip = container.querySelector(".mention-chip") ?? undefined;
+
+  assert.ok(chip?.querySelector(".mention-chip-glyph .harness-mark"), "the chip wears its harness");
+  const card = await cardOf(chip);
+  assert.equal(card.name, "Prorate seat changes");
+  assert.deepEqual(agentReads(), [
+    {
+      kind: ACT_KIND.CODING_AGENTS_LIST,
+      payload: { taskId: BILLING.id, includeArchived: true },
+    },
+  ]);
 });
 
 test("an agent on another task hangs its tab's card, its task's agents read once as it is hung, naming the task it works on", async () => {
@@ -297,9 +352,12 @@ test("an agent on no task is found by the name its chip was written with, else a
   assert.deepEqual([archivist.name, archivist.foot], ["Archive stale branches", "On no task"]);
   assert.equal(missing.corner, "Not found");
   assert.equal(missing.foot, undefined, "an agent not found works nowhere the card can say");
+  // Note that each chip reads as it is drawn, so the four chains interleave and are compared whole.
+  const inOrder = (payloads: readonly unknown[]) =>
+    payloads.map((payload) => JSON.stringify(payload)).sort();
   assert.deepEqual(
-    agentReads().map((request) => ("payload" in request ? request.payload : undefined)),
-    [
+    inOrder(agentReads().map((request) => ("payload" in request ? request.payload : undefined))),
+    inOrder([
       { workspaceId: ACME.id, includeArchived: true, words: "Sweep flaky tests" },
       { workspaceId: ACME.id, includeArchived: true, words: "The auditor" },
       { workspaceId: ACME.id, includeArchived: true },
@@ -309,7 +367,7 @@ test("an agent on no task is found by the name its chip was written with, else a
       { workspaceId: ACME.id, includeArchived: true, words: "Gone" },
       { workspaceId: ACME.id, includeArchived: true },
       { agentId: "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c" },
-    ],
+    ]),
   );
 });
 

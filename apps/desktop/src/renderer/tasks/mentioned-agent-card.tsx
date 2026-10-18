@@ -35,10 +35,9 @@ import { useKnownNames } from "./use-known-names";
  *
  * A mark the window holds no model for, an archived agent's or one past the
  * few a task's row names, is read the same way as it is drawn
- * (`ReadAgentModel`): an agent on a task by its task's agents, the very
- * read its card takes, held once per task for every mark and card of it,
- * and an agent on no task by its own id, so its harness is drawn without
- * the card being hung first.
+ * (`ReadAgentModel`), by the very read its card takes, held once for every
+ * mark and card of it, so its harness is drawn without the card being hung
+ * first. An agent the window holds a model for is read for nothing.
  */
 
 /** What a mentioned agent's card names it by: the catalog that names its model, and the reader, whose own agents name no starter. */
@@ -152,7 +151,7 @@ const tasklessAgentsAtom = Atom.family((workspaceId: string) =>
   ),
 );
 
-/** One agent read by its id, for a mark of an agent on no task the window holds no model for, read once for every mark of it while one stands. */
+/** One agent read by its id, for a mark of an agent on no task drawn where no workspace is known to find it in, read once for every mark of it while one stands. */
 const agentByIdAtom = Atom.family((agentId: string) => rendererRuntime.atom(agentById(agentId)));
 
 /** The model a read answered the agent runs on; none while it is out, where it failed, and where it found no such agent. */
@@ -176,6 +175,20 @@ function TaskAgentModel({
   return children(modelOf(useAtomValue(taskAgentsAtom(taskId)), agentId));
 }
 
+function TasklessAgentModel({
+  workspaceId,
+  agentId,
+  name,
+  children,
+}: {
+  workspaceId: string;
+  agentId: string;
+  name: string;
+  children: ModelDrawer;
+}): ReactNode {
+  return children(modelOf(useAtomValue(tasklessAgentsAtom(workspaceId)(agentId)(name)), agentId));
+}
+
 function AgentModelById({
   agentId,
   children,
@@ -188,26 +201,43 @@ function AgentModelById({
 
 /**
  * The model an agent the window holds no line of runs on, read for its
- * mark: by its task's agents, archived ones among them, where it works on
- * one, else by its own id; drawn with none while the read is out and where
- * it answered nothing.
+ * mark by the very read its card takes, so a card hung after shares it: by
+ * its task's agents, archived ones among them, where it works on one; by
+ * the workspace's agents its name finds, as its card finds it, where it
+ * works on none; and by its own id where no workspace or name is known.
+ * It is drawn with none while the read is out and where it answered
+ * nothing.
  */
 export function ReadAgentModel({
   agentId,
   taskId,
+  workspaceId,
+  name,
   children,
 }: {
   agentId: string;
   /** The task the agent works on; none for an agent on none, or where the place does not say. */
   taskId: string | undefined;
+  /** The workspace the words are of, which an agent on no task is found in. */
+  workspaceId?: string | undefined;
+  /** The name the agent was written with, which an agent on no task is searched by. */
+  name?: string | undefined;
   children: ModelDrawer;
 }): ReactNode {
-  return taskId === undefined ? (
-    <AgentModelById agentId={agentId}>{children}</AgentModelById>
-  ) : (
-    <TaskAgentModel taskId={taskId} agentId={agentId}>
+  if (taskId !== undefined) {
+    return (
+      <TaskAgentModel taskId={taskId} agentId={agentId}>
+        {children}
+      </TaskAgentModel>
+    );
+  }
+  if (workspaceId === undefined || name === undefined) {
+    return <AgentModelById agentId={agentId}>{children}</AgentModelById>;
+  }
+  return (
+    <TasklessAgentModel workspaceId={workspaceId} agentId={agentId} name={name}>
       {children}
-    </TaskAgentModel>
+    </TasklessAgentModel>
   );
 }
 
