@@ -138,10 +138,19 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
     latest.current = { act, onAct };
   });
 
-  // Note that closing lets go of a trackpad's swipe still waiting for its wheel to rest, so its frame can never settle it after.
+  // Note that closing lets go of a trackpad's swipe still waiting for its wheel to rest, so its frame can never settle it after,
+  // and of a pointer's swipe still held, so its release does nothing and its click opens nothing.
   const close = () => {
     if (wheel.current !== undefined) cancelAnimationFrame(wheel.current.frame);
     wheel.current = undefined;
+    const held = press.current;
+    press.current = undefined;
+    if (held?.swiping === true) {
+      swallow.current = true;
+      if (ref.current?.hasPointerCapture?.(held.pointerId) === true) {
+        ref.current.releasePointerCapture(held.pointerId);
+      }
+    }
     setOffset(0);
     setState(SWIPE_STATE.REST);
   };

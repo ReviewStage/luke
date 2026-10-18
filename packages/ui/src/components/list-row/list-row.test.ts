@@ -615,3 +615,26 @@ test("a wheel more up or down than sideways is the list's to scroll while a trac
   expect(wheel(item, -5, 30)).toBe(false);
   expect(standing(item)).toEqual(["moving", "40px", false]);
 });
+
+test("a pointer's swipe interrupted by a press or a wheel elsewhere does nothing when it is let go, and opens nothing", () => {
+  for (const interrupt of ["pointerdown", "wheel"] as const) {
+    const { item, press, acted, opened } = swiped();
+    drag(press, 20, 200);
+    expect(standing(item)).toEqual(["moving", "200px", true]);
+    act(() => {
+      document.body.dispatchEvent(
+        interrupt === "wheel"
+          ? new WheelEvent("wheel", { bubbles: true, deltaX: 0, deltaY: 30 })
+          : new PointerEvent("pointerdown", {
+              bubbles: true,
+              button: 0,
+              clientX: 400,
+              pointerId: 2,
+            }),
+      );
+    });
+    expect(standing(item)).toEqual(["rest", "0px", false]);
+    release(press, 200);
+    expect([acted, opened]).toEqual([[], []]);
+  }
+});
