@@ -1477,6 +1477,64 @@ it.effect(
 );
 
 it.effect(
+  "a turn of the open untitled plan that settles reads the list again once the name the service gives it has had time to land",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Untitled", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Reading")], "1:1", CODING_AGENT_STATUS.RUNNING),
+      );
+      yield* conversations.nextAsk;
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Done.")], "1:2", CODING_AGENT_STATUS.COMPLETED),
+      );
+      // The service names the task just after the turn settles.
+      service.tasks = [task(INVITES, "Fix invite emails", "# Draft", 10)];
+      const named = yield* viewLands(
+        (view) =>
+          view.tasks.some((row) => row.id === INVITES && row.name === "Fix invite emails") &&
+          view.document.task?.name === "Fix invite emails",
+      );
+
+      yield* TestClock.adjust(Duration.seconds(5));
+
+      yield* named;
+    }),
+);
+
+it.effect(
+  "an untitled plan opened on a turn already settled reads the list again for the name it may have been given",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Untitled", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Done.")], "1:1", CODING_AGENT_STATUS.COMPLETED),
+      );
+      service.tasks = [task(INVITES, "Fix invite emails", "# Draft", 10)];
+      const named = yield* viewLands((view) =>
+        view.tasks.some((row) => row.id === INVITES && row.name === "Fix invite emails"),
+      );
+
+      yield* TestClock.adjust(Duration.seconds(5));
+
+      yield* named;
+    }),
+);
+
+it.effect(
   "a call's end wakes the open plan's parked conversation read, and wakes it again once the call's last writes have had time to land",
   () =>
     Effect.gen(function* () {

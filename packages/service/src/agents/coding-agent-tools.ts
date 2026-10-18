@@ -509,7 +509,9 @@ const START_AGENT_INPUT = Schema.Struct({
       Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(TASK_BOUNDS.MAX_NAME_CHARS)),
       "The name of a new task to make and start the agent on, as the developer would name it in " +
         "the sidebar: made in your workspace, on the repository you work in, owned by the " +
-        "developer you work for, with an empty plan, so give a prompt with it. Never with a taskId.",
+        "developer you work for, with an empty plan, so give a prompt with it. Never with a taskId, " +
+        "and only for work unrelated to the task you work on, where the developer asked for a new " +
+        "task, or where you work on no task.",
     ),
   ),
   prompt: Schema.optionalKey(
@@ -718,7 +720,12 @@ export const START_AGENT_TOOL = {
     "which is made in your workspace on the repository you work in, for a separate piece of " +
     "work that should stand as a task of its own in the developer's sidebar; exactly as the " +
     "developer's Start button would: on the task's plan itself with no prompt, or on the prompt given in the plan's " +
-    "place, with the note after either. This one call carries everything the agent is told as " +
+    "place, with the note after either. Start it on the task you work on, taskId and newTask " +
+    "left out, for any part of that task's work, even one that runs apart from yours, so its " +
+    "branch, pull request, and transcript stand under that task; name another task or a new " +
+    "one only for work unrelated to it, or where the developer asked for that; where you work " +
+    "on no task, name one, or a new one, for any work. " +
+    "This one call carries everything the agent is told as " +
     "it starts, and the agent sets to work on it at once, so never follow it with a message to " +
     "the agent it started; message it only when there is something new to say. Its checkout is " +
     "the repository's default branch, or the branch named, which must already be on GitHub. " +

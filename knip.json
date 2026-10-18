@@ -74,6 +74,7 @@
         "@better-auth/drizzle-adapter",
         "@better-auth/electron",
         "@better-auth/oauth-provider",
+        "@sentry/cli",
         "@vercel/connect",
         "@vercel/oidc",
         "better-auth",
@@ -87,6 +88,7 @@
         "{,subagents/*/}instructions/*.ts",
         "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
         "instrumentation/*.ts",
+        "nitro.config.ts",
         "evals/evals.config.ts",
         "evals/*.eval.ts"
       ],
@@ -99,6 +101,7 @@
         "@better-auth/drizzle-adapter",
         "@better-auth/electron",
         "@better-auth/oauth-provider",
+        "@sentry/cli",
         "@vercel/connect",
         "@vercel/oidc",
         "better-auth",
@@ -112,6 +115,7 @@
         "{,subagents/*/}instructions/*.ts",
         "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
         "instrumentation/*.ts",
+        "nitro.config.ts",
         "evals/evals.config.ts",
         "evals/*.eval.ts"
       ],

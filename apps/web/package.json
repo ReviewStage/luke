@@ -36,6 +36,7 @@
     "@luke/ui": "workspace:*",
     "@luke/wire": "workspace:*",
     "@tailwindcss/vite": "4.3.3",
+    "@vercel/functions": "3.10.1",
     "ai": "catalog:",
     "better-auth": "1.7.7",
     "drizzle-orm": "catalog:",

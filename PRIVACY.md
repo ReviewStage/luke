@@ -906,10 +906,11 @@ yours.
 sends Sentry reports of unhandled exceptions in its Electron main, preload,
 and renderer code, process-session status, and native minidumps when an
 Electron main, renderer, or GPU process crashes. It also sends performance
-traces: how long Luke took to start, how each window's page loaded, and the
-requests each made. Luke uses Sentry's default data collection, so reports
-and traces carry the exception message and code path, breadcrumbs (among them
-messages Luke wrote to its console and the addresses of requests it made),
+traces for about one launch or page load in ten: how long Luke took to start,
+how each window's page loaded, and the requests each made. Luke uses Sentry's
+default data collection, so reports and traces carry the exception message
+and code path, breadcrumbs (among them messages Luke wrote to its console and
+the addresses of requests it made),
 the headers, bodies, and query parameters of requests Luke made, Electron,
 operating-system, runtime, and device context, and your Mac's IP address.
 Sentry replaces a value whose name looks like a credential, such as an
@@ -919,22 +920,30 @@ Luke account, and does not enable Sentry Replay, screenshots, or profiling.
 Fixture and evidence runs send nothing to Sentry.
 
 **Error, performance, and agent reports from our service.** Our service and
-Luke's agents send Sentry what its SDK collects by default, so that we can find
-and fix failures. That is: every error our service did not handle, with its
-message, stack trace, the lines of code around it, and the values of local
-variables; performance traces of each request our service answers, each
-database query, and each request it makes, with their headers, bodies, query
-parameters, and database query parameters, and the IP address a request came
-from; every line our service logs; counts and timings; and, each minute,
-whether the scheduled sweep ran. Luke's agents also send Sentry's agent
-traces of each turn: the instructions and messages sent to the model (which
-include the plan, the conversation, what was said on a call, and what Luke and
-his workers read, such as code, a command's output from your Mac, and an
-integration's answer), the model's replies, and each tool call with its
-arguments and result. Sentry replaces a value whose name looks like a
-credential (such as `auth`, `token`, `secret`, `password`, `key`, or `session`)
-before it leaves, but not a credential written in free text, such as a key
-pasted into a conversation. Terminal tabs' bytes are not sent. What reaches
+Luke's agents send Sentry reports so that we can find and fix failures. Our
+service's web functions send every error they did not handle, with its
+message, stack trace, and the lines of code around it; performance traces of a
+share of the requests they answer, each database query, and each request they
+make, with the method, address, and query parameters, the status, the
+browser's or app's user agent, and the query's text; every line they log;
+counts and timings; and, each minute, whether the scheduled sweep ran. They do
+not send a request's headers or body, the values of local variables, or the IP
+address a request came from. Luke's agents send what Sentry's SDK collects by
+default: every error they did not handle, with its message, stack trace, the
+lines of code around it, and the values of local variables; performance traces
+of each request they answer, each database query, and each request they make,
+with their headers, bodies, query parameters, and database query parameters,
+and the IP address a request came from; every line they log; and Sentry's
+agent traces of each turn: the instructions and messages sent to the model
+(which include the plan, the conversation, what was said on a call, and what
+Luke and his workers read, such as code, a command's output from your Mac, and
+an integration's answer), the model's replies, and each tool call with its
+arguments and result. In what the agents send, Sentry replaces a value whose
+name looks like a credential (such as `auth`, `token`, `secret`, `password`,
+`key`, or `session`) before it leaves, but not a credential written in free
+text, such as a key pasted into a conversation; the address and query
+parameters of a request the web functions trace are sent as the request
+carried them. Terminal tabs' bytes are not sent. What reaches
 Sentry is kept under Sentry's retention, not tied to your account, and is not
 erased when you delete your account.
 
@@ -1266,8 +1275,12 @@ and error, performance, and agent reports by Sentry.
   its attached files, every call's record, the commands waiting for your Mac with the
   record of when it last read, your own API keys, Luke's record of your
   Linear, Notion, Sentry, and Slack connections, and everything earlier
-  versions left there — and asks PostHog to erase your usage data and
-  recordings, which does not reach a recording never attached to your account.
+  versions left there — and asks PostHog to erase the person it holds for your
+  account with its usage data and recordings, which PostHog queues and carries
+  out shortly after rather than at once, and which does not reach a recording
+  never attached to your account. If PostHog cannot be reached, refuses, or
+  reports that it could not erase them, the account is deleted anyway and
+  PostHog keeps what it holds.
   Luke stops recording for the rest of the session, and starts again the next
   time you open it or sign in. Sentry reporting continues, and what Sentry
   already received is not tied to your account and is not erased with it. Deleting does not affect your Google or GitHub account

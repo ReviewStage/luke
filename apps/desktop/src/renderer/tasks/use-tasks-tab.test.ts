@@ -821,6 +821,18 @@ test("Show panel beside the Inbox, its item's plan's strip holding no tab, shows
   assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
 });
 
+test("a peek opened beside the Issues list shows the panel, though the plan open behind it holds no tab", () => {
+  window.localStorage.clear();
+  const tab = mount({ shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
+  act(() => tab.control().issuesView.onOpen());
+  act(() => tab.control().issuesView.onPeek("issue-1"));
+  act(() => tab.control().sidePanel.onSetOpen(true));
+
+  assert.deepEqual(tab.control().sidePanel.strip, [], "no tab of the plan's");
+  assert.equal(tab.control().sidePanel.open, true);
+  assert.equal(tab.control().issuesView.peeked, "issue-1");
+});
+
 test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
   const tab = mount(
     { shown: true, tasks: OPEN },

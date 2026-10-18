@@ -7,11 +7,15 @@
    status and priority marks, its properties' row, and its description's
    editor. Tokens only. */
 
-/* The pages, the peek, and the new issue's card share one root, which C
-   and the arrows are read against: the page beside the peek, which the
-   page gives its room to at once (`issue-peek.tsx`). Whatever slides past
+/* The pages, the side panel beside the list, and the new issue's card share
+   one root, which C and the arrows are read against: the page beside the
+   window's own side panel (`side-panel.tsx`'s `PanelFrame`), which the page
+   gives its room to at once (`issue-peek.tsx`). The panel leaves the board a
+   column and its insets, as it leaves a plan's document its reserve, which
+   its edge and its width read from here (PEEK_RESERVE). Whatever slides past
    its edge is clipped, never scrolled (renderer AGENTS.md, Panel motion). */
 .issues-pages {
+  --document-reserve: 320px; /* off-scale: a column of the board and its insets, PEEK_RESERVE */
   position: relative;
   display: flex;
   min-width: 0;
@@ -20,71 +24,11 @@
   overflow: clip;
 }
 
-/* The peek's pane, its width the developer's (`usePeekWidth`), its left
-   edge the side panel's own resize edge. A window narrower than the kept
-   width leaves the board a column and its insets, PEEK_RESERVE, and the
-   kept width comes back as the window grows. */
-.issue-peek-pane {
-  position: relative;
-  display: flex;
-  min-height: 0;
-  max-width: max(360px, calc(100% - 320px)); /* off-scale: PEEK_WIDTH.MIN, PEEK_RESERVE */
-  flex: none;
-}
-
-/* The peek on its way out has left the layout, the board already standing
-   in its room, and slides out over the board's edge on its own ground
-   (`usePaneSlide`). */
-.issue-peek-pane[data-leaving] {
-  position: absolute;
-  inset-block: 0;
-  right: 0;
-}
-
-/* The peek: its head level with the page's toolbar, over the issue's own
-   document, which scrolls under the head. */
-.issue-peek {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  border-left: 1px solid var(--luke-color-border);
-  background: var(--luke-color-ground);
-}
-
-/* Level with the page's toolbar and, like it and the side panel's own top
-   row (`.side-panel-bar`), the window's drag handle wherever no control
-   stands. */
-.issue-peek-head {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  min-height: var(--desktop-bar-height);
-  padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-8) var(--column-inset);
-  border-bottom: 1px solid var(--luke-color-border);
-  -webkit-app-region: drag;
-}
-
-.issue-peek-identifier {
-  min-width: 0;
-  flex: 1;
-  margin: 0;
-  overflow: hidden;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-  font-weight: var(--luke-weight-medium);
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.issue-peek-actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  -webkit-app-region: no-drag;
+/* With the panel beside it, the page's toolbar ends at the panel's edge
+   rather than the window's, and the panel's own row leaves the toggle its
+   room, as a plan's toolbar does beside its panel. */
+.desktop-shell .issues-pages[data-panel-open="true"] .desktop-toolbar {
+  padding-right: var(--column-inset);
 }
 
 /* The card read in the peek is marked as the sidebar marks the open plan. */

@@ -36,6 +36,7 @@
     "ws": "catalog:"
   },
   "devDependencies": {
+    "@sentry/cli": "2.58.6",
     "@types/node": "catalog:",
     "typescript": "catalog:"
   }

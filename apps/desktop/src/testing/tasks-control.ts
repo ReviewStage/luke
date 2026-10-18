@@ -316,6 +316,8 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       place: { kind: ISSUES_PAGE.LIST },
       onOpen: ignore,
       onClose: ignore,
+      peeked: undefined,
+      onPeek: ignore,
     },
     callTaskId: undefined,
     chatView: {

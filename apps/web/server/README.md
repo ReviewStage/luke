@@ -87,6 +87,49 @@ vercel env run --environment production --scope stage-review -- \
   pnpm --filter @luke/web auth:seed
 ```
 
+On a Preview, `pnpm db:migrate` then makes the branch database the
+Preview's own, the first time a build reaches it, on the same direct
+connection the migrations run on, which is where Neon puts admin work
+(`apps/web/server/db/migrate.ts`; `packages/service/src/maintenance/preview-database.ts`
+decides, `packages/database/src/models/preview-fork.ts` runs). Neon branches it off
+production with every row production held, so it arrives with every account's
+words and with whatever was in flight: turns still running, coding agents at
+work, open calls, commands queued for a Mac, sandboxes queued to stop,
+automations due. Each names a live thing in production that the Preview can
+neither finish nor reach, and no cron runs on a Preview to settle it. So the
+step keeps the workspaces `LUKE_PREVIEW_WORKSPACES` names by slug, their
+members, and those members' own first workspaces, and deletes every other
+workspace and account with their rows, and every conversation stamped
+cleared, which only a purge the Preview never runs would remove; deletes the
+copy's sessions, OAuth tokens and consents, provider keys, password hashes,
+and the provider tokens on `account` rows, which production's secrets sealed
+and the Preview's cannot open; settles every
+queued or running turn as failed for its session's end; archives every
+coding agent, since its session and sandbox are production's; closes open
+calls; pauses automations and skips their queued runs; and empties the Mac
+command queue and the sandbox deletion and terminal lease queues. Then it
+writes `preview_fork`'s one row, which a later build of the branch reads as
+done, so a teammate's agents started on the Preview are left alone. Because
+it runs after the migration, a branch's first build still applies its
+migrations to the whole copy of production before the copy is cut down.
+
+It runs only on a Preview's build that names both `LUKE_PREVIEW_WORKSPACES`
+and `LUKE_PRODUCTION_DATABASE_ENDPOINT` (production's Neon endpoint, its
+`ep-…` id), set for the Preview environment alone; without them a build
+leaves the copy as it stands. A Preview whose connection string names
+production's endpoint (the endpoint id Neon's documented hostnames carry,
+with or without `-pooler`), whose database says it is that endpoint, or whose
+database holds no member of the workspaces named, fails its build instead.
+The database's own word is the `neon.endpoint_id` setting every Neon compute
+carries, read before anything is touched whatever name the connection reached
+it by; Neon does not document that setting, so it is a second check behind
+the hostname's rather than the only one, and a compute without it reads as
+not production's. Production's own `preview_fork` table stays empty,
+so resetting a Preview's branch onto production in Neon has its next build
+cut it down again. Neon keeps the copy as it was in the branch's history for
+the project's history window, so this narrows what a Preview holds rather
+than never copying it.
+
 Better Auth runs on its Drizzle adapter over `packages/database/src/schemas/auth.ts`
 (`packages/service/src/auth/auth-database.ts`), not its Kysely one: the migrations declare the
 OAuth tables' `scopes`, `redirect_uris`, `grant_types`, and `response_types`
@@ -772,7 +815,11 @@ names set by hand stops it from syncing. Without `SENTRY_DSN` the SDK starts
 disabled. `VERCEL_ENV` names the environment. `scripts/bundle-functions.ts`
 uploads the function bundles' source maps when the build holds
 `SENTRY_AUTH_TOKEN`, under the release the plugin writes into each bundle from
-the deployment's commit. Alert rules are set in Sentry, not here: a Slack
+the deployment's commit. The eve roots' builds do the same after `eve build`:
+each root's `nitro.config.ts` has Nitro write hidden maps when the build holds
+the token, and `scripts/eve-source-maps.sh` gives the bundles debug IDs,
+uploads the maps to `luke-web` under `VERCEL_GIT_COMMIT_SHA`, and deletes them
+from the output. Alert rules are set in Sentry, not here: a Slack
 `#alerts` message on more than ten events in five minutes, and an email to
 the issue's owners on a high-priority issue.
 

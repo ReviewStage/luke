@@ -5,6 +5,7 @@ import { never } from "eve/tools/approval";
 import glob from "eve/tools/glob";
 import readFile from "eve/tools/read_file";
 import writeFile from "eve/tools/write_file";
+import { preparePatch } from "./patch-text.js";
 
 /**
  * files.ts -- the coding agent's file tools: eve's own, with every path resolved from the checkout.
@@ -21,6 +22,13 @@ import writeFile from "eve/tools/write_file";
  * shows the model's own paths, as it does for the shell; and that each
  * tool advertises eve's own input schema with its path property described
  * anew, since the model reads the property's words beside the tool's.
+ *
+ * Two of them also spare the model a refusal it could not have avoided by
+ * reading the tool. `apply_patch` takes a patch missing its Begin or End
+ * line, and one that updates a file in two sections, as `patch-text.ts`
+ * says, and adds what to do next to eve's words where they leave it to
+ * guess. `grep` searches a pattern ripgrep refuses as a regular expression
+ * as a fixed string instead, and says that it did.
  */
 
 /** JSON Schema as eve serializes a tool's input schema for the model. */
@@ -127,9 +135,78 @@ export function grepIn(checkout: string) {
       "path",
       "Directory or file to search, relative to the checkout or absolute. Omit to search the whole checkout. Narrow this first.",
     ),
-    execute: (input, ctx) =>
-      grep.execute({ ...input, path: fromCheckout(checkout, input.path) }, ctx),
+    execute: async (input, ctx) => {
+      const search = { ...input, path: fromCheckout(checkout, input.path) };
+      try {
+        return await whole(grep.execute(search, ctx));
+      } catch (failure) {
+        // A pattern the model meant as text but wrote with a regex's characters, such as an unclosed `(`, is searched as written.
+        if (input.literal === true || !(failure instanceof Error) || !isRegexRefusal(failure))
+          throw failure;
+        const answer = await whole(grep.execute({ ...search, literal: true }, ctx));
+        return { ...answer, content: `${FIXED_STRING_NOTE}\n${answer.content}` };
+      }
+    },
   });
+}
+
+/** A tool's answer as one value: eve's `grep` and `apply_patch` answer once rather than stream. */
+async function whole<T extends object>(answer: T | PromiseLike<T> | AsyncIterable<T>): Promise<T> {
+  const settled = await answer;
+  if (isStream(settled))
+    throw new Error("the tool answered a stream where one answer was expected");
+  return settled;
+}
+
+function isStream<T extends object>(answer: T | AsyncIterable<T>): answer is AsyncIterable<T> {
+  return Symbol.asyncIterator in answer;
+}
+
+/** What the search refusing the pattern as a regular expression is told, ahead of what searching it as written found. */
+const FIXED_STRING_NOTE =
+  "[The pattern is not a valid regular expression, so it was searched as a fixed string. To search it as a regex, escape its special characters and set literal false.]";
+
+/** ripgrep's refusal of a pattern, and POSIX grep's, as eve's `grep` reports a search that exited 2. */
+const REGEX_REFUSAL =
+  /^grep failed \(exit 2\): [\s\S]*(?:regex parse error|Unmatched [([{]|Invalid (?:regular expression|preceding regular expression|range end|character class name|back reference|content of \\\{\\\})|Trailing backslash)/u;
+
+function isRegexRefusal(failure: Error): boolean {
+  return REGEX_REFUSAL.test(failure.message);
+}
+
+/**
+ * eve's refusal of a patch, with what the model should do next said where
+ * eve's own words leave it to guess: a file named by two sections that
+ * could not be joined, a file another writer changed while the patch was
+ * applied, and a hunk missed in sections that were joined.
+ */
+function explainedPatchFailure(failure: Error, joined: readonly string[]): Error {
+  const notes: string[] = [];
+  if (failure.message.includes("patch contains overlapping file operations:")) {
+    notes.push(
+      "A file may stand in one section of a patch, except that several `*** Update File:` sections of one file written top to bottom are applied in order. Write each file's hunks top to bottom in one section, give an added, deleted, or moved file no other section, and patch it again.",
+    );
+  }
+  if (
+    failure.message.includes("apply_patch stale write:") &&
+    !failure.message.includes("Rollback also failed")
+  ) {
+    notes.push(
+      "Something else wrote that file while this patch was being applied, such as another tool call in the same step or a command still running, so none of this patch was kept. Re-read the file and patch it again, and edit one file from one tool call at a time.",
+    );
+  }
+  // eve names the file a hunk missed as `failed to find expected lines in <path>.` or `failed to find context '…' in <path>.`
+  const missed = joined.filter(
+    (path) =>
+      failure.message.includes("failed to find ") && failure.message.includes(` in ${path}.\n`),
+  );
+  if (missed.length > 0) {
+    notes.push(
+      `The patch's sections for ${missed.join(", ")} were applied as one, their hunks in the order written: write a file's hunks top to bottom, against the file as it stands.`,
+    );
+  }
+  if (notes.length === 0) return failure;
+  return new Error([failure.message, ...notes].join("\n\n"), { cause: failure });
 }
 
 /** The code extension's `apply_patch`, against the checkout given unless `root` names another. */
@@ -148,7 +225,17 @@ export function applyPatchIn(checkout: string) {
     // eve's own approval, restated because the one spread in is typed on the required root.
     approval: never(),
     label: { start: ({ root }: PatchInput) => `Patch ${fromCheckout(checkout, root)}` },
-    execute: ({ root, patchText }: PatchInput, ctx) =>
-      applyPatch.execute({ root: fromCheckout(checkout, root), patchText }, ctx),
+    execute: async ({ root, patchText }: PatchInput, ctx) => {
+      const repository = fromCheckout(checkout, root);
+      const sandbox = await ctx.getSandbox();
+      const prepared = await preparePatch(patchText, (path) =>
+        sandbox.readTextFile({ path: posix.join(repository, path) }),
+      );
+      try {
+        return await whole(applyPatch.execute({ root: repository, patchText: prepared.text }, ctx));
+      } catch (failure) {
+        throw failure instanceof Error ? explainedPatchFailure(failure, prepared.joined) : failure;
+      }
+    },
   });
 }
