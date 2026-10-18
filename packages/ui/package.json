@@ -50,7 +50,9 @@
     "./avatar-session": "./src/avatar-session.js",
     "./person-page-model": "./src/person-page-model.js",
     "./chat-mention": "./src/chat-mention.js",
-    "./chat-model": "./src/chat-model.js"
+    "./chat-model": "./src/chat-model.js",
+    "./factory-world": "./src/factory-world/factory-world.js",
+    "./testing": "./src/testing/index.js"
   },
   "types": "./src/index.ts",
   "scripts": {
