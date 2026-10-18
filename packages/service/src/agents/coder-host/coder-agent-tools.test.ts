@@ -1533,6 +1533,38 @@ test("start_agent run twice at once under one call's key keeps one new task: the
   );
 });
 
+test("start_agent's new task that another agent came to stand on while its own start failed is kept, and counted once", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const name = "Kept by another";
+  const prompt = "Write the migration that adds the invitation's expiry.";
+  // Another agent lands on the new task while this start confirms its repository, then GitHub fails this start.
+  let landing = true;
+  const eve = await fakeCoderEve(workspaceId, [], async () => {
+    // The new task's own repository check reaches GitHub before the task is made, so the landing waits for it.
+    const [taskId] = await tasksNamed(caller.userId, workspaceId, name);
+    if (!landing || taskId === undefined) return;
+    landing = false;
+    await claimed(caller.userId, {
+      ...AGENT_CHOICE,
+      idempotencyKey: "another",
+      taskId,
+      planSnapshot: null,
+      prompt,
+    });
+    // GitHub then does not answer this start, which is refused.
+    throw new Error("GitHub unreachable");
+  });
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const countedBefore = tasksCounted(caller.userId);
+
+  const answered = await call(CODER_TOOL.START_AGENT, { newTask: name, prompt }, "call-kept");
+  assert.equal(answered.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(answered));
+  assert.equal(landing, false, "the other agent landed");
+  assert.equal((await tasksNamed(caller.userId, workspaceId, name)).length, 1);
+  assert.equal(tasksCounted(caller.userId), countedBefore + 1, "the task that stands is counted");
+});
+
 test("an agent whose starter has left the workspace makes no task in it", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
