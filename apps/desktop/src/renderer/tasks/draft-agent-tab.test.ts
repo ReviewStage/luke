@@ -583,41 +583,27 @@ test("a continue's draft names its source alone over the box, stands on a workin
   assert.equal(dropped, 1);
 });
 
-test("a draft New task handed over sends itself once the task can start an agent, and a Start refused leaves its words in the box with why and Retry", async () => {
+test("a draft New task handed over after its agent was refused sends nothing by itself, shows the words with why and Retry, and Retry starts the agent", async () => {
   const handed: AgentDraft = {
     ...DRAFT,
     prompt: "Make the sidebar keep its folds.",
-    sendsOnOpen: true,
+    refused: startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID),
   };
   const marks: unknown[] = [];
-  const unready = mount([], handed, {
+  const tab = mount([undefined], handed, {
+    start: { available: true, reason: undefined, busy: false, note: undefined, onPress: () => {} },
     onDraftChange: (change) => marks.push(change),
   });
   await settle();
-  assert.deepEqual(unready.starts, [], "nothing is sent before the task can start an agent");
-  for (const root of roots.splice(0)) act(() => root.unmount());
-  document.body.innerHTML = "";
 
-  const tab = mount(
-    [startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID), undefined],
-    handed,
-    {
-      start: {
-        available: true,
-        reason: undefined,
-        busy: false,
-        note: undefined,
-        onPress: () => {},
-      },
-      onDraftChange: (change) => marks.push(change),
-    },
-  );
-  await settle();
-
-  assert.deepEqual(tab.starts, [handed.prompt]);
-  assert.deepEqual(marks, [{ sendsOnOpen: undefined }], "the mark is let go as it sends");
-  assert.match(tab.note() ?? "", /could not be started/u);
+  assert.deepEqual(tab.starts, [], "nothing is sent until the developer asks");
   assert.equal(tab.draft(), handed.prompt);
+  assert.match(tab.note() ?? "", /could not be started/u);
   await tab.press("Retry");
-  assert.deepEqual(tab.starts, [handed.prompt, handed.prompt]);
+  assert.deepEqual(tab.starts, [handed.prompt]);
+  assert.deepEqual(
+    marks,
+    [{ refused: undefined }],
+    "the refusal handed over is let go as it sends",
+  );
 });

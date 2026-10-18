@@ -59,12 +59,13 @@ import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
  *   stands once there are words, files, or a Linear issue, and a
  *   repository, without which it is held and the card says so under it. It
  *   starts the task with an empty plan and no call, named by the issue where
- *   one was picked and else Untitled until the agent names it, then opens
- *   it on a draft agent's tab holding the words, the files, and the model on
- *   the chip, which starts the agent at once (`draft-agent-tab.tsx`), so an
- *   agent refused leaves the words there with why and Retry. The model chip
- *   starts on the account's default, and a pick here runs this one agent
- *   alone: only Settings changes the default.
+ *   one was picked and else Untitled until the agent names it, and the agent
+ *   on the words, the files, and the model on the chip, in the one start
+ *   (`use-tasks-tab.ts`), then opens the task on the agent's tab; an agent
+ *   refused opens it on a draft agent's tab holding the words, why under
+ *   the box, and Retry (`draft-agent-tab.tsx`). The model chip starts on the
+ *   account's default, and a pick here runs this one agent alone: only
+ *   Settings changes the default.
  * - Plan mode: the task starts from the plan template and opens its call
  *   with Luke, as New task always did. Start always stands, an empty box
  *   starting today's blank plan, and the model chip stands down, since the

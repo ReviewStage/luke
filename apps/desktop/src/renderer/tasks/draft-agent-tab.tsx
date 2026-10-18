@@ -51,12 +51,11 @@ import { useWorkingNow, WorkingLine } from "./working-time";
  * not land leaves the line for the note and Retry under the box, the words
  * kept.
  *
- * A draft New task handed over (`sendsOnOpen`, `use-coding-agents.ts`'s
- * `onHandDraft`) holds the words, files, and model New task's box held, and
- * the tab sends it by itself as soon as the task can start an agent, once:
- * the tab gives way to the agent's as it starts, and a Start the service
- * refused leaves the developer on the draft with the words in the box, why
- * under it, and Retry, as a send of their own would.
+ * A draft New task handed over (`use-coding-agents.ts`'s `onHandDraft`)
+ * is a task whose agent the service refused as New task started them
+ * both: it holds the words, files, and model New task's box held, and why
+ * (`refused`), which the tab shows under the box with Retry and what mends
+ * it, as a refused send of the developer's own would, until the next send.
  */
 
 /** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */
@@ -97,6 +96,8 @@ export function DraftAgentTab({
   // When a fork's or a continue's Start went, which its working line counts from; none while none is out.
   const [sentAt, setSentAt] = useState<number | undefined>(undefined);
   const [note, setNote] = useState<Failure | undefined>(undefined);
+  // Note that a send lets the refusal New task handed over go, so a tab opened again after says only its own.
+  const shownNote = note ?? draft.refused;
   // The account's default as read, which the chip names until the developer makes a choice of their own.
   const [fallback, setFallback] = useState<AgentDraft["choice"]>(undefined);
   // Note that the control is read through a ref, because the panel hands a
@@ -126,6 +127,7 @@ export function DraftAgentTab({
     if (sending || (fork === undefined && !hasWordsOrFiles(prompt, draft.attachments))) return;
     setSending(true);
     setNote(undefined);
+    if (draft.refused !== undefined) latest.current.onDraftChange({ refused: undefined });
     if (fork !== undefined) setSentAt(Date.now());
     const { id, choice, attachments, disabledServers } = draft;
     const started =
@@ -144,7 +146,7 @@ export function DraftAgentTab({
     attachments: draft.attachments,
     setAttachments: control.onDraftAttachments,
     sending: sending || control.start.busy,
-    note,
+    note: shownNote,
     closed: undefined,
     send,
     retry: send,
@@ -152,16 +154,6 @@ export function DraftAgentTab({
   };
   // A fork runs on its source's model and effort until the developer picks another.
   const choice = draft.choice ?? (source === undefined ? fallback : forkChoice(source));
-  // A draft New task handed over sends itself once the task can start an
-  // agent; the mark is let go first, so a refusal waits on Retry.
-  const handed = draft.sendsOnOpen === true && control.start.available;
-  const sendHanded = useRef(send);
-  sendHanded.current = send;
-  useEffect(() => {
-    if (!handed) return;
-    latest.current.onDraftChange({ sendsOnOpen: undefined });
-    sendHanded.current();
-  }, [handed]);
   if (control.onUnarchive !== undefined) {
     return (
       <section className="agent-tab ph-no-capture" aria-label={TAB_WORDS.NEW_AGENT}>
