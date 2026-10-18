@@ -1181,8 +1181,7 @@ function checksCount(summary: CheckSummary, count: number | undefined): ReactNod
   return (
     <TabCount
       tone={SUMMARY_TONES[summary]}
-      glyph={glyph ?? undefined}
-      glyphLabel={SUMMARY_WORDS[summary]}
+      {...(glyph === null ? {} : { glyph, glyphLabel: SUMMARY_WORDS[summary] })}
     >
       {count?.toLocaleString()}
     </TabCount>

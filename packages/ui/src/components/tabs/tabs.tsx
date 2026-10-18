@@ -63,19 +63,19 @@ function targetOf(key: string, at: number, length: number): number | undefined {
   return step === undefined ? undefined : (Math.max(at, 0) + step + length) % length;
 }
 
+/** A count's glyph and what it says, the words required beside one so it is never colour and shape alone. */
+type TabCountGlyph =
+  | { glyph?: undefined; glyphLabel?: undefined }
+  | { glyph: ReactNode; glyphLabel: string };
+
 /** A count in `tone`, a glyph before it saying its state in words to a reader who cannot see it. */
-export function TabCount({
-  tone = TAB_COUNT_TONE.QUIET,
-  glyph,
-  glyphLabel,
-  children,
-}: {
-  tone?: TabCountTone;
-  glyph?: ReactNode;
-  /** What the glyph says, required beside one so it is never colour and shape alone. */
-  glyphLabel?: string;
-  children?: string | undefined;
-}): React.JSX.Element {
+export function TabCount(
+  props: {
+    tone?: TabCountTone;
+    children?: string | undefined;
+  } & TabCountGlyph,
+): React.JSX.Element {
+  const { tone = TAB_COUNT_TONE.QUIET, glyph, glyphLabel, children } = props;
   return (
     <span className="luke-tab-count-part" data-tone={tone}>
       {glyph === undefined ? null : (
