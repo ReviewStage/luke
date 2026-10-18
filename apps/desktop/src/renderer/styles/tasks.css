@@ -3432,14 +3432,6 @@ ol.transcript-list {
   color: var(--luke-color-danger-text);
 }
 
-.agent-end-dot {
-  margin: 0 var(--luke-space-4);
-}
-
-.agent-end-cost {
-  white-space: nowrap;
-}
-
 .agent-end-remedy {
   margin-left: var(--luke-space-8);
   vertical-align: middle;
