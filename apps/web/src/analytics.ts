@@ -59,24 +59,27 @@ const AUTH_PATHS: ReadonlySet<string> = new Set(Object.values(AUTH_PATH));
  * hands back, a PKCE challenge or verifier, a signed request and its
  * signature, and a bearer token by its usual names. A provider or a link may
  * land on any page with one, the landing page included, so these are taken
- * off every address that leaves, not only the sign-in pages'.
+ * off every address that leaves, not only the sign-in pages', from its query
+ * and from a fragment written as a query, where an implicit grant puts them.
  */
-const AUTH_PARAMS: ReadonlySet<string> = new Set([
-  "code",
-  "state",
-  "error",
-  "error_description",
-  "error_uri",
-  "code_challenge",
-  "code_verifier",
-  "sig",
-  "signature",
-  "oauth_query",
-  "token",
-  "access_token",
-  "id_token",
-  "refresh_token",
-]);
+const AUTH_PARAM = {
+  CODE: "code",
+  STATE: "state",
+  ERROR: "error",
+  ERROR_DESCRIPTION: "error_description",
+  ERROR_URI: "error_uri",
+  CODE_CHALLENGE: "code_challenge",
+  CODE_VERIFIER: "code_verifier",
+  SIG: "sig",
+  SIGNATURE: "signature",
+  OAUTH_QUERY: "oauth_query",
+  TOKEN: "token",
+  ACCESS_TOKEN: "access_token",
+  ID_TOKEN: "id_token",
+  REFRESH_TOKEN: "refresh_token",
+} as const;
+
+const AUTH_PARAMS: ReadonlySet<string> = new Set(Object.values(AUTH_PARAM));
 
 /** The library's console-log capture, which a project can switch on whatever `init` says. */
 const LOGS_SCRIPT = "/logs.js";
@@ -84,6 +87,21 @@ const LOGS_SCRIPT = "/logs.js";
 /** Whether the page now loading is one the sign-in flow's address serves. */
 function onAuthPage(): boolean {
   return AUTH_PATHS.has(window.location.pathname);
+}
+
+/**
+ * A query or a fragment (`?…` or `#…`) without its credential parameters, or
+ * undefined when it holds none, so an address with nothing to take off is
+ * never re-encoded. A part with no `=` is not written as parameters, so an
+ * anchor that happens to be named `#code` is left alone.
+ */
+function withoutAuthParams(part: string): string | undefined {
+  if (!part.includes("=")) return undefined;
+  const params = new URLSearchParams(part.slice(1));
+  const found = [...params.keys()].filter((name) => AUTH_PARAMS.has(name));
+  if (found.length === 0) return undefined;
+  for (const name of found) params.delete(name);
+  return params.toString();
 }
 
 /** Whether a script the library is about to load is its console-log capture. */
@@ -94,10 +112,10 @@ function isLogsScript(script: HTMLScriptElement): boolean {
 /**
  * Cuts an auth page's address to its origin and path, dropping the query and
  * the fragment that carry the authorization request, and takes the
- * credential-bearing parameters off every other address. The rest of an
- * address is kept, so a marketing link keeps the campaign that brought
- * someone; an address with nothing to take off, and a value that is not an
- * address, are returned exactly as they came.
+ * credential-bearing parameters off every other address's query and
+ * fragment. The rest of an address is kept, so a marketing link keeps the
+ * campaign that brought someone; an address with nothing to take off, and a
+ * value that is not an address, are returned exactly as they came.
  */
 function scrubAuthUrl(value: string): string {
   let url: URL;
@@ -107,9 +125,11 @@ function scrubAuthUrl(value: string): string {
     return value;
   }
   if (AUTH_PATHS.has(url.pathname)) return `${url.origin}${url.pathname}`;
-  const found = [...url.searchParams.keys()].filter((name) => AUTH_PARAMS.has(name));
-  if (found.length === 0) return value;
-  for (const name of found) url.searchParams.delete(name);
+  const query = withoutAuthParams(url.search);
+  const fragment = withoutAuthParams(url.hash);
+  if (query === undefined && fragment === undefined) return value;
+  if (query !== undefined) url.search = query;
+  if (fragment !== undefined) url.hash = fragment;
   return url.toString();
 }
 
@@ -191,6 +211,9 @@ export function startSiteAnalytics(): void {
         // and it is the one thing here worth masking.
         maskAllInputs: true,
         blockSelector: ".ph-block",
+        // No request's headers or body, whatever the project's settings say.
+        recordHeaders: false,
+        recordBody: false,
         // The recorder's own hook for every address it writes: the page's
         // address in each snapshot, each navigation, and each network entry.
         maskCapturedNetworkRequestFn: (request: CapturedNetworkRequest) => ({
