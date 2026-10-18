@@ -21,9 +21,8 @@ import { LinkWorkspaceProvider } from "../copy-link-item";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { SPINNER_SIZE, Spinner } from "../spinner";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
-import { InboxList, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
+import { InboxList, InboxListSkeleton, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
 import {
   anyNeedsYou,
   firstChoice,
@@ -124,7 +123,7 @@ function listedHoldings(
   return holdings.filter((holding) => listed.some((task) => task.id === holding.taskId));
 }
 
-/** What stands under the list's rows: a read that did not answer, the spinner while nothing is read, Needs you's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
+/** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, Needs you's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
 function ListNote({
   failed,
   reading,
@@ -153,7 +152,7 @@ function ListNote({
     );
   }
   if (!empty) return null;
-  if (reading) return <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />;
+  if (reading) return <InboxListSkeleton />;
   if (filteredOut !== undefined) return <NeedsYouEmpty needsYou={filteredOut} onList={onList} />;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
   if (alone) return <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>;
