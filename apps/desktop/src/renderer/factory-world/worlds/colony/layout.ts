@@ -562,9 +562,10 @@ function antLine(center: readonly Point2[]): Poly {
 
 /**
  * Numbers each zone's strongly connected component by Tarjan's walk, so the
- * zones of one dependency cycle share a number. A cycle's own tunnels are
- * all kept, and only the acyclic graph between components is reduced, so a
- * reduction never cuts a zone off.
+ * zones of one dependency cycle share a number. A cycle keeps the few of its
+ * own tunnels that keep its zones reaching each other (`spanningEdges`), and
+ * only the acyclic graph between components is reduced, so a reduction never
+ * cuts a zone off.
  */
 function componentsOf(
   paths: readonly string[],
@@ -602,7 +603,46 @@ function componentsOf(
   return component;
 }
 
-/** The dependencies left once one reached through another is dropped, in path order, at most `MAX_TUNNELS`. */
+/** Of the edges inside one dependency cycle, the few that keep its zones reaching each other: a tree out from its first zone and a tree back into it, at most two per zone. */
+function spanningEdges(inside: readonly ZoneEdge[]): Set<ZoneEdge> {
+  const kept = new Set<ZoneEdge>();
+  const root = inside.map((edge) => edge.from).sort()[0];
+  if (root === undefined) return kept;
+  for (const outward of [true, false]) {
+    const seen = new Set([root]);
+    const queue = [root];
+    for (let at = queue.shift(); at !== undefined; at = queue.shift()) {
+      for (const edge of inside) {
+        const [here, there] = outward ? [edge.from, edge.to] : [edge.to, edge.from];
+        if (here !== at || seen.has(there)) continue;
+        seen.add(there);
+        queue.push(there);
+        kept.add(edge);
+      }
+    }
+  }
+  return kept;
+}
+
+/**
+ * `edges` dealt out a zone at a time, each zone's first, then each one's
+ * second, and so on, so where a graph needs more tunnels than are drawn,
+ * the ones cut are the last of the busiest zones and every zone keeps one.
+ */
+function evenly(edges: readonly ZoneEdge[]): ZoneEdge[] {
+  const byZone = new Map<string, ZoneEdge[]>();
+  for (const edge of edges) byZone.set(edge.from, [...(byZone.get(edge.from) ?? []), edge]);
+  const dealt: ZoneEdge[] = [];
+  for (let round = 0; dealt.length < edges.length; round += 1) {
+    for (const own of byZone.values()) {
+      const edge = own[round];
+      if (edge !== undefined) dealt.push(edge);
+    }
+  }
+  return dealt;
+}
+
+/** The dependencies left once one reached through another is dropped, dealt out a zone at a time, at most `MAX_TUNNELS`. */
 function reducedEdges(edges: readonly ZoneEdge[], laid: ReadonlyMap<string, Chamber>): ZoneEdge[] {
   const bored = edges
     .filter((edge) => laid.has(edge.from) && laid.has(edge.to) && edge.from !== edge.to)
@@ -633,14 +673,19 @@ function reducedEdges(edges: readonly ZoneEdge[], laid: ReadonlyMap<string, Cham
     reaches.set(from, found);
     return found;
   };
-  return bored
-    .filter((edge) => {
-      const from = of(edge.from);
-      const to = of(edge.to);
-      if (from === to) return true;
-      return ![...(next.get(from) ?? [])].some((other) => other !== to && reach(other).has(to));
-    })
-    .slice(0, MAX_TUNNELS);
+  const inside = new Map<number, ZoneEdge[]>();
+  for (const edge of bored) {
+    if (of(edge.from) === of(edge.to))
+      inside.set(of(edge.from), [...(inside.get(of(edge.from)) ?? []), edge]);
+  }
+  const cycles = new Set([...inside.values()].flatMap((edges) => [...spanningEdges(edges)]));
+  const kept = bored.filter((edge) => {
+    const from = of(edge.from);
+    const to = of(edge.to);
+    if (from === to) return cycles.has(edge);
+    return ![...(next.get(from) ?? [])].some((other) => other !== to && reach(other).has(to));
+  });
+  return evenly(kept).slice(0, MAX_TUNNELS);
 }
 
 function tunnelOf(from: Chamber, to: Chamber, index: number): Tunnel {

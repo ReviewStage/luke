@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
 import { factoryWorldViewOf } from "@luke/ui/factory-world";
 import { factoryWorldOf, factoryZoneOf } from "@luke/ui/testing";
 import { test } from "vitest";
@@ -51,4 +52,22 @@ test("a dependency cycle keeps every zone reaching what it depends on, and a dep
     !tunnels.some((tunnel) => tunnel.from === "packages/d" && tunnel.to === "packages/a"),
     "d reaches a through e",
   );
+});
+
+test("a cycle through every zone the contract allows still keeps each zone reaching what it depends on", () => {
+  const count = FACTORY_WORLD_BOUNDS.MAX_ZONES;
+  const pathOf = (index: number) => `packages/p${index % count}`;
+  const zones = Array.from({ length: count }, (_, index) =>
+    factoryZoneOf(pathOf(index), [pathOf(index + 1), pathOf(index + 2), pathOf(index + 3)]),
+  );
+  const view = factoryWorldViewOf(factoryWorldOf({ zones }));
+  const tunnels = burrowsOf(view).tunnels.map((tunnel) => ({
+    from: tunnel.from.zone.path,
+    to: tunnel.to.zone.path,
+  }));
+  for (const zone of zones) {
+    for (const dependency of zone.dependsOn) {
+      assert.ok(reachable(tunnels, zone.path, dependency), `${zone.path} reaches ${dependency}`);
+    }
+  }
 });
