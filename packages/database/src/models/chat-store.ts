@@ -16,8 +16,8 @@ import {
   chatReplySchema,
   formValueLines,
   GENERAL_CHANNEL,
+  LUKE_HANDLE,
   MEMBER_KIND,
-  PLANNER_HANDLE,
   replyWords,
 } from "@luke/features/chat-wire";
 import {
@@ -119,11 +119,11 @@ export const CHAT_REFUSAL = {
 
 export type ChatRefusal = (typeof CHAT_REFUSAL)[keyof typeof CHAT_REFUSAL];
 
-/** Who a member stands for: a person in the workspace, a coding agent on one of its plans, or one of its plans' planner. */
+/** Who a member stands for: a person in the workspace, a coding agent on one of its tasks, or one of its tasks' Luke. */
 export type ChatMemberSubject =
   | { readonly kind: typeof MEMBER_KIND.HUMAN; readonly userId: string }
   | { readonly kind: typeof MEMBER_KIND.AGENT; readonly agentId: string }
-  | { readonly kind: typeof MEMBER_KIND.PLANNER; readonly planId: string };
+  | { readonly kind: typeof MEMBER_KIND.LUKE; readonly planId: string };
 
 /** The most messages a window's read past its cursor answers with; the rest are read from the cursor it hands back. */
 const MAX_PAST = 200;
@@ -145,7 +145,7 @@ const MAX_HANDLE_STEM_CHARS = 32;
 /** The handle a person's name spells nothing of. */
 const FALLBACK_HANDLE = "member";
 
-/** The handles no person is minted: every planner's, and the shape of an agent's. */
+/** The handles no person is minted: Luke's, and the shape of an agent's. */
 const SPOKEN_FOR = /^(luke|agent-\d+)$/u;
 
 const ChatMemberRowSchema = Schema.Struct({
@@ -343,7 +343,7 @@ const SubjectKeySchema = Schema.Struct({
 const SUBJECT_COLUMN = {
   [MEMBER_KIND.HUMAN]: chatMember.userId,
   [MEMBER_KIND.AGENT]: chatMember.agentId,
-  [MEMBER_KIND.PLANNER]: chatMember.planId,
+  [MEMBER_KIND.LUKE]: chatMember.planId,
 } as const;
 
 const findMemberOfSubject = SqlSchema.findOneOption({
@@ -405,7 +405,7 @@ const findHandles = SqlSchema.findAll({
         .where(
           and(
             eq(chatMember.organizationId, key.organizationId),
-            ne(chatMember.kind, MEMBER_KIND.PLANNER),
+            ne(chatMember.kind, MEMBER_KIND.LUKE),
           ),
         ),
     ),
@@ -432,7 +432,7 @@ const findAgentWorkspace = SqlSchema.findOneOption({
 });
 
 /** A plan the account reaches, with its workspace and its name. */
-const findReachablePlan = SqlSchema.findOneOption({
+const findReachableTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
   Result: Schema.Struct({
     organizationId: Schema.String,
@@ -452,7 +452,7 @@ const findReachablePlan = SqlSchema.findOneOption({
     ),
 });
 
-const findPlanWorkspace = SqlSchema.findOneOption({
+const findTaskWorkspace = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: OrganizationKeySchema,
   execute: (planId) =>
@@ -561,7 +561,7 @@ const findChannelByName = SqlSchema.findOneOption({
     ),
 });
 
-const findPlanChannel = SqlSchema.findOneOption({
+const findTaskChannel = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: ChatChannelRowSchema,
   execute: (planId) =>
@@ -722,7 +722,7 @@ const findMemberByHandle = SqlSchema.findOneOption({
           and(
             eq(chatMember.organizationId, key.organizationId),
             eq(chatMember.handle, key.handle),
-            ne(chatMember.kind, MEMBER_KIND.PLANNER),
+            ne(chatMember.kind, MEMBER_KIND.LUKE),
           ),
         ),
     ),
@@ -745,7 +745,7 @@ const findChannelInWorkspace = SqlSchema.findOneOption({
     ),
 });
 
-const findAgentPlan = SqlSchema.findOneOption({
+const findAgentTask = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ planId: Schema.NullOr(Schema.String) }),
   execute: (agentId) =>
@@ -1108,8 +1108,8 @@ function subjectInWorkspace(
       return Effect.map(findAgentWorkspace(subject.agentId), (found) =>
         Option.exists(found, (row) => row.organizationId === organizationId),
       );
-    case MEMBER_KIND.PLANNER:
-      return Effect.map(findPlanWorkspace(subject.planId), (found) =>
+    case MEMBER_KIND.LUKE:
+      return Effect.map(findTaskWorkspace(subject.planId), (found) =>
         Option.exists(found, (row) => row.organizationId === organizationId),
       );
   }
@@ -1122,7 +1122,7 @@ function subjectId(subject: ChatMemberSubject): string {
       return subject.userId;
     case MEMBER_KIND.AGENT:
       return subject.agentId;
-    case MEMBER_KIND.PLANNER:
+    case MEMBER_KIND.LUKE:
       return subject.planId;
   }
 }
@@ -1135,7 +1135,7 @@ function mintHandle(
 ): ChatStoreEffect<string> {
   return Effect.gen(function* () {
     if (subject.kind === MEMBER_KIND.AGENT) return `agent-${ordinal}`;
-    if (subject.kind === MEMBER_KIND.PLANNER) return PLANNER_HANDLE;
+    if (subject.kind === MEMBER_KIND.LUKE) return LUKE_HANDLE;
     const account = yield* findAccountName(subject.userId);
     const held = new Set((yield* findHandles({ organizationId })).map((row) => row.handle));
     const stem = personStem(Option.match(account, { onNone: () => "", onSome: (row) => row.name }));
@@ -1214,7 +1214,7 @@ function headOf(organizationId: string): ChatStoreEffect<number> {
 }
 
 /** The plan a message's `@luke` names: its channel's plan, else its author's; none for an agent that works no plan outside a plan's channel. */
-function planOfContext(
+function taskOfContext(
   channel: ChatChannelRow,
   author: ChatMemberRow,
 ): ChatStoreEffect<Option.Option<string>> {
@@ -1223,21 +1223,21 @@ function planOfContext(
   if (author.agentId === null) return Effect.succeed(Option.none());
   // An agent that works no plan names no planner, so its `@luke` answers to no one.
   return Effect.map(
-    findAgentPlan(author.agentId),
+    findAgentTask(author.agentId),
     Option.flatMap((row) => Option.fromNullishOr(row.planId)),
   );
 }
 
-/** The member a handle names in the workspace: `luke` the plan's planner, minted where it is not yet, any other a person or agent standing under it. */
+/** The member a handle names in the workspace: `luke` the task's Luke, minted where it is not yet, any other a person or agent standing under it. */
 function namedMember(
   userId: string,
   organizationId: string,
   handle: string,
   planId: Option.Option<string>,
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
-  if (handle !== PLANNER_HANDLE) return findMemberByHandle({ organizationId, handle });
+  if (handle !== LUKE_HANDLE) return findMemberByHandle({ organizationId, handle });
   if (Option.isNone(planId)) return Effect.succeed(Option.none());
-  return ensureMember(userId, organizationId, { kind: MEMBER_KIND.PLANNER, planId: planId.value });
+  return ensureMember(userId, organizationId, { kind: MEMBER_KIND.LUKE, planId: planId.value });
 }
 
 /** The reader as a member of the workspace; nothing where the account is not in it or no such member is. */
@@ -1298,7 +1298,7 @@ export function ensureMember(
         kind: subject.kind,
         userId: subject.kind === MEMBER_KIND.HUMAN ? subject.userId : null,
         agentId: subject.kind === MEMBER_KIND.AGENT ? subject.agentId : null,
-        planId: subject.kind === MEMBER_KIND.PLANNER ? subject.planId : null,
+        planId: subject.kind === MEMBER_KIND.LUKE ? subject.planId : null,
         handle,
         ordinal,
         now,
@@ -1360,19 +1360,19 @@ export function ensureGeneral(
  * holds the name already, and `plan` where the name spells nothing; nothing
  * where the account does not reach the plan.
  */
-export function ensurePlanChannel(
+export function ensureTaskChannel(
   userId: string,
   planId: string,
 ): ChatStoreEffect<Option.Option<ChatChannelRow>> {
   return transaction(
     Effect.gen(function* () {
-      const reached = yield* findReachablePlan({ userId, planId });
+      const reached = yield* findReachableTask({ userId, planId });
       if (Option.isNone(reached)) return Option.none();
-      const standing = yield* findPlanChannel(planId);
+      const standing = yield* findTaskChannel(planId);
       if (Option.isSome(standing)) return standing;
       const { organizationId } = reached.value;
       yield* lockWorkspace(organizationId);
-      const again = yield* findPlanChannel(planId);
+      const again = yield* findTaskChannel(planId);
       if (Option.isSome(again)) return again;
       const held = new Set(
         (yield* findChannels({ organizationId })).flatMap((row) =>
@@ -1397,7 +1397,7 @@ export function ensurePlanChannel(
         archivedAt: reached.value.archivedAt,
         now,
       });
-      return yield* madeOrStanding(made, findPlanChannel(planId));
+      return yield* madeOrStanding(made, findTaskChannel(planId));
     }),
   );
 }
@@ -1493,7 +1493,7 @@ export function findOrMakeDm(
   });
 }
 
-const stampPlanChannelArchive = SqlSchema.void({
+const stampTaskChannelArchive = SqlSchema.void({
   Request: Schema.Struct({ planId: Schema.String, archivedAt: Schema.NullOr(Schema.Date) }),
   execute: ({ planId, archivedAt }) =>
     Database.use((db) =>
@@ -1510,8 +1510,8 @@ const stampPlanChannelArchive = SqlSchema.void({
  * plan's lock, so an archived plan's channel takes no post until the plan
  * returns. Nothing where the plan has no channel.
  */
-export function followPlanArchive(planId: string, archivedAt: Date | null): ChatStoreEffect<void> {
-  return stampPlanChannelArchive({ planId, archivedAt });
+export function followTaskArchive(planId: string, archivedAt: Date | null): ChatStoreEffect<void> {
+  return stampTaskChannelArchive({ planId, archivedAt });
 }
 
 /**
@@ -1533,7 +1533,7 @@ export function leave(
   });
 }
 
-/** The member a handle names in the workspace, `luke` the planner of the plan given; nothing where the account is not in it or no member answers to it. */
+/** The member a handle names in the workspace, `luke` the Luke of the task given; nothing where the account is not in it or no member answers to it. */
 export function memberNamed(
   userId: string,
   organizationId: string,
@@ -1598,7 +1598,7 @@ function placePost(
     if (!postsIn(author.value, channel.value)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
     if (channel.value.archivedAt !== null) return Result.fail(CHAT_REFUSAL.CHANNEL_ARCHIVED);
     // Mentions are resolved before the sequence is locked, because minting a planner takes the workspace's lock.
-    const planId = yield* planOfContext(channel.value, author.value);
+    const planId = yield* taskOfContext(channel.value, author.value);
     const named = yield* Effect.forEach(post.mentions, (handle) =>
       Effect.map(namedMember(userId, organizationId, handle, planId), (found) => ({
         handle,
@@ -2769,8 +2769,8 @@ const findChannelMessages = SqlSchema.findAll({
     ),
 });
 
-/** The members a plan's move takes along: its planner, and the agents of the plan, in the workspace it leaves. */
-const findPlanMembers = SqlSchema.findAll({
+/** The members a task's move takes along: its Luke, and the agents of the task, in the workspace it leaves. */
+const findTaskMembers = SqlSchema.findAll({
   Request: Schema.Struct({ planId: Schema.String, organizationId: Schema.String }),
   Result: ChatMemberRowSchema,
   execute: ({ planId, organizationId }) =>
@@ -2911,7 +2911,7 @@ const advanceSequence = SqlSchema.void({
  */
 function memberAcross(
   member: ChatMemberRow,
-  ofPlan: boolean,
+  ofTask: boolean,
   planId: string,
   organizationId: string,
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
@@ -2928,10 +2928,10 @@ function memberAcross(
       }
       return Option.some(minted);
     }
-    const subject = !ofPlan
+    const subject = !ofTask
       ? undefined
-      : member.kind === MEMBER_KIND.PLANNER
-        ? ({ kind: MEMBER_KIND.PLANNER, planId } as const)
+      : member.kind === MEMBER_KIND.LUKE
+        ? ({ kind: MEMBER_KIND.LUKE, planId } as const)
         : member.agentId === null
           ? undefined
           : ({ kind: MEMBER_KIND.AGENT, agentId: member.agentId } as const);
@@ -2941,7 +2941,7 @@ function memberAcross(
   });
 }
 
-/** A former agent or planner minted in the workspace as having left, naming no agent or plan, for the moved messages that name it. */
+/** A former agent or Luke minted in the workspace as having left, naming no agent or task, for the moved messages that name it. */
 function mintFormer(
   organizationId: string,
   member: ChatMemberRow,
@@ -2959,7 +2959,7 @@ function mintFormer(
       userId: null,
       agentId: null,
       planId: null,
-      handle: member.kind === MEMBER_KIND.PLANNER ? PLANNER_HANDLE : `agent-${ordinal}`,
+      handle: member.kind === MEMBER_KIND.LUKE ? LUKE_HANDLE : `agent-${ordinal}`,
       ordinal,
       now,
     }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
@@ -2983,7 +2983,7 @@ function mint(organizationId: string, subject: ChatMemberSubject): ChatStoreEffe
       kind: subject.kind,
       userId: subject.kind === MEMBER_KIND.HUMAN ? subject.userId : null,
       agentId: subject.kind === MEMBER_KIND.AGENT ? subject.agentId : null,
-      planId: subject.kind === MEMBER_KIND.PLANNER ? subject.planId : null,
+      planId: subject.kind === MEMBER_KIND.LUKE ? subject.planId : null,
       handle,
       ordinal,
       now,
@@ -3019,10 +3019,10 @@ const forgetChannelReads = SqlSchema.void({
  * go of, since their places are the old sequence's. DMs, threads, and posts elsewhere stay where they were. Nothing where the
  * plan has no channel or it stands in that workspace already.
  */
-export function movePlanChat(planId: string, organizationId: string): ChatStoreEffect<void> {
+export function moveTaskChat(planId: string, organizationId: string): ChatStoreEffect<void> {
   return transaction(
     Effect.gen(function* () {
-      const channel = yield* findPlanChannel(planId);
+      const channel = yield* findTaskChannel(planId);
       if (Option.isNone(channel) || channel.value.organizationId === organizationId) return;
       const from = channel.value.organizationId;
       // Note that both workspaces are locked before both sequences, each pair in one order, because a post that mints a planner takes a workspace's lock before its sequence's, and two moves the other way at once would each wait on the other.
@@ -3037,16 +3037,16 @@ export function movePlanChat(planId: string, organizationId: string): ChatStoreE
           ...(row.answeredByMemberId === null ? [] : [row.answeredByMemberId]),
         ]),
       );
-      const ours = yield* findPlanMembers({ planId, organizationId: from });
+      const ours = yield* findTaskMembers({ planId, organizationId: from });
       const others = yield* findMembersByIds({
         ids: [...named].filter((id) => !ours.some((row) => row.id === id)),
       });
       const across = new Map<string, string>();
-      for (const [member, ofPlan] of [
+      for (const [member, ofTask] of [
         ...ours.map((row) => [row, true] as const),
         ...others.map((row) => [row, false] as const),
       ]) {
-        const moved = yield* memberAcross(member, ofPlan, planId, organizationId);
+        const moved = yield* memberAcross(member, ofTask, planId, organizationId);
         if (Option.isSome(moved)) across.set(member.id, moved.value.id);
       }
       const held = new Set(

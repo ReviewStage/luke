@@ -263,7 +263,7 @@ export const BRIDGE = {
    */
   onTasksTalk: entry({
     kind: "subscribe",
-    channel: "app:planning-talk-forwarded",
+    channel: "app:task-talk-forwarded",
     args: noArgs,
     result: result<{ taskId: string }>((value) => isRecord(value) && isWireString(value.taskId)),
   }),

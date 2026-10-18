@@ -5,12 +5,8 @@
 @layer components {
   .luke-nav-item {
     /* Note that the rest ink is the sidebar's, a step under the primary,
-       read from the desktop's own `--sidebar-ink` until the palette names it
-       (`--luke-color-sidebar-ink`), and the muted ink where neither is set. */
-    --luke-nav-item-ink: var(
-      --luke-color-sidebar-ink,
-      var(--sidebar-ink, var(--luke-color-text-muted))
-    );
+       as the task rows it heads are. */
+    --luke-nav-item-ink: var(--luke-color-sidebar-ink);
     display: flex;
     align-items: center;
     gap: var(--luke-icon-gap);

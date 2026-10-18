@@ -15,7 +15,7 @@
 @layer components {
   .luke-tooltip {
     position: fixed;
-    z-index: var(--z-tooltip, 30);
+    z-index: var(--luke-z-tooltip);
     top: 0;
     left: 0;
     display: flex;
@@ -97,7 +97,7 @@
     border-color: var(--luke-color-border-strong);
     border-radius: var(--luke-menu-radius);
     background: var(--luke-color-overlay);
-    box-shadow: 0 12px 32px var(--luke-color-shadow);
+    box-shadow: var(--luke-menu-shadow);
     color: var(--luke-color-text);
     font-weight: var(--luke-weight-regular);
     overflow-wrap: normal;
