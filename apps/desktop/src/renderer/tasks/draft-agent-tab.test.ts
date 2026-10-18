@@ -395,8 +395,8 @@ test("the MCP servers popover draws a row for each server the deployment offers 
   act(() => servers.click());
   await settle();
 
-  const rows = [...document.querySelectorAll(".agent-servers-row")].map(
-    (row) => row.querySelector(".task-compose-menu-name")?.textContent,
+  const rows = [...document.querySelectorAll(".agent-servers-list li")].map(
+    (row) => row.querySelector(".agent-servers-name")?.textContent,
   );
   assert.deepEqual(rows, ["Slack"]);
   assert.equal(tab.button("Connect"), undefined, "nothing offers a server not offered");
@@ -412,8 +412,8 @@ test("the MCP popover's GitHub row connects GitHub in place, and the popover sta
   await settle();
 
   const githubRow = () =>
-    [...document.querySelectorAll(".agent-servers-row")].find(
-      (row) => row.querySelector(".task-compose-menu-name")?.textContent === "GitHub",
+    [...document.querySelectorAll(".agent-servers-list li")].find(
+      (row) => row.querySelector(".agent-servers-name")?.textContent === "GitHub",
     ) ?? assert.fail("the popover draws GitHub's row");
   const connect =
     [...githubRow().querySelectorAll("button")].find(
@@ -436,7 +436,7 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
   act(() => servers.click());
   await settle();
   const slackRow = () => {
-    const row = document.querySelector(".agent-servers-row") ?? assert.fail("Slack has a row");
+    const row = document.querySelector(".agent-servers-list li") ?? assert.fail("Slack has a row");
     return {
       words:
         row.querySelector(".agent-servers-problem, .agent-servers-waiting")?.textContent ??

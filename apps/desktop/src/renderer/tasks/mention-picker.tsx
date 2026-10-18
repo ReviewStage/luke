@@ -785,7 +785,7 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
           onClick={back}
         />
       )}
-      <span className="menu-item-glyph">
+      <span className="mention-menu-crumb-glyph">
         {folder === undefined ? <KindGlyph kind={kind} /> : <FolderIcon aria-hidden="true" />}
       </span>
       <span className="mention-menu-crumb-title">

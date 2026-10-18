@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+// Note that the row a list engine owns is reached through the barrel, as an app reaches it.
+import { ComboboxOptionItem } from "../../index.js";
 import { Combobox, ComboboxList, type ComboboxOption, comboboxOptionId } from "./combobox.js";
 import { useComboboxField } from "./use-combobox-field.js";
 
@@ -387,4 +389,53 @@ test("a note stands after the options, whether or not any do", () => {
   const { list } = mountSteered();
 
   assert.match(list.textContent ?? "", /Cherry.*Reading more fruit…$/u);
+});
+
+test("an option a list engine owns is lit by the engine's aria-selected, and a press reaches the engine's handler", () => {
+  const pressed: string[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  let held: HTMLDivElement | null = null;
+  act(() =>
+    root.render(
+      createElement(ComboboxOptionItem, {
+        option: { id: "relay", label: "relay", detail: "ada", hint: "⌘1" },
+        id: "engine-relay",
+        "aria-selected": true,
+        onClick: () => pressed.push("relay"),
+        ref: (element: HTMLDivElement | null) => {
+          held = element;
+        },
+      }),
+    ),
+  );
+  const option = container.querySelector<HTMLElement>('[role="option"]') ?? assert.fail("option");
+  act(() => option.click());
+
+  assert.equal(option.getAttribute("aria-selected"), "true");
+  assert.equal(option.id, "engine-relay");
+  assert.equal(option.textContent, "relayada⌘1");
+  assert.equal(held, option);
+  assert.deepEqual(pressed, ["relay"]);
+});
+
+test("an option a list engine owns that cannot be chosen now passes no press on to the engine", () => {
+  const pressed: string[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(ComboboxOptionItem, {
+        option: { id: "sonnet", label: "Sonnet", disabled: true },
+        onClick: () => pressed.push("sonnet"),
+      }),
+    ),
+  );
+  const option = container.querySelector<HTMLElement>('[role="option"]') ?? assert.fail("option");
+  act(() => option.click());
+
+  assert.equal(option.getAttribute("aria-disabled"), "true");
+  assert.deepEqual(pressed, []);
 });

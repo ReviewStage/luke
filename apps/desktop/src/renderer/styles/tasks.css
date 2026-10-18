@@ -331,6 +331,22 @@
   padding-left: calc(var(--row-inset) + var(--luke-menu-inset));
 }
 
+/* The crumb's glyph stands in a row glyph's column, muted beside its words. */
+.mention-menu-crumb-glyph {
+  display: inline-flex;
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--luke-color-text-muted);
+}
+
+.mention-menu-crumb-glyph svg {
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
+}
+
 /* A folder's path too long for the crumb is cut short. */
 .mention-menu-crumb-title {
   min-width: 0;
@@ -4787,19 +4803,41 @@ ol.transcript-list {
 }
 
 /* The MCP servers popover: the searchable menu's surface, its search field
-   first, then one row per server under Connected and Not connected, and
-   Manage in Settings pinned at its foot. A row is its mark, its name, how
-   many tools it offers in the muted detail type, and at its end its switch,
-   or Connect as Settings › Integrations draws it (`@luke/ui`'s Button), a
-   control's height inside the menu's row. A row that opens onto its
-   tools shows its chevron while it holds the highlight; a row with nothing
-   to press is dimmed as the menu's other disabled rows are. The list is
-   taller than the searchable menu's, as tall as a server's page, so going
-   in and back keeps the popover's size, and never taller than the window
-   leaves above the composer once the field and the foot are drawn, so the
-   field stays on screen in the shortest window. */
-.agent-servers-menu .agent-servers-list {
+   first (`@luke/ui`'s SearchField), then one row per server under Connected
+   and Not connected (its List rows), and Manage in Settings pinned at its
+   foot. A row is its mark, its name, how many tools it offers in the muted
+   detail type, and beside it its switch, or Connect as Settings ›
+   Integrations draws it (`@luke/ui`'s Button); a row that opens onto its
+   tools wears the row's chevron. The list is taller than the searchable
+   menu's, as tall as a server's page, so going in and back keeps the
+   popover's size, and never taller than the window leaves above the
+   composer once the field and the foot are drawn, so the field stays on
+   screen in the shortest window. */
+.agent-servers-list {
   max-height: clamp(160px, 100vh - 320px, 400px);
+  padding: var(--luke-menu-inset);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* A section's heading over its rows, inset as a row's words are, and what
+   the list says in its rows' place, centred at a row or two's height. */
+.agent-servers-heading {
+  padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
+}
+
+.agent-servers-heading:first-child {
+  padding-top: var(--luke-space-2);
+}
+
+.agent-servers-note {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: var(--luke-space-4) var(--luke-space-12);
+  text-align: center;
 }
 
 /* The searchable menu's class rides a box drawn as its contents
@@ -4808,12 +4846,22 @@ ol.transcript-list {
   display: contents;
 }
 
-.agent-servers-row[data-opens="true"] {
-  cursor: default;
+/* A server's words, one line beside its mark: its name, its count, and
+   why it lists no tools, each giving way so the reason stays in sight. */
+.agent-servers-words {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--luke-icon-gap);
 }
 
-.agent-servers-row .task-compose-menu-name {
+.agent-servers-name {
+  min-width: 0;
   flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-servers-count {
@@ -4832,26 +4880,11 @@ ol.transcript-list {
   margin-left: auto;
 }
 
-.agent-servers-chevron {
-  display: flex;
-  color: var(--luke-color-text-subtle);
-  visibility: hidden;
-}
-
-.agent-servers-chevron svg {
-  width: 12px;
-  height: 12px;
-}
-
-.agent-servers-row[data-highlighted="true"] .agent-servers-chevron {
-  visibility: visible;
-}
-
 /* Why a connected server lists no tools, after its name in the attention
-   tint at the count's size, cut where the row's button begins while the
-   name keeps its width; the whole line is the row's title. */
-.agent-servers-row:has(.agent-servers-problem) .task-compose-menu-name {
-  flex: none;
+   tint at the count's size, cut where the row's buttons begin; a long name
+   gives way first past most of the line, so the reason stays in sight. */
+.agent-servers-name:has(~ .agent-servers-problem) {
+  max-width: 60%;
 }
 
 .agent-servers-problem {
@@ -4874,14 +4907,6 @@ ol.transcript-list {
 
 .agent-servers-waiting {
   display: flex;
-}
-
-/* A tool a search found: its name in the code face at the row's size, and
-   its server's name after it as the count is drawn. */
-.agent-servers-hit .integration-tool-id {
-  flex: 0 1 auto;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
 }
 
 /* A server's page, in the popover's place: back (`@luke/ui`'s IconButton),
@@ -4913,16 +4938,6 @@ ol.transcript-list {
 .agent-servers-tool-page .integration-tool-detail-body {
   height: clamp(200px, 100vh - 280px, 440px);
   flex: none;
-}
-
-/* Manage in Settings, pinned under the list: a quiet row, its gear a glyph's size. */
-.agent-servers-manage {
-  color: var(--luke-color-text-muted);
-}
-
-.agent-servers-manage svg {
-  width: 14px;
-  height: 14px;
 }
 
 /* The context ring beside the MCP button: the window's one icon button
