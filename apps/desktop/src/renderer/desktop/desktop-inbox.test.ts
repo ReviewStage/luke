@@ -2695,6 +2695,23 @@ test("an item a link names under an agent that is not there, deleted or another'
   assert.equal(page.querySelector('.inbox-tasks [aria-current="page"]'), null);
 });
 
+test("an item a link names under an agent with no task that its own read does not hold is not found, though the account's task list is not read yet", async () => {
+  agentInboxes = new Map([[STRAY_AGENT, []]]);
+  pageAgents = new Map([[STRAY_AGENT, { ...AGENT, id: STRAY_AGENT, planId: null, title: "Bump" }]]);
+  const { page } = mount([], { listUnread: true });
+  await settle();
+  act(() =>
+    chooseFromOutside({
+      agentId: STRAY_AGENT,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+});
+
 test("an item a link names under a task with no agent and nothing in its Inbox is not found, and no other task's item is chosen", async () => {
   const quiet = { ...INVITES, id: "0f0e0d0c-0000-4000-8000-00000000a11e", name: "Quiet task" };
   listedAgents = [];
