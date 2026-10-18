@@ -44,6 +44,9 @@ function newTaskHeading(issue: string | undefined, inWorkspace: boolean): string
 /** The composer's words field, the editor's own textbox, which the card hands focus to. */
 const FIELD_SELECTOR = '[role="textbox"]';
 
+/** The dialog's own card, which holds focus while the field has not landed. */
+const CARD_SELECTOR = '[aria-modal="true"]';
+
 /** What the workspace picker's menu says where no workspace matches; its list is short enough to read whole, so it is never searched. */
 const NO_WORKSPACE_MATCH = "No workspaces match";
 
@@ -101,11 +104,13 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
   const body = useRef<HTMLDivElement>(null);
   // Note that the field is the editor the composer mounts once its bundle
   // has landed, so the card hands focus to it by where it stands rather than
-  // by a ref of its own; before it lands the field takes the caret itself.
+  // by a ref of its own; before it lands the card holds focus, and the field
+  // takes the caret itself as it lands.
   const field = useMemo(
     (): RefObject<HTMLElement | null> => ({
       get current() {
-        return body.current?.querySelector<HTMLElement>(FIELD_SELECTOR) ?? null;
+        const card = body.current?.closest<HTMLElement>(CARD_SELECTOR) ?? null;
+        return body.current?.querySelector<HTMLElement>(FIELD_SELECTOR) ?? card;
       },
     }),
     [],
