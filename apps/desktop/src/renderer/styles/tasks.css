@@ -1843,7 +1843,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .pull-request-branch-row > .pull-request-branches {
@@ -1855,20 +1855,20 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   height: 22px;
-  margin-top: var(--space-2);
-  padding: 0 var(--space-6);
-  border: 1px solid var(--hairline);
+  margin-top: var(--luke-space-2);
+  padding: 0 var(--luke-space-6);
+  border: 1px solid var(--luke-color-border);
   border-radius: 6px;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 11.5px;
 }
 
 .pull-request-stack:hover {
-  background: var(--raised);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
 }
 
 .pull-request-stack > svg {
@@ -1877,7 +1877,7 @@
 }
 
 .pull-request-stack-count {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1888,8 +1888,8 @@
 .pull-request-labels {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
-  margin: var(--space-6) 0 var(--space-2);
+  gap: var(--luke-space-4);
+  margin: var(--luke-space-6) 0 var(--luke-space-2);
   padding: 0 var(--row-inset);
   list-style: none;
 }
@@ -1897,11 +1897,11 @@
 .pull-request-label {
   max-width: 100%;
   overflow: hidden;
-  padding: 1px var(--space-8);
-  border: 1px solid var(--label-edge-dark, var(--hairline));
+  padding: 1px var(--luke-space-8);
+  border: 1px solid var(--label-edge-dark, var(--luke-color-border));
   border-radius: 999px;
   background: var(--label-fill-dark, transparent);
-  color: var(--label-words-dark, var(--text-secondary));
+  color: var(--label-words-dark, var(--luke-color-text-muted));
   font-size: 11px;
   font-weight: 500;
   line-height: 1.45;
@@ -1911,9 +1911,9 @@
 
 @media (prefers-color-scheme: light) {
   .pull-request-label {
-    border-color: var(--label-edge-light, var(--hairline));
+    border-color: var(--label-edge-light, var(--luke-color-border));
     background: var(--label-fill-light, transparent);
-    color: var(--label-words-light, var(--text-secondary));
+    color: var(--label-words-light, var(--luke-color-text-muted));
   }
 }
 
@@ -1921,7 +1921,7 @@
 .pull-request-reviewers-glyph {
   width: 14px;
   height: 14px;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .pull-request-page {
@@ -2294,29 +2294,29 @@ button.pull-request-check:hover {
    so the window's own type and card draw it, inset from the code's edges
    as GitHub's are; an outdated one stands in a list above the diff. */
 .diff-note {
-  padding: var(--space-6) var(--space-12);
+  padding: var(--luke-space-6) var(--luke-space-12);
   font-family: var(--luke-font-sans);
   white-space: normal;
 }
 
 .diff-inline-thread {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
   max-width: 720px;
   overflow: clip;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
 }
 
 .diff-outdated-threads {
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   margin: 0;
-  padding: var(--space-8) var(--space-12);
+  padding: var(--luke-space-8) var(--luke-space-12);
   list-style: none;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
 .pull-request-thread-head {
