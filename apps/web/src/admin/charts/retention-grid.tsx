@@ -1,4 +1,5 @@
 import type { AdminMetrics, AdminRetentionCell } from "@luke/service/admin/admin-metrics";
+import { TEXT_ELEMENT, TEXT_FONT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { formatDayTick, formatNumber } from "@luke/ui/admin-format";
 import { Fragment } from "react";
 import { ChartEmpty, ChartFrame } from "./chart-frame";
@@ -61,6 +62,20 @@ function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Elemen
   );
 }
 
+/** A column's heading in the mono face the grid keeps for its labels. */
+function HeaderWords({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <Text
+      as={TEXT_ELEMENT.SPAN}
+      variant={TEXT_VARIANT.CAPTION}
+      tone={TEXT_TONE.MUTED}
+      font={TEXT_FONT.MONO}
+    >
+      {children}
+    </Text>
+  );
+}
+
 /**
  * Weekly signup cohorts against the weeks after them, as a plain CSS grid
  * rather than a chart: each row is the accounts created in one UTC week, each
@@ -97,16 +112,15 @@ export function RetentionGrid({
             gridTemplateColumns: `minmax(84px, auto) minmax(72px, auto) repeat(${retention.weeks}, minmax(52px, 1fr))`,
           }}
         >
-          <div className="flex items-center font-mono text-muted-foreground uppercase">Cohort</div>
-          <div className="flex items-center justify-end font-mono text-muted-foreground uppercase">
-            Accounts
+          <div className="flex items-center uppercase">
+            <HeaderWords>Cohort</HeaderWords>
+          </div>
+          <div className="flex items-center justify-end uppercase">
+            <HeaderWords>Accounts</HeaderWords>
           </div>
           {offsets.map((offset) => (
-            <div
-              key={offset}
-              className="flex items-center justify-center font-mono text-muted-foreground uppercase"
-            >
-              Wk {offset}
+            <div key={offset} className="flex items-center justify-center uppercase">
+              <HeaderWords>Wk {offset}</HeaderWords>
             </div>
           ))}
           {retention.cohorts.map((cohort) => (

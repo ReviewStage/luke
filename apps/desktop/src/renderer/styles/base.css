@@ -26,7 +26,7 @@
   /* The keyboard's ring, how thick and how far off the edge, is the
      profile's `--luke-focus-ring-*` (`tokens/profiles.css`). */
   /* The caption strip's ground, opaque because the document scrolls on beneath it. */
-  --surface-caption: #16161b;
+  --surface-caption: var(--luke-color-overlay);
   /* The code on screen, in the ground and inks of the theme the host colours
      it with (`plan-code.ts`), and its lines pointed at in that theme's blue. */
   --code-ground: #0d1117;
@@ -53,7 +53,9 @@
      canvas, which reads none of this itself, so the bundle reads each one
      off the host and draws again when the appearance flips
      (`terminal/terminal-theme.ts`). */
-  --terminal-ground: var(--luke-color-well);
+  /* The well's own colour in each appearance rather than `--luke-color-well`,
+     because xterm takes the property's text and cannot read a `light-dark()`. */
+  --terminal-ground: #0f0f12;
   --terminal-text: var(--code-text);
   --terminal-cursor: var(--code-text);
   --terminal-selection: rgba(56, 139, 253, 0.4);
@@ -138,13 +140,13 @@
 @media (prefers-color-scheme: light) {
   :root {
     --voice-developer: #17784a;
-    --surface-caption: #fff;
     --code-ground: #fff;
     --code-text: #1f2328;
     --code-line-number: rgba(31, 35, 40, 0.5);
     --code-line-number-pointed: rgba(31, 35, 40, 0.85);
     --code-pointed: rgba(9, 105, 218, 0.08);
     --code-pointed-edge: #0969da;
+    --terminal-ground: #f8f8f9;
     --terminal-selection: rgba(9, 105, 218, 0.2);
     --terminal-scrollbar: rgba(0, 0, 0, 0.2);
     --terminal-black: #24292f;
@@ -518,7 +520,7 @@ body,
   display: inline-flex;
   height: 12px;
   align-items: center;
-  gap: 4px;
+  gap: var(--luke-space-4);
 }
 
 /* The dots keep the generated `success` cycle's beat — luke-success-2, 2s, the
@@ -621,15 +623,15 @@ body,
   position: absolute;
   z-index: 6;
   left: 50%;
-  padding: var(--luke-space-8) 14px 10px;
+  padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   /* Opaque, because the document scrolls on beneath it. */
   background: var(--surface-caption);
   box-shadow: 0 var(--luke-space-8) var(--luke-space-24) var(--luke-color-shadow-soft);
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 6px);
+  transform: translate(-50%, var(--luke-space-6));
   transition:
     opacity var(--duration-exit) var(--motion-exit),
     transform var(--duration-exit) var(--motion-exit);
@@ -665,7 +667,7 @@ body,
    lines leave through it. The fade rides a scroll timeline, so it stands only
    while the words overflow and a caption that fits is left whole. */
 .voice-caption-words {
-  max-height: 44px;
+  max-height: calc(2 * var(--luke-type-dialog-leading));
   overflow: hidden;
   animation: caption-overflow-fade linear both;
   animation-timeline: scroll(self block);
@@ -681,13 +683,13 @@ body,
   }
 }
 
-/* Mirrors the 44px above: two of these lines. */
+/* Mirrors the height above: two of these lines. */
 .voice-caption-text {
   display: block;
   color: var(--luke-color-text);
-  font-size: 15px;
+  font-size: var(--luke-type-dialog-size);
   font-weight: var(--luke-weight-medium);
-  line-height: 22px;
+  line-height: var(--luke-type-dialog-leading);
 }
 
 /* A voice failure borrows the strip in the `.error-message` red, because it
@@ -801,7 +803,7 @@ body,
 .error-message {
   margin: 0;
   color: var(--luke-color-danger-text);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The mark an agent at work wears (`working-mark.tsx`): two pixels and their

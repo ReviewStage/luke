@@ -46,9 +46,9 @@
   --color-border: var(--luke-color-border);
   --color-ring: var(--luke-color-focus-ring);
 
-  --radius-sm: calc(var(--luke-control-radius) - 2px);
+  --radius-sm: var(--luke-radius-6);
   --radius-md: var(--luke-control-radius);
-  --radius-lg: calc(var(--luke-control-radius) + 4px);
+  --radius-lg: var(--luke-radius-14);
 
   --font-sans: var(--luke-font-sans);
   --font-mono: var(--luke-font-mono);

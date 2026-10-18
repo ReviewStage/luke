@@ -29,7 +29,7 @@ html.call-window #root {
   gap: var(--luke-space-4);
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-overlay);
   box-shadow:
     0 1px 2px var(--luke-color-shadow-soft),
@@ -224,7 +224,7 @@ html.call-window[data-pointer-stale="true"]
   box-sizing: border-box;
   aspect-ratio: 16 / 9;
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-overlay);
   color: var(--luke-color-text);
   font-size: var(--luke-type-label-size);
@@ -301,7 +301,7 @@ html.call-window[data-pointer-stale="true"]
   box-sizing: border-box;
   padding: var(--luke-space-4) var(--luke-space-4) var(--luke-space-4) var(--luke-space-12);
   border: 1px solid var(--luke-color-border-strong);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-overlay);
   color: var(--luke-color-text);
 }

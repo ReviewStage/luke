@@ -2,6 +2,8 @@ import type { AdminDayAccount, AdminDayDetail } from "@luke/service/admin/admin-
 import {
   BADGE_TONE,
   Badge,
+  CARD_PADDING,
+  Card,
   GAP,
   Inline,
   Stack,
@@ -64,13 +66,15 @@ function DayAccountsTable({
 }): React.JSX.Element {
   if (accounts.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card px-5 py-8 text-center">
-        <Text tone={TEXT_TONE.MUTED}>No hosted-tier calls recorded on this day.</Text>
-      </div>
+      <Card>
+        <div className="py-3 text-center">
+          <Text tone={TEXT_TONE.MUTED}>No hosted-tier calls recorded on this day.</Text>
+        </div>
+      </Card>
     );
   }
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <Card padding={CARD_PADDING.FLUSH}>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px]">
           <thead>
@@ -135,7 +139,7 @@ function DayAccountsTable({
           </tbody>
         </table>
       </div>
-    </div>
+    </Card>
   );
 }
 

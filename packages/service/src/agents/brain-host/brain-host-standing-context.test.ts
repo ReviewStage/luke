@@ -154,6 +154,6 @@ test("a plan started from a Linear issue hands every turn the issue as it was re
   const started = await standingContextOf(await targetOf(plan.id));
   const other = await standingContextOf(await targetOf(plain.id));
 
-  assert.ok(started.includes(`[linear issue the plan was started from]\n${JSON.stringify(issue)}`));
+  assert.ok(started.includes(`[linear issue the task was started from]\n${JSON.stringify(issue)}`));
   assert.equal(other.includes("[linear issue"), false);
 });

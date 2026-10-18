@@ -189,7 +189,7 @@ export function DesktopChat({
 }
 
 /** What the plan's Chat tab says where its plan has no channel yet. */
-const NO_PLAN_CHANNEL = "Nothing is posted in this plan's channel yet.";
+const NO_PLAN_CHANNEL = "Nothing is posted in this task's channel yet.";
 
 /**
  * The plan's own Chat tab, in the plan's column: its channel of the

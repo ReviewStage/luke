@@ -60,7 +60,53 @@
     cursor: default;
   }
 
-  /* Beside its acts, the row's press gives its end inset to the acts. */
+  /* A card holds its rows edge to edge on its ground, a hairline between
+     each and the next, as a settings section's card does; its corner clips
+     the fill of its first and last rows. */
+  .luke-list[data-variant="card"] {
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-surface);
+  }
+
+  .luke-list[data-variant="card"] > .luke-list-row {
+    border-radius: 0;
+  }
+
+  .luke-list[data-variant="card"] > .luke-list-row + .luke-list-row {
+    border-top: 1px solid var(--luke-color-border);
+  }
+
+  /* A card's rows keep a settings row's side inset, so their words line up
+     with the card's other rows. */
+  .luke-list[data-variant="card"] .luke-list-row-main {
+    padding-inline: var(--luke-space-16);
+  }
+
+  .luke-list[data-variant="card"] .luke-list-row-actions {
+    padding-inline-end: var(--luke-space-16);
+  }
+
+  /* Note that a card's row rings inside its press, because the card's
+     corner clips whatever stands past its edge. */
+  .luke-list[data-variant="card"] .luke-list-row-main:focus-visible {
+    outline-offset: calc(-1 * var(--luke-focus-ring-width));
+  }
+
+  /* A compact row keeps its words and gives up some of the room around them. */
+  .luke-list[data-density="compact"] .luke-list-row-main {
+    padding: var(--luke-space-4) var(--luke-space-8);
+  }
+
+  .luke-list[data-density="compact"] .luke-list-row-actions {
+    padding-inline-end: var(--luke-space-8);
+  }
+
+  /* Beside its acts, the row's press gives its end inset to the acts,
+     whatever its list's variant or density set it (so this rule stays below
+     theirs). */
   .luke-list-row:has(> .luke-list-row-actions) > .luke-list-row-main {
     padding-inline-end: 0;
   }
