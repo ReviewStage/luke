@@ -12,7 +12,6 @@
     "./activity-calendar": "./src/activity-calendar.js",
     "./admin-animations": "./src/admin-animations.js",
     "./admin-format": "./src/admin-format.js",
-    "./auth-surface": "./src/auth-surface.js",
     "./daily-series": "./src/daily-series.js",
     "./chart": "./src/chart/chart.js",
     "./theme.css": "./src/theme.css",
