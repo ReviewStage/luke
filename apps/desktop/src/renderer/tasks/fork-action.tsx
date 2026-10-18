@@ -153,7 +153,6 @@ export function ForkMessageAction({
     <MessageAction
       label={FORK_WORDS.ACTION}
       tooltip={FORK_WORDS.ACTION}
-      className="[&_svg]:size-4"
       data-fork-action=""
       onClick={() => onFork(messageId, words, cut)}
     >
@@ -168,7 +167,7 @@ export function ForkedToLine({ messageId }: { messageId: string }): ReactNode {
   if (chips.length === 0) return null;
   return (
     <p className="agent-forked-to" data-forked-to="">
-      <SplitIcon className="size-3.5 shrink-0" aria-hidden="true" />
+      <SplitIcon aria-hidden="true" />
       <span>{FORK_WORDS.TO}</span>
       {chips.map((chip, index) => (
         // Note that each chip holds the comma after it, so no gap opens before the comma.

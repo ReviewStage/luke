@@ -3,7 +3,14 @@ import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-age
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
+import {
+  TEXT_BUTTON_TONE,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  TextButton,
+} from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -278,13 +285,13 @@ function StepRow({
  */
 function SummaryRow({ line, text }: { line: string; text: string }): React.JSX.Element {
   return (
-    <Fold className="text-[12.5px]" data-replay-summary="">
-      <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+    <Fold className="transcript-fold" data-replay-summary="">
+      <FoldSummary className="transcript-fold-line">
         <FoldChevron />
-        <TextQuoteIcon className="size-4 shrink-0" aria-hidden="true" />
+        <TextQuoteIcon aria-hidden="true" />
         {line}
       </FoldSummary>
-      <FoldBody className="px-1 py-1">
+      <FoldBody className="replay-summary-body">
         <TranscriptWords text={text} />
       </FoldBody>
     </Fold>
@@ -316,15 +323,15 @@ function ReplaySteps({
     setShown(steps.length - page.from + page.next);
   };
   return (
-    <div ref={list} tabIndex={-1} className="flex flex-col gap-3 outline-none" data-replay-steps="">
+    <div ref={list} tabIndex={-1} className="replay-steps" data-replay-steps="">
       {page.from === 0 ? null : (
         <button
           type="button"
-          className="m-0 flex h-7 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1 text-left text-[12.5px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          className="transcript-fold-line"
           data-replay-earlier=""
           onClick={drawMore}
         >
-          <ChevronsUpIcon className="size-4 shrink-0" aria-hidden="true" />
+          <ChevronsUpIcon aria-hidden="true" />
           {earlierStepsLine(page)}
         </button>
       )}
@@ -355,9 +362,9 @@ function ReplayFoot({
       ? undefined
       : `#${pullRequest.number} ${pullRequest.title}`;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-0 border-t border-dashed border-border pt-2 text-[12.5px] text-muted-foreground">
+    <div className="replay-foot">
       {branch === undefined ? null : (
-        <span className="min-w-0">
+        <span>
           Builds on <code>{branch}</code>
         </span>
       )}
@@ -454,23 +461,32 @@ export function ReplayCard({
           <PlanIcon>
             <SplitIcon />
           </PlanIcon>
-          <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
-            <span className="text-muted-foreground">{replayVerb(replay)} </span>
+          <span className="replay-card-title">
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {replayVerb(replay)}{" "}
+            </Text>
             {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the chip's own press from also folding the card; the chip is the control. */}
             {/* biome-ignore lint/a11y/useKeyWithClickEvents: the chip inside is a button, which takes the keys itself. */}
             <span className="agent-origin-chip" onClick={(event) => event.stopPropagation()}>
               <ActorRef actor={tile} card={place.card(agentId)} onOpen={openSource} />
             </span>
-            <span className="text-muted-foreground"> · {replayCount(replay)}</span>
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {" "}
+              · {replayCount(replay)}
+            </Text>
           </span>
         </PlanHeader>
         <PlanContent layout={PLAN_BODY_LAYOUT.STACK}>
-          <p className="m-0 text-[12px] text-muted-foreground">{replayLede(name)}</p>
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            {replayLede(name)}
+          </Text>
           {summary === undefined || replay.summary === undefined ? null : (
             <SummaryRow line={summary} text={replay.summary.text} />
           )}
           {left === undefined ? null : (
-            <p className="m-0 text-[12px] italic text-muted-foreground">{left}</p>
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              <em>{left}</em>
+            </Text>
           )}
           <ReplaySteps steps={replay.steps} readerId={place.readerId} />
           <ReplayFoot agentId={agentId} place={place} onOpenTranscript={onOpenTranscript} />
