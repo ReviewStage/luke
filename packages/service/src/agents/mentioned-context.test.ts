@@ -392,11 +392,11 @@ const person = (name: string, userId = PERSON_ID) =>
 const page = (name: string, pageId = PAGE_ID) =>
   mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK.id, pageId }, name, PLACE);
 
-const agent = (name: string, agentId = OTHER_AGENT_ID, planId: string | undefined = TASK.id) =>
+const agent = (name: string, agentId = OTHER_AGENT_ID, taskId: string | undefined = TASK.id) =>
   mentionMarkdown(
-    planId === undefined
+    taskId === undefined
       ? { kind: MENTION_KIND.AGENT, agentId }
-      : { kind: MENTION_KIND.AGENT, taskId: planId, agentId },
+      : { kind: MENTION_KIND.AGENT, taskId: taskId, agentId },
     name,
     PLACE,
   );
@@ -545,9 +545,9 @@ test("a person the words mention is handed by their name and role in the workspa
 test("a person the send did not find among the workspace's members is named as not a member, to an agent with a plan or with none", () => {
   const words = `Ask ${person("Sam", "Zz9yX8wV7uT6sR5q")}.`;
 
-  for (const plan of [TASK, undefined]) {
+  for (const task of [TASK, undefined]) {
     assert.equal(
-      mentionedContext(words, plan, READS),
+      mentionedContext(words, task, READS),
       `${MENTIONED_HEADING}\n\nThe person "Sam": not a member of your workspace.`,
     );
   }

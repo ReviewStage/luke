@@ -5,6 +5,7 @@ import {
   DATA_TABLE_MIN_WIDTH,
   DataTable,
   type DataTableColumn,
+  IconButton,
   Inline,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -54,7 +55,6 @@ interface AccountsFavorite<Row> {
 function StarIcon({ filled }: { filled: boolean }): React.JSX.Element {
   return (
     <svg
-      className="size-4 shrink-0"
       viewBox="0 0 16 16"
       fill={filled ? "currentColor" : "none"}
       stroke="currentColor"
@@ -76,16 +76,12 @@ function favoriteColumn<Row extends AccountsTableRow>(
     label: "Favorite",
     kind: DATA_TABLE_COLUMN_KIND.MARK,
     cell: (row) => (
-      <button
-        type="button"
-        className="-my-2 -ml-3 flex size-11 cursor-pointer items-center justify-center text-muted-foreground opacity-60 transition-opacity duration-150 outline-offset-2 hover:text-foreground hover:opacity-100 focus-visible:opacity-100 data-[favorite=true]:text-attention data-[favorite=true]:opacity-100"
-        data-favorite={favorite.starred(row)}
-        aria-pressed={favorite.starred(row)}
-        aria-label={`${favorite.starred(row) ? "Unfavorite" : "Favorite"} ${row.name || row.email}`}
+      <IconButton
+        icon={<StarIcon filled={favorite.starred(row)} />}
+        label={`${favorite.starred(row) ? "Unfavorite" : "Favorite"} ${row.name || row.email}`}
+        pressed={favorite.starred(row)}
         onClick={() => favorite.onToggle(row.id, !favorite.starred(row))}
-      >
-        <StarIcon filled={favorite.starred(row)} />
-      </button>
+      />
     ),
   };
 }

@@ -832,10 +832,10 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return pictureNotLooked(found.failure);
-        const { taskId: planId } = found.success;
-        if (planId === null) return pictureNotLooked(PICTURE_LOOK_REFUSAL.TASKLESS);
+        const { taskId } = found.success;
+        if (taskId === null) return pictureNotLooked(PICTURE_LOOK_REFUSAL.TASKLESS);
         // The plan is read as the member whose turn this is, as `editPlan` writes it.
-        return yield* runLookAtPicture({ userId: admitted.caller, taskId: planId }, input);
+        return yield* runLookAtPicture({ userId: admitted.caller, taskId: taskId }, input);
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNAVAILABLE))),
@@ -867,9 +867,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         if (!(yield* chatEnabledFor(admitted.target.userId))) {
           return chatRejected(CHAT_TOOL_REFUSAL.OFF);
         }
-        const { id: agentId, taskId: planId, repository } = found.success;
+        const { id: agentId, taskId, repository } = found.success;
         const self = { kind: MEMBER_KIND.AGENT, agentId };
-        const reader = { userId: admitted.target.userId, planId, self };
+        const reader = { userId: admitted.target.userId, planId: taskId, self };
         if (call.tool === CHAT_TOOL.READ) return yield* readAsAgent(reader, call.input);
         if (call.tool === CHAT_TOOL.RESOLVE) return yield* resolveAsAgent(reader, call.input);
         // An archived agent, or one on an archived task, posts nothing until it is brought back.
@@ -904,10 +904,10 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         if (Result.isFailure(found)) return undefined;
         // A turn opens with the chat only where the agent's starter turned Chat on.
         if (!(yield* chatEnabledFor(admitted.target.userId))) return undefined;
-        const { id: agentId, taskId: planId } = found.success;
+        const { id: agentId, taskId } = found.success;
         return yield* chatDigest({
           userId: admitted.target.userId,
-          planId,
+          planId: taskId,
           self: { kind: MEMBER_KIND.AGENT, agentId },
         });
       }).pipe(
