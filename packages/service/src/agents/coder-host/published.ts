@@ -53,8 +53,10 @@ import { CODER } from "./bounds.js";
  * merged, and its lines by directory, folded from its changed files
  * (`@luke/features/pull-request-area`); the files cost a read of their
  * own, so they are read again only where the pull request, its head,
- * where it stands, or its size moved since the row's, and a check's delivery, which
- * moves none of them, reads only the checks. The answer is kept per
+ * where it stands, or its size moved since the row's, or the row keeps
+ * none, and a check's delivery, which moves none of them, reads only the
+ * checks; a failed read of them leaves the pull request read and the
+ * areas for the next refresh. The answer is kept per
  * agent for `CODER.PUBLISHED_TTL` so a tab reading it beside every page of
  * a held transcript asks GitHub a few times a minute at most, under a key
  * that says whether the agent had ended, so the first read after a turn
@@ -96,17 +98,36 @@ function filesMoved(kept: StoredPullRequest, found: GitHubPullRequest): boolean 
   );
 }
 
-/** The pull request's lines by directory: the row's own where it keeps them and its files cannot have moved, else folded from its files read afresh, within their bound. */
+/**
+ * The pull request's lines by directory: the row's own where it keeps them
+ * and its files cannot have moved, else folded from its files read afresh.
+ * Note that the files are read within `pullRequestFiles`' bound, so a pull
+ * request past it is placed by the files it reads, while its own size stays
+ * GitHub's whole count. A read of the files that failed answers none rather
+ * than failing the pull request beside it, and the row then keeps no areas,
+ * so the next refresh reads them again.
+ */
 function areasOf(
   token: Redacted.Redacted,
   agent: CodingAgent,
   found: GitHubPullRequest,
   kept: StoredPullRequest | null,
-): Effect.Effect<readonly PullRequestArea[], PullRequestReadFailure, HttpClient.HttpClient> {
+): Effect.Effect<readonly PullRequestArea[] | undefined, never, HttpClient.HttpClient> {
   if (kept?.areas !== undefined && !filesMoved(kept, found)) return Effect.succeed(kept.areas);
-  return Effect.map(pullRequestFiles(token, agent.repository, found), ({ files }) =>
-    pullRequestAreasOf(
-      files.map(({ path, additions, deletions }) => ({ path, additions, deletions })),
+  return pullRequestFiles(token, agent.repository, found).pipe(
+    Effect.map(({ files }) =>
+      pullRequestAreasOf(
+        files.map(({ path, additions, deletions }) => ({ path, additions, deletions })),
+      ),
+    ),
+    // The kind alone: nothing of the repository or the token rides the line.
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning("a pull request's files could not be read; its areas wait", {
+          failure: failure._tag,
+        }),
+        undefined,
+      ),
     ),
   );
 }
@@ -140,7 +161,7 @@ function withChecks(
         ...pullRequest,
         headSha: found.headSha,
         ...(found.mergedAt === undefined ? undefined : { mergedAt: found.mergedAt }),
-        areas,
+        ...(areas === undefined ? undefined : { areas }),
       };
       return {
         answer: { repository: agent.repository, branch: found.headRef, pullRequest },

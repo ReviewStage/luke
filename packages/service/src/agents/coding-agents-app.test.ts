@@ -1792,6 +1792,8 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
     additions: number;
     files: readonly ReturnType<typeof githubFile>[];
     mergedAt: string | null;
+    /** Whether GitHub's read of the files answers unavailable; it answers them unless a test says so. */
+    filesDown?: boolean;
   }
 
   const MERGED_AT = "2026-10-17T09:00:00Z";
@@ -1802,7 +1804,11 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
     async (sent) => {
       const pull = `/repos/${RELAY.owner}/${RELAY.name}/pulls/${PUBLISHED.number}`;
       const { pathname } = new URL(sent.url);
-      if (pathname === `${pull}/files`) return Response.json(standing.files);
+      if (pathname === `${pull}/files`) {
+        return standing.filesDown === true
+          ? Response.json({ message: "Service Unavailable" }, { status: 503 })
+          : Response.json(standing.files);
+      }
       const answered = await publishedPullRequest(sent);
       if (answered === undefined || pathname !== pull) return answered;
       const merged = standing.mergedAt !== null;
@@ -1869,6 +1875,38 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
             changedFiles: 1,
           },
         });
+      }),
+  );
+
+  it.effect(
+    "a pull request whose files GitHub cannot list now is still answered and kept, with no areas until a later read lists them",
+    () =>
+      Effect.gen(function* () {
+        const standing: Standing = {
+          sha: PUBLISHED.headSha,
+          additions: 2,
+          files: [githubFile("apps/web/vite.config.ts", 2, 0)],
+          mergedAt: MERGED_AT,
+          filesDown: true,
+        };
+        const { read, kept } = yield* publishedAs(standing);
+
+        const answered = yield* read;
+
+        assert.equal(
+          readAnswer(codingAgentPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, {
+            status: HOSTED_HTTP_STATUS.OK,
+            body: answered,
+          }).pullRequest?.state,
+          PULL_REQUEST_STATE.MERGED,
+        );
+        const stored = yield* kept;
+        assert.equal(stored?.mergedAt, Date.parse(MERGED_AT));
+        assert.equal(stored?.areas, undefined);
+
+        standing.filesDown = false;
+        yield* read;
+        assert.deepEqual((yield* kept)?.areas, [{ path: "apps/web", additions: 2, deletions: 0 }]);
       }),
   );
 
