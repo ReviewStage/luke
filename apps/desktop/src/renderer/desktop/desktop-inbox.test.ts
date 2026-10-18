@@ -522,6 +522,15 @@ function answerHead(page: HTMLElement): string | null {
   );
 }
 
+/** The picks the shown item's answer carries, as its comment draws them. */
+function answeredPicks(page: HTMLElement): (string | null)[] {
+  return [
+    ...page.querySelectorAll(
+      '.inbox-view-items:not([hidden]) [data-inbox-comment="answered"] [data-inbox-pick]',
+    ),
+  ].map((pick) => pick.textContent);
+}
+
 /** Opens the fold holding what a settled item offered, by pressing its line. */
 function openOffered(within: ParentNode): void {
   const line =
@@ -781,7 +790,8 @@ test("Enter on a focused option sends the answer and never presses the option; w
     sent.map(({ reply, choices }) => ({ reply, choices })),
     [{ reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] }],
   );
-  assert.deepEqual(checkedOptions(pane), ["Retry once"], "Enter left the pick standing");
+  // The answer stands at once, as sent: the pick Enter was on, never pressed off.
+  assert.deepEqual(answeredPicks(page), ["Retry once"], "Enter left the pick standing");
 });
 
 test("a waiting choice of several is a checkbox list whose box counts the picks on its foot: the arrows move along it picking nothing, a number key toggles its option, and Enter on a picked option sends every pick and lets none go", async () => {
@@ -830,7 +840,8 @@ test("a waiting choice of several is a checkbox list whose box counts the picks 
     sent.map(({ reply, choices }) => ({ reply, choices })),
     [{ reply: INBOX_REPLY.CHOSE, choices: ["Pager", "Email"] }],
   );
-  assert.deepEqual(checkedOptions(pane), ["Email", "Pager"], "Enter let no pick go");
+  // The answer stands at once, as sent: every pick, Enter's own among them.
+  assert.deepEqual(answeredPicks(page), ["Email, Pager"], "Enter let no pick go");
 });
 
 test("Enter anywhere in a form, in a short number field or its text field's composer, sends it once its required fields are filled, and before that takes the keyboard to the first one left empty, the box's foot naming it; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
@@ -958,7 +969,8 @@ test("an approval is decided in its question, Approve and Decline two cards pick
     sent.map(({ reply }) => reply),
     [INBOX_REPLY.DECLINED],
   );
-  assert.deepEqual(checkedOptions(pane), ["Decline"], "Enter left the pick standing");
+  // The answer stands at once, as sent: the pick Enter was on, never pressed off.
+  assert.deepEqual(answeredPicks(page), ["Decline"], "Enter left the pick standing");
 });
 
 test("a to-do is a task card in its question: a checkbox beside its step, the item's title, and a Couldn't do it pill under it, picked as a choice of two by a press, the arrows, or its number, and sent by the box's one Send", async () => {
