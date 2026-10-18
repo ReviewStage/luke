@@ -1093,19 +1093,34 @@
 /* The bar: history, the path, then the file's actions and the tree's
    toggle at its end, in the window's toolbar buttons. It stands the one
    height of a tab's bar whatever it holds, words alone or nothing yet, its
-   words in the caption's type. */
+   words in the caption's type.
+
+   Every tab's bar is this one (File, Changes, Page, Terminal, Pull
+   request), and each keeps to the panel's top row's two edges, so the tab
+   reads down from the strip above it: a control at its start stands where
+   the row's first tab does, its last control ends where the row's last
+   control ends, and words leading the bar start at the content inset,
+   where a tab's glyph does. Its groups stand a control's gap apart, the
+   glyphs within a group close. */
 .file-view-bar {
   display: flex;
   min-width: 0;
   min-height: var(--secondary-bar-height);
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--luke-space-4);
-  padding: var(--luke-space-4) var(--luke-space-6);
+  gap: var(--luke-control-gap);
+  padding: var(--luke-space-4) var(--column-inset);
   border-bottom: 1px solid var(--luke-color-border);
   background: var(--luke-color-fill-hover);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
+}
+
+/* Words leading the bar, with no control before them. */
+.file-view-bar > .page-view-title,
+.file-view-bar > .terminal-tab-title,
+.file-view-bar > .luke-breadcrumb-bar > .file-view-path:first-child {
+  padding-left: var(--row-inset);
 }
 
 .file-view-history,
@@ -1322,6 +1337,15 @@
   white-space: nowrap;
 }
 
+/* The version's steps and count are a group of their own, a control's gap
+   before the page's actions, as the File tab's history stands from its path. */
+.page-view-versions {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-2);
+  margin-right: calc(var(--luke-control-gap) - var(--luke-space-2));
+}
+
 /* A narrow panel counts the versions without words between the steps,
    leaving the page's title its room. */
 .page-view-version-count {
@@ -1382,6 +1406,58 @@
 
 /* The find a page's tab keeps over its source fills the tab as the panel's
    own would. */
+/* A Browser tab (browser-pane.tsx): the page's bar, its address field
+   filling what the steps leave, and the body main lays the page's view
+   over, which draws a still of the page while something covers it. */
+.browser-view-address {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+}
+
+.browser-view-address input {
+  width: 100%;
+  min-width: 0;
+  height: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
+  padding: 0 var(--luke-space-6);
+  border: 1px solid var(--luke-color-border);
+  border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
+  background: var(--luke-color-well);
+  color: var(--luke-color-text);
+  font-family: inherit;
+  font-size: var(--luke-type-caption-size);
+  text-overflow: ellipsis;
+  transition: border-color var(--duration-hover) ease;
+}
+
+.browser-view-address input::placeholder {
+  color: var(--luke-color-text-subtle);
+}
+
+.browser-view-address input:focus {
+  border-color: var(--luke-color-text-subtle);
+  outline: none; /* no ring: its border lights */
+}
+
+.browser-view-body {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: clip;
+}
+
+/* The still stands where the page stood, at the size the page was drawn
+   at (browser-pane.tsx sets it), never at the image's own, which is in the
+   screen's pixels, nor stretched to a body that has since moved. */
+.browser-view-still {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+}
+
 .page-view-find {
   display: flex;
   min-height: 0;
@@ -1800,17 +1876,12 @@
    the checks, a comment) stands at the row's inset, where a tab's chip
    does, and every word and glyph at the content inset, where a tab's glyph
    does, a box holding its own at a row's inset within; the bar's last
-   control ends where the row's last control ends. A boxed thing's hairline
-   counts toward its inset (`--boxed-inset`), so what it holds lands on the
-   content inset to the pixel. */
+   control ends where the row's last control ends, as every tab's bar's
+   does (`.file-view-bar`). A boxed thing's hairline counts toward its inset
+   (`--boxed-inset`), so what it holds lands on the content inset to the
+   pixel. */
 .pull-request-tab {
   --boxed-inset: calc(var(--row-inset) - 1px);
-}
-
-.pull-request-bar,
-.pull-request-tab .file-view-bar {
-  gap: var(--luke-control-gap);
-  padding-inline: var(--column-inset);
 }
 
 /* The tab shown fills the room under the header and the tabs, the others
@@ -4487,7 +4558,6 @@ ol.transcript-list {
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-6);
-  padding-left: var(--luke-space-4);
   overflow: hidden;
   color: var(--luke-color-text-muted);
   white-space: nowrap;

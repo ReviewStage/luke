@@ -10,15 +10,18 @@ import type { FactoryWorld } from "@luke/features/factory-world-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { runAppCommand, useAppCommand } from "@luke/panel/app-commands";
+import { type SideBundles, sideBundles, worldBundleAtom } from "@luke/panel/bundle-loader";
 import type {
   FactorySceneModule,
   FactorySceneProps,
   SceneHover,
 } from "@luke/panel/factory-world/contract";
+import type { WorldEntry } from "@luke/panel/factory-world/registry";
 import { PICK_KIND, type WorldModule, type WorldState } from "@luke/panel/factory-world/world";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { bundleLanded, landedBundles, onSideBundles } from "@luke/panel/testing/side-bundles";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   areaOf,
@@ -41,11 +44,8 @@ import { FlaskConicalIcon } from "lucide-react";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { bundleLanded, landedBundles, onSideBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
-import { type SideBundles, sideBundles, worldBundleAtom } from "../bundle-loader";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import type { WorldEntry } from "./registry";
 import { FactoryWorldPage } from "./world-page";
 
 /**

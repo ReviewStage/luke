@@ -1,4 +1,4 @@
-import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
+import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { AttentionMark } from "@luke/panel/attention-mark";
@@ -110,11 +110,12 @@ import {
   inboxMedia,
   inboxPreview,
   isUnread,
+  listedItems,
   NEEDS_YOU,
-  needsReader,
+  needsYou as needsYouOf,
   readersItem,
 } from "./inbox-model";
-import { RowMedia, type RowMediaReads, useRowMediaReads } from "./inbox-row-media";
+import { RowMedia, type RowMediaReads, useRowMediaAsks, useRowMediaReads } from "./inbox-row-media";
 import { ReadAgentModel } from "./mentioned-agent-card";
 import { cardTitle } from "./tool-call-model";
 
@@ -192,6 +193,9 @@ const MARK_ALL_READ = "Mark all as read";
 /** What the view's menu offers to show or hide the media under each row's preview with. */
 const MEDIA_PREVIEWS = "Media previews";
 
+/** The items whose media the rows show while they show none, kept as one so the reads see no change. */
+const NO_ITEMS: readonly string[] = [];
+
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
 
@@ -228,6 +232,7 @@ const SHOW_TAB_WORDS = [
   { show: INBOX_SHOW.UNREAD, label: "Unread" },
   { show: INBOX_SHOW.OPEN, label: "All open" },
   { show: INBOX_SHOW.ALL, label: "Everything" },
+  { show: INBOX_SHOW.ARCHIVED, label: "Archived" },
 ] as const;
 
 /**
@@ -239,19 +244,31 @@ const SHOW_EMPTY = {
   [INBOX_SHOW.UNREAD]: { title: "Nothing unread", body: "You've read everything" },
   [INBOX_SHOW.OPEN]: { title: "Nothing open", body: "Every item is answered" },
   [INBOX_SHOW.ALL]: { title: "Nothing here", body: "Nothing in the Inbox is theirs" },
+  [INBOX_SHOW.ARCHIVED]: {
+    title: "Nothing archived",
+    body: "An archived task's items stand here until it is unarchived",
+  },
 } as const satisfies Record<InboxShow, { title: string; body: string }>;
 
 /** What the empty state's press says, by the tab it shows instead. */
 const SHOW_INSTEAD = {
   [INBOX_SHOW.OPEN]: "Show all open",
   [INBOX_SHOW.ALL]: "Show everything",
+  [INBOX_SHOW.ARCHIVED]: "Show archived",
 } as const;
 
-/** The tab an empty tab offers instead: All open from Needs you or Unread where anything is open, else Everything where it holds anything; none from Everything, nor where nothing is there to show. */
+/**
+ * The tab an empty tab offers instead: All open from Needs you or Unread
+ * where anything is open, else Everything where it holds anything, else
+ * Archived where only an archived task holds items; none from Archived,
+ * whose items the other tabs never list, nor where nothing is there to show.
+ */
 function insteadOf(show: InboxShow, counts: InboxCounts): keyof typeof SHOW_INSTEAD | undefined {
-  if (show === INBOX_SHOW.ALL) return undefined;
-  if (show !== INBOX_SHOW.OPEN && counts[INBOX_SHOW.OPEN] > 0) return INBOX_SHOW.OPEN;
-  return counts[INBOX_SHOW.ALL] > 0 ? INBOX_SHOW.ALL : undefined;
+  if (show === INBOX_SHOW.ARCHIVED) return undefined;
+  if (show !== INBOX_SHOW.OPEN && show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.OPEN] > 0)
+    return INBOX_SHOW.OPEN;
+  if (show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0) return INBOX_SHOW.ALL;
+  return (counts[INBOX_SHOW.ARCHIVED] ?? 0) > 0 ? INBOX_SHOW.ARCHIVED : undefined;
 }
 
 /** What the empty state's press says where it lists everyone's items again, Whose having left out every item. */
@@ -439,7 +456,7 @@ export function InboxItemRow({
   const title = cardTitle(item.title);
   const directory = useMemberDirectory();
   const reader = directory.readerId ?? readerId;
-  const needsYou = needsReader(item, reader);
+  const needsYou = needsYouOf(listed, reader);
   const drafted = useInboxItemDrafted(item) && !open;
   const starter = readersItem(item, reader)
     ? undefined
@@ -448,6 +465,7 @@ export function InboxItemRow({
     actorName(personActor(member, directory.members, reader, directory.former)),
   );
   const carried = useMemo(() => inboxMedia(item), [item]);
+  useRowMediaAsks(item.id, item.updatedAt, carried, media);
   const menu = useMenu(true);
   const copyLink = useCopyLinkItem()(
     holder.kind === INBOX_HOLDER.TASK
@@ -500,7 +518,7 @@ export function InboxItemRow({
         }
         attachments={
           media === undefined || carried.length === 0 ? undefined : (
-            <RowMedia itemId={item.id} changedAt={item.updatedAt} media={carried} reads={media} />
+            <RowMedia media={carried} reads={media} />
           )
         }
         meta={
@@ -896,8 +914,9 @@ function showTabId(tabs: string, show: InboxShow): string {
 /**
  * The row of tabs under the Inbox's title, each listing its own items and
  * counting them: Needs you, its count in the attention mark's orange while
- * anything needs the developer, Unread, All open, and Everything. The list
- * under them is the panel every tab shows.
+ * anything needs the developer, Unread, All open, and Everything; and
+ * Archived, the archived tasks' items, where the Inbox counts them, which
+ * only the window's does. The list under them is the panel every tab shows.
  */
 function ShowTabs({
   show,
@@ -911,21 +930,27 @@ function ShowTabs({
   return (
     <Tabs<InboxShow>
       label={SHOW_TABS}
-      tabs={SHOW_TAB_WORDS.map(({ show: value, label }) => ({
-        value,
-        label,
-        count: (
-          <TabCount
-            tone={
-              value === INBOX_SHOW.NEEDS_YOU && counts[value] > 0
-                ? TAB_COUNT_TONE.ATTENTION
-                : TAB_COUNT_TONE.QUIET
-            }
-          >
-            {String(counts[value])}
-          </TabCount>
-        ),
-      }))}
+      tabs={SHOW_TAB_WORDS.flatMap(({ show: value, label }) => {
+        const count = counts[value];
+        if (count === undefined) return [];
+        return [
+          {
+            value,
+            label,
+            count: (
+              <TabCount
+                tone={
+                  value === INBOX_SHOW.NEEDS_YOU && count > 0
+                    ? TAB_COUNT_TONE.ATTENTION
+                    : TAB_COUNT_TONE.QUIET
+                }
+              >
+                {String(count)}
+              </TabCount>
+            ),
+          },
+        ];
+      })}
       value={show.show}
       onChange={show.onShow}
       ids={(value) => ({ tab: showTabId(ids.tabs, value), panel: ids.panel })}
@@ -1163,8 +1188,12 @@ export function InboxList({
   const { width, onResize } = useInboxListWidth();
   const rowFocus = useRowFocusKept(rows);
   // Note that only the window's Inbox shows its rows' media, as its view's menu chooses; a task's own shows none.
-  const mediaReads = useRowMediaReads();
-  const media = head.view?.choices.mediaPreviews === true ? mediaReads : undefined;
+  // The reads hold the pictures of the items listed alone, and none while the rows show no media.
+  const previews = head.view?.choices.mediaPreviews === true;
+  const mediaReads = useRowMediaReads(
+    previews ? listedItems(view).map(({ item }) => item.id) : NO_ITEMS,
+  );
+  const media = previews ? mediaReads : undefined;
   const edge = useResizableEdge({
     side: EDGE_SIDE.RIGHT,
     width,
@@ -1193,8 +1222,8 @@ export function InboxList({
       onMark={onMark}
     />
   );
-  const needingYou = (items: readonly InboxItem[]) =>
-    items.filter((item) => needsReader(item, view.readerId)).length;
+  const needingYou = (items: readonly InboxListed[]) =>
+    items.filter((listed) => needsYouOf(listed, view.readerId)).length;
   const statusSection = ({ key, status, items }: InboxStatusGroup) => {
     const folded = head.view?.folds.folded(key) ?? false;
     return (
@@ -1202,7 +1231,7 @@ export function InboxList({
         <StatusHeader
           status={status}
           folded={folded}
-          count={needingYou(items.map(({ item }) => item))}
+          count={needingYou(items)}
           onToggle={() => head.view?.folds.toggle(key)}
         />
         {folded ? null : <ul className="sidebar-tasks">{items.map(row)}</ul>}
@@ -1217,7 +1246,7 @@ export function InboxList({
           starter={starter}
           readerId={readerId}
           folded={folded}
-          count={needingYou(items.map(({ item }) => item))}
+          count={needingYou(items)}
           onToggle={() => head.view?.folds.toggle(key)}
         />
         {folded ? null : <ul className="sidebar-tasks">{items.map(row)}</ul>}
@@ -1257,7 +1286,7 @@ export function InboxList({
                   <HolderHeader
                     holder={holder}
                     folded={folded}
-                    count={needingYou(items)}
+                    count={needingYou(items.map((item) => ({ holder, item })))}
                     onToggle={() => head.view?.folds.toggle(key)}
                   />
                   {folded ? null : (

@@ -9,6 +9,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { channels } from "@luke/host/bridge";
 import { startMacTerminal } from "@luke/host/node";
+import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { callInProgress, IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import {
@@ -21,8 +22,10 @@ import {
 } from "electron";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
+import { createBrowserViews } from "../window/browser-views";
 import { HOTKEY_RANK } from "../window/hotkey-registrar";
 import { avatarActRows, avatarReports } from "./avatar-acts";
+import { browserActRows } from "./browser-acts";
 import { macTerminalActRows } from "./mac-terminal-acts";
 import { clientSettingSideEffects } from "./settings-side-effects";
 import { terminalActRows, whenPageGone } from "./terminal-acts";
@@ -75,6 +78,14 @@ export function registerDesktopIpc(services: DesktopServices): void {
       void run(operator.host.recordAgentTrace(trace));
     },
   };
+
+  // A Browser tab's page is told to the panel that opened it alone, and goes with that panel's page.
+  const browserViews = createBrowserViews({
+    tellPage: (sender, page) => sender.send(channels.onBrowserState, page),
+    tellKey: (sender, key) => sender.send(channels.onBrowserKey, key),
+    tellFocus: (sender, focus) => sender.send(channels.onBrowserFocus, focus),
+    whenGone: whenPageGone,
+  });
 
   const platformRows: PlatformActRows<WebContents> = {
     ...windowSurfaceActRows({
@@ -133,6 +144,11 @@ export function registerDesktopIpc(services: DesktopServices): void {
       },
       createId: randomUUID,
       run,
+    }),
+    ...browserActRows({
+      views: browserViews,
+      experimentOn: () =>
+        experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER),
     }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),

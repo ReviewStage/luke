@@ -28,10 +28,12 @@ import { taskWorkspace } from "../../github/workspace-repository.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { type ModelCatalog, providerModelOf } from "../../providers/model-catalog.js";
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
+import { PLAN_SAVE_REFUSAL } from "../../tasks/plan-notes.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { type AgentSkill, repositorySkills } from "../agent-runtime/skills.js";
 import { CHAT_DOORS } from "../coder-host/chat-notify.js";
 import type { CoderModelSelection } from "../coder-host/model.js";
+import { type PlanEditResult, planEditRejected } from "../coder-host/plan-edit.js";
 import { titleSubagent } from "../coder-host/title.js";
 import { AGENT_CALLER } from "../coding-agent-tools.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
@@ -63,6 +65,7 @@ import {
 } from "./conversation.js";
 import { EVE_MOUNT, eveSessionsComposer } from "./eve-sessions.js";
 import { brainModelSelection } from "./model.js";
+import { recordBrainPlanEdit } from "./plan-edit.js";
 import type { BrainHostSeams } from "./production.js";
 import { foldedQuietly, type RelayStanding, type RelayStateStore, StreamRelay } from "./relay.js";
 import { rotationSeedText } from "./seed.js";
@@ -179,6 +182,15 @@ export interface BrainHost extends HostAdmission {
   toolDeclarations(): readonly HostedToolDeclaration[];
   /** The tools this conversation's turns are offered: every one, the chat's only where Chat is on for the plan's owner. */
   toolDeclarationsFor(admitted: AdmittedConversation): HostEffect<readonly HostedToolDeclaration[]>;
+  /**
+   * One `edit_plan` call's notes taken into the plan the admitted
+   * conversation is about, as the member speaking: the plan is found again
+   * as the call runs, so a plan deleted meanwhile saves nothing.
+   */
+  editPlan(
+    admitted: AdmittedConversation,
+    input: UnparsedWireValue,
+  ): Effect.Effect<PlanEditResult, QueryError | Schema.SchemaError, DatabaseServices>;
   /** Carries one call of one declared tool under the binding the tool captured and the standing eve hands it, whose sandbox a repository read runs in. */
   runTool(
     name: string,
@@ -449,6 +461,12 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     toolDeclarations: () => brainToolDeclarations(),
 
     toolDeclarationsFor: offeredFor,
+    editPlan: (admitted, input) =>
+      Effect.gen(function* () {
+        const task = yield* taskOf(admitted);
+        if (task === undefined) return planEditRejected(PLAN_SAVE_REFUSAL.NO_TASK);
+        return yield* recordBrainPlanEdit({ userId: admitted.caller, taskId: task.task.id }, input);
+      }),
 
     runTool: (name, binding, input, context) =>
       Effect.gen(function* () {

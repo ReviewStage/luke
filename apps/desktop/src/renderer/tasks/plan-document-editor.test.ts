@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import type { TasksEditAnswer } from "@luke/features/tasks-view";
+import { type SideBundles, sideBundles } from "@luke/panel/bundle-loader";
 import {
   PLACEMENT_END,
   type PlanEditorModule,
@@ -12,13 +13,12 @@ import {
 } from "@luke/panel/plan-editor/contract";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { landedBundles, onSideBundles } from "@luke/panel/testing/side-bundles";
 import { DIAGRAM_DRAWING, type DiagramModule } from "@luke/ui/diagram-contract";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { landedBundles, onSideBundles } from "#testing/side-bundles";
-import { type SideBundles, sideBundles } from "../bundle-loader";
 import { PlanBody } from "./plan-body";
 
 /**

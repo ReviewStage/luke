@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
 import { decodeMention, isMentionLabel, MENTION_KIND } from "@luke/features/mention-link";
 import { test } from "vitest";
-import { BRAIN_INSTRUCTIONS, SCRIBE_INSTRUCTIONS } from "./brain-host/brain.js";
+import { BRAIN_INSTRUCTIONS } from "./brain-host/brain.js";
 import { INBOX_TOOLS } from "./coder-host/inbox.js";
 import { coderInstructions } from "./coder-host/instructions.js";
 import { EDIT_PLAN_TOOL } from "./coder-host/plan-edit.js";
@@ -72,12 +72,11 @@ test("a coding agent is shown to name each kind as a mention Luke draws as its c
   }
 });
 
-test("the inbox's post tool, the plan's edit tool, and the planner show a file's link Luke draws as its chip", () => {
+test("the inbox's post tool and the plan's edit tool show a file's link Luke draws as its chip", () => {
   assert.deepEqual(drawnAs(INBOX_TOOLS.POST.description), [MENTION_KIND.FILE]);
   assert.deepEqual(drawnAs(EDIT_PLAN_TOOL.description), [MENTION_KIND.FILE]);
-  assert.deepEqual(drawnAs(BRAIN_INSTRUCTIONS), [MENTION_KIND.FILE]);
 });
 
-test("the notetaker shows an issue's link Luke draws as the integration page's chip", () => {
-  assert.deepEqual(drawnAs(SCRIBE_INSTRUCTIONS), [MENTION_KIND.LINK]);
+test("the planner shows an issue's link for the plan and a file's link for code, each drawn as its chip", () => {
+  assert.deepEqual(drawnAs(BRAIN_INSTRUCTIONS), [MENTION_KIND.LINK, MENTION_KIND.FILE]);
 });

@@ -23,6 +23,7 @@ import {
   PromptInputTools,
   submitPromptInput,
 } from "@luke/panel/ai-elements/prompt-input";
+import { useSideBundles } from "@luke/panel/bundle-loader";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { imageFiles } from "@luke/panel/feedback-images";
 import { GRANT_OUTCOME, useIntegrationGrant } from "@luke/panel/integration-grant";
@@ -49,7 +50,6 @@ import {
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
-import { useSideBundles } from "../bundle-loader";
 import { AgentContextRing } from "./agent-context";
 import { contextHint } from "./agent-context-model";
 import { AgentModelChip } from "./agent-model-chip";

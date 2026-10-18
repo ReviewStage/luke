@@ -6,6 +6,7 @@ import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@luke/feature
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { appCommandOffered, runAppCommand } from "@luke/panel/app-commands";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { editorBundleLanded, installEditorLayout } from "@luke/panel/testing/composer";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { relayout } from "@luke/panel/testing/resize-observer";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -14,7 +15,6 @@ import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { editorBundleLanded, installEditorLayout } from "#testing/composer";
 import { PlanBody } from "./plan-body";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 

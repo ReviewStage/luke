@@ -189,6 +189,86 @@ test("mid-turn the slow step is told at once, then the settled mark, the sentenc
   assert.deepEqual(end, { turnId, seq: 5, kind: TURN_EVENT_KIND.ENDED, end: TURN_END.COMPLETED });
 });
 
+test("a plan save Luke started holds back no sentence of his: the turn goes on being said while the save runs as a task", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  const turnId = hostTurnId(standing.sessionId, EVE_TURN);
+  const sequence = 0;
+  const notes = { notes: [{ kind: "add", section: "Context", text: "- Invites expire." }] };
+  await play(
+    [
+      stamped({ type: "turn.started", data: { turnId: EVE_TURN, sequence } }),
+      stamped({ type: "message.received", data: { turnId: EVE_TURN, sequence, message: "q" } }),
+      stamped({
+        type: "step.started",
+        data: { turnId: EVE_TURN, sequence, stepIndex: 0, modelId: "m" },
+      }),
+      stamped({
+        type: "message.completed",
+        data: {
+          turnId: EVE_TURN,
+          sequence,
+          stepIndex: 0,
+          finishReason: "tool-calls",
+          message: "I'll write that down.",
+        },
+      }),
+      stamped({
+        type: "actions.requested",
+        data: {
+          turnId: EVE_TURN,
+          sequence,
+          stepIndex: 0,
+          actions: [{ kind: "tool-call", callId: "call-1", toolName: "edit_plan", input: notes }],
+        },
+      }),
+      // A task's call answers with its receipt as the task starts; the save's result comes later.
+      stamped({
+        type: "action.result",
+        data: {
+          turnId: EVE_TURN,
+          sequence,
+          stepIndex: 0,
+          status: "completed",
+          result: {
+            kind: "tool-result",
+            callId: "call-1",
+            toolName: "edit_plan",
+            output: "Started task edit_plan-1.",
+          },
+        },
+      }),
+      stamped({
+        type: "step.completed",
+        data: { turnId: EVE_TURN, sequence, stepIndex: 0, finishReason: "tool-calls" },
+      }),
+      stamped({
+        type: "step.started",
+        data: { turnId: EVE_TURN, sequence, stepIndex: 1, modelId: "m" },
+      }),
+      stamped({
+        type: "message.completed",
+        data: {
+          turnId: EVE_TURN,
+          sequence,
+          stepIndex: 1,
+          finishReason: "stop",
+          message: "Invites expire after seven days.",
+        },
+      }),
+    ],
+    standing,
+  );
+
+  const heard = await projected(target.userId, turnId);
+  assert.deepEqual(
+    heard.flatMap((event) =>
+      event.kind === TURN_EVENT_KIND.REPLY_SENTENCE ? [event.sentence] : [],
+    ),
+    ["I'll write that down.", "Invites expire after seven days."],
+  );
+});
+
 test("the events' words are the brain's own: the event kinds are members of the run stream's set, and the slow step kinds are its", () => {
   const runEventKinds = new Set<string>(Object.values(BRAIN_RUN_EVENT));
   for (const kind of Object.values(TURN_EVENT_KIND)) assert.equal(runEventKinds.has(kind), true);

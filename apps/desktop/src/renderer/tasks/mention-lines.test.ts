@@ -6,19 +6,19 @@ import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { runAppCommand } from "@luke/panel/app-commands";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
-import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { Effect } from "effect";
-import { act, createElement, type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import {
   composerEditor,
   editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   QUIET_COMPOSER,
-} from "#testing/composer";
+} from "@luke/panel/testing/composer";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { Effect } from "effect";
+import { act, createElement, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { AgentComposer } from "./agent-composer";
 import { FileTab } from "./file-tab";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";

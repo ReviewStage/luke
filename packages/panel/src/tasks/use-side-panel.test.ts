@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -269,6 +271,77 @@ test("closing the last tab shuts the panel and leaves full screen, and the toggl
   assert.deepEqual(panel.control().strip, []);
   assert.equal(panel.control().tab, undefined);
   assert.deepEqual(panel.control().closedTabs, SIDE_PANEL_TABS);
+});
+
+test("a Browser tab opens chosen on its plan alone, closes with its page, and is kept across no launch", () => {
+  const sent: Act[] = [];
+  // The act channel is the window's door to main, the process boundary a closed tab's page is let go across.
+  fakeAppBridge({
+    act: (request: Act) => {
+      sent.push(request);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+    },
+  });
+  const first = launch({ task: TASK, taskAgents: [] });
+  act(() => first.control().onOpenBrowser("http://localhost:3000/"));
+  act(() => first.control().onOpenBrowser());
+  const [shown, blank] = first.control().browsers;
+  assert.ok(shown !== undefined && blank !== undefined);
+  assert.equal(shown.address, "http://localhost:3000/");
+  assert.equal(blank.address, undefined);
+  assert.deepEqual(first.control().tab, blank.tab, "the newest opened is chosen");
+  assert.deepEqual(first.control().strip.slice(-2), [shown.tab, blank.tab], "at the strip's end");
+
+  // The address a blank tab's page was first opened at is kept; a later one is not.
+  act(() => first.control().onBrowserOpened(blank.tab.browser, "https://example.com/"));
+  act(() => first.control().onBrowserOpened(blank.tab.browser, "https://example.org/"));
+  assert.equal(first.control().browsers[1]?.address, "https://example.com/");
+
+  // Another plan draws neither.
+  first.render({ task: OTHER_TASK, taskAgents: [] });
+  assert.deepEqual(first.control().browsers, []);
+  assert.ok(!first.control().strip.some((tab) => tab instanceof Object && "browser" in tab));
+
+  // Closed, the tab's page is let go in main.
+  first.render({ task: TASK, taskAgents: [] });
+  act(() => first.control().onClose(blank.tab));
+  assert.deepEqual(first.control().browsers, [shown]);
+  assert.deepEqual(sent, [
+    { kind: ACT_KIND.BROWSER_CLOSE, payload: { browserId: blank.tab.browser } },
+  ]);
+  first.quit();
+
+  const second = launch({ task: TASK, taskAgents: [] });
+  assert.deepEqual(second.control().browsers, []);
+});
+
+test("the Browser tab experiment going off closes every Browser tab on every plan, each page with it", () => {
+  const sent: Act[] = [];
+  // The act channel is the window's door to main, the process boundary a closed tab's page is let go across.
+  fakeAppBridge({
+    act: (request: Act) => {
+      sent.push(request);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+    },
+  });
+  const panel = launch({ task: TASK, taskAgents: [] });
+  act(() => panel.control().onOpenBrowser("http://localhost:3000/"));
+  const here = panel.control().browsers[0];
+  panel.render({ task: OTHER_TASK, taskAgents: [] });
+  act(() => panel.control().onOpenBrowser("https://example.com/"));
+  const there = panel.control().browsers[0];
+  assert.ok(here !== undefined && there !== undefined);
+
+  act(() => panel.control().onCloseBrowsers());
+
+  assert.deepEqual(panel.control().browsers, []);
+  assert.ok(panel.control().tab === undefined || !("browser" in Object(panel.control().tab)));
+  panel.render({ task: TASK, taskAgents: [] });
+  assert.deepEqual(panel.control().browsers, []);
+  assert.deepEqual(
+    sent.map((request) => ("payload" in request ? request.payload : undefined)),
+    [{ browserId: here.tab.browser }, { browserId: there.tab.browser }],
+  );
 });
 
 test("a plan whose strip holds no tab draws no panel, and the next plan with a tab draws it again, still open", () => {

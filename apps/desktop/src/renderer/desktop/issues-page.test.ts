@@ -13,6 +13,7 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { runAppCommand, useAppKeymap } from "@luke/panel/app-commands";
+import { type SideBundles, sideBundles } from "@luke/panel/bundle-loader";
 import {
   PLACEMENT_END,
   type PlanEditorModule,
@@ -25,6 +26,7 @@ import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { relayout } from "@luke/panel/testing/resize-observer";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { landedBundles, onSideBundles, unlandedBundles } from "@luke/panel/testing/side-bundles";
 import { ToastHost } from "@luke/panel/toast";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
@@ -34,9 +36,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { playMotions } from "#testing/pane-motion";
-import { landedBundles, onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
-import { type SideBundles, sideBundles } from "../bundle-loader";
 import { ISSUES_PAGE, type IssuesPlace, type NewTaskIssue } from "../tasks/use-tasks-tab";
 import { IssuesPage } from "./issues-page";
 

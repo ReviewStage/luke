@@ -121,6 +121,14 @@ function missedWorkNote(missed: string, working: boolean): string {
   return `While the developer was away, Luke kept working. Catch them up in a sentence or two, in your own words rather than reading this out: ${missed}${still}`;
 }
 
+/**
+ * How the developer's words no ask carried are handed to the brain as the
+ * call ends: what they settle is still the plan's, and nothing Luke answers
+ * is heard on this call.
+ */
+const UNHEARD_ASK_NOTE =
+  "The call has ended, and no ask carried the developer's latest line above: write into the plan whatever it settles; nothing you answer is heard now. Their line:";
+
 /** What a call back is told, silently, where work an earlier call asked for is still under way and nothing of it is news yet. */
 const STILL_WORKING_NOTE =
   "Luke is still working on what the developer asked on an earlier call; his findings will follow when he has them.";
@@ -335,6 +343,11 @@ interface StandingSession {
   ended: boolean;
   /** The graceful close under way, so a second ask to end the session waits on the first. */
   closing: Deferred.Deferred<void> | undefined;
+  /**
+   * Whether the session's end hands the developer's words no ask carried to
+   * the brain; not where it is let go of for its peer to attach to again.
+   */
+  handsOver: boolean;
   micLive: boolean;
   lastDelegationOffsetMs: number;
   readonly claimedDelegations: Set<string>;
@@ -822,6 +835,39 @@ export class LiveSessionService {
   }
 
   /**
+   * The developer's words no ask carried, handed to the brain as the call
+   * ends. Note that nothing reaches the plan but through an ask, so a
+   * correction said just before the hang-up, or one the voice answered from
+   * the conversation without delegating, would otherwise be lost. Nobody on
+   * this call hears its run: Luke works on it with no call up, and what he
+   * says of it is the next call's catch-up.
+   */
+  #askUnheard(session: StandingSession): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      for (const open of session.openAsks.values()) this.#claimLate(session, open);
+      const context = session.ledger.askContext(session.lastDelegationOffsetMs);
+      const rows = askRowsOf(context, session.askedRows, Number.POSITIVE_INFINITY);
+      const last = rows.at(-1);
+      if (last === undefined) return;
+      this.#claim(session, rows, last.endMs);
+      session.revisions += 1;
+      const submissionId = this.#options.createId();
+      const submission = yield* this.#brain.submitAsk({
+        submissionId,
+        question: [renderAskContext(context), `${UNHEARD_ASK_NOTE} ${last.text.trim()}`].join("\n"),
+        sessionId: session.sessionId,
+        revision: session.revisions,
+      });
+      if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) return;
+      yield* this.#attachAsk(
+        session,
+        submissionId,
+        rows.map((row) => row.rowId),
+      );
+    });
+  }
+
+  /**
    * The peer's transport as it saw it change. A failed transport is a lost
    * connection whatever the sideband still shows; a peer closed without a
    * hang-up asked of the host ends the session gracefully from here.
@@ -908,6 +954,7 @@ export class LiveSessionService {
       this.#stopRunEvents();
       const session = this.#standing;
       const releasing = this.#releasing;
+      if (session !== undefined) session.handsOver = false;
       if (session !== undefined) yield* this.#over(session);
       else if (releasing !== undefined) yield* Deferred.await(releasing);
     });
@@ -985,6 +1032,7 @@ export class LiveSessionService {
         started: false,
         ended: false,
         closing: undefined,
+        handsOver: true,
         micLive: false,
         lastDelegationOffsetMs: 0,
         claimedDelegations: new Set(),
@@ -1048,6 +1096,9 @@ export class LiveSessionService {
   #arrivals(session: StandingSession): Effect.Effect<void> {
     return Stream.runForEach(session.sideband.arrivals, (arrival) => {
       if ("close" in arrival) {
+        // A socket gone with no close of the session's own, none asked for, may be a device that
+        // attaches again: what no ask carried is left for that call rather than handed on.
+        if (!session.closing) session.handsOver = false;
         this.#settle(session, {
           outcome: SIDEBAND_CLOSE_OUTCOME.CONNECTION_LOST,
           close: arrival.close,
@@ -1795,7 +1846,8 @@ export class LiveSessionService {
    * sideband's transport released, and with it whatever the source left
    * standing under it. Then what the end owes and nothing inside it waits
    * on: every row with a write still put off written as it stands, so a
-   * socket closing mid-sentence leaves the words said so far on the row.
+   * socket closing mid-sentence leaves the words said so far on the row, and
+   * then the words no ask carried handed to the brain (`#askUnheard`).
    */
   #release(session: StandingSession): Effect.Effect<void> {
     return Effect.andThen(
@@ -1803,9 +1855,16 @@ export class LiveSessionService {
       Effect.suspend(() => {
         const rows = [...session.pendingRows.keys()];
         session.pendingRows.clear();
-        return Effect.all(
-          rows.map((rowId) => this.#upsertRow(session, rowId)),
-          { concurrency: "unbounded", discard: true },
+        return Effect.andThen(
+          Effect.all(
+            rows.map((rowId) => this.#upsertRow(session, rowId)),
+            { concurrency: "unbounded", discard: true },
+          ),
+          // Every end but a let-go hands on what no ask carried, once the session has said its
+          // last, however the end came: the developer's hang-up, the idle close, the session's own
+          // `session.closed`, or the socket gone. The service's stop waits on this release, so the
+          // brain is still standing when it runs.
+          session.handsOver ? this.#askUnheard(session) : Effect.void,
         );
       }),
     );

@@ -21,6 +21,7 @@ import {
   storeWriter,
 } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { ACCOUNT_INBOX_ARCHIVED, ACCOUNT_INBOX_QUERY } from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
@@ -134,6 +135,7 @@ import { logStoreFailure } from "../http/store-failure.js";
 import {
   answerInboxItem,
   INBOX_MESSAGE_OUTCOME,
+  inboxItemArchived,
   markInboxItemRead,
   markInboxItemUnread,
   markInboxRead,
@@ -1404,7 +1406,7 @@ const agentInboxEndpoint = /* @__PURE__ */ Effect.fn("web/agentInboxEndpoint")(f
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
 });
 
-/** GET reads what waits on the developer across the account's tasks past the cursor: every open item, held open while nothing changed. */
+/** GET reads what waits on the developer across the account's tasks past the cursor: every open item, held open while nothing changed, the archived tasks holding items listed too where `archived=include` asks. */
 const accountInboxEndpoint = /* @__PURE__ */ Effect.fn("web/accountInboxEndpoint")(function* (
   seams: CodingAgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
@@ -1415,7 +1417,10 @@ const accountInboxEndpoint = /* @__PURE__ */ Effect.fn("web/accountInboxEndpoint
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const after = yield* inboxCursorOf(request);
   const userId = yield* resolvedUserId(seams, request);
-  const page = yield* hostedStoreOrUnavailable(accountInboxPast(userId, after));
+  const archived =
+    new URL(request.url).searchParams.get(ACCOUNT_INBOX_QUERY.ARCHIVED) ===
+    ACCOUNT_INBOX_ARCHIVED.INCLUDE;
+  const page = yield* hostedStoreOrUnavailable(accountInboxPast(userId, after, { archived }));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
 });
 
@@ -1520,6 +1525,10 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
   const userId = yield* resolvedUserId(seams, request);
   const stored = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
   if (Option.isNone(stored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  // An item put away with its task is read but not answered, whether or not its agent would hear it, until the task is back.
+  if (yield* hostedStoreOrUnavailable(inboxItemArchived(userId, itemId))) {
+    return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
+  }
   const body = yield* readJsonBodyEffect(MAXIMUM_INBOX_ANSWER_BODY_BYTES);
   const asked = readEither(inboxAnswerRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);

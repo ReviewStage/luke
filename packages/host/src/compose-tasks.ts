@@ -9,6 +9,7 @@ import {
   WORKSPACE_CALL_FAILURE,
   type WorkspaceCallResult,
 } from "@luke/features";
+import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import {
   CODING_AGENT_CALL_FAILURE,
@@ -105,7 +106,7 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@luke/gateway";
-import { unparsedWire } from "@luke/wire";
+import { isRecord, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
   Clock,
@@ -222,6 +223,21 @@ const CONVERSATION_WRITING: ReadonlySet<CodingAgentStatus> = new Set([
 class ConversationUnanswered extends Data.TaggedError("ConversationUnanswered")<{
   readonly failure: CodingAgentCallFailure;
 }> {}
+
+/** How the SDK spells the type of a part that calls Luke's plan edit. */
+const PLAN_EDIT_PART_TYPE = `tool-${AGENT_TOOL.EDIT_PLAN}`;
+
+/**
+ * Whether a page carries a turn that wrote the plan. Note that the call's
+ * part is journaled with its receipt and the save lands as a task after it,
+ * so the document is read again on every page that carries the call, which
+ * the turn's later steps amend, and once more when the turn stops writing.
+ */
+function pageWritesDocument(page: CodingAgentMessagesAnswer): boolean {
+  return page.messages.some((message) =>
+    message.parts.some((part) => isRecord(part) && part.type === PLAN_EDIT_PART_TYPE),
+  );
+}
 
 /** Whether a page says the brain, or a worker of its, may still add to the conversation. */
 function conversationWriting(page: CodingAgentMessagesAnswer): boolean {
@@ -479,6 +495,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The tasks whose pages a settled `show_page` may have moved, read one at a time by the loop below. */
   const pageReads = yield* Queue.sliding<string>(1);
+
+  /** The tasks whose plan one of Luke's plan edits may have moved, read one at a time by the loop below. */
+  const documentReads = yield* Queue.sliding<string>(1);
 
   /** The tasks a call just ended about, whose transcript and work are read again by the loop below. */
   const callEndReads = yield* Queue.sliding<string>(1);
@@ -886,6 +905,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return Effect.gen(function* () {
       let after = newest ? undefined : view.conversation?.cursor;
       let wasWriting = view.conversation !== undefined && conversationWriting(view.conversation);
+      let edited = false;
       while (gate() && view.activeTaskId === taskId) {
         conversationWoken = false;
         const page = yield* askConversation(taskId, after === undefined ? {} : { after }).pipe(
@@ -906,6 +926,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const settledTurn = wasWriting || page.value.messages.length > 0;
         if (!writing && settledTurn && untitled) Queue.offerUnsafe(nameReads, taskId);
         wasWriting = writing;
+        // Luke's plan edits land with no call standing as well as with one, so the document is
+        // read again off the conversation's own follow rather than off the call's frames.
+        edited ||= pageWritesDocument(page.value);
+        if (pageWritesDocument(page.value) || (edited && !writing)) {
+          Queue.offerUnsafe(documentReads, taskId);
+        }
         if (!writing && !conversationWoken) return;
         after = page.value.cursor;
       }
@@ -2002,7 +2028,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }),
       );
     }),
-    // The board and page reads a settled draw or page asks for, the
+    // The board and page reads a settled draw or page asks for, the document
+    // read one of Luke's plan edits asks for, the
     // transcript and work reads a call's end asks for, the list read a
     // settled turn asks for, for the name it may have given, and the wake of a
     // parked conversation read the call's words ask for; every other read of
@@ -2012,6 +2039,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         Effect.forever(
           Effect.flatMap(Queue.take(boardReads), (taskId) =>
             gate() ? serial(readBoard(taskId)) : Effect.void,
+          ),
+        ),
+      );
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(documentReads), (taskId) =>
+            gate() && view.activeTaskId === taskId ? serial(readDocument(taskId)) : Effect.void,
           ),
         ),
       );

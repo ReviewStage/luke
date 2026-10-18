@@ -25,6 +25,7 @@ import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { appBridge } from "@luke/panel/app-bridge";
 import { useAppCommand, useAppKeymap } from "@luke/panel/app-commands";
+import type { SideBundles } from "@luke/panel/bundle-loader";
 import type { DiffListProps, DiffViewModule } from "@luke/panel/diff-view/contract";
 import type { FileTreeModule } from "@luke/panel/file-tree/contract";
 import { blobShaOf } from "@luke/panel/tasks/changes-model";
@@ -32,6 +33,7 @@ import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridg
 import { handSettings } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { relayout } from "@luke/panel/testing/resize-observer";
+import { landedBundles, onSideBundles } from "@luke/panel/testing/side-bundles";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
@@ -39,9 +41,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
-import type { SideBundles } from "../bundle-loader";
 import type { ChangesThreads } from "./agent-changes-tab";
 
 /**

@@ -853,7 +853,11 @@ your name and email to that record. The counts are event names and values from
 a fixed list. A voice session's start is counted with the source that opened
 it, our voice service on your account, and never with a session id. A count
 made before you sign in waits in Luke's memory and is sent under your account
-if you sign in before Luke quits, and is dropped otherwise. Nothing you type
+if you sign in before Luke quits, and is dropped otherwise. The mark that you
+used Luke on a day is counted once a day for each account signed in, so Luke
+keeps in its settings file on your Mac, for each account it was sent for, the
+email address and the UTC day it was last sent, and only the newest day; it is
+never sent anywhere. Nothing you type
 or say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text.
 
@@ -884,7 +888,8 @@ its whiteboard, its Call and Code tabs, the contents of its File tabs with
 their tree, its pages, and its version history with the earlier version you
 are viewing; an Inbox item's body and pictures; the messages in Chat; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
-skills and MCP servers, and the files you attach there; code drawn in a
+skills and MCP servers, and the files you attach there; a Browser tab, with
+the still of its page drawn while something covers it; code drawn in a
 transcript; the API keys and Plan template pages of Settings; an automation's
 webhook secret, the one time it is shown; and the cards
 that open over a row or a chip on hover, a page's preview among them. The
@@ -894,6 +899,18 @@ their only line, and recording what a canvas draws is switched off. A mention dr
 plan section's heading, only in its words, never in an attribute the masking
 leaves, so the recording keeps its shape alone. Luke does not report what you
 clicked.
+
+**Browser tabs.** With the Browser tab experiment on, a Browser tab opens a
+web page you choose, your own `localhost` included, in a view of its own on
+your Mac. Luke does not see, store, log, or count the page, its address, or
+its title; they reach only the panel that opened the tab, and none of it
+reaches a trace, a counted event, or our service. The screen recording cannot
+see into the page's view, and leaves out the still of the page Luke draws while
+a menu covers it; the tab's title and address appear there as blocks, as every
+word does. The pages keep their own cookies and storage on your
+Mac, apart from Luke's own sign-in, and a sign-in to a site holds across
+launches. Every permission a page asks for, such as the camera, microphone, or
+location, is refused, and downloads are cancelled.
 
 Recording starts just after the panel first draws when Luke opens, before
 you sign in, so it covers the signed-out panel and the sign-in. A recording
@@ -928,17 +945,18 @@ service's web functions send every error they did not handle or that ended
 work they run apart from a request (such as following a turn for a call, or
 standing the voice or terminal service), with its message, stack trace, and
 the lines of code around it; performance traces of a share of the requests
-they answer, each database query, and each request they
-make, with the method, address, and query parameters, the status, the
+they answer, each database query, and each request they make, with the
+method, the address and the names of its query parameters, the status, the
 browser's or app's user agent, and the query's text; every line they log;
 counts and timings; and, each minute, whether the scheduled sweep ran. They do
 not send a request's headers or body, the values of local variables, or the IP
 address a request came from. Luke's agents send what Sentry's SDK collects by
 default: every error they did not handle or that ended work they started
 apart from a turn, with its message, stack trace, the lines of code around it,
-and the values of local variables; performance traces
-of each request they answer, each database query, and each request they make,
-with their headers, bodies, query parameters, and database query parameters,
+and the values of local variables; performance traces of each request they
+answer, each database query, and each request they make, with their headers,
+bodies, addresses, the names of their query parameters, and database query
+parameters,
 and the IP address a request came from; every line they log; and Sentry's
 agent traces of each turn: the instructions and messages sent to the model
 (which include the plan, the conversation, what was said on a call, and what
@@ -947,9 +965,15 @@ an integration's answer), the model's replies, and each tool call with its
 arguments and result. In what the agents send, Sentry replaces a value whose
 name looks like a credential (such as `auth`, `token`, `secret`, `password`,
 `key`, or `session`) before it leaves, but not a credential written in free
-text, such as a key pasted into a conversation; the address and query
-parameters of a request the web functions trace are sent as the request
-carried them. Terminal tabs' bytes are not sent. What reaches
+text, such as a key pasted into a conversation. In the address of a request
+that the web functions or the agents give on a trace, an error, a breadcrumb,
+or a log line, the value of each query parameter and the fragment are replaced,
+and so is any part of its path shaped like a credential, such as a long token;
+the scheme, the host, the rest of the path, and the parameters' names are sent
+as the request carried them. An address written elsewhere, such as in a header,
+the words of an error or a log line, a tool call, or a message to the model, is
+sent as it was written. Terminal
+tabs' bytes are not sent. What reaches
 Sentry is kept under Sentry's retention, not tied to your account, and is not
 erased when you delete your account.
 
@@ -1226,9 +1250,13 @@ sign-in or a link put there, and cuts a sign-in page's address to the page
 itself. It collects nothing else, whatever our PostHog project's settings
 say: no errors, nothing from your browser's console, no network requests,
 no page or network timings, no heatmaps, no chat widget, surveys, or product
-tours, and no feature flags. When you finish signing in, the site names you
-to PostHog by your account's id, name, and email address, which links your
-earlier visits to your account. Your browser contacts PostHog directly, so
+tours, and no feature flags. When you finish signing in, on the page that
+hands the sign-in back to Luke on your Mac, or on the consent page where one
+is shown, the site names you to PostHog by your account's id, name, and
+email address, which links your earlier visits to your account, and counts
+the sign-in once, remembering in your browser which sign-in it last counted.
+The hand-off page is one of the sign-in pages above: not recorded, its
+address cut to the page itself. Your browser contacts PostHog directly, so
 PostHog sees your network address, as it does for the app's recordings.
 
 A link to something in Luke, pasted into Slack, iMessage, or anywhere else

@@ -12,7 +12,6 @@ import {
   HOSTED_API_ERROR,
   type HostedApiError,
   HTTP_STATUS,
-  type PlanDraftFrame,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
   type TaskCodeFrame,
@@ -513,23 +512,6 @@ export class VoiceService {
         taskId: opened.taskId,
         started: opened.started,
         sideband,
-        // The call's plan as its notetaker has it now, sent on a fiber of
-        // the service's own set since the exchange reports it from inside
-        // its own, so the Tasks tab types it in as the call goes on; a
-        // device gone by then takes it nowhere.
-        onPlanDraft: (draft) => {
-          const frame: PlanDraftFrame = {
-            type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
-            planId: opened.taskId,
-            document: draft.document,
-            readAt: draft.readAt,
-            ...(draft.savedAt === undefined ? undefined : { savedAt: draft.savedAt }),
-            ...(draft.sectionEdits === undefined
-              ? undefined
-              : { sectionEdits: draft.sectionEdits }),
-          };
-          this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
-        },
         // What each part of Luke is doing, sent the same way, so the
         // Tasks tab says the voice's state and the backend's apart.
         onActivity: (activity) => {
