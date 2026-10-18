@@ -3,7 +3,7 @@ import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-att
 import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BUTTON_VARIANT, Button } from "@luke/ui";
+import { BUTTON_VARIANT, Button, FormField, TextField } from "@luke/ui";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
@@ -172,31 +172,27 @@ function DescribeField({
   onSave: (words: string) => void;
   onClose: () => void;
 }): React.JSX.Element {
+  const [words, setWords] = useState(value);
+  const keep = () => {
+    onSave(words.trim());
+    onClose();
+  };
   return (
     <span className="picture-describe">
-      <label>
-        <span className="picture-describe-label">{describing.label}</span>
-        <input
-          className="picture-describe-field"
-          defaultValue={value}
-          // biome-ignore lint/a11y/noAutofocus: the field opens on a press of its own tool, which is where the keyboard is going.
-          autoFocus
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              onSave(event.currentTarget.value.trim());
-              onClose();
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              onClose();
-            }
-          }}
-          onBlur={(event) => {
-            onSave(event.currentTarget.value.trim());
-            onClose();
-          }}
-        />
-      </label>
+      <FormField label={describing.label}>
+        {(field) => (
+          <TextField
+            field={field}
+            value={words}
+            // Note that the field opens on a press of its own tool, which is where the keyboard is going.
+            autoFocus
+            onChange={setWords}
+            onEnter={keep}
+            onEscape={onClose}
+            onBlur={keep}
+          />
+        )}
+      </FormField>
     </span>
   );
 }

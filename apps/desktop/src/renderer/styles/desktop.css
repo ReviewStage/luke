@@ -4996,24 +4996,6 @@ button.integration-tool-head:hover,
   gap: var(--luke-space-12);
 }
 
-/* Its name is written where a Settings page's title stands, in the page
-   title role. */
-.automation-editor-name {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-title-size);
-  font-weight: var(--luke-weight-bold);
-  letter-spacing: -0.015em;
-  line-height: var(--luke-type-title-leading);
-  outline: none; /* no ring: the caret in the title's own words shows focus */
-}
-
-.automation-editor-name::placeholder {
-  color: var(--luke-color-text-subtle);
-}
-
 /* The form, drawn as a Settings page: each group's name over a card of
    Settings rows, the groups a section apart. */
 .automation-form {
@@ -5432,8 +5414,7 @@ button.integration-tool-head:hover,
   border-radius: var(--luke-radius-10);
 }
 
-.chat-composer-field,
-.chat-ask-note-field {
+.chat-composer-field {
   width: 100%;
   min-height: 0;
   padding: 0;
@@ -5479,15 +5460,17 @@ button.integration-tool-head:hover,
 }
 
 /* An open ask's note line, the round send at its end where the note is what is sent. */
+/* The note's field and, where the answer is sent by one, its send beside it. */
 .chat-ask-note {
   display: flex;
   align-items: center;
   gap: var(--luke-space-8);
   margin: var(--luke-space-4) 0 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-10);
-  background: var(--luke-color-sidebar);
+}
+
+.chat-ask-note-field {
+  flex: 1;
+  min-width: 0;
 }
 
 .chat-ask-presses {

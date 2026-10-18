@@ -40,6 +40,7 @@ import {
   GAP,
   Stack,
   Switch,
+  TEXT_FIELD_TYPE,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -582,17 +583,13 @@ function InboxFormField({
         <div data-inbox-field={field.type}>
           <FormField label={field.label} description={requiredWords(field)}>
             {(control) => (
-              <input
-                id={control.id}
-                aria-describedby={control["aria-describedby"]}
-                className="settings-input inbox-field-input"
-                type="number"
-                value={value === undefined ? "" : String(value)}
+              <TextField
+                field={control}
+                type={TEXT_FIELD_TYPE.NUMBER}
+                maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+                value={value === undefined ? undefined : Number(value)}
                 disabled={disabled}
-                onChange={(event) => {
-                  const parsed = event.currentTarget.valueAsNumber;
-                  set(Number.isFinite(parsed) ? parsed : undefined);
-                }}
+                onChange={set}
               />
             )}
           </FormField>
