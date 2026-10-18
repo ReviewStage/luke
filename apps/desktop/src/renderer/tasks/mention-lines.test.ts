@@ -187,7 +187,7 @@ test("lines selected in a File tab, ⌥⌘K, are a chip in the agent's box namin
   select(lineText(container, 2), 1, lineText(container, 3), 2);
   const ran = runAppCommand(APP_COMMAND.MENTION_LINES);
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   const card = cardOn(chips[0]);
   pressInComposer(container, "Enter");
   await settle();

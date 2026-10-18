@@ -186,7 +186,7 @@ test("Enter writes the highlighted row as its mention, drawn in the editor as it
   task.press("Enter");
   await act(async () => undefined);
 
-  const chips = [...task.container.querySelectorAll(".plan-document-text .mention-chip")];
+  const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
   assert.deepEqual(
     chips.map((chip) => chip.textContent),
     ["Rollout"],
@@ -314,7 +314,7 @@ test("a section's address pasted whole into the plan is laid in as its chip, cal
   await plan.typeAtEnd(" See ");
   await plan.pasteAtEnd(goal);
 
-  const chips = [...plan.container.querySelectorAll(".plan-document-text .mention-chip")];
+  const chips = [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
   assert.deepEqual(
     chips.map((chip) => chip.textContent),
     ["Goal"],
@@ -361,7 +361,7 @@ test("a bare @ in the plan narrows by its kind's row to the repository's paths, 
   assert.deepEqual(inWeb, ["apps/web", [["apps/web", ["web/", "rollout-store.ts"]]]]);
   assert.deepEqual(climbed, ["apps", [["apps", ["apps/", "web/"]]]]);
   assert.deepEqual(
-    [...plan.container.querySelectorAll(".plan-document-text .mention-chip")].map(
+    [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")].map(
       (chip) => chip.textContent,
     ),
     ["web/"],
@@ -414,7 +414,7 @@ test("on the plan's page an @ typed in the plan offers the pull requests its age
 
   assert.deepEqual(offered, [["Pull requests", ["#3059 feat(billing): bill by seat"]]]);
   assert.deepEqual(
-    [...plan.container.querySelectorAll(".plan-document-text .mention-chip")].map(
+    [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")].map(
       (chip) => chip.textContent,
     ),
     ["#3059 feat(billing): bill by seat"],

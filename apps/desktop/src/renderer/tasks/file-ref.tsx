@@ -1,8 +1,14 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
-import { HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
+import {
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  INLINE_REF_LOOK,
+  INLINE_REF_NAME,
+} from "@luke/ui";
 import { fileFolder, fileName, fileRefText, lineRangeText } from "@luke/voice/code-pane-model";
-import { Tooltip } from "../tooltip";
+import { InlineRef } from "../inline-ref";
 import { shownWhereRead } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
 
@@ -108,33 +114,17 @@ export function FileRef({
   /** Shows the file's tab on the reference's lines; none where the file cannot be opened from here. */
   onOpen: (() => void) | undefined;
 }): React.JSX.Element {
-  const lines = lineRangeText(codeRef);
-  const words = (
-    <>
-      <FileTypeIcon name={fileName(codeRef.path)} />
-      <span className="file-ref-path">
-        <bdi>{codeRef.path}</bdi>
-      </span>
-      {lines === undefined ? null : <span className="file-ref-lines">{lines}</span>}
-    </>
-  );
   return (
-    <Tooltip label={codeRef.path} card={<FileCard path={codeRef.path} note={note} />}>
-      {onOpen === undefined ? (
-        <span className="file-ref" data-file-ref="">
-          {words}
-        </span>
-      ) : (
-        <button
-          type="button"
-          className="file-ref"
-          data-file-ref=""
-          aria-label={`Open ${fileRefText(codeRef)}`}
-          onClick={onOpen}
-        >
-          {words}
-        </button>
-      )}
-    </Tooltip>
+    <InlineRef
+      look={INLINE_REF_LOOK.LINK}
+      glyph={<FileTypeIcon name={fileName(codeRef.path)} />}
+      label={codeRef.path}
+      name={INLINE_REF_NAME.PATH}
+      state={lineRangeText(codeRef)}
+      onPress={onOpen === undefined ? undefined : () => onOpen()}
+      pressLabel={onOpen === undefined ? undefined : `Open ${fileRefText(codeRef)}`}
+      card={<FileCard path={codeRef.path} note={note} />}
+      data-file-ref=""
+    />
   );
 }
