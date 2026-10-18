@@ -1180,6 +1180,19 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
   assert.equal(onCall().checked, true);
   assert.ok(pane.querySelector('[data-inbox-field="number"] .inbox-field-short input'));
   assert.ok(pane.querySelector('[data-inbox-field="text"] .inbox-field-composer .composer-editor'));
+  const reason =
+    pane.querySelector<HTMLElement>('[data-inbox-field="text"]') ?? assert.fail("no Reason");
+  act(() => reason.querySelector<HTMLElement>(".luke-field-label")?.click());
+  assert.equal(
+    document.activeElement,
+    composerEditor(reason),
+    "a press on its name takes the caret in",
+  );
+  assert.equal(
+    document.getElementById(composerEditor(reason).getAttribute("aria-labelledby") ?? "")
+      ?.textContent,
+    "Reason",
+  );
 });
 
 test("the pane's crumbs lead with their tabs' glyphs, the plan's document and the agent's mark, and open the item's plan and its agent's tab, each leaving the Inbox, with no other way out in its bar", async () => {
@@ -2390,6 +2403,56 @@ test("an answered item's note draws a mention it holds as the chip a sent messag
 
   assert.equal(note?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
   assert.equal(note?.textContent, "See rollout-store.ts");
+});
+
+test("an answered form draws its values a field a line under the answer's head, a text field's words as a sent message's, so a mention it holds is its chip and never its link's words", async () => {
+  const file = mentionMarkdown(
+    { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" },
+    "rollout-store.ts",
+    { workspace: BILLING.workspaceId, repository: "acme/relay" },
+  );
+  const filled: InboxItem = {
+    ...RETRY,
+    response: {
+      type: INBOX_RESPONSE.FORM,
+      fields: [
+        { type: INBOX_FIELD.SELECT, label: "Effort", options: ["high", "xhigh"] },
+        { type: INBOX_FIELD.TEXT, label: "Reason" },
+        { type: INBOX_FIELD.BOOLEAN, label: "Page on-call" },
+      ],
+    },
+    answer: {
+      reply: INBOX_REPLY.SUBMITTED,
+      values: [
+        { label: "Effort", value: "high" },
+        { label: "Reason", value: `See ${file}` },
+        { label: "Page on-call", value: false },
+      ],
+    },
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, filled]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  const values = itemPane(page).querySelector(
+    '[data-inbox-comment="answered"] [data-inbox-values]',
+  );
+
+  assert.deepEqual(
+    [...(values?.querySelectorAll("li") ?? [])].map((line) => [
+      line.querySelector(".inbox-value-label")?.textContent,
+      line.querySelector(".inbox-value-words")?.textContent,
+    ]),
+    [
+      ["Effort", "high"],
+      ["Reason", "See rollout-store.ts"],
+      ["Page on-call", "no"],
+    ],
+  );
+  assert.equal(values?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
 });
 
 test("what an item's box said of a dictation that failed stays with that item, and the next item's box opens without it", async () => {

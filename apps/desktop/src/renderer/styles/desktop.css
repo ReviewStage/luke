@@ -3774,6 +3774,13 @@ body:has(.app-stage[data-capture="true"])
   flex: none;
 }
 
+/* A comment holding a form's composer field lets what stands over the
+   field, its @ and / lists, run past its top and foot, clipping only what
+   runs long across, as every comment does. */
+.inbox-comment-body:has(.inbox-field-composer) {
+  overflow-y: visible;
+}
+
 /* A form's fields stacked, each its name over its control at one left edge
    (`inbox-pane.tsx`'s FormFields): "Optional" quiet after the name of one
    that may be left empty, a number in a short field, and a select's name
@@ -3936,6 +3943,36 @@ body:has(.app-stage[data-capture="true"])
 .inbox-todo-step:disabled,
 .inbox-todo-pill:disabled {
   opacity: 0.4;
+}
+
+/* A settled form's values, a field a line in the form's order: its name in
+   the muted ink, then what was put in it, a text field's words drawn as a
+   sent message's are, their mentions chips. */
+.inbox-values {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inbox-value {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--luke-space-8);
+}
+
+.inbox-value-label {
+  flex: none;
+  color: var(--luke-color-text-muted);
+}
+
+.inbox-value-words {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted

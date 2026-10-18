@@ -4,7 +4,7 @@ import { INBOX_BOUNDS, type InboxField } from "@luke/features/inbox-wire";
 import type { FieldControl } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useSideBundles } from "../bundle-loader";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract";
@@ -23,7 +23,8 @@ import type { SkillSource } from "./skill-picker";
  * value, links and all, so a mention reaches the agent as a note's does.
  * Enter sends the item's answer, or takes the keyboard to what it lacks,
  * as Enter anywhere in the item does, Shift+Enter is a new line, and
- * Escape leaves the field. Like the box, it never takes the caret as the
+ * Escape leaves the field. A press on the field's name takes the caret
+ * into it, as a label's press does for an input. Like the box, it never takes the caret as the
  * item opens, because K and J step the list.
  */
 
@@ -66,6 +67,15 @@ export function InboxFormText({
   const bundle = useAtomValue(useSideBundles().planEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
   const { agent } = doors;
+  // Note that a press on the field's name takes the caret into its words, as a label does for its input, since an editor is no labelable element.
+  const { labelId } = control;
+  useEffect(() => {
+    const name = document.getElementById(labelId);
+    if (name === null) return;
+    const focus = () => editor.current?.focus();
+    name.addEventListener("click", focus);
+    return () => name.removeEventListener("click", focus);
+  }, [labelId]);
   const pickers = useComposerPickers({
     editor,
     room,
@@ -102,7 +112,11 @@ export function InboxFormText({
         maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
         takesFocus={false}
         {...pickers.field}
-        aria={{ ...pickers.field.aria, "aria-describedby": control["aria-describedby"] }}
+        aria={{
+          ...pickers.field.aria,
+          "aria-labelledby": labelId,
+          "aria-describedby": control["aria-describedby"],
+        }}
         onEnter={doors.onEnter}
         onPasteFiles={() => false}
       />

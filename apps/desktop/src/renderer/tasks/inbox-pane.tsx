@@ -1,6 +1,7 @@
 import type { FileChip } from "@luke/features/attachment-model";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import {
+  fieldValueWords,
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
@@ -53,6 +54,7 @@ import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
 import { useClipped } from "@luke/ui/use-clipped";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
+import { isWireString } from "@luke/wire";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref";
@@ -1267,6 +1269,42 @@ function CommentFiles({
 /** No files, one array so a comment that has none hands down the same one. */
 const NO_FILES: NonNullable<InboxItem["answerFiles"]> = [];
 
+/**
+ * A form's values as the developer filled them, one a line in the form's
+ * order: each field's name, then what was put in it, a text field's words
+ * drawn as the agent's tab draws a sent message, so a mention they hold is
+ * its chip, and any other field's value in its words, "yes" or "no" for a
+ * yes or no.
+ */
+function FormValues({ item }: { item: InboxItem }): React.JSX.Element | null {
+  const values = item.answer?.values ?? [];
+  if (values.length === 0) return null;
+  const response = item.response;
+  const texts = new Set(
+    knownResponse(response) && response.type === INBOX_RESPONSE.FORM
+      ? response.fields
+          .filter((field) => field.type === INBOX_FIELD.TEXT)
+          .map((field) => field.label)
+      : [],
+  );
+  return (
+    <ul className="inbox-values" data-inbox-values="">
+      {values.map(({ label, value }) => (
+        <li key={label} className="inbox-value">
+          <span className="inbox-value-label">{label}</span>
+          <div className="inbox-words inbox-value-words">
+            {texts.has(label) && isWireString(value) ? (
+              <SentWords text={value} />
+            ) : (
+              fieldValueWords(value)
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** The developer's answer as their comment: who answered, by their face and name, when, and where it went, then what they picked as a chip, the files they attached, and what they wrote. */
 function Answered({
   item,
@@ -1319,9 +1357,7 @@ function Answered({
           <span>{pick}</span>
         </span>
       )}
-      {settled.values === undefined ? null : (
-        <p className="inbox-words inbox-lines">{settled.values}</p>
-      )}
+      {settled.values === undefined ? null : <FormValues item={item} />}
       <CommentFiles
         itemId={item.id}
         files={item.answerFiles ?? NO_FILES}

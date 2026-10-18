@@ -893,14 +893,10 @@
 }
 
 /* An Inbox item's words and what was filled in, which a reader may select
-   and copy; what was filled in keeps the lines it was typed on. */
+   and copy. */
 .inbox-words {
   margin: 0;
   user-select: text;
-}
-
-.inbox-lines {
-  white-space: pre-line;
 }
 
 /* A link the window does not open: its address beside its label, to copy. */
