@@ -155,6 +155,8 @@ export const GATEWAY_METHOD = {
   ISSUES_READ: "issues.read",
   ISSUES_CREATE: "issues.create",
   ISSUES_CHANGE: "issues.change",
+  /** A workspace's Factory world, read whole as it stands now. */
+  FACTORY_WORLD: "factory.world",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",

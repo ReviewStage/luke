@@ -97,6 +97,11 @@ import {
   providerKeysAnswerViewSchema,
 } from "@luke/features/coding-agent-view";
 import {
+  type FactoryWorldView,
+  factoryWorldParamsSchema,
+  factoryWorldViewSchema,
+} from "@luke/features/factory-world-view";
+import {
   type FeedbackResult,
   type FeedbackSubmission,
   feedbackSubmission,
@@ -485,6 +490,8 @@ export const ACT_KIND = {
   ISSUES_READ: "issues.read",
   ISSUES_CREATE: "issues.create",
   ISSUES_CHANGE: "issues.change",
+  /** A workspace's Factory world, read whole as it stands now, for the Factory page's worlds. */
+  FACTORY_WORLD: "factory.world",
   /**
    * Settings › API keys: the account's own provider keys read as hints and
    * statuses, one saved, one removed. The save's payload is the one place a
@@ -1386,6 +1393,11 @@ export const ACT = {
     payload: actSchema(issueChangeParamsSchema),
     result: wireResult<IssueView>(isReadable(issueViewSchema)),
     refusal: "Could not change the issue on this system.",
+  },
+  [ACT_KIND.FACTORY_WORLD]: {
+    payload: actSchema(factoryWorldParamsSchema),
+    result: wireResult<FactoryWorldView>(isReadable(factoryWorldViewSchema)),
+    refusal: "Could not read the workspace's world on this system.",
   },
   [ACT_KIND.PROVIDER_KEYS_READ]: {
     payload: noPayload,

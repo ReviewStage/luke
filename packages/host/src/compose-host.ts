@@ -1,6 +1,7 @@
 import {
   HostedAutomationClient,
   HostedCodingAgentClient,
+  HostedFactoryWorldClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
   HostedIssueClient,
@@ -30,6 +31,7 @@ import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
 import { composeAutomations } from "./compose-automations.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
+import { composeFactory } from "./compose-factory.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeIssues } from "./compose-issues.js";
 import { composeLive } from "./compose-live.js";
@@ -76,6 +78,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.CODING_AGENTS,
   HOST_CONCERN.AUTOMATIONS,
   HOST_CONCERN.ISSUES,
+  HOST_CONCERN.FACTORY,
   HOST_CONCERN.INTEGRATIONS,
   HOST_CONCERN.MAC_COMMANDS,
 ];
@@ -197,6 +200,14 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         ...account.token,
       }),
     });
+    const factory = yield* composeFactory({
+      kernel,
+      account,
+      client: new HostedFactoryWorldClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+    });
     const integrations = yield* composeIntegrations({
       kernel,
       account,
@@ -289,6 +300,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
       [HOST_CONCERN.AUTOMATIONS]: automations,
       [HOST_CONCERN.ISSUES]: issues,
+      [HOST_CONCERN.FACTORY]: factory,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
       [HOST_CONCERN.MAC_TERMINAL]: macTerminal,

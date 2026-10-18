@@ -183,6 +183,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       integrations: { host: operator.host },
       automations: { host: operator.host },
       issues: { host: operator.host },
+      factory: { host: operator.host },
     },
     platformRows,
   );
