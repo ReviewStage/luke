@@ -1208,7 +1208,6 @@ button.file-ref:hover .file-ref-path {
    height of a tab's bar whatever it holds, words alone or nothing yet, its
    words in the caption's type. */
 .file-view-bar {
-  container: file-bar / inline-size;
   display: flex;
   min-width: 0;
   min-height: var(--secondary-bar-height);
@@ -1254,13 +1253,10 @@ button.file-ref:hover .file-ref-path {
   white-space: nowrap;
 }
 
-/* The bar's path as breadcrumbs: each crumb a press that lists where it
-   stands, the chevrons between plain. The path gives way in the stylesheet
-   alone (file-breadcrumbs.tsx): every crumb narrows, cut short at its end,
-   the folders first, then the repository, the file's own name last, clipped
-   past the keyboard's ring on a crumb, which stands as tall as the path; and
-   on a narrow bar the folders between the repository and the file's own
-   folder stand as one "…" crumb (below). */
+/* A path drawn in the bar's breadcrumbs' own rows rather than `@luke/ui`'s
+   `Breadcrumbs`, as the Inbox pane's is: each crumb gives way, by its
+   share, down to its first letters and the ellipsis, clipped past the
+   keyboard's ring on a crumb, the last giving way last of all. */
 .file-breadcrumbs {
   position: relative;
   min-width: 0;
@@ -1278,9 +1274,6 @@ button.file-ref:hover .file-ref-path {
   list-style: none;
 }
 
-/* A crumb gives way, by its share, down to its first letters and the
-   ellipsis, its chevron always standing before it: the repository and the
-   folders first, and the file's own name last of all. */
 .file-breadcrumbs li {
   display: flex;
   min-width: calc(2.5em + 12px);
@@ -1288,16 +1281,8 @@ button.file-ref:hover .file-ref-path {
   align-items: center;
 }
 
-.file-breadcrumbs li:is([data-crumb="0"], [data-folded-crumb="all"]) {
-  min-width: 2.5em;
-}
-
-.file-breadcrumbs li[data-crumb="0"] {
-  flex-shrink: 9;
-}
-
-/* Note that the file's share is a whole one, because shares summing to
-   less than one leave the rest of the overflow standing. */
+/* Note that the last crumb's share is a whole one, because shares summing
+   to less than one leave the rest of the overflow standing. */
 .file-breadcrumbs li:last-child {
   flex-shrink: 1;
 }
@@ -1307,76 +1292,6 @@ button.file-ref:hover .file-ref-path {
 .file-breadcrumbs .file-breadcrumb-separator {
   min-width: 0;
   flex-shrink: 0;
-}
-
-/* A "…" stands for crumbs only where the bar is narrow enough to ask for
-   it. */
-.file-breadcrumbs li[data-folded-crumb] {
-  display: none;
-  flex-shrink: 0;
-}
-
-/* A path six folders deep or deeper draws its middle folders as the one
-   "…" on a bar of any width it does not fold further, since their floors
-   alone would push the file's own name out of the bar. */
-@container file-bar (min-width: 300px) {
-  .file-breadcrumbs:has(li[data-crumb="6"][data-folder="true"]) li[data-folded-crumb="middle"] {
-    display: flex;
-  }
-
-  .file-breadcrumbs:has(li[data-crumb="6"][data-folder="true"]) li[data-middle="true"] {
-    display: none;
-  }
-}
-
-/* A bar narrower than 520px draws the folders between the repository and
-   the file's own folder as one "…", which names them in its pill. */
-@container file-bar (max-width: 519px) {
-  .file-breadcrumbs li[data-folded-crumb="middle"] {
-    display: flex;
-  }
-
-  .file-breadcrumbs li[data-middle="true"] {
-    display: none;
-  }
-}
-
-/* A bar narrower than 300px draws the repository and every folder as one
-   "…", the file's own name alone after it. */
-@container file-bar (max-width: 299px) {
-  .file-breadcrumbs li[data-folded-crumb="all"] {
-    display: flex;
-  }
-
-  .file-breadcrumbs li:is([data-folded-crumb="middle"], [data-folder="true"]) {
-    display: none;
-  }
-}
-
-.file-breadcrumb {
-  min-width: 0;
-  padding: var(--luke-space-2) var(--luke-space-4);
-  overflow: hidden;
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.file-breadcrumb:hover,
-.file-breadcrumb[aria-expanded="true"] {
-  background: var(--luke-color-fill-selected);
-  color: var(--luke-color-text);
-}
-
-.file-breadcrumb[aria-current="page"] {
-  color: var(--luke-color-text);
 }
 
 .file-breadcrumb-separator {

@@ -4,6 +4,7 @@ export * from "./components/attachment-chip/attachment-chip.js";
 export * from "./components/auth-page/auth-page.js";
 export * from "./components/avatar/avatar.js";
 export * from "./components/badge/badge.js";
+export * from "./components/breadcrumbs/breadcrumbs.js";
 export * from "./components/button/button.js";
 export * from "./components/card/card.js";
 export * from "./components/checkbox/checkbox.js";

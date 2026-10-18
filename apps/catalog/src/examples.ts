@@ -4,6 +4,7 @@ import { ATTACHMENT_CHIPS_EXAMPLE } from "./examples/attachment-chips";
 import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { AVATARS_EXAMPLE } from "./examples/avatars";
 import { BADGES_EXAMPLE } from "./examples/badges";
+import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CARDS_EXAMPLE } from "./examples/cards";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
@@ -65,6 +66,7 @@ export const EXAMPLES: readonly Example[] = [
   ATTACHMENT_CHIPS_EXAMPLE,
   AVATARS_EXAMPLE,
   BADGES_EXAMPLE,
+  BREADCRUMBS_EXAMPLE,
   BUTTONS_EXAMPLE,
   CARDS_EXAMPLE,
   CHIPS_EXAMPLE,
