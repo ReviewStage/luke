@@ -233,7 +233,7 @@ test("a plan's item in the window's Inbox reads its links through the plan's wor
     sweep: undefined,
   });
 
-  assert.deepEqual(chips(container), [["relay#42 Send invitations in batches", "Merged"]]);
+  assert.deepEqual(chips(container), [["relay#42", "Merged"]]);
   assert.deepEqual(readThrough(asked), ["workspace-acme acme/relay#42"]);
 });
 
@@ -249,7 +249,7 @@ test("an item of a workspace an older service answered with no slug still reads 
     workspaces: [ACME, unslugged],
   });
 
-  assert.deepEqual(chips(container), [["ledger#5 Settle the ledger nightly", "Merged"]]);
+  assert.deepEqual(chips(container), [["ledger#5", "Merged"]]);
   assert.deepEqual(readThrough(asked), ["workspace-globex globex/ledger#5"]);
 });
 
@@ -263,7 +263,7 @@ test("an item of an agent with no plan reads its links through the agent's own w
     },
   });
 
-  assert.deepEqual(chips(container), [["ledger#5 Settle the ledger nightly", "Merged"]]);
+  assert.deepEqual(chips(container), [["ledger#5", "Merged"]]);
   assert.deepEqual(readThrough(asked), ["workspace-globex globex/ledger#5"]);
 });
 
