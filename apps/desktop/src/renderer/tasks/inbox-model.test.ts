@@ -16,7 +16,6 @@ import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { test } from "vitest";
 import {
-  anyNeedsYou,
   CODE_READ,
   codeNotice,
   codeReadOf,
@@ -26,9 +25,12 @@ import {
   holderName,
   INBOX_GROUPING,
   INBOX_MISSING,
+  INBOX_SHOW,
   type InboxDraft,
   type InboxListView,
+  type InboxShow,
   inboxBoard,
+  inboxCounts,
   inboxList,
   inboxMissing,
   inboxPreview,
@@ -484,7 +486,7 @@ test("the list holds every item the latest changed first, under its plan, the pl
     drawn(
       inboxList(TASKS, {
         grouping: INBOX_GROUPING.TASK,
-        waitingOnly: false,
+        show: INBOX_SHOW.ALL,
         readerId: undefined,
         chosen,
       }),
@@ -497,8 +499,8 @@ test("the list holds every item the latest changed first, under its plan, the pl
   assert.deepEqual(
     drawn(
       inboxList(TASKS, {
-        grouping: INBOX_GROUPING.NEWEST,
-        waitingOnly: false,
+        grouping: INBOX_GROUPING.NONE,
+        show: INBOX_SHOW.ALL,
         readerId: undefined,
         chosen,
       }),
@@ -510,7 +512,7 @@ test("the list holds every item the latest changed first, under its plan, the pl
 test("Needs you lists only what waits, and the item chosen where one is given, as the steps through the list keep it, and a plan with nothing listed has no group", () => {
   const waiting = {
     grouping: INBOX_GROUPING.TASK,
-    waitingOnly: true,
+    show: INBOX_SHOW.NEEDS_YOU,
     readerId: undefined,
   } as const;
   assert.deepEqual(drawn(inboxList(TASKS, { ...waiting, chosen: undefined })), [
@@ -541,20 +543,20 @@ test("Needs you lists only what waits, and the item chosen where one is given, a
 });
 
 test("with nothing chosen, the first listed item that waits stands chosen, else the first listed, and nothing where nothing is listed", () => {
-  const all = { waitingOnly: false, readerId: undefined, chosen: undefined } as const;
+  const all = { show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined } as const;
   assert.equal(
     firstChoice(inboxList(TASKS, { ...all, grouping: INBOX_GROUPING.TASK }))?.item.id,
     "threshold",
   );
   assert.equal(
-    firstChoice(inboxList(TASKS, { ...all, grouping: INBOX_GROUPING.NEWEST }))?.item.id,
+    firstChoice(inboxList(TASKS, { ...all, grouping: INBOX_GROUPING.NONE }))?.item.id,
     "expiry",
   );
   const settled = [
     { holder: taskHolder(BILLING), items: [item({ id: "done", status: INBOX_STATUS.ANSWERED })] },
   ];
   assert.equal(
-    firstChoice(inboxList(settled, { ...all, grouping: INBOX_GROUPING.NEWEST }))?.item.id,
+    firstChoice(inboxList(settled, { ...all, grouping: INBOX_GROUPING.NONE }))?.item.id,
     "done",
   );
   assert.equal(firstChoice(inboxList([], { ...all, grouping: INBOX_GROUPING.TASK })), undefined);
@@ -562,8 +564,8 @@ test("with nothing chosen, the first listed item that waits stands chosen, else 
 
 test("the next item that needs you follows the chosen one in the list's order, wrapping round to its top, never the chosen one itself, and none where nothing else needs you", () => {
   const newest = inboxList(TASKS, {
-    grouping: INBOX_GROUPING.NEWEST,
-    waitingOnly: false,
+    grouping: INBOX_GROUPING.NONE,
+    show: INBOX_SHOW.ALL,
     readerId: undefined,
     chosen: undefined,
   });
@@ -583,7 +585,7 @@ test("the next item that needs you follows the chosen one in the list's order, w
         ],
       },
     ],
-    { grouping: INBOX_GROUPING.NEWEST, waitingOnly: false, readerId: undefined, chosen: undefined },
+    { grouping: INBOX_GROUPING.NONE, show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined },
   );
   assert.equal(
     nextNeedingYou(settled, "only", () => false),
@@ -615,34 +617,32 @@ const SHARED = [
 ];
 
 test("only an open item the reader's own agent asks needs them, or one whose starter the service does not name: Needs you leaves a teammate's out, though the list holds it, and the Inbox's attention mark does not count it", () => {
-  const newest = { grouping: INBOX_GROUPING.NEWEST, chosen: undefined } as const;
+  const newest = { grouping: INBOX_GROUPING.NONE, chosen: undefined } as const;
   assert.deepEqual(
-    drawn(inboxList(SHARED, { ...newest, waitingOnly: true, readerId: ME.userId })),
+    drawn(inboxList(SHARED, { ...newest, show: INBOX_SHOW.NEEDS_YOU, readerId: ME.userId })),
     ["mine-invites", "mine", "unnamed"],
   );
   assert.deepEqual(
-    drawn(inboxList(SHARED, { ...newest, waitingOnly: false, readerId: ME.userId })),
+    drawn(inboxList(SHARED, { ...newest, show: INBOX_SHOW.ALL, readerId: ME.userId })),
     ["danas-answered", "danas", "kais", "mine-invites", "mine", "unnamed"],
   );
   assert.deepEqual(
-    drawn(inboxList(SHARED, { ...newest, waitingOnly: true, readerId: DANA.userId })),
+    drawn(inboxList(SHARED, { ...newest, show: INBOX_SHOW.NEEDS_YOU, readerId: DANA.userId })),
     ["danas", "unnamed"],
     "the same list read by the teammate needs them for their own",
   );
   const teammates = [{ holder: taskHolder(BILLING), items: [item({ id: "d", startedBy: DANA })] }];
-  assert.equal(anyNeedsYou(teammates, ME.userId), false);
-  assert.equal(anyNeedsYou(teammates, DANA.userId), true);
-  assert.equal(
-    anyNeedsYou(teammates, undefined),
-    true,
-    "a reader not known yet is asked everything",
-  );
+  const needingYou = (readerId: string | undefined) =>
+    inboxCounts(teammates, readerId)[INBOX_SHOW.NEEDS_YOU];
+  assert.equal(needingYou(ME.userId), 0);
+  assert.equal(needingYou(DANA.userId), 1);
+  assert.equal(needingYou(undefined), 1, "a reader not known yet is asked everything");
 });
 
 test("a teammate's open item is never the one chosen first nor the next that needs you, which go to the reader's own", () => {
   const list = inboxList(SHARED, {
-    grouping: INBOX_GROUPING.NEWEST,
-    waitingOnly: false,
+    grouping: INBOX_GROUPING.NONE,
+    show: INBOX_SHOW.ALL,
     readerId: ME.userId,
     chosen: undefined,
   });
@@ -655,10 +655,91 @@ test("a teammate's open item is never the one chosen first nor the next that nee
   );
 });
 
+/** The shared items with two of them unread: a teammate's settled one and the reader's own open one. */
+const UNREAD_SHARED = SHARED.map(({ holder, items }) => ({
+  holder,
+  items: items.map((each) =>
+    each.id === "danas-answered" || each.id === "mine" ? { ...each, unread: true } : each,
+  ),
+}));
+
+test("each tab lists its own items and counts them: Needs you the reader's own open ones, Unread anyone's unread ones whether open or settled, All open every open one, and Everything all of them", () => {
+  const rows = (show: InboxShow) =>
+    drawn(
+      inboxList(UNREAD_SHARED, {
+        grouping: INBOX_GROUPING.NONE,
+        show,
+        readerId: ME.userId,
+        chosen: undefined,
+      }),
+    );
+  assert.deepEqual(rows(INBOX_SHOW.NEEDS_YOU), ["mine-invites", "mine", "unnamed"]);
+  assert.deepEqual(rows(INBOX_SHOW.UNREAD), ["danas-answered", "mine"]);
+  assert.deepEqual(rows(INBOX_SHOW.OPEN), ["danas", "kais", "mine-invites", "mine", "unnamed"]);
+  assert.deepEqual(rows(INBOX_SHOW.ALL), [
+    "danas-answered",
+    "danas",
+    "kais",
+    "mine-invites",
+    "mine",
+    "unnamed",
+  ]);
+  assert.deepEqual(inboxCounts(UNREAD_SHARED, ME.userId), {
+    [INBOX_SHOW.NEEDS_YOU]: 3,
+    [INBOX_SHOW.UNREAD]: 2,
+    [INBOX_SHOW.OPEN]: 5,
+    [INBOX_SHOW.ALL]: 6,
+  });
+});
+
+test("the first item chosen, the next that needs you, and the steps either side follow the tab shown, the chosen item keeping its place among the steps once the tab leaves it out", () => {
+  const unread = inboxList(UNREAD_SHARED, {
+    grouping: INBOX_GROUPING.NONE,
+    show: INBOX_SHOW.UNREAD,
+    readerId: ME.userId,
+    chosen: undefined,
+  });
+  assert.equal(firstChoice(unread)?.item.id, "mine");
+  assert.equal(
+    nextNeedingYou(unread, "danas-answered", () => false)?.item.id,
+    "mine",
+    "Unread holds no other item that needs you than the reader's unread one",
+  );
+  assert.equal(inboxSteps(unread, "danas-answered", () => false)?.next?.item.id, "mine");
+  // Note that an item read once opened leaves Unread's rows but not its steps.
+  const read = UNREAD_SHARED.map(({ holder, items }) => ({
+    holder,
+    items: items.map((each) => (each.id === "mine" ? { ...each, unread: false } : each)),
+  }));
+  const steps = inboxList(read, {
+    grouping: INBOX_GROUPING.NONE,
+    show: INBOX_SHOW.UNREAD,
+    readerId: ME.userId,
+    chosen: "mine",
+  });
+  assert.equal(inboxSteps(steps, "mine", () => false)?.previous?.item.id, "danas-answered");
+  const open = inboxList(UNREAD_SHARED, {
+    grouping: INBOX_GROUPING.NONE,
+    show: INBOX_SHOW.OPEN,
+    readerId: ME.userId,
+    chosen: undefined,
+  });
+  assert.equal(
+    firstChoice(open)?.item.id,
+    "mine-invites",
+    "All open still chooses the reader's own first, past a teammate's newer one",
+  );
+  assert.equal(
+    inboxSteps(open, "danas", () => false)?.previous,
+    undefined,
+    "the settled item newer than it is not a step",
+  );
+});
+
 test("grouped by person, the reader's own items stand first as You, then each teammate's, the one whose item changed latest first, each item keeping the plan that holds it", () => {
   const view = inboxList(SHARED, {
     grouping: INBOX_GROUPING.PERSON,
-    waitingOnly: false,
+    show: INBOX_SHOW.ALL,
     readerId: ME.userId,
     chosen: undefined,
   });
@@ -675,7 +756,7 @@ test("grouped by person, the reader's own items stand first as You, then each te
     drawn(
       inboxList(SHARED, {
         grouping: INBOX_GROUPING.PERSON,
-        waitingOnly: true,
+        show: INBOX_SHOW.NEEDS_YOU,
         readerId: ME.userId,
         chosen: "kais",
       }),
@@ -691,7 +772,7 @@ test("grouped by person, the reader's own items stand first as You, then each te
 test("grouped by person, a folded person's items are stepped past but for the one chosen", () => {
   const view = inboxList(SHARED, {
     grouping: INBOX_GROUPING.PERSON,
-    waitingOnly: false,
+    show: INBOX_SHOW.ALL,
     readerId: ME.userId,
     chosen: undefined,
   });

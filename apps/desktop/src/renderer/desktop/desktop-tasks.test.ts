@@ -387,18 +387,14 @@ async function narrowTaskInbox(
         : "",
     ],
     title: () => tab.querySelector("[data-inbox-title]")?.textContent,
-    /** The list's head as a reader meets it: its name, and Needs you's pressed state. */
-    head: () => {
-      const head = tab.querySelector(".inbox-tasks header");
-      const needsYou = head?.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]');
-      return [head?.querySelector("h1")?.textContent, needsYou?.getAttribute("aria-pressed")];
-    },
-    pressNeedsYou: () =>
-      act(() =>
-        tab
-          .querySelector<HTMLButtonElement>('.inbox-tasks button[aria-label="Needs you"]')
-          ?.click(),
-      ),
+    /** The list's head as a reader meets it: its name, and the tab it shows. */
+    head: () => [
+      tab.querySelector(".inbox-tasks header h1")?.textContent,
+      tab.querySelector('.inbox-tasks [role="tab"][aria-selected="true"] .luke-tab-label')
+        ?.textContent,
+    ],
+    pressTab: (name: string) => act(() => taskInboxTab(tab, name)?.click()),
+    pressNeedsYou: () => act(() => taskInboxTab(tab, "Needs you")?.click()),
     rows: () =>
       [...tab.querySelectorAll(".inbox-tasks .luke-list-row-title")].map((row) => row.textContent),
     /** Needs you's empty state in the list as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
@@ -439,6 +435,22 @@ async function narrowTaskInbox(
   };
 }
 
+/** The tab under a task's Inbox's title named `name`. */
+function taskInboxTab(tab: HTMLElement, name: string): HTMLButtonElement | undefined {
+  return [...tab.querySelectorAll<HTMLButtonElement>('.inbox-tasks [role="tab"]')].find(
+    (each) => each.querySelector(".luke-tab-label")?.textContent === name,
+  );
+}
+
+/** Where a task's own Inbox keeps the tab it shows, apart from the window's, and where its Needs you kept its press before the tabs. */
+const TASK_SHOW_KEY = "luke.taskInboxShow";
+const TASK_EARLIER_SHOW_KEY = "luke.taskInboxWaitingOnly";
+
+/** Opens every task's own Inbox on Everything, as a test of what it pages through over settled items asks. */
+function showEverything(): void {
+  window.localStorage.setItem(TASK_SHOW_KEY, JSON.stringify("all"));
+}
+
 test("a task's Inbox tab too narrow for its list and the item side by side is the item it holds, with no way back to a list of one", async () => {
   const inbox = await narrowTaskInbox([
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
@@ -458,29 +470,50 @@ function approvedItem(id: string, title: string, at: number): InboxItem {
   };
 }
 
-test("a task's Inbox heads its list with the Inbox's name and Needs you, whose press lists only what needs you, kept across a relaunch", async () => {
+test("a task's Inbox heads its list with the Inbox's name and its tabs, opening on All open; Needs you lists only what needs you, and the tab pressed is kept across a relaunch apart from the window's", async () => {
   window.localStorage.clear();
+  window.localStorage.setItem("luke.inboxShow", JSON.stringify("unread"));
   const items = [
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ];
   let inbox = await narrowTaskInbox(items, false, 1_200);
-  assert.deepEqual(inbox.head(), ["Inbox", "false"]);
+  assert.deepEqual(inbox.head(), ["Inbox", "All open"]);
+  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
+  inbox.pressTab("Everything");
   assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
 
   inbox.pressNeedsYou();
-  assert.deepEqual(inbox.head(), ["Inbox", "true"]);
+  assert.deepEqual(inbox.head(), ["Inbox", "Needs you"]);
   assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
   inbox.unmount();
 
   inbox = await narrowTaskInbox(items, false, 1_200);
-  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"], "Needs you outlives a relaunch");
+  assert.deepEqual(inbox.head(), ["Inbox", "Needs you"], "the tab outlives a relaunch");
   inbox.unmount();
+  window.localStorage.clear();
+});
+
+test("a task's Inbox whose Needs you was pressed before the tabs opens on the Needs you tab, and one left off on Everything", async () => {
+  const items = [
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+  ];
+  for (const [pressed, shown] of [
+    [true, "Needs you"],
+    [false, "Everything"],
+  ] as const) {
+    window.localStorage.clear();
+    window.localStorage.setItem(TASK_EARLIER_SHOW_KEY, JSON.stringify(pressed));
+    const inbox = await narrowTaskInbox(items, false, 1_200);
+    assert.deepEqual(inbox.head(), ["Inbox", shown]);
+    inbox.unmount();
+  }
   window.localStorage.clear();
 });
 
 test("one column wide, a task's Inbox filtered to what needs you pages through only those", async () => {
   window.localStorage.clear();
+  showEverything();
   const inbox = await narrowTaskInbox([
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
@@ -497,8 +530,9 @@ test("one column wide, a task's Inbox filtered to what needs you pages through o
   inbox.unmount();
 });
 
-test("one column wide, a task's Inbox filtered down to one item still offers its way back, to the list that holds Needs you", async () => {
+test("one column wide, a task's Inbox filtered down to one item still offers its way back, to the list that holds the tabs", async () => {
   window.localStorage.clear();
+  showEverything();
   const inbox = await narrowTaskInbox([
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
@@ -508,7 +542,7 @@ test("one column wide, a task's Inbox filtered down to one item still offers its
   act(() => inbox.row("Expire after 7 days?")?.click());
   assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
   act(() => inbox.back()?.click());
-  assert.deepEqual(inbox.head(), ["Inbox", "true"]);
+  assert.deepEqual(inbox.head(), ["Inbox", "Needs you"]);
   window.localStorage.clear();
   inbox.unmount();
 });
@@ -571,8 +605,9 @@ test("with Needs you on, the item a task's Inbox chose for itself stays shown on
   inbox.unmount();
 });
 
-test("a task's Inbox holding only settled items, Needs you pressed on, lists no row and says nothing needs you with Show all, wide or one column wide, and Show all turns the filter off", async () => {
+test("a task's Inbox holding only settled items, on the Needs you tab, lists no row and says nothing needs you with Show everything, wide or one column wide, whose press shows Everything", async () => {
   window.localStorage.clear();
+  showEverything();
   const items = [
     approvedItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
@@ -580,31 +615,31 @@ test("a task's Inbox holding only settled items, Needs you pressed on, lists no 
   const wide = await narrowTaskInbox(items, false, 1_200);
   assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   wide.pressNeedsYou();
-  assert.deepEqual(wide.head(), ["Inbox", "true"]);
+  assert.deepEqual(wide.head(), ["Inbox", "Needs you"]);
   assert.deepEqual(wide.rows(), [], "the item read is not listed under a filter leaving it out");
   assert.deepEqual(wide.filteredOut(), [
     "Nothing needs you",
     "You've answered everything",
-    "Show all",
+    "Show everything",
   ]);
   assert.equal(wide.title(), "Resend on bounce?", "the item read stays shown beside the list");
   wide.showAll();
-  assert.deepEqual(wide.head(), ["Inbox", "false"]);
+  assert.deepEqual(wide.head(), ["Inbox", "Everything"]);
   assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   wide.pressNeedsYou();
   wide.unmount();
 
-  // Opened again one column wide, Needs you kept, nothing stands chosen, so the list stands alone and says so.
+  // Opened again one column wide, the Needs you tab kept, nothing stands chosen, so the list stands alone and says so.
   const narrow = await narrowTaskInbox(items);
   assert.deepEqual(narrow.standing(), ["list", ""]);
-  assert.equal(narrow.filteredOut()?.[2], "Show all");
+  assert.equal(narrow.filteredOut()?.[2], "Show everything");
   narrow.showAll();
   assert.deepEqual(
     narrow.standing(),
     ["list", ""],
-    "Show all leaves the rows it brings back standing",
+    "Show everything leaves the rows it brings back standing",
   );
-  assert.deepEqual(narrow.head(), ["Inbox", "false"]);
+  assert.deepEqual(narrow.head(), ["Inbox", "Everything"]);
   assert.deepEqual(narrow.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   window.localStorage.clear();
   narrow.unmount();
