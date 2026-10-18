@@ -47,7 +47,6 @@ export function CopyMessageAction({
         <MessageAction
           label={COPY_LABEL}
           tooltip={copyHint(state, COPY_LABEL)}
-          className="[&_svg]:size-4"
           onClick={() => copy(words)}
         >
           <CopyGlyph state={state} />
@@ -57,7 +56,6 @@ export function CopyMessageAction({
         <MessageAction
           label={LINK_COPY.LABEL}
           tooltip={LINK_COPY.LABEL}
-          className="[&_svg]:size-4"
           onClick={() => copyLink(place)}
         >
           <LinkIcon />

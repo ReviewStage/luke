@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
+import { SpinnerRing } from "../spinner/spinner.js";
 
 /**
  * button.tsx -- the one button every app presses: a labelled Button and a glyph-alone IconButton, in one of five looks.
@@ -43,6 +44,19 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
  * any link does; it is never unavailable or busy, since a link that cannot
  * be followed is not drawn.
  *
+ * An IconButton comes in two sizes: the control's own, and `compact`, the
+ * smaller square a row's marks stand in at its end (a sidebar row's Pin,
+ * Archive, or ⋯, a message's Copy), which its row reveals under the
+ * pointer. A compact quiet one draws no ground under the pointer, because
+ * the row beneath it is already lit; only its glyph brightens.
+ *
+ * An IconButton may instead be a `submit`, the round button a message is
+ * sent with: its glyph is its state's, never its caller's, an arrow while it
+ * sends, a ring while a send is out, and a square while a reply streams,
+ * which its owner may make the Stop. It never changes size or place, and
+ * unavailable it stands on the strong fill with a muted glyph rather than
+ * fading, so its glyph stays a colour apart from its disc.
+ *
  * An app's hint wraps a button and hands it the pointer and focus handlers
  * it shows and goes on, and the chord it names (`HintProps`), which land on
  * the button itself, so a reader is told the shortcut by the control.
@@ -67,6 +81,23 @@ export const BUTTON_SHAPE = {
 } as const;
 
 export type ButtonShape = (typeof BUTTON_SHAPE)[keyof typeof BUTTON_SHAPE];
+
+/** How big a glyph-alone button is: the control's own square, or a row mark's. */
+export const BUTTON_SIZE = {
+  CONTROL: "control",
+  COMPACT: "compact",
+} as const;
+
+export type ButtonSize = (typeof BUTTON_SIZE)[keyof typeof BUTTON_SIZE];
+
+/** Where a message's send stands, which decides its submit's glyph. */
+export const SUBMIT_STATE = {
+  READY: "ready",
+  SUBMITTED: "submitted",
+  STREAMING: "streaming",
+} as const;
+
+export type SubmitState = (typeof SUBMIT_STATE)[keyof typeof SUBMIT_STATE];
 
 /** What a press of a button in a form does: act on its own, or submit the form. */
 export const BUTTON_TYPE = {
@@ -103,6 +134,8 @@ type ButtonBase = BusyProps &
     shape?: ButtonShape;
     type?: ButtonType;
     onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+    /** A right-click's handler, as on a row's mark that offers its row's own menu. */
+    onContextMenu?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
     disabled?: boolean | undefined;
     /** Whether an unavailable button stays in the tab order, so a hint can say why it is unavailable. */
     focusableWhenDisabled?: boolean | undefined;
@@ -155,6 +188,7 @@ function stateProps(props: ButtonBase, name: string | undefined) {
     onPointerDown: props.onPointerDown,
     // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
     onMouseDown: props.keepFocus === true ? preventFocusMove : undefined,
+    onContextMenu: props.onContextMenu,
     onFocus: props.onFocus,
     onBlur: props.onBlur,
     "data-variant": props.variant ?? BUTTON_VARIANT.QUIET,
@@ -221,27 +255,101 @@ export function ButtonLink({
   );
 }
 
-/** A glyph alone in a square, named by `label` since it shows no words; `pressed` makes it a toggle. */
+/** A submit's arrow: the message goes up into the conversation. */
+function SendGlyph(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="m5 12 7-7 7 7" />
+      <path d="M12 19V5" />
+    </svg>
+  );
+}
+
+/** A submit's Stop, filled as every chat draws it; an outline reads as a checkbox at this size. */
+function StopGlyph(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect width="16" height="16" x="4" y="4" rx="2" />
+    </svg>
+  );
+}
+
+/** The glyph a submit wears in its state. */
+function submitGlyph(state: SubmitState): React.JSX.Element {
+  switch (state) {
+    case SUBMIT_STATE.READY:
+      return <SendGlyph />;
+    case SUBMIT_STATE.SUBMITTED:
+      return (
+        <span className="luke-button-ring">
+          <SpinnerRing />
+        </span>
+      );
+    case SUBMIT_STATE.STREAMING:
+      return <StopGlyph />;
+  }
+}
+
+/** A glyph-alone button's glyph: its caller's own, or a submit's, which its state decides. */
+type IconProps =
+  | { icon: ReactNode; submit?: undefined }
+  | {
+      icon?: undefined;
+      /** Where the send it makes stands; it is round and wears its state's glyph. */
+      submit: SubmitState;
+    };
+
+/**
+ * A glyph alone in a square, named by `label` since it shows no words;
+ * `pressed` makes it a toggle, `size` a row's compact mark, and `submit` a
+ * message's round send.
+ */
 export function IconButton({
   icon,
+  submit,
   label,
   pressed,
+  size,
   ...props
-}: ButtonBase & {
-  icon: ReactNode;
-  /** Its accessible name, which a sighted reader has from the glyph. */
-  label: string;
-  /** Whether a toggle stands on, which it is drawn and announced as. */
-  pressed?: boolean | undefined;
-}): React.JSX.Element {
+}: ButtonBase &
+  IconProps & {
+    /** Its accessible name, which a sighted reader has from the glyph. */
+    label: string;
+    /** Whether a toggle stands on, which it is drawn and announced as. */
+    pressed?: boolean | undefined;
+    size?: ButtonSize;
+  }): React.JSX.Element {
+  const state = stateProps(
+    submit === undefined ? props : { ...props, shape: BUTTON_SHAPE.ROUND },
+    label,
+  );
   return (
     <button
       className="luke-button"
       data-icon-only="true"
+      data-size={size === BUTTON_SIZE.COMPACT ? BUTTON_SIZE.COMPACT : undefined}
+      data-submit={submit}
       aria-pressed={pressed}
-      {...stateProps(props, label)}
+      {...state}
     >
-      <span className="luke-button-face">{icon}</span>
+      <span className="luke-button-face">{submit === undefined ? icon : submitGlyph(submit)}</span>
     </button>
   );
 }

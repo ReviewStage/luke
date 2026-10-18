@@ -3,7 +3,16 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { BUTTON_SHAPE, BUTTON_VARIANT, Button, ButtonLink, IconButton } from "./button.js";
+import {
+  BUTTON_SHAPE,
+  BUTTON_SIZE,
+  BUTTON_TYPE,
+  BUTTON_VARIANT,
+  Button,
+  ButtonLink,
+  IconButton,
+  SUBMIT_STATE,
+} from "./button.js";
 
 /**
  * button.test.ts -- a ButtonLink is a link a reader finds by its words,
@@ -11,7 +20,12 @@ import { BUTTON_SHAPE, BUTTON_VARIANT, Button, ButtonLink, IconButton } from "./
  * follows it. A button that is not tabbable is left out of the tab order,
  * yet takes the focus a roving group hands it and is pressed as any other;
  * an ordinary button stays a Tab stop. A button that keeps focus leaves it
- * on the field that held it when a pointer presses it.
+ * on the field that held it when a pointer presses it. A compact row mark
+ * is a button named by its label like any other, its right-click heard so
+ * it can offer its row's menu, and an unavailable one is pressed to no
+ * effect. A submit sends its form while it takes a press,
+ * sends nothing while it is unavailable, and made a Stop does its own act
+ * without sending the form.
  */
 
 const roots: Root[] = [];
@@ -168,4 +182,101 @@ test("a toggle is announced pressed while it is on, in any look, and a plain but
   expect(
     container.querySelector('button[aria-label="End call"]')?.hasAttribute("aria-pressed"),
   ).toBe(false);
+});
+
+test("a compact row mark is found by its label, pressed, and right-clicked, and refuses its press while unavailable", () => {
+  const pressed: string[] = [];
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(IconButton, {
+        icon: createElement("svg"),
+        label: "Pin Launch notes",
+        size: BUTTON_SIZE.COMPACT,
+        onClick: () => pressed.push("Pin"),
+        onContextMenu: () => pressed.push("Row menu"),
+      }),
+      createElement(IconButton, {
+        icon: createElement("svg"),
+        label: "Archive Launch notes",
+        size: BUTTON_SIZE.COMPACT,
+        disabled: true,
+        onClick: () => pressed.push("Archive"),
+      }),
+    ),
+  );
+  const pin = container.querySelector<HTMLButtonElement>('button[aria-label="Pin Launch notes"]');
+  const archive = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Archive Launch notes"]',
+  );
+
+  act(() => pin?.click());
+  act(() => pin?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })));
+  act(() => archive?.click());
+
+  expect(archive?.disabled).toBe(true);
+  expect(pressed).toEqual(["Pin", "Row menu"]);
+});
+
+/** Draws a form holding `submit`, and answers how many times the form was sent. */
+function mountForm(submit: React.ReactElement): { container: HTMLElement; sent: () => number } {
+  let sent = 0;
+  const container = mount(
+    createElement(
+      "form",
+      {
+        onSubmit: (event: React.FormEvent) => {
+          event.preventDefault();
+          sent += 1;
+        },
+      },
+      submit,
+    ),
+  );
+  return { container, sent: () => sent };
+}
+
+test("a ready submit sends its form, and an unavailable one sends nothing", () => {
+  const ready = mountForm(
+    createElement(IconButton, {
+      submit: SUBMIT_STATE.READY,
+      type: BUTTON_TYPE.SUBMIT,
+      label: "Send",
+      variant: BUTTON_VARIANT.INK,
+    }),
+  );
+  const held = mountForm(
+    createElement(IconButton, {
+      submit: SUBMIT_STATE.READY,
+      type: BUTTON_TYPE.SUBMIT,
+      label: "Send",
+      variant: BUTTON_VARIANT.INK,
+      disabled: true,
+    }),
+  );
+
+  act(() => ready.container.querySelector("button")?.click());
+  act(() => held.container.querySelector("button")?.click());
+
+  expect(ready.sent()).toBe(1);
+  expect(held.sent()).toBe(0);
+});
+
+test("a streaming submit made the Stop does its own act, named Stop, without sending the form", () => {
+  const stops: string[] = [];
+  const form = mountForm(
+    createElement(IconButton, {
+      submit: SUBMIT_STATE.STREAMING,
+      label: "Stop",
+      variant: BUTTON_VARIANT.INK,
+      onClick: () => stops.push("Stop"),
+    }),
+  );
+  const stop = form.container.querySelector<HTMLButtonElement>('button[aria-label="Stop"]');
+
+  act(() => stop?.click());
+
+  expect(stops).toEqual(["Stop"]);
+  expect(form.sent()).toBe(0);
 });

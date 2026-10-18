@@ -8,10 +8,12 @@ import {
 } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import {
+  BUTTON_SIZE,
   ConfirmDialog,
   DIALOG_TONE,
   type DialogConfirm,
   EllipsisIcon,
+  IconButton,
   PencilIcon,
   TrashIcon,
   useConfirmDialog,
@@ -319,15 +321,13 @@ function SidebarSection({
         onToggle={() => context.onToggle(section.id)}
         actions={
           <Tooltip label="Section actions">
-            <button
+            <IconButton
               ref={ellipsis}
-              type="button"
-              className="sidebar-repository-action"
-              aria-label={`Actions for ${section.title}`}
+              icon={<EllipsisIcon />}
+              label={`Actions for ${section.title}`}
+              size={BUTTON_SIZE.COMPACT}
               {...menu.trigger()}
-            >
-              <EllipsisIcon />
-            </button>
+            />
           </Tooltip>
         }
       />
