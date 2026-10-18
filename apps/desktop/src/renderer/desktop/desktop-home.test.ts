@@ -8,7 +8,10 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxAnswerView,
+} from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_RESPONSE,
@@ -939,10 +942,15 @@ const MODELS: readonly CatalogModel[] = [
   },
 ];
 
-/** Home with New task's dialog open over it, as ⌘N opens it, each start written down; Escape in the dialog's words puts it away. */
-async function mountUnderDialog() {
+/** Home with New task's dialog open over it, as ⌘N opens it, each start written down, a model kept as the default unless `keeps` says otherwise; Escape in the dialog's words puts it away. */
+async function mountUnderDialog(keeps = true) {
   const started: Started[] = [];
-  const newTask = { ...newTaskControl(started), models: MODELS };
+  const newTask: TasksControl["newTask"] = {
+    ...newTaskControl(started),
+    models: MODELS,
+    writeDefault: (choice) =>
+      Promise.resolve(keeps ? { choice } : { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+  };
   const tasks = tasksControl({
     tasks: TASKS,
     listed: { tasks: TASKS, archived: [], ...HOLDING },
@@ -1001,17 +1009,22 @@ test("Plan turned on in the dialog over Home and the dialog put away, Home's com
   );
 });
 
-test("a model picked as the default in the dialog over Home is the one Home's composer then starts its agent on", async () => {
-  const page = await mountUnderDialog();
+/** Picks Fast on the dialog's model chip, which asks for it to be kept as the account's default. */
+async function pickFastInDialog(dialog: HTMLElement): Promise<void> {
   const chip =
-    page.dialog().querySelector<HTMLButtonElement>(".agent-model-chip button") ??
+    dialog.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
     assert.fail("the dialog's model chip stands");
   act(() => chip.click());
   const fast =
-    page.dialog().querySelector<HTMLButtonElement>('[role="switch"]') ??
+    dialog.querySelector<HTMLButtonElement>('[role="switch"]') ??
     assert.fail("the menu offers Fast");
   act(() => fast.click());
   await settle();
+}
+
+test("a model picked as the default in the dialog over Home is the one Home's composer then starts its agent on", async () => {
+  const page = await mountUnderDialog();
+  await pickFastInDialog(page.dialog());
   await page.closeDialog();
 
   typeInComposer(page.home(), "Speed up the build");
@@ -1019,4 +1032,16 @@ test("a model picked as the default in the dialog over Home is the one Home's co
   await settle();
 
   assert.equal(page.started[0]?.agent?.choice?.model, "anthropic/claude-opus-5.5-fast");
+});
+
+test("a model picked in the dialog over Home that the account's default refused leaves Home's composer on the default it read", async () => {
+  const page = await mountUnderDialog(false);
+  await pickFastInDialog(page.dialog());
+  await page.closeDialog();
+
+  typeInComposer(page.home(), "Speed up the build");
+  pressInComposer(page.home(), "Enter");
+  await settle();
+
+  assert.deepEqual(page.started[0]?.agent?.choice, DEFAULT_CHOICE);
 });

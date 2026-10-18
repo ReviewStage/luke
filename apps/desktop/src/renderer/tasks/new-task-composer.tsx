@@ -175,6 +175,9 @@ function IssueChip({
  */
 const defaultPicks = new Set<(choice: ModelChoice) => void>();
 
+/** How many default writes any card has asked for, so only the latest one kept is told to the others. */
+let defaultWrites = 0;
+
 /** The account's default model as read, the chip's pick, which is written back as the default, and why that write did not take, where it did not. */
 function useDefaultChoice(
   newTask: TasksControl["newTask"],
@@ -211,9 +214,15 @@ function useDefaultChoice(
     pickedHere.current = true;
     setChoice(next);
     setRefused(undefined);
-    for (const hear of defaultPicks) if (hear !== hearing.current) hear(next);
+    defaultWrites += 1;
+    const write = defaultWrites;
     latest.current.writeDefault(next).then((answer) => {
       setRefused("failure" in answer ? DEFAULT_NOT_KEPT : undefined);
+      // Note that the others follow only a default that was kept, and only
+      // the one asked for last, so a write refused, or one overtaken by a
+      // later pick, moves no other card's chip.
+      if ("failure" in answer || write !== defaultWrites) return;
+      for (const hear of defaultPicks) if (hear !== hearing.current) hear(answer.choice);
     });
   };
   return [choice, choose, refused];
