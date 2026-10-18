@@ -37,11 +37,12 @@ function render(element: ReactElement): HTMLElement {
 
 test("a truncated heading is still named by its whole title", () => {
   const container = render(
-    createElement(
-      Text,
-      { as: TEXT_ELEMENT.H2, variant: TEXT_VARIANT.SECTION, truncate: true },
-      LONG_TITLE,
-    ),
+    createElement(Text, {
+      as: TEXT_ELEMENT.H2,
+      variant: TEXT_VARIANT.SECTION,
+      truncate: true,
+      children: LONG_TITLE,
+    }),
   );
   const heading = container.querySelector("h2");
   assert.ok(heading);
