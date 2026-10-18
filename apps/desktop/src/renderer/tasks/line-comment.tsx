@@ -3,9 +3,9 @@ import {
   REVIEW_COMMENT_MODE,
   type ReviewCommentMode,
 } from "@luke/features/pull-request-write-wire";
+import { type CommentLines, commentLinesLabel } from "@luke/panel/tasks/changes-model";
 import { BUTTON_VARIANT, Button } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
-import { type CommentLines, commentLinesLabel } from "./changes-model";
 import { MarkdownField } from "./markdown-field";
 import { PullRequestWriteNote, usePullRequestWrites, WRITE_NOTE } from "./pull-request-writes";
 

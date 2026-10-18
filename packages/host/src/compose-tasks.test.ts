@@ -6,6 +6,7 @@ import {
   type GitHubRepositoryIssueAnswer,
   type GitHubRepositoryPullRequestAnswer,
   type TaskCallResult,
+  type TaskStarted,
   VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
 } from "@luke/features";
@@ -125,7 +126,7 @@ interface FakeService extends TasksClient {
   deleteFails: boolean;
   /** Where a list read waits after reading the table and before answering, so a test can hold one on the wire. */
   listGate: Effect.Effect<void>;
-  createAnswer: TaskCallResult<Task, RepositoryCallFailure>;
+  createAnswer: TaskCallResult<TaskStarted, RepositoryCallFailure>;
   /** The repositories the account reaches, as the service answers them; a failure is the service refusing the read. */
   repositoriesAnswer: TaskCallResult<GitHubRepositoriesAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>;
   /** Whether a repository is refused as one the App does not reach. */
@@ -1159,6 +1160,45 @@ it.effect(
 
       assert.deepEqual(afterStale, edited);
       assert.deepEqual(last()?.document.task?.document, saved);
+    }),
+);
+
+it.effect(
+  "a start naming an agent opens the task it made and answers the agent's start beside it, a refusal among them",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const { call, last } = yield* subject(service);
+      const made = task(INVITES, "Invitation expiry", "", 10);
+      const agent = {
+        id: "3c9e1d2a-6b7f-4e8a-9c0d-1e2f3a4b5c6d",
+        planId: INVITES,
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        title: null,
+        createdAt: 11,
+        status: CODING_AGENT_STATUS.STARTING,
+        turnId: null,
+      };
+      const params = {
+        repository: "acme/relay",
+        agent: { idempotencyKey: "start-1", prompt: "Expire invitations." },
+      };
+
+      service.createAnswer = { ok: true, answer: { task: made, agent: { agent } } };
+      const started = yield* call(GATEWAY_METHOD.TASKS_START, params);
+      service.createAnswer = {
+        ok: true,
+        answer: { task: made, agent: { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE } },
+      };
+      const refused = yield* call(GATEWAY_METHOD.TASKS_START, params);
+
+      assert.deepEqual(started, { planId: INVITES, agentStart: { agent } });
+      assert.deepEqual(refused, {
+        planId: INVITES,
+        agentStart: { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE },
+      });
+      assert.equal(last()?.activeTaskId, INVITES);
     }),
 );
 

@@ -20,6 +20,7 @@ import {
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import {
+  FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
 } from "@luke/features/pull-request-write-wire";
@@ -246,6 +247,14 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
         Effect.sync(() => {
           asked.push(`pull-request-action:${agentId}:${request.action}`);
           return { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE } as const;
+        }),
+      codingAgentPullRequestViewed: ({ agentId }) =>
+        Effect.sync(() => {
+          asked.push(`pull-request-viewed:${agentId}`);
+          return {
+            outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+            files: [{ path: "src/seats.ts", state: FILE_VIEWED_STATE.VIEWED }],
+          } as const;
         }),
       codingAgentGitHubImage: ({ agentId }) =>
         Effect.sync(() => {
@@ -513,6 +522,34 @@ it.effect(
       assert.deepEqual(asked, [
         `pull-request-action:${AGENT_ID}:${PULL_REQUEST_ACTION.CONVERT_TO_DRAFT}`,
       ]);
+    }),
+);
+
+it.effect(
+  "a panel's read of which files it viewed reaches the host and hears each file's mark, and the voice window's is refused before it",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const act = {
+        kind: ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED,
+        payload: { agentId: AGENT_ID },
+      } as const;
+
+      const refused = yield* router.performAct(act, VOICE);
+      const read = yield* router.performAct(act, PANEL);
+
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED].refusal,
+      });
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: {
+          outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+          files: [{ path: "src/seats.ts", state: FILE_VIEWED_STATE.VIEWED }],
+        },
+      });
+      assert.deepEqual(asked, [`pull-request-viewed:${AGENT_ID}`]);
     }),
 );
 

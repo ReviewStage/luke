@@ -1,7 +1,9 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { useAppCommand } from "@luke/panel/app-commands";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
+import { usePerson } from "@luke/panel/member-directory";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -18,10 +20,8 @@ import {
 } from "@luke/ui";
 import { ListTodoIcon } from "lucide-react";
 import { type ReactNode, useRef } from "react";
-import { useAppCommand } from "../app-commands";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag } from "../experiment-marks";
-import { usePerson } from "../member-directory";
 import { DocumentByline, DocumentScroll } from "../tasks/document-frame";
 import { RelativeTime } from "../tasks/relative-time";
 import { Tooltip } from "../tooltip";
@@ -34,12 +34,14 @@ import {
 } from "./issue-actions";
 import { IssueDescription } from "./issue-description";
 import { PriorityMenu, StatusMenu } from "./issue-pickers";
-import { IssueWorkRow, useStartTaskItem } from "./issue-work";
+import { IssueWorkRow, useStartItems } from "./issue-work";
 
 /**
  * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, who filed it and when it was filed and last changed, its status and priority changed from their chips, the tasks started from it, its description written in place, a task started from it, its link copied, and its archive.
  *
- * Every change is sent at once and the page draws the issue the service
+ * The issue itself (`IssueDocument`) and its ⋯ menu (`IssueMenu`) are
+ * drawn by the peek beside the board as well (`issue-peek.tsx`), so the
+ * two never differ. Every change is sent at once and the page draws the issue the service
  * answers, so what stands is what was kept; a change the service refused
  * leaves the issue as it stood and says so in a toast the page raises.
  * Archiving asks first, and once it lands the page goes back to the list,
@@ -83,47 +85,55 @@ export function IssueCrumbs({
   );
 }
 
-/** The toolbar: the path back to the list, and the issue's ⋯ menu: Start task…, Copy link, and Archive. */
-function DetailToolbar({
+/**
+ * The issue's ⋯ menu, on its page's toolbar and on its peek's head: Start
+ * task… and Start agent…, Copy link, and Archive, which asks first and, once kept, hands back to
+ * `onArchived`, since the issue no longer stands where it was drawn.
+ */
+export function IssueMenu({
   issue,
   identifier,
-  onBack,
-  onArchive,
+  surfaceOpen = true,
+  onChange,
+  onArchived,
 }: {
   issue: Issue;
   identifier: string;
-  onBack: () => void;
-  onArchive: () => void;
+  /** Whether what it hangs from still stands, which its menu and question do not outlive: a page for as long as it does, a peek until it starts to leave. */
+  surfaceOpen?: boolean;
+  /** Sends a change, answering whether it was kept. */
+  onChange: (change: IssueChange) => Promise<boolean>;
+  onArchived: () => void;
 }): React.JSX.Element {
-  const menu = useMenu(true);
-  const startTask = useStartTaskItem(issue, identifier);
+  const menu = useMenu(surfaceOpen);
+  const starts = useStartItems(issue, identifier);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.ISSUE, issueId: issue.id });
-  const archive = archiveItem(onArchive);
-  const groups = [
-    ...(startTask === undefined ? [] : [[startTask]]),
-    ...(copyLink === undefined ? [] : [[copyLink]]),
-    [archive],
-  ];
+  const archiving = useConfirmDialog({ subject: true, surfaceOpen }, () =>
+    onChange({ archived: true }).then((archived) => {
+      if (archived) onArchived();
+      return archiveAnswered(archived);
+    }),
+  );
+  const archive = archiveItem(archiving.ask);
   return (
-    <header className="desktop-toolbar">
-      <div className="desktop-toolbar-heading">
-        <IssueCrumbs identifier={identifier} onBack={onBack} />
-        <ExperimentTag />
-      </div>
-      <div className="desktop-toolbar-actions">
-        <Tooltip label={ISSUE_ACTIONS_LABEL}>
-          <IconButton icon={<EllipsisIcon />} label={ISSUE_ACTIONS_LABEL} {...menu.trigger()} />
-        </Tooltip>
-        {menu.drawn === undefined ? null : (
-          <ActionMenu
-            label={ISSUE_ACTIONS_LABEL}
-            menu={menu.drawn}
-            groups={groups}
-            onClose={menu.close}
-          />
-        )}
-      </div>
-    </header>
+    <>
+      <Tooltip label={ISSUE_ACTIONS_LABEL}>
+        <IconButton icon={<EllipsisIcon />} label={ISSUE_ACTIONS_LABEL} {...menu.trigger()} />
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={ISSUE_ACTIONS_LABEL}
+          menu={menu.drawn}
+          groups={[
+            ...(starts.length === 0 ? [] : [starts]),
+            ...(copyLink === undefined ? [] : [[copyLink]]),
+            [archive],
+          ]}
+          onClose={menu.close}
+        />
+      )}
+      <ConfirmDialog confirm={archiving} question={archiveQuestion(identifier)} />
+    </>
   );
 }
 
@@ -249,6 +259,41 @@ export function IssueDocumentPage({
   );
 }
 
+/**
+ * The issue itself, wherever it is drawn, its page or its peek beside the
+ * board: its title, who filed it and when, its Status and Priority chips,
+ * the tasks started from it, and its description, in a plan's own type; its
+ * page and its peek each scroll it in the column every document of the
+ * window does (`DocumentScroll`).
+ */
+export function IssueDocument({
+  issue,
+  onChange,
+}: {
+  issue: Issue;
+  /** Sends a change, answering whether it was kept. */
+  onChange: (change: IssueChange) => Promise<boolean>;
+}): React.JSX.Element {
+  return (
+    <article className="plan-body">
+      <IssueTitle issue={issue} onChange={onChange} />
+      <IssueByline issue={issue} />
+      <div className="issue-properties">
+        <StatusMenu status={issue.status} onPick={(status) => void onChange({ status })} />
+        <PriorityMenu
+          priority={issue.priority}
+          onPick={(priority) => void onChange({ priority })}
+        />
+      </div>
+      <IssueWorkRow issue={issue} />
+      <IssueDescription
+        description={issue.description}
+        onSave={(description) => onChange({ description })}
+      />
+    </article>
+  );
+}
+
 /** One issue's page, drawn from the issue as the service last answered it. */
 export function IssueDetail({
   issue,
@@ -263,45 +308,29 @@ export function IssueDetail({
   onBack: () => void;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ISSUES, onBack);
-  const archiving = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    onChange({ archived: true }).then((archived) => {
-      if (archived) onBack();
-      return archiveAnswered(archived);
-    }),
-  );
   const identifier = issueIdentifier(workspaceName, issue.number);
   return (
-    <>
-      <IssueDocumentPage
-        label={identifier}
-        toolbar={
-          <DetailToolbar
-            issue={issue}
-            identifier={identifier}
-            onBack={onBack}
-            onArchive={archiving.ask}
-          />
-        }
-      >
-        <article className="plan-body">
-          <IssueTitle issue={issue} onChange={onChange} />
-          <IssueByline issue={issue} />
-          <div className="issue-properties">
-            <StatusMenu status={issue.status} onPick={(status) => void onChange({ status })} />
-            <PriorityMenu
-              priority={issue.priority}
-              onPick={(priority) => void onChange({ priority })}
+    <IssueDocumentPage
+      label={identifier}
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <IssueCrumbs identifier={identifier} onBack={onBack} />
+            <ExperimentTag />
+          </div>
+          <div className="desktop-toolbar-actions">
+            <IssueMenu
+              issue={issue}
+              identifier={identifier}
+              onChange={onChange}
+              onArchived={onBack}
             />
           </div>
-          <IssueWorkRow issue={issue} />
-          <IssueDescription
-            description={issue.description}
-            onSave={(description) => onChange({ description })}
-          />
-        </article>
-      </IssueDocumentPage>
-      <ConfirmDialog confirm={archiving} question={archiveQuestion(identifier)} />
-    </>
+        </header>
+      }
+    >
+      <IssueDocument issue={issue} onChange={onChange} />
+    </IssueDocumentPage>
   );
 }
 

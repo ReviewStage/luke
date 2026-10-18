@@ -1,4 +1,7 @@
 import type { TaskSummary } from "@luke/features/task-wire";
+import { useRowKeys } from "@luke/panel/desktop/use-row-keys";
+import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
+import { RepositoryPicture } from "@luke/panel/repository-picture";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import {
   ErrorState,
@@ -19,8 +22,6 @@ import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
-import { MemberDirectory, useMemberDirectory } from "../member-directory";
-import { RepositoryPicture } from "../repository-picture";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
 import {
   holderName,
@@ -35,7 +36,6 @@ import { RelativeTime } from "../tasks/relative-time";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems } from "../tasks/use-waiting-items";
 import { TaskStatusMark } from "./task-card";
-import { useRowKeys } from "./use-row-keys";
 
 /**
  * desktop-home.tsx -- the home page: the column the window rests on with no task open, opening on New task's composer and saying what needs the developer and the tasks saved latest.

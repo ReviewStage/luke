@@ -23,6 +23,10 @@ import { type DisclosureMotion, disclosureMotion, useDisclosure } from "../../us
  * summary takes the click itself and stops the element's own toggle, so the
  * two cannot disagree, and says whether it is open in `aria-expanded`.
  *
+ * A fold whose open state outlives it, as a tab keeps which of its cards it
+ * folded, is controlled: it is handed `open` and hears `onOpenChange`, a
+ * press and a find's toggle alike, and is open as its holder says.
+ *
  * A press moves the fold, and nothing else does. The layout lands at once
  * either way; a press that opens marks the element `data-disclosure` as
  * opening, which unrolls the body as it fades in (disclosure.css), and a
@@ -44,10 +48,11 @@ import { type DisclosureMotion, disclosureMotion, useDisclosure } from "../../us
  * instead, so the state and the motion live here once.
  */
 
-/** Where an open body stands: under the summary's words, past its chevron, or flush with the row. */
+/** Where an open body stands: under the summary's words, past its chevron, flush with the row, or wherever the caller's own skin inside it sets it. */
 export const DISCLOSURE_BODY = {
   INDENTED: "indented",
   FLUSH: "flush",
+  NONE: "none",
 } as const;
 export type DisclosureBodyInset = (typeof DISCLOSURE_BODY)[keyof typeof DISCLOSURE_BODY];
 
@@ -72,6 +77,12 @@ export interface DisclosureDetailsProps {
   readonly onToggle: (event: SyntheticEvent<HTMLDetailsElement>) => void;
 }
 
+/** A fold whose open state its holder keeps: open as it says, and told of every press and toggle. */
+export interface DisclosureControl {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+}
+
 /** A fold's state, and the props for the `details` it is drawn on. */
 export interface DisclosureFold {
   readonly state: DisclosureState;
@@ -79,6 +90,9 @@ export interface DisclosureFold {
 }
 
 const FindContext = createContext(false);
+
+/** What a controlled fold whose holder hears nothing does with a press. */
+const NO_CHANGE = (): void => undefined;
 const StateContext = createContext<DisclosureState | undefined>(undefined);
 
 /** The fold around the caller. */
@@ -103,10 +117,19 @@ export function useDisclosureBodyDrawn(): boolean {
 
 /**
  * A fold's state and the props for the `details` it is drawn on, for a
- * surface that draws its own summary and body inside `DisclosureScope`.
+ * surface that draws its own summary and body inside `DisclosureScope`;
+ * open as `control` says where its holder keeps it.
  */
-export function useDisclosureFold(defaultOpen: boolean): DisclosureFold {
-  const [open, setOpen] = useState(defaultOpen);
+export function useDisclosureFold(
+  defaultOpen: boolean,
+  control?: DisclosureControl | undefined,
+): DisclosureFold {
+  const [kept, setKept] = useState(defaultOpen);
+  const open = control === undefined ? kept : control.open;
+  const setOpen = (next: boolean) => {
+    if (control === undefined) setKept(next);
+    else control.onOpenChange(next);
+  };
   // Whether the open state is a press's, which alone plays the opening.
   const [pressed, setPressed] = useState(false);
   const shown = useDisclosure(open);
@@ -201,20 +224,32 @@ export function useDisclosureSummaryClick(): (event: MouseEvent<HTMLElement>) =>
   };
 }
 
-/** Note that the element's own `open` is not a prop: the state is the fold's, and a fold meant to start open says `defaultOpen`. */
+/**
+ * Note that a fold meant to start open says `defaultOpen`, and one whose
+ * holder keeps its state says `open` and hears `onOpenChange`, because the
+ * element's own `open` is drawn from the fold's state rather than set.
+ */
 type DisclosureProps = {
   defaultOpen?: boolean;
+  /** Whether it is open, where its holder keeps that; `onOpenChange` hears each press and toggle. */
+  open?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
   children: ReactNode;
 } & Omit<ComponentPropsWithoutRef<"details">, "open" | "className" | "style" | "children">;
 
 /** A fold drawn as the quiet summary row and its body. */
 export function Disclosure({
   defaultOpen = false,
+  open,
+  onOpenChange,
   onToggle,
   children,
   ...props
 }: DisclosureProps): React.JSX.Element {
-  const { state, details } = useDisclosureFold(defaultOpen);
+  const { state, details } = useDisclosureFold(
+    defaultOpen,
+    open === undefined ? undefined : { open, onOpenChange: onOpenChange ?? NO_CHANGE },
+  );
   return (
     <DisclosureScope state={state}>
       <details

@@ -1,3 +1,4 @@
+import type { PickTarget, WorldPicking } from "@luke/panel/factory-world/world";
 import {
   Box3,
   type Camera,
@@ -8,7 +9,6 @@ import {
   Vector2,
   Vector3,
 } from "three";
-import type { PickTarget, WorldPicking } from "../world";
 
 /**
  * picking.ts -- what the pointer lands on: the registered object a ray from it meets first, or, where it meets none, the nearest registered one within a finger's width on screen.

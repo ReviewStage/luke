@@ -1,6 +1,11 @@
+import {
+  PICK_KIND,
+  type PickKind,
+  type WorldModule,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
 import { type AgentView, agentDrawnUnder } from "@luke/ui/factory-world";
 import { Color, type Vector3 } from "three";
-import { PICK_KIND, type PickKind, type WorldModule, type WorldState } from "../../world";
 import { agentsOf } from "./agents";
 import { type CityLayout, cityLayoutOf, laidOutFrom } from "./city";
 import { defectsOf } from "./defects";

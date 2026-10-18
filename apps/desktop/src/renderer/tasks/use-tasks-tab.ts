@@ -34,6 +34,13 @@ import type { ActHandle } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import { useInboxPages } from "@luke/panel/tasks/use-inbox-pages";
+import {
+  MAIN_TAB,
+  type MainTab,
+  type MainTabsControl,
+  useMainTabs,
+} from "@luke/panel/tasks/use-main-tabs";
+import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "@luke/panel/toast";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { callCard } from "@luke/ui/call-card-model";
@@ -123,7 +130,6 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCopyToast } from "../copy-feedback";
 import { useChosenWorkspace } from "../desktop/chosen-workspace";
-import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import type { FixtureChat, Staged } from "./chat-fixture";
 import {
   CLOSED_TAB_STRIP,
@@ -146,7 +152,6 @@ import {
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 import { useLastTask } from "./use-last-task";
-import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs";
 import { usePanelArrivals } from "./use-panel-arrivals";
 import {
   type HistorySpot,
@@ -400,10 +405,29 @@ export interface NewTaskAgent {
   readonly choice: ModelChoice | undefined;
 }
 
-/** What the press that opened New task chose: a repository (a repository group's +), or the issue the task starts from (an issue's Start task…). */
+/**
+ * What the press that opened New task chose: a repository (a repository
+ * group's +), or the issue the task starts from (an issue's Start task…),
+ * and whether an agent starts on the task at once (an issue's Start
+ * agent…), which starts it without its planning phase.
+ */
 export interface NewTaskPreset {
   readonly repository?: string;
   readonly issue?: NewTaskIssue;
+  readonly agent?: boolean;
+}
+
+/**
+ * What a start comes from beyond its name, repository, workspace, and
+ * planning: a Linear issue, one of the workspace's own issues, whether an
+ * agent starts on the task's plan at once (`agent`), and the agent New
+ * task's composer starts on its words (`handed`).
+ */
+export interface NewTaskStart {
+  readonly linearIssueId?: string;
+  readonly issueId?: string;
+  readonly agent?: boolean;
+  readonly handed?: NewTaskAgent;
 }
 
 /** Which Issues page stands: the list, or one issue's. */
@@ -645,8 +669,8 @@ export interface TasksControl {
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
-  /** New task started from one of the workspace's issues: named by it, in its workspace, and linked to it once started; what an issue's Start task… asks. */
-  onNewTaskFrom: (issue: NewTaskIssue) => void;
+  /** New task started from one of the workspace's issues: named by it, in its workspace, and linked to it once started; what an issue's Start task… asks, and with `agent` its Start agent…, which starts an agent on the task at once. */
+  onNewTaskFrom: (issue: NewTaskIssue, agent?: boolean) => void;
   /** The New task dialog: whether it stands, what its press chose, and the two presses it makes. */
   newTask: {
     open: boolean;
@@ -662,18 +686,19 @@ export interface TasksControl {
      * Starts the plan on the repository given, or none, in the workspace
      * given, with its planning phase or without it, from the Linear issue
      * given where one was picked, or from the workspace's own issue the
-     * dialog was opened on, which closes the dialog and opens the plan, and,
-     * with an agent given, opens it on a draft agent's tab holding the
-     * agent's prompt, files, and model, which starts the agent at once;
-     * answers why the task did not start, or nothing once it has.
+     * dialog was opened on, which closes the dialog and opens the plan; with
+     * an agent asked for at once it presses the task's Start once it stands
+     * open, and with an agent handed over it opens the task on a draft
+     * agent's tab holding the agent's prompt, files, and model, which starts
+     * the agent at once; answers why the task did not start, or nothing once
+     * it has.
      */
     start: (
       name: string,
       repository: string | null,
       workspaceId: string | undefined,
       planning: boolean,
-      from?: { readonly linearIssueId?: string; readonly issueId?: string },
-      agent?: NewTaskAgent,
+      from?: NewTaskStart,
     ) => Promise<string | undefined>;
     /** The models the composer's chip offers, as last read; nothing before the first read lands. */
     models: readonly CatalogModel[] | undefined;
@@ -1301,6 +1326,29 @@ export function useTasksTab(input: {
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     keywords: dictationWords,
   });
+  // An agent asked to start on a task the moment it starts, as an issue's
+  // Start agent… asks, is the open task's own Start pressed once that task
+  // stands open with its repository: it is handed the task's plan, on the
+  // account's default choice, and its tab opens once it lands, while one
+  // that did not start says why beside the task's Start.
+  // Note that the ask goes once the developer leaves its task before it
+  // could start, so coming back to the task later starts nothing unasked.
+  const [agentAskedFor, setAgentAskedFor] = useState<string | undefined>(undefined);
+  const askedTaskOpened = useRef(false);
+  const pressStart = useRef(agents.start.onPress);
+  pressStart.current = agents.start.onPress;
+  const startable = agents.start.available && openDocument?.id === viewed.activeTaskId;
+  useEffect(() => {
+    if (agentAskedFor === undefined) return;
+    if (viewed.activeTaskId !== agentAskedFor) {
+      if (askedTaskOpened.current) setAgentAskedFor(undefined);
+      return;
+    }
+    askedTaskOpened.current = true;
+    if (!startable) return;
+    setAgentAskedFor(undefined);
+    pressStart.current();
+  }, [agentAskedFor, viewed.activeTaskId, startable]);
   // The calls heard on the open task, each held past its end until the
   // record's copy catches up; a fixture's open task is drawn with its own
   // call's words.
@@ -2305,8 +2353,7 @@ export function useTasksTab(input: {
     repository: string | null,
     workspaceId: string | undefined,
     planning: boolean,
-    from: { readonly linearIssueId?: string; readonly issueId?: string } = {},
-    agent?: NewTaskAgent,
+    from: NewTaskStart = {},
   ): Promise<string | undefined> => {
     const panelWasOpen = sidePanel.open;
     sidePanel.onSetOpen(false);
@@ -2331,11 +2378,15 @@ export function useTasksTab(input: {
           askOnOpen.current = answer.planId;
           setAskedFor(answer.planId);
         }
-        // The agent starts from a draft the task is handed, its tab the one
-        // the task opens on, so a refusal leaves the words there with Retry.
-        if (agent !== undefined) {
+        if (from.agent === true) {
+          askedTaskOpened.current = false;
+          setAgentAskedFor(answer.planId);
+        }
+        // An agent handed over starts from a draft the task is handed, its tab
+        // the one the task opens on, so a refusal leaves the words there with Retry.
+        if (from.handed !== undefined) {
           const draftId = crypto.randomUUID();
-          agents.onHandDraft(answer.planId, { id: draftId, ...agent });
+          agents.onHandDraft(answer.planId, { id: draftId, ...from.handed });
           mainTabs.onShow(answer.planId, { draft: draftId });
         }
         return undefined;
@@ -3077,7 +3128,8 @@ export function useTasksTab(input: {
     },
     onNewTask: () => newTaskWith(undefined),
     onNewTaskIn: (repository) => newTaskWith({ repository }),
-    onNewTaskFrom: (issue) => newTaskWith({ issue }),
+    onNewTaskFrom: (issue, agent) =>
+      newTaskWith({ issue, ...(agent === true ? { agent } : undefined) }),
     newTask: {
       open: newTaskAsk !== undefined,
       preset: newTaskAsk?.preset,

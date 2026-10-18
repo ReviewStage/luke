@@ -1,5 +1,3 @@
-import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type {
   ComposerChip,
   ComposerEditorHandle,
@@ -8,7 +6,9 @@ import type {
   ComposerTrigger,
   MentionNode,
   PlanEditorModule,
-} from "../plan-editor/contract";
+} from "@luke/panel/plan-editor/contract";
+import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * composer-field.tsx -- the field of a box written to an agent, its message box's or the Inbox's answer box's: the editor bundle's composer mounted in the card, the words it hands back, and the commands that change them from outside.

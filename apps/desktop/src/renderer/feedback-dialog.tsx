@@ -35,6 +35,9 @@ import {
 } from "@luke/features/feedback";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { encodeImage, imageFiles } from "@luke/panel/feedback-images";
+import { Shortcut } from "@luke/panel/shortcut";
+import { TOAST_TONE, type ToastNotice, useToast } from "@luke/panel/toast";
 import { EXPERIMENTS, type Experiment } from "@luke/settings";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import {
@@ -52,9 +55,6 @@ import {
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration } from "effect";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { encodeImage, imageFiles } from "./feedback-images";
-import { Shortcut } from "./shortcut";
-import { TOAST_TONE, type ToastNotice, useToast } from "./toast";
 import { Tooltip } from "./tooltip";
 
 /**

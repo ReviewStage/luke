@@ -13,8 +13,9 @@ import {
   readCodingAgentByKey,
   readCodingAgentContext,
 } from "@luke/database/models/coding-agent-store";
+import { beginIssueWork } from "@luke/database/models/issue-store";
 import { readTask, type StoredTaskIssue } from "@luke/database/models/task-store";
-import { isWorkspaceMember } from "@luke/database/models/workspace-store";
+import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import type {
   StoredAutomationOrigin,
@@ -31,11 +32,14 @@ import {
 } from "@luke/features/agent-replay";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
+  base64Chars,
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   CONTEXT_WINDOW,
   type CodingAgentAttachment,
   type CodingAgentStartFrom,
+  type CodingAgentStartRequest,
+  type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import type { TaskLinearIssue } from "@luke/features/linear-wire";
@@ -45,7 +49,7 @@ import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/mo
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Task } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
-import { Effect, Option } from "effect";
+import { Clock, Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { GitHubApp } from "../../github/github-app.js";
 import { githubReachOrRefusal } from "../../github/github-refusal.js";
@@ -92,7 +96,8 @@ import {
   summarizeSteps,
   withinWindow,
 } from "./replay-summary.js";
-import { cancelledTurn } from "./stop.js";
+import { codingAgentSummary, summaryAccounts } from "./status.js";
+import { cancelledTurn, summaryOf } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -118,7 +123,11 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * handed a plan started from a Linear issue reads that issue after the
  * plan and before the note (`linearIssueBrief`), and one handed a plan
  * started from one of the workspace's own issues reads that issue as it
- * stands then, after the Linear one (`workspaceIssueBrief`). An agent
+ * stands then, after the Linear one (`workspaceIssueBrief`); once eve has
+ * taken such an agent, the issue moves into progress where it stood in the
+ * backlog or to do and is not archived, and stands as it was otherwise
+ * (`beginIssueWork`), a move that fails logged rather than the Start's
+ * failure. An agent
  * started with no task is handed a prompt in a workspace the account is a
  * member of, on a repository named by the ask and read through that
  * workspace's installation as a task's is.
@@ -170,6 +179,15 @@ export const LINEAR_ISSUE_HEADING = "## The Linear issue this task was started f
 
 /** The heading the workspace's own issue a plan was started from stands under, after the plan and before any note. */
 export const ISSUE_HEADING = "## The issue this task was started from";
+
+/** The files one message or Start may carry: their base64 together, and each one's name at JSON's widest escape with room for the keys around it. */
+export const MAXIMUM_ATTACHMENTS_BODY_BYTES =
+  base64Chars(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) +
+  CODING_AGENT_BOUNDS.MAX_ATTACHMENTS * (6 * CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS + 128);
+
+/** A Start names a key, a choice, and a prompt with its files at most: the prompt's bound at JSON's widest escape, the files, and room for the rest. */
+export const MAXIMUM_START_BODY_BYTES =
+  6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 4_096;
 
 /** A run of whitespace, line breaks among it, which a line of the brief spells as one space. */
 const WHITESPACE_RUN = /\s+/gu;
@@ -790,6 +808,12 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   }
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
   if (continued) yield* stoppedSource(eve, from.source);
+  // Work on the issue the task was started from has begun, so one in the backlog or to do moves
+  // into progress; a move that fails is logged, never the Start's failure.
+  const issueId = landing.task?.issueId;
+  if (issueId !== undefined) {
+    yield* beginIssueWork(userId, issueId).pipe(Effect.asVoid, Effect.catch(logStoreFailure));
+  }
   // An agent joins the chat only where its starter turned Chat on; one minted later joins on first use.
   const chatOn = yield* chatEnabledFor(userId).pipe(
     Effect.tapError(logStoreFailure),
@@ -805,4 +829,62 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     yield* hostedStoreOrUnavailable(writeAccountPreferences(userId, { codingAgent: choice }));
   }
   return { agent, created };
+});
+
+/** A Start as a request reached the service, answered: the agent's summary, and whether this request made it or found it under its key. */
+export interface RequestedStart {
+  readonly agent: CodingAgentSummary;
+  readonly created: boolean;
+}
+
+/**
+ * The account's agent started on the task as a request asks it, through
+ * `startCodingAgent`: the agent's own Start (`POST /api/plans/{id}/agents`)
+ * and a task's start that names an agent (`POST /api/plans`) both take it,
+ * so the two refuse and answer alike. A choice is one thing, so a model
+ * without its effort, the reverse, or a window without a model is refused
+ * as invalid, as is a choice the catalog refuses; an empty note is none,
+ * its files carrying it alone. A new agent's summary is read as it was just
+ * made, with no turn; one a retry found under its key, as it stands now.
+ */
+export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+  eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
+  userId: string,
+  taskId: string,
+  request: CodingAgentStartRequest,
+  summaryModel?: SummaryModelOf,
+): Effect.fn.Return<RequestedStart, HostedRefusal, StartServices> {
+  const { model, effort, contextWindow, note } = request;
+  if (
+    (model === undefined) !== (effort === undefined) ||
+    (contextWindow !== undefined && model === undefined)
+  ) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const choice =
+    model !== undefined && effort !== undefined
+      ? { model, effort, ...(contextWindow === undefined ? undefined : { contextWindow }) }
+      : undefined;
+  const { agent, created } = yield* startCodingAgent(eve, userId, {
+    taskId,
+    idempotencyKey: request.idempotencyKey,
+    choice,
+    prompt: request.prompt,
+    attachments: request.attachments,
+    disabledServers: request.disabledServers,
+    from: request.from,
+    note: note === "" ? undefined : note,
+    summaryModel,
+  }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
+  if (!created) return { agent: yield* summaryOf(userId, agent), created };
+  const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
+  return {
+    agent: codingAgentSummary(
+      agent,
+      { turn: undefined, awaitingLineAt: undefined },
+      yield* Clock.currentTimeMillis,
+      names,
+    ),
+    created,
+  };
 });

@@ -139,7 +139,7 @@ export function SignInMethodsChart({
               dataKey="label"
               position="right"
               offset={8}
-              className="fill-muted-foreground"
+              className="fill-(--luke-color-text-muted)"
               fontSize={12}
             />
           </Bar>

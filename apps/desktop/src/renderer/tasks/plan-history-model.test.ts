@@ -3,11 +3,11 @@ import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type PlanRevisionLine } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { dayAndTimeText } from "@luke/panel/tasks/task-time";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { ACTOR_KIND, ACTOR_STATE, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { DOCUMENT_TASK } from "#testing/document-task";
 import { MARKDOWN_MARK, MarkdownMessage } from "../markdown-message";
 import {
   changedSections,

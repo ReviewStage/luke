@@ -83,6 +83,7 @@ import {
   READ_PAGE_REFUSAL,
   START_CODING_AGENT_REFUSAL,
   STOP_AGENT_REFUSAL,
+  UPDATE_TASK_REFUSAL,
 } from "../coding-agent-tools.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
@@ -1637,6 +1638,154 @@ test("archive_agent refuses an agent still working, the caller itself, an agent 
   for (const agent of [agents.teammates, agents.caller, agents.otherWorkspaces, agents.strangers]) {
     const read = Option.getOrThrow(await database.run(readCodingAgent(agent.userId, agent.id)));
     assert.equal(read.archivedAt, null, agent.id);
+  }
+});
+
+test("update_task archives a teammate's task of the caller's workspace for the caller's starter, as the Archive task menu does, without stopping or refusing over the agent still working on it, answers a call run again as done, and brings it back", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  await turnOn(agents.teammates, false);
+  const answered = (archived: boolean, already: boolean) => ({
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    task: {
+      id: tasks.billing,
+      name: "Billing",
+      repository: RELAY_FULL_NAME,
+      archived,
+      pinned: false,
+      mention: `[@Billing](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing})`,
+    },
+    already,
+  });
+  const archivedAt = async () =>
+    Option.getOrThrow(await database.run(readTask(agents.teammates.userId, tasks.billing))).task
+      .archivedAt;
+  const listedBy = async (userId: string) =>
+    (await database.run(listTasks(userId))).map((listed) => listed.id);
+  const archive = (archived: boolean, key: string) =>
+    call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, archived }, key);
+
+  assert.deepEqual(await archive(true, "call-1"), answered(true, false));
+  const stamped = await archivedAt();
+  assert.ok(stamped !== undefined);
+  // Every member of the workspace reads it archived, its owner among them, as after the menu's.
+  assert.ok(!(await listedBy(agents.caller.userId)).includes(tasks.billing));
+  assert.ok(!(await listedBy(agents.teammates.userId)).includes(tasks.billing));
+  const working = await call(CODER_TOOL.LIST_AGENTS, { taskId: tasks.billing });
+  assert.deepEqual(
+    Array.isArray(working.agents)
+      ? working.agents.map((agent) => isRecord(agent) && [agent.status, agent.archived])
+      : [],
+    [[CODING_AGENT_STATUS.RUNNING, false]],
+    "the agent on it is neither stopped nor archived",
+  );
+  // list_tasks leaves it out unless asked, and then names it archived, so it is found to bring back.
+  const listedIds = (listed: WireRecord) =>
+    Array.isArray(listed.tasks)
+      ? listed.tasks.flatMap((each) => (isRecord(each) ? [[each.id, each.archived]] : []))
+      : [];
+  assert.deepEqual(listedIds(await call(CODER_TOOL.LIST_TASKS, { nameContains: "Bill" })), []);
+  assert.deepEqual(
+    listedIds(await call(CODER_TOOL.LIST_TASKS, { nameContains: "Bill", includeArchived: true })),
+    [[tasks.billing, true]],
+  );
+  assert.deepEqual(await archive(true, "call-2"), answered(true, true));
+  assert.equal(await archivedAt(), stamped, "a second archive keeps the first stamp");
+  // An archived task takes no new name, as the menu's rename refuses one, unless the same call brings it back.
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, name: "Seats" }, "call-3"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: UPDATE_TASK_REFUSAL.ARCHIVED },
+  );
+
+  assert.deepEqual(await archive(false, "call-4"), answered(false, false));
+  assert.equal(await archivedAt(), undefined);
+  assert.ok((await listedBy(agents.teammates.userId)).includes(tasks.billing));
+  assert.deepEqual(await archive(false, "call-5"), answered(false, true));
+});
+
+test("update_task renames a task, pins it for the caller's starter alone, sets its repository only where the workspace's installation reaches it and clears it, and renames the caller's own task, as the member's menu does", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const update = (changes: WireRecord, key: string) =>
+    call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, ...changes }, key);
+  const readBy = async (userId: string) =>
+    Option.getOrThrow(await database.run(readTask(userId, tasks.billing))).task;
+
+  const renamed = await update({ name: "Seat billing", pinned: true }, "call-1");
+  assert.equal(renamed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(renamed));
+  assert.deepEqual(
+    isRecord(renamed.task) ? [renamed.task.name, renamed.task.pinned, renamed.already] : [],
+    ["Seat billing", true, false],
+  );
+  assert.equal((await readBy(agents.teammates.userId)).name, "Seat billing");
+  assert.ok((await readBy(agents.caller.userId)).pinnedAt !== undefined);
+  assert.equal((await readBy(agents.teammates.userId)).pinnedAt, undefined, "the owner's own pin");
+  assert.equal(
+    (await update({ name: "Seat billing", pinned: true }, "call-2")).already,
+    true,
+    "a change already standing answers as done",
+  );
+
+  assert.deepEqual(await update({ repository: "Acme/Elsewhere" }, "call-3"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: UPDATE_TASK_REFUSAL.NOT_REACHABLE,
+  });
+  assert.equal((await readBy(agents.caller.userId)).repository, RELAY_FULL_NAME);
+  const cleared = await update({ repository: null }, "call-4");
+  assert.equal(isRecord(cleared.task) && cleared.task.repository, null, JSON.stringify(cleared));
+  const set = await update({ repository: RELAY_FULL_NAME }, "call-5");
+  assert.equal(isRecord(set.task) && set.task.repository, RELAY_FULL_NAME, JSON.stringify(set));
+  // The repository named in another casing is GitHub's same one, which already stands.
+  const again = await update({ repository: RELAY_FULL_NAME.toLowerCase() }, "call-5b");
+  assert.deepEqual(
+    [isRecord(again.task) && again.task.repository, again.already],
+    [RELAY_FULL_NAME, true],
+    JSON.stringify(again),
+  );
+
+  const own = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: tasks.invitations, name: "Invitations" },
+    "call-6",
+  );
+  assert.equal(own.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(own));
+});
+
+test("update_task refuses to archive the task the caller works on, and refuses a task of another workspace its starter is also in, a stranger's, an id that names no task, and a call that names no change, changing none of them", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const strangersTask = Option.getOrThrow(
+    await database.run(readCodingAgent(agents.strangers.userId, agents.strangers.id)),
+  ).taskId;
+  assert.ok(strangersTask !== null);
+  const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+  const archive = (taskId: string) => call(CODER_TOOL.UPDATE_TASK, { taskId, archived: true });
+
+  assert.deepEqual(await archive(tasks.invitations), rejected(UPDATE_TASK_REFUSAL.OWN_TASK));
+  assert.deepEqual(await archive(tasks.elsewhere), rejected(UPDATE_TASK_REFUSAL.NO_TASK));
+  assert.deepEqual(await archive(strangersTask), rejected(UPDATE_TASK_REFUSAL.NO_TASK));
+  assert.deepEqual(await archive(randomUUID()), rejected(UPDATE_TASK_REFUSAL.NO_TASK));
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_TASK, { taskId: strangersTask, name: "Mine now" }),
+    rejected(UPDATE_TASK_REFUSAL.NO_TASK),
+  );
+  assert.deepEqual(await archive("Billing"), rejected(UPDATE_TASK_REFUSAL.UNREADABLE));
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing }),
+    rejected(UPDATE_TASK_REFUSAL.UNREADABLE),
+  );
+  const owners = [
+    [agents.caller.userId, tasks.invitations],
+    [agents.otherWorkspaces.userId, tasks.elsewhere],
+    [agents.strangers.userId, strangersTask],
+  ] as const;
+  for (const [userId, taskId] of owners) {
+    const read = Option.getOrThrow(await database.run(readTask(userId, taskId)));
+    assert.equal(read.task.archivedAt, undefined, taskId);
+    assert.notEqual(read.task.name, "Mine now", taskId);
   }
 });
 

@@ -1,5 +1,6 @@
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { TILE_SIZE, WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
 import {
   BUTTON_VARIANT,
   Button,
@@ -16,7 +17,6 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { sharedWords } from "./workspace-ref";
-import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
 
 /**
  * move-task-dialog.tsx -- Move to workspace, from a task's ⋯: the account's other workspaces to move the task to, and what the move does.

@@ -20,6 +20,10 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -28,8 +32,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { handState } from "#testing/app-state";
 import {
   composerEditor,
   editorBundleLanded,
@@ -37,8 +39,6 @@ import {
   pressInComposer,
   typeInComposer,
 } from "#testing/composer";
-import { onRegistry } from "#testing/copy-feedback";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import type { InboxChoice, NewTaskAgent, TasksControl } from "../tasks/use-tasks-tab";
 import { commandKeyshortcuts } from "../tooltip";
@@ -246,8 +246,8 @@ function newTaskControl(started: Started[]): TasksControl["newTask"] {
     workspaceId: LISTED_WORKSPACE,
     repositoriesIn: () => ({ ...tasksControl().repositories, recent: ["acme/relay"] }),
     readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
-    start: (name, repository, workspaceId, planning, _from, agent) => {
-      started.push({ name, repository, workspaceId, planning, agent });
+    start: (name, repository, workspaceId, planning, from) => {
+      started.push({ name, repository, workspaceId, planning, agent: from?.handed });
       return Promise.resolve(undefined);
     },
   };

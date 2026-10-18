@@ -1,7 +1,7 @@
 import type { Workspace } from "@luke/features/workspace-wire";
+import { WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
 import { CHIP_WIDTH, DIALOG_SIZE, Dialog, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 import { type RefObject, useId, useMemo, useRef, useState } from "react";
-import { WorkspaceTile } from "../desktop/workspace-tile";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row";
 import { NewTaskComposer } from "./new-task-composer";
 import type { TasksControl } from "./use-tasks-tab";
@@ -32,12 +32,16 @@ import type { TasksControl } from "./use-tasks-tab";
  * Opened from one of the workspace's own issues (its Start task…), the card
  * says so in its title, starts in the issue's workspace and no other, names
  * the task by the issue, and offers no Linear chip; the task it starts is
- * linked to that issue, which the issue's page lists it under.
+ * linked to that issue, which the issue's page lists it under. Opened from
+ * the issue's Start agent…, the card is a new agent's: its composer stands
+ * in Agent mode with no Plan toggle, and starts the task and an agent on it
+ * at once.
  */
 
-/** The card's title, before the workspace's chip: the issue it starts from where there is one, and "in" where the chip stands after it. */
-function newTaskHeading(issue: string | undefined, inWorkspace: boolean): string {
-  const heading = issue === undefined ? "New task" : `New task from ${issue}`;
+/** The card's title, before the workspace's chip: an agent's where one alone is asked for, the issue it starts from where there is one, and "in" where the chip stands after it. */
+function newTaskHeading(issue: string | undefined, inWorkspace: boolean, agent: boolean): string {
+  const what = agent ? "New agent" : "New task";
+  const heading = issue === undefined ? what : `${what} from ${issue}`;
   return inWorkspace ? `${heading} in` : heading;
 }
 
@@ -131,7 +135,11 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
         <div className="new-task-head">
           <div className="new-task-title">
             <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
-              {newTaskHeading(from?.identifier, startsIn !== undefined)}
+              {newTaskHeading(
+                from?.identifier,
+                startsIn !== undefined,
+                newTask.preset?.agent === true,
+              )}
             </Text>
             <WorkspaceChip
               workspaces={newTask.workspaces}

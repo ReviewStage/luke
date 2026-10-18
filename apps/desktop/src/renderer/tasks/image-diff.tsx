@@ -1,9 +1,9 @@
 import { CHANGED_FILE_STATUS, type CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { Segmented } from "@luke/panel/segmented";
 import { PICTURE_STATE, type PictureState, usePicture } from "@luke/ui/picture-cache";
 import { useCallback, useEffect, useState } from "react";
-import { Segmented } from "../segmented";
 
 /**
  * image-diff.tsx -- a changed image as Files changed draws it: the picture before and after, side by side, swiped, or one faded over the other, in place of "binary file".

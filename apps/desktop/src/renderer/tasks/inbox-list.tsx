@@ -1,10 +1,18 @@
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { AttentionMark } from "@luke/panel/attention-mark";
+import { useAutomation } from "@luke/panel/automation-directory";
+import { EDGE_SIDE, useResizableEdge } from "@luke/panel/desktop/use-resizable-edge";
+import { DraftMark } from "@luke/panel/draft-mark";
+import { useMemberDirectory } from "@luke/panel/member-directory";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
+  CHIP_LOOK,
+  Chip,
+  ChipName,
   DocumentIcon,
   EmptyState,
   IconButton,
@@ -15,6 +23,11 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  TAB_COUNT_TONE,
+  TABS_DENSITY,
+  TABS_INSET,
+  TabCount,
+  Tabs,
   useMenu,
 } from "@luke/ui";
 import {
@@ -28,32 +41,34 @@ import {
 import {
   ArrowDownNarrowWideIcon,
   CheckCheckIcon,
+  CircleCheckIcon,
+  CircleDotIcon,
+  ClockIcon,
   FactoryIcon,
+  HourglassIcon,
   InboxIcon,
+  ListIcon,
   MailIcon,
   MailOpenIcon,
   SlidersHorizontalIcon,
+  UserIcon,
   UsersIcon,
 } from "lucide-react";
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback, useId, useLayoutEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
-import { AttentionMark } from "../attention-mark";
-import { useAutomation } from "../automation-directory";
 import { useInboxItemDrafted } from "../composer-drafts";
 import { useCopyLinkItem } from "../copy-link-item";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
 import {
   INBOX_LIST_WIDTH,
+  type InboxShowChoice,
   type InboxTaskFolds,
   type InboxViewChoices,
-  type InboxWaitingOnly,
+  type InboxWhoseChoice,
   useInboxListWidth,
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
-import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
-import { DraftMark } from "../draft-mark";
-import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
 import { providerOf } from "./coding-agent-model";
@@ -61,19 +76,30 @@ import {
   INBOX_COLUMNS,
   type InboxColumnsShown,
   type InboxRowPresses,
-  needsYouButton,
+  listHeadControl,
 } from "./inbox-columns";
 import {
+  EVERYONES,
   holderKey,
   holderName,
   INBOX_GROUPING,
   INBOX_HOLDER,
+  INBOX_SHOW,
+  INBOX_SORT,
+  INBOX_STATUS_GROUP,
+  INBOX_WHOSE,
+  type InboxCounts,
   type InboxGrouping,
   type InboxHolder,
   type InboxListed,
   type InboxListView,
   type InboxPersonGroup,
+  type InboxShow,
+  type InboxSort,
   type InboxStarter,
+  type InboxStatusGroup,
+  type InboxStatusGroupKind,
+  type InboxWhose,
   inboxPreview,
   isUnread,
   NEEDS_YOU,
@@ -114,22 +140,27 @@ import { cardTitle } from "./tool-call-model";
  * reads it, and its row, its menu, U, and Mark all as read in the view's
  * menu mark it read or unread (`use-inbox-read-marks.ts`). A folded task
  * counts what in it needs the developer, at rest, and says nothing where
- * none does. The head names the Inbox and, at its right, offers two
- * buttons: Needs you, pressed while the list holds only what needs the
- * developer, the way a mail app shows unread mail only, its glyph the
- * Inbox's own wearing a dot in the attention mark's orange while anything
- * needs the developer, filtered out or not, its pressed fill alone saying the filter
- * is on and its tooltip what a press does; and one whose menu says
- * how the list groups its items, by plan, by person, or newest first, the
+ * none does. The head names the Inbox and, at its right, offers the view's
+ * menu: Group by, by task, by person, by status (what needs the developer
+ * under the attention mark, what waits on others, what is answered, each
+ * folding as a task's group does), or None, one run; Sort, the latest
+ * activity first or the open items waiting longest first; Whose, everyone's
+ * items, the developer's own, or one teammate's by face and name, which a
+ * chip over the list then says, its × listing everyone's again; each
  * choice checked, and under them Mark all as read, which clears the dots
- * alone; both choices are kept across launches. Grouped by person, each
- * person's items stand under their face, the reader's own first as You, and
- * a row names its plan where it wears no face, since the header says whose
- * it is. Where Needs you leaves out every
- * item listed, the list says so in the Inbox's empty state, with Show all to
- * turn the filter off, as a mail app's empty unread view does; the item the
- * pane shows keeps its place there, though no row. A task's own Inbox lists one
- * task's items in one run, so its head offers Needs you alone, kept apart
+ * alone. Under the head stand the tabs that choose what the list
+ * holds, each counting its own of whose items Whose lists: Needs you, the reader's own open items,
+ * its count in the attention mark's orange while anything needs them;
+ * Unread, anyone's; All open; and Everything, settled items too. Every
+ * choice is kept across launches. Grouped by person, each person's items
+ * stand under their face, the reader's own first as You. Grouped by
+ * anything but task, a row names its task in a chip before its preview,
+ * since no task's header stands over it. Where the tab leaves out every
+ * item listed, the list says so in the Inbox's empty state, offering the
+ * tab that holds something, as a mail app's empty unread view does; the
+ * item the pane shows keeps its place there, though no row. A task's own
+ * Inbox lists one task's items in one run, so its head offers its tabs
+ * alone, kept apart
  * from the window's, and its list has no groups. Either list
  * is resized from its right edge as the sidebar is, and keeps one width
  * between them across launches; an Inbox showing one column at a time
@@ -152,6 +183,9 @@ const MARK_ALL_READ = "Mark all as read";
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
 
+/** What the view's submenu of groupings is called. */
+const GROUP_BY = "Group by";
+
 /** What the list's placeholder rows say to a reader while its items are first read. */
 const READING_ITEMS = "Reading your inbox…";
 
@@ -173,11 +207,57 @@ const SKELETON_CONTEXT = "7em";
 /** How wide a placeholder row's mark stands, an agent's tile at its inline size (`.actor-mark`). */
 const SKELETON_MARK = "16px";
 
-/** What a press on Needs you does, as its tooltip says: list only what needs the developer, or everything again. */
-const NEEDS_YOU_PRESS = {
-  ONLY: "Show only what needs you",
-  ALL: "Show all",
+/** What the row of tabs under the Inbox's title is called. */
+const SHOW_TABS = "Show";
+
+/** The tabs under the Inbox's title, in the order they stand, each by what it is called. */
+const SHOW_TAB_WORDS = [
+  { show: INBOX_SHOW.NEEDS_YOU, label: NEEDS_YOU.LABEL },
+  { show: INBOX_SHOW.UNREAD, label: "Unread" },
+  { show: INBOX_SHOW.OPEN, label: "All open" },
+  { show: INBOX_SHOW.ALL, label: "Everything" },
+] as const;
+
+/**
+ * What the list says where its tab leaves out every item it holds: a title,
+ * and the line under it. Everything leaves out only what Whose does.
+ */
+const SHOW_EMPTY = {
+  [INBOX_SHOW.NEEDS_YOU]: { title: NEEDS_YOU.NONE, body: NEEDS_YOU.ANSWERED },
+  [INBOX_SHOW.UNREAD]: { title: "Nothing unread", body: "You've read everything" },
+  [INBOX_SHOW.OPEN]: { title: "Nothing open", body: "Every item is answered" },
+  [INBOX_SHOW.ALL]: { title: "Nothing here", body: "Nothing in the Inbox is theirs" },
+} as const satisfies Record<InboxShow, { title: string; body: string }>;
+
+/** What the empty state's press says, by the tab it shows instead. */
+const SHOW_INSTEAD = {
+  [INBOX_SHOW.OPEN]: "Show all open",
+  [INBOX_SHOW.ALL]: "Show everything",
 } as const;
+
+/** The tab an empty tab offers instead: All open from Needs you or Unread where anything is open, else Everything where it holds anything; none from Everything, nor where nothing is there to show. */
+function insteadOf(show: InboxShow, counts: InboxCounts): keyof typeof SHOW_INSTEAD | undefined {
+  if (show === INBOX_SHOW.ALL) return undefined;
+  if (show !== INBOX_SHOW.OPEN && counts[INBOX_SHOW.OPEN] > 0) return INBOX_SHOW.OPEN;
+  return counts[INBOX_SHOW.ALL] > 0 ? INBOX_SHOW.ALL : undefined;
+}
+
+/** What the empty state's press says where it lists everyone's items again, Whose having left out every item. */
+const SHOW_EVERYONES = "Show everyone's";
+
+/** What each status group is called, and its glyph, a list grouped by status heading it. */
+const STATUS_WORDS = {
+  [INBOX_STATUS_GROUP.NEEDS_YOU]: NEEDS_YOU.LABEL,
+  [INBOX_STATUS_GROUP.WAITING]: "Waiting on others",
+  [INBOX_STATUS_GROUP.ANSWERED]: "Answered",
+} as const satisfies Record<InboxStatusGroupKind, string>;
+
+/** What the view's submenu of sorts and of whose items are called. */
+const SORT_BY = "Sort";
+const WHOSE = "Whose";
+
+/** What the chip over the list says its × does. */
+const CLEAR_WHOSE = "Show everyone's items";
 
 /** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */
 function waitingOn(starter: Actor): string {
@@ -298,7 +378,9 @@ export function ItemMark({
  * short one leaving the row open on a Read or Unread button, a long one
  * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). The home page's Inbox
  * names the item's plan at the row's end, in `context`, since its rows stand
- * under no plan's header, as a person's group does. Its right-click offers
+ * under no plan's header; the Inbox's own list, grouped by anything but
+ * task, names it in a chip before the preview instead (`chip`), its glyph
+ * and its name cut short, so the title keeps its whole line. Its right-click offers
  * Copy link, the item's link under the task or the agent that holds it, where
  * the list hands down a workspace to write it under.
  */
@@ -311,6 +393,7 @@ export function InboxItemRow({
   readerId,
   context,
   face = true,
+  chip = false,
   ref,
   onChoose,
   onMark,
@@ -326,6 +409,8 @@ export function InboxItemRow({
   context?: string;
   /** Whether a teammate's item wears their face, which a person's group header says instead. */
   face?: boolean;
+  /** Whether the row names its task, or its automation, in a chip before its preview, as a list its tasks do not head does. */
+  chip?: boolean;
   /** Handed the row's press, by which the list finds the row of an item. */
   ref?: React.RefCallback<HTMLElement> | undefined;
   onChoose: (listed: InboxListed) => void;
@@ -392,6 +477,9 @@ export function InboxItemRow({
         }
         title={title}
         description={preview}
+        lead={
+          chip ? { icon: <HolderGlyph holder={holder} />, label: holderName(holder) } : undefined
+        }
         meta={
           <span className="home-row-meta">
             {unread ? <span className="visually-hidden">{UNREAD}</span> : null}
@@ -449,6 +537,28 @@ export function InboxItemRow({
 }
 
 /**
+ * A holder's glyph as a row's chip draws it: a task's document, an
+ * automation's clock tile, and the Factory's glyph for the agents no
+ * automation names, as the holder's group header draws them.
+ */
+function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
+  const known = useAutomation(
+    holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
+  );
+  if (holder.kind === INBOX_HOLDER.TASK) return <DocumentIcon />;
+  if (holder.automationId === null) return <FactoryIcon />;
+  return (
+    <ActorMark
+      actor={
+        known === undefined
+          ? { kind: ACTOR_KIND.AUTOMATION, name: holder.name, state: ACTOR_STATE.REST }
+          : automationActor(known.automation)
+      }
+    />
+  );
+}
+
+/**
  * A holder's group header: a task's document glyph and name; an
  * automation's clock tile, wearing how its last run went and hanging its
  * card where the window reads the automation; and the Factory's glyph, the
@@ -498,6 +608,43 @@ function HolderHeader({
 }
 
 /**
+ * A status's group header: Needs you by the attention mark, Waiting on
+ * others by the hourglass, and Answered by a check. A press folds the
+ * group, as every group header's does.
+ */
+function StatusHeader({
+  status,
+  folded,
+  count,
+  onToggle,
+}: {
+  status: InboxStatusGroupKind;
+  folded: boolean;
+  count: number;
+  onToggle: () => void;
+}): React.JSX.Element {
+  const glyph =
+    status === INBOX_STATUS_GROUP.NEEDS_YOU ? (
+      <AttentionMark />
+    ) : status === INBOX_STATUS_GROUP.WAITING ? (
+      <HourglassIcon />
+    ) : (
+      <CircleCheckIcon />
+    );
+  return (
+    <SidebarGroupHeader
+      glyph={glyph}
+      name={STATUS_WORDS[status]}
+      folded={folded}
+      count={count}
+      noun={NEEDS_YOU.COUNT}
+      steady
+      onToggle={onToggle}
+    />
+  );
+}
+
+/**
  * A person's group header: their face and name, the reader's own as You, a
  * member who left on the quiet outline, as the sidebar's group by creator
  * heads its groups. A press folds the group, as every group header's does.
@@ -537,39 +684,112 @@ function PersonHeader({
   );
 }
 
-/** The head's button that drops the menu of how the list groups its items, the choice checked. */
+/** Whose's choices: Everyone, then Mine, then each teammate the workspace lists by face and name, the choice checked. */
+function whoseEntries(
+  whose: InboxWhose,
+  onWhose: (whose: InboxWhose) => void,
+  reader: ReturnType<typeof useMemberDirectory>,
+  readerId: string | undefined,
+): MenuAction[] {
+  const you = reader.readerId ?? readerId;
+  const me = reader.members?.find((member) => member.userId === you);
+  const others = (reader.members ?? []).filter((member) => member.userId !== you);
+  return [
+    {
+      label: "Everyone",
+      icon: <UsersIcon />,
+      checked: whose.kind === INBOX_WHOSE.EVERYONE,
+      onSelect: () => onWhose(EVERYONES),
+    },
+    {
+      label: "Mine",
+      icon:
+        me === undefined ? (
+          <UserIcon />
+        ) : (
+          <ActorMark actor={memberActor(me, you)} size={ACTOR_SIZE.INLINE} />
+        ),
+      checked: whose.kind === INBOX_WHOSE.MINE,
+      onSelect: () => onWhose({ kind: INBOX_WHOSE.MINE }),
+    },
+    ...others.map((member) => ({
+      label: member.name,
+      icon: <ActorMark actor={memberActor(member, you)} size={ACTOR_SIZE.INLINE} />,
+      checked: whose.kind === INBOX_WHOSE.PERSON && whose.userId === member.userId,
+      onSelect: () =>
+        onWhose({ kind: INBOX_WHOSE.PERSON, userId: member.userId, name: member.name }),
+    })),
+  ];
+}
+
+/**
+ * The head's button that drops the view's menu: Group by and Sort, each a
+ * submenu with its choice checked; Whose, Everyone, Mine, or a teammate by
+ * face and name; and Mark all as read at its foot.
+ */
 function ViewOptions({
   shown,
-  grouping,
-  onGrouping,
+  choices,
+  readerId,
   readAll,
 }: {
   shown: boolean;
-  grouping: InboxGrouping;
-  onGrouping: (grouping: InboxGrouping) => void;
+  choices: InboxViewChoices;
+  readerId: string | undefined;
   readAll: InboxReadAll | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
-  const choices: MenuAction[] = [
+  const reader = useMemberDirectory();
+  const groupBy = (label: string, icon: React.JSX.Element, value: InboxGrouping): MenuAction => ({
+    label,
+    icon,
+    checked: choices.grouping === value,
+    onSelect: () => choices.onGrouping(value),
+  });
+  const sortBy = (label: string, icon: React.JSX.Element, value: InboxSort): MenuAction => ({
+    label,
+    icon,
+    checked: choices.sort === value,
+    onSelect: () => choices.onSort(value),
+  });
+  const view: MenuEntry[] = [
     {
-      label: "Group by task",
-      icon: <DocumentIcon />,
-      checked: grouping === INBOX_GROUPING.TASK,
-      onSelect: () => onGrouping(INBOX_GROUPING.TASK),
+      label: GROUP_BY,
+      icon: <ListIcon />,
+      items: [
+        groupBy("Task", <DocumentIcon />, INBOX_GROUPING.TASK),
+        groupBy("Person", <UsersIcon />, INBOX_GROUPING.PERSON),
+        groupBy("Status", <CircleDotIcon />, INBOX_GROUPING.STATUS),
+        groupBy("None", <ListIcon />, INBOX_GROUPING.NONE),
+      ],
     },
     {
-      label: "Group by person",
-      icon: <UsersIcon />,
-      checked: grouping === INBOX_GROUPING.PERSON,
-      onSelect: () => onGrouping(INBOX_GROUPING.PERSON),
-    },
-    {
-      label: "Newest first",
+      label: SORT_BY,
       icon: <ArrowDownNarrowWideIcon />,
-      checked: grouping === INBOX_GROUPING.NEWEST,
-      onSelect: () => onGrouping(INBOX_GROUPING.NEWEST),
+      items: [
+        sortBy("Latest activity", <ClockIcon />, INBOX_SORT.LATEST),
+        sortBy("Waiting longest", <HourglassIcon />, INBOX_SORT.WAITING),
+      ],
     },
   ];
+  const whose: MenuEntry[] = [
+    {
+      label: WHOSE,
+      icon: <UsersIcon />,
+      items: whoseEntries(choices.whose, choices.onWhose, reader, readerId),
+    },
+  ];
+  const markAll: MenuEntry[] =
+    readAll === undefined
+      ? []
+      : [
+          {
+            label: MARK_ALL_READ,
+            icon: <CheckCheckIcon />,
+            disabled: !readAll.unread,
+            onSelect: readAll.onMarkAll,
+          },
+        ];
   return (
     <>
       <Tooltip label={VIEW_OPTIONS}>
@@ -579,21 +799,7 @@ function ViewOptions({
         <ActionMenu
           label={VIEW_OPTIONS}
           menu={menu.drawn}
-          groups={
-            readAll === undefined
-              ? [choices]
-              : [
-                  choices,
-                  [
-                    {
-                      label: MARK_ALL_READ,
-                      icon: <CheckCheckIcon />,
-                      disabled: !readAll.unread,
-                      onSelect: readAll.onMarkAll,
-                    },
-                  ],
-                ]
-          }
+          groups={[view, whose, markAll].filter((group) => group.length > 0)}
           onClose={menu.close}
         />
       )}
@@ -601,55 +807,148 @@ function ViewOptions({
   );
 }
 
-/** The head's button that lists only what needs the developer while it is pressed, its glyph wearing a dot in the attention mark's orange while anything does. */
-function NeedsYouOnly({
-  waiting,
-  waitingOnly,
-  onWaitingOnly,
+/**
+ * The chip over the list while Whose leaves out anyone's items: Mine by the
+ * reader's face, or the teammate's face and name, and a × that lists
+ * everyone's again (`@luke/ui`'s removable filter chip, as the sidebar's
+ * Created by stands over its tasks).
+ */
+function WhoseChip({
+  whose,
+  readerId,
 }: {
-  waiting: boolean;
-  waitingOnly: boolean;
-  onWaitingOnly: (waitingOnly: boolean) => void;
-}): React.JSX.Element {
+  whose: InboxWhoseChoice;
+  readerId: string | undefined;
+}): React.JSX.Element | null {
+  const { members, former, readerId: known } = useMemberDirectory();
+  const reader = known ?? readerId;
+  const chosen = whose.whose;
+  if (chosen.kind === INBOX_WHOSE.EVERYONE) return null;
+  const me = members?.find((member) => member.userId === reader);
+  const actor: Actor | undefined =
+    chosen.kind === INBOX_WHOSE.PERSON
+      ? personActor(chosen, members, reader, former)
+      : me === undefined
+        ? undefined
+        : memberActor(me, reader);
   return (
-    <Tooltip label={waitingOnly ? NEEDS_YOU_PRESS.ALL : NEEDS_YOU_PRESS.ONLY}>
-      <IconButton
-        icon={
-          <InboxIcon className="inbox-needs-you-glyph" data-waiting={String(waiting)}>
-            {/* Note that the dot's place and size are desktop.css's, beside the cut it stands in. */}
-            {waiting ? <circle className="inbox-needs-you-dot" /> : null}
-          </InboxIcon>
-        }
-        label={NEEDS_YOU.LABEL}
-        pressed={waitingOnly}
-        onClick={() => onWaitingOnly(!waitingOnly)}
-      />
-    </Tooltip>
+    <div className="inbox-tasks-chips">
+      <Chip
+        look={CHIP_LOOK.FILTER}
+        removeLabel={CLEAR_WHOSE}
+        onRemove={() => whose.onWhose(EVERYONES)}
+      >
+        {actor === undefined ? <UserIcon /> : <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
+        <ChipName>
+          {chosen.kind === INBOX_WHOSE.MINE
+            ? "Mine"
+            : actor === undefined
+              ? chosen.name
+              : actorName(actor)}
+        </ChipName>
+      </Chip>
+    </div>
   );
 }
 
-/** What the list stands where Needs you leaves out every item listed: nothing needs the developer, and Show all, which turns the filter off and keeps the list standing where the Inbox shows one column. */
-export function NeedsYouEmpty({
-  needsYou,
+/** The ids the list's tabs are drawn by: the one each tab's id starts with, and the list's rows, the panel every tab controls. */
+interface ShowTabIds {
+  readonly tabs: string;
+  readonly panel: string;
+}
+
+/** A tab's element id, under the list's own. */
+function showTabId(tabs: string, show: InboxShow): string {
+  return `${tabs}-${show}`;
+}
+
+/**
+ * The row of tabs under the Inbox's title, each listing its own items and
+ * counting them: Needs you, its count in the attention mark's orange while
+ * anything needs the developer, Unread, All open, and Everything. The list
+ * under them is the panel every tab shows.
+ */
+function ShowTabs({
+  show,
+  counts,
+  ids,
+}: {
+  show: InboxShowChoice;
+  counts: InboxCounts;
+  ids: ShowTabIds;
+}): React.JSX.Element {
+  return (
+    <Tabs<InboxShow>
+      label={SHOW_TABS}
+      tabs={SHOW_TAB_WORDS.map(({ show: value, label }) => ({
+        value,
+        label,
+        count: (
+          <TabCount
+            tone={
+              value === INBOX_SHOW.NEEDS_YOU && counts[value] > 0
+                ? TAB_COUNT_TONE.ATTENTION
+                : TAB_COUNT_TONE.QUIET
+            }
+          >
+            {String(counts[value])}
+          </TabCount>
+        ),
+      }))}
+      value={show.show}
+      onChange={show.onShow}
+      ids={(value) => ({ tab: showTabId(ids.tabs, value), panel: ids.panel })}
+      inset={TABS_INSET.COLUMN}
+      density={TABS_DENSITY.COMPACT}
+    />
+  );
+}
+
+/** What the list stands where its tab leaves out every item it holds: that nothing is there, and the press that shows the tab that holds something, which keeps the list standing where the Inbox shows one column. */
+export function ShowEmpty({
+  show,
+  counts,
+  whose,
   onList,
 }: {
-  needsYou: InboxWaitingOnly;
+  show: InboxShowChoice;
+  counts: InboxCounts;
+  /** Whose items the window's Inbox lists, which offers everyone's again where no tab holds any of theirs; none on a task's own. */
+  whose?: InboxWhoseChoice | undefined;
   /** Asks the Inbox for its list, so the item chosen once the rows return does not stand in their place. */
   onList: () => void;
 }): React.JSX.Element {
+  const { title, body } = SHOW_EMPTY[show.show];
+  const instead = insteadOf(show.show, counts);
+  const everyone =
+    instead === undefined && whose !== undefined && whose.whose.kind !== INBOX_WHOSE.EVERYONE
+      ? whose
+      : undefined;
   return (
     <EmptyState
       icon={<InboxIcon />}
-      title={NEEDS_YOU.NONE}
-      action={{
-        label: NEEDS_YOU_PRESS.ALL,
-        onClick: () => {
-          onList();
-          needsYou.onWaitingOnly(false);
-        },
-      }}
+      title={title}
+      action={
+        instead !== undefined
+          ? {
+              label: SHOW_INSTEAD[instead],
+              onClick: () => {
+                onList();
+                show.onShow(instead);
+              },
+            }
+          : everyone !== undefined
+            ? {
+                label: SHOW_EVERYONES,
+                onClick: () => {
+                  onList();
+                  everyone.onWhose(EVERYONES);
+                },
+              }
+            : undefined
+      }
     >
-      {NEEDS_YOU.ANSWERED}
+      {body}
     </EmptyState>
   );
 }
@@ -701,48 +1000,56 @@ export function InboxListSkeleton({
 }
 
 /**
- * The list's head: the Inbox's name, and Needs you and, on the window's
- * Inbox, the view's menu at the list's top right; a task's own Inbox lists
- * one task's items in one run, so it has no menu. On the window's Inbox its
- * heading and its buttons glide as the sidebar folds, the name moving to the
- * list's middle, clear of the sidebar's toggle, and the buttons keeping to
- * the list's edge.
+ * The list's head: the Inbox's name, the view's menu at the list's top
+ * right on the window's Inbox, and under them the tabs that choose what it
+ * lists; a task's own Inbox lists one task's items in one run, so it has no
+ * menu. On the window's Inbox its heading and its button glide as the
+ * sidebar folds, the name moving to the list's middle, clear of the
+ * sidebar's toggle, and the button keeping to the list's edge.
  */
-function ListHead({ head }: { head: InboxListHead }): React.JSX.Element {
-  const { shown, needsYou, view, waiting } = head;
+function ListHead({
+  head,
+  ids,
+  readerId,
+}: {
+  head: InboxListHead;
+  ids: ShowTabIds;
+  readerId: string | undefined;
+}): React.JSX.Element {
+  const { shown, show, view, counts } = head;
   return (
-    <header className="desktop-toolbar inbox-tasks-bar">
-      <div className="desktop-toolbar-heading">
-        <h1 className="desktop-toolbar-title">Inbox</h1>
-      </div>
-      <div className="desktop-toolbar-actions">
-        <NeedsYouOnly
-          waiting={waiting}
-          waitingOnly={needsYou.waitingOnly}
-          onWaitingOnly={needsYou.onWaitingOnly}
-        />
-        {view === undefined ? null : (
-          <ViewOptions
-            shown={shown}
-            grouping={view.choices.grouping}
-            onGrouping={view.choices.onGrouping}
-            readAll={head.readAll}
-          />
-        )}
-      </div>
-    </header>
+    <>
+      <header className="desktop-toolbar inbox-tasks-bar">
+        <div className="desktop-toolbar-heading">
+          <h1 className="desktop-toolbar-title">Inbox</h1>
+        </div>
+        <div className="desktop-toolbar-actions">
+          {view === undefined ? null : (
+            <ViewOptions
+              shown={shown}
+              choices={view.choices}
+              readerId={readerId}
+              readAll={head.readAll}
+            />
+          )}
+        </div>
+      </header>
+      <ShowTabs show={show} counts={counts} ids={ids} />
+      {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
+    </>
   );
 }
 
-/** What the list's head offers: Needs you on every Inbox, and on the window's how it groups its items and which plans are folded. */
+/** What the list's head offers: its tabs on every Inbox, and on the window's how it groups its items and which plans are folded. */
 export interface InboxListHead {
   /** Whether the list is on screen, for its menu not to outlive it. */
   readonly shown: boolean;
-  readonly needsYou: InboxWaitingOnly;
+  /** The tab the list shows, and the press that shows another. */
+  readonly show: InboxShowChoice;
+  /** How many items each tab lists, filtered out or not. */
+  readonly counts: InboxCounts;
   /** The window's Inbox's grouping and its plans' folds; none on a task's own, which lists one task's items in one run. */
   readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxTaskFolds } | undefined;
-  /** Whether any item needs the developer, filtered out or not, for Needs you's dot. */
-  readonly waiting: boolean;
   /** Mark all as read, in the view's menu, where the list marks its items. */
   readonly readAll?: InboxReadAll | undefined;
 }
@@ -763,8 +1070,8 @@ interface RowFocus {
 /**
  * Keeps the keyboard in the list when the row holding it is no longer
  * drawn, as Needs you leaves out an item answered on another Mac while its
- * row is focused: the keyboard goes to Needs you, the control that left it
- * out. Note that a removed row fires no blur, so the row last focused is
+ * row is focused: the keyboard goes to the tab shown, the control that left
+ * it out. Note that a removed row fires no blur, so the row last focused is
  * remembered and looked for after every render.
  */
 function useRowFocusKept(rows: InboxRowPresses): RowFocus {
@@ -777,7 +1084,7 @@ function useRowFocusKept(rows: InboxRowPresses): RowFocus {
     if (rows.find(row) !== undefined) return;
     focusedRow.current = undefined;
     if (document.activeElement !== null && document.activeElement !== document.body) return;
-    needsYouButton(list)?.focus();
+    listHeadControl(list)?.focus();
   });
   return {
     ref,
@@ -832,7 +1139,10 @@ export function InboxList({
     label: "Resize inbox list",
     onResize,
   });
-  const row = (listed: InboxListed, byPerson = false) => (
+  const panel = useId();
+  const tabs = useId();
+  // Note that a row names its task wherever no task's header stands over it, and a teammate's face wherever no person's does.
+  const row = (listed: InboxListed) => (
     <InboxItemRow
       key={listed.item.id}
       listed={listed}
@@ -841,15 +1151,29 @@ export function InboxList({
       now={now}
       models={models}
       readerId={readerId}
-      face={!byPerson}
+      face={view.grouping !== INBOX_GROUPING.PERSON}
+      chip={head.view !== undefined && view.grouping !== INBOX_GROUPING.TASK}
       ref={rows.hold(listed.item.id)}
-      {...(byPerson ? { context: holderName(listed.holder) } : undefined)}
       onChoose={onChoose}
       onMark={onMark}
     />
   );
   const needingYou = (items: readonly InboxItem[]) =>
     items.filter((item) => needsReader(item, view.readerId)).length;
+  const statusSection = ({ key, status, items }: InboxStatusGroup) => {
+    const folded = head.view?.folds.folded(key) ?? false;
+    return (
+      <div key={key} className="sidebar-repository">
+        <StatusHeader
+          status={status}
+          folded={folded}
+          count={needingYou(items.map(({ item }) => item))}
+          onToggle={() => head.view?.folds.toggle(key)}
+        />
+        {folded ? null : <ul className="sidebar-tasks">{items.map(row)}</ul>}
+      </div>
+    );
+  };
   const personSection = ({ key, starter, items }: InboxPersonGroup) => {
     const folded = head.view?.folds.folded(key) ?? false;
     return (
@@ -861,9 +1185,7 @@ export function InboxList({
           count={needingYou(items.map(({ item }) => item))}
           onToggle={() => head.view?.folds.toggle(key)}
         />
-        {folded ? null : (
-          <ul className="sidebar-tasks">{items.map((listed) => row(listed, true))}</ul>
-        )}
+        {folded ? null : <ul className="sidebar-tasks">{items.map(row)}</ul>}
       </div>
     );
   };
@@ -877,12 +1199,19 @@ export function InboxList({
       onBlur={rowFocus.onBlur}
       style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
-      <ListHead head={head} />
-      <div className="inbox-tasks-scroll scroll-fade-top">
-        {view.grouping === INBOX_GROUPING.NEWEST ? (
-          <ul className="sidebar-tasks">{view.items.map((listed) => row(listed))}</ul>
+      <ListHead head={head} ids={{ tabs, panel }} readerId={readerId} />
+      <div
+        id={panel}
+        className="inbox-tasks-scroll scroll-fade-top"
+        role="tabpanel"
+        aria-labelledby={showTabId(tabs, head.show.show)}
+      >
+        {view.grouping === INBOX_GROUPING.NONE ? (
+          <ul className="sidebar-tasks">{view.items.map(row)}</ul>
         ) : view.grouping === INBOX_GROUPING.PERSON ? (
           view.groups.map(personSection)
+        ) : view.grouping === INBOX_GROUPING.STATUS ? (
+          view.groups.map(statusSection)
         ) : (
           view.groups.map(({ holder, items }) => {
             const key = holderKey(holder);

@@ -13,10 +13,32 @@ import {
 import { imageTypeOfPath } from "@luke/features/github-image";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { appPlatform } from "@luke/panel/app-platform";
+import {
+  DIFF_SELECTION_SIDE,
+  type DiffListSelection,
+  type DiffSelection,
+  FILE_NOTE_LINE,
+} from "@luke/panel/diff-view/contract";
+import { SpinnerRegion } from "@luke/panel/spinner";
+import {
+  CHANGES_WORDS,
+  changedFolders,
+  changeMarks,
+  commentLines,
+  fileNotice,
+  filePatch,
+  headerPatch,
+  linesChanged,
+  listPatch,
+  STATUS_LETTER,
+  STATUS_WORDS,
+  threadsOn,
+} from "@luke/panel/tasks/changes-model";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   Button,
+  Checkbox,
   CopyIcon,
   DownloadIcon,
   EmptyState,
@@ -41,31 +63,10 @@ import {
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCopyToast } from "../copy-feedback";
-import {
-  DIFF_SELECTION_SIDE,
-  type DiffListSelection,
-  type DiffSelection,
-  FILE_NOTE_LINE,
-} from "../diff-view/contract";
-import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
 import { AgentActorRef, type AgentSubject } from "./agent-ref";
 import { type ChangesList, FileHead, FOLD_CHORD, LIST_WORDS, useChangesList } from "./changes-list";
-import {
-  CHANGES_WORDS,
-  changedFolders,
-  changeMarks,
-  commentLines,
-  fileNotice,
-  filePatch,
-  headerPatch,
-  linesChanged,
-  listPatch,
-  STATUS_LETTER,
-  STATUS_WORDS,
-  threadsOn,
-} from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
 import { type DiffListEntry, type DiffNote, PierreDiffList } from "./diff-list";
 import { DiffSettingsButton } from "./diff-settings";
@@ -76,8 +77,10 @@ import { FileViewBar, usePaneRoom } from "./file-view";
 import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff";
 import { LineComment, type PendingReview } from "./line-comment";
 import { PullRequestMark } from "./pull-request-mark";
-import { OpenedBy, PullRequestPeople, ReviewersLine } from "./pull-request-people";
+import { OpenedBy, ReviewersLine } from "./pull-request-people";
+import { PullRequestWriteNote } from "./pull-request-writes";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
+import { useViewedFiles } from "./viewed-files";
 
 /**
  * agent-changes-tab.tsx -- the Files changed view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's files drawn as a File tab draws a file, the chosen file's unified diff under the same bar and beside the same tree.
@@ -92,12 +95,11 @@ import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
  * panel keys the tab by its agent, so one agent's answer is never drawn in
  * another's tab.
  *
- * Under its bar the view says who the pull request names, who opened it,
- * its reviewers, and who authored its commits (`pull-request-people.tsx`);
- * what the reviews said stands in the tab's overview, whole, in its
- * conversation.
+ * Who opened the pull request and its reviewers stand in the Pull request
+ * tab's header above it, and what the reviews said in its overview's
+ * conversation, so the view leads with its files.
  *
- * Otherwise the tab is a File view (`file-view.tsx`) over its files' diffs,
+ * The tab is a File view (`file-view.tsx`) over its files' diffs,
  * every file in one list as stage-cli draws them (`diff-list.tsx`), each
  * under a header of its own that folds it, names it, with the letter of
  * what became of it and the lines it adds and removes, and stays at the top
@@ -388,9 +390,14 @@ function entryOf(
       <FileHead
         file={file}
         controls={
-          image === undefined || fileNotice(file) !== undefined ? null : (
-            <SourceToggle source={source} onToggle={() => list.toggleSource(path)} />
-          )
+          <>
+            {image === undefined || fileNotice(file) !== undefined ? null : (
+              <SourceToggle source={source} onToggle={() => list.toggleSource(path)} />
+            )}
+            {list.viewed === undefined || list.markViewed === undefined ? null : (
+              <ViewedBox viewed={list.viewed(path)} onToggle={() => list.markViewed?.(path)} />
+            )}
+          </>
         }
         collapsed={collapsed}
         standing={list.standing === path}
@@ -473,6 +480,23 @@ function useListCommenting(
     ),
   };
   return { open, note: { path, picked, content } };
+}
+
+/** A file's Viewed box at the end of its header, GitHub's own, as the member's marks hold it; V does the same for the file the keys stand on. */
+function ViewedBox({
+  viewed,
+  onToggle,
+}: {
+  viewed: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
+  return (
+    <span className="diff-list-viewed">
+      <Checkbox checked={viewed} onChange={onToggle}>
+        {LIST_WORDS.VIEWED}
+      </Checkbox>
+    </span>
+  );
 }
 
 /** An SVG's turn between its picture and its source's lines, at the end of its header. */
@@ -706,7 +730,13 @@ export function AgentChangesTab({
     const paths = files.map((file) => file.path);
     return { files, paths, marks: changeMarks(files), folders: changedFolders(paths) };
   }, [pullRequest]);
-  const list = useChangesList(changed.files);
+  // Note that the marks are read with each answer the changes read lands with, so the two describe the same push.
+  const viewedFiles = useViewedFiles(
+    agentId,
+    control.readPullRequestViewed,
+    pullRequest === null ? undefined : reads.current.count,
+  );
+  const list = useChangesList(changed.files, viewedFiles.marks);
   const { closeOver } = room;
   const { go } = list;
   // A file chosen in the tree floating over the list takes the tree down, to show the file.
@@ -743,14 +773,8 @@ export function AgentChangesTab({
   if (pullRequest === null) {
     return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.NO_PULL_REQUEST}</EmptyState>;
   }
-  // A pull request that changes no file still names its people, over the line saying so.
   if (shownFile === undefined) {
-    return (
-      <div className="file-view ph-no-capture">
-        <PullRequestPeople people={pullRequest} />
-        <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>
-      </div>
-    );
+    return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>;
   }
   const count = pullRequest.files.length;
   const total = linesChanged(pullRequest.files);
@@ -758,6 +782,15 @@ export function AgentChangesTab({
     <>
       {count} {count === 1 ? "file" : "files"} changed{" "}
       <LinesChanged additions={total.additions} deletions={total.deletions} />
+      {list.viewed === undefined ? null : (
+        <span className="diff-list-progress">
+          {" · "}
+          {LIST_WORDS.viewedOf(
+            pullRequest.files.filter((file) => list.viewed?.(file.path) === true).length,
+            count,
+          )}
+        </span>
+      )}
     </>
   );
   return (
@@ -789,7 +822,7 @@ export function AgentChangesTab({
         }
         tree={room.toggles}
       />
-      <PullRequestPeople people={pullRequest} />
+      <PullRequestWriteNote writes={viewedFiles} />
       {pullRequest.truncated ? (
         <div className="file-tab-notice">
           <p>{CHANGES_WORDS.TRUNCATED}</p>

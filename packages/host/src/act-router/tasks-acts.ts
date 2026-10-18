@@ -335,10 +335,11 @@ export function tasksActRows(dependencies: TasksActsDependencies): Pick<ActRows,
     // microphone, the task's own microphone button asks instead, and where
     // a call already stands the panel asks whether to end it first. A task
     // started without planning opens no call, since skipping the call is
-    // what that start asked for.
+    // what that start asked for, and nor does one started with an agent,
+    // which starts it without planning.
     [ACT_KIND.TASKS_START]: (request, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_START, sender);
-      const calls = request.planning !== false;
+      const calls = request.planning !== false && request.agent === undefined;
       return Effect.tap(host.tasksStart(request), (answer) =>
         Effect.sync(() => {
           if (

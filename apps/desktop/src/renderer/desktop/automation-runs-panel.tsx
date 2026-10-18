@@ -12,7 +12,9 @@ import {
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { usePaneSlide } from "@luke/panel/desktop/pane-motion";
 import type { RunsRead } from "@luke/panel/desktop/use-automation-runs";
+import { EDGE_SIDE, useResizableEdge } from "@luke/panel/desktop/use-resizable-edge";
 import { momentText, sinceText, useMinute } from "@luke/panel/tasks/task-time";
 import {
   EmptyState,
@@ -40,8 +42,6 @@ import { centreWithin, scrollerOf } from "../tasks/code-pane";
 import { Tooltip } from "../tooltip";
 import { ActionMenu } from "./action-menu";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups";
-import { usePaneSlide } from "./pane-motion";
-import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge";
 
 /**
  * automation-runs-panel.tsx -- the panel on an automation's page's right: its runs, newest first, each opening its agent.

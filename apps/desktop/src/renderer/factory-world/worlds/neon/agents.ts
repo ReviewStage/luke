@@ -1,3 +1,4 @@
+import type { WorldPalette } from "@luke/panel/factory-world/world";
 import { AGENT_STATE, type AgentState, BUILD_FULL_LINES } from "@luke/ui/factory-world";
 import {
   AdditiveBlending,
@@ -32,7 +33,6 @@ import {
   Vector4,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import type { WorldPalette } from "../../world";
 import { COMMON_GLSL, OUTPUT_GLSL, type SharedUniforms } from "./glsl";
 
 /**

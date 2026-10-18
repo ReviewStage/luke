@@ -9,12 +9,16 @@ import {
   sectionAnchors,
 } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
+import type {
+  ComposerTrigger,
+  MentionNode,
+  PlanEditorHandle,
+} from "@luke/panel/plan-editor/contract";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { afterEach, beforeEach, test } from "vitest";
 import { installEditorLayout } from "#testing/composer";
 import { retargetedMention } from "../tasks/mention-chip";
-import type { ComposerTrigger, MentionNode, PlanEditorHandle } from "./contract";
 import { mountPlanEditor } from "./plan-editor";
 
 /**

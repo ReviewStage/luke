@@ -4,6 +4,7 @@ import {
   REVIEW_STATE,
   type ReviewState,
 } from "@luke/features/coding-agent-wire";
+import { useMemberDirectory } from "@luke/panel/member-directory";
 import { type Actor, githubActor } from "@luke/ui/actor-model";
 import {
   CheckIcon,
@@ -15,10 +16,9 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActorLine, ActorRef, ActorStack, type StackFace } from "../actor-ref";
-import { useMemberDirectory } from "../member-directory";
 
 /**
- * pull-request-people.tsx -- who an agent's pull request names, drawn as every actor is: who opened it, its reviewers as a facepile wearing where each stands, and who authored its commits.
+ * pull-request-people.tsx -- who an agent's pull request names, drawn as every actor is: who opened it, and its reviewers as a facepile wearing where each stands.
  *
  * GitHub names everyone by an account of its own; the window names each as
  * the actor they are to the reader (`githubActor`). A GitHub account linked
@@ -104,19 +104,6 @@ function ReviewerPile({
   );
 }
 
-/** Who authored the commits, as a facepile, each face hanging their card. */
-function CommitAuthorPile({ authors }: { authors: readonly GitHubPerson[] }): React.JSX.Element {
-  const name = useNamer();
-  return (
-    <ActorStack
-      actors={authors.map(name)}
-      faces={authors.map(() => ({}))}
-      drawn={5}
-      label="Commit authors"
-    />
-  );
-}
-
 /** Who opened the pull request, in a line: "Opened by [face] dana". */
 export function OpenedBy({ person }: { person: GitHubPerson }): React.JSX.Element {
   return (
@@ -155,32 +142,5 @@ export function HeaderReviewers({
       <UsersIcon className="pull-request-reviewers-glyph" aria-hidden="true" />
       <ReviewerPile reviewers={reviewers} drawn={HEADER_FACES} />
     </ActorLine>
-  );
-}
-
-/**
- * The strip a Changes tab leads with, under its bar: who opened the pull
- * request, its reviewers, and who authored its commits, each only where
- * the pull request names any; nothing where a service before them names
- * none.
- */
-export function PullRequestPeople({
-  people,
-}: {
-  people: CodingAgentChangesPeople;
-}): React.JSX.Element | null {
-  const { author, reviewers = [], commitAuthors = [] } = people;
-  if (author === undefined && reviewers.length === 0 && commitAuthors.length === 0) return null;
-  return (
-    <div className="changes-people ph-no-capture">
-      {author === undefined ? null : <OpenedBy person={author} />}
-      {reviewers.length === 0 ? null : <ReviewersLine reviewers={reviewers} />}
-      {commitAuthors.length === 0 ? null : (
-        <ActorLine>
-          {"Commits by "}
-          <CommitAuthorPile authors={commitAuthors} />
-        </ActorLine>
-      )}
-    </div>
   );
 }

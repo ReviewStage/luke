@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
 import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  type WorldHost,
+  type WorldLayers,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import {
   blastRadiusOf,
   factoryWorldAsOf,
   factoryWorldViewOf,
@@ -31,14 +39,6 @@ import {
   Vector3,
 } from "three";
 import { test } from "vitest";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  type WorldHost,
-  type WorldLayers,
-  type WorldState,
-} from "../../world";
 import { world } from "./index";
 
 /**

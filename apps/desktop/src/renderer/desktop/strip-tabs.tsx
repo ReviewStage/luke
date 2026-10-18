@@ -1,4 +1,5 @@
 import type { CodingAgentStatus, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
@@ -24,7 +25,6 @@ import {
   type TranscriptCopy,
   transcriptMarkdown,
 } from "../tasks/transcript-copy";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { MenuTab } from "./tab-strip";

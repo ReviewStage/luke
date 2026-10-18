@@ -5,6 +5,8 @@ import type {
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
+import { useAutomation } from "@luke/panel/automation-directory";
+import { usePerson } from "@luke/panel/member-directory";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
@@ -16,8 +18,6 @@ import {
   AutomationCard,
   automationActor,
 } from "../actor-ref";
-import { useAutomation } from "../automation-directory";
-import { usePerson } from "../member-directory";
 import {
   type ArchivedByReading,
   agentParts,

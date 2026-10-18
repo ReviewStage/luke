@@ -8,6 +8,8 @@ import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wi
 import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { type ActHandle, useAct } from "@luke/panel/act";
+import type { PlanEditDoor } from "@luke/panel/tasks/use-plan-editing";
+import { TOAST_TONE, useToast } from "@luke/panel/toast";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   BANNER_LOOK,
@@ -39,8 +41,6 @@ import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TaskReader } from "../tasks/edit-ref";
 import { PlanBody } from "../tasks/plan-body";
-import type { PlanEditDoor } from "../tasks/use-plan-editing";
-import { TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 
 /**

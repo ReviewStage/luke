@@ -3,24 +3,24 @@ import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-att
 import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BUTTON_VARIANT, ErrorState, FormField, TextField } from "@luke/ui";
-import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
-import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
-import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { useAppCommand } from "../app-commands";
-import { encodeImage } from "../feedback-images";
-import { FoldingButton } from "../folding-button";
-import { PictureBlock } from "../picture-block";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { encodeImage } from "@luke/panel/feedback-images";
 import type {
   PictureNode,
   PictureNodeDoors,
   PictureTaken,
   PlanEditorHandle,
   PlanEditorPictures,
-} from "../plan-editor/contract";
-import { Spinner } from "../spinner";
+} from "@luke/panel/plan-editor/contract";
+import { Spinner } from "@luke/panel/spinner";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { BUTTON_VARIANT, ErrorState, FormField, TextField } from "@luke/ui";
+import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
+import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { FoldingButton } from "../folding-button";
+import { PictureBlock } from "../picture-block";
 import { DOCUMENT_SCROLL_CLASS } from "./document-frame";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures";
 

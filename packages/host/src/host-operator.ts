@@ -62,6 +62,7 @@ import {
   type CodingAgentPullRequestActionParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
+  type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
   type CodingAgentReviewOptionsAnswerView,
@@ -90,6 +91,7 @@ import {
   codingAgentOverviewPullRequestAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPullRequestAnswerViewSchema,
+  codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentReviewOptionsAnswerViewSchema,
   type DictationTranscribeAnswerView,
@@ -571,6 +573,10 @@ export interface HostOperator {
   codingAgentPullRequestAction(
     params: CodingAgentPullRequestActionParams,
   ): Effect.Effect<CodingAgentPullRequestWriteAnswerView>;
+  /** Which of one agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in; or why there is no answer. */
+  codingAgentPullRequestViewed(
+    params: CodingAgentPullRequestParams,
+  ): Effect.Effect<CodingAgentPullRequestViewedAnswerView>;
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them; or why there is none. */
   codingAgentOverviewPullRequest(
     params: CodingAgentPullRequestParams,
@@ -1409,6 +1415,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("linearIssueId" in request ? { linearIssueId: request.linearIssueId } : undefined),
           ...("issueId" in request ? { issueId: request.issueId } : undefined),
           ...("planning" in request ? { planning: request.planning } : undefined),
+          ...("agent" in request ? { agent: request.agent } : undefined),
         }),
         (answer): TasksStartAnswer =>
           (answer.ok
@@ -1627,6 +1634,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           request: params.request,
         }),
         codingAgentAnswer(codingAgentPullRequestWriteAnswerViewSchema),
+      ),
+    codingAgentPullRequestViewed: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentPullRequestViewedAnswerViewSchema),
       ),
     codingAgentOverviewPullRequest: (params) =>
       Effect.map(

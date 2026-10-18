@@ -27,6 +27,14 @@ import {
 } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { runAppCommand } from "@luke/panel/app-commands";
+import { OpenFeedbackProvider } from "@luke/panel/open-feedback";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { relayout } from "@luke/panel/testing/resize-observer";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { ToastHost } from "@luke/panel/toast";
 import { appStateNow } from "@luke/panel/use-app-state";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -34,18 +42,11 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { handState } from "#testing/app-state";
 import { layContainersAt } from "#testing/container-width";
-import { onRegistry } from "#testing/copy-feedback";
-import { relayout } from "#testing/resize-observer";
-import { installScrollIntoView } from "#testing/scroll-into-view";
+import { playMotions } from "#testing/pane-motion";
 import { tasksControl } from "#testing/tasks-control";
-import { runAppCommand } from "../app-commands";
-import { OpenFeedbackProvider } from "../open-feedback";
 import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../tasks/use-tasks-tab";
-import { ToastHost } from "../toast";
 import { AutomationsPage } from "./automations-page";
 
 /**
@@ -1265,50 +1266,6 @@ test("the Runs panel hides and shows by its toggle and by the side panel's chord
   assert.ok(again.querySelector("aside[aria-label='Runs']"), "⌥⌘B brings it back");
   window.localStorage.clear();
 });
-
-/** A motion the page played: the element it played on, its keyframes, and a way to have it finish. */
-interface Played {
-  element: Element;
-  keyframes: Keyframe[];
-  finish: () => void;
-}
-
-/** What the recording engine answers a motion with: no more of an Animation than the page reaches for. */
-interface RecordedMotion {
-  onfinish: (() => void) | null;
-  cancel: () => void;
-}
-
-/**
- * Gives the window the pane's motion tokens and an animation engine that
- * records what is played rather than playing it, since jsdom has neither;
- * answers what was played, and a way to take both away again.
- */
-function playMotions() {
-  const played: Played[] = [];
-  const root = document.documentElement.style;
-  root.setProperty("--duration-pane", "240ms");
-  root.setProperty("--motion-pane", "ease-out");
-  Object.defineProperty(Element.prototype, "animate", {
-    configurable: true,
-    value(this: Element, keyframes: Keyframe[]) {
-      const animation: RecordedMotion = {
-        onfinish: null,
-        cancel: () => undefined,
-      };
-      played.push({ element: this, keyframes, finish: () => animation.onfinish?.() });
-      return animation;
-    },
-  });
-  return {
-    played,
-    remove: () => {
-      root.removeProperty("--duration-pane");
-      root.removeProperty("--motion-pane");
-      Reflect.deleteProperty(Element.prototype, "animate");
-    },
-  };
-}
 
 test("the Runs panel slides out past the page's right edge as it is hidden, held drawn and out of reach until it has, and slides back in as it is shown", async () => {
   window.localStorage.clear();

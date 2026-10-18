@@ -1,4 +1,14 @@
 import {
+  COMPOSER_INPUT,
+  type ComposerEditorHandle,
+  type ComposerEditorProps,
+  type ComposerInput,
+  type ComposerMark,
+  type ComposerQuote,
+  type ComposerTrigger,
+  type MentionNode,
+} from "@luke/panel/plan-editor/contract";
+import {
   cutReply,
   MESSAGE_BLOCK,
   messageBlocks,
@@ -24,16 +34,6 @@ import {
 } from "@tiptap/pm/state";
 import type { EditorProps, EditorView } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
-import {
-  COMPOSER_INPUT,
-  type ComposerEditorHandle,
-  type ComposerEditorProps,
-  type ComposerInput,
-  type ComposerMark,
-  type ComposerQuote,
-  type ComposerTrigger,
-  type MentionNode,
-} from "./contract";
 import {
   MENTION_NODE,
   type MentionToken,

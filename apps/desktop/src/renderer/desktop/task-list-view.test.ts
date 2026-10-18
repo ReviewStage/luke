@@ -5,19 +5,19 @@ import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-a
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { appCommandOffered, runAppCommand } from "@luke/panel/app-commands";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { newestToastSays } from "@luke/panel/testing/toast";
+import { ToastHost } from "@luke/panel/toast";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { tasksControl } from "#testing/tasks-control";
-import { newestToastSays } from "#testing/toast";
-import { appCommandOffered, runAppCommand } from "../app-commands";
-import { ToastHost } from "../toast";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 

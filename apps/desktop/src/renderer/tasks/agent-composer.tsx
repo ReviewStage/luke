@@ -17,6 +17,19 @@ import {
 } from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
+  PromptInput,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTools,
+  submitPromptInput,
+} from "@luke/panel/ai-elements/prompt-input";
+import { imageFiles } from "@luke/panel/feedback-images";
+import { GRANT_OUTCOME, useIntegrationGrant } from "@luke/panel/integration-grant";
+import { useIntegrationStatuses } from "@luke/panel/integration-statuses";
+import { COMPOSER_INPUT, type ComposerEditorHandle } from "@luke/panel/plan-editor/contract";
+import { readFiles, withFiles } from "@luke/panel/tasks/attached-files";
+import { useRepositoryRemedy } from "@luke/panel/tasks/repository-remedy";
+import {
   BUTTON_TYPE,
   EllipsisIcon,
   ErrorState,
@@ -31,19 +44,8 @@ import {
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
-import {
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTools,
-  submitPromptInput,
-} from "../ai-elements/prompt-input";
 import { useSideBundles } from "../bundle-loader";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { imageFiles } from "../feedback-images";
-import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant";
-import { useIntegrationStatuses } from "../integration-statuses";
-import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
 import { contextHint } from "./agent-context-model";
@@ -51,12 +53,10 @@ import { AgentModelChip } from "./agent-model-chip";
 import { BranchChip, type PublishedDoors } from "./agent-published";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
-import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";
 import { useComposerPickers } from "./composer-pickers";
 import { DictateButton, DictationStrip } from "./dictation-strip";
 import { ComposerQuoteView } from "./reply-to-selection";
-import { useRepositoryRemedy } from "./repository-remedy";
 import type { SkillSource } from "./skill-picker";
 import { useMentionBox } from "./task-mentions";
 import type { AgentComposerControl } from "./use-agent-composer";
@@ -388,7 +388,7 @@ export function AgentComposer({
   actions?: ReactNode;
   /** Whether the round button may send at all, beside the words: New task's is held while Agent mode has no repository. */
   sendable?: boolean;
-  /** A key pressed in the field that neither its lists nor dictation took; answers whether it took it. */
+  /** A key pressed in the field that neither its lists nor dictation took, and none while a file is still being read; answers whether it took it. */
   onKey?: ((event: KeyboardEvent) => boolean) | undefined;
   /** What Escape in the field does where no list or dictation takes it; the field gives up the caret where none is given. */
   onLeave?: (() => void) | undefined;
@@ -438,11 +438,15 @@ export function AgentComposer({
       }
     });
   };
-  const lapsed = lapsedServer({
-    statusOf: statuses.statusOf,
-    accountsOf: statuses.accountsOf,
-    disabled: servers?.disabled ?? [],
-  });
+  // Note that a box handing no servers, as New task's, offers none to reconnect either.
+  const lapsed =
+    servers === undefined
+      ? undefined
+      : lapsedServer({
+          statusOf: statuses.statusOf,
+          accountsOf: statuses.accountsOf,
+          disabled: servers.disabled,
+        });
   const unloaded = AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined;
   const words =
     composer.closed ??
@@ -679,7 +683,11 @@ export function AgentComposer({
           maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
           takesFocus={!(focusedByOwner && mountedFirst)}
           {...pickers.field}
-          onKey={(event) => pickers.field.onKey(event) || onKey?.(event) === true}
+          onKey={(event) =>
+            pickers.field.onKey(event) ||
+            // A file still being read holds the owner's keys too, as it holds Send.
+            (reading === 0 && onKey?.(event) === true)
+          }
           onEnter={() => {
             if (room.current !== null) submitPromptInput(room.current);
           }}

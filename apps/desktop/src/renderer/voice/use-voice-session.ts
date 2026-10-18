@@ -6,6 +6,9 @@ import { useAct } from "@luke/panel/act";
 import { appBridge } from "@luke/panel/app-bridge";
 import { rendererRegistry, rendererServicesNow } from "@luke/panel/renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "@luke/panel/use-app-state";
+import { createBrowserSilence } from "@luke/panel/voice/live-peer";
+import { openPreferredMicrophone } from "@luke/panel/voice/microphone-choice";
+import { startVoiceLevelMeter } from "@luke/panel/voice/voice-level-meter";
 import { appSettingsView } from "@luke/settings/wire";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_STATUS } from "@luke/voice/avatar";
@@ -22,9 +25,6 @@ import * as Atom from "effect/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { startAvatarFeed } from "../avatar-feed/start-avatar-feed";
 import { type AvatarFeedActs, LiveCall, type LiveStreamSlot } from "./live-call";
-import { createBrowserSilence } from "./live-peer";
-import { openPreferredMicrophone } from "./microphone-choice";
-import { startVoiceLevelMeter } from "./voice-level-meter";
 
 /**
  * How long a refused remote-audio play waits before trying again. Chromium

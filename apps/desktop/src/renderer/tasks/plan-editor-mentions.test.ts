@@ -5,6 +5,8 @@ import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-w
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
@@ -12,9 +14,7 @@ import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { editorBundleLanded, installEditorLayout } from "#testing/composer";
-import { DOCUMENT_TASK } from "#testing/document-task";
 import { PlanBody } from "./plan-body";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 

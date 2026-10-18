@@ -1,5 +1,7 @@
 import { dayAndTimeText, momentText } from "@luke/panel/tasks/task-time";
+import { TaskTitle } from "@luke/panel/tasks/task-title";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
+import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "@luke/panel/toast";
 import {
   BUTTON_VARIANT,
   Button,
@@ -14,13 +16,11 @@ import {
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { MarkdownMessage } from "../markdown-message";
-import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast";
 import { Tooltip } from "../tooltip";
 import { DocumentScroll } from "./document-frame";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
 import { type MentionedTask, useMentionLink } from "./task-mentions";
-import { TaskTitle } from "./task-title";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 
 /**

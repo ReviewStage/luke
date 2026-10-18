@@ -6,11 +6,11 @@ import {
   type CodingAgentMessagesAnswerView,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentSubagentTab } from "./agent-tab";
 

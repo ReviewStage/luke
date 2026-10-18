@@ -8,12 +8,12 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
 import { layContainersAt } from "#testing/container-width";
-import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentChangesTab } from "./agent-changes-tab";
 
@@ -96,7 +96,6 @@ function drawChangesTab(): Promise<HTMLElement> {
             },
           ],
           reviewers: [],
-          commitAuthors: [],
           comments: [],
         },
       }),

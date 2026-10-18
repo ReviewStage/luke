@@ -1,6 +1,8 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { BusyLabel, SpinnerRegion } from "@luke/panel/spinner";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -13,9 +15,7 @@ import {
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useAppCommand } from "../app-commands";
 import { useFindOpen } from "../find-in-tab";
-import { BusyLabel, SpinnerRegion } from "../spinner";
 import { CodeLineRows, centreWithin } from "./code-pane";
 import { type FileNotes, notesBefore } from "./file-note";
 import {

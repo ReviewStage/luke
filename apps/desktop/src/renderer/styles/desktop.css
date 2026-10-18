@@ -1133,26 +1133,48 @@ ul.actor-stack {
   z-index: 1;
 }
 
-/* A pinned row's transform is a drag's (use-row-drag.ts): sliding aside for
-   a row dragged past it on the motion tokens, and put back home the same
-   way, so reduced motion and a capture run hold it still. */
+/* A row's transform is a drag's (use-row-drag.ts): sliding aside for a row
+   dragged past it on the motion tokens, and put back home the same way, so
+   reduced motion and a capture run hold it still. The sidebar's rows and
+   the Issues board's cards share it. */
 .sidebar-tasks > li {
   position: relative;
   transition:
     transform var(--duration-fast) var(--spring-fast),
-    background-color var(--duration-hover) ease;
+    background-color var(--duration-hover) ease,
+    opacity var(--duration-quick) var(--motion-exit);
 }
 
-/* A row being dragged is lifted over the rows it passes: the open row's fill
-   made opaque on the sidebar's ground, and a shadow beneath. It follows the
-   pointer frame for frame, so its own transform eases nothing. */
-.sidebar-tasks > li[data-dragging="true"] {
-  z-index: 2;
+/* A row being dragged stays in its list as its own placeholder, faded, and
+   slides to where it would land, while its copy follows the pointer. */
+.sidebar-tasks > li[data-dragging="true"],
+.sidebar-sections > .sidebar-sections-item[data-dragging="true"] {
+  opacity: 0.4;
+}
+
+/* The layer a dragged row's copy is carried in (use-row-drag.ts): fixed over
+   the whole window, above both panes and under the menus, at the row's
+   place and width, and moved only by its transform, frame for frame, so it
+   eases nothing and takes no pointer. */
+[data-carried="true"] {
+  --carried-ground: var(--luke-color-sidebar);
+  position: fixed;
+  z-index: calc(var(--luke-z-menu) - 1);
+  margin: 0;
+  pointer-events: none;
+}
+
+/* The copy itself, lifted: the open row's fill made opaque on the ground it
+   was dragged from, ringed so it reads over either pane, and a shadow
+   beneath. The sidebar's rows, its sections, and the board's cards share it. */
+[data-lifted="true"] {
   border-radius: var(--luke-control-radius);
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--luke-color-sidebar);
-  box-shadow: 0 4px 12px var(--luke-color-shadow);
+    var(--carried-ground);
+  box-shadow:
+    0 0 0 1px var(--luke-color-border-strong),
+    0 4px 12px var(--luke-color-shadow);
   transition: none;
 }
 
@@ -1205,7 +1227,7 @@ ul.actor-stack {
 
 /* The account's own sections, between Pinned and Tasks (sidebar-sections.tsx).
    Each is dragged among the others by its header, on the rows' own timing,
-   and lifted while held as a row is. */
+   and carried as a copy while held as a row is. */
 .sidebar-sections {
   display: flex;
   flex-direction: column;
@@ -1217,17 +1239,13 @@ ul.actor-stack {
 
 .sidebar-sections > .sidebar-sections-item {
   position: relative;
-  transition: transform var(--duration-fast) var(--spring-fast);
+  transition:
+    transform var(--duration-fast) var(--spring-fast),
+    opacity var(--duration-quick) var(--motion-exit);
 }
 
-.sidebar-sections > .sidebar-sections-item[data-dragging="true"] {
-  z-index: 3;
+.sidebar-sections > .sidebar-sections-item[data-lifted="true"] {
   border-radius: var(--luke-radius-8);
-  background:
-    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--luke-color-sidebar);
-  box-shadow: 0 4px 12px var(--luke-color-shadow);
-  transition: none;
 }
 
 .sidebar-sections[data-dragging="true"] {
@@ -1776,7 +1794,7 @@ ul.actor-stack {
 .luke-segment,
 .luke-nav-item,
 .desktop-toolbar-actions,
-.desktop-toolbar .file-breadcrumbs,
+.desktop-toolbar .inbox-crumbs,
 .sidebar-task {
   -webkit-app-region: no-drag;
 }
@@ -1890,143 +1908,6 @@ ul.actor-stack {
 
 .menu-surface[data-placed="false"] {
   visibility: hidden;
-}
-
-/* One row for every menu: an action menu's item, a picker's row, and ⌘K's,
-   each its glyph slot, its words, and at its end a muted hint and the end
-   slot. A row is one fixed height and flexes in no column it stands in. */
-.menu-item {
-  display: flex;
-  flex: none;
-  width: 100%;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  height: var(--luke-menu-row-height);
-  padding: 0 var(--row-inset);
-  border-radius: var(--luke-menu-row-radius);
-  background: none;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  text-align: left;
-  white-space: nowrap;
-  cursor: default;
-}
-
-/* The row a menu is on is filled, never ringed. In an action menu focus
-   moves with the pointer and the arrows alike, so the pointer and focus
-   both light a row, and a submenu's item stays lit while its submenu
-   stands beside it. */
-.menu-item:is(:hover, :focus-visible),
-.menu-item[data-open="true"] {
-  outline: none; /* no ring: the row's fill marks it */
-  background: var(--luke-color-fill-strong);
-}
-
-/* A list whose keys stay in its field (the MCP popover's and ⌘K's) has
-   one highlight, which the arrows and the pointer both move, so the
-   pointer's own hover draws nothing of its own. The popover's rows carry
-   it as a data attribute, and ⌘K's rows as cmdk's. */
-:is(.searchable-menu, .command-palette) .menu-item:hover {
-  background: none;
-}
-
-:is(.searchable-menu, .command-palette)
-  .menu-item:is(
-    [aria-selected="true"],
-    [data-highlighted="true"],
-    [data-selected="true"],
-    :focus-visible
-  ) {
-  background: var(--luke-color-fill-strong);
-}
-
-.menu-item[data-danger="true"] {
-  color: var(--luke-color-danger-text);
-}
-
-.menu-item[data-danger="true"]:is(:hover, :focus-visible) {
-  background: color-mix(in srgb, var(--luke-color-danger) 16%, transparent);
-}
-
-/* A row that cannot be chosen now is dimmed with its mark and lit by
-   nothing. Note that the selector is as specific as a highlight's, because
-   a highlight that lands on a dimmed row must not light it. */
-:is(.menu-item, .searchable-menu .menu-item):is(:disabled, [aria-disabled="true"]) {
-  background: none;
-  opacity: 0.4;
-}
-
-/* The glyph slot: a mark in a glyph's column, muted beside the words, and
-   red with them on an act that cannot be taken back. An action menu draws
-   the slot whether or not the item has a mark, so its labels start in one
-   line down the menu. */
-.menu-item-glyph {
-  display: inline-flex;
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.menu-item[data-danger="true"] .menu-item-glyph {
-  color: inherit;
-}
-
-/* A glyph is sized by what it sits in, as every glyph is: an SVG with no
-   size of its own fills the row it is in. */
-.menu-item > :is(svg, .repository-picture),
-.menu-item-glyph :is(svg, .repository-picture),
-.menu-item-end > svg {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
-}
-
-/* A row's shortcut, or why it cannot be picked now, at its end before the
-   end slot, the way a system menu prints a chord. */
-.menu-item-hint {
-  flex: 0 0 auto;
-  margin-left: auto;
-  padding-left: var(--luke-space-16);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  white-space: nowrap;
-}
-
-/* The end slot is one glyph wide, so a name ends where every other does
-   wherever the slot is drawn; the check is the text's own colour, a choice
-   rather than a state, and a mark or a chevron is quieter. */
-.menu-item-end {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  margin-left: auto;
-  color: var(--luke-color-text-subtle);
-}
-
-.menu-item-hint + .menu-item-end {
-  margin-left: 0;
-}
-
-.menu-item-end .credential-check {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  color: var(--luke-color-text);
-}
-
-.menu-item-end .settings-chevron {
-  width: 14px;
-  height: 14px;
-}
-
-.menu-item-end .link-icon {
-  width: 14px;
-  height: 14px;
-  margin: 0;
 }
 
 /* Plan actions ---------------------------------------------------------- */
@@ -2757,56 +2638,6 @@ ul.actor-stack {
   padding: 0;
 }
 
-.task-compose-menu-search {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  height: 38px;
-  padding: 0 var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-subtle);
-}
-
-/* The glyph is sized here, as every glyph is by what it sits in: an SVG
-   with no size of its own fills the row it is in. */
-.task-compose-menu-search svg {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
-}
-
-.task-compose-menu-search input {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  outline: none; /* no ring: a menu's filter, which always holds the caret */
-  background: none;
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-body-size);
-}
-
-.task-compose-menu-search input::placeholder {
-  color: var(--luke-color-text-subtle);
-}
-
-/* The list scrolls down and never sideways: a row's words that outrun the
-   menu's width fade at their end inside the row instead. */
-.task-compose-menu-list {
-  display: block;
-  max-height: 288px;
-  padding: var(--luke-menu-inset);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.task-compose-menu-list:focus-visible {
-  outline: none; /* no ring: the highlighted row marks it */
-}
-
 .task-compose-menu-foot {
   display: block;
   flex: 0 0 auto;
@@ -2822,20 +2653,6 @@ ul.actor-stack {
 
 .task-compose-submenu > .task-compose-menu-foot-note {
   padding-bottom: var(--luke-menu-inset);
-}
-
-/* What stands in the list's place: one quiet line, centred, at a row or
-   two's height, so a menu with nothing to list never falls to a sliver. */
-.task-compose-menu-note {
-  display: flex;
-  min-height: 40px;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: var(--luke-space-4) var(--luke-space-12);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  text-align: center;
 }
 
 /* A submenu stands beside the pinned row that opened it, its top level
@@ -2863,12 +2680,6 @@ ul.actor-stack {
 .task-compose-submenu[data-stand="up"] {
   top: auto;
   bottom: 0;
-}
-
-.task-compose-menu-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* A searchable menu hung from its own button (`@luke/ui`'s
@@ -2911,31 +2722,13 @@ ul.actor-stack {
   transition: none;
 }
 
-.task-compose-menu-name {
-  min-width: 0;
-  flex: 0 1 auto;
-  font-weight: var(--luke-weight-medium);
-}
-
-/* The MCP popover's words fade where they are cut rather than end in an
-   ellipsis, as a tab's label does. */
-.searchable-menu .task-compose-menu-name {
-  text-overflow: clip;
-}
-
-/* The heading over a menu section's rows, a searchable menu's and ⌘K's
-   alike: quiet, inset as a row's words are, and a little apart from the
-   section above it. cmdk draws the palette's heading itself, so it is
-   reached by its attribute rather than given the class. */
-.menu-heading,
+/* The heading over a section of ⌘K's rows: inset as a row's words are,
+   and a little apart from the section above it. cmdk draws the heading's
+   box itself, so it is reached by its attribute; its words are a caption. */
 .command-palette [cmdk-group-heading] {
   padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
 }
 
-[role="group"]:first-child > .menu-heading,
 .command-palette [cmdk-group]:first-child [cmdk-group-heading] {
   padding-top: var(--luke-space-2);
 }
@@ -3222,6 +3015,15 @@ ul.actor-stack {
 
 .inbox-view > [hidden] {
   display: none;
+}
+
+/* The chip saying whose items the list holds, under its tabs and over its
+   rows, on the rows' inset. */
+.inbox-tasks-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-8) var(--column-inset) 0;
 }
 
 .inbox-tasks {
@@ -3785,25 +3587,12 @@ ul.actor-stack {
   overflow-wrap: anywhere;
 }
 
-/* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
-   by the strip's gap and the breadcrumbs' chevron, and a crumb under the
-   pointer's press takes the chosen tab's fill, where a tab pressed lands. */
-.inbox-crumbs ol {
-  gap: var(--luke-list-gap);
-}
-
-/* Note that the agent's crumb gives way as the task's does, because the
-   breadcrumbs keep their last crumb whole, and the path's clip would cut it.
-   A crumb takes no tab's cap, since it shares no strip: it names its task or
-   its agent whole while the bar has room, and is cut only once it has not. */
-.inbox-crumbs li.inbox-crumb {
-  max-width: none;
-  flex-shrink: 1;
-}
-
-.inbox-crumb:active {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
+/* The pane's path (`@luke/ui`'s Breadcrumbs) takes what the bar's way back
+   and pager leave it, its crumbs giving way by their share. */
+.inbox-crumbs {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
 }
 
 /* A settled item's foot, over its box: the next item that needs the
@@ -3871,27 +3660,8 @@ ul.actor-stack {
 }
 
 /* An item standing alone narrower than its bar's crumbs, the way back, and
-   the pager, drops the task's crumb, and the agent's keeps enough of its
-   name to read; its hover card names it whole. Narrower still the way back
-   draws its glyph alone, named still, beside the pager, and the crumbs take
-   a line of their own under them, where both fit again, sharing it. */
-@container inbox-item (width < 560px) {
-  .inbox-crumb:first-child,
-  .inbox-crumb:first-child + .file-breadcrumb-separator {
-    display: none;
-  }
-
-  .inbox-view-items .inbox-crumbs .tab {
-    min-width: calc(
-      var(--tab-start) +
-      var(--luke-control-icon) +
-      var(--tab-gap) +
-      8ch +
-      var(--tab-end)
-    );
-  }
-}
-
+   the pager draws its way back's glyph alone, named still, beside the
+   pager, and the crumbs take a line of their own under them. */
 @container inbox-item (width < 360px) {
   /* The way back folds to its glyph (`FoldingButton`). */
   .inbox-view-items > .desktop-toolbar {
@@ -3903,26 +3673,6 @@ ul.actor-stack {
   .inbox-view-items > .desktop-toolbar > .inbox-crumbs {
     order: 1;
     flex-basis: 100%;
-  }
-
-  .inbox-crumb:first-child,
-  .inbox-crumb:first-child + .file-breadcrumb-separator {
-    display: flex;
-  }
-
-  /* The task's crumb gives way first, so the agent's keeps the more of its name. */
-  .inbox-crumbs li.inbox-crumb:first-child {
-    flex-shrink: 4;
-  }
-
-  .inbox-view-items .inbox-crumbs .tab {
-    min-width: calc(
-      var(--tab-start) +
-      var(--luke-control-icon) +
-      var(--tab-gap) +
-      3.5ch +
-      var(--tab-end)
-    );
   }
 }
 
@@ -4442,6 +4192,290 @@ ul.actor-stack {
   height: 100%;
   margin: 0;
   accent-color: var(--luke-color-accent);
+}
+
+/* Factory campus ------------------------------------------------------------ */
+
+/* The campus stands in a world's place under the same chrome, drawn in SVG
+   (`factory-world/campus/`). Its ground, walls, and props are coloured by
+   the drawing (`@luke/ui/factory-campus`), which hands the scene the few
+   colours its stylesheet needs as custom properties: the ground behind it,
+   a window gone out, and the selection's signal. */
+.factory-campus {
+  position: absolute;
+  inset: 0;
+}
+
+.factory-campus-scene {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--campus-ground);
+  cursor: grab;
+  touch-action: none;
+}
+
+.factory-campus-scene[data-dragging] {
+  cursor: grabbing;
+}
+
+/* The camera moves by one transform: a flight on the spring, a drag or the
+   wheel at once. */
+.factory-campus-camera {
+  transform-origin: 0 0;
+  transition: transform var(--duration-shape) var(--spring);
+}
+
+.factory-campus-camera[data-instant] {
+  transition: none;
+}
+
+.factory-campus-building,
+.factory-campus-container,
+.factory-campus-blueprint {
+  cursor: pointer;
+  outline: none;
+}
+
+/* A building lifts a little under the pointer, and opening it drops its
+   walls and lifts its roof off onto the line inside. */
+.factory-campus-lift {
+  transition: transform var(--duration-hover) ease;
+}
+
+.factory-campus-building:hover > .factory-campus-lift {
+  transform: translateY(-3px);
+}
+
+.factory-campus-shell,
+.factory-campus-upper,
+.factory-campus-sign {
+  transition:
+    opacity var(--duration-fast) ease,
+    transform var(--duration-shape) var(--spring);
+}
+
+.factory-campus-building[data-open] .factory-campus-shell,
+.factory-campus-building[data-open] .factory-campus-sign {
+  opacity: 0;
+}
+
+.factory-campus-building[data-open] .factory-campus-upper {
+  opacity: 0;
+  transform: translateY(-48px);
+}
+
+.factory-campus-inside {
+  animation: factory-campus-inside var(--duration-fast) ease backwards;
+}
+
+@keyframes factory-campus-inside {
+  from {
+    opacity: 0;
+  }
+}
+
+.factory-campus-blueprint:hover,
+.factory-campus-blueprint:focus-visible,
+.factory-campus-blueprint[data-hot] {
+  filter: brightness(1.35);
+}
+
+/* What is pointed at is edged faintly, what is selected in the selection's
+   signal, and what the keyboard is on in the focus ring. */
+.factory-campus-edge polygon,
+polygon.factory-campus-edge {
+  fill: none;
+  stroke: var(--luke-color-text);
+  stroke-opacity: 0.4;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.factory-campus-edge[data-edge="selected"] polygon,
+polygon.factory-campus-edge[data-edge="selected"] {
+  stroke: var(--campus-selection);
+  stroke-opacity: 1;
+  stroke-width: 2;
+}
+
+.factory-campus-building:focus-visible .factory-campus-shell,
+.factory-campus-container:focus-visible {
+  outline: none;
+  filter: drop-shadow(0 0 1px var(--luke-color-focus-ring));
+}
+
+.factory-campus-route {
+  fill: none;
+  stroke: var(--luke-color-text-subtle);
+  stroke-width: 1.6;
+  stroke-dasharray: 4 3;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.factory-campus-route[data-selected] {
+  stroke: var(--campus-selection);
+}
+
+/* A layer switched off: its signs and containers go, and a building's
+   windows lit by it go out rather than vanish. */
+.factory-campus-scene[data-hide-planned] [data-layer="planned"],
+.factory-campus-scene[data-hide-building] [data-layer="building"]:not(.factory-campus-lit),
+.factory-campus-scene[data-hide-shipped] [data-layer="shipped"],
+.factory-campus-scene[data-hide-defects] [data-layer="defects"]:not(.factory-campus-lit),
+.factory-campus-scene[data-hide-failed] [data-layer="failed"]:not(.factory-campus-lit) {
+  display: none;
+}
+
+.factory-campus-scene[data-hide-building] .factory-campus-lit[data-layer="building"],
+.factory-campus-scene[data-hide-defects] .factory-campus-lit[data-layer="defects"],
+.factory-campus-scene[data-hide-failed] .factory-campus-lit[data-layer="failed"] {
+  fill: var(--campus-unlit);
+  stroke: none;
+  opacity: 1;
+  filter: none;
+}
+
+/* A glow is a blur only in a small campus at night, close in; a big one
+   glows by a stroke the drawing gives it, since a blur on every window is
+   what costs a busy campus its frames. */
+.factory-campus-scene[data-glow] .factory-campus-lit,
+.factory-campus-scene[data-glow] .factory-campus-glow,
+.factory-campus-scene[data-glow] .factory-campus-pulse {
+  filter: url(#factory-campus-glow-filter);
+}
+
+/* Loops, each answering --loop-motion after its own shorthand (which would
+   reset it), so reduced motion and a capture run hold them still; they rest
+   while the campus is off screen, and a big campus or one far out is a still
+   frame, its smoke drawn standing. */
+.factory-campus-smoke,
+.factory-campus-pulse,
+.factory-campus-flag,
+.factory-campus-belt {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.factory-campus-smoke {
+  animation: factory-campus-smoke 4.8s linear infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+.factory-campus-smoke:nth-child(2) {
+  animation-delay: -0.96s;
+}
+
+.factory-campus-smoke:nth-child(3) {
+  animation-delay: -1.92s;
+}
+
+.factory-campus-smoke:nth-child(4) {
+  animation-delay: -2.88s;
+}
+
+.factory-campus-smoke:nth-child(5) {
+  animation-delay: -3.84s;
+}
+
+.factory-campus-pulse {
+  animation: factory-campus-pulse 1.6s ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+.factory-campus-flag {
+  animation: factory-campus-flag 2.2s ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+  transform-origin: left center;
+}
+
+.factory-campus-belt {
+  animation: factory-campus-belt 0.6s linear infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+.factory-campus-scene[data-big]
+  :is(.factory-campus-pulse, .factory-campus-flag, .factory-campus-belt),
+.factory-campus-scene[data-detail="far"]
+  :is(.factory-campus-pulse, .factory-campus-flag, .factory-campus-belt) {
+  animation: none;
+}
+
+.factory-campus-scene[data-resting]
+  :is(.factory-campus-smoke, .factory-campus-pulse, .factory-campus-flag, .factory-campus-belt) {
+  animation-play-state: paused;
+}
+
+@keyframes factory-campus-smoke {
+  0% {
+    transform: translate(0, 0) scale(0.5);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate(-22px, -64px) scale(2.1);
+    opacity: 0;
+  }
+}
+
+@keyframes factory-campus-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes factory-campus-flag {
+  50% {
+    transform: skewY(-6deg) scaleX(0.92);
+  }
+}
+
+@keyframes factory-campus-belt {
+  to {
+    stroke-dashoffset: -6;
+  }
+}
+
+/* Names hang over the campus at one size whatever the zoom: each scales by
+   the camera's inverse, `--campus-k`, which the camera writes. */
+.factory-campus-names {
+  pointer-events: none;
+}
+
+.factory-campus-name rect {
+  fill: var(--luke-color-overlay);
+  stroke: var(--luke-color-border-strong);
+}
+
+.factory-campus-name text {
+  fill: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+}
+
+.factory-campus-painted text {
+  fill: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
+}
+
+/* The layout switch stands in the bottom-left corner, on the chrome's
+   ground. */
+.factory-campus-layout {
+  position: absolute;
+  bottom: var(--luke-space-12);
+  left: var(--luke-space-12);
+  padding: var(--luke-space-2);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-menu-radius);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 12px 32px var(--luke-color-shadow-soft);
 }
 
 /* Automations ---------------------------------------------------------------- */
@@ -5253,7 +5287,7 @@ ul.actor-stack {
 
 /* A person's handle reads in the developer's green, as their words do on a call. */
 .chat-notice[data-author="human"] .chat-notice-from {
-  color: var(--voice-developer);
+  color: var(--luke-color-complete);
 }
 
 .chat-notice-words {
@@ -5755,30 +5789,6 @@ ul.actor-stack {
   width: var(--summary-rail-width);
 }
 
-/* Needs you's glyph is the Inbox's own, wearing a dot in the rows'
-   attention orange at its top right while anything needs the developer,
-   filtered out or not, so the dot says there is something to answer and the pressed fill alone says the
-   filter is on. The stroke is cut back in a ring around the dot, as lucide's
-   own dotted glyphs are drawn. The dot stands in the glyph's 24-unit box,
-   the cut in the glyph's pixels at the same point, scaled by one unit. */
-.inbox-needs-you-dot {
-  cx: 19px;
-  cy: 5px;
-  r: 3.6px;
-  fill: var(--luke-color-attention-fill);
-  stroke: none;
-}
-
-.inbox-needs-you-glyph[data-waiting="true"] {
-  --needs-you-unit: calc(var(--luke-control-icon) / 24);
-  mask: radial-gradient(
-    circle at calc(19 * var(--needs-you-unit)) calc(5 * var(--needs-you-unit)),
-    #000 calc(3.7 * var(--needs-you-unit)),
-    transparent calc(3.7 * var(--needs-you-unit)) calc(5.6 * var(--needs-you-unit)),
-    #000 calc(5.6 * var(--needs-you-unit))
-  );
-}
-
 /* Expanded where it cannot be pinned, the whole summary stands in a card
    over the rail's own footprint, its top and right edges the rail's, or the
    column's where the column is too narrow for a rail (`SUMMARY_RAILED`), drawn
@@ -5916,10 +5926,6 @@ ul.actor-stack {
   transition: background-color var(--duration-hover) ease;
 }
 
-.task-summary-row:hover {
-  background: var(--luke-color-fill-hover);
-}
-
 .task-summary-glyph {
   display: flex;
   flex: none;
@@ -5944,12 +5950,6 @@ ul.actor-stack {
   white-space: nowrap;
 }
 
-.task-summary-detail {
-  margin-left: var(--luke-space-6);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
 /* The Inbox row's count of what waits, at its end in the quiet count a
    folded sidebar group shows after its name. */
 .inbox-row-count {
@@ -5957,23 +5957,6 @@ ul.actor-stack {
   color: var(--luke-color-text-subtle);
   font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
-}
-
-/* The files Luke showed, in rows the file tree's own (`tasks.css`): its
-   compact row's height, corner, and type size, and its 16px type icons. */
-.task-summary-rows[data-tree="true"] {
-  gap: 0;
-}
-
-.task-summary-rows[data-tree="true"] .task-summary-row {
-  height: 24px;
-  border-radius: var(--luke-radius-6);
-  font-size: var(--luke-type-caption-size);
-}
-
-.task-summary-rows[data-tree="true"] .task-summary-glyph svg {
-  width: 16px;
-  height: 16px;
 }
 
 /* The archived agents, folded under Archived at the foot of Coding agents
@@ -6722,17 +6705,7 @@ ul.actor-stack {
 /* The plan's tab alone in its column takes the room the heading has rather
    than a most of its own, giving way to the toolbar's buttons as any tab
    gives way (`.tab-strip .tab`). Beside an agent's it is a tab like any
-   other. The Inbox pane's crumbs give way alike, within a tab's most. */
-.inbox-crumbs .tab {
-  min-width: calc(
-    var(--tab-start) +
-    var(--luke-control-icon) +
-    var(--tab-gap) +
-    3.5ch +
-    var(--tab-end)
-  );
-  flex: 0 1 auto;
-}
+   other. */
 
 .desktop-toolbar-heading .tab[data-quiet="true"] {
   max-width: 100%;
@@ -6854,34 +6827,6 @@ ul.actor-stack {
 
 .command-palette-list:focus-visible {
   outline: none; /* no ring: the highlighted row marks it */
-}
-
-.command-palette-name {
-  min-width: 0;
-  flex: 0 1 auto;
-  overflow: hidden;
-  font-weight: var(--luke-weight-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A name with a detail after it keeps its whole width, up to most of the
-   row, and the detail is what gives way: an action's name is short and says
-   what the row does, where its detail (the task it acts on) can run long. */
-.command-palette-name:has(+ .command-palette-detail) {
-  max-width: 70%;
-  flex: none;
-}
-
-/* A plan's repository follows its name, as the sidebar's row says it. */
-.command-palette-detail {
-  min-width: 0;
-  flex: 0 1 auto;
-  overflow: hidden;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* The keys' hints along the card's foot, each chord a step louder than the

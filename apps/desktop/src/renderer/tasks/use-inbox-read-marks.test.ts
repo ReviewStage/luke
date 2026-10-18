@@ -11,10 +11,10 @@ import {
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { type InboxGroup, isUnread, taskHolder } from "./inbox-model";
 import { type InboxReadMarks, useInboxReadMarks } from "./use-inbox-read-marks";
 

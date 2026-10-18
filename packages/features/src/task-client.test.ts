@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, recordedRoutes } from "@luke/wire/testing";
 import { Effect } from "effect";
+import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
+import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { HOSTED_API_ERROR } from "./service-wire.js";
 import { HostedTaskClient } from "./task-client.js";
 import { TASK_BOUNDS } from "./task-wire.js";
 import { TASK_CALL_FAILURE } from "./tasks-view.js";
@@ -97,4 +100,64 @@ it.effect("the repositories of one workspace are asked by its id, and every one 
       "GET /api/github/repositories",
     ]);
   }),
+);
+
+it.effect(
+  "a start naming an agent answers the task with the agent started on it, or with why it was refused as a Start reads it; one asking for planning beside it is never sent",
+  () =>
+    Effect.gen(function* () {
+      const task = { ...TASK, repository: "acme/relay", document: { body: "", assumptions: [] } };
+      const agent = {
+        id: "3c9e1d2a-6b7f-4e8a-9c0d-1e2f3a4b5c6d",
+        planId: TASK_ID,
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        title: null,
+        createdAt: 1_800_000_300_000,
+        status: CODING_AGENT_STATUS.STARTING,
+        turnId: null,
+      };
+      let sent = 0;
+      const api = fakeCloudApi({
+        "POST /api/plans": {
+          answer: () => {
+            sent += 1;
+            return sent === 1
+              ? { plan: task, agent }
+              : { plan: task, agentRefusal: { error: HOSTED_API_ERROR.INVALID_REQUEST } };
+          },
+        },
+      });
+      const request = {
+        repository: "acme/relay",
+        agent: { idempotencyKey: "start-1", prompt: " Expire invitations. " },
+      };
+
+      const started = yield* Effect.provide(client().create(request), api.layer);
+      const refused = yield* Effect.provide(client().create(request), api.layer);
+      const planned = yield* Effect.provide(
+        client().create({ ...request, planning: true }),
+        api.layer,
+      );
+
+      assert.deepEqual(started, { ok: true, answer: { task, agent: { agent } } });
+      assert.deepEqual(refused, {
+        ok: true,
+        answer: { task, agent: { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE } },
+      });
+      assert.deepEqual(planned, { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(
+        api.requests().map((each) => JSON.parse(each.body ?? "{}")),
+        [
+          {
+            repository: "acme/relay",
+            agent: { idempotencyKey: "start-1", prompt: "Expire invitations." },
+          },
+          {
+            repository: "acme/relay",
+            agent: { idempotencyKey: "start-1", prompt: "Expire invitations." },
+          },
+        ],
+      );
+    }),
 );

@@ -13,21 +13,21 @@ import {
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { MemberDirectory } from "@luke/panel/member-directory";
+import type { TaskLooks } from "@luke/panel/tasks/use-task-looks";
+import { lineWords } from "@luke/panel/testing/actor-line";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { handState, signedInAs } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test, vi } from "vitest";
-import { lineWords } from "#testing/actor-line";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { handState, signedInAs } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { DOCUMENT_TASK } from "#testing/document-task";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { MemberDirectory } from "../member-directory";
 import type { EditAgents } from "./edit-ref";
 import { PlanBody } from "./plan-body";
-import type { TaskLooks } from "./use-task-looks";
 
 /**
  * plan-body.test.ts -- the open task's document says who created it and who last wrote it,

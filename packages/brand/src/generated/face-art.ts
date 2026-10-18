@@ -3,7 +3,7 @@
 //
 // The face the renderer draws, in the artwork's own canvas coordinates, and the
 // vocabulary of things it can be doing. The motions themselves are @keyframes in
-// styles/face-motion.css, generated from the same table.
+// @luke/ui's face/face-motion.css, generated from the same table.
 
 /** Luke's face, on the 240x240 canvas every asset in packages/brand/assets/ is cut from. */
 export const FACE_ART = {

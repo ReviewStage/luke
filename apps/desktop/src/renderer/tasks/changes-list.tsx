@@ -1,4 +1,11 @@
 import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
+import {
+  filterFiles,
+  STATUS_LETTER,
+  STATUS_WORDS,
+  startsCollapsed,
+  treeOrder,
+} from "@luke/panel/tasks/changes-model";
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import { IconButton } from "@luke/ui";
 import { ChevronRightIcon } from "lucide-react";
@@ -13,13 +20,6 @@ import {
 } from "react";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
-import {
-  filterFiles,
-  STATUS_LETTER,
-  STATUS_WORDS,
-  startsCollapsed,
-  treeOrder,
-} from "./changes-model";
 import type { DiffListDoor } from "./diff-list";
 
 /**
@@ -28,19 +28,22 @@ import type { DiffListDoor } from "./diff-list";
  * The keys are stage-cli's own, a letter alone each: J and K step to the
  * next and the previous file, `;` collapses or expands the file stood on,
  * ⇧; collapses every file the filter keeps, or expands them all once all
- * are collapsed, and Escape lets go of the file stood on. They answer only
+ * are collapsed, V marks the file stood on viewed on GitHub, or unmarks it,
+ * and steps on to the next, and Escape lets go of the file stood on. They answer only
  * where the press lands inside Files changed and is not typing, and go no
  * further once answered, so J and K keep their meaning everywhere else in
- * the window (the Inbox's next and previous item, `#shared/shortcuts`), an
+ * the window (the Inbox's next and previous item, `@luke/settings/shortcuts`), an
  * Escape with no file stood on reaches the window's layers, and the tab's ⌘F
  * is never one of them. The file stood on is outlined in the list and named
  * in the bar; with none stood on, the bar names the file at the top of the
  * list, and a key starts from it.
  *
- * A file's fold is its default, `startsCollapsed`, turned over for the files
- * the developer folded the other way, so a file that starts collapsed and is
- * opened stays open, and Collapse all and Expand all turn over exactly the
- * files the filter keeps. A file the filter leaves out, chosen where every
+ * A file's fold is the one the developer chose for it, else its default:
+ * folded where it `startsCollapsed`, or where the member marked it viewed,
+ * as stage-cli folds a viewed file. So a file that starts collapsed and is
+ * opened stays open, Collapse all and Expand all fold exactly the files the
+ * filter keeps, and marking a file viewed folds it, or unmarking opens it,
+ * whatever was chosen for it before. A file the filter leaves out, chosen where every
  * changed file is listed, as the bar's crumbs list them, clears the filter
  * and is scrolled to once the list holds it.
  */
@@ -52,6 +55,7 @@ const FILE_KEY = {
   TOGGLE: "toggle",
   TOGGLE_ALL: "toggle-all",
   LET_GO: "let-go",
+  VIEWED: "viewed",
 } as const;
 
 type FileKey = (typeof FILE_KEY)[keyof typeof FILE_KEY];
@@ -71,6 +75,9 @@ export const LIST_WORDS = {
   EXPAND_ALL: "Expand all files",
   SHOW_SOURCE: "Show source",
   SHOW_IMAGE: "Show image",
+  VIEWED: "Viewed",
+  /** How far through the files the member is, as GitHub counts it. */
+  viewedOf: (viewed: number, files: number) => `${viewed} / ${files} viewed`,
 } as const;
 
 /** Whether the press landed in something taking typing, which keeps its letters. */
@@ -93,6 +100,7 @@ function fileKeyOf(event: React.KeyboardEvent, standing: boolean): FileKey | und
   if (event.shiftKey) return undefined;
   const key = event.key.toLowerCase();
   if (key === "j") return FILE_KEY.NEXT;
+  if (key === "v") return FILE_KEY.VIEWED;
   return key === "k" ? FILE_KEY.PREVIOUS : undefined;
 }
 
@@ -110,18 +118,27 @@ function turned(paths: ReadonlySet<string>, path: string): ReadonlySet<string> {
   return next;
 }
 
-/** The folds turned over, with `paths` folded as `collapsed` says. */
+/** The folds the developer chose, with `files` folded as `collapsed` says. */
 function foldedAs(
-  overrides: ReadonlySet<string>,
+  chosen: ReadonlyMap<string, boolean>,
   files: readonly CodingAgentChangedFile[],
   collapsed: boolean,
-): ReadonlySet<string> {
-  const next = new Set(overrides);
-  for (const file of files) {
-    if (startsCollapsed(file) === collapsed) next.delete(file.path);
-    else next.add(file.path);
-  }
+): ReadonlyMap<string, boolean> {
+  const next = new Map(chosen);
+  for (const file of files) next.set(file.path, collapsed);
   return next;
+}
+
+/** The fold a path is drawn with: the one the developer chose, else its default. */
+function chosenOr(chosen: ReadonlyMap<string, boolean>, path: string, otherwise: boolean): boolean {
+  return chosen.get(path) ?? otherwise;
+}
+
+/** Which of the files the member marked viewed on GitHub, and the door that marks or unmarks one (`viewed-files.ts`). */
+export interface ViewedMarks {
+  readonly viewed: (path: string) => boolean;
+  /** Marks or unmarks a file, answering once GitHub settled it whether the member's last press for it stands. */
+  readonly toggle: (path: string) => Promise<boolean>;
 }
 
 /** The list's state and doors: the files kept, each fold, the file stood on and the one at the top, and what the keys and controls do. */
@@ -147,12 +164,18 @@ export interface ChangesList {
   /** Whether an image that is text too, an SVG, is drawn as its source's lines rather than as a picture, and the door that turns it. */
   readonly asSource: (path: string) => boolean;
   readonly toggleSource: (path: string) => void;
+  /** Whether a file is marked viewed, and the door that marks or unmarks it, which folds or opens it; none while the marks are not read. */
+  readonly viewed: ((path: string) => boolean) | undefined;
+  readonly markViewed: ((path: string) => void) | undefined;
 }
 
 /** Files changed's list over `files`, every fold at its default and no file stood on until the developer acts. */
-export function useChangesList(files: readonly CodingAgentChangedFile[]): ChangesList {
+export function useChangesList(
+  files: readonly CodingAgentChangedFile[],
+  marks?: ViewedMarks | undefined,
+): ChangesList {
   const [query, onQuery] = useState("");
-  const [overrides, setOverrides] = useState<ReadonlySet<string>>(new Set());
+  const [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [standing, setStanding] = useState<string | undefined>(undefined);
   const [top, setTop] = useState<string | undefined>(undefined);
   const [sources, setSources] = useState<ReadonlySet<string>>(new Set());
@@ -160,23 +183,62 @@ export function useChangesList(files: readonly CodingAgentChangedFile[]): Change
   const ordered = useMemo(() => treeOrder(files), [files]);
   const kept = useMemo(() => filterFiles(ordered, query), [ordered, query]);
   const paths = useMemo(() => kept.map((file) => file.path), [kept]);
+  const viewed = marks?.viewed;
   const folds = useMemo(
     () =>
-      new Map(files.map((file) => [file.path, startsCollapsed(file) !== overrides.has(file.path)])),
-    [files, overrides],
+      new Map(
+        files.map((file) => [
+          file.path,
+          chosenOr(chosen, file.path, startsCollapsed(file) || viewed?.(file.path) === true),
+        ]),
+      ),
+    [files, chosen, viewed],
   );
   const collapsed = useCallback((path: string) => folds.get(path) === true, [folds]);
   const allCollapsed = kept.length > 0 && kept.every((file) => collapsed(file.path));
   const keptStanding = standing !== undefined && paths.includes(standing) ? standing : undefined;
   const current = keptStanding ?? (top !== undefined && paths.includes(top) ? top : paths[0]);
 
-  const toggle = useCallback((path: string) => setOverrides((was) => turned(was, path)), []);
+  // How many times each file's fold was chosen, so a press undone puts back only a fold nothing chose since.
+  const foldChoices = useRef(new Map<string, number>());
+  const choose = useCallback((paths: readonly string[]) => {
+    for (const path of paths)
+      foldChoices.current.set(path, (foldChoices.current.get(path) ?? 0) + 1);
+  }, []);
+  const toggle = useCallback(
+    (path: string) => {
+      choose([path]);
+      setChosen((was) => new Map(was).set(path, folds.get(path) !== true));
+    },
+    [folds, choose],
+  );
+  // A file marked viewed folds, and one unmarked opens, whatever was chosen for it before, which comes back where GitHub would not take the press.
+  const markViewed = useCallback(
+    (path: string) => {
+      if (marks === undefined) return;
+      const before = chosen.get(path);
+      const folding = !marks.viewed(path);
+      choose([path]);
+      const choice = foldChoices.current.get(path);
+      setChosen((was) => new Map(was).set(path, folding));
+      void marks.toggle(path).then((stood) => {
+        if (stood || foldChoices.current.get(path) !== choice) return;
+        setChosen((was) => {
+          const next = new Map(was);
+          if (before === undefined) next.delete(path);
+          else next.set(path, before);
+          return next;
+        });
+      });
+    },
+    [marks, chosen, choose],
+  );
   const asSource = useCallback((path: string) => sources.has(path), [sources]);
   const toggleSource = useCallback((path: string) => setSources((was) => turned(was, path)), []);
-  const toggleAll = useCallback(
-    () => setOverrides((was) => foldedAs(was, kept, !allCollapsed)),
-    [kept, allCollapsed],
-  );
+  const toggleAll = useCallback(() => {
+    choose(kept.map((file) => file.path));
+    setChosen((was) => foldedAs(was, kept, !allCollapsed));
+  }, [kept, allCollapsed, choose]);
   // A file the filter leaves out is chosen in the tree's crumbs, which list every changed file: the filter is cleared, and the list scrolled to it once it holds it again.
   const [revealing, setRevealing] = useState<string | undefined>(undefined);
   const go = useCallback(
@@ -197,11 +259,19 @@ export function useChangesList(files: readonly CodingAgentChangedFile[]): Change
   const onKeyDown = (event: React.KeyboardEvent) => {
     const key = fileKeyOf(event, keptStanding !== undefined);
     if (key === undefined || current === undefined) return;
+    // V is the list's only while the marks are read, so there is something to mark.
+    if (key === FILE_KEY.VIEWED && marks === undefined) return;
     // Note that an answered press goes no further, because the window's keymap would run the Inbox's J and K too.
     event.preventDefault();
     event.stopPropagation();
     if (key === FILE_KEY.LET_GO) return setStanding(undefined);
     if (key === FILE_KEY.TOGGLE_ALL) return toggleAll();
+    if (key === FILE_KEY.VIEWED) {
+      // The file marked folds, and the keys step on to the next, so pressing V again marks it.
+      markViewed(current);
+      const next = keptStanding === undefined ? current : stepped(paths, current, 1);
+      return go(next ?? current);
+    }
     if (key === FILE_KEY.TOGGLE) {
       toggle(current);
       return go(current);
@@ -229,6 +299,8 @@ export function useChangesList(files: readonly CodingAgentChangedFile[]): Change
     door,
     asSource,
     toggleSource,
+    viewed: marks?.viewed,
+    markViewed: marks === undefined ? undefined : markViewed,
   };
 }
 

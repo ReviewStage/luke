@@ -1,12 +1,12 @@
 import type { PlanEditor } from "@luke/features/task-wire";
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
+import { Checkpoint } from "@luke/panel/ai-elements/checkpoint";
+import { usePerson } from "@luke/panel/member-directory";
 import { callHeading, useMinute } from "@luke/panel/tasks/task-time";
 import type { CallRecord } from "@luke/voice/transcript-model";
 import { AudioLinesIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref";
-import { Checkpoint } from "../ai-elements/checkpoint";
-import { usePerson } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { RUN_CARD, RunCard } from "./turn-card";
 import { STATUS_LINE_CLASS, WORKED_SEPARATOR, workingTime } from "./working-time";

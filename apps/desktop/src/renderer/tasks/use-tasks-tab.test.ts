@@ -29,6 +29,12 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
+import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
+import { handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { newestToastAction, newestToastSays } from "@luke/panel/testing/toast";
+import { ToastHost } from "@luke/panel/toast";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
@@ -54,13 +60,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { handState } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { installScrollIntoView } from "#testing/scroll-into-view";
-import { newestToastAction, newestToastSays } from "#testing/toast";
-import { ToastHost } from "../toast";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
-import { MAIN_TAB } from "./use-main-tabs";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
 import {
   AUTOMATIONS_PAGE,
@@ -2539,6 +2539,136 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
   });
 });
 
+test("a task started from an issue's Start agent… presses its Start once it stands open, with no planning, linked to the issue, and the agent's tab opens; an agent that did not start says why beside the Start", async () => {
+  let agents = 0;
+  let listed: CodingAgentSummary[] = [];
+  const started: Task = { ...TASK, id: OTHER_TASK_ID, name: "Invites", repository: "acme/web" };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
+      // The service lists the agent once it started, as it does.
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
+      [ACT_KIND.CODING_AGENTS_START]: () => {
+        if (agents++ > 0) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+        listed = [{ ...RUNNING_AGENT, id: AGENT_ID }];
+        return Promise.resolve({ agent: { ...RUNNING_AGENT, id: AGENT_ID } });
+      },
+    },
+  );
+  await settle();
+  const issue = {
+    id: "issue-1",
+    workspaceId: "workspace-acme",
+    identifier: "ACME-7",
+    title: "Invites",
+  };
+  const agentStarts = () =>
+    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START);
+  /** Start agent… pressed and its card's Start answered, then the task standing open as the host opens it. */
+  const startFrom = async () => {
+    act(() => tab.control().onNewTaskFrom(issue, true));
+    await act(async () => {
+      await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
+        issueId: issue.id,
+        agent: true,
+      });
+    });
+    await settle();
+    tab.stand({
+      tasks: {
+        ...OPEN,
+        activeTaskId: OTHER_TASK_ID,
+        document: { status: TASKS_READ.READY, task: started },
+      },
+    });
+    await settle();
+  };
+
+  act(() => tab.control().onNewTaskFrom(issue, true));
+  assert.deepEqual(tab.control().newTask.preset, { issue, agent: true });
+  act(() => tab.control().newTask.onClose());
+  act(() => tab.control().onNewTaskFrom(issue, true));
+  await act(async () => {
+    await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
+      issueId: issue.id,
+      agent: true,
+    });
+  });
+  await settle();
+  assert.deepEqual(agentStarts(), [], "no agent starts before its task stands open");
+  assert.deepEqual(tab.payloads.find(({ kind }) => kind === ACT_KIND.TASKS_START)?.payload, {
+    name: "Invites",
+    repository: "acme/web",
+    workspaceId: "workspace-acme",
+    issueId: issue.id,
+    planning: false,
+  });
+  tab.stand({
+    tasks: {
+      ...OPEN,
+      activeTaskId: OTHER_TASK_ID,
+      document: { status: TASKS_READ.READY, task: started },
+    },
+  });
+  await settle();
+
+  assert.equal(agentStarts().length, 1);
+  assert.equal(JSON.parse(JSON.stringify(agentStarts()[0]?.payload)).taskId, OTHER_TASK_ID);
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+
+  tab.stand({ tasks: OPEN });
+  await settle();
+  await startFrom();
+  assert.equal(agentStarts().length, 2);
+  assert.ok(tab.control().agents.start.note, "why the agent did not start stands beside the Start");
+});
+
+test("an agent asked of Start agent… whose task was left before it could start starts nothing when the task is opened again", async () => {
+  const started: Task = { ...TASK, id: OTHER_TASK_ID, name: "Invites", repository: "acme/web" };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
+      [ACT_KIND.CODING_AGENTS_START]: () =>
+        Promise.resolve({ agent: { ...RUNNING_AGENT, id: AGENT_ID } }),
+    },
+  );
+  await settle();
+  const standOn = (task: Task) =>
+    tab.stand({
+      tasks: { ...OPEN, activeTaskId: task.id, document: { status: TASKS_READ.READY, task } },
+    });
+
+  act(() =>
+    tab
+      .control()
+      .onNewTaskFrom(
+        { id: "issue-1", workspaceId: "workspace-acme", identifier: "ACME-7", title: "Invites" },
+        true,
+      ),
+  );
+  await act(async () => {
+    await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
+      issueId: "issue-1",
+      agent: true,
+    });
+  });
+  // The new task opens while its repository is still unread, and the developer leaves it for another.
+  standOn({ ...started, repository: null });
+  await settle();
+  standOn(TASK);
+  await settle();
+  standOn(started);
+  await settle();
+
+  assert.deepEqual(
+    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START),
+    [],
+  );
+});
+
 test("New task's Agent mode starts the task without planning and opens it on a draft agent holding the prompt, files, and model, marked to send itself", async () => {
   const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
   const tab = mount(
@@ -2551,18 +2681,9 @@ test("New task's Agent mode starts the task without planning and opens it on a d
   act(() => tab.control().onNewTask());
   let note: string | undefined = "unanswered";
   await act(async () => {
-    note = await tab.control().newTask.start(
-      "",
-      "acme/web",
-      undefined,
-      false,
-      {},
-      {
-        prompt: "Make the sidebar keep its folds.",
-        attachments: [],
-        choice,
-      },
-    );
+    note = await tab.control().newTask.start("", "acme/web", undefined, false, {
+      handed: { prompt: "Make the sidebar keep its folds.", attachments: [], choice },
+    });
   });
   tab.stand({
     tasks: {

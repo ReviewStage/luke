@@ -337,6 +337,11 @@ function fakeService() {
         asked.push(`pull-request-action:${agentId}:${request.action}`);
         return { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
       }),
+    pullRequestViewed: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`pull-request-viewed:${agentId}`);
+        return { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
+      }),
     githubImage: (agentId, src) =>
       Effect.sync(() => {
         asked.push(`github-image:${agentId}:${src}`);
@@ -646,6 +651,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED, { agentId: AGENT_ID }),
+      { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
         taskId: TASK_ID,
         after: INBOX_CURSOR_START,
@@ -768,6 +777,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `overview-conversation:${AGENT_ID}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
       `pull-request-action:${AGENT_ID}:${PULL_REQUEST_ACTION.READY_FOR_REVIEW}`,
+      `pull-request-viewed:${AGENT_ID}`,
       `inbox:${TASK_ID}:${INBOX_CURSOR_START}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,

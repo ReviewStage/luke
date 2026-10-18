@@ -1,6 +1,6 @@
+import { Spinner } from "@luke/panel/spinner";
 import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
 import { ImageOffIcon } from "lucide-react";
-import { Spinner } from "./spinner";
 
 /**
  * picture-block.tsx -- a picture drawn in written words: its own block, at its own size up to the column's, its caption under it, a press opening it over the window.

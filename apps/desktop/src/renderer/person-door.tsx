@@ -1,7 +1,7 @@
 import { appPlatform } from "@luke/panel/app-platform";
+import { useMemberDirectory } from "@luke/panel/member-directory";
 import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { createContext, useContext } from "react";
-import { useMemberDirectory } from "./member-directory";
 
 /**
  * person-door.tsx -- where a press on a person goes: their page in the listed workspace, the page of someone who left, or a GitHub account's own page on GitHub.

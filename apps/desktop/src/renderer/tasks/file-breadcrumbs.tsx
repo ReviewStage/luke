@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import type { ReadFolder } from "@luke/panel/file-tree/contract";
 import {
   BREADCRUMB_POPUP,
   BREADCRUMB_SHOWN,
@@ -11,7 +12,6 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader";
-import type { ReadFolder } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
 
 /**

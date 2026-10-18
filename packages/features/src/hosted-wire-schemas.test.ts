@@ -227,6 +227,8 @@ const EFFECT_MODULE_SCHEMAS = {
       codingAgentView.codingAgentPullRequestActionParamsSchema,
     codingAgentPullRequestWriteAnswerViewSchema:
       codingAgentView.codingAgentPullRequestWriteAnswerViewSchema,
+    codingAgentPullRequestViewedAnswerViewSchema:
+      codingAgentView.codingAgentPullRequestViewedAnswerViewSchema,
     codingAgentGitHubImageParamsSchema: codingAgentView.codingAgentGitHubImageParamsSchema,
     githubImageTypeSchema: codingAgentView.githubImageTypeSchema,
     codingAgentGitHubImageViewSchema: codingAgentView.codingAgentGitHubImageViewSchema,
@@ -393,6 +395,7 @@ const EFFECT_MODULE_SCHEMAS = {
     agentEditLineSchema: taskWire.agentEditLineSchema,
     planAssumptionSchema: taskWire.planAssumptionSchema,
     planDocumentSchema: taskWire.planDocumentSchema,
+    taskAgentStartSchema: taskWire.taskAgentStartSchema,
     taskCreateRequestSchema: taskWire.taskCreateRequestSchema,
     taskRenameRequestSchema: taskWire.taskRenameRequestSchema,
     taskUpdateRequestSchema: taskWire.taskUpdateRequestSchema,
@@ -409,6 +412,8 @@ const EFFECT_MODULE_SCHEMAS = {
     repositoryPinsAnswerSchema: taskWire.repositoryPinsAnswerSchema,
     repositoryPinRequestSchema: taskWire.repositoryPinRequestSchema,
     taskAnswerSchema: taskWire.taskAnswerSchema,
+    taskAgentRefusalSchema: taskWire.taskAgentRefusalSchema,
+    taskStartAnswerSchema: taskWire.taskStartAnswerSchema,
     taskDeleteAnswerSchema: taskWire.taskDeleteAnswerSchema,
     planRevisionSeqSchema: taskWire.planRevisionSeqSchema,
     planRevisionLineSchema: taskWire.planRevisionLineSchema,
@@ -441,6 +446,7 @@ const EFFECT_MODULE_SCHEMAS = {
     mergeMethodSchema: pullRequestWriteWire.mergeMethodSchema,
     pullRequestActionRequestSchema: pullRequestWriteWire.pullRequestActionRequestSchema,
     pullRequestWriteAnswerSchema: pullRequestWriteWire.pullRequestWriteAnswerSchema,
+    pullRequestViewedAnswerSchema: pullRequestWriteWire.pullRequestViewedAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof pullRequestWriteWire>,
   "repository-reach-wire": {
     repositoryUnreachedSchema: repositoryReachWire.repositoryUnreachedSchema,

@@ -3,6 +3,9 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { AttentionMark } from "@luke/panel/attention-mark";
+import { useCreator, useMemberDirectory } from "@luke/panel/member-directory";
+import { RepositoryPicture } from "@luke/panel/repository-picture";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import {
   HOVER_CARD_ROW_LOOK,
@@ -17,17 +20,13 @@ import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { repositoryPageUrl } from "@luke/ui/tasks-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { AttentionMark } from "../attention-mark";
-import { useCreator, useMemberDirectory } from "../member-directory";
 import { useActorDoor } from "../person-door";
-import { RepositoryPicture } from "../repository-picture";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { agentTabLabel, pullRequestNumberLabel } from "../tasks/coding-agent-model";
 import { PullRequestMark } from "../tasks/pull-request-mark";
 import { RelativeTime } from "../tasks/relative-time";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { Tooltip } from "../tooltip";
 import { strandedHome } from "./move-task-dialog";
 import { WorkspaceRef } from "./workspace-ref";
 
@@ -365,36 +364,5 @@ export function taskCardOf(
       onOpenGitHub={tasks.repositories.openGitHub}
       onShowAgent={(agentId) => tasks.onShowAgent(task.id, agentId)}
     />
-  );
-}
-
-/**
- * A task named in place: what it is drawn as, its document glyph and its
- * name as the place sets them, as one button that hangs the task's card
- * while the pointer rests on it and opens the task on a press, as
- * `AgentRef` names an agent. Note that the Inbox list's task heading, whose
- * press folds it, and ⌘K's task rows, whose card's buttons the modal
- * palette would leave unpressable, name the task without one.
- */
-export function TaskRef({
-  task,
-  card,
-  onOpen,
-  className,
-  children,
-}: {
-  task: Pick<TaskSummary, "name">;
-  /** The task's card (`planCardOf`). */
-  card: React.ReactNode;
-  onOpen: () => void;
-  className?: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <Tooltip label={task.name} card={card}>
-      <button type="button" className={className} data-task-ref="" onClick={onOpen}>
-        {children}
-      </button>
-    </Tooltip>
   );
 }

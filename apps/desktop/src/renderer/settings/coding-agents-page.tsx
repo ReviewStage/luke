@@ -12,6 +12,8 @@ import {
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { HarnessMark } from "@luke/panel/harness-marks";
+import { Segmented } from "@luke/panel/segmented";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
@@ -26,8 +28,6 @@ import {
 import { actionRejection } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
-import { HarnessMark } from "../harness-marks";
-import { Segmented } from "../segmented";
 import {
   choiceModelId,
   choiceOn,

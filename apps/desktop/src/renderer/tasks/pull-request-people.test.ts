@@ -13,25 +13,26 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { MemberDirectory } from "@luke/panel/member-directory";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { MemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { AgentChangesTab, ChangesCard, peopleOf } from "./agent-changes-tab";
 import { agentSubject, NOTHING_HELD } from "./agent-ref";
 
 /**
- * pull-request-people.test.ts -- an agent's Changes tab and its card say
- * who its pull request names as every actor is drawn: a linked teammate as
- * the member, anyone else as themself on GitHub, a person's circle or an
- * App's bot's square, Luke's own App's bot among them; each reviewer's face
- * wears where they stand and hangs their card; the reviews that said
- * something fold under their count. Synthetic people throughout.
+ * pull-request-people.test.ts -- an agent's Changes card says who its pull
+ * request names as every actor is drawn: a linked teammate as the member,
+ * anyone else as themself on GitHub, a person's circle or an App's bot's
+ * square, Luke's own App's bot among them; each reviewer's face wears where
+ * they stand and hangs their card; the reviewers past the pile fold under
+ * their count. Its Files changed view names nobody, since the Pull request
+ * tab's header above it does. Synthetic people throughout.
  */
 
 const CHARLES: WorkspaceMember = {
@@ -66,7 +67,6 @@ const PEOPLE: CodingAgentChangesPeople = {
     { by: DEVIN, state: REVIEW_STATE.COMMENTED },
     { by: LUKE_BOT, state: REVIEW_STATE.COMMENTED },
   ],
-  commitAuthors: [LUKE_BOT, CHARLES_ON_GITHUB],
   comments: [
     { by: DEVIN, state: REVIEW_STATE.COMMENTED, excerpt: "Found 1 potential issue.", at: 1_000 },
     { by: CHARLES_ON_GITHUB, state: REVIEW_STATE.APPROVED, excerpt: "Ship it.", at: 2_000 },
@@ -163,20 +163,19 @@ function hover(control: Element): void {
   });
 }
 
-test("the Changes tab says who opened the pull request, its reviewers by where each stands, and who authored its commits, each the actor they are to the reader", async () => {
-  const tab = await draw(
-    createElement(AgentChangesTab, {
-      agentId: AGENT.id,
-      control,
-      shown: true,
-      repository: "acme/relay",
-      tree: { open: false, onToggle: () => undefined },
+test("a Changes card says who opened the pull request and its reviewers by where each stands, each the actor they are to the reader", async () => {
+  const strip = await draw(
+    createElement(ChangesCard, {
+      subject: agentSubject(control, AGENT.id, NOTHING_HELD, false),
+      models: [],
+      pullRequest: PULL_REQUEST,
+      people: PEOPLE,
+      onOpenAgent: () => undefined,
     }),
   );
-  const strip =
-    tab.querySelector(".changes-people") ?? assert.fail("the people stand under the bar");
 
-  const opener = strip.querySelector("[data-actor-ref]") ?? assert.fail("who opened it is named");
+  const opener =
+    strip.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("who opened it is named");
   assert.deepEqual(
     [opener.querySelector(".luke-inline-ref-label")?.textContent, opener.getAttribute("data-kind")],
     ["luke-agent", "github"],
@@ -206,29 +205,20 @@ test("the Changes tab says who opened the pull request, its reviewers by where e
   hover(faces[1] ?? assert.fail("octocat's face"));
   const card = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');
   assert.match(card?.textContent ?? "", /@octocat.*GitHub user.*Not in this workspace/u);
-
-  const commits =
-    strip.querySelector('[aria-label="Commit authors"]') ?? assert.fail("commit authors stand");
-  assert.deepEqual(
-    [...commits.querySelectorAll(".actor-stack-face")].map((face) =>
-      face.getAttribute("aria-label"),
-    ),
-    ["luke-agent", "Charles Pan"],
-  );
 });
 
 test("who opened the pull request is named alone, whoever the agent wrote as", async () => {
   const opener = async (people: CodingAgentChangesPeople) => {
-    const tab = await draw(
-      createElement(AgentChangesTab, {
-        agentId: AGENT.id,
-        control: controlNaming(people),
-        shown: true,
-        repository: "acme/relay",
-        tree: { open: false, onToggle: () => undefined },
+    const card = await draw(
+      createElement(ChangesCard, {
+        subject: agentSubject(control, AGENT.id, NOTHING_HELD, false),
+        models: [],
+        pullRequest: PULL_REQUEST,
+        people,
+        onOpenAgent: () => undefined,
       }),
     );
-    const line = tab.querySelector(".changes-people .actor-words");
+    const line = card.querySelector(".actor-words");
     const named = [
       line?.querySelector(".luke-inline-ref-label")?.textContent,
       /as the GitHub App/u.test(line?.textContent ?? ""),
@@ -275,24 +265,30 @@ test("a Changes card says who opened the pull request and its reviewers once its
   assert.equal(read.querySelectorAll('[aria-label="Reviewers"] .actor-stack-face').length, 4);
 });
 
-test("a pull request that changes no file still says who it names, over the line saying it changes nothing", async () => {
-  const tab = await draw(
-    createElement(AgentChangesTab, {
-      agentId: AGENT.id,
-      control: {
-        ...control,
-        readChanges: () =>
-          Promise.resolve({
-            pullRequest: { url: PULL_REQUEST.url, truncated: false, files: [], ...PEOPLE },
-          }),
-      },
-      shown: true,
-      repository: "acme/relay",
-      tree: { open: false, onToggle: () => undefined },
-    }),
-  );
-  assert.ok(tab.querySelector(".changes-people"), "the people stand");
-  assert.match(tab.textContent ?? "", /This pull request changes no files\./u);
+test("Files changed names nobody, with files or without, since the Pull request tab's header does", async () => {
+  const names = async (readChanges: typeof control.readChanges) => {
+    const tab = await draw(
+      createElement(AgentChangesTab, {
+        agentId: AGENT.id,
+        control: { ...control, readChanges },
+        shown: true,
+        repository: "acme/relay",
+        tree: { open: false, onToggle: () => undefined },
+      }),
+    );
+    const named =
+      tab.querySelector("[data-actor-ref], .actor-stack") !== null ||
+      /Opened by|Reviewers|Commits by/u.test(tab.textContent ?? "");
+    act(() => root?.unmount());
+    document.body.innerHTML = "";
+    return named;
+  };
+  const noFiles = () =>
+    Promise.resolve({
+      pullRequest: { url: PULL_REQUEST.url, truncated: false, files: [], ...PEOPLE },
+    });
+
+  assert.deepEqual([await names(control.readChanges), await names(noFiles)], [false, false]);
 });
 
 test("a card says the people its tab read only for the pull request they were read for", () => {

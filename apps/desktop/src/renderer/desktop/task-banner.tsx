@@ -1,6 +1,6 @@
+import { AttentionMark } from "@luke/panel/attention-mark";
 import { BANNER_LOOK, BANNER_TONE, Banner, BUTTON_VARIANT, Button } from "@luke/ui";
 import type { ReactNode } from "react";
-import { AttentionMark } from "../attention-mark";
 
 /**
  * task-banner.tsx -- a notice about the whole task: one slim line under the task's toolbar, over every tab of it, which only mending what it says takes away.
