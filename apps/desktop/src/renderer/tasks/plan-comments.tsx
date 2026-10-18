@@ -1222,6 +1222,11 @@ export function PlanCommentLayer({
       setPointed(marked?.dataset.threads?.split(" ")[0]);
       const found = blockAt(event.target, unitClass);
       if (found === undefined) return;
+      // Note that a block whose words already carry a thread is commented on through that thread, so it offers no button.
+      if (found.block.querySelector(`.${COMMENT_MARK_CLASS}[data-threads]`) !== null) {
+        setHovered(undefined);
+        return;
+      }
       if (editor !== undefined) {
         setHovered({
           top: topIn(element, found.block),
@@ -1429,9 +1434,7 @@ export function PlanCommentLayer({
       />
     );
   const blockButton =
-    // Note that folded, a line holding a count opens its threads there, so its block shows no button over it.
-    hovered === undefined ||
-    (!wide && [...anchors.values()].some((top) => Math.abs(top - hovered.top) < 4)) ? null : (
+    hovered === undefined ? null : (
       <div className="comment-block-button" data-folded={!wide} style={{ top: hovered.top }}>
         <Tooltip label={COMMENT_WORDS.COMMENT}>
           <button

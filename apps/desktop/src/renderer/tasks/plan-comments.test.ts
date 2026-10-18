@@ -639,6 +639,31 @@ test("a thread at rest draws its comment's mentions as their chips, as it does o
   );
 });
 
+test("a block whose words already carry a thread offers no button to start another, folded or wide", () => {
+  const onHeading = threadOn(ID.OPEN, "Approach", "Is this the right order?", {
+    scope: PLAN_COMMENT_SCOPE.BLOCK,
+    section: "Approach",
+  });
+  for (const draw of [wide, <Drawn>(paint: () => Drawn) => paint()]) {
+    const { container } = draw(() => drawn("page", [onHeading]));
+    const button = (block: Element) => {
+      act(() => block.dispatchEvent(new Event("pointerover", { bubbles: true })));
+      return container.querySelector(".comment-block-button button");
+    };
+    const heading = (name: string) =>
+      [...container.querySelectorAll(".markdown-heading")].find((h) => h.textContent === name);
+    const approach = heading("Approach");
+    const goal = heading("Goal");
+    assert.ok(approach && goal);
+
+    assert.ok(button(approach) === null, "the heading holding a thread offers none");
+    assert.ok(button(goal), "a heading without one does");
+    assert.ok(button(approach) === null, "and going back takes it away");
+    for (const root of roots.splice(0)) act(() => root.unmount());
+    container.remove();
+  }
+});
+
 test("a thread being started goes on a press away while empty, and stays holding a draft", () => {
   const { container } = wide(() => drawn("page", []));
   const startOn = () => {
