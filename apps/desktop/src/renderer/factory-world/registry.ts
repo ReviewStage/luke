@@ -6,6 +6,7 @@ import {
   FlaskConicalIcon,
   type LucideIcon,
   SatelliteIcon,
+  ShovelIcon,
   TrainFrontIcon,
 } from "lucide-react";
 import type { WorldModule } from "./world";
@@ -55,6 +56,12 @@ const FACTORY_WORLDS = [
     name: "Orbital Station",
     icon: SatelliteIcon,
     load: () => import("./worlds/station/index"),
+  },
+  {
+    key: "colony",
+    name: "Ant Colony",
+    icon: ShovelIcon,
+    load: () => import("./worlds/colony/index"),
   },
   {
     key: "archipelago",
