@@ -1,4 +1,5 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { settleEndedSession } from "@luke/database/models/abandoned-turns";
 import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
   type CodingAgent,
@@ -17,6 +18,7 @@ import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { causeKind } from "@luke/runtime/effect";
 import { Effect, Option, type Redacted, Result, type Schema, Stream } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
@@ -287,6 +289,18 @@ export interface CoderHost extends HostAdmission {
    * answers no, so the stop goes ahead as it would with no terminal.
    */
   sandboxHeld(admitted: AdmittedConversation): Effect.Effect<boolean, never, DatabaseServices>;
+  /**
+   * Settles failed for its session's end the turn still queued or running
+   * of the coding agent whose conversation records the session eve said
+   * ended, failed or completed (`abandoned-turns.ts`'s `settleEndedSession`),
+   * so the agent reads as failed at once rather than running until the
+   * sweep's day-long bound. eve names the session itself, from inside its
+   * own run, so nothing is admitted: a session no agent's conversation
+   * records settles nothing. Never fails, since its caller is eve's channel
+   * adapter: a store failure is logged and dropped, and the sweep's bound
+   * still ends the turn in time.
+   */
+  sessionEnded(sessionId: string): Effect.Effect<void, never, DatabaseServices>;
   /**
    * Relays one event of a worker's session into the child conversation its
    * delegation was recorded under, as a child turn on the recorded pair; a
@@ -768,6 +782,18 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
               `The terminal lease of conversation ${admitted.target.conversationId} was not read: ${failure._tag}`,
             ),
             false,
+          ),
+        ),
+      ),
+
+    sessionEnded: (sessionId) =>
+      Effect.gen(function* () {
+        const writer = yield* seams.writer();
+        yield* settleEndedSession(writer, sessionId, seams.now());
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning(
+            `The turn of ended session ${sessionId} was not settled: ${causeKind(cause)}`,
           ),
         ),
       ),
