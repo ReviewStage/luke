@@ -2548,6 +2548,26 @@ ul.actor-stack {
   --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
 }
 
+/* New task's Linear chip (`linear-issue-chip.tsx`) stands after the
+   repository chip in the card's foot and hangs its menu from its leading
+   edge, placed as a Settings picker's is, wide enough for an issue's title
+   with its key and state after it. */
+.linear-issue-chip {
+  --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
+  position: relative;
+  min-width: 0;
+}
+
+.linear-issue-chip .searchable-menu {
+  width: 420px;
+  max-width: var(--settings-picker-width-max, 420px);
+}
+
+.linear-issue-chip[data-side="above"] .searchable-menu {
+  top: auto;
+  bottom: calc(100% + var(--luke-space-4));
+}
+
 /* A harness's mark keeps its box in a row however tight the row is, drawn
    as an image (`harness-marks.tsx`) as the traced provider marks
    (`@luke/ui`'s `ProviderMark`) keep theirs. */
