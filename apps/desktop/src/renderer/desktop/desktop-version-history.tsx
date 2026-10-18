@@ -6,10 +6,16 @@ import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { LINK_COPY, useCopyToast } from "@luke/panel/copy-feedback";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
+import type { SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
+import { FIND_PAGE, PageFind } from "@luke/panel/find-in-tab";
 import { Shortcut } from "@luke/panel/shortcut";
 import { BusyLabel } from "@luke/panel/spinner";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { useFormerMembers, useWorkspaceMembers } from "@luke/panel/tasks/use-workspace-members";
+import { commandKeyshortcuts, Tooltip } from "@luke/panel/tooltip";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import type { DialogConfirm } from "@luke/ui";
 import {
@@ -37,8 +43,6 @@ import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-
 import { useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, LeftWords } from "../actor-ref";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
-import { LINK_COPY, useCopyToast } from "../copy-feedback";
-import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory } from "../navigation-history";
 import { centreWithin } from "../tasks/code-pane";
 import { DocumentScroll } from "../tasks/document-frame";
@@ -56,7 +60,6 @@ import {
   VERSION_CHANGE,
   versionDiff,
 } from "../tasks/plan-history-model";
-import { RelativeTime } from "../tasks/relative-time";
 import type { MentionedTask } from "../tasks/task-mentions";
 import {
   HISTORY_READ,
@@ -66,10 +69,7 @@ import {
 } from "../tasks/use-plan-history";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/version-view";
-import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
-import type { SidebarCollapse } from "./sidebar-collapse";
 
 /**
  * desktop-version-history.tsx -- a plan's version history, taking the whole window the way Settings does: every version listed where the sidebar stands, the one chosen beside them.

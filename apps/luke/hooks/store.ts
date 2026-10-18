@@ -15,7 +15,10 @@ import { chatHanded, sessionPrompt } from "../session-prompt.js";
  * first attempt kept. A session the host does not admit writes nothing, and
  * a session the conversation has rotated away from is one the host does not
  * admit: its start claims the record only forward, and every later event is
- * admitted only while the record is still its own.
+ * admitted only while the record is still its own. An event the relay
+ * passes over, or folds into its state alone, such as a fragment of a
+ * step's reasoning or of a sentence not yet finished, is folded without
+ * the admission, which reads the store for each event it admits.
  */
 
 const relayState = defineState<RelayState>("luke.relay", () => EMPTY_RELAY_STATE);
@@ -36,6 +39,9 @@ export default defineHook({
             if (Result.isFailure(starting)) return;
             if (!(yield* host.sessionStarted(starting.success, ctx.session.id))) return;
           }
+          // A fragment the store need hear nothing of is folded into the relay's state without
+          // admitting the session, whose reads would otherwise run for every one of them.
+          if (host.relaysQuietly(event, state)) return;
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
           if (Result.isFailure(admitted)) return;
           yield* host.relay(

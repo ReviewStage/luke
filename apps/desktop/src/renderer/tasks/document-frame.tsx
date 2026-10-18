@@ -1,7 +1,7 @@
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import type { Actor } from "@luke/ui/actor-model";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref";
-import { RelativeTime } from "./relative-time";
 
 /**
  * document-frame.tsx -- what every document of the window is drawn in, a plan's, a version's, and an issue's alike: the column it scrolls in, and the line under its title.

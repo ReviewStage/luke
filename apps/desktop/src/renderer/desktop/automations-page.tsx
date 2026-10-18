@@ -17,15 +17,20 @@ import type { AutomationScope, AutomationSummary } from "@luke/features/automati
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { LinkWorkspaceProvider, useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { ActionMenu } from "@luke/panel/desktop/action-menu";
 import {
   automationNextText,
   automationOwnerName,
   READING_AUTOMATIONS,
 } from "@luke/panel/desktop/automation-words";
 import { useAutomations } from "@luke/panel/desktop/use-automations";
+import { FoldingButton } from "@luke/panel/folding-button";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
+import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "@luke/panel/state-glyph";
 import { momentText, useMinute } from "@luke/panel/tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
+import { Tooltip } from "@luke/panel/tooltip";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -57,13 +62,8 @@ import {
 } from "@luke/ui";
 import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useRef, useState } from "react";
-import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
-import { FoldingButton } from "../folding-button";
-import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "../state-glyph";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
-import { Tooltip } from "../tooltip";
-import { ActionMenu } from "./action-menu";
 import { AutomationEditor } from "./automation-editor";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel, FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel";
@@ -165,9 +165,11 @@ function OwnerCell({
 }
 
 /**
- * One automation's row: the glyph of what fires it wearing where its newest run
- * stands, its name over what fires it, its owner, when it runs next, a
- * failure's mark, and its switch. Everything but the switch is one press
+ * One automation's row: the glyph of what fires it on a tile, as a
+ * suggestion's is, wearing where its newest run stands, its name over what
+ * fires it, its owner, when it runs next with a failure's mark before it,
+ * and its switch. The owner and the next run each keep a column of their
+ * own, so they line up down the card whatever each row says. Everything but the switch is one press
  * that opens its page, as a sidebar task's row is, so the row opens wherever
  * it is pressed and the switch beside the press only switches. Its
  * right-click offers Copy link, and hands focus back to its press as the
@@ -200,7 +202,11 @@ function AutomationRow({
         ref={(node) => {
           press.current = node;
         }}
-        leading={<StateGlyph glyph={<FiringGlyph of={automation.trigger} />} state={state} />}
+        leading={
+          <span className="automation-row-glyph">
+            <StateGlyph glyph={<FiringGlyph of={automation.trigger} />} state={state} />
+          </span>
+        }
         title={
           <span className="automation-row-name" data-enabled={String(automation.enabled)}>
             {automation.name}
@@ -215,10 +221,12 @@ function AutomationRow({
               mine={automation.mine === true}
               workspace={workspace}
             />
-            <Tooltip label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}>
-              <span className="automation-row-when">{automationNextText(automation, now)}</span>
-            </Tooltip>
-            {stateEndMark(state, true)}
+            <span className="automation-row-next">
+              {stateEndMark(state, true)}
+              <Tooltip label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}>
+                <span className="automation-row-when">{automationNextText(automation, now)}</span>
+              </Tooltip>
+            </span>
           </span>
         }
         actions={

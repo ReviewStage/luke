@@ -62,15 +62,15 @@ function scanned(rows: readonly TurnRow<AgentPart>[]): unknown[] {
 }
 
 /** The first turn's rows as the agent tab draws Luke's message for it. */
-function rowsOf(turns: readonly TaskWorkTurn[], callLive = true): readonly TurnRow<AgentPart>[] {
-  const [row] = workRowsOf(conversationOf(turns), callLive);
+function rowsOf(turns: readonly TaskWorkTurn[]): readonly TurnRow<AgentPart>[] {
+  const [row] = workRowsOf(conversationOf(turns));
   assert.ok(row);
   return agentRows(row.message, row.moving);
 }
 
 /** The turn's calls, as the agent tab reads its parts. */
-function callsOf(turns: readonly TaskWorkTurn[], callLive = true) {
-  const [row] = workRowsOf(conversationOf(turns), callLive);
+function callsOf(turns: readonly TaskWorkTurn[]) {
+  const [row] = workRowsOf(conversationOf(turns));
   assert.ok(row);
   return agentParts(row.message).flatMap((part) => (part.kind === AGENT_PART.TOOL ? [part] : []));
 }
@@ -308,14 +308,12 @@ test("the worker stands on its own row, the one call still turning while its tur
   assert.equal(row.block.state, TOOL_STATE.INPUT_AVAILABLE);
 });
 
-test("a turn its call left running is drawn as stopped, with nothing on it still turning", () => {
-  const left = [workTurn(TASK_WORK_STATE.RUNNING, [command("a", "ls")])];
-  const [row] = workRowsOf(conversationOf(left), false);
+test("a turn still running once the call is hung up is drawn as still working, never as stopped, since Luke goes on with no call up", () => {
+  const working = [workTurn(TASK_WORK_STATE.RUNNING, [command("a", "ls")])];
+  const [row] = workRowsOf(conversationOf(working));
   assert.ok(row);
-  assert.equal(row.state, TASK_WORK_STATE.FAILED);
-  assert.equal(row.moving, false);
-  const [call] = callsOf(left, false);
-  assert.equal(call?.state, TOOL_STATE.OUTPUT_AVAILABLE);
+  assert.equal(row.state, TASK_WORK_STATE.RUNNING);
+  assert.equal(row.moving, true);
 });
 
 test("a worker's session is read into parts the way a turn is, each call on its own line, and its tab finds it among the turns", () => {
@@ -337,7 +335,6 @@ test("a worker's session is read into parts the way a turn is, each call on its 
         workers: [comparing],
       }),
     ]),
-    false,
   );
 
   assert.equal(workerOf(rows, "w")?.task, comparing.task);
@@ -377,7 +374,7 @@ const DELEGATE_CALL = {
   output: "Started task delegate-7k2m9q. Its result will arrive in a <task_result> message.",
 };
 
-test("a worker delegated in the background reads as running while its own session runs, though its call answered at its receipt, and keeps running past the turn that started it while the call stands", () => {
+test("a worker delegated in the background reads as running while its own session runs, though its call answered at its receipt, and keeps running past the turn that started it", () => {
   const session = [
     {
       type: "tool-run_in_repository",
@@ -400,11 +397,8 @@ test("a worker delegated in the background reads as running while its own sessio
   const [running] = callsOf(turns);
   assert.ok(running !== undefined && delegates(running));
   assert.equal(running.state, TOOL_STATE.INPUT_AVAILABLE);
-  const worker = workerOf(workRowsOf(conversationOf(turns), true), "call-1");
+  const worker = workerOf(workRowsOf(conversationOf(turns)), "call-1");
   assert.equal(worker?.call.running, true);
-
-  const [ended] = callsOf(turns, false);
-  assert.equal(ended?.state, TOOL_STATE.OUTPUT_AVAILABLE);
 });
 
 test("a worker delegated in the background names the pair its session ran on, and reads as failed where its session failed", () => {
@@ -424,9 +418,9 @@ test("a worker delegated in the background names the pair its session ran on, an
   assert.equal(failed?.state, TOOL_STATE.OUTPUT_ERROR);
 });
 
-test("a call a turn's journal holds unanswered reads as running while the turn moves, and as having run once the call it ran on ended, never as failed", () => {
-  const turns = [
-    journaled(TASK_WORK_STATE.RUNNING, [
+test("a call a turn's journal holds unanswered reads as running while the turn moves, and as having run once the turn ended, never as failed", () => {
+  const turns = (state: TaskWorkState) => [
+    journaled(state, [
       {
         type: "tool-run_in_repository",
         toolCallId: "a",
@@ -437,11 +431,11 @@ test("a call a turn's journal holds unanswered reads as running while the turn m
   ];
 
   assert.deepEqual(
-    callsOf(turns).map((part) => [part.tool, part.state]),
+    callsOf(turns(TASK_WORK_STATE.RUNNING)).map((part) => [part.tool, part.state]),
     [["run_in_repository", TOOL_STATE.INPUT_AVAILABLE]],
   );
   assert.deepEqual(
-    callsOf(turns, false).map((part) => [part.tool, part.state]),
+    callsOf(turns(TASK_WORK_STATE.DONE)).map((part) => [part.tool, part.state]),
     [["run_in_repository", TOOL_STATE.OUTPUT_AVAILABLE]],
   );
 });
@@ -459,7 +453,6 @@ test("a turn whose older steps the service left out says so, and a worker whose 
         workers: [failing],
       }),
     ]),
-    false,
   );
 
   assert.equal(row?.earlierOmitted, true);

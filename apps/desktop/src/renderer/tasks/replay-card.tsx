@@ -3,6 +3,15 @@ import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-age
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { Message, MessageContent } from "@luke/panel/ai-elements/message";
+import {
+  PLAN_BODY_LAYOUT,
+  Plan,
+  PlanContent,
+  PlanHeader,
+  PlanIcon,
+} from "@luke/panel/ai-elements/plan";
+import { useFindOpen } from "@luke/panel/find-in-tab";
 import { useMemberDirectory } from "@luke/panel/member-directory";
 import { SentTime } from "@luke/panel/tasks/sent-time";
 import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
@@ -29,10 +38,7 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ActorRef } from "../actor-ref";
-import { Message, MessageContent } from "../ai-elements/message";
-import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan";
 import { TOOL_BLOCK } from "../ai-elements/tool";
-import { useFindOpen } from "../find-in-tab";
 import { lineSender, providerOf } from "./coding-agent-model";
 import { linkChip } from "./mention-chip";
 import {

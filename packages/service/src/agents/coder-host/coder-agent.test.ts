@@ -184,6 +184,21 @@ test("an agent on a task is told of the task's links and pages, and one an autom
   }
 });
 
+test("an agent on a task starts the agents that help with it on its own task, and one an automation started with no task, which has none, names a task for them", () => {
+  const OWN_TASK = "Start it on your own task";
+  const NO_TASK = "You work on no task, so name the task to start it on";
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const onTask = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS);
+    const taskless = coderInstructions("Acme/Relay", brief, true, null);
+    assert.deepEqual([onTask.includes(OWN_TASK), onTask.includes(NO_TASK)], [true, false], brief);
+    assert.deepEqual(
+      [taskless.includes(OWN_TASK), taskless.includes(NO_TASK)],
+      [false, true],
+      brief,
+    );
+  }
+});
+
 test("an agent handed its task's plan is offered edit_plan and show_page, one handed a prompt on a task show_page alone, and one an automation started with no task neither", () => {
   const offered = (agent: Parameters<typeof taskToolsOf>[0]) => [...taskToolsOf(agent)].sort();
   assert.deepEqual(offered({ taskId: "plan-1", prompt: null }), [

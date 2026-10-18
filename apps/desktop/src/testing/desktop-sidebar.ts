@@ -1,9 +1,9 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { SIDEBAR_OVERLAY } from "@luke/panel/desktop/sidebar-collapse";
 import { PANEL_TAB } from "@luke/panel/panel-tabs";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import type { ComponentProps } from "react";
 import type { DesktopSidebar } from "../renderer/desktop/desktop-sidebar";
-import { SIDEBAR_OVERLAY } from "../renderer/desktop/sidebar-collapse";
 import type { TasksControl } from "../renderer/tasks/use-tasks-tab";
 
 /**

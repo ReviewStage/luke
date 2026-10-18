@@ -346,7 +346,10 @@ test("on a server's page the arrows move the highlight, and Enter opens the tool
     )?.textContent,
     "Read project",
   );
-  assert.equal(document.activeElement, page.querySelector(".integration-tool-detail-body"));
+  assert.equal(
+    document.activeElement,
+    page.querySelector(".integration-tool-detail-body")?.parentElement,
+  );
 });
 
 test("Escape, Left, and Backspace on a tool's page each go back to its server's page, the filter and the highlight as they were", async () => {

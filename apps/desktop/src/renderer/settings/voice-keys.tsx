@@ -3,6 +3,7 @@
  */
 
 import { AttentionMark, ChangedMark } from "@luke/panel/settings/marks";
+import { MenuRow } from "@luke/panel/settings/menu-row";
 import { Shortcut } from "@luke/panel/shortcut";
 import {
   capturedVoiceHotkey,
@@ -33,7 +34,6 @@ import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import type { ShortcutControl } from "@luke/voice/settings-controls";
 import type { ActionResult } from "@luke/wire";
 import { useEffect, useId, useRef, useState } from "react";
-import { MenuRow } from "./menu-row";
 
 /* What a talk key may be: offered the moment recording starts, and restated
    in the error line for the keystroke that was not one. */

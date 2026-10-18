@@ -30,6 +30,8 @@ import {
   type Reaction,
 } from "@luke/features/pull-request-write-wire";
 import { useMemberDirectory } from "@luke/panel/member-directory";
+import { PopoverPanel } from "@luke/panel/popover-panel";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   AnchoredPopover,
   CHIP_LOOK,
@@ -42,8 +44,6 @@ import {
 import { ACTOR_KIND, actorName, githubActor } from "@luke/ui/actor-model";
 import { SmilePlusIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
-import { PopoverPanel } from "../popover-panel";
-import { Tooltip } from "../tooltip";
 import { noop, useThreadWriting } from "./pull-request-thread-actions";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes";
 

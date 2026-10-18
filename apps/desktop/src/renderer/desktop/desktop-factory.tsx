@@ -3,11 +3,18 @@ import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { AttentionMark } from "@luke/panel/attention-mark";
+import { LINK_COPY, useCopyToast } from "@luke/panel/copy-feedback";
+import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { paneTiming } from "@luke/panel/desktop/pane-motion";
 import { useRowKeys } from "@luke/panel/desktop/use-row-keys";
 import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
+import { GLYPH_STATE, stateEndMark } from "@luke/panel/state-glyph";
 import { useSettledWaiting } from "@luke/panel/tasks/inbox-settling";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "@luke/panel/tasks/use-side-panel";
+import { RowHint, RowHintOptions } from "@luke/panel/tooltip";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -44,23 +51,16 @@ import {
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
-import { LINK_COPY, useCopyToast } from "../copy-feedback";
-import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { FACTORY_CAMPUS } from "../factory-world/registry";
 import { FactoryWorldPage } from "../factory-world/world-page";
 import { useFactoryWorlds, WorldPicker } from "../factory-world/world-picker";
-import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { NEEDS_YOU } from "../tasks/inbox-model";
 import { PullRequestMark } from "../tasks/pull-request-mark";
-import { RelativeTime } from "../tasks/relative-time";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
-import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems, type WaitingItems } from "../tasks/use-waiting-items";
-import { RowHint, RowHintOptions } from "../tooltip";
-import { ActionMenu, type MenuAction } from "./action-menu";
 import {
   agentMovedAt,
   FACTORY_BLOCK,

@@ -101,6 +101,10 @@
   --luke-menu-glyph: 16px;
   --luke-menu-shadow: 0 12px 32px var(--luke-color-shadow);
 
+  /* How deep a scroller's edge dissolves where content runs past it
+     (`ScrollArea`'s fade); the window's has stood a step off the scale. */
+  --luke-scroll-fade: 26px;
+
   /* How thick the keyboard's ring is and how far it stands off the control's
      edge; its colour is the palette's `--luke-color-focus-ring`. The reach is
      how far the ring stands past the control's edge: a scroller pads by it,
@@ -208,6 +212,9 @@
   /* The glyph slot every menu row keeps, at its end as at its start. */
   --luke-menu-glyph: 16px;
   --luke-menu-shadow: 0 12px 32px var(--luke-color-shadow);
+
+  /* How deep a scroller's edge dissolves where content runs past it (`ScrollArea`'s fade). */
+  --luke-scroll-fade: var(--luke-space-24);
 
   /* How thick the keyboard's ring is and how far it stands off the control's
      edge; its colour is the palette's `--luke-color-focus-ring`. The reach is

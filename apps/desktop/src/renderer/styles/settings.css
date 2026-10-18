@@ -483,13 +483,14 @@
   grid-template-columns: minmax(200px, 42%) minmax(0, 1fr);
 }
 
+/* The tools' rows, inside the `ScrollArea` that scrolls them; the page
+   beside them draws the rule between the two. */
 .integration-tools-list {
-  min-height: 0;
   padding: var(--luke-space-4);
-  overflow-x: hidden;
-  overflow-y: auto;
-  border-right: 1px solid var(--luke-color-border);
-  overscroll-behavior: contain;
+}
+
+.integration-tools-split > .integration-tool-detail {
+  border-left: 1px solid var(--luke-color-border);
 }
 
 /* The column is too narrow for a title and a name both, so it says the
@@ -513,9 +514,9 @@
     grid-template-rows: 180px minmax(0, 1fr);
   }
 
-  .integration-tools-list {
-    border-right: 0;
-    border-bottom: 1px solid var(--luke-color-border);
+  .integration-tools-split > .integration-tool-detail {
+    border-top: 1px solid var(--luke-color-border);
+    border-left: 0;
   }
 
   /* The page under the column has the column's whole width and no room

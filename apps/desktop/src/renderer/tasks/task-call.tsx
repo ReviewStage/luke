@@ -384,7 +384,6 @@ export function TaskCall({
   region,
   onRetry,
   conversation,
-  callLive,
   onLoadEarlier,
   onOpenSubagent,
   onOpenTarget,
@@ -399,7 +398,6 @@ export function TaskCall({
   onRetry: () => void;
   /** The task's conversation with the brain as an agent's transcript is read, its newest turns and every older page read since; none before the first read lands. */
   conversation: TaskConversation;
-  callLive: boolean;
   /** Reads the page before the oldest turn drawn, which the conversation's `earlier` names; the view brings it. */
   onLoadEarlier: () => Promise<void>;
   /** Opens a subagent's session in a tab of the panel's own, or chooses the tab open on it, by the call that started it. */
@@ -417,7 +415,7 @@ export function TaskCall({
   /** The call's video, drawn above the thread at the tab's width while Luke's avatar is up. */
   video?: React.ReactNode;
 }): React.JSX.Element {
-  const rows = workRowsOf(conversation, callLive);
+  const rows = workRowsOf(conversation);
   const earlier = conversation?.earlier;
   const now = Date.now();
   const root = useRef<HTMLElement>(null);

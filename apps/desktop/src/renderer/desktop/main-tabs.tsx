@@ -8,14 +8,16 @@ import {
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { TabStrip } from "@luke/panel/desktop/tab-strip";
 import { SpinnerRegion } from "@luke/panel/spinner";
 import { MAIN_TAB, type MainTab, type MainTabsControl } from "@luke/panel/tasks/use-main-tabs";
+import type { ColumnPinnableTab, PinnedTab } from "@luke/panel/tasks/use-side-panel";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { INLINE_EDIT_LOOK, InlineEdit } from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
 import { useEffect, useRef } from "react";
-import { useCopyLinkItem } from "../copy-link-item";
 import { RetryButton } from "../retry-button";
 import { agentCardReading } from "../tasks/agent-ref";
 import { AgentTab } from "../tasks/agent-tab";
@@ -34,7 +36,6 @@ import {
   type TranscriptCopy,
 } from "../tasks/transcript-copy";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
-import type { ColumnPinnableTab, PinnedTab } from "../tasks/use-side-panel";
 import { useAgentArchive } from "./agent-archive";
 import type { TaskCards } from "./side-panel";
 import {
@@ -49,7 +50,6 @@ import {
   type TranscriptRead,
   useTranscriptCopier,
 } from "./strip-tabs";
-import { TabStrip } from "./tab-strip";
 
 /**
  * main-tabs.tsx -- the task's column's tabs: the plan's own, each coding agent's, the draft agent's, and the Inbox's after it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.

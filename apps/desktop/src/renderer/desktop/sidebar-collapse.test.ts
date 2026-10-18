@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { runAppCommand } from "@luke/panel/app-commands";
+import { useSidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { DESKTOP_CAPABILITIES } from "@luke/panel/testing/app-state";
@@ -22,7 +23,6 @@ import { afterEach, beforeEach, test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { DesktopShell } from "./desktop-shell";
-import { useSidebarCollapse } from "./sidebar-collapse";
 
 const ignore = () => undefined;
 const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });

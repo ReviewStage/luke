@@ -327,11 +327,18 @@ export function agentWakeOf(
   }
 }
 
-/** The pull request a line names, by its number where the delivery gave one. */
+/**
+ * The pull request a line names and the page of what was done on it: a
+ * mention labelled by the pull request's number, `[@#41](<page>)`, as an
+ * agent names one in its own words, so the transcript draws GitHub's line
+ * with the same chip as the agent's (`mention-chip.tsx`), where a bare
+ * address would be called by its repository, key, and title; the bare
+ * address where the delivery gave no number.
+ */
 function pullRequestWords(wake: AgentWake): string {
   return wake.pullRequest === undefined
-    ? "your pull request"
-    : `your pull request #${wake.pullRequest}`;
+    ? `your pull request: ${wake.url}`
+    : `your pull request [@#${wake.pullRequest}](${wake.url}).`;
 }
 
 /** One inline comment as the review's words carry it: where it is, its page, and what it says. */
@@ -367,7 +374,7 @@ function agentWakeText(
   switch (wake.kind) {
     case AGENT_WAKE.REVIEW: {
       const verdict = VERDICT_WORDS.get(wake.verdict ?? "") ?? REVIEWED;
-      const head = `@${wake.by} ${verdict} ${pullRequestWords(wake)}: ${wake.url}`;
+      const head = `@${wake.by} ${verdict} ${pullRequestWords(wake)}`;
       const said = [
         wake.words?.trim() ?? "",
         ...Option.getOrElse(inline, () => []).map(lineCommentWords),
@@ -381,7 +388,7 @@ function agentWakeText(
     }
     case AGENT_WAKE.COMMENT:
       return withWords(
-        `@${wake.by} commented on ${pullRequestWords(wake)}: ${wake.url}`,
+        `@${wake.by} commented on ${pullRequestWords(wake)}`,
         FENCE_TAG[AGENT_WAKE.COMMENT],
         wake.words?.trim() ?? "",
         "Act on it as you judge best, and read with `gh` anything cut short or the conversation before it.",

@@ -1,4 +1,5 @@
 import { ChangedMark } from "@luke/panel/settings/marks";
+import { PictureChoiceRow } from "@luke/panel/settings/picture-choice-row";
 import type { SettingsWrites } from "@luke/panel/settings/writes";
 import {
   isAppSettingId,
@@ -15,7 +16,6 @@ import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@luke/wire/app-settings";
 import { Picker } from "./picker-row";
-import { PictureChoiceRow } from "./picture-choice-row";
 
 /** One value a choice's control offers, as the schema hands it. */
 type SettingOption = NonNullable<

@@ -22,6 +22,7 @@ import {
   useMenuCommands,
 } from "@luke/panel/app-commands";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import { SIDE_PANEL_TAB, type SidePanelControl } from "@luke/panel/tasks/use-side-panel";
 import { useTaskLooks } from "@luke/panel/tasks/use-task-looks";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { DESKTOP_CAPABILITIES, handState } from "@luke/panel/testing/app-state";
@@ -45,7 +46,6 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand";
-import { SIDE_PANEL_TAB, type SidePanelControl } from "../tasks/use-side-panel";
 import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { CommandPalette } from "./command-palette";
 import { DesktopSidebar } from "./desktop-sidebar";

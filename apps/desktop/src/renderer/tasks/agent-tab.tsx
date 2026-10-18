@@ -24,11 +24,21 @@ import {
   ConversationScrollButton,
 } from "@luke/panel/ai-elements/conversation";
 import { Fold, FoldBody, FoldSummary } from "@luke/panel/ai-elements/fold";
+import {
+  MESSAGE_ACTIONS_PLACEMENT,
+  Message,
+  MessageContent,
+} from "@luke/panel/ai-elements/message";
+import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "@luke/panel/ai-elements/plan";
 import { appPlatform } from "@luke/panel/app-platform";
 import { useAutomation } from "@luke/panel/automation-directory";
+import { useCopyToast } from "@luke/panel/copy-feedback";
+import { InlineRef } from "@luke/panel/inline-ref";
 import { useMemberDirectory, usePerson } from "@luke/panel/member-directory";
 import { SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
+import { GLYPH_STATE, stateEndMark } from "@luke/panel/state-glyph";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { REPLY_SCOPE, ReplyToSelection } from "@luke/panel/tasks/reply-to-selection";
 import { SentTime } from "@luke/panel/tasks/sent-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import {
@@ -66,12 +76,7 @@ import {
   AutomationCard,
   automationActor,
 } from "../actor-ref";
-import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message";
-import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
-import { useCopyToast } from "../copy-feedback";
-import { InlineRef } from "../inline-ref";
-import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { AgentComposer } from "./agent-composer";
 import {
   AgentPicturesProvider,
@@ -136,7 +141,6 @@ import {
 import { PlanPictures } from "./plan-pictures";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
 import { briefAgent, replayOpening } from "./replay-card-model";
-import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
@@ -821,8 +825,9 @@ function TaskSender({
 /**
  * The issue or pull request an automation's GitHub event named, by number
  * and title: where the event gave its address, its chip, as the transcript
- * draws a link to it, wearing GitHub's mark for where it stands and opening
- * it on GitHub (`mention-chip.tsx`); a link opening on GitHub where the
+ * draws a link to it, wearing GitHub's mark for where it stands, called by
+ * its number once GitHub answers for it, and opening it on GitHub
+ * (`mention-chip.tsx`); a link opening on GitHub where the
  * address names no chip; and its words alone where the event gave none.
  */
 function OriginSubject({

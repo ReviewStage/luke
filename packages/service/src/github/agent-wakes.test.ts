@@ -360,7 +360,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         const text = eve.sent[0]?.message.message;
         assert.ok(
           JSON.stringify(text).includes(
-            "@octocat requested changes on your pull request #41: https://github.com/Acme/Relay/pull/41#pullrequestreview-9",
+            "@octocat requested changes on your pull request [@#41](https://github.com/Acme/Relay/pull/41#pullrequestreview-9).",
           ),
         );
         const read = yield* readMessageByClientId(
@@ -386,6 +386,35 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
           Effect.provide(github),
         );
         assert.deepEqual([own, archived, eve.sent.length], [0, 0, 1]);
+      }),
+  );
+
+  it.effect(
+    "a comment names its pull request as an agent does, by its number linked to the comment, and spells the comment's address nowhere else",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ref } = yield* openAgent;
+        yield* endedTurn(owner, agent.conversationId, MADE_AT - 60_000);
+        const url = `https://github.com/${RELAY_FULL_NAME}/pull/41#issuecomment-7`;
+        const comment: AgentWake = {
+          kind: AGENT_WAKE.COMMENT,
+          repository: RELAY_FULL_NAME,
+          branches: [ref],
+          pullRequest: 41,
+          url,
+          by: "octocat",
+          at: MADE_AT,
+          words: "Does this handle a revoked seat?",
+        };
+
+        yield* wakeAgents(eve.eveFor, comment, randomUUID(), LUKE_BOT).pipe(
+          Effect.provide(githubReaching(INSTALLATIONS).layer),
+        );
+
+        const text = sentText(eve.sent[0]?.message.message);
+        assert.ok(text.startsWith(`@octocat commented on your pull request [@#41](${url}).\n`));
+        assert.equal(text.split(url).length, 2, "the comment's address is written once");
       }),
   );
 

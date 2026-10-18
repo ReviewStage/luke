@@ -1,5 +1,12 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
+import { CampusScene } from "@luke/panel/factory-world/campus/campus-scene";
+import type {
+  FactorySceneHandle,
+  FactorySceneModule,
+  SceneHover,
+  StageSceneProps,
+} from "@luke/panel/factory-world/contract";
 import { useFactoryWorld } from "@luke/panel/factory-world/use-factory-world";
 import {
   PICK_KIND,
@@ -29,13 +36,6 @@ import {
 } from "react";
 import { useSideBundles, WORLD_LOAD_FAILED, worldBundleAtom } from "../bundle-loader";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { CampusScene } from "./campus/campus-scene";
-import type {
-  FactorySceneHandle,
-  FactorySceneModule,
-  SceneHover,
-  StageSceneProps,
-} from "./contract";
 import type { WorldEntry } from "./registry";
 import { HomeButton, HoverLabel, namingOf, PipelineBar, WorldCard } from "./world-chrome";
 

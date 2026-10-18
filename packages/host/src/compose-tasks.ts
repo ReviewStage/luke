@@ -22,7 +22,7 @@ import {
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
 import { SHOW_PAGE_TOOL_NAME } from "@luke/features/page-wire";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR, type Task, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
@@ -190,6 +190,14 @@ import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
  * land; this is that wait's margin.
  */
 const TRANSCRIPT_SETTLE = Duration.seconds(5);
+
+/**
+ * How long after the open Untitled task's brain settles a turn the list is
+ * read again, for the name the service may give it as one of its first
+ * turns completes (`brain-host/task-title.ts`): the naming call is made once
+ * the turn is recorded settled and usually answers in a second or two.
+ */
+const NAME_SETTLE = Duration.seconds(5);
 
 /**
  * How long the conversation's read waits after one the service did not
@@ -474,6 +482,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The tasks a call just ended about, whose transcript and work are read again by the loop below. */
   const callEndReads = yield* Queue.sliding<string>(1);
+
+  /** The tasks whose brain just settled a turn, whose new name the loop below reads the list again for. */
+  const nameReads = yield* Queue.sliding<string>(1);
 
   /** The one read of the open task's conversation; running another interrupts it. */
   const conversationRead = yield* FiberHandle.make<void>();
@@ -866,11 +877,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * newest page, or past the cursor held, then past each page's cursor while
    * the page says it is still written or the call woke it meanwhile. A read
    * the service did not answer is asked again after the backoff; a task it
-   * no longer holds, or a gate that closed, ends the follow.
+   * no longer holds, or a gate that closed, ends the follow. A follow of an
+   * Untitled task that finds a turn settled, one it saw the brain writing or
+   * one a settled page carries words of, asks for the list again, for the
+   * name the turn may have given the task, and draws it on the open document.
    */
   function followConversation(taskId: string, newest: boolean) {
     return Effect.gen(function* () {
       let after = newest ? undefined : view.conversation?.cursor;
+      let wasWriting = view.conversation !== undefined && conversationWriting(view.conversation);
       while (gate() && view.activeTaskId === taskId) {
         conversationWoken = false;
         const page = yield* askConversation(taskId, after === undefined ? {} : { after }).pipe(
@@ -883,7 +898,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (Option.isNone(page) || view.activeTaskId !== taskId) return;
         write({ conversation: withForwardPage(page.value) });
-        if (!conversationWriting(page.value) && !conversationWoken) return;
+        const writing = conversationWriting(page.value);
+        const untitled = view.tasks.some(
+          (row) => row.id === taskId && row.name === UNTITLED_TASK_NAME,
+        );
+        // A turn that settled before this follow's first page is caught by the page's words.
+        const settledTurn = wasWriting || page.value.messages.length > 0;
+        if (!writing && settledTurn && untitled) Queue.offerUnsafe(nameReads, taskId);
+        wasWriting = writing;
+        if (!writing && !conversationWoken) return;
         after = page.value.cursor;
       }
     });
@@ -985,6 +1008,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     if (view.activeTaskId !== taskId) return;
     Queue.offerUnsafe(callEndReads, taskId);
     wakeConversation(taskId);
+  }
+
+  /** The open document of `taskId` given the name its row of the list now reads, where the two differ. */
+  function nameHeldAsListed(taskId: string): void {
+    const held = heldTaskOf(taskId);
+    const listed = view.tasks.find((row) => row.id === taskId);
+    if (held === undefined || listed === undefined || listed.name === held.name) return;
+    write({ document: { status: TASKS_READ.READY, task: { ...held, name: listed.name } } });
   }
 
   /** Draws `task` as the service answered it, in the list's row and in the open document where it is the one held. */
@@ -1972,7 +2003,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       );
     }),
     // The board and page reads a settled draw or page asks for, the
-    // transcript and work reads a call's end asks for, and the wake of a
+    // transcript and work reads a call's end asks for, the list read a
+    // settled turn asks for, for the name it may have given, and the wake of a
     // parked conversation read the call's words ask for; every other read of
     // the tasks is an ask's.
     lifetime: Effect.gen(function* () {
@@ -2003,6 +2035,25 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             );
             return Effect.andThen(read, Effect.andThen(Effect.sleep(TRANSCRIPT_SETTLE), read));
           }),
+        ),
+      );
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(nameReads), (taskId) =>
+            Effect.andThen(
+              Effect.sleep(NAME_SETTLE),
+              Effect.suspend(() =>
+                gate()
+                  ? serial(
+                      Effect.andThen(
+                        readList,
+                        Effect.sync(() => nameHeldAsListed(taskId)),
+                      ),
+                    )
+                  : Effect.void,
+              ),
+            ),
+          ),
         ),
       );
       // Note that a read still following is left alone, because it already
