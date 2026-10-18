@@ -154,6 +154,12 @@
     display: none;
   }
 
+  /* A chevron is drawn at the widths where a crumb before its own is, so
+     the crumb leading the path at a width stands without one there. */
+  .luke-breadcrumb-separator[data-wide="false"] {
+    display: none;
+  }
+
   @container luke-breadcrumb-bar (max-width: 519px) {
     .luke-breadcrumbs li[data-shown="wide"] {
       display: none;
@@ -161,6 +167,14 @@
 
     .luke-breadcrumbs li[data-shown="narrow"] {
       display: flex;
+    }
+
+    .luke-breadcrumb-separator[data-wide="false"] {
+      display: flex;
+    }
+
+    .luke-breadcrumb-separator[data-narrow="false"] {
+      display: none;
     }
   }
 
@@ -171,6 +185,14 @@
 
     .luke-breadcrumbs li[data-shown="narrowest"] {
       display: flex;
+    }
+
+    .luke-breadcrumb-separator[data-narrow="false"] {
+      display: flex;
+    }
+
+    .luke-breadcrumb-separator[data-narrowest="false"] {
+      display: none;
     }
   }
 }

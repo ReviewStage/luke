@@ -61,27 +61,48 @@ export const BREADCRUMB_POPUP = {
 
 export type BreadcrumbPopup = (typeof BREADCRUMB_POPUP)[keyof typeof BREADCRUMB_POPUP];
 
-/** One crumb of a path. */
-export interface Crumb {
+/** What every crumb holds: its words, its press, and the widths it is drawn at. */
+interface CrumbBase {
   /** Its words. */
   readonly label: string;
+  /** What a press does, handed the crumb pressed. */
+  readonly onPress?: ((crumb: HTMLElement) => void) | undefined;
+  /** At which of its bar's widths it is drawn; always where none is said. */
+  readonly shownAt?: BreadcrumbShown | undefined;
+}
+
+/** A crumb of words, or a quiet pill a press reaches. */
+interface PathCrumb extends CrumbBase {
+  readonly icon?: undefined;
   /** Its name for a reader, where its words alone do not say it ("…"). */
   readonly name?: string | undefined;
   /** The words its hint raises, where the app hands the path one. */
   readonly hint?: string | undefined;
-  /** A glyph before its words, which fold away where its toolbar folds them; a crumb with one is pressed. */
-  readonly icon?: ReactNode;
   /** Whether it is the page the reader stands on. */
   readonly current?: boolean | undefined;
-  /** What a press does, handed the crumb pressed. */
-  readonly onPress?: ((crumb: HTMLElement) => void) | undefined;
   /** What a press opens, said to a reader. */
   readonly popup?: BreadcrumbPopup | undefined;
   /** Whether what it opens stands open. */
   readonly expanded?: boolean | undefined;
-  /** At which of its bar's widths it is drawn; always where none is said. */
-  readonly shownAt?: BreadcrumbShown | undefined;
 }
+
+/**
+ * The toolbar's way back: a glyph before its words, which fold away where
+ * its toolbar folds them. Note that it is never the current page and opens
+ * nothing, because a way back leads elsewhere, and so it says neither.
+ */
+interface WayBackCrumb extends CrumbBase {
+  readonly icon: ReactNode;
+  readonly onPress: (crumb: HTMLElement) => void;
+  readonly name?: undefined;
+  readonly hint?: undefined;
+  readonly current?: undefined;
+  readonly popup?: undefined;
+  readonly expanded?: undefined;
+}
+
+/** One crumb of a path. */
+export type Crumb = PathCrumb | WayBackCrumb;
 
 /** The widths at which each `shownAt` draws its crumb. */
 const SHOWN_WIDTHS = {
@@ -92,10 +113,26 @@ const SHOWN_WIDTHS = {
   [BREADCRUMB_SHOWN.NARROWEST]: { wide: false, narrow: false, narrowest: true },
 } as const;
 
-/** The path's punctuation between two crumbs, the chevron a menu row's submenu points with. */
-function Chevron(): React.JSX.Element {
+/** At which of the bar's widths something is drawn. */
+interface Widths {
+  readonly wide: boolean;
+  readonly narrow: boolean;
+  readonly narrowest: boolean;
+}
+
+/**
+ * The path's punctuation between two crumbs, drawn at the widths `at` says,
+ * the chevron a menu row's submenu points with.
+ */
+function Chevron({ at }: { at: Widths }): React.JSX.Element {
   return (
-    <span className="luke-breadcrumb-separator" aria-hidden="true">
+    <span
+      className="luke-breadcrumb-separator"
+      aria-hidden="true"
+      data-wide={at.wide}
+      data-narrow={at.narrow}
+      data-narrowest={at.narrowest}
+    >
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -113,21 +150,34 @@ function Chevron(): React.JSX.Element {
 }
 
 /**
- * Whether a chevron stands before the crumb at `at`: where a crumb before it
- * is drawn at a width it is drawn at too. Note that the widths are compared
- * rather than the places, because a crumb standing for others at the
- * narrowest width leads the path there and is gone at every other.
+ * At which widths a chevron stands before the crumb at `at`: each width
+ * where a crumb before it is drawn too, so a crumb leading the path at a
+ * width, the others before it gone there, stands without one. Note that a
+ * width the crumb is not drawn at says yes, since nothing is drawn there.
  */
-function chevronBefore(crumbs: readonly Crumb[], at: number): boolean {
+function chevronBefore(crumbs: readonly Crumb[], at: number): Widths | undefined {
   const own = SHOWN_WIDTHS[crumbs[at]?.shownAt ?? BREADCRUMB_SHOWN.ALWAYS];
-  return crumbs.slice(0, at).some((before) => {
-    const widths = SHOWN_WIDTHS[before.shownAt ?? BREADCRUMB_SHOWN.ALWAYS];
-    return (
-      (own.wide && widths.wide) ||
-      (own.narrow && widths.narrow) ||
-      (own.narrowest && widths.narrowest)
-    );
-  });
+  const before = crumbs
+    .slice(0, at)
+    .map((each) => SHOWN_WIDTHS[each.shownAt ?? BREADCRUMB_SHOWN.ALWAYS]);
+  const led = {
+    wide: before.some((widths) => widths.wide),
+    narrow: before.some((widths) => widths.narrow),
+    narrowest: before.some((widths) => widths.narrowest),
+  };
+  if (!(own.wide && led.wide) && !(own.narrow && led.narrow) && !(own.narrowest && led.narrowest)) {
+    return undefined;
+  }
+  return {
+    wide: !own.wide || led.wide,
+    narrow: !own.narrow || led.narrow,
+    narrowest: !own.narrowest || led.narrowest,
+  };
+}
+
+/** The chevron before a crumb, where one stands at any width. */
+function CrumbChevron({ at }: { at: Widths | undefined }): React.JSX.Element | null {
+  return at === undefined ? null : <Chevron at={at} />;
 }
 
 /** One crumb's control: words, a quiet pill, or the toolbar's folding way back. */
@@ -205,7 +255,7 @@ export function Breadcrumbs({
             data-shown={crumb.shownAt ?? BREADCRUMB_SHOWN.ALWAYS}
             data-words={crumb.icon === undefined && crumb.onPress === undefined}
           >
-            {chevronBefore(crumbs, at) ? <Chevron /> : null}
+            <CrumbChevron at={chevronBefore(crumbs, at)} />
             <CrumbControl crumb={crumb} hint={hint} />
           </li>
         ))}
