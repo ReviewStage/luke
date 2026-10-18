@@ -343,7 +343,7 @@ function RowToolsPanel({
     setHeld(tool.name);
     const row = rows.current.get(tool.name);
     row?.focus({ preventScroll: true });
-    keepInView(list.current, row?.closest(".integration-tool") ?? null);
+    keepInView(list.current, row?.closest("li") ?? null);
   };
 
   const onRowKey = (event: React.KeyboardEvent<HTMLElement>, tool: IntegrationTool) => {
