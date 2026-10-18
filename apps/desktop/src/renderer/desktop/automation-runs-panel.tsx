@@ -29,6 +29,7 @@ import { useCopyLinkItem } from "../copy-link-item";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { centreWithin, scrollerOf } from "../tasks/code-pane";
 import { momentText, sinceText, useMinute } from "../tasks/task-time";
+import { Tooltip } from "../tooltip";
 import { ActionMenu } from "./action-menu";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups";
 import { usePaneSlide } from "./pane-motion";
@@ -112,13 +113,13 @@ function RunRow({
       <StateGlyph glyph={glyph} state={state} />
       <span className="automation-row-copy">
         <span className="automation-row-name">{automationRunTitle(run)}</span>
-        <span className="automation-row-detail" title={line}>
-          {line}
-        </span>
+        <Tooltip label={line}>
+          <span className="automation-row-detail">{line}</span>
+        </Tooltip>
       </span>
-      <span className="automation-row-when" title={momentText(run.firedAt)}>
-        {sinceText(run.firedAt, now)}
-      </span>
+      <Tooltip label={momentText(run.firedAt)}>
+        <span className="automation-row-when">{sinceText(run.firedAt, now)}</span>
+      </Tooltip>
       {stateEndMark(state, true)}
     </>
   );

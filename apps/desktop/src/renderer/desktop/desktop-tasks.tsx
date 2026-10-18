@@ -6,6 +6,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  Button,
   ConfirmDialog,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -479,9 +480,7 @@ function PlanDocument({
               <p role="alert">{line}</p>
             )}
             {region.kind === DOCUMENT_REGION.FAILED ? (
-              <button type="button" className="toolbar-button" onClick={close.onClick}>
-                {close.label}
-              </button>
+              <Button onClick={close.onClick}>{close.label}</Button>
             ) : null}
           </section>
         )}

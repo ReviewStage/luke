@@ -42,6 +42,7 @@ import { StateGlyph, stateEndMark } from "../state-glyph";
 import { momentText, useMinute } from "../tasks/task-time";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
+import { Tooltip } from "../tooltip";
 import { ActionMenu } from "./action-menu";
 import { AutomationEditor } from "./automation-editor";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
@@ -101,10 +102,12 @@ function OwnerCell({
 }): React.JSX.Element {
   const name = automationOwnerName(owner, workspace?.name);
   return (
-    <span className="automation-owner" data-owner={owner} title={name}>
-      <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
-      <span className="automation-owner-name">{name}</span>
-    </span>
+    <Tooltip label={name}>
+      <span className="automation-owner" data-owner={owner}>
+        <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
+        <span className="automation-owner-name">{name}</span>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -152,12 +155,9 @@ function AutomationRow({
           mine={automation.mine === true}
           workspace={workspace}
         />
-        <span
-          className="automation-row-when"
-          title={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
-        >
-          {automationNextText(automation, now)}
-        </span>
+        <Tooltip label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}>
+          <span className="automation-row-when">{automationNextText(automation, now)}</span>
+        </Tooltip>
         {stateEndMark(state, true)}
       </button>
       <Switch
