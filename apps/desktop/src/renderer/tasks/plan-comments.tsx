@@ -979,14 +979,37 @@ function drawnOffset(root: HTMLElement, node: globalThis.Node, offset: number): 
 /** A block's own words in its section's drawn text: a bullet's up to the list nested under it, which its own bullets are commented on apart; any other block's whole. */
 function ownWords(unit: HTMLElement, block: HTMLElement) {
   const from = drawnOffset(unit, block, 0);
+  const quote = ownRange(block).toString().trimEnd();
+  return { quote, from, to: from + quote.length };
+}
+
+/** A block's own words, a list item's without the bullets nested under it. */
+function ownRange(block: HTMLElement): Range {
   const nested = [...block.childNodes].findIndex(
     (child) => child instanceof HTMLElement && (child.tagName === "UL" || child.tagName === "OL"),
   );
   const range = document.createRange();
   range.selectNodeContents(block);
   if (nested >= 0) range.setEnd(block, nested);
-  const quote = range.toString().trimEnd();
-  return { quote, from, to: from + quote.length };
+  return range;
+}
+
+/**
+ * Whether threads' marks cover every one of the block's own words, as a
+ * thread on the block does, so it is commented on through them; a thread on
+ * a few of its words, or on a bullet nested under it, leaves it its button.
+ */
+function threadedWhole(block: HTMLElement): boolean {
+  const own = ownRange(block);
+  const marked = [...block.querySelectorAll(`.${COMMENT_MARK_CLASS}[data-threads]`)]
+    .filter(
+      (mark) =>
+        own.intersectsNode(mark) && mark.parentElement?.closest(`.${COMMENT_MARK_CLASS}`) === null,
+    )
+    .map((mark) => mark.textContent ?? "")
+    .join("");
+  const words = own.toString().replace(/\s+/gu, "");
+  return words !== "" && marked.replace(/\s+/gu, "") === words;
 }
 
 /** A thread started on the editor's words, its quote held to the bound the service keeps. */
@@ -1210,8 +1233,8 @@ export function PlanCommentLayer({
       setPointed(marked?.dataset.threads?.split(" ")[0]);
       const found = blockAt(event.target, unitClass);
       if (found === undefined) return;
-      // Note that a block whose words already carry a thread is commented on through that thread, so it offers no button.
-      if (found.block.querySelector(`.${COMMENT_MARK_CLASS}[data-threads]`) !== null) {
+      // Note that a block whose words a thread already covers is commented on through that thread, so it offers no button.
+      if (threadedWhole(found.block)) {
         setHovered(undefined);
         return;
       }
@@ -1414,7 +1437,9 @@ export function PlanCommentLayer({
       />
     );
   const blockButton =
-    hovered === undefined ? null : (
+    // Note that folded, a line holding a count opens its threads there, a thread whose words were deleted counted at its section's top too, so its block shows no button over it.
+    hovered === undefined ||
+    (!wide && [...anchors.values()].some((top) => Math.abs(top - hovered.top) < 4)) ? null : (
       <div className="comment-block-button" style={{ top: hovered.top }}>
         <Tooltip label={COMMENT_WORDS.COMMENT}>
           {/* Note that the press takes no focus, so an open editor stays to measure the block through. */}

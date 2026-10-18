@@ -639,29 +639,44 @@ test("a thread at rest draws its comment's mentions as their chips, as it does o
   );
 });
 
-test("a block whose words already carry a thread offers no button to start another, folded or wide", () => {
+test("a block a thread covers whole offers no button to start another, and one a thread covers in part keeps it", () => {
   const onHeading = threadOn(ID.OPEN, "Approach", "Is this the right order?", {
     scope: PLAN_COMMENT_SCOPE.BLOCK,
     section: "Approach",
   });
-  for (const draw of [wide, <Drawn>(paint: () => Drawn) => paint()]) {
-    const { container } = draw(() => drawn("page", [onHeading]));
+  const onWord = threadOn(ID.RESOLVED, "withdraw", "Or revoke?", { section: "Approach" });
+  const blocks = (container: HTMLElement) => {
     const button = (block: Element) => {
       act(() => block.dispatchEvent(new Event("pointerover", { bubbles: true })));
       return container.querySelector(".comment-block-button button");
     };
     const heading = (name: string) =>
       [...container.querySelectorAll(".markdown-heading")].find((h) => h.textContent === name);
+    const paragraph = [...container.querySelectorAll("p")].find((p) =>
+      p.textContent?.startsWith("Admins can withdraw"),
+    );
     const approach = heading("Approach");
     const goal = heading("Goal");
-    assert.ok(approach && goal);
+    assert.ok(approach && goal && paragraph);
+    return { button, approach, goal, paragraph };
+  };
 
-    assert.ok(button(approach) === null, "the heading holding a thread offers none");
-    assert.ok(button(goal), "a heading without one does");
-    assert.ok(button(approach) === null, "and going back takes it away");
-    for (const root of roots.splice(0)) act(() => root.unmount());
-    container.remove();
-  }
+  const { container } = wide(() => drawn("page", [onHeading, onWord]));
+  const { button, approach, goal, paragraph } = blocks(container);
+  assert.ok(button(approach) === null, "the heading a thread covers offers none");
+  assert.ok(button(goal), "a heading without one does");
+  assert.ok(button(paragraph), "a paragraph with a thread on one word does");
+  assert.ok(button(approach) === null, "and going back takes it away");
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  container.remove();
+
+  // Note that folded, a line's count stands where its button would, though its thread covers a word alone; jsdom stands every line at one top.
+  const folded = blocks(drawn("page", [onWord]).container);
+  assert.ok(folded.button(folded.paragraph) === null, "the counted line offers none");
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  const bare = blocks(drawn("page", []).container);
+  assert.ok(bare.button(bare.paragraph), "a line with no count does");
 });
 
 test("a thread being started goes on a press away while empty, and stays holding a draft", () => {
