@@ -121,6 +121,118 @@
               },
               "maxItems": 50
             },
+            "merging": {
+              "type": "object",
+              "properties": {
+                "methods": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "merge",
+                      "squash",
+                      "rebase"
+                    ]
+                  }
+                },
+                "autoMergeAllowed": {
+                  "type": "boolean"
+                },
+                "queue": {
+                  "type": "boolean"
+                },
+                "queued": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "position": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "position"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "autoMerge": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "merge",
+                                "squash",
+                                "rebase"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "method"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "headSha": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "review": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "approved",
+                        "changes-requested",
+                        "review-required"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "checks": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "passing",
+                    "failing",
+                    "none"
+                  ]
+                }
+              },
+              "required": [
+                "methods",
+                "autoMergeAllowed",
+                "queue",
+                "queued",
+                "autoMerge",
+                "headSha",
+                "review",
+                "checks"
+              ],
+              "additionalProperties": false
+            },
             "labels": {
               "type": "array",
               "items": {

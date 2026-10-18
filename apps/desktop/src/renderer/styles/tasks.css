@@ -181,7 +181,21 @@
   }
 }
 
-/* Who last edited the plan, over the document in the muted meta weight. */
+/* Who created the task and when, and who last edited its plan and when,
+   under its title, in the words of an issue's own line
+   (`.issue-byline`). Each phrase wraps whole onto the next line rather
+   than leaving a name cut from its time. */
+.plan-byline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4) var(--luke-space-16);
+  margin: 0 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* Who last edited the plan template, under its title in the muted meta weight. */
 .plan-edit-note {
   margin: 0 0 var(--luke-space-12);
   color: var(--luke-color-text-muted);
@@ -1990,6 +2004,63 @@
   height: 14px;
   flex: 0 0 auto;
   color: var(--merge-tone);
+}
+
+.pull-request-merge-words {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* The merge box's presses at the line's end (`merge-box.tsx`): what stands
+   of a merge already asked for, quiet, then the one press, a method's
+   press joined to the chevron that chooses the method. */
+.merge-box-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--luke-space-8);
+  margin-inline-start: auto;
+}
+
+.merge-box-note {
+  color: var(--luke-color-text-muted);
+}
+
+.merge-box-split {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.merge-box-press {
+  height: 26px;
+  padding: 0 var(--luke-space-8);
+  gap: var(--luke-space-4);
+  font-size: 12px;
+}
+
+.merge-box-press svg {
+  width: 13px;
+  height: 13px;
+}
+
+.merge-box-split > .merge-box-press:not(:last-child) {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.merge-box-picker {
+  height: 26px;
+  padding: 0 var(--luke-space-4);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  margin-inline-start: -1px;
+}
+
+.merge-box-picker svg {
+  width: 13px;
+  height: 13px;
 }
 
 [data-merge-tone="ready"] {

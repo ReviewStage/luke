@@ -3,6 +3,7 @@ import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
+import { mergeMethodSchema, PULL_REQUEST_WRITE_BOUNDS } from "./pull-request-write-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -953,6 +954,39 @@ export const MERGE_STATE = {
 
 export type MergeState = (typeof MERGE_STATE)[keyof typeof MERGE_STATE];
 
+/** What the reviews a branch requires say of a pull request, as GitHub sums them up. */
+export const REVIEW_DECISION = {
+  APPROVED: "approved",
+  CHANGES_REQUESTED: "changes-requested",
+  REVIEW_REQUIRED: "review-required",
+} as const;
+
+export type ReviewDecision = (typeof REVIEW_DECISION)[keyof typeof REVIEW_DECISION];
+
+/**
+ * How an open pull request may be merged, as its merge box offers it: the
+ * methods the repository allows, whether it allows auto-merge, whether its
+ * base is merged through a merge queue, where the pull request stands in that
+ * queue or whether auto-merge is on for it, by which method, the head a merge
+ * is made against, what its required reviews say, and its checks as one word.
+ */
+const pullRequestMergingSchema = EffectSchema.Struct({
+  methods: EffectSchema.Array(mergeMethodSchema),
+  autoMergeAllowed: EffectSchema.Boolean,
+  queue: EffectSchema.Boolean,
+  queued: EffectSchema.NullOr(EffectSchema.Struct({ position: countedNumber })),
+  autoMerge: EffectSchema.NullOr(
+    EffectSchema.Struct({ method: EffectSchema.NullOr(mergeMethodSchema) }),
+  ),
+  headSha: EffectSchema.String.check(
+    EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_COMMIT_CHARS),
+  ),
+  review: EffectSchema.NullOr(EffectSchema.Literals(Object.values(REVIEW_DECISION))),
+  checks: EffectSchema.Literals(Object.values(CHECK_SUMMARY)),
+});
+
+export type PullRequestMerging = typeof pullRequestMergingSchema.Type;
+
 /** Where one check on a pull request's head stands: running or queued, passed, failed, or skipped or neutral, which passes nothing and fails nothing. */
 export const CHECK_STATE = {
   PENDING: "pending",
@@ -1225,6 +1259,8 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
       requested: EffectSchema.Array(githubPersonSchema).check(
         EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
       ),
+      /** How it may be merged; absent where GitHub did not say, or from a service before the merge box. */
+      merging: EffectSchema.optionalKey(pullRequestMergingSchema),
       labels: EffectSchema.optionalKey(
         EffectSchema.Array(pullRequestLabelSchema).check(
           EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_LABELS),
