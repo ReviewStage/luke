@@ -85,12 +85,27 @@ export interface IssueFilter {
   readonly showCompleted: boolean;
 }
 
-/** The filter that leaves nothing out, as a workspace's issues first draw. */
-export const NO_ISSUE_FILTER: IssueFilter = { showCompleted: true };
+/**
+ * The filter a workspace's issues first draw under: every priority and
+ * everyone's issues, settled issues gone quiet left out, as Linear's board
+ * leaves them.
+ */
+export const DEFAULT_ISSUE_FILTER: IssueFilter = { showCompleted: false };
 
-/** Whether a filter may leave any issue out. */
-export function issueFilterOn(filter: IssueFilter): boolean {
-  return filter.priorities !== undefined || filter.createdBy !== undefined || !filter.showCompleted;
+/** Whether a filter differs from the one a workspace's issues first draw under. */
+export function issueFilterChanged(filter: IssueFilter): boolean {
+  return filter.priorities !== undefined || filter.createdBy !== undefined || filter.showCompleted;
+}
+
+/**
+ * The filter Clear filters goes back to: the first filter where that keeps
+ * any of the issues, else every issue shown, settled ones gone quiet among
+ * them, so the press always draws something.
+ */
+export function clearedIssueFilter(issues: readonly Issue[], now: number): IssueFilter {
+  return filteredIssues(issues, DEFAULT_ISSUE_FILTER, now).length > 0
+    ? DEFAULT_ISSUE_FILTER
+    : { showCompleted: true };
 }
 
 /**
@@ -138,7 +153,6 @@ export function filteredIssues(
   filter: IssueFilter,
   now: number,
 ): readonly Issue[] {
-  if (!issueFilterOn(filter)) return issues;
   const { priorities, createdBy, showCompleted } = filter;
   return issues.filter(
     (issue) =>

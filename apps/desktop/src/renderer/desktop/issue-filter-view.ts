@@ -1,4 +1,4 @@
-import { type IssueFilter, NO_ISSUE_FILTER } from "@luke/features/issue-list-model";
+import { DEFAULT_ISSUE_FILTER, type IssueFilter } from "@luke/features/issue-list-model";
 import { issuePrioritySchema } from "@luke/features/issue-wire";
 import { Schema } from "effect";
 import { useState } from "react";
@@ -13,7 +13,8 @@ import { readKept, writeKept } from "./folded-groups";
  * workspace's filter never changes another's. Each is kept under the
  * reader's account as well, so Me, which names the reader's account, never
  * filters another account signed in on this Mac to someone else's issues.
- * A workspace with no filter kept leaves nothing out.
+ * A workspace with no filter kept draws under the first filter, which
+ * leaves out only settled issues gone quiet (`DEFAULT_ISSUE_FILTER`).
  */
 
 /** Where the filters are kept in the renderer's storage. */
@@ -50,7 +51,7 @@ export function useIssueFilter(
   const [filters, setFilters] = useState<Filters>(() => readKept(STORAGE_KEY, storedFilters, {}));
   const readers = readerId === undefined ? undefined : filters[readerId];
   const filter =
-    (workspaceId === undefined ? undefined : readers?.[workspaceId]) ?? NO_ISSUE_FILTER;
+    (workspaceId === undefined ? undefined : readers?.[workspaceId]) ?? DEFAULT_ISSUE_FILTER;
   return {
     filter,
     onFilter: (next) => {

@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
+  clearedIssueFilter,
+  DEFAULT_ISSUE_FILTER,
   filteredIssues,
   issueColumns,
   issueFilterAnyPriority,
+  issueFilterChanged,
   issueFilterCreatedBy,
-  issueFilterOn,
   issueFilterToggledPriority,
   issueGroups,
   issueIdentifier,
-  NO_ISSUE_FILTER,
 } from "./issue-list-model.js";
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "./issue-wire.js";
 
@@ -108,14 +109,24 @@ function numbers(issues: readonly Issue[]): number[] {
   return issues.map((one) => one.number);
 }
 
-test("the filter a workspace starts on leaves nothing out, a quiet settled issue among them", () => {
+test("the filter a workspace starts on leaves out only settled issues gone quiet, and is no change", () => {
   const issues = [
     issue(1, { status: ISSUE_STATUS.DONE, updatedAt: NOW - 30 * DAY }),
     issue(2, { priority: ISSUE_PRIORITY.URGENT }),
+    issue(3, { status: ISSUE_STATUS.CANCELED, updatedAt: NOW - DAY }),
   ];
 
-  assert.equal(issueFilterOn(NO_ISSUE_FILTER), false);
-  assert.deepEqual(numbers(filteredIssues(issues, NO_ISSUE_FILTER, NOW)), [1, 2]);
+  assert.equal(issueFilterChanged(DEFAULT_ISSUE_FILTER), false);
+  assert.deepEqual(numbers(filteredIssues(issues, DEFAULT_ISSUE_FILTER, NOW)), [2, 3]);
+  assert.deepEqual(numbers(filteredIssues(issues, { showCompleted: true }, NOW)), [1, 2, 3]);
+  assert.equal(issueFilterChanged({ showCompleted: true }), true);
+});
+
+test("Clear filters goes back to the first filter where it keeps an issue, else shows every issue", () => {
+  const quiet = issue(1, { status: ISSUE_STATUS.DONE, updatedAt: NOW - 30 * DAY });
+
+  assert.deepEqual(clearedIssueFilter([quiet, issue(2)], NOW), DEFAULT_ISSUE_FILTER);
+  assert.deepEqual(numbers(filteredIssues([quiet], clearedIssueFilter([quiet], NOW), NOW)), [1]);
 });
 
 test("a priority chosen from every priority narrows to it, another adds to it, and taking the last away shows every one again", () => {
@@ -124,7 +135,7 @@ test("a priority chosen from every priority narrows to it, another adds to it, a
     issue(2, { priority: ISSUE_PRIORITY.HIGH }),
     issue(3, { priority: ISSUE_PRIORITY.NONE }),
   ];
-  const urgent = issueFilterToggledPriority(NO_ISSUE_FILTER, ISSUE_PRIORITY.URGENT);
+  const urgent = issueFilterToggledPriority(DEFAULT_ISSUE_FILTER, ISSUE_PRIORITY.URGENT);
   const urgentOrUnweighed = issueFilterToggledPriority(urgent, ISSUE_PRIORITY.NONE);
   const unweighed = issueFilterToggledPriority(urgentOrUnweighed, ISSUE_PRIORITY.URGENT);
   const none = issueFilterToggledPriority(unweighed, ISSUE_PRIORITY.NONE);
@@ -132,7 +143,7 @@ test("a priority chosen from every priority narrows to it, another adds to it, a
   assert.deepEqual(numbers(filteredIssues(issues, urgent, NOW)), [1]);
   assert.deepEqual(numbers(filteredIssues(issues, urgentOrUnweighed, NOW)), [1, 3]);
   assert.deepEqual(numbers(filteredIssues(issues, unweighed, NOW)), [3]);
-  assert.equal(issueFilterOn(none), false, "no priority left chosen shows every one");
+  assert.equal(issueFilterChanged(none), false, "no priority left chosen shows every one");
   assert.deepEqual(numbers(filteredIssues(issues, none, NOW)), [1, 2, 3]);
 });
 
@@ -143,9 +154,9 @@ test("choosing every priority one by one is the same as choosing none", () => {
     ISSUE_PRIORITY.MEDIUM,
     ISSUE_PRIORITY.LOW,
     ISSUE_PRIORITY.NONE,
-  ].reduce(issueFilterToggledPriority, NO_ISSUE_FILTER);
+  ].reduce(issueFilterToggledPriority, DEFAULT_ISSUE_FILTER);
 
-  assert.equal(issueFilterOn(every), false);
+  assert.equal(issueFilterChanged(every), false);
 });
 
 test("a member's filter keeps the issues they filed and leaves out another's and one whose creator is gone", () => {
@@ -156,7 +167,7 @@ test("a member's filter keeps the issues they filed and leaves out another's and
   ];
 
   assert.deepEqual(
-    numbers(filteredIssues(issues, { ...NO_ISSUE_FILTER, createdBy: "user-ada" }, NOW)),
+    numbers(filteredIssues(issues, { ...DEFAULT_ISSUE_FILTER, createdBy: "user-ada" }, NOW)),
     [1],
   );
 });
@@ -181,7 +192,7 @@ test("a priority and a member's filter together keep only what both keep", () =>
     issue(3, { priority: ISSUE_PRIORITY.HIGH, creator: null }),
   ];
   const filter = issueFilterToggledPriority(
-    { ...NO_ISSUE_FILTER, createdBy: ada.userId },
+    { ...DEFAULT_ISSUE_FILTER, createdBy: ada.userId },
     ISSUE_PRIORITY.HIGH,
   );
 

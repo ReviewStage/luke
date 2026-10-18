@@ -58,6 +58,13 @@ const DAY = 24 * HOUR;
 /** The moment the window's clock stands at in a test that reads how long ago something was. */
 const NOW = Date.UTC(2026, 9, 14, 12);
 
+/**
+ * The moment the window's clock stands at otherwise: a day past the epoch,
+ * so the synthetic issues, stamped in its first seconds, are recent, and a
+ * settled one among them is not left out as gone quiet.
+ */
+const EARLY = DAY;
+
 /** The signed-in reader's account. */
 const READER = "user-grace";
 
@@ -191,6 +198,7 @@ let tasksOpened: string[] = [];
 let signedIn = READER;
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"], now: EARLY });
   installScrollIntoView();
   window.localStorage.clear();
   standing = [];
@@ -2187,7 +2195,7 @@ test("Created by Me in View options shows only the issues the reader filed", asy
   assert.equal(saysFiltered(page), false);
 });
 
-test("with Show completed off, a Done or Canceled issue last changed over a week ago leaves the board and the list while a recent one stands", async () => {
+test("a Done or Canceled issue last changed over a week ago is left off the board and the list at first while a recent one stands, and Show completed brings it back", async () => {
   vi.useFakeTimers({ toFake: ["Date"], now: NOW });
   standing = [
     issue(1, { status: ISSUE_STATUS.DONE, updatedAt: NOW - 8 * DAY }),
@@ -2197,26 +2205,49 @@ test("with Show completed off, a Done or Canceled issue last changed over a week
   ];
   const page = mount();
   await settle();
-  const before = columns(page);
+  const atFirst = columns(page);
+  const filteredAtFirst = saysFiltered(page);
+  showList();
+  const listedAtFirst = groups(page);
 
   chooseView("Show completed");
-  const after = columns(page);
-  showList();
+  const listed = groups(page);
+  act(() => button("View options").click());
+  act(() => labelledItem("Board").click());
 
-  assert.deepEqual(before.slice(3), [
-    ["Done2", ["ACME-2", "ACME-1"]],
-    ["Canceled1", ["ACME-3"]],
-  ]);
-  assert.deepEqual(after.slice(3), [
+  assert.deepEqual(atFirst.slice(3), [
     ["Done1", ["ACME-2"]],
     ["Canceled", []],
   ]);
-  assert.deepEqual(after[0], ["Backlog1", ["ACME-4"]], "open work stands however old");
-  assert.deepEqual(groups(page), [
+  assert.deepEqual(atFirst[0], ["Backlog1", ["ACME-4"]], "open work stands however old");
+  assert.equal(filteredAtFirst, false, "the first filter is no change to say");
+  assert.deepEqual(listedAtFirst, [
     ["Backlog1", ["ACME-4 Issue 4"]],
     ["Done1", ["ACME-2 Issue 2"]],
   ]);
+  assert.deepEqual(listed, [
+    ["Backlog1", ["ACME-4 Issue 4"]],
+    ["Done2", ["ACME-2 Issue 2", "ACME-1 Issue 1"]],
+    ["Canceled1", ["ACME-3 Issue 3"]],
+  ]);
+  assert.deepEqual(columns(page).slice(3), [
+    ["Done2", ["ACME-2", "ACME-1"]],
+    ["Canceled1", ["ACME-3"]],
+  ]);
   assert.ok(saysFiltered(page));
+});
+
+test("where every issue is settled and gone quiet, the page says none matches and Clear filters shows them", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  standing = [issue(1, { status: ISSUE_STATUS.DONE, updatedAt: NOW - 30 * DAY })];
+  const page = mount();
+  await settle();
+  const said = page.querySelector(".luke-empty-state")?.textContent;
+
+  act(() => button("Clear filters").click());
+
+  assert.equal(said, "No issues matchClear filters");
+  assert.deepEqual(groups(page), [["Done1", ["ACME-1 Issue 1"]]]);
 });
 
 test("a filter that keeps none of the workspace's issues says no issue matches, and Clear filters shows every issue again", async () => {

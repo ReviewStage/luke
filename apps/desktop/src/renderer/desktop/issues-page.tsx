@@ -3,8 +3,8 @@ import {
   filteredIssues,
   ISSUE_PRIORITY_WORDS,
   issueFilterAnyPriority,
+  issueFilterChanged,
   issueFilterCreatedBy,
-  issueFilterOn,
   issueFilterToggledPriority,
 } from "@luke/features/issue-list-model";
 import {
@@ -345,8 +345,9 @@ function ListPage({
  * View options does: Board or List; Priority, every one or those chosen;
  * Created by, in a shared workspace or while it filters, Anyone, Me, or a
  * member by face; and Show completed, whether a Done or Canceled issue
- * last changed over a week ago stands. While the filter may leave issues
- * out, the button wears the sidebar's dot and says it is filtered.
+ * last changed over a week ago stands, off at first. While the filter
+ * differs from that first one, the button wears the sidebar's dot and
+ * says it is filtered.
  */
 function ViewOptions({
   shown,
@@ -418,7 +419,7 @@ function ViewOptions({
     checked: filter.showCompleted,
     onSelect: () => onFilter({ ...filter, showCompleted: !filter.showCompleted }),
   };
-  const filtered = issueFilterOn(filter);
+  const filtered = issueFilterChanged(filter);
   return (
     <>
       <span className="issues-view-options" data-filtered={filtered ? "true" : undefined}>
