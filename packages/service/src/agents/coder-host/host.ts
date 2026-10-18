@@ -86,6 +86,7 @@ import {
   runStartAgent,
   runStopAgent,
   runUnarchiveAgent,
+  runUpdateAgent,
   runUpdateTask,
 } from "../coding-agent-tools.js";
 import {
@@ -467,6 +468,7 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.ARCHIVE_AGENT
     | typeof CODER_TOOL.UNARCHIVE_AGENT
     | typeof CODER_TOOL.STOP_AGENT
+    | typeof CODER_TOOL.UPDATE_AGENT
     | typeof CODER_TOOL.READ_PAGE
     | typeof CODER_TOOL.LIST_TASKS
     | typeof CODER_TOOL.CREATE_SECTION
@@ -487,6 +489,7 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.ARCHIVE_AGENT]: runArchiveAgent,
   [CODER_TOOL.UNARCHIVE_AGENT]: runUnarchiveAgent,
   [CODER_TOOL.STOP_AGENT]: runStopAgent,
+  [CODER_TOOL.UPDATE_AGENT]: runUpdateAgent,
   [CODER_TOOL.READ_PAGE]: runReadPage,
   [CODER_TOOL.LIST_TASKS]: runListTasks,
   [CODER_TOOL.CREATE_SECTION]: runCreateSection,

@@ -591,6 +591,7 @@ const CALL_ICON = {
   [CALL_KIND.UNARCHIVE_AGENT]: ArchiveRestoreIcon,
   [CALL_KIND.LIST_MODELS]: CpuIcon,
   [CALL_KIND.STOP_AGENT]: CircleStopIcon,
+  [CALL_KIND.UPDATE_AGENT]: PencilLineIcon,
   [CALL_KIND.CREATE_SECTION]: FolderPlusIcon,
   [CALL_KIND.DELETE_SECTION]: FolderMinusIcon,
   [CALL_KIND.MOVE_TASK]: FolderInputIcon,

@@ -66,6 +66,8 @@ export const CALL_KIND = {
   /** A list of the models a coding agent may be started on (`list_models`). */
   LIST_MODELS: "list-models",
   STOP_AGENT: "stop-agent",
+  /** A coding agent renamed, moved to another model, pinned, or given other servers (`update_agent`), its row naming it by its chip. */
+  UPDATE_AGENT: "update-agent",
   /** A section made in the member's sidebar (`create_section`), its row naming its title. */
   CREATE_SECTION: "create-section",
   /** A section of the member's sidebar deleted (`delete_section`), its row naming its title once answered. */
@@ -122,6 +124,7 @@ export const CALL_WORDS = {
   [CALL_KIND.UNARCHIVE_AGENT]: { verb: "Unarchived the coding agent", code: false },
   [CALL_KIND.LIST_MODELS]: { verb: "Listed the models", code: false },
   [CALL_KIND.STOP_AGENT]: { verb: "Stopped the coding agent", code: false },
+  [CALL_KIND.UPDATE_AGENT]: { verb: "Changed the coding agent", code: false },
   [CALL_KIND.CREATE_SECTION]: { verb: "Made the section", code: false },
   [CALL_KIND.DELETE_SECTION]: { verb: "Deleted the section", code: false },
   [CALL_KIND.MOVE_TASK]: { verb: "Moved the task", code: false },
@@ -154,6 +157,7 @@ const AGENT_CALL_WORDS = {
   [CALL_KIND.ARCHIVE_AGENT]: { verb: "Archived", subject: false },
   [CALL_KIND.UNARCHIVE_AGENT]: { verb: "Unarchived", subject: false },
   [CALL_KIND.STOP_AGENT]: { verb: "Stopped", subject: false },
+  [CALL_KIND.UPDATE_AGENT]: { verb: "Changed", subject: false },
 } as const satisfies Partial<Record<CallKind, { verb: string; subject: boolean }>>;
 
 type AgentCallKind = keyof typeof AGENT_CALL_WORDS;
