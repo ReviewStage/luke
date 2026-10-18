@@ -13,7 +13,9 @@ import { CloseIcon, SearchIcon } from "../../face/glyphs.js";
  *
  * Its end holds what the caller gives it. A tally (`tally`) says how many
  * results the query found, and which one is current, in a polite live region,
- * while a query stands; or `trailing` is any words of the caller's. A chord
+ * while a query stands, said rather than drawn under an element whose
+ * `--luke-fold` is `folded`, so a narrow bar gives the field its room; or
+ * `trailing` is any words of the caller's. A chord
  * (`shortcut`) says how to summon the field while it is empty and the caret
  * elsewhere. And where the caller can clear the query (`onClear`), a clear
  * button stands at the very end while a query does, handing the caret back.

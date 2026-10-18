@@ -892,8 +892,11 @@ svg.working-mark[viewBox] {
    so without this a capture could land mid-transition and the PNGs would stop
    being reproducible.
    Zeroing the tokens every transition is written in terms of is enough — no
-   rule has to be overridden. */
-.app-stage[data-capture="true"] {
+   rule has to be overridden. They are zeroed on the body as well as on the
+   stage, so a hint, a menu, the palette, or a toast drawn at the body's end,
+   which none stands under, holds still too. */
+.app-stage[data-capture="true"],
+body:has(.app-stage[data-capture="true"]) {
   --duration-shape: 0s;
   --duration-exit: 0s;
   --duration-quick: 0s;
@@ -901,8 +904,10 @@ svg.working-mark[viewBox] {
   --duration-hover: 0s;
   --duration-pane: 0s;
   --row-stagger: 0s;
-  /* A late state shows at once, so a capture never waits on its delay. */
+  /* A late state and a hint show at once, so a capture never waits on
+     their delay. */
   --late-delay: 0s;
+  --hint-delay: 0s;
   /* Luke blinks and sways on a loop with no end to wait for, so a capture would
      otherwise land wherever in it the shutter happened to fall. Held on its
      first frame, he is the same face in every PNG. The working rows' spinners

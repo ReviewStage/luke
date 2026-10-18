@@ -7,16 +7,7 @@
   -webkit-app-region: no-drag;
 }
 
-/* A capture run zeroes the motion tokens on its stage, which a hint drawn
-   at the body's end does not stand under, so it is held still here too. */
-body:has(.app-stage[data-capture="true"]) .luke-tooltip {
-  --duration-quick: 0s;
-  --duration-fast: 0s;
-  --duration-exit: 0s;
-  --hint-delay: 0s;
-}
-
 /* The pill's chord, muted against its own dark fill rather than the window's. */
-.luke-tooltip .shortcut {
+.tooltip-chord {
   --shortcut-ink: var(--luke-color-tooltip-chord);
 }

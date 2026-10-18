@@ -5,8 +5,8 @@ import { CatalogSection } from "../section";
 
 /**
  * search-fields.tsx -- a SearchField empty with its chord, holding a query
- * with its clear, with a tally of its results and of none, and in a narrow
- * column with a long query.
+ * with its clear, with a tally of its results and of none, its tally folded
+ * as a narrow bar folds it, and in a narrow column with a long query.
  */
 
 /** A search the example holds the query of, as a caller would. */
@@ -68,6 +68,11 @@ function SearchFields(): React.JSX.Element {
             <Held start="plan" label="Find" placeholder="Find" tally={{ count: 12, at: 2 }} />
             <Held start="planx" label="Find" placeholder="Find" tally={{ count: 0 }} />
           </Stack>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="search-folded" title="Folded, its tally said rather than drawn">
+        <div className="catalog-folded catalog-narrow">
+          <Held start="plan" label="Find" placeholder="Find" tally={{ count: 12, at: 2 }} />
         </div>
       </CatalogSection>
       <CatalogSection id="search-narrow" title="Narrow column, long query">

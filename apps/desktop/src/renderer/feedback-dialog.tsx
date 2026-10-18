@@ -389,7 +389,7 @@ export function FeedbackDialog({
             onClick={() => void send()}
           >
             Send
-            <Shortcut chord={SEND_CHORD} />
+            <Shortcut chord={SEND_CHORD} className="button-chord" />
           </Button>
         </>
       }
