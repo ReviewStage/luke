@@ -3211,6 +3211,7 @@ ul.actor-stack {
    name and when on one line and its words under it, and a line down from
    the face to the next comment's, as an issue's timeline joins them. */
 .inbox-thread {
+  --inbox-face: 20px;
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -3219,7 +3220,6 @@ ul.actor-stack {
 }
 
 .inbox-comment {
-  --inbox-face: 20px;
   position: relative;
   display: grid;
   grid-template-columns: var(--inbox-face) minmax(0, 1fr);
