@@ -501,7 +501,7 @@ test("a settled choice folds what its agent offered to one line saying who picke
   assert.deepEqual(
     [...offered.querySelectorAll<HTMLElement>("li.inbox-option")].map((option) => [
       option.dataset.picked,
-      option.querySelector(".font-medium")?.textContent,
+      option.querySelector(".inbox-option-label > :first-child")?.textContent,
       wordsOf(option.querySelector(".inbox-picked")),
     ]),
     [
@@ -534,7 +534,7 @@ function optionHeads(page: HTMLElement, option: string): (string | null | undefi
   return [...pane.querySelectorAll<HTMLElement>(option)].map((each) => {
     const head = each.querySelector(".inbox-option-head")?.textContent ?? "";
     return [
-      each.querySelector(".font-medium")?.textContent,
+      each.querySelector(".inbox-option-label > :first-child")?.textContent,
       head.endsWith("Recommended") ? "Recommended" : null,
     ];
   });
@@ -648,7 +648,10 @@ test("a settled choice whose pick is not the one recommended marks each apart: t
     ["Retry once", null],
   ]);
   const picked = page.querySelector<HTMLElement>('li.inbox-option[data-picked="true"]');
-  assert.equal(picked?.querySelector(".font-medium")?.textContent, "Retry once");
+  assert.equal(
+    picked?.querySelector(".inbox-option-label > :first-child")?.textContent,
+    "Retry once",
+  );
   assert.equal(wordsOf(picked?.querySelector(".inbox-picked")), "Your pick");
 });
 

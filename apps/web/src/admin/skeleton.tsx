@@ -1,4 +1,11 @@
-import { Skeleton as LineBone, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  CARD_PADDING,
+  Card,
+  Skeleton as LineBone,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { ChartFrameSkeleton } from "./charts/chart-frame";
 import {
   METRIC_STATUS,
@@ -139,7 +146,7 @@ function SkeletonAccountsTable({
 }): React.JSX.Element {
   const columns = bones(numericColumns);
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <Card padding={CARD_PADDING.FLUSH}>
       <div className="flex items-center gap-6 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
           <SkeletonLine box="h-[18px]" bone="h-3 w-16" />
@@ -169,7 +176,7 @@ function SkeletonAccountsTable({
           ))}
         </div>
       ))}
-    </div>
+    </Card>
   );
 }
 
@@ -229,14 +236,14 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
       return <SkeletonCalendarCard />;
     case SKELETON_SHAPE.RETENTION:
       return (
-        <div className="rounded-lg border border-border bg-card p-5">
+        <Card>
           <div className="grid gap-1">
             <SkeletonLine box="h-4" bone="h-3 w-full" />
             {bones(8).map((row) => (
               <Skeleton key={row} className="h-9 w-full" />
             ))}
           </div>
-        </div>
+        </Card>
       );
     case SKELETON_SHAPE.TABLE:
       return <SkeletonAccountsTable rows={shape.rows} numericColumns={shape.numericColumns} />;

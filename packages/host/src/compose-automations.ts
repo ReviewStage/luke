@@ -105,7 +105,7 @@ function composed(
         const list = yield* read(
           automationListParamsSchema,
           params,
-          "a list names a plan, a workspace, or neither",
+          "a list names a task, a workspace, or neither",
         );
         return carried<AutomationListView>(yield* asked(client.list(list)));
       }),

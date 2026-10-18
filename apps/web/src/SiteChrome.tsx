@@ -1,4 +1,5 @@
 import { FACE_ART } from "@luke/brand";
+import { TEXT_ELEMENT, TEXT_FONT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 
 export const REPOSITORY_URL = "https://github.com/ReviewStage/luke";
 export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/Luke.dmg`;
@@ -146,7 +147,12 @@ export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
  */
 export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
   return (
-    <div className="font-mono text-xs text-muted-foreground">
+    <Text
+      as={TEXT_ELEMENT.DIV}
+      variant={TEXT_VARIANT.CAPTION}
+      tone={TEXT_TONE.MUTED}
+      font={TEXT_FONT.MONO}
+    >
       {/* The separator belongs to the gap between items rather than to any
             item, so adding or reordering a link never leaves a stray dot. */}
       <div className="flex flex-wrap gap-2 [&>*+*]:before:mr-2 [&>*+*]:before:content-['·']">
@@ -174,6 +180,6 @@ export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
             way stagereview.app closes its footer, so the link row above stays
             a row of links. */}
       <p className="mt-8 border-t border-border pt-6">© 2026 Stage Inc.</p>
-    </div>
+    </Text>
   );
 }

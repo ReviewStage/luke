@@ -1,4 +1,14 @@
-import { BADGE_TONE, Badge, Inline, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  BADGE_TONE,
+  Badge,
+  CARD_PADDING,
+  Card,
+  Inline,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import {
   ACCOUNTS_SORT_KEY,
@@ -145,14 +155,16 @@ export function AccountsTable<Row extends AccountsTableRow>({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card px-5 py-8 text-center">
-        <Text tone={TEXT_TONE.MUTED}>{emptyText}</Text>
-      </div>
+      <Card>
+        <div className="py-3 text-center">
+          <Text tone={TEXT_TONE.MUTED}>{emptyText}</Text>
+        </div>
+      </Card>
     );
   }
   const sorted = sortAccountsRows(rows, sort, detailColumns, favorite?.starred);
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <Card padding={CARD_PADDING.FLUSH}>
       <div className="overflow-x-auto">
         {/* Note that every cell keeps to one line, because the type roles break
             words anywhere: a narrow table would otherwise split a count or an
@@ -292,6 +304,6 @@ export function AccountsTable<Row extends AccountsTableRow>({
           </tbody>
         </table>
       </div>
-    </div>
+    </Card>
   );
 }

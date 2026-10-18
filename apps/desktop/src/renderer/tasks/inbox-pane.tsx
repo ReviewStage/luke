@@ -32,7 +32,14 @@ import {
   FoldingButton,
   type FoldingButtonHint,
   FormField,
+  GAP,
+  LAYOUT_ELEMENT,
+  Stack,
   Switch,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   TextField,
 } from "@luke/ui";
 import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
@@ -179,9 +186,8 @@ const NEWER_LUKE = {
   BLOCK: "Open this in a newer Luke to see the rest.",
 } as const;
 
-/** How long ago a thread's line says something happened: muted a size down, in tabular figures, as a card's corner says it. */
-const THREAD_TIME_CLASS =
-  "text-[11.5px] whitespace-nowrap text-(color:--luke-color-text-subtle) tabular-nums";
+/** How long ago a thread's line says something happened: in the caption type, quieter still, in tabular figures, as a card's corner says it (`.thread-time`, tasks.css). */
+const THREAD_TIME_CLASS = "thread-time";
 
 /** What the way back from an item standing alone to the list says it does. */
 const BACK_TO_INBOX = "Back to inbox";
@@ -217,7 +223,7 @@ export function LinkBlock({
   return (
     <Tooltip label={url}>
       <span className="text-link-inert">
-        {label} <span className="select-text text-muted-foreground">{url}</span>
+        {label} <span className="inbox-link-address">{url}</span>
       </span>
     </Tooltip>
   );
@@ -295,13 +301,11 @@ function CodeBlock({
       ) : shown.kind === CODE_READ.READING ? (
         <SpinnerRegion label="Loading lines" />
       ) : (
-        <div className="file-tab-notice border-b-0">
+        <div className="file-tab-notice">
           {shown.again ? (
             <ErrorState onRetry={() => setAsked((was) => was + 1)}>{shown.line}</ErrorState>
           ) : (
-            <p className="m-0" role="alert">
-              {shown.line}
-            </p>
+            <p role="alert">{shown.line}</p>
           )}
         </div>
       )}
@@ -406,7 +410,7 @@ function KnownBlock({
       );
     case INBOX_BLOCK.LINK:
       return (
-        <p className="m-0" data-inbox-link="">
+        <p className="inbox-words">
           <LinkBlock url={block.url} label={block.label} openLink={openLink} />
         </p>
       );
@@ -445,7 +449,7 @@ function Blocks({
 }): React.JSX.Element | null {
   if (item.blocks.length === 0) return null;
   return (
-    <div className="flex flex-col gap-2" data-inbox-blocks="">
+    <Stack gap={GAP.CONTROL}>
       {item.blocks.map((block, index) =>
         // Blocks have no key of their own, and are never reordered: a change to an item draws them whole again.
         knownBlock(block) ? (
@@ -460,12 +464,12 @@ function Blocks({
             code={code}
           />
         ) : (
-          <p key={index} className="m-0 text-muted-foreground" data-inbox-unknown="">
+          <Text key={index} tone={TEXT_TONE.MUTED}>
             {NEWER_LUKE.BLOCK}
-          </p>
+          </Text>
         ),
       )}
-    </div>
+    </Stack>
   );
 }
 
@@ -492,7 +496,9 @@ function OptionHead({
   return (
     <span className="inbox-option-head">
       <span className="inbox-option-label">
-        <span className="font-medium">{label}</span>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+          {label}
+        </Text>
         {children}
       </span>
       {recommended ? (
@@ -516,7 +522,7 @@ export function ChoiceOptions({
 }): React.JSX.Element {
   const multiple = choice.multiple === true;
   return (
-    <div className="flex flex-col gap-1" data-inbox-choice={multiple ? "multiple" : "one"}>
+    <Stack gap={GAP.TIGHT}>
       {choice.options.map((option) => (
         <button
           key={option.label}
@@ -532,14 +538,18 @@ export function ChoiceOptions({
             settled={false}
           />
           {option.detail === undefined ? null : (
-            <span className="text-muted-foreground">{option.detail}</span>
+            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+              {option.detail}
+            </Text>
           )}
         </button>
       ))}
       {multiple ? (
-        <p className="m-0 text-[12px] text-muted-foreground">Pick any that apply.</p>
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          Pick any that apply.
+        </Text>
       ) : null}
-    </div>
+    </Stack>
   );
 }
 
@@ -649,7 +659,7 @@ export function FormFields({
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
   return (
-    <div className="flex flex-col gap-2" data-inbox-form="">
+    <Stack gap={GAP.CONTROL}>
       {form.fields.map((field) => (
         <InboxFormField
           key={field.label}
@@ -659,7 +669,7 @@ export function FormFields({
           onDraft={onDraft}
         />
       ))}
-    </div>
+    </Stack>
   );
 }
 
@@ -730,7 +740,7 @@ function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
   const options = proposedOptions(item);
   if (options.length === 0) return null;
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="What the agent offered">
+    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} aria-label="What the agent offered">
       {options.map((option) => (
         <li key={option.label} className="inbox-option" data-picked={String(option.picked)}>
           <OptionHead label={option.label} recommended={option.recommended} settled>
@@ -745,11 +755,13 @@ function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
             ) : null}
           </OptionHead>
           {option.detail === undefined ? null : (
-            <span className="text-muted-foreground">{option.detail}</span>
+            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+              {option.detail}
+            </Text>
           )}
         </li>
       ))}
-    </ul>
+    </Stack>
   );
 }
 
@@ -957,7 +969,7 @@ function Answered({
         </span>
       )}
       {settled.values === undefined ? null : (
-        <p className="m-0 whitespace-pre-line select-text">{settled.values}</p>
+        <p className="inbox-words inbox-lines">{settled.values}</p>
       )}
       <CommentFiles
         itemId={item.id}
@@ -968,7 +980,7 @@ function Answered({
       />
       {/* The note is drawn as the agent's tab draws a message, so a mention it holds is its chip. */}
       {settled.note === undefined ? null : (
-        <div className="select-text" data-inbox-note="">
+        <div className="inbox-words" data-inbox-note="">
           <SentWords text={settled.note} />
         </div>
       )}
@@ -1008,7 +1020,7 @@ function Withdrawn({
         </>
       }
     >
-      {settled.words === undefined ? undefined : <p className="m-0 select-text">{settled.words}</p>}
+      {settled.words === undefined ? undefined : <p className="inbox-words">{settled.words}</p>}
     </Comment>
   );
 }
@@ -1064,7 +1076,7 @@ function Message({
         onRetryImage={onRetryImage}
       />
       {message.text === "" ? null : (
-        <div className="select-text" data-inbox-message-text="">
+        <div className="inbox-words" data-inbox-message-text="">
           <SentWords text={message.text} />
         </div>
       )}
@@ -1503,7 +1515,7 @@ export function InboxPane({
       <div className="desktop-inbox">
         <div
           // The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there.
-          className="inbox-board scroll-fade agent-log-over-composer ph-no-capture flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-(--luke-section-gap)"
+          className="inbox-board scroll-fade agent-log-over-composer ph-no-capture"
           data-item-id={item.id}
           ref={board}
         >

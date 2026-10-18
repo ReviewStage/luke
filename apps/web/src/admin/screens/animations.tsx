@@ -1,10 +1,12 @@
 import type { FaceMotion } from "@luke/brand";
 import {
   ALIGN,
+  Card,
   Inline,
   JUSTIFY,
   Stack,
   TEXT_ELEMENT,
+  TEXT_FONT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -76,16 +78,19 @@ const PREVIEW_FRAME = "aspect-square overflow-hidden rounded-md";
 function AnimationCard({ entry }: { entry: AnimationEntry }): React.JSX.Element {
   const variants = MOTION_MARKUP.get(entry.motion);
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-card p-5">
+    <Card>
       <Stack>
         <Inline justify={JUSTIFY.BETWEEN} align={ALIGN.BASELINE}>
-          <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.SECTION}>
-            <span className="font-mono">{entry.motion}</span>
+          <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.SECTION} font={TEXT_FONT.MONO}>
+            {entry.motion}
           </Text>
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            <span className="font-mono tabular-nums">
-              {formatCycleSeconds(entry.cycleMs)} cycle
-            </span>
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.CAPTION}
+            tone={TEXT_TONE.MUTED}
+            font={TEXT_FONT.MONO}
+          >
+            {formatCycleSeconds(entry.cycleMs)} cycle
           </Text>
         </Inline>
         <div className="grid grid-cols-2 gap-3">
@@ -117,7 +122,7 @@ function AnimationCard({ entry }: { entry: AnimationEntry }): React.JSX.Element 
           </Text>
         ) : null}
       </Stack>
-    </div>
+    </Card>
   );
 }
 
