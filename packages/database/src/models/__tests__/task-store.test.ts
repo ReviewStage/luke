@@ -538,4 +538,20 @@ it.layer(getTestDB())("a plan's archive and its live calls", (it) => {
         assert.deepEqual(yield* sweptOf(calls), [deansCall, charlesCall]);
       }),
   );
+
+  it.effect(
+    "a call opened, or re-attached, on a plan the archive already landed on is handed to the sweep as well",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId } = yield* openSharedTask;
+        const held = yield* openCall(dean, taskId);
+        yield* updateTask(dean, taskId, { archived: true });
+
+        // A re-attach and a creation that read the plan before its archive land after it.
+        yield* voiceSessionRecord().attached({ sessionId: held, attachId: randomUUID() });
+        const late = yield* openCall(charles, taskId);
+
+        assert.deepEqual(yield* sweptOf([held, late]), [held, late]);
+      }),
+  );
 });

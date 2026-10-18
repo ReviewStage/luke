@@ -1070,7 +1070,7 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
 });
 
 /** The instant an archived task's open calls are stamped detached at: before any grace, so the sweep's next run takes them first. */
-const HANDED_TO_SWEEP_AT = new Date(0);
+export const HANDED_TO_SWEEP_AT = new Date(0);
 
 /**
  * Every open call on the task, whichever member opened it, handed to the
