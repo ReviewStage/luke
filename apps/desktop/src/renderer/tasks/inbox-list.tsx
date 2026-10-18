@@ -115,7 +115,7 @@ import {
   needsReader,
   readersItem,
 } from "./inbox-model";
-import { RowMedia, type RowMediaReads, useRowMediaReads } from "./inbox-row-media";
+import { RowMedia, type RowMediaReads, useRowMediaAsks, useRowMediaReads } from "./inbox-row-media";
 import { ReadAgentModel } from "./mentioned-agent-card";
 import { cardTitle } from "./tool-call-model";
 
@@ -452,6 +452,7 @@ export function InboxItemRow({
     actorName(personActor(member, directory.members, reader, directory.former)),
   );
   const carried = useMemo(() => inboxMedia(item), [item]);
+  useRowMediaAsks(item.id, item.updatedAt, carried, media);
   const menu = useMenu(true);
   const copyLink = useCopyLinkItem()(
     holder.kind === INBOX_HOLDER.TASK
@@ -504,7 +505,7 @@ export function InboxItemRow({
         }
         attachments={
           media === undefined || carried.length === 0 ? undefined : (
-            <RowMedia itemId={item.id} changedAt={item.updatedAt} media={carried} reads={media} />
+            <RowMedia media={carried} reads={media} />
           )
         }
         meta={

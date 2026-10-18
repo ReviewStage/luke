@@ -213,21 +213,22 @@ function PageTile({
   );
 }
 
-/** The strip of an item's media under its row's preview, each asked for as it is first drawn. */
-export function RowMedia({
-  itemId,
-  changedAt,
-  media,
-  reads,
-}: {
-  itemId: string;
+/**
+ * Asks for the media an item's row shows, as it is first drawn and whenever the item changes: its pictures,
+ * which lets go of any it no longer carries, and its tasks' pages. The row asks whether or not it draws a strip,
+ * so an item reposted with no media says so too; it asks nothing where the rows show no media.
+ */
+export function useRowMediaAsks(
+  itemId: string,
   /** When the item last changed, so its pages are read again once it does. */
-  changedAt: number;
-  media: readonly InboxMedia[];
-  reads: RowMediaReads;
-}): React.JSX.Element {
-  const { onImages, onPages } = reads;
+  changedAt: number,
+  media: readonly InboxMedia[],
+  reads: RowMediaReads | undefined,
+): void {
+  const onImages = reads?.onImages;
+  const onPages = reads?.onPages;
   useEffect(() => {
+    if (onImages === undefined || onPages === undefined) return;
     const pictures: string[] = [];
     for (const each of media) {
       if (each.kind === INBOX_MEDIA.IMAGE) pictures.push(each.attachmentId);
@@ -235,6 +236,16 @@ export function RowMedia({
     }
     onImages(itemId, pictures);
   }, [itemId, changedAt, media, onImages, onPages]);
+}
+
+/** The strip of an item's media under its row's preview, each as its row's asks read it. */
+export function RowMedia({
+  media,
+  reads,
+}: {
+  media: readonly InboxMedia[];
+  reads: RowMediaReads;
+}): React.JSX.Element {
   return (
     <>
       {media.map((each) =>
