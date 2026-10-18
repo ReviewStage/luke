@@ -461,6 +461,18 @@ test("the tree's search narrows the list, said over it while the tree is hidden,
   assert.equal(lastDrawn().files.length, 3);
 });
 
+test("with the file stood on filtered out, the bar names the file the list scrolls to", async () => {
+  files = [changed("src/a.ts"), changed("lib/b.ts"), changed("lib/c.ts")];
+  await drawTab({ treeOpen: true });
+  act(() => header("src/a.ts").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  assert.ok(header("src/a.ts").hasAttribute("data-standing"));
+
+  typeSearch("lib");
+  await flush();
+  act(() => lastDrawn().onTopFile("lib/c.ts"));
+  assert.match(document.querySelector(".file-view-bar")?.textContent ?? "", /c\.ts/u);
+});
+
 test("a file the filter leaves out, chosen in a tree of every changed file, clears the filter and is scrolled to", async () => {
   files = [changed("src/seats.ts"), changed("src/billing/plan.ts"), changed("README.md")];
   await drawTab({ treeOpen: true });
@@ -559,6 +571,19 @@ test("a file's header mounts its hints as the keyboard comes to its fold, which 
   } finally {
     delete document.documentElement.dataset.keyboard;
   }
+});
+
+test("the pointer's first arrival on a header's letter hangs its hint, though the hint is mounted by that arrival", async () => {
+  files = [changed("a.ts")];
+  await drawTab();
+  document.body.append(lastDrawn().renderHeader("a.ts"));
+  const letter = () =>
+    header("a.ts").querySelector(".file-view-status") ?? assert.fail("the letter stands");
+  act(() => letter().dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  await flush();
+  const hint = letter().getAttribute("aria-describedby");
+  assert.ok(hint !== null, "the letter is described by its hint");
+  assert.equal(document.getElementById(hint)?.textContent, "Modified");
 });
 
 test("J outside Files changed is still the Inbox's, and inside it is the view's alone", async () => {

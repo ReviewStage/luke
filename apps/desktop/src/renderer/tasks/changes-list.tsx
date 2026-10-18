@@ -183,8 +183,8 @@ export function useChangesList(
   // while no file is stood on, because the bar names the one stood on then,
   // and a draw of the whole view for each file scrolled past is the cost.
   const latestTop = useRef(top);
-  const standingNow = useRef(standing);
-  standingNow.current = standing;
+  // The file stood on among those the filter keeps, which the bar names; set below once the filter is read.
+  const standingNow = useRef<string | undefined>(undefined);
   const onTopFile = useCallback((path: string) => {
     latestTop.current = path;
     if (standingNow.current === undefined) setTop(path);
@@ -212,6 +212,7 @@ export function useChangesList(
   const collapsed = useCallback((path: string) => folds.get(path) === true, [folds]);
   const allCollapsed = kept.length > 0 && kept.every((file) => collapsed(file.path));
   const keptStanding = standing !== undefined && paths.includes(standing) ? standing : undefined;
+  standingNow.current = keptStanding;
   const current = keptStanding ?? (top !== undefined && paths.includes(top) ? top : paths[0]);
 
   // How many times each file's fold was chosen, so a press undone puts back only a fold nothing chose since.
@@ -327,6 +328,14 @@ export function useChangesList(
   };
 }
 
+/** A pointer arriving over a control, as the window would say it; a window with no pointer events says it as a mouse's. */
+function pointerOver(): Event {
+  const init = { bubbles: true, pointerType: "mouse" };
+  return typeof PointerEvent === "function"
+    ? new PointerEvent("pointerover", init)
+    : new MouseEvent("pointerover", init);
+}
+
 /**
  * A file's header in the list, one row: its fold, the letter of what
  * became of it, its path, from the path it moved from where it moved, and
@@ -360,11 +369,16 @@ export function FileHead({
 }): React.JSX.Element {
   const [near, setNear] = useState(false);
   const foldRef = useRef<HTMLButtonElement>(null);
-  const refocus = useRef(false);
+  const letterRef = useRef<HTMLSpanElement>(null);
+  // What brought the hints: the keyboard's focus on the fold, or the pointer on the fold or the letter.
+  const arrived = useRef({ focused: false, overFold: false, overLetter: false });
   useLayoutEffect(() => {
-    if (!near || !refocus.current) return;
-    refocus.current = false;
-    foldRef.current?.focus();
+    if (!near) return;
+    const { focused, overFold, overLetter } = arrived.current;
+    if (focused) foldRef.current?.focus();
+    // Note that the control the pointer is already on is told so again, because the one drawn in its place has heard no arrival.
+    if (overFold) foldRef.current?.dispatchEvent(pointerOver());
+    if (overLetter) letterRef.current?.dispatchEvent(pointerOver());
   }, [near]);
   const label = collapsed ? "Expand file" : "Collapse file";
   const fold = (
@@ -378,7 +392,7 @@ export function FileHead({
     />
   );
   const letter = (
-    <span className="file-view-status" data-status={file.status}>
+    <span ref={letterRef} className="file-view-status" data-status={file.status}>
       {STATUS_LETTER[file.status]}
     </span>
   );
@@ -388,10 +402,25 @@ export function FileHead({
       data-standing={standing ? "" : undefined}
       data-collapsed={collapsed ? "" : undefined}
       onPointerDown={onStand}
-      onPointerEnter={() => setNear(true)}
+      onPointerEnter={(event) => {
+        if (near) return;
+        const { target } = event;
+        const on = (control: HTMLElement | null) =>
+          target instanceof Node && control?.contains(target) === true;
+        arrived.current = {
+          focused: false,
+          overFold: on(foldRef.current),
+          overLetter: on(letterRef.current),
+        };
+        setNear(true);
+      }}
       onFocusCapture={(event) => {
         if (near) return;
-        refocus.current = foldRef.current?.contains(event.target) === true;
+        arrived.current = {
+          focused: foldRef.current?.contains(event.target) === true,
+          overFold: false,
+          overLetter: false,
+        };
         setNear(true);
       }}
     >
