@@ -19,10 +19,10 @@
  * title names one (opened from that experiment's row in Settings ›
  * Experimental), and — only while "Include my name and email" is
  * ticked — the signed-in account's name and address, the line beside the
- * box reads out. Nothing else rides along, a credential least of all. The
- * whole card is left out of the screen recording (`ph-no-capture`), because a
- * screenshot is a picture of the person's screen and could carry another
- * app's words.
+ * box reads out. Nothing else rides along, a credential least of all. All the
+ * card holds between its title and its answers is left out of the screen
+ * recording (`ph-no-capture`), because a screenshot is a picture of the
+ * person's screen and could carry another app's words.
  */
 
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
@@ -46,9 +46,6 @@ import {
   ErrorState,
   IconButton,
   ImageIcon,
-  TEXT_ELEMENT,
-  TEXT_VARIANT,
-  Text,
   TextArea,
 } from "@luke/ui";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -226,7 +223,6 @@ export function FeedbackDialog({
   const open = kind !== undefined;
   const field = useRef<HTMLTextAreaElement | null>(null);
   const picker = useRef<HTMLInputElement | null>(null);
-  const titleId = useId();
   const signatureId = useId();
   const signature = accountSignature(account);
 
@@ -332,7 +328,7 @@ export function FeedbackDialog({
     // The whole dimmed window takes a dropped screenshot.
     <Dialog
       size={DIALOG_SIZE.WIDE}
-      labelledBy={titleId}
+      title={dialogTitle(kind, about)}
       busy={busy}
       initialFocus={field}
       onDismiss={() => close(false)}
@@ -354,11 +350,51 @@ export function FeedbackDialog({
           void attach(imageFiles(event.dataTransfer.files));
         },
       }}
+      actionsStart={
+        <>
+          <Tooltip label="Attach screenshot">
+            <IconButton
+              icon={<ImageIcon />}
+              label="Attach screenshot"
+              disabled={busy || full}
+              onClick={() => picker.current?.click()}
+            />
+          </Tooltip>
+          <input
+            ref={picker}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={(event) => {
+              const picked = imageFiles(event.currentTarget.files);
+              // Cleared so the same file can be picked again after a removal.
+              event.currentTarget.value = "";
+              void attach(picked);
+            }}
+          />
+        </>
+      }
+      actions={
+        <>
+          <Button variant={BUTTON_VARIANT.QUIET} disabled={busy} onClick={() => close(true)}>
+            Cancel
+          </Button>
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            aria-keyshortcuts={shortcutAria(SEND_CHORD)}
+            disabled={!hasWords(draft)}
+            busy={busy}
+            busyLabel="Sending"
+            onClick={() => void send()}
+          >
+            Send
+            <Shortcut chord={SEND_CHORD} />
+          </Button>
+        </>
+      }
     >
       <div className="feedback-dialog ph-no-capture">
-        <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
-          {dialogTitle(kind, about)}
-        </Text>
         <TextArea
           ref={field}
           label={FEEDBACK_COPY[kind].field}
@@ -413,45 +449,6 @@ export function FeedbackDialog({
           </div>
         ) : null}
         {rejection === undefined ? null : <ErrorState>{rejection}</ErrorState>}
-        <div className="feedback-dialog-actions">
-          <Tooltip label="Attach screenshot">
-            <IconButton
-              icon={<ImageIcon />}
-              label="Attach screenshot"
-              disabled={busy || full}
-              onClick={() => picker.current?.click()}
-            />
-          </Tooltip>
-          <input
-            ref={picker}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            onChange={(event) => {
-              const picked = imageFiles(event.currentTarget.files);
-              // Cleared so the same file can be picked again after a removal.
-              event.currentTarget.value = "";
-              void attach(picked);
-            }}
-          />
-          <div className="feedback-dialog-answers">
-            <Button disabled={busy} onClick={() => close(true)}>
-              Cancel
-            </Button>
-            <Button
-              variant={BUTTON_VARIANT.PRIMARY}
-              aria-keyshortcuts={shortcutAria(SEND_CHORD)}
-              disabled={!hasWords(draft)}
-              busy={busy}
-              busyLabel="Sending"
-              onClick={() => void send()}
-            >
-              Send
-              <Shortcut chord={SEND_CHORD} />
-            </Button>
-          </div>
-        </div>
       </div>
     </Dialog>
   );

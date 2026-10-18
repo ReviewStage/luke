@@ -52,6 +52,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
+    network: { online: true },
     window: { fullScreen: false },
   };
 }

@@ -1,6 +1,8 @@
 import {
   BUTTON_VARIANT,
   ButtonLink,
+  MARK_PROVIDER,
+  ProviderMark,
   PUBLIC_TITLE,
   PublicPage,
   PublicSection,
@@ -11,14 +13,7 @@ import {
 } from "@luke/ui";
 import { captureSiteEvent, SITE_EVENT } from "./analytics";
 import { DemoVideo } from "./DemoVideo";
-import {
-  DMG_URL,
-  GitHubMark,
-  REPOSITORY_URL,
-  SITE_PAGE,
-  SiteFooterLinks,
-  SiteNavigation,
-} from "./SiteChrome";
+import { DMG_URL, REPOSITORY_URL, SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 
 /**
  * The landing: the copy runs left, the way a page of prose does. The demo is
@@ -42,7 +37,11 @@ export function App(): React.JSX.Element {
           >
             Download for macOS
           </ButtonLink>
-          <ButtonLink variant={BUTTON_VARIANT.OUTLINE} href={REPOSITORY_URL} icon={<GitHubMark />}>
+          <ButtonLink
+            variant={BUTTON_VARIANT.OUTLINE}
+            href={REPOSITORY_URL}
+            icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}
+          >
             View on GitHub
           </ButtonLink>
         </div>

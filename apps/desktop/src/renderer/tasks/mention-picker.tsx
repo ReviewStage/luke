@@ -14,7 +14,8 @@ import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   ArrowLeftIcon,
-  ChevronRightIcon,
+  type ComboboxGroup,
+  ComboboxList,
   DocumentIcon,
   IconButton,
   ProviderMark,
@@ -23,6 +24,7 @@ import {
   TEXT_VARIANT,
   Text,
   UserIcon,
+  useComboboxField,
 } from "@luke/ui";
 import { type Actor, memberActor } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
@@ -37,25 +39,27 @@ import {
   HashIcon,
   UsersIcon,
 } from "lucide-react";
-import { type RefObject, useEffect, useId, useState } from "react";
+import { type RefObject, useEffect, useState } from "react";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools";
 import { useMemberDirectory } from "../member-directory";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract";
 import { FileTypeIcon } from "./file-type-icon";
-import { NO_TASK } from "./plan-mentions";
 import { PullRequestMark } from "./pull-request-mark";
 import { AgentMark } from "./tab-look";
+import { NO_TASK } from "./task-mentions";
 
 /**
  * mention-picker.tsx -- the list an `@` opens: the task's repository's files and folders, the plan's sections, and the task, grouped by kind, narrowed as the word is typed, the pick written as its mention.
  *
  * The list opens the way the `/` list does (`skill-picker.tsx`), at the
  * word an editor reports (`ComposerTrigger`), the caret staying in the
- * editor throughout: ↑ and ↓ move the highlight, Enter or Tab write the
+ * editor throughout, its keys steered as any combobox's are
+ * (`@luke/ui`'s `useComboboxField`): ↑ and ↓ move the highlight, a bare Home
+ * and End take it to the first row and the last, Enter or Tab write the
  * highlighted row as its mention, and Escape closes the list until the caret
- * leaves the word. Nothing typed after the `@`, it offers the task and its
+ * leaves the word. Keys an input method is composing with stay its own. Nothing typed after the `@`, it offers the task and its
  * sections; typed, it finds each kind's best few by the words typed, scored
  * as ⌘K scores them (cmdk's own filter), files and folders first, each
  * group in a fixed place so a later read never moves the rows above it.
@@ -736,9 +740,24 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
   }
 }
 
-/** One row's id, under the list's own. */
-function optionId(listId: string, index: number): string {
-  return `${listId}-${index}`;
+/** A row's key, stable while it stands: its skill's name, its kind's narrowing, or its mention. */
+function rowKey(row: MentionRow): string {
+  if ("skill" in row) return row.skill;
+  return JSON.stringify("from" in row ? row.from.narrow : row.mention);
+}
+
+/** The groups as the list draws them: each row its glyph, its name, its detail, and a chevron where it opens. */
+function comboboxGroups(groups: readonly MentionGroup[]): ComboboxGroup[] {
+  return groups.map((group) => ({
+    label: group.label,
+    options: group.rows.map((row) => ({
+      id: rowKey(row),
+      label: row.name,
+      icon: <RowGlyph row={row} />,
+      detail: row.detail,
+      opens: "from" in row,
+    })),
+  }));
 }
 
 /** What a narrowed list stands under: its kind, the folder walked into, and the way back, where a key made it. */
@@ -780,7 +799,6 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
 
 /** The list itself: a narrowed list's crumb, each group's heading and rows, the highlighted one washed, and the keys it hears at its foot. */
 function MentionMenu({
-  id,
   crumb,
   groups,
   at,
@@ -789,7 +807,6 @@ function MentionMenu({
   onHover,
   onChoose,
 }: {
-  id: string;
   crumb: Crumb | undefined;
   groups: readonly MentionGroup[];
   at: number;
@@ -798,65 +815,23 @@ function MentionMenu({
   onHover: (index: number) => void;
   onChoose: (row: MentionRow) => void;
 }): React.JSX.Element {
-  let index = -1;
+  const rows = groups.flatMap((group) => group.rows);
   return (
     <div className="menu-surface searchable-menu mention-menu" style={place}>
       {crumb === undefined ? null : <MentionCrumb crumb={crumb} />}
-      {/* Note that a press on a row keeps the caret in the editor, where the keys are read. */}
-      <div
-        id={id}
-        className="task-compose-menu-list"
-        role="listbox"
-        aria-label={MENU_LABEL}
-        onMouseDown={(event) => event.preventDefault()}
-      >
-        {groups.map((group) => (
-          // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
-          <div key={group.label} role="group" aria-label={group.label}>
-            {/* A narrowed list's one group is named by its crumb. */}
-            {crumb === undefined ? (
-              <div className="menu-heading" aria-hidden="true">
-                {group.label}
-              </div>
-            ) : null}
-            {group.rows.map((row) => {
-              index += 1;
-              const mine = index;
-              return (
-                <button
-                  key={
-                    "skill" in row
-                      ? row.skill
-                      : JSON.stringify("from" in row ? row.from.narrow : row.mention)
-                  }
-                  id={optionId(id, mine)}
-                  type="button"
-                  role="option"
-                  tabIndex={-1}
-                  className="menu-item"
-                  aria-selected={mine === at}
-                  onMouseMove={() => onHover(mine)}
-                  onClick={() => onChoose(row)}
-                >
-                  <span className="menu-item-glyph">
-                    <RowGlyph row={row} />
-                  </span>
-                  <span className="task-compose-menu-name">{row.name}</span>
-                  {row.detail === undefined ? null : (
-                    <span className="menu-item-hint mention-row-detail">{row.detail}</span>
-                  )}
-                  {"from" in row ? (
-                    <span className="menu-item-end">
-                      <ChevronRightIcon />
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        ))}
-        {groups.length === 0 ? <p className="task-compose-menu-note">{NO_MATCH}</p> : null}
-      </div>
+      <ComboboxList
+        label={MENU_LABEL}
+        groups={comboboxGroups(groups)}
+        active={at}
+        onActiveChange={onHover}
+        onChoose={(index) => {
+          const row = rows[index];
+          if (row !== undefined) onChoose(row);
+        }}
+        // A narrowed list's one group is named by its crumb.
+        headed={crumb === undefined}
+        empty={NO_MATCH}
+      />
       <div className="task-compose-menu-foot mention-menu-foot" aria-hidden="true">
         {keys.map((key) => (
           <Text
@@ -926,7 +901,7 @@ const NO_AGENTS: readonly MentionableAgent[] = [];
 const NO_PULL_REQUESTS: readonly MentionablePullRequest[] = [];
 const NO_MEMBERS: readonly WorkspaceMember[] = [];
 
-/** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; `NO_PLAN` for a page no plan holds, which offers its repository alone. */
+/** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; `NO_TASK` for a page no task holds, which offers its repository alone. */
 export interface MentionSource {
   readonly taskId: string;
   readonly taskName: string;
@@ -1081,7 +1056,6 @@ export function useMentionPicker({
   side: MentionMenuSide;
   onChoose: (mention: MentionNode) => void;
 }): MentionPicker {
-  const listId = useId();
   const { act } = useAct();
   const { members, readerId } = useMemberDirectory();
   const [trigger, setTrigger] = useState<ComposerTrigger | undefined>(undefined);
@@ -1262,34 +1236,56 @@ export function useMentionPicker({
     else onChoose({ name: row.name, target: encodeMention(row.mention, place) });
   };
 
+  // ↑, ↓, Home, End, Enter and Escape steer the list as any combobox's do;
+  // ⌘Enter writes the highlighted row as a bare Enter does.
+  const field = useComboboxField({
+    open: shown,
+    active: at,
+    count: rows.length,
+    controls: undefined,
+    activeId: undefined,
+    onActiveChange: (index) => {
+      if (trigger !== undefined)
+        setHighlight({ start: trigger.start, query: trigger.query, at: index });
+    },
+    onChoose: (index) => {
+      const row = rows[index];
+      if (row !== undefined) choose(row);
+    },
+    onEnter: () => {
+      const row = rows[at];
+      if (row !== undefined) choose(row);
+    },
+    onEscape: () => {
+      if (trigger !== undefined) setClosedAt(trigger.start);
+    },
+  });
+
+  // The list's own keys come first: ⌫ widens, → opens, Tab writes, and a
+  // Shift+Enter is the editor's line break, as a modified Home or End is
+  // its own; with no row only Escape is the list's.
   const onKey = (event: KeyboardEvent): boolean => {
     if (!shown) return false;
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      setClosedAt(trigger.start);
-      return true;
-    }
     const bare = !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey;
     if (event.key === "Backspace" && bare && term === "" && back !== undefined) {
       back();
       return true;
     }
+    if (event.key === "Escape") return field.onKeyDown(event);
     const row = rows[at];
     if (row === undefined) return false;
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      const step = event.key === "ArrowDown" ? 1 : rows.length - 1;
-      setHighlight({ start: trigger.start, query: trigger.query, at: (at + step) % rows.length });
-      return true;
-    }
     if (event.key === "ArrowRight" && bare && opens(row)) {
       openRow(row);
       return true;
     }
-    if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") {
+    if (event.key === "Tab") {
       choose(row);
       return true;
     }
-    return false;
+    if (event.key === "Enter" && event.shiftKey) return false;
+    // A Home or End held with a modifier selects or travels in the editor's words.
+    if ((event.key === "Home" || event.key === "End") && !bare) return false;
+    return field.onKeyDown(event);
   };
 
   // The foot names the keys the list hears now: → where a row opens, ⌫ where the list is narrowed.
@@ -1313,7 +1309,6 @@ export function useMentionPicker({
   const menu =
     !shown || box === null || placed === undefined ? null : (
       <MentionMenu
-        id={listId}
         crumb={
           scope?.kind === undefined
             ? undefined

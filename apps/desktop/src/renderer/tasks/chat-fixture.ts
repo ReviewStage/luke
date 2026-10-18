@@ -76,8 +76,8 @@ const CHANNEL = {
   WITH_MARIA: "4c5d6e7f-8a9b-4c0d-8e1f-2a3b4c5d6e7f",
 } as const;
 
-/** The fixture plan's other plan, whose channel stands quiet. */
-const BILLING_PLAN_ID = "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71";
+/** The fixture task's other task, whose channel stands quiet. */
+const BILLING_TASK_ID = "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71";
 
 /** The commit the agent's code block points at. */
 const AGENT_ONE_COMMIT = "4be1c0de9a8f7e6d5c4b3a29180f7e6d5c4b3a29";
@@ -355,7 +355,7 @@ export function fixtureChat(
         id: CHANNEL.BILLING,
         kind: CHANNEL_KIND.PLAN,
         name: "billing-export",
-        planId: BILLING_PLAN_ID,
+        planId: BILLING_TASK_ID,
         archived: false,
       },
       { id: CHANNEL.SCHEMA, kind: CHANNEL_KIND.TOPIC, name: "members-schema", archived: false },

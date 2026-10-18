@@ -1065,8 +1065,8 @@ test("an @ in the agent's box names an archived agent of an archived task by tha
   const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
   assert.deepEqual(
     rows.map((row) => [
-      row.querySelector(".task-compose-menu-name")?.textContent,
-      row.querySelector(".mention-row-detail")?.textContent,
+      row.querySelector(".luke-combobox-option-label")?.textContent,
+      row.querySelector(".luke-combobox-option-detail")?.textContent,
     ]),
     [["Bill by seat", "Billing · Archived"]],
   );
