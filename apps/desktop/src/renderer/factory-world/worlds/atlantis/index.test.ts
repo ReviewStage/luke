@@ -24,14 +24,7 @@ import {
   factoryZoneOf,
   HOUR_MS,
 } from "@luke/ui/testing";
-import {
-  type InstancedMesh,
-  Matrix4,
-  type Object3D,
-  PerspectiveCamera,
-  Scene,
-  Vector3,
-} from "three";
+import { InstancedMesh, Matrix4, type Object3D, PerspectiveCamera, Scene, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 import {
   PICK_KIND,
@@ -135,6 +128,17 @@ function anchorOf(registrations: Set<Registration>, target: PickTarget): Vector3
     }
   }
   return undefined;
+}
+
+/** The sonar rings standing on the floor: every instanced mesh drawn with a ring's look. */
+function ringMeshes(scene: Scene): InstancedMesh[] {
+  const rings: InstancedMesh[] = [];
+  scene.traverse((object) => {
+    if (object instanceof InstancedMesh && object.geometry.getAttribute("aPing") !== undefined) {
+      rings.push(object);
+    }
+  });
+  return rings;
 }
 
 const ALL_LAYERS: WorldLayers = { planned: true, building: true, shipped: true, defects: true };
@@ -351,6 +355,25 @@ describe("Atlantis", () => {
     expect(first).toBeDefined();
     expect(second).toBeDefined();
     expect(first?.distanceTo(second ?? new Vector3()) ?? 0).toBeGreaterThan(5);
+  });
+
+  it("keeps the selected agent's sonar ringing when shipped is switched off after work has landed", () => {
+    const snapshot = cityOf();
+    const view = factoryWorldViewOf(snapshot);
+    const selected = { kind: PICK_KIND.AGENT, id: snapshot.agents[0]?.id ?? "" };
+    const blast = new Map(
+      blastRadiusOf(view, selected.id).map((zone) => [zone.path, zone.distance]),
+    );
+    const { host } = fakeHost();
+    const instance = world.create(host);
+    const moving = stateOf(snapshot, { selected, blast, still: false });
+    instance.update(moving);
+    // Note that the first work lands about three and a half seconds in, while the sonar rings out every 1.6.
+    for (let step = 1; step <= 40; step += 1) instance.frame?.(0.1, step * 0.1);
+    const ringing = () => ringMeshes(host.scene).reduce((rings, mesh) => rings + mesh.count, 0);
+    expect(ringing()).toBeGreaterThanOrEqual(2);
+    instance.update({ ...moving, layers: { ...ALL_LAYERS, shipped: false } });
+    expect(ringing()).toBeGreaterThanOrEqual(1);
   });
 
   it("draws a scrubbed instant from its own view: work merged later is not there to pick", () => {
