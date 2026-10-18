@@ -1154,11 +1154,13 @@ only when you press Send.
   session's history (the messages, files, tool calls, and answers its model
   works from) so the session can pick up where it stopped. Deleting a task or
   your account ends each of its sessions for good, a turn still running
-  included. When a session of Luke's or a coding agent's ends, Vercel deletes that
-  history at once, though the session's ids, status, and times may stay as
-  long as Vercel's own retention. This holds for a session started on or after
-  13 October 2026; a session started before then, and the session of a worker
-  either one hands work to, keeps its history under Vercel's own retention.
+  included. When a session of Luke's ends, Vercel deletes that history at
+  once, though the session's ids, status, and times may stay as long as
+  Vercel's own retention. This holds for a session started on or after
+  13 October 2026. A coding agent's session, for now, keeps its history under
+  Vercel's own retention (7 days after it ends) so that we can find out why a
+  session stopped partway, and so does a session of Luke's started before
+  then and the session of a worker either one hands work to.
 - GitHub, asked by your Mac itself and unauthenticated, which sees your Mac's
   network address: to check for updates, carrying nothing about you, when Luke
   opens, every four hours, and when you ask from Luke's menu or Settings,
