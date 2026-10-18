@@ -649,10 +649,13 @@ function ReplyField({
   // Note that only the agent box's editor takes a dictation, so the plain field offers none.
   const dictates = useCommentEditor() !== undefined;
   const [words, setWords] = useState("");
+  // The words sent and not yet answered, which the field holds as a draft while it stands empty, so a send that fails finds them.
+  const [inFlight, setInFlight] = useState("");
   // A dictation under way holds the field as words do, since its words land only once it is heard.
   const told = useRef(onDraft);
   told.current = onDraft;
-  useEffect(() => told.current?.(words, dictating), [words, dictating]);
+  const held = words === "" ? inFlight : words;
+  useEffect(() => told.current?.(held, dictating), [held, dictating]);
   const attempt = useRef<{ words: string; key: string } | undefined>(undefined);
   const send = () => {
     const trimmed = words.trim();
@@ -661,7 +664,9 @@ function ReplyField({
     attempt.current = { words: trimmed, key };
     // Note that the field empties as the words are sent, since a send may wait on the ones its mentions hand the thread to, and takes them back where the send fails and nothing was typed since.
     setWords("");
+    setInFlight(trimmed);
     void onSend(trimmed, key).then((sent) => {
+      setInFlight("");
       if (sent) {
         attempt.current = undefined;
         return;

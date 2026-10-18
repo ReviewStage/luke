@@ -755,3 +755,34 @@ test("a reply's field empties as it is sent, and takes the words back where the 
   await act(async () => undefined);
   assert.equal(field.value, "Not for v1.", "and takes them back where the send fails");
 });
+
+test("a thread being started keeps its card through a press away while its words are sent, and takes them back where the send fails", async () => {
+  const { container } = wide(() => drawn("page", []));
+  const paragraph = [...container.querySelectorAll("p")].find((p) =>
+    p.textContent?.startsWith("Admins can withdraw"),
+  );
+  assert.ok(paragraph);
+  act(() => paragraph.dispatchEvent(new Event("pointerover", { bubbles: true })));
+  act(() => container.querySelector<HTMLButtonElement>(".comment-block-button button")?.click());
+  const pending = () => container.querySelector(`.comment-card[data-thread="pending"]`);
+  const field = pending()?.querySelector<HTMLTextAreaElement>("textarea");
+  assert.ok(field);
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(field, "Ask Luke about retries");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  act(() => document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  assert.ok(pending(), "the card stays while its words are sent");
+
+  await act(async () => undefined);
+  assert.equal(
+    pending()?.querySelector<HTMLTextAreaElement>("textarea")?.value,
+    "Ask Luke about retries",
+    "and takes them back where the send fails",
+  );
+});
