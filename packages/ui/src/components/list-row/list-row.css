@@ -308,6 +308,10 @@
     transition: opacity 0s linear var(--duration-fast);
   }
 
+  .luke-list-row[data-swipe="moving"] > .luke-list-row-swipe {
+    transition: background-color var(--duration-hover) ease;
+  }
+
   .luke-list-row[data-armed="true"] > .luke-list-row-swipe {
     background: color-mix(in srgb, var(--luke-color-accent) 82%, var(--luke-color-on-accent));
   }
@@ -340,8 +344,11 @@
     transition: transform var(--duration-fast) var(--spring-fast);
   }
 
+  /* While the row follows the hand, its label follows a beat behind, so
+     the jump from the button's middle to the face's edge as the row arms
+     glides rather than snaps. */
   .luke-list-row[data-swipe="moving"] .luke-list-row-swipe-label {
-    transition: none;
+    transition: transform var(--duration-hover) ease-out;
   }
 
   .luke-list-row-swipe-label > svg {

@@ -552,6 +552,9 @@ test("a trackpad's two-finger swipe moves the row by its sideways wheel and is l
   const short = swiped();
   wheel(short.item, 0, 30);
   expect(standing(short.item)).toEqual(["rest", "0px", false]);
+  // The scroll rests before the swipe begins.
+  frameAt(500);
+  frameAt(700);
   wheel(short.item, -20);
   wheel(short.item, -20);
   expect(standing(short.item)).toEqual(["moving", "40px", false]);
@@ -655,4 +658,90 @@ test("a pointer's swipe interrupted and let go off the row leaves no click to sw
   // Note that a keyboard's click comes with no press before it, and a detail of 0.
   act(() => press.click());
   expect([acted, opened]).toEqual([[], ["open"]]);
+});
+
+/** An event stamped as the window would have stamped it, `at` milliseconds in. */
+function stamped<E extends Event>(event: E, at: number): E {
+  Object.defineProperty(event, "timeStamp", { value: at });
+  return event;
+}
+
+/** A press on `target` moved through each `[dx, at]` in turn, from x 10 at time 0, then let go at the last. */
+function flick(target: HTMLElement, ...moves: [number, number][]): void {
+  act(() => {
+    target.dispatchEvent(stamped(pointer("pointerdown", 10), 0));
+  });
+  for (const [dx, at] of moves) {
+    act(() => {
+      target.dispatchEvent(stamped(pointer("pointermove", 10 + dx), at));
+    });
+  }
+  const [dx, at] = moves[moves.length - 1] ?? [0, 0];
+  act(() => {
+    target.dispatchEvent(stamped(pointer("pointerup", 10 + dx), at + 4));
+    target.dispatchEvent(pointerClick());
+  });
+}
+
+test("a flick carries a release along its speed: let go short of the line, a fast swipe right acts; let go past where it would open, a fast swipe back closes", () => {
+  const thrown = swiped();
+  flick(thrown.press, [20, 10], [60, 20], [140, 30], [150, 32]);
+  expect(thrown.acted).toEqual(["Read"]);
+  expect(standing(thrown.item)).toEqual(["rest", "0px", false]);
+
+  const pulled = swiped();
+  flick(pulled.press, [100, 100], [110, 200], [60, 210], [30, 220]);
+  expect([pulled.acted, standing(pulled.item)]).toEqual([[], ["rest", "0px", false]]);
+
+  const slow = swiped();
+  flick(slow.press, [20, 100], [60, 400], [150, 900]);
+  expect([slow.acted, standing(slow.item)]).toEqual([[], ["open", "72px", false]]);
+});
+
+test("past 85% of the row the row gives, going on with a third of the hand's travel", () => {
+  const { item, press } = swiped();
+  drag(press, 20, 300);
+  expect(standing(item)).toEqual(["moving", "270.75px", true]);
+});
+
+test("a trackpad movement that begins up or down stays the list's until its wheel rests, however sideways it turns; a sideways one begins a swipe only once it leans sideways 5px, and twice as far as up or down", () => {
+  const { frameAt, wheel } = trackpad();
+  const { item } = swiped();
+  expect(wheel(item, 0, 20)).toBe(false);
+  expect(wheel(item, -60)).toBe(false);
+  expect(standing(item)).toEqual(["rest", "0px", false]);
+  frameAt(1_000);
+  frameAt(1_200);
+
+  expect(wheel(item, -4)).toBe(false);
+  expect(standing(item)[0]).toBe("rest");
+  expect(wheel(item, -3)).toBe(true);
+  expect(standing(item)).toEqual(["moving", "7px", false]);
+  frameAt(2_000);
+  frameAt(2_200);
+
+  expect(wheel(item, -6, -4)).toBe(false);
+  expect(standing(item)[0]).toBe("rest");
+  expect(wheel(item, -6)).toBe(true);
+  expect(standing(item)).toEqual(["moving", "12px", false]);
+});
+
+test("a trackpad's deltas shrinking five times in a row are the fingers lifted: the swipe is let go at once, a long one acting and a short one resting open, and the coast that follows moves nothing", () => {
+  const { frameAt, wheel } = trackpad();
+  const long = swiped();
+  for (const delta of [-60, -60, -60, -50, -40, -30, -20]) wheel(long.item, delta);
+  expect(long.acted).toEqual([]);
+  wheel(long.item, -10);
+  expect(long.acted).toEqual(["Read"]);
+  expect(standing(long.item)).toEqual(["rest", "0px", false]);
+  expect(wheel(long.item, -5)).toBe(true);
+  expect(standing(long.item)).toEqual(["rest", "0px", false]);
+  frameAt(1_000);
+  frameAt(1_200);
+  expect(long.acted).toEqual(["Read"]);
+
+  const short = swiped();
+  for (const delta of [-30, -8, -6, -4, -2, -1]) wheel(short.item, delta);
+  expect(standing(short.item)).toEqual(["open", "72px", false]);
+  expect(short.acted).toEqual([]);
 });

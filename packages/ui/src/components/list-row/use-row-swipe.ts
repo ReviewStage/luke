@@ -8,14 +8,24 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
  * gone further sideways than up or down, it is a swipe, the pointer
  * captured by the row's item, and the row follows it to the right, never
  * left of where it rests. A two-finger swipe on a trackpad moves it the
- * same way, by its horizontal wheel deltas, and is let go once they stop.
- * Let go past `SWIPE.OPEN`, the row rests open on the act's button, which a
- * click presses; let go past `SWIPE.ACT_SHARE` of the row, the act is done
- * with no click, and while the row stands past that line it is armed, the
- * button brighter and its label riding the row's edge. Let go short of
- * both, it closes. A press anywhere but the open row, a wheel elsewhere, a
- * click on the row itself, or swiping it back closes it. Swiping left from
- * rest does nothing.
+ * same way, by its horizontal wheel deltas, once the movement leans
+ * sideways: 5px, and twice as far as up or down. A movement that begins up
+ * or down is the list's to scroll until its wheel rests, however it turns,
+ * so a scroll never swipes a row. The trackpad's swipe is let go once its
+ * deltas shrink five times running, as a coast's do once the fingers lift,
+ * or else once the wheel rests; the coast after moves nothing.
+ *
+ * The row follows the hand with no render, its place written straight onto
+ * the item, and past `SWIPE.GIVE_SHARE` of the row it gives, keeping a
+ * third of the hand's travel. Let go past `SWIPE.OPEN`, the row rests open
+ * on the act's button, which a click presses; let go past `SWIPE.ACT_SHARE`
+ * of the row, the act is done with no click, and while the row stands past
+ * that line it is armed, the button brighter and its label riding the
+ * row's edge a beat behind. Where a release lands is carried along the
+ * hand's speed, so a flick right acts or opens and one back closes. Let go
+ * short of both, it closes. A press anywhere but the open row, a wheel
+ * elsewhere, a click on the row itself, or swiping it back closes it.
+ * Swiping left from rest does nothing.
  *
  * A pointer the system took away never acts, and nor does a swipe whose
  * act changed under it, since the list redrew the row with something else
@@ -28,14 +38,30 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /** The swipe's lengths, in CSS pixels, and the share of the row past which a release acts. */
 const SWIPE = {
-  /** How far a press goes before it is a swipe rather than a click. */
+  /** How far a press or a trackpad goes sideways before it is a swipe rather than a click or a scroll. */
   START: 5,
+  /** How much more sideways than up or down a trackpad's first movement must be to begin a swipe. */
+  LEAN: 2,
   /** Past this, a release leaves the row resting open on the act's button. */
   OPEN: 24,
   /** Where an open row rests: the button's width. */
   REST: 72,
   /** Past this share of the row's width, a release does the act. */
   ACT_SHARE: 0.6,
+  /** Past this share of the row's width, the row goes on with a third of the hand's travel, as a held edge gives. */
+  GIVE_SHARE: 0.85,
+  /** How much of the hand's travel the row keeps past the give. */
+  GIVE: 0.35,
+  /** How far ahead a release looks along the hand's speed, in milliseconds, so a flick carries. */
+  PROJECT_MS: 120,
+  /** The most a flick carries a release, either way. */
+  PROJECT_MAX: 64,
+  /** How far back the hand's speed is read, in milliseconds. */
+  SPEED_WINDOW_MS: 80,
+  /** The shortest span the speed is read over, in milliseconds; a shorter one says nothing. */
+  SPEED_MIN_MS: 8,
+  /** How many shrinking wheel deltas in a row mean the fingers have lifted and the trackpad coasts. */
+  COAST: 5,
   /** The width of the act's label inside its button. */
   LABEL: 56,
   /** How far inside the row's edge an armed label rides. */
@@ -85,11 +111,37 @@ interface Press {
   readonly from: number;
   readonly act: string;
   swiping: boolean;
+  /** Where the hand was lately, for its speed at release. */
+  readonly samples: Sample[];
 }
 
-/** A trackpad swipe under way: the act it began on, and the frame time its wheel last moved at, unknown until the next frame. */
+/** Where the hand put the row, and when, by the event's own clock. */
+interface Sample {
+  readonly at: number;
+  readonly offset: number;
+}
+
+/**
+ * A trackpad's movement under way, read by its wheel. Before it is a swipe
+ * it leans one way or the other: sideways enough, it begins one; up or down
+ * first, it is the list's to scroll until the wheel rests. Once the deltas
+ * shrink steadily the fingers have lifted and the trackpad coasts, so the
+ * swipe is let go then and the rest of the coast moves nothing.
+ */
 interface Wheel {
-  readonly act: string;
+  /** The act a swipe began on; none while the movement leans no way yet, or is a scroll. */
+  act: string | undefined;
+  /** Whether the movement is the list's to scroll. */
+  scroll: boolean;
+  /** Whether the fingers lifted and the swipe was let go, the coast left to run out. */
+  coasting: boolean;
+  /** How far the movement has gone each way before it leaned. */
+  leanX: number;
+  leanY: number;
+  /** The last delta's size, and how many deltas in a row have shrunk. */
+  last: number;
+  shrinking: number;
+  readonly samples: Sample[];
   movedAt: number | undefined;
   frame: number;
 }
@@ -112,6 +164,37 @@ function labelAt(offset: number, armed: boolean): RowSwipeView["label"] {
   };
 }
 
+/** Where the row stands for the hand's travel: as far as the hand, never left of rest, and giving past `SWIPE.GIVE_SHARE` of the row. */
+function followed(travel: number, width: number): number {
+  const at = Math.max(0, travel);
+  const give = width * SWIPE.GIVE_SHARE;
+  return width > 0 && at > give ? give + (at - give) * SWIPE.GIVE : at;
+}
+
+/** A sample kept, and those older than the speed's window dropped. */
+function sampled(samples: Sample[], sample: Sample): void {
+  samples.push(sample);
+  while (samples.length > 2 && sample.at - (samples[0]?.at ?? sample.at) > SWIPE.SPEED_WINDOW_MS) {
+    samples.shift();
+  }
+}
+
+/**
+ * Where a release lands once the hand's speed carries it: the row's own
+ * place, moved along the speed for `SWIPE.PROJECT_MS` and by no more than
+ * `SWIPE.PROJECT_MAX`, so a flick right acts or opens sooner and one back
+ * closes. Samples over too short a span say no speed.
+ */
+function projected(offset: number, samples: readonly Sample[]): number {
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  if (first === undefined || last === undefined) return offset;
+  const span = last.at - first.at;
+  if (span < SWIPE.SPEED_MIN_MS) return offset;
+  const carry = ((last.offset - first.offset) / span) * SWIPE.PROJECT_MS;
+  return offset + Math.max(-SWIPE.PROJECT_MAX, Math.min(SWIPE.PROJECT_MAX, carry));
+}
+
 /**
  * A row swiped to its one act. `act` names what the act does now, its
  * label, so a swipe whose act changed before its release does nothing;
@@ -121,13 +204,45 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
   const ref = useRef<HTMLLIElement | null>(null);
   const [state, setState] = useState<SwipeState>(SWIPE_STATE.REST);
   const [offset, setOffsetDrawn] = useState(0);
+  const [armedDrawn, setArmedDrawn] = useState(false);
   // Note that the offset and the row's width are held in refs too, so a release reads them as the last move left them rather than as the last render drew them.
   const at = useRef(0);
   const width = useRef(0);
+  const moving = useRef(false);
+  /** Where the row is put at rest, open, or home: drawn by a render, as the row settles on the stylesheet's timing. */
   const setOffset = (next: number) => {
     at.current = next;
+    moving.current = false;
     setOffsetDrawn(next);
+    setArmedDrawn(false);
   };
+  /**
+   * Where the row follows the hand: written straight onto the item, so a
+   * move costs no render and the row keeps up with a trackpad's every
+   * frame; a render comes only as the row arms or disarms.
+   */
+  const follow = (next: number) => {
+    at.current = next;
+    moving.current = true;
+    const armed = acts(next, width.current);
+    const item = ref.current;
+    if (item !== null) {
+      const label = labelAt(next, armed);
+      item.style.setProperty("--luke-list-row-swipe", `${next}px`);
+      item.style.setProperty("--luke-list-row-swipe-label", `${label.offset}px`);
+      item.style.setProperty("--luke-list-row-swipe-shown", String(label.opacity));
+    }
+    setArmedDrawn(armed);
+  };
+  // Note that a row put down by a render is put there whatever the hand last wrote, since a render that draws the same place as the one before writes nothing.
+  useLayoutEffect(() => {
+    const item = ref.current;
+    if (item === null || moving.current) return;
+    const label = labelAt(offset, false);
+    item.style.setProperty("--luke-list-row-swipe", `${offset}px`);
+    item.style.setProperty("--luke-list-row-swipe-label", `${label.offset}px`);
+    item.style.setProperty("--luke-list-row-swipe-shown", String(label.opacity));
+  });
   const press = useRef<Press | undefined>(undefined);
   const wheel = useRef<Wheel | undefined>(undefined);
   const swallow = useRef(false);
@@ -138,7 +253,7 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
     latest.current = { act, onAct };
   });
 
-  // Note that closing lets go of a trackpad's swipe still waiting for its wheel to rest, so its frame can never settle it after,
+  // Note that closing lets go of a trackpad's movement still waiting for its wheel to rest, so its frame can never settle it after,
   // and of a pointer's swipe still held, so its release does nothing and its click opens nothing.
   const close = () => {
     if (wheel.current !== undefined) cancelAnimationFrame(wheel.current.frame);
@@ -154,14 +269,16 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
     setOffset(0);
     setState(SWIPE_STATE.REST);
   };
-  // Note that the act's own words are read at release, so a row the list redrew with another act does nothing.
-  const settle = (began: string) => {
+  // Note that the act's own words are read at release, so a row the list redrew with another act does nothing;
+  // and that where the release lands is carried by the hand's speed, so a flick acts or closes as it was thrown.
+  const settle = (began: string, samples: readonly Sample[]) => {
     if (latest.current.act !== began) return close();
-    if (acts(at.current, width.current)) {
+    const landed = projected(at.current, samples);
+    if (acts(landed, width.current)) {
       latest.current.onAct();
       return close();
     }
-    if (at.current >= SWIPE.OPEN) {
+    if (landed >= SWIPE.OPEN) {
       openedOn.current = began;
       setOffset(SWIPE.REST);
       setState(SWIPE_STATE.OPEN);
@@ -203,7 +320,7 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
     item.addEventListener("wheel", listen, { passive: false });
     return () => item.removeEventListener("wheel", listen);
   }, [offered]);
-  // A row the list drops takes its wheel's swipe with it.
+  // A row the list drops takes its wheel's movement with it.
   useEffect(
     () => () => {
       if (wheel.current !== undefined) cancelAnimationFrame(wheel.current.frame);
@@ -221,33 +338,81 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
       return;
     }
     wheel.current = undefined;
-    settle(held.act);
+    // A movement that leaned no way, was the list's, or coasted after its swipe was let go, rests with nothing to settle.
+    if (held.act === undefined || held.scroll || held.coasting) return;
+    settle(held.act, []);
   };
   const wheelMoved = (event: WheelEvent) => {
     const current = latest.current.act;
     if (current === undefined || press.current !== undefined) return;
-    // A wheel more up or down than sideways is the list's to scroll, a swipe under way or not, and leaves the swipe's rest uncounted.
-    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
-    event.preventDefault();
-    if (wheel.current === undefined) {
-      measure();
-      wheel.current = {
-        act: current,
+    let held = wheel.current;
+    if (held === undefined) {
+      held = {
+        act: undefined,
+        scroll: false,
+        coasting: false,
+        leanX: 0,
+        leanY: 0,
+        last: 0,
+        shrinking: 0,
+        samples: [],
         movedAt: undefined,
         frame: requestAnimationFrame(wheelFrame),
       };
-      setState(SWIPE_STATE.MOVING);
+      wheel.current = held;
     }
-    wheel.current.movedAt = undefined;
-    setOffset(Math.max(0, at.current - event.deltaX));
+    // A wheel more up or down than sideways during a swipe is the list's to scroll, and leaves the swipe's rest uncounted.
+    if (held.act !== undefined && Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+    held.movedAt = undefined;
+    // A movement that began up or down is the list's to scroll until its wheel rests, however it turns.
+    if (held.scroll) return;
+    if (held.act === undefined) {
+      held.leanX += event.deltaX;
+      held.leanY += event.deltaY;
+      const sideways = Math.abs(held.leanX);
+      const upright = Math.abs(held.leanY);
+      if (upright > sideways) {
+        held.scroll = true;
+        return;
+      }
+      if (sideways < SWIPE.START || sideways < upright * SWIPE.LEAN) return;
+      event.preventDefault();
+      measure();
+      held.act = current;
+      setState(SWIPE_STATE.MOVING);
+      held.last = Math.abs(event.deltaX);
+      follow(followed(-held.leanX, width.current));
+      sampled(held.samples, { at: event.timeStamp, offset: at.current });
+      return;
+    }
+    event.preventDefault();
+    if (held.coasting) return;
+    // Note that a coast's deltas shrink smoothly, one after another, as a hand's never do for long, so a run of them is the fingers lifted.
+    const size = Math.abs(event.deltaX);
+    held.shrinking = size > 0 && size < held.last ? held.shrinking + 1 : 0;
+    held.last = size;
+    follow(followed(at.current - event.deltaX, width.current));
+    sampled(held.samples, { at: event.timeStamp, offset: at.current });
+    if (held.shrinking >= SWIPE.COAST) {
+      held.coasting = true;
+      settle(held.act, held.samples);
+      // Note that settling may close the row, letting go of the movement; the coast is still the hand's, so it is held until the wheel rests and moves nothing.
+      if (wheel.current === undefined) {
+        held.movedAt = undefined;
+        held.frame = requestAnimationFrame(wheelFrame);
+        wheel.current = held;
+      }
+    }
   };
   useLayoutEffect(() => {
     heard.current = wheelMoved;
   });
 
   const view: RowSwipeView = (() => {
-    const armed = state === SWIPE_STATE.MOVING && acts(offset, width.current);
-    return { state, offset, armed, label: labelAt(offset, armed) };
+    // Note that a render while the row follows the hand draws where the hand left it, not where the last render did.
+    const drawn = moving.current ? at.current : offset;
+    const armed = state === SWIPE_STATE.MOVING && armedDrawn;
+    return { state, offset: drawn, armed, label: labelAt(drawn, armed) };
   })();
 
   return {
@@ -269,6 +434,7 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
           from: at.current,
           act: current,
           swiping: false,
+          samples: [],
         };
       },
       onPointerMove: (event) => {
@@ -288,7 +454,8 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
           ref.current?.setPointerCapture?.(event.pointerId);
           setState(SWIPE_STATE.MOVING);
         }
-        setOffset(Math.max(0, held.from + dx));
+        follow(followed(held.from + dx, width.current));
+        sampled(held.samples, { at: event.timeStamp, offset: at.current });
       },
       onPointerUp: (event) => {
         const held = press.current;
@@ -296,8 +463,9 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
         press.current = undefined;
         if (held.swiping) {
           swallow.current = true;
-          setOffset(Math.max(0, held.from + event.clientX - held.x));
-          settle(held.act);
+          follow(followed(held.from + event.clientX - held.x, width.current));
+          sampled(held.samples, { at: event.timeStamp, offset: at.current });
+          settle(held.act, held.samples);
           return;
         }
         // A click on an open row closes it and opens nothing.
