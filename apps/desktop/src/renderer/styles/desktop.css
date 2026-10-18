@@ -3965,12 +3965,17 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--luke-space-8);
 }
 
+/* A name too long for the line, one unbroken word, wraps anywhere rather
+   than pushing the value past the comment's clip. */
 .inbox-value-label {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--luke-color-text-muted);
 }
 
 .inbox-value-words {
+  flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
 }
