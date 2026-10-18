@@ -230,6 +230,8 @@ function everythingIn(snapshot: FactoryWorld): Map<PickKind, Set<string>> {
     [PICK_KIND.SHIPPED, new Set(snapshot.shipped.map((merged) => merged.url))],
     [PICK_KIND.PLANNED, new Set(snapshot.planned.map((issue) => issue.identifier))],
     [PICK_KIND.DEFECT, new Set(snapshot.defects.map((defect) => defect.id))],
+    // Note that a task is the campus's to pick; no world draws one.
+    [PICK_KIND.TASK, new Set()],
   ]);
 }
 

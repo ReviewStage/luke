@@ -4390,6 +4390,290 @@ ul.actor-stack {
   accent-color: var(--luke-color-accent);
 }
 
+/* Factory campus ------------------------------------------------------------ */
+
+/* The campus stands in a world's place under the same chrome, drawn in SVG
+   (`factory-world/campus/`). Its ground, walls, and props are coloured by
+   the drawing (`@luke/ui/factory-campus`), which hands the scene the few
+   colours its stylesheet needs as custom properties: the ground behind it,
+   a window gone out, and the selection's signal. */
+.factory-campus {
+  position: absolute;
+  inset: 0;
+}
+
+.factory-campus-scene {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--campus-ground);
+  cursor: grab;
+  touch-action: none;
+}
+
+.factory-campus-scene[data-dragging] {
+  cursor: grabbing;
+}
+
+/* The camera moves by one transform: a flight on the spring, a drag or the
+   wheel at once. */
+.factory-campus-camera {
+  transform-origin: 0 0;
+  transition: transform var(--duration-shape) var(--spring);
+}
+
+.factory-campus-camera[data-instant] {
+  transition: none;
+}
+
+.factory-campus-building,
+.factory-campus-container,
+.factory-campus-blueprint {
+  cursor: pointer;
+  outline: none;
+}
+
+/* A building lifts a little under the pointer, and opening it drops its
+   walls and lifts its roof off onto the line inside. */
+.factory-campus-lift {
+  transition: transform var(--duration-hover) ease;
+}
+
+.factory-campus-building:hover > .factory-campus-lift {
+  transform: translateY(-3px);
+}
+
+.factory-campus-shell,
+.factory-campus-upper,
+.factory-campus-sign {
+  transition:
+    opacity var(--duration-fast) ease,
+    transform var(--duration-shape) var(--spring);
+}
+
+.factory-campus-building[data-open] .factory-campus-shell,
+.factory-campus-building[data-open] .factory-campus-sign {
+  opacity: 0;
+}
+
+.factory-campus-building[data-open] .factory-campus-upper {
+  opacity: 0;
+  transform: translateY(-48px);
+}
+
+.factory-campus-inside {
+  animation: factory-campus-inside var(--duration-fast) ease backwards;
+}
+
+@keyframes factory-campus-inside {
+  from {
+    opacity: 0;
+  }
+}
+
+.factory-campus-blueprint:hover,
+.factory-campus-blueprint:focus-visible,
+.factory-campus-blueprint[data-hot] {
+  filter: brightness(1.35);
+}
+
+/* What is pointed at is edged faintly, what is selected in the selection's
+   signal, and what the keyboard is on in the focus ring. */
+.factory-campus-edge polygon,
+polygon.factory-campus-edge {
+  fill: none;
+  stroke: var(--luke-color-text);
+  stroke-opacity: 0.4;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.factory-campus-edge[data-edge="selected"] polygon,
+polygon.factory-campus-edge[data-edge="selected"] {
+  stroke: var(--campus-selection);
+  stroke-opacity: 1;
+  stroke-width: 2;
+}
+
+.factory-campus-building:focus-visible .factory-campus-shell,
+.factory-campus-container:focus-visible {
+  outline: none;
+  filter: drop-shadow(0 0 1px var(--luke-color-focus-ring));
+}
+
+.factory-campus-route {
+  fill: none;
+  stroke: var(--luke-color-text-subtle);
+  stroke-width: 1.6;
+  stroke-dasharray: 4 3;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.factory-campus-route[data-selected] {
+  stroke: var(--campus-selection);
+}
+
+/* A layer switched off: its signs and containers go, and a building's
+   windows lit by it go out rather than vanish. */
+.factory-campus-scene[data-hide-planned] [data-layer="planned"],
+.factory-campus-scene[data-hide-building] [data-layer="building"]:not(.factory-campus-lit),
+.factory-campus-scene[data-hide-shipped] [data-layer="shipped"],
+.factory-campus-scene[data-hide-defects] [data-layer="defects"]:not(.factory-campus-lit),
+.factory-campus-scene[data-hide-failed] [data-layer="failed"]:not(.factory-campus-lit) {
+  display: none;
+}
+
+.factory-campus-scene[data-hide-building] .factory-campus-lit[data-layer="building"],
+.factory-campus-scene[data-hide-defects] .factory-campus-lit[data-layer="defects"],
+.factory-campus-scene[data-hide-failed] .factory-campus-lit[data-layer="failed"] {
+  fill: var(--campus-unlit);
+  stroke: none;
+  opacity: 1;
+  filter: none;
+}
+
+/* A glow is a blur only in a small campus at night, close in; a big one
+   glows by a stroke the drawing gives it, since a blur on every window is
+   what costs a busy campus its frames. */
+.factory-campus-scene[data-glow] .factory-campus-lit,
+.factory-campus-scene[data-glow] .factory-campus-glow,
+.factory-campus-scene[data-glow] .factory-campus-pulse {
+  filter: url(#factory-campus-glow-filter);
+}
+
+/* Loops, each answering --loop-motion after its own shorthand (which would
+   reset it), so reduced motion and a capture run hold them still; they rest
+   while the campus is off screen, and a big campus or one far out is a still
+   frame, its smoke drawn standing. */
+.factory-campus-smoke,
+.factory-campus-pulse,
+.factory-campus-flag,
+.factory-campus-belt {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.factory-campus-smoke {
+  animation: factory-campus-smoke 4.8s linear infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+.factory-campus-smoke:nth-child(2) {
+  animation-delay: -0.96s;
+}
+
+.factory-campus-smoke:nth-child(3) {
+  animation-delay: -1.92s;
+}
+
+.factory-campus-smoke:nth-child(4) {
+  animation-delay: -2.88s;
+}
+
+.factory-campus-smoke:nth-child(5) {
+  animation-delay: -3.84s;
+}
+
+.factory-campus-pulse {
+  animation: factory-campus-pulse 1.6s ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+.factory-campus-flag {
+  animation: factory-campus-flag 2.2s ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+  transform-origin: left center;
+}
+
+.factory-campus-belt {
+  animation: factory-campus-belt 0.6s linear infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+.factory-campus-scene[data-big]
+  :is(.factory-campus-pulse, .factory-campus-flag, .factory-campus-belt),
+.factory-campus-scene[data-detail="far"]
+  :is(.factory-campus-pulse, .factory-campus-flag, .factory-campus-belt) {
+  animation: none;
+}
+
+.factory-campus-scene[data-resting]
+  :is(.factory-campus-smoke, .factory-campus-pulse, .factory-campus-flag, .factory-campus-belt) {
+  animation-play-state: paused;
+}
+
+@keyframes factory-campus-smoke {
+  0% {
+    transform: translate(0, 0) scale(0.5);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate(-22px, -64px) scale(2.1);
+    opacity: 0;
+  }
+}
+
+@keyframes factory-campus-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes factory-campus-flag {
+  50% {
+    transform: skewY(-6deg) scaleX(0.92);
+  }
+}
+
+@keyframes factory-campus-belt {
+  to {
+    stroke-dashoffset: -6;
+  }
+}
+
+/* Names hang over the campus at one size whatever the zoom: each scales by
+   the camera's inverse, `--campus-k`, which the camera writes. */
+.factory-campus-names {
+  pointer-events: none;
+}
+
+.factory-campus-name rect {
+  fill: var(--luke-color-overlay);
+  stroke: var(--luke-color-border-strong);
+}
+
+.factory-campus-name text {
+  fill: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+}
+
+.factory-campus-painted text {
+  fill: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
+}
+
+/* The layout switch stands in the bottom-left corner, on the chrome's
+   ground. */
+.factory-campus-layout {
+  position: absolute;
+  bottom: var(--luke-space-12);
+  left: var(--luke-space-12);
+  padding: var(--luke-space-2);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-menu-radius);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 12px 32px var(--luke-color-shadow-soft);
+}
+
 /* Automations ---------------------------------------------------------------- */
 
 /* A window-wide place beside the sidebar, as Factory is: its toolbar, then

@@ -195,7 +195,7 @@ function Page({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_FACTORY, () => {
     if (backOut.current?.() !== true) left += 1;
   });
-  return createElement(FactoryWorldPage, { tasks, entry: ENTRY, backOut });
+  return createElement(FactoryWorldPage, { tasks, scene: { world: ENTRY }, backOut });
 }
 
 /** Draws the page over `registry`, answering the redraw that draws it again with another control. */

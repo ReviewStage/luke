@@ -38,6 +38,8 @@ export const PICK_KIND = {
   PLANNED: "planned",
   /** A defect, by its id at the monitor. */
   DEFECT: "defect",
+  /** A listed task, by its id: the campus draws one as a building; no world does. */
+  TASK: "task",
 } as const;
 
 export type PickKind = (typeof PICK_KIND)[keyof typeof PICK_KIND];

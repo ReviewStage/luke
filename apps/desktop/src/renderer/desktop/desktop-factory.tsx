@@ -44,6 +44,7 @@ import { AttentionMark } from "../attention-mark";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
+import { FACTORY_CAMPUS } from "../factory-world/registry";
 import { FactoryWorldPage } from "../factory-world/world-page";
 import { useFactoryWorlds, WorldPicker } from "../factory-world/world-picker";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
@@ -104,11 +105,11 @@ import { useRowKeys } from "./use-row-keys";
  * fades in; nothing else moves, and the times count on with the window's
  * minute. ↑ and ↓ move through the rows from the window itself, as on Home,
  * and Return opens the one reached. Escape leaves it for the task it stood
- * over, and so does any row of the sidebar. The toolbar's picker, where the
- * build offers a world, shows one of the Factory's worlds in the board's
- * place (`../factory-world/`); the board is its first entry and what the
- * page opens on, and Escape in a world steps back to its overview before it
- * leaves. Until the plan list is read the line stands in blocks, its
+ * over, and so does any row of the sidebar. The toolbar's picker shows the
+ * campus or one of the Factory's worlds in the board's place
+ * (`../factory-world/`); the board is its first entry and what the page
+ * opens on, and Escape in the campus or a world steps back to its overview
+ * before it leaves. Until the plan list is read the line stands in blocks, its
  * stations named and holding placeholder rows in a row's own shape, so the
  * rows land where the blocks stood; a list that could not be read says so
  * with Retry, above the line where an earlier read still stands, and with
@@ -895,13 +896,13 @@ export function DesktopFactory({ tasks }: { tasks: TasksControl }): React.JSX.El
   const state = lineState(tasks, empty);
   return (
     <div ref={setRoot} className="factory-pages">
-      {worlds.chosen !== undefined ? (
+      {worlds.chosen !== undefined || worlds.campus ? (
         <section className="factory-view" aria-label="Factory">
           {toolbar}
           <FactoryWorldPage
-            key={worlds.chosen.key}
+            key={worlds.chosen?.key ?? FACTORY_CAMPUS}
             tasks={tasks}
-            entry={worlds.chosen}
+            scene={worlds.chosen === undefined ? { campus: true } : { world: worlds.chosen }}
             backOut={backOut}
           />
         </section>
