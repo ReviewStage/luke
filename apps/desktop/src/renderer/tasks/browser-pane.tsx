@@ -77,6 +77,42 @@ const PROBES = 8;
 /** Less than this, in square CSS pixels, covers nothing: a visually hidden region's one pixel. */
 const NO_AREA = 4;
 
+/**
+ * The properties an animation of the side panel moves or cuts the body with:
+ * its slide and its uncovering (`pane-motion.tsx`), and any change of place
+ * or size. Note that the panel animates others too, its scrollbars fading in
+ * as it is scrolled or hovered among them, which move nothing and must not
+ * put the page out of sight, or each turn of the wheel over it would.
+ */
+const MOTION_PROPERTIES: ReadonlySet<string> = new Set([
+  "transform",
+  "translate",
+  "scale",
+  "rotate",
+  "clipPath",
+  "width",
+  "height",
+  "inset",
+  "top",
+  "right",
+  "bottom",
+  "left",
+]);
+
+/** Whether an animation moves or cuts what it plays on, by the properties its keyframes name. */
+function isMotion(animation: Animation): boolean {
+  const effect = animation.effect;
+  if (effect === null || !("getKeyframes" in effect)) return false;
+  // SAFETY: an effect with keyframes is a KeyframeEffect, whose getKeyframes the check above found.
+  const keyframes = (effect as KeyframeEffect).getKeyframes();
+  return keyframes.some((frame) => Object.keys(frame).some((key) => MOTION_PROPERTIES.has(key)));
+}
+
+/** Whether the side panel the body stands in is sliding, growing, or being uncovered now. */
+function panelMoving(element: Element): boolean {
+  return (element.closest(".side-panel")?.getAnimations() ?? []).some(isMotion);
+}
+
 /** How many frames running the body must stand still and uncovered before the view is laid over it, so a pass of motion is not chased. */
 const SETTLED_FRAMES = 2;
 
@@ -231,8 +267,7 @@ function useViewPlacing(
       const element = body.current;
       if (element === null || leaving) return;
       const box = element.getBoundingClientRect();
-      const moving =
-        !sameBox(last, box) || (element.closest(".side-panel")?.getAnimations().length ?? 0) > 0;
+      const moving = !sameBox(last, box) || panelMoving(element);
       last = box;
       const free = !moving && box.width > 0 && box.height > 0 && !coveredAt(element, box);
       settled = free ? settled + 1 : 0;

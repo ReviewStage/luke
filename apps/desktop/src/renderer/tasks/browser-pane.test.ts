@@ -405,3 +405,37 @@ test("a still caught as the tab was left never hides the page once the tab is dr
     payload: { browserId: first.browserId, bounds: BODY },
   });
 });
+
+/** An animation as the side panel reports it running, of the properties its keyframes name. */
+function running(...properties: string[]): Animation {
+  const frame = Object.fromEntries(properties.map((property) => [property, "0"]));
+  // SAFETY: the pane reads an animation's keyframes alone, which this one answers.
+  return { effect: { getKeyframes: () => [frame, frame] } } as unknown as Animation;
+}
+
+test("the panel's scrollbars fading in as the page is scrolled leave the page standing, and only the panel sliding gives way to a still", async () => {
+  const doors = main();
+  const clock = frames();
+  const tab = mount("https://example.com/");
+  await act(async () => undefined);
+  // The tab stands in the side panel, whose running animations it reads.
+  tab.container.classList.add("side-panel");
+  let animations: Animation[] = [];
+  Object.defineProperty(tab.container, "getAnimations", { value: () => animations });
+  laidOut(tab.body(), BODY);
+  hitTest(tab.body);
+  await clock.run(3);
+  const placed = doors.sent.length;
+
+  animations = [running("scrollbarColor")];
+  await clock.run(6);
+  assert.deepEqual(doors.kinds().slice(placed), [], "the page stays laid over the body");
+
+  animations = [running("transform")];
+  await clock.run(3);
+  assert.deepEqual(doors.kinds().slice(placed), [ACT_KIND.BROWSER_CAPTURE, ACT_KIND.BROWSER_PLACE]);
+  assert.deepEqual(doors.sent.at(-1), {
+    kind: ACT_KIND.BROWSER_PLACE,
+    payload: { browserId: tab.browserId, bounds: null },
+  });
+});
