@@ -215,24 +215,6 @@ blockquote.markdown-quote > * + * {
   border-top: 1px solid var(--markdown-edge);
 }
 
-/* A button that reads as a link (`replay-card.tsx`'s way to the full
-   transcript) wears an underlined TextLink's line: the words' own ink over a
-   thin underline in a faint wash of it, full strength under the pointer or
-   the keyboard. */
-.text-link {
-  border-radius: 2px;
-  color: inherit;
-  text-decoration-line: underline;
-  text-decoration-color: color-mix(in srgb, currentColor 32%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.24em;
-  transition: text-decoration-color var(--duration-hover) ease;
-}
-
-.text-link:is(:hover, :focus-visible) {
-  text-decoration-color: currentColor;
-}
-
 /* An address the window opens nothing for, a file's say: the same line,
    dotted, with the address as its hint. */
 .text-link-inert {
