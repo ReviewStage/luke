@@ -270,3 +270,19 @@ test("a task item emptied above its nested checklist is saved as a checkbox and 
   reopened.editor.commands.insertContent("again");
   assert.equal(reopened.handedOver(), "- [ ] again\n  - [ ] nested\n");
 });
+
+test("a list mixing bullets and task items opens editable, untouched byte for byte, and an edit to a task item changes its line alone", () => {
+  const text = "## Notes\n\n- one\n- two\n\n- [x] test\n- [ ] &nbsp;\n\nAfter.\n";
+  const { host, editor, handedOver } = opened(text);
+
+  assert.equal(host.querySelector("[data-raw-block]"), null);
+  assert.equal(host.querySelectorAll('input[type="checkbox"]').length, 2);
+  assert.equal(handedOver(), text);
+
+  let end = 0;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.text === "test") end = pos + node.nodeSize;
+  });
+  editor.chain().setTextSelection(end).insertContent(" again").run();
+  assert.deepEqual(changedLines(text, handedOver()), ["-- [x] test", "+- [x] test again"]);
+});
