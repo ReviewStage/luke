@@ -186,6 +186,10 @@
     opacity: 0;
   }
 
+  .luke-nav-item-count[data-tone="accent"] {
+    color: var(--luke-color-accent-text);
+  }
+
   .luke-nav-item:is(:hover, :focus-visible) .luke-nav-item-count[data-shown="on-hover"] {
     opacity: 1;
   }
