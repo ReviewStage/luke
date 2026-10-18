@@ -52,8 +52,8 @@ const CARDS = ".sidebar-task";
 /** A column of cards. */
 const COLUMNS = "[data-issue-column]";
 
-/** The board's own scroller, which scrolls sideways (`issues-page.tsx`). */
-const BOARD_SCROLLER = ".issue-board-scroll";
+/** The board itself, which its page scrolls sideways (`issues-page.tsx`). */
+const BOARD = ".issue-board";
 
 /** How each arrow moves: across the columns, or down a column. */
 const ARROW_MOVE = {
@@ -84,25 +84,32 @@ function reached(
   return undefined;
 }
 
+/** The nearest box around the board that scrolls sideways: its page's scroll. */
+function sidewaysScroller(board: HTMLElement): HTMLElement | undefined {
+  for (let box = board.parentElement; box !== null; box = box.parentElement) {
+    const overflow = getComputedStyle(box).overflowX;
+    if (overflow === "auto" || overflow === "scroll") return box;
+  }
+  return undefined;
+}
+
 /**
- * Keeps the column a card stands in whole inside the board's scroller, its
- * inset to spare, scrolling only that scroller (the renderer's rule against
- * `scrollIntoView`). Note that a focus scrolls a card in only where none of
- * it shows, so a column half past the edge would hold the keyboard half
- * unseen.
+ * Keeps the column a card stands in whole inside the page's sideways
+ * scroll, the board's inset to spare, scrolling only that scroller (the
+ * renderer's rule against `scrollIntoView`). Note that a focus scrolls a
+ * card in only where none of it shows, so a column half past the edge
+ * would hold the keyboard half unseen.
  */
 function keepColumnInView(card: HTMLElement): void {
   const column = card.closest<HTMLElement>(COLUMNS);
-  const scroller = column?.closest<HTMLElement>(BOARD_SCROLLER);
-  if (column === null || column === undefined || scroller === null || scroller === undefined) {
-    return;
-  }
-  const inset = Number.parseFloat(getComputedStyle(scroller).paddingLeft) || 0;
-  const left =
-    column.getBoundingClientRect().left -
-    scroller.getBoundingClientRect().left +
-    scroller.scrollLeft -
-    inset;
+  const board = column?.closest<HTMLElement>(BOARD);
+  if (board === null || board === undefined) return;
+  const scroller = sidewaysScroller(board);
+  if (column === null || column === undefined || scroller === undefined) return;
+  // Note that the scroll's content starts where the scroller does, less how far it has scrolled, and the board stands the page's inset in from there.
+  const start = scroller.getBoundingClientRect().left - scroller.scrollLeft;
+  const inset = board.getBoundingClientRect().left - start;
+  const left = column.getBoundingClientRect().left - start - inset;
   const right = left + column.offsetWidth + 2 * inset;
   if (left < scroller.scrollLeft) scroller.scrollLeft = left;
   else if (right > scroller.scrollLeft + scroller.clientWidth) {
