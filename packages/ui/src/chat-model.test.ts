@@ -25,7 +25,7 @@ const AGENT = "00000000-0000-4000-8000-0000000000a2";
 const LUKE = "00000000-0000-4000-8000-0000000000a3";
 const MARIA = "00000000-0000-4000-8000-0000000000a4";
 const AGENT_ID = "00000000-0000-4000-8000-0000000000b1";
-const PLAN_ID = "00000000-0000-4000-8000-0000000000c1";
+const TASK_ID = "00000000-0000-4000-8000-0000000000c1";
 
 const GENERAL: ChatChannel = {
   id: "general",
@@ -37,7 +37,7 @@ const PLAN: ChatChannel = {
   id: "plan",
   kind: CHANNEL_KIND.PLAN,
   name: "invites",
-  planId: PLAN_ID,
+  planId: TASK_ID,
   archived: false,
 };
 const TOPIC: ChatChannel = {
@@ -73,7 +73,7 @@ const NAMES: ChatNames = {
       },
     ],
   ]),
-  plans: new Map([[PLAN_ID, "Teammate invitations"]]),
+  plans: new Map([[TASK_ID, "Teammate invitations"]]),
   selfName: "Dean Stratakos",
 };
 
@@ -118,7 +118,7 @@ function chatOf(readSeq: number, messages: readonly ChatMessage[]): ChatAnswer {
     members: [
       { id: ME, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false },
       { id: AGENT, kind: MEMBER_KIND.AGENT, handle: "agent-2", agentId: AGENT_ID, left: false },
-      { id: LUKE, kind: MEMBER_KIND.PLANNER, handle: "luke", planId: PLAN_ID, left: false },
+      { id: LUKE, kind: MEMBER_KIND.LUKE, handle: "luke", planId: TASK_ID, left: false },
       { id: MARIA, kind: MEMBER_KIND.HUMAN, handle: "maria", left: false },
     ],
     channels: [WITH_AGENT, TOPIC, OLD, PLAN, WITH_MARIA, GENERAL],
@@ -241,7 +241,7 @@ test("a channel reads as its roots in the order posted, each with its thread's r
   );
 });
 
-test("a line names an agent by its title, a plan's planner as Luke, the reader by their own name, and anyone else by their handle", () => {
+test("a line names an agent by its title, a task's Luke as Luke, the reader by their own name, and anyone else by their handle", () => {
   const chat = chatOf(0, []);
   assert.deepEqual(
     [AGENT, LUKE, ME, MARIA].map((id) => {

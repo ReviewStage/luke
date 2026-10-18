@@ -2,6 +2,7 @@ import {
   BUTTON_VARIANT,
   ButtonLink,
   MARK_PROVIDER,
+  Pagination,
   ProviderMark,
   PUBLIC_PAGE_WIDTH,
   PublicPage,
@@ -20,7 +21,6 @@ import {
   CHANGELOG_VIEW,
   type ChangelogView,
   changelogPagePath,
-  changelogPagerItems,
   changelogReleasePath,
   parseReleases,
   type Release,
@@ -117,40 +117,6 @@ function ReleaseEntry({ release }: { readonly release: Release }): React.JSX.Ele
    line up with what they page through; on one column there is no rail to clear. */
 const UNDER_NOTES = "ml-[calc(8.5rem+2.5rem)] pt-4 max-[640px]:ml-0";
 
-const PAGER_ITEM =
-  "inline-flex h-7 min-w-7 items-center justify-center rounded-md px-2 font-mono text-xs text-muted-foreground no-underline transition-colors duration-150 hover:bg-muted hover:text-foreground motion-reduce:transition-none";
-const PAGER_CURRENT =
-  "inline-flex h-7 min-w-7 items-center justify-center rounded-md border border-border bg-muted px-2 font-mono text-xs font-semibold text-foreground";
-const PAGER_IDLE =
-  "inline-flex h-7 min-w-7 items-center justify-center px-2 font-mono text-xs text-muted-foreground opacity-40";
-
-/** A step to the page or release beside this one, or the arrow alone, dimmed, at either end. */
-function PagerStep({
-  href,
-  rel,
-  label,
-  children,
-}: {
-  readonly href: string | undefined;
-  readonly rel: "prev" | "next";
-  /** What the step opens, for a step whose glyph alone says only which way it points. */
-  readonly label: string | undefined;
-  readonly children: React.ReactNode;
-}): React.JSX.Element {
-  if (href === undefined) {
-    return (
-      <span aria-hidden="true" className={PAGER_IDLE}>
-        {children}
-      </span>
-    );
-  }
-  return (
-    <a aria-label={label} className={PAGER_ITEM} href={href} rel={rel}>
-      {children}
-    </a>
-  );
-}
-
 /** The changelog's pages as numbers, the current one held, with a step to either side. */
 function PageNumbers({
   page,
@@ -161,37 +127,16 @@ function PageNumbers({
 }): React.JSX.Element | null {
   if (pageCount < 2) return null;
   return (
-    <nav aria-label="Changelog pages" className={`${UNDER_NOTES} flex items-center gap-1`}>
-      <PagerStep
-        href={page > 1 ? changelogPagePath(page - 1) : undefined}
-        rel="prev"
-        label="Newer page"
-      >
-        ←
-      </PagerStep>
-      {changelogPagerItems(page, pageCount).map((number, index) =>
-        number === undefined ? (
-          <span key={`gap-${index}`} className={PAGER_IDLE}>
-            …
-          </span>
-        ) : number === page ? (
-          <span key={number} aria-current="page" className={PAGER_CURRENT}>
-            {number}
-          </span>
-        ) : (
-          <a key={number} className={PAGER_ITEM} href={changelogPagePath(number)}>
-            {number}
-          </a>
-        ),
-      )}
-      <PagerStep
-        href={page < pageCount ? changelogPagePath(page + 1) : undefined}
-        rel="next"
-        label="Older page"
-      >
-        →
-      </PagerStep>
-    </nav>
+    <div className={UNDER_NOTES}>
+      <Pagination
+        label="Changelog pages"
+        previous={page > 1 ? { href: changelogPagePath(page - 1), label: "Newer page" } : undefined}
+        next={
+          page < pageCount ? { href: changelogPagePath(page + 1), label: "Older page" } : undefined
+        }
+        pages={{ current: page, count: pageCount, href: changelogPagePath }}
+      />
+    </div>
   );
 }
 
@@ -204,22 +149,29 @@ function ReleaseSteps({
   readonly older: Release | undefined;
 }): React.JSX.Element {
   return (
-    <nav aria-label="Releases" className={`${UNDER_NOTES} flex items-center justify-between gap-4`}>
-      <PagerStep
-        href={newer === undefined ? undefined : changelogReleasePath(newer.version)}
-        rel="prev"
-        label={newer === undefined ? undefined : `Newer release, v${newer.version}`}
-      >
-        {newer === undefined ? "←" : `← v${newer.version}`}
-      </PagerStep>
-      <PagerStep
-        href={older === undefined ? undefined : changelogReleasePath(older.version)}
-        rel="next"
-        label={older === undefined ? undefined : `Older release, v${older.version}`}
-      >
-        {older === undefined ? "→" : `v${older.version} →`}
-      </PagerStep>
-    </nav>
+    <div className={UNDER_NOTES}>
+      <Pagination
+        label="Releases"
+        previous={
+          newer === undefined
+            ? undefined
+            : {
+                href: changelogReleasePath(newer.version),
+                label: `Newer release, v${newer.version}`,
+                text: `v${newer.version}`,
+              }
+        }
+        next={
+          older === undefined
+            ? undefined
+            : {
+                href: changelogReleasePath(older.version),
+                label: `Older release, v${older.version}`,
+                text: `v${older.version}`,
+              }
+        }
+      />
+    </div>
   );
 }
 
