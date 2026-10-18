@@ -194,6 +194,12 @@ let inboxRefused = false;
 let automationsRefused = false;
 /** Whether the Inbox's reads are still out, answering nothing yet. */
 let inboxHeld = false;
+/** Whether the automations' reads are still out, answering nothing yet. */
+let automationsHeld = false;
+/** Whether the members read is held until the test answers it with `answerMembers`. */
+let membersHeld = false;
+/** Answers the held members read with the fixture's members. */
+let answerMembers: () => void = () => undefined;
 /** Every text the page asked the window to copy, in order. */
 let copied: string[] = [];
 
@@ -201,6 +207,8 @@ beforeEach(() => {
   inboxRefused = false;
   automationsRefused = false;
   inboxHeld = false;
+  automationsHeld = false;
+  membersHeld = false;
   copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   window.localStorage.clear();
@@ -210,6 +218,14 @@ beforeEach(() => {
         request.kind === ACT_KIND.CODING_AGENTS_INBOX ||
         request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX;
       if (inbox && inboxHeld) return new Promise(() => undefined);
+      if (request.kind === ACT_KIND.AUTOMATIONS_LIST && automationsHeld) {
+        return new Promise(() => undefined);
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && membersHeld) {
+        return new Promise((resolve) => {
+          answerMembers = () => resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
+        });
+      }
       if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
       }
@@ -322,6 +338,13 @@ function sections(page: HTMLElement): Record<string, string[]> {
 
 function head(page: HTMLElement): string[] {
   return [...page.querySelectorAll(".person-head p")].map((line) => line.textContent ?? "");
+}
+
+/** What each placeholder on the page says it is waiting on, in order. */
+function waits(page: HTMLElement): string[] {
+  return [...page.querySelectorAll('[role="status"][aria-busy="true"]')].map(
+    (region) => region.textContent ?? "",
+  );
 }
 
 function button(page: HTMLElement, text: string): HTMLButtonElement {
@@ -582,7 +605,52 @@ test("automations that could not be read leave the Inbox still being read saying
 
   assert.match(page.textContent ?? "", /Their automations could not be read\./u);
   // The Inbox still being read stands as its own wait beside the automations' failure.
-  assert.equal(page.querySelectorAll('.person-column .luke-spinner[role="status"]').length, 1);
+  assert.deepEqual(waits(page), ["Reading your inbox…"]);
+  assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
+});
+
+test("while the Inbox and the automations are read, placeholder rows stand for each, never a spinner", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  inboxHeld = true;
+  automationsHeld = true;
+  const { page } = mount("user-sam");
+  await settle();
+
+  assert.deepEqual(waits(page), ["Reading your inbox…", "Reading their automations…"]);
+  assert.equal(page.querySelector(".luke-spinner"), null);
+  assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
+});
+
+test("a page opened by a member's id alone stands a placeholder head while the members are read, never Someone not in this workspace", async () => {
+  membersHeld = true;
+  const { page } = mount("user-sam");
+  await settle();
+
+  assert.deepEqual(waits(page), ["Reading who they are…"]);
+  assert.doesNotMatch(page.textContent ?? "", /Someone|Not in this workspace/u);
+
+  answerMembers();
+  await settle();
+
+  assert.deepEqual(waits(page), []);
+  assert.deepEqual(head(page), ["Sam Ortiz", "Member · sam@example.com"]);
+});
+
+test("while the task list is read, placeholder rows stand for their tasks and the page is never called empty", async () => {
+  const { page } = mountWith({ listRead: false }, "user-sam");
+  await settle();
+
+  assert.deepEqual(waits(page), ["Reading their tasks…"]);
+  assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
+});
+
+test("a task list that could not be read says so and offers Retry, never calling the page empty", async () => {
+  const { page } = mountWith({ listRead: false, listFailed: true }, "user-sam");
+  await settle();
+
+  assert.match(page.textContent ?? "", /Their tasks could not be read\./u);
+  assert.ok(button(page, "Retry"));
+  assert.deepEqual(waits(page), []);
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
 });
 
