@@ -560,6 +560,28 @@ test("the Issues page's sidebar row and its command stand only while the account
   assert.equal(opens, 2);
 });
 
+test("the side panel's toggle stands over the Issues list once an issue has been peeked there, as over the Inbox once an item is chosen", async () => {
+  const control = tasksControl();
+  const toggles = (container: HTMLElement) =>
+    [...container.querySelectorAll("button")].some((button) =>
+      ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
+    );
+  handState(experimentsOn(EXPERIMENT.ISSUES));
+  const unpeeked = mount(false, false, { issuesView: { ...control.issuesView, open: true } });
+  await settle();
+  const before = toggles(unpeeked);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const peeked = mount(false, false, {
+    issuesView: { ...control.issuesView, open: true, peeked: "issue-1" },
+  });
+  await settle();
+
+  assert.equal(before, false, "nothing peeked, no panel to show");
+  assert.equal(toggles(peeked), true);
+});
+
 test("the Automations page's sidebar row and its command stand only while the account has its experiment on", async () => {
   handState({});
   const off = mount(false);
