@@ -92,18 +92,6 @@
   /* The floating layers are `--luke-z-*`. Nothing inside the window's stage
      reaches them, since the stage is one stacking context under them all;
      inside it, the whiteboard is a stacking context of its own (`tasks.css`). */
-  /* The window's own names for roles `@luke/ui` now sets, kept while callers
-     still in flight move onto the shared names. */
-  --list-gap: var(--luke-list-gap);
-  --menu-glyph: var(--luke-menu-glyph);
-  --menu-shadow: var(--luke-menu-shadow);
-  --reading-width: var(--luke-page-measure);
-  --desktop-sidebar: var(--luke-color-sidebar);
-  --desktop-well: var(--luke-color-well);
-  --z-menu: var(--luke-z-menu);
-  --z-dialog: var(--luke-z-dialog);
-  --z-tooltip: var(--luke-z-tooltip);
-  --z-toast: var(--luke-z-toast);
 }
 
 /* In full screen macOS hides the traffic lights, so the title bar's buttons
