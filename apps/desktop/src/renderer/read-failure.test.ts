@@ -16,6 +16,7 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "@luke/host/acts";
+import { SIDEBAR_OVERLAY } from "@luke/panel/desktop/sidebar-collapse";
 import { PANEL_TAB } from "@luke/panel/panel-tabs";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -27,7 +28,6 @@ import { afterEach, beforeEach, test } from "vitest";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { DesktopInbox } from "./desktop/desktop-inbox";
 import { DesktopSidebar } from "./desktop/desktop-sidebar";
-import { SIDEBAR_OVERLAY } from "./desktop/sidebar-collapse";
 import { ApiKeysSection } from "./settings/api-keys-section";
 import { WorkspacePage } from "./settings/workspace-page";
 import { AgentChangesTab } from "./tasks/agent-changes-tab";

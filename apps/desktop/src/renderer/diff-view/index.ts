@@ -14,6 +14,7 @@ import {
   sameLook,
   sameNotes,
 } from "@luke/panel/diff-view/contract";
+import { type Highlighting, startHighlighting } from "@luke/panel/diff-view/highlight-pool";
 import { FIND_SHADOW_ATTRIBUTE } from "@luke/panel/find-matches";
 import { DIFF_FONT, DIFF_LAYOUT, DIFF_LINE_HEIGHT } from "@luke/settings/diff-view";
 import {
@@ -28,6 +29,7 @@ import {
   type File as PierreFile,
   FileDiff as PierreFileDiff,
   type PostRenderPhase,
+  parsePatchFiles,
   type SelectedLineRange,
 } from "@pierre/diffs";
 import { adoptShadowStyles } from "./inline-styles";
@@ -43,9 +45,19 @@ import { adoptShadowStyles } from "./inline-styles";
  * the File tab's two GitHub themes (`@luke/host`'s `task-code.ts`) until
  * another is, each taken as the system's appearance changes, and runs its
  * grammars on its JavaScript engine, since the panel's policy admits no
- * WebAssembly. Pierre's worker pool is not used: one file is drawn at a
- * time, on the window's own thread, and the policy admits a worker only
- * from a `blob:`.
+ * WebAssembly.
+ *
+ * A list's files are highlighted off the window's thread, in Pierre's own
+ * pool of workers (`listHighlighting`): the build bundles Pierre's worker
+ * whole as one classic script and hands this bundle its text
+ * (`DIFF_HIGHLIGHT_WORKER`), which each worker is started from as a
+ * `blob:`, the one place the policy admits a worker from. A file is drawn
+ * in plain text until its colours come back, and each file's patch is read
+ * under a name of its own (`readPatch`), so the pool's cache hands a file
+ * scrolled back into view its colours again rather than highlighting it
+ * anew. Where no worker can start, or the build carried none, as under a
+ * test, Pierre highlights on the window's own thread, as one diff alone
+ * always does.
  *
  * Pierre draws in a shadow root of its own. The panel's diff tints reach it
  * through the `--diffs-*` properties a sheet adopted there sets from the
@@ -109,6 +121,13 @@ const LIGATURES = { ON: "'liga' 1, 'calt' 1", OFF: "'liga' 0, 'calt' 0" } as con
 
 /** The longest line, in characters, whose changed words are marked; a longer one is tinted whole. */
 const MAX_LINE_DIFF_LENGTH = 1000;
+
+/**
+ * The text of the worker a list's files are highlighted in, set by the
+ * build (`scripts/build.mjs`); a run that never went through the bundler
+ * has none.
+ */
+declare const DIFF_HIGHLIGHT_WORKER: string | undefined;
 
 /** The attribute a list's file wears while it is drawn as its notes alone. */
 const LEAD_ATTRIBUTE = "data-lead";
@@ -222,6 +241,61 @@ function sharedOptions(drawn: DiffLook) {
   } as const satisfies FileDiffOptions<string, undefined>;
 }
 
+/** The worker's text the build set; none where nothing built this bundle. */
+function highlightWorkerText(): string | undefined {
+  try {
+    // SAFETY: esbuild replaces this free identifier when it bundles the
+    // renderer; a run that never went through the bundler has no such
+    // global, and reading one throws rather than answering undefined.
+    return DIFF_HIGHLIGHT_WORKER;
+  } catch {
+    return undefined;
+  }
+}
+
+let kept: Highlighting | undefined;
+
+/**
+ * How a list's files are highlighted (`@luke/panel/diff-view/highlight-pool`),
+ * started the first time a list is drawn and kept for the window's life,
+ * since a next list would only load the same grammars and themes again:
+ * each worker started from the text the build carried, as a `blob:`.
+ */
+function listHighlighting(drawn: DiffLook): Highlighting {
+  if (kept !== undefined) {
+    // A list drawn after the settings changed hands the kept pool its own look.
+    kept.follow(drawn);
+    return kept;
+  }
+  const text = highlightWorkerText();
+  const address =
+    text === undefined
+      ? undefined
+      : URL.createObjectURL(new Blob([text], { type: "text/javascript" }));
+  const startWorker =
+    address === undefined ? undefined : () => new Worker(address, { name: "diff-highlight" });
+  kept = startHighlighting(startWorker, drawn, MAX_LINE_DIFF_LENGTH);
+  return kept;
+}
+
+/** How many patches the list has read, which names each read in the pool's cache. */
+let patchesRead = 0;
+
+/**
+ * A file's patch read under a name of its own, which the pool keeps its
+ * colours by, so a patch read again, a file whose patch changed, is never
+ * handed the colours of the one before; one that does not read as a single
+ * file's patch is refused, as `getSingularPatch` refuses it.
+ */
+function readPatch(patch: string): FileDiffMetadata {
+  patchesRead += 1;
+  const files = parsePatchFiles(patch, String(patchesRead)).flatMap((each) => each.files);
+  const [file] = files;
+  if (file === undefined || files.length !== 1)
+    throw new Error("A list's patch reads as one file.");
+  return file;
+}
+
 /** Pierre's options for one patch: a whole file's, or an excerpt with nothing said of the lines around it. */
 function optionsOf(props: DiffViewProps): FileDiffOptions<string, undefined> {
   return {
@@ -288,7 +362,7 @@ function leadPatchOf(path: string): FileDiffMetadata {
 function patchOf(file: DiffListFile): FileDiffMetadata {
   if (file.lead) return leadPatchOf(file.path);
   try {
-    return getSingularPatch(file.patch);
+    return readPatch(file.patch);
   } catch {
     const path = file.path;
     return getSingularPatch(`diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n`);
@@ -418,7 +492,9 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   const commentable = (path: string) => drawnFiles.get(path)?.file.lead === false;
   const optionsFor = (next: DiffListProps) =>
     listOptions(next.look, () => latest, dress, commentable);
-  const view = new CodeView<string, undefined>(optionsFor(props));
+  const highlighting = listHighlighting(props.look);
+  const { pool } = highlighting;
+  const view = new CodeView<string, undefined>(optionsFor(props), pool);
   view.setup(host);
   view.setItems(itemsOf(props.files));
   view.render(true);
@@ -447,6 +523,10 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       const was = latest;
       latest = next;
       typeset(host, next.look);
+      if (!sameLook(next.look, was.look)) {
+        // A look the pool's workers do not hold yet is handed them first, since the pool's colours stand over the list's own.
+        highlighting.follow(next.look);
+      }
       if (
         !sameLook(next.look, was.look) ||
         (next.onComment === undefined) !== (was.onComment === undefined)

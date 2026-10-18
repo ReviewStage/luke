@@ -1,7 +1,7 @@
+import { FoldingButton } from "@luke/panel/folding-button";
 import { useOpenFeedback } from "@luke/panel/open-feedback";
 import type { Experiment } from "@luke/settings";
 import { MessageSquareIcon } from "lucide-react";
-import { FoldingButton } from "./folding-button";
 
 /**
  * experiment-marks.tsx -- what an experiment's page wears in its toolbar: the Experimental tag after its title, and Send feedback among its actions.

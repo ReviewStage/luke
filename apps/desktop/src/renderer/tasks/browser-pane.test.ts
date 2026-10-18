@@ -3,12 +3,12 @@
 import assert from "node:assert/strict";
 import { BROWSER_STEP, type BrowserKey, type BrowserPage } from "@luke/features/browser-acts";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import type { OpenBrowser } from "@luke/panel/tasks/use-side-panel";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { BrowserPane } from "./browser-pane";
-import type { OpenBrowser } from "./use-side-panel";
 
 /**
  * A Browser tab as the developer meets it: a bar that opens what they type,

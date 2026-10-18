@@ -8,7 +8,9 @@ import {
   type TerminalSummary,
   type TerminalsAnswer,
 } from "@luke/features/terminal-wire";
+import { ActionMenu } from "@luke/panel/desktop/action-menu";
 import type { FloatingBox } from "@luke/panel/desktop/hover-pane";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   CloseIcon,
   ConfirmDialog,
@@ -21,6 +23,7 @@ import {
   List,
   ListRow,
   PlusIcon,
+  ScrollArea,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -29,8 +32,6 @@ import {
 } from "@luke/ui";
 import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
-import { ActionMenu } from "../desktop/action-menu";
-import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject } from "./agent-ref";
 import { agentStillWriting } from "./coding-agent-model";
 import { AgentGlyph } from "./tab-look";
@@ -99,18 +100,20 @@ function ShellsSkeleton(): React.JSX.Element {
   return (
     <div className="terminal-shells-wait">
       <SkeletonRegion label={READING_SHELLS}>
-        <div className="terminal-shells-rows">
-          <List label="Shell list" density={LIST_DENSITY.COMPACT}>
-            {SKELETON_ROWS.map(({ name, detail }) => (
-              <ListRow
-                key={name}
-                leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_GLYPH} />}
-                title={<Skeleton width={name} />}
-                description={<Skeleton width={detail} />}
-              />
-            ))}
-          </List>
-        </div>
+        <ScrollArea>
+          <div className="terminal-shells-rows">
+            <List label="Shell list" density={LIST_DENSITY.COMPACT}>
+              {SKELETON_ROWS.map(({ name, detail }) => (
+                <ListRow
+                  key={name}
+                  leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_GLYPH} />}
+                  title={<Skeleton width={name} />}
+                  description={<Skeleton width={detail} />}
+                />
+              ))}
+            </List>
+          </div>
+        </ScrollArea>
       </SkeletonRegion>
     </div>
   );
@@ -146,19 +149,21 @@ function ListedShells({
 }): React.JSX.Element {
   if (listed.terminals.length === 0) return <p className="terminal-shells-none">No shells.</p>;
   return (
-    <div className="terminal-shells-rows">
-      <List label="Shell list" density={LIST_DENSITY.COMPACT}>
-        {listed.terminals.map((shell) => (
-          <ShellRow
-            key={shell.id}
-            shell={shell}
-            shown={shell.id === session.shell}
-            surfaceOpen={surfaceOpen}
-            session={session}
-          />
-        ))}
-      </List>
-    </div>
+    <ScrollArea>
+      <div className="terminal-shells-rows">
+        <List label="Shell list" density={LIST_DENSITY.COMPACT}>
+          {listed.terminals.map((shell) => (
+            <ShellRow
+              key={shell.id}
+              shell={shell}
+              shown={shell.id === session.shell}
+              surfaceOpen={surfaceOpen}
+              session={session}
+            />
+          ))}
+        </List>
+      </div>
+    </ScrollArea>
   );
 }
 

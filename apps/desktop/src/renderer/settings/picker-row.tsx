@@ -1,3 +1,4 @@
+import { type MenuRow, SearchableMenu } from "@luke/panel/searchable-menu";
 import { ChangedMark } from "@luke/panel/settings/marks";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
@@ -12,7 +13,6 @@ import {
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { type RefObject, useId, useLayoutEffect, useRef, useState } from "react";
-import { type MenuRow, SearchableMenu } from "../searchable-menu";
 
 /**
  * picker-row.tsx -- the one control a settings row picks a value with: a chip naming the value, and the app's own menu under it.

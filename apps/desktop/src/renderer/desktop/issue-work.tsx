@@ -1,13 +1,13 @@
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import type { Issue } from "@luke/features/issue-wire";
 import type { TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
+import type { MenuAction } from "@luke/panel/desktop/action-menu";
+import { InlineRef } from "@luke/panel/inline-ref";
 import { ComposeIcon, DocumentIcon, INLINE_REF_LOOK } from "@luke/ui";
 import { BotIcon } from "lucide-react";
 import { createContext, useContext } from "react";
-import { InlineRef } from "../inline-ref";
 import { pullRequestNumberLabel } from "../tasks/coding-agent-model";
 import { PullRequestMark } from "../tasks/pull-request-mark";
-import type { MenuAction } from "./action-menu";
 
 /**
  * issue-work.tsx -- the work an issue is taken up in: its Start task…, and the tasks started from it, as its page lists them.

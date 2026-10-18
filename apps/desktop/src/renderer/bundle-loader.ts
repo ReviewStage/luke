@@ -1,5 +1,6 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { DiffViewModule } from "@luke/panel/diff-view/contract";
+import type { FactorySceneModule } from "@luke/panel/factory-world/contract";
 import type { WorldModule } from "@luke/panel/factory-world/world";
 import type { FileTreeModule } from "@luke/panel/file-tree/contract";
 import type { PlanEditorModule } from "@luke/panel/plan-editor/contract";
@@ -11,7 +12,6 @@ import { Effect } from "effect";
 import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { createContext, useCallback, useContext } from "react";
-import type { FactorySceneModule } from "./factory-world/contract";
 import type { WorldEntry } from "./factory-world/registry";
 
 /**

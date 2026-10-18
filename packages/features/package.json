@@ -16,6 +16,8 @@
     "./issue-wire": "./src/issue-wire.js",
     "./issue-view": "./src/issue-view.js",
     "./avatar-grant": "./src/avatar-grant.js",
+    "./sentry-reporting": "./src/sentry-reporting.js",
+    "./sentry-tracing": "./src/sentry-tracing.js",
     "./video-avatar": "./src/video-avatar.js",
     "./board-text": "./src/board-text.js",
     "./image-signature": "./src/image-signature.js",
@@ -119,6 +121,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@sentry/core": "11.7.0",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

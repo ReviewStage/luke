@@ -16,15 +16,44 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { paneTiming } from "@luke/panel/desktop/pane-motion";
+import { TabStrip } from "@luke/panel/desktop/tab-strip";
 import {
   EDGE_SIDE,
   type ResizableEdgeProps,
   useResizableEdge,
 } from "@luke/panel/desktop/use-resizable-edge";
+import { FindScope } from "@luke/panel/find-in-tab";
 import { drawnVisibly, focusSeek } from "@luke/panel/focus-seek";
+import { type MenuRow, MenuRowList } from "@luke/panel/searchable-menu";
 import { SpinnerRegion } from "@luke/panel/spinner";
+import {
+  GLYPH_STATE,
+  type GlyphState,
+  glyphStateWords,
+  stateEndMark,
+} from "@luke/panel/state-glyph";
 import { PullRequestsOnGitHub } from "@luke/panel/tasks/use-open-link";
+import {
+  type DrawnTabs,
+  drawsChanges,
+  drawsSubagent,
+  drawsTerminal,
+  type FileHistoryStep,
+  type FixedSidePanelTab,
+  isPinnable,
+  type OpenBrowser,
+  type OpenFile,
+  PULL_REQUEST_VIEW,
+  type PullRequestView,
+  SIDE_PANEL_TAB,
+  SIDE_PANEL_TABS,
+  SIDE_PANEL_WIDTH,
+  type SidePanelControl,
+  type SidePanelTab,
+} from "@luke/panel/tasks/use-side-panel";
+import { Tooltip } from "@luke/panel/tooltip";
 import { useCapability, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -35,6 +64,8 @@ import {
   ErrorState,
   ExpandIcon,
   IconButton,
+  SCROLL_SIZE,
+  ScrollArea,
   SidePanelIcon,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -71,11 +102,7 @@ import {
   useState,
 } from "react";
 import { CallTabVideo } from "../call/panel-avatar";
-import { useCopyLinkItem } from "../copy-link-item";
-import { FindScope } from "../find-in-tab";
 import { panelTabPlace } from "../links-at-hand";
-import { type MenuRow, MenuRowList } from "../searchable-menu";
-import { GLYPH_STATE, type GlyphState, glyphStateWords, stateEndMark } from "../state-glyph";
 import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab";
 import { AgentPullRequestTab } from "../tasks/agent-pull-request-tab";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
@@ -112,24 +139,6 @@ import {
 import type { TranscriptReader } from "../tasks/use-agent-transcript";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import {
-  type DrawnTabs,
-  drawsChanges,
-  drawsSubagent,
-  drawsTerminal,
-  type FileHistoryStep,
-  type FixedSidePanelTab,
-  isPinnable,
-  type OpenBrowser,
-  type OpenFile,
-  PULL_REQUEST_VIEW,
-  type PullRequestView,
-  SIDE_PANEL_TAB,
-  SIDE_PANEL_TABS,
-  SIDE_PANEL_WIDTH,
-  type SidePanelControl,
-  type SidePanelTab,
-} from "../tasks/use-side-panel";
-import {
   type TaskConversation,
   type WorkTurnRow,
   type WorkWorkerBlock,
@@ -140,7 +149,6 @@ import {
   workFailed,
   workRowsOf,
 } from "../tasks/work-model";
-import { Tooltip } from "../tooltip";
 import {
   type AddEntry,
   AddTabButton,
@@ -154,7 +162,6 @@ import {
   useTranscriptCopier,
   type WorkerStandings,
 } from "./strip-tabs";
-import { TabStrip } from "./tab-strip";
 
 /**
  * side-panel.tsx -- the open task's side panel at the window's right: its toggle, its tabs and their "+", its full-screen button, the tab shown, and the edge it is resized by.
@@ -976,18 +983,20 @@ function PanelTabs({
  */
 function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Element {
   return (
-    <div className="side-panel-no-tabs">
-      <div className="side-panel-no-tabs-line">
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          No tabs open
-        </Text>
+    <ScrollArea size={SCROLL_SIZE.CONTENT}>
+      <div className="side-panel-no-tabs">
+        <div className="side-panel-no-tabs-line">
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            No tabs open
+          </Text>
+        </div>
+        <MenuRowList
+          label="Open a tab"
+          rows={entries.map((entry) => entry.row)}
+          onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
+        />
       </div>
-      <MenuRowList
-        label="Open a tab"
-        rows={entries.map((entry) => entry.row)}
-        onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
-      />
-    </div>
+    </ScrollArea>
   );
 }
 
@@ -999,10 +1008,9 @@ interface SidePanelTranscript {
   reveal?: { readonly call: string; readonly onRevealed: () => void } | undefined;
 }
 
-/** What the brain wrote and ran on the open task's calls, and whether a call still stands. */
+/** What the brain wrote and ran on the open task's calls. */
 interface SidePanelWork {
   conversation: TaskConversation;
-  callLive: boolean;
   onLoadEarlier: () => Promise<void>;
   /** Reads a brain's worker's session past a cursor, as an agent's worker's tab reads its own, the task standing in the agent's place. */
   readWorker: TranscriptReader;
@@ -1588,7 +1596,6 @@ function TabContent({
           region={transcript.region}
           onRetry={transcript.onRetry}
           conversation={work.conversation}
-          callLive={work.callLive}
           onLoadEarlier={work.onLoadEarlier}
           onOpenSubagent={onOpenSubagent}
           onOpenTarget={onOpenTarget}
@@ -1873,7 +1880,7 @@ export function SidePanel({
   // Every subagent the task's work holds, and those with a tab open, each
   // with its session, in the order started and the strip's order; a
   // delegated worker's tab stands while its agent's does.
-  const workRows = workRowsOf(work.conversation, work.callLive);
+  const workRows = workRowsOf(work.conversation);
   const workers = taskWorkers(workRows);
   const { held: drawnTranscripts, standings } = views;
   const subagents = drawnSubagents(panel.subagents, workRows, standings, drawnTranscripts, {

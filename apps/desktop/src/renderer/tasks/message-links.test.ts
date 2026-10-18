@@ -13,6 +13,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { LinkWorkspaceProvider } from "@luke/panel/copy-link-item";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { newestToastSays } from "@luke/panel/testing/toast";
@@ -24,7 +25,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { LinkWorkspaceProvider } from "../copy-link-item";
 import { AgentTab } from "./agent-tab";
 import {
   agentMessagePlace,

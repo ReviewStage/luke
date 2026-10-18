@@ -49,6 +49,7 @@ import {
   turnRows,
 } from "@luke/features/turn-rows";
 import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
+import { GLYPH_STATE, type GlyphState, glyphStateWords } from "@luke/panel/state-glyph";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -73,7 +74,6 @@ import {
 } from "@luke/wire";
 import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
-import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph";
 import {
   changesSidebar,
   remoteCallOf,

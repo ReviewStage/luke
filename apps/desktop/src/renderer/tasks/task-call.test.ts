@@ -42,7 +42,6 @@ function callTab(
   return createElement(TaskCall, {
     onRetry: () => undefined,
     conversation: undefined,
-    callLive: false,
     onLoadEarlier: () => Promise.resolve(),
     onOpenSubagent: () => undefined,
     shown: true,
@@ -122,7 +121,7 @@ test("a stop names the subagent it stopped by that subagent's job, a start in an
   );
 
   const container = mounted(
-    callTab({ region: said(0), conversation: conversationOf([started, stopping]), callLive: true }),
+    callTab({ region: said(0), conversation: conversationOf([started, stopping]) }),
   );
   const row = (id: string) => container.querySelector(`[data-call-id="${id}"]`)?.textContent;
   assert.match(row("c1") ?? "", /Stopped subagent\s*Read the styling setup\./u);
@@ -165,9 +164,7 @@ test("a finished spoken turn is one folded line under the line that asked for it
     { startedAt: 60_000, endedAt: 67_000, asked: ["row-ask"] },
   );
 
-  const container = mounted(
-    callTab({ region, conversation: conversationOf([ended]), callLive: false }),
-  );
+  const container = mounted(callTab({ region, conversation: conversationOf([ended]) }));
   const fold = container.querySelector("[data-turn-fold]");
   assert.ok(fold);
   assert.equal(fold.textContent, "1 tool call");
@@ -227,9 +224,7 @@ test("the look around a call opens with, a spoken turn no line asked for, stands
     { startedAt: 95_000, endedAt: 103_000, origin: TURN_ORIGIN.SPOKEN },
   );
 
-  const container = mounted(
-    callTab({ region, conversation: conversationOf([explore]), callLive: true }),
-  );
+  const container = mounted(callTab({ region, conversation: conversationOf([explore]) }));
   const fold = container.querySelector("[data-turn-fold]");
   assert.ok(fold);
   assert.equal(fold.textContent, "1 tool call");
@@ -287,7 +282,7 @@ test("on the Call tab, a subagent's row hangs its tab's card, its title and how 
   });
   const cards = taskCards({
     agents,
-    workRows: workRowsOf(conversation, false),
+    workRows: workRowsOf(conversation),
     held: NOTHING_HELD,
     chosen: () => false,
     shownCode: [],
@@ -334,7 +329,7 @@ test("on the Call tab, a show_code row says its lines as the Code tab's card say
   const note = "A used invite is refused here.";
   const cards = taskCards({
     agents: codingAgentsControl(),
-    workRows: workRowsOf(conversation, false),
+    workRows: workRowsOf(conversation),
     held: NOTHING_HELD,
     chosen: () => false,
     shownCode: [

@@ -81,7 +81,9 @@ export interface EdgeKit {
  * hands a resolver no lineage, and a root's on its own standing. A session
  * the host does not admit is handed no server, no token, and no skill. Note
  * that a child's `childTasked` fiber outlives the hook that relayed its
- * task, so the worker's turn is not held for it.
+ * task, so the worker's turn is not held for it, and that its failure is
+ * reported to Sentry from the fiber itself, because the runner's own
+ * reporting ends with the hook and eve never sees the fiber.
  */
 export function edgeKit(run: WebAgentRun, root: EdgeRoot): EdgeKit {
   const { host } = root;
@@ -113,7 +115,7 @@ export function edgeKit(run: WebAgentRun, root: EdgeRoot): EdgeKit {
         Effect.gen(function* () {
           yield* host.relayChild(event, session, state);
           if (childTasked !== undefined && event.type === "message.received") {
-            yield* Effect.forkDetach(childTasked(session));
+            yield* Effect.forkDetach(Effect.withErrorReporting(childTasked(session)));
           }
         }),
       );

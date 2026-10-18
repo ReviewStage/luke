@@ -1,4 +1,4 @@
-import type { FactorySceneModule } from "../contract";
+import type { FactorySceneModule } from "@luke/panel/factory-world/contract";
 import { mountScene } from "./scene-host";
 
 /**

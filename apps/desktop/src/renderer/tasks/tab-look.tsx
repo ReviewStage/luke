@@ -1,6 +1,8 @@
 import type { CodingAgentPullRequest, CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import { HarnessMark } from "@luke/panel/harness-marks";
+import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "@luke/panel/state-glyph";
+import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "@luke/panel/tasks/use-side-panel";
 import { AgentPlaceholderIcon, DocumentIcon, PlusIcon } from "@luke/ui";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
@@ -12,11 +14,9 @@ import {
   LaptopIcon,
   MessagesSquareIcon,
 } from "lucide-react";
-import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { agentGlyphState, providerOf } from "./coding-agent-model";
 import { fileLook } from "./file-ref";
 import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark";
-import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel";
 
 /**
  * tab-look.tsx -- how each kind of tab looks wherever it is drawn: its glyph and its name on its tab in either strip, its pin in the sidebar, its row in either "+" menu and the task's summary, and its row in ⌘K.

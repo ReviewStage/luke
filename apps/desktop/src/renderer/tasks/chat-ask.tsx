@@ -10,6 +10,7 @@ import {
   replyWords,
 } from "@luke/features/chat-wire";
 import { type InboxReadResponse, inboxReadResponseSchema } from "@luke/features/inbox-wire";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   BUTTON_SHAPE,
   BUTTON_TYPE,
@@ -27,7 +28,6 @@ import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { Option, Schema } from "effect";
 import { ArrowUpIcon } from "lucide-react";
 import { useState } from "react";
-import { Tooltip } from "../tooltip";
 import { EMPTY_INBOX_DRAFT, type InboxDraft, inboxReply, pressesOf } from "./inbox-model";
 import { ChoiceOptions, choiceOptions, FormFields } from "./inbox-pane";
 

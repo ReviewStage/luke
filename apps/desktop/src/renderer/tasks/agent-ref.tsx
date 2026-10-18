@@ -1,13 +1,13 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
+import { InlineRef } from "@luke/panel/inline-ref";
+import { Tooltip } from "@luke/panel/tooltip";
 import { INLINE_REF_LOOK } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { ActorMark, ActorRef } from "../actor-ref";
 import type { HeldTranscripts } from "../desktop/strip-tabs";
-import { InlineRef } from "../inline-ref";
-import { Tooltip } from "../tooltip";
 import {
   AgentTabCard,
   type CardReading,

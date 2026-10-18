@@ -1,5 +1,9 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import { agentPlace, useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { useMemberDirectory } from "@luke/panel/member-directory";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   LIST_DENSITY,
   LIST_ROW_CURRENT,
@@ -13,11 +17,7 @@ import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/a
 import { agentRow, taskRowName } from "@luke/ui/task-list-model";
 import { useCallback, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { agentPlace, useCopyLinkItem } from "../copy-link-item";
-import { RelativeTime } from "../tasks/relative-time";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
-import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction } from "./action-menu";
 
 /**
  * sidebar-agent.tsx -- an agent an automation started with no task, as a row among the sidebar's tasks.

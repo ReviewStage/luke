@@ -6,6 +6,7 @@ import type { TaskSummary } from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { appCommandOffered, runAppCommand } from "@luke/panel/app-commands";
+import { SIDEBAR_OVERLAY } from "@luke/panel/desktop/sidebar-collapse";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { newestToastSays } from "@luke/panel/testing/toast";
@@ -19,7 +20,6 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { tasksControl } from "#testing/tasks-control";
 import { DesktopSidebar } from "./desktop-sidebar";
-import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
  * task-list-view.test.ts -- the sidebar's Tasks section groups, orders,

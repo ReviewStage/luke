@@ -12,6 +12,7 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ReplyToSelection } from "@luke/panel/tasks/reply-to-selection";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
@@ -32,7 +33,6 @@ import {
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentComposer } from "./agent-composer";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab";
-import { ReplyToSelection } from "./reply-to-selection";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 
 /**

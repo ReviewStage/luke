@@ -1,5 +1,10 @@
 import type { CodingAgentStatus, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { useCopyToast } from "@luke/panel/copy-feedback";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
+import { MenuTab } from "@luke/panel/desktop/tab-strip";
+import { type MenuRow, SearchableMenu } from "@luke/panel/searchable-menu";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
+import { Tooltip } from "@luke/panel/tooltip";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
@@ -16,8 +21,6 @@ import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ListXIcon, PlayIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useCopyToast } from "../copy-feedback";
-import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import type { HeldTranscript } from "../tasks/agent-tab-card";
 import {
   type CopiedTranscript,
@@ -25,9 +28,6 @@ import {
   type TranscriptCopy,
   transcriptMarkdown,
 } from "../tasks/transcript-copy";
-import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction } from "./action-menu";
-import { MenuTab } from "./tab-strip";
 
 /**
  * strip-tabs.tsx -- what the task's column's strip and the side panel's draw alike: a tab with its actions, the "+" after the last tab and the menu it drops, a transcript's copy, and what the agents' tabs last drew.

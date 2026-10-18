@@ -10,6 +10,12 @@ import {
 import { type PaneSlide, usePaneSlide } from "@luke/panel/desktop/pane-motion";
 import type { ReadFolder } from "@luke/panel/file-tree/contract";
 import {
+  FILE_HISTORY_STEP,
+  type FileHistoryStep,
+  type OpenFile,
+} from "@luke/panel/tasks/use-side-panel";
+import { Tooltip } from "@luke/panel/tooltip";
+import {
   ArrowLeftIcon,
   ArrowRightIcon,
   BreadcrumbBar,
@@ -19,7 +25,6 @@ import {
 } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { Fragment, type ReactNode, useCallback, useMemo, useRef, useState } from "react";
-import { Tooltip } from "../tooltip";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
 import { FileMenu } from "./file-menu";
 import type { FileNotes } from "./file-note";
@@ -36,7 +41,6 @@ import {
 } from "./file-tab-model";
 import { FileTreePane } from "./file-tree-pane";
 import { keptListings, type ListFolder, listingOf } from "./folder-listings";
-import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-side-panel";
 
 /**
  * file-view.tsx -- a File tab with the task's repository beside it: one bar across both, the file under it, and the collapsible tree on its right.

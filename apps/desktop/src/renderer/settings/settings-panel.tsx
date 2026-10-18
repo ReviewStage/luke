@@ -1,7 +1,9 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { WindowShortcutSections } from "@luke/panel/settings/shortcuts-page";
 import { UpdatesSection } from "@luke/panel/settings/updates";
 import { useSettingsWrites } from "@luke/panel/settings/writes";
+import type { SettingsSearchInput } from "@luke/panel/settings-search";
 import { EXPERIMENTS, HOST_CAPABILITY, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
@@ -14,7 +16,6 @@ import type {
   UpdateControl,
 } from "@luke/voice/settings-controls";
 import type { ActionResult } from "@luke/wire";
-import type { SettingsSearchInput } from "../settings-search";
 import { AccountSection } from "./account-section";
 import { AppearanceSection } from "./appearance-page";
 import { CodingAgentsPage } from "./coding-agents-page";
@@ -22,7 +23,6 @@ import { ExperimentalPage } from "./experimental-page";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page";
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
-import { WindowShortcutSections } from "./shortcuts-page";
 import { ShortcutSection } from "./voice-keys";
 import { VoiceSection } from "./voice-page";
 import { shownWorkspace, WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";

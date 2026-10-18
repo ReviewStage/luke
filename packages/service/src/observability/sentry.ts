@@ -35,6 +35,9 @@ const UNNAMED_DEPLOYMENT = "development";
 /** Sentry's level for an error a class annotated with Effect's `ErrorReporter.severity`; `error` for the rest, as `effectLayer`'s own reporter does. */
 const SEVERITY_LEVEL = { Fatal: "fatal", Warn: "warning" } as const;
 
+/** How a capture at a promise edge is marked: unhandled, since nothing past the edge was there to handle it. */
+const PROMISE_EDGE_MECHANISM = { type: "luke.promise_edge", handled: false } as const;
+
 /** A scheduled job Sentry's Crons watches, created from its first check-in rather than by hand. */
 export interface CronMonitor {
   readonly slug: string;
@@ -162,6 +165,30 @@ export const sentryReportingLayer: Layer.Layer<never> = Layer.merge(
   ),
   sentryTelemetry,
 );
+
+/**
+ * A service a promise edge stands for its instance's life, with no request
+ * whose answer could carry its failure, so nothing it ends on is discarded.
+ * Once the runner runs it, what ends it is reported through the runtime's
+ * `ErrorReporter`, which captures a failure and a defect and passes over an
+ * interruption. A runner that rejects without running it, as one whose
+ * runtime could not be built does, is captured at the promise. The promise
+ * settles either way, so the edge that stood the service carries on as it
+ * would have without it.
+ */
+export function standReported<E, R>(
+  run: (service: Effect.Effect<never, E, R>) => Promise<never>,
+  service: Effect.Effect<never, E, R>,
+): Promise<void> {
+  let ran = false;
+  const reported = Effect.suspend(() => {
+    ran = true;
+    return Effect.withErrorReporting(service);
+  });
+  return run(reported).catch((error) => {
+    if (!ran) Sentry.captureException(error, { mechanism: PROMISE_EDGE_MECHANISM });
+  });
+}
 
 /** How long a run waits for its closing check-in to leave before it returns anyway. */
 const CHECK_IN_FLUSH_MS = 2_000;

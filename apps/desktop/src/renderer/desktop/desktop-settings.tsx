@@ -5,6 +5,9 @@ import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { appPlatform } from "@luke/panel/app-platform";
+import { LinkWorkspaceProvider, useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { ActionMenu } from "@luke/panel/desktop/action-menu";
+import type { SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
 import { WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
 import { AttentionMark } from "@luke/panel/settings/marks";
 import {
@@ -12,8 +15,18 @@ import {
   settingsPageOf,
   shownSettingsPageGroups,
 } from "@luke/panel/settings/pages";
+import { pageResetControl } from "@luke/panel/settings/reset";
 import { useSettingsWrites } from "@luke/panel/settings/writes";
+import {
+  landOnSettingsRow,
+  type SettingsSearchEntry,
+  SettingsSearchField,
+  SettingsSearchResults,
+  searchSettings,
+  settingsSearchEntries,
+} from "@luke/panel/settings-search";
 import { Shortcut } from "@luke/panel/shortcut";
+import { commandKeyshortcuts } from "@luke/panel/tooltip";
 import { SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
 import {
   SETTINGS_PAGE_GROUP,
@@ -27,11 +40,9 @@ import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
-import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import type { NavigationHistory } from "../navigation-history";
 import { TemplateVersionHistory } from "../settings/plan-template-history";
 import { PlanTemplatePage } from "../settings/plan-template-page";
-import { pageResetControl } from "../settings/reset";
 import {
   SettingsPanel,
   type SettingsPanelProps,
@@ -39,18 +50,7 @@ import {
   voicePageAttention,
 } from "../settings/settings-panel";
 import { shownWorkspace } from "../settings/workspace-page";
-import {
-  landOnSettingsRow,
-  type SettingsSearchEntry,
-  SettingsSearchField,
-  SettingsSearchResults,
-  searchSettings,
-  settingsSearchEntries,
-} from "../settings-search";
-import { commandKeyshortcuts } from "../tooltip";
-import { ActionMenu } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
-import type { SidebarCollapse } from "./sidebar-collapse";
 
 /** What a page's row's right-click menu is called. */
 const PAGE_ACTIONS = "Settings page actions";

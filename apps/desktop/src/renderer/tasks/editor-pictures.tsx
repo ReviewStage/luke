@@ -5,6 +5,8 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { encodeImage } from "@luke/panel/feedback-images";
+import { FoldingButton } from "@luke/panel/folding-button";
+import { PictureBlock } from "@luke/panel/picture-block";
 import type {
   PictureNode,
   PictureNodeDoors,
@@ -19,8 +21,6 @@ import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cac
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FoldingButton } from "../folding-button";
-import { PictureBlock } from "../picture-block";
 import { DOCUMENT_SCROLL_CLASS } from "./document-frame";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures";
 

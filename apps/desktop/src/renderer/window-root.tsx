@@ -11,6 +11,7 @@
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@luke/features/sentry-tracing";
 import type { AppBridge } from "@luke/host/bridge";
 import { installAppBridge } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
@@ -46,10 +47,13 @@ export function mountWindow(surface: ReactNode): void {
 
   // Every window's tracing, as Sentry's Electron guide sets up a renderer;
   // the DSN, release, and environment are main's, which every renderer event
-  // goes through.
+  // goes through. Its reports reach main as requests of their own, which
+  // are never traced (`sentryTracesRequest`).
   Sentry.init({
-    integrations: [Sentry.browserTracingIntegration()],
-    tracesSampleRate: 1.0,
+    integrations: [
+      Sentry.browserTracingIntegration({ shouldCreateSpanForRequest: sentryTracesRequest }),
+    ],
+    tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: eventWithoutAccessTokens,
     beforeSendTransaction: transactionWithoutAccessTokens,
@@ -64,6 +68,14 @@ export function mountWindow(surface: ReactNode): void {
       await Effect.runPromise(appStateFirstRead);
     } catch (error) {
       console.error("The window's state could not be read; nothing is drawn.", error);
+      // A blank window is a failure, so it is sent as an event through this
+      // window's SDK and its filters, not only kept as the console's
+      // breadcrumb. Note that it is captured here rather than through main's
+      // Effect reporter, because providing a reporter layer on this path put
+      // 90 to 130 KB gzipped on every window's first load.
+      Sentry.captureException(error, {
+        mechanism: { type: "auto.electron.renderer.first_read", handled: false },
+      });
       return;
     }
     root.render(

@@ -10,8 +10,8 @@
  * that missed one spelling would send the rest. An event is held to the same
  * rule, since a failed join's error can carry the same URL in its message,
  * and so is a trace, since browser tracing records each request as a span
- * whose description and data carry its URL. Every renderer's page and its
- * preload both report, so both drop them.
+ * whose description and data carry its URL. Every renderer's page, its
+ * preload, and main all report, so all three drop them.
  */
 
 import type { Breadcrumb, ErrorEvent } from "@sentry/electron/renderer";

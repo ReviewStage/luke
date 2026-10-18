@@ -9,10 +9,13 @@ import {
   knownBlock,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
+import { ChatComposer } from "@luke/panel/tasks/chat-composer";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
   Avatar,
+  ScrollArea,
   TEXT_BUTTON_TONE,
   TextButton,
   WingFace,
@@ -37,9 +40,7 @@ import {
 } from "@luke/ui/chat-model";
 import { useState } from "react";
 import { AskCard } from "./chat-ask";
-import { ChatComposer } from "./chat-composer";
 import { LinkBlock } from "./inbox-pane";
-import { RelativeTime } from "./relative-time";
 import { AgentGlyph } from "./tab-look";
 import { TranscriptWords } from "./transcript-blocks";
 
@@ -373,22 +374,24 @@ export function ChatPane({
     return (
       <section className="chat-stream ph-no-capture" aria-label="For you">
         <PlaceHead title="For you" meta={FOR_YOU_META} />
-        <div className="chat-scroll">
-          {entries.length === 0 ? (
-            <p className="chat-empty">{NOTHING_WAITS}</p>
-          ) : (
-            <ol className="chat-messages">
-              {entries.map((entry) => (
-                <ThreadRow
-                  key={entry.message.id}
-                  thread={entry}
-                  where={whereWords(chat, names, entry)}
-                  context={context}
-                />
-              ))}
-            </ol>
-          )}
-        </div>
+        <ScrollArea>
+          <div className="chat-stream-body">
+            {entries.length === 0 ? (
+              <p className="chat-empty">{NOTHING_WAITS}</p>
+            ) : (
+              <ol className="chat-messages">
+                {entries.map((entry) => (
+                  <ThreadRow
+                    key={entry.message.id}
+                    thread={entry}
+                    where={whereWords(chat, names, entry)}
+                    context={context}
+                  />
+                ))}
+              </ol>
+            )}
+          </div>
+        </ScrollArea>
       </section>
     );
   }
@@ -397,22 +400,24 @@ export function ChatPane({
   return (
     <section className="chat-stream ph-no-capture" aria-label={title}>
       <PlaceHead title={title} meta={channelMeta(chat, names, channel)} />
-      <div className="chat-scroll">
-        {threads.length === 0 ? (
-          <p className="chat-empty">{NOTHING_POSTED}</p>
-        ) : (
-          <ol className="chat-messages">
-            {threads.map((thread) => (
-              <ThreadRow
-                key={thread.message.id}
-                thread={thread}
-                where={undefined}
-                context={context}
-              />
-            ))}
-          </ol>
-        )}
-      </div>
+      <ScrollArea>
+        <div className="chat-stream-body">
+          {threads.length === 0 ? (
+            <p className="chat-empty">{NOTHING_POSTED}</p>
+          ) : (
+            <ol className="chat-messages">
+              {threads.map((thread) => (
+                <ThreadRow
+                  key={thread.message.id}
+                  thread={thread}
+                  where={undefined}
+                  context={context}
+                />
+              ))}
+            </ol>
+          )}
+        </div>
+      </ScrollArea>
       {/* Note that the composer is keyed by its channel, so words typed for one are never sent to another. */}
       <ChatComposer
         key={channel.id}

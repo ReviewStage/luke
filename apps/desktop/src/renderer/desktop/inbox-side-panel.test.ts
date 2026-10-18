@@ -24,6 +24,7 @@ import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { useAppKeymap } from "@luke/panel/app-commands";
 import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
+import { type SidePanelControl, useSidePanel } from "@luke/panel/tasks/use-side-panel";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -37,7 +38,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
-import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel";
 import type { InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
 

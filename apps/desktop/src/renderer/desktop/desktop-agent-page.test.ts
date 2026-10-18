@@ -30,6 +30,7 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { runAppCommand } from "@luke/panel/app-commands";
+import { type SidePanelControl, useSidePanel } from "@luke/panel/tasks/use-side-panel";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import {
   DESKTOP_CAPABILITIES,
@@ -55,7 +56,6 @@ import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testi
 import { editorBundleLanded, installEditorLayout, typeInComposer } from "#testing/composer";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { archiveWords } from "../tasks/coding-agent-model";
-import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopAgentPage } from "./desktop-agent-page";
 
@@ -1040,7 +1040,7 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
       chip?.querySelector(".luke-inline-ref-state")?.textContent,
       chip?.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
     ],
-    ["#2905 View commands", "Open", PULL_REQUEST_STATE.OPEN],
+    ["#2905", "Open", PULL_REQUEST_STATE.OPEN],
   );
 });
 

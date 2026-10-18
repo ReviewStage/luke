@@ -32,7 +32,11 @@ import type { DesktopConfig } from "./desktop-config";
 import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
 import { createNativeNode, type NativeNode } from "./native-node";
-import { createTelemetryService, type TelemetryService } from "./telemetry-service";
+import {
+  createTelemetryService,
+  mainErrorReporting,
+  type TelemetryService,
+} from "./telemetry-service";
 import { createUpdateServiceHost, type UpdateServiceHost } from "./update-service-host";
 import { createWindowService, type WindowService } from "./window-service";
 
@@ -65,7 +69,8 @@ export interface DesktopServices {
    * Every act's Effect, run here rather than under a context of its own: the
    * desktop's own `ManagedRuntime` is what `main.ts` disposes, and these are
    * that runtime's own services, read back out of the fiber that is building
-   * this layer rather than assembled apart from it.
+   * this layer rather than assembled apart from it. A defect in one is
+   * reported to Sentry, since many of them are begun and never awaited.
    */
   readonly run: <A>(effect: Effect.Effect<A>) => Promise<A>;
 }
@@ -173,7 +178,7 @@ export function composeDesktop(
       // under them, never under a context of act-router's own.
       const services: Context.Context<never> = yield* Effect.context();
       const run = <A>(effect: Effect.Effect<A>): Promise<A> =>
-        Effect.runPromiseWith(services)(effect);
+        Effect.runPromiseWith(services)(Effect.withErrorReporting(effect, { defectsOnly: true }));
       // Nothing to install without a signed build, a network, and the platform
       // Squirrel serves; the row says so rather than offering a press that could
       // not land, and the document says so from its first version.
@@ -325,5 +330,8 @@ export function composeDesktop(
     // takes its cipher as a seam, so it is constructed before the assembly
     // and begins before it.
     Layer.provideMerge(effectServiceLayer(keychain, config.report)),
+    // Sentry's reporter stands beneath everything, so every fiber the launch
+    // forks and every act `run` begins reports through it.
+    Layer.provideMerge(mainErrorReporting),
   );
 }

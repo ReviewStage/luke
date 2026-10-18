@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
+import { SIDE_PANEL_TAB } from "@luke/panel/tasks/use-side-panel";
 import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
@@ -18,7 +19,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { DesktopTasks } from "../desktop/desktop-tasks";
-import { SIDE_PANEL_TAB } from "./use-side-panel";
 
 /**
  * Where a Browser tab is offered: the side panel's "+" lists New Browser tab

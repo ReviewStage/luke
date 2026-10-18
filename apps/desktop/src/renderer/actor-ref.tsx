@@ -9,7 +9,12 @@ import {
 } from "@luke/features/automation-list-model";
 import type { AutomationSummary } from "@luke/features/automation-wire";
 import { automationNextText, automationOwnerName } from "@luke/panel/desktop/automation-words";
+import { InlineRef } from "@luke/panel/inline-ref";
+import { useActorDoor } from "@luke/panel/person-door";
+import { GLYPH_STATE, type GlyphState, StateGlyph } from "@luke/panel/state-glyph";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -38,12 +43,7 @@ import {
 } from "@luke/ui/actor-model";
 import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { InlineRef } from "./inline-ref";
-import { useActorDoor } from "./person-door";
-import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph";
-import { RelativeTime } from "./tasks/relative-time";
 import { AgentMark } from "./tasks/tab-look";
-import { Tooltip } from "./tooltip";
 
 /**
  * actor-ref.tsx -- whoever did something, drawn one way wherever the window names them: a person on a circle, and Luke, an agent, or an automation by its glyph in a rounded square's box, on a solid tile in a facepile whose faces overlap.

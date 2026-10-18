@@ -8,6 +8,8 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { appBridge } from "@luke/panel/app-bridge";
+import type { OpenBrowser } from "@luke/panel/tasks/use-side-panel";
+import { Tooltip } from "@luke/panel/tooltip";
 import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import {
   ArrowLeftIcon,
@@ -26,8 +28,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { Tooltip } from "../tooltip";
-import type { OpenBrowser } from "./use-side-panel";
 
 /**
  * browser-pane.tsx -- one Browser tab in the side panel: a bar to type an address and step the page, and the page itself, a view main lays over the tab's body.

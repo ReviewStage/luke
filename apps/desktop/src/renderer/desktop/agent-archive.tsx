@@ -1,5 +1,8 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
+import { type CountNoun, SidebarGroupHeader } from "@luke/panel/desktop/sidebar-group-header";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   ArchiveIcon,
   BUTTON_SIZE,
@@ -17,9 +20,6 @@ import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
 import { agentStillWriting, agentTabLabel } from "../tasks/coding-agent-model";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
-import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction } from "./action-menu";
-import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 
 /**
  * agent-archive.tsx -- a coding agent's Archive, asked first while the agent still works, and the task's archived agents folded under Archived at the foot of its summary's Coding agents, each with its Unarchive.

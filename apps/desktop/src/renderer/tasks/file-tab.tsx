@@ -2,8 +2,10 @@ import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { useFindOpen } from "@luke/panel/find-in-tab";
 import { BusyLabel, SpinnerRegion } from "@luke/panel/spinner";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
+import type { OpenFile } from "@luke/panel/tasks/use-side-panel";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ERROR_STATE_PLACEMENT,
@@ -15,7 +17,6 @@ import {
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useFindOpen } from "../find-in-tab";
 import { CodeLineRows, centreWithin } from "./code-pane";
 import { type FileNotes, notesBefore } from "./file-note";
 import {
@@ -32,7 +33,6 @@ import {
   withWindow,
 } from "./file-tab-model";
 import { useMentionDrop, useTaskMentions } from "./task-mentions";
-import type { OpenFile } from "./use-side-panel";
 
 /**
  * file-tab.tsx -- a File tab: one whole file of the open task's repository, opened from a snippet Luke showed, its lines lit and scrolled into view.

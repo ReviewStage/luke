@@ -10,7 +10,8 @@ import { developerSeedItem, type InitialItem } from "./seed.js";
  * will not reach for. Note that the backend keeps the question queue, so
  * every answer is a reason to delegate: it is what keeps the queue the voice
  * asks from current. Note that the call's start is no reason here, because
- * the service sets the backend exploring as the session starts, and a
+ * the service sets the backend exploring as a plan's first call starts, and
+ * takes up the work earlier calls left under way on a call back, and a
  * delegation before the developer's first words waits for them anyway. Note
  * that the goodbye is delegated as it starts rather than after, because the
  * backend's `end_call` then lands while the goodbye plays and the developer's

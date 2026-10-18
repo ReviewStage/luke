@@ -1,4 +1,5 @@
 import { CHECK_SUMMARY } from "@luke/features/coding-agent-wire";
+import { issueAddressOf, pullRequestAddressOf } from "@luke/features/github-repositories-wire";
 import { LINK_PLACE, type LinkPlace, readLink } from "@luke/features/luke-link";
 import {
   decodeMention,
@@ -16,6 +17,7 @@ import {
 } from "@luke/features/mention-link";
 import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
 import { planSections } from "@luke/features/plan-document";
+import { InlineRef } from "@luke/panel/inline-ref";
 import { usePerson } from "@luke/panel/member-directory";
 import type { HeadingsChange, MentionNode } from "@luke/panel/plan-editor/contract";
 import { IssueMark } from "@luke/panel/tasks/issue-mark";
@@ -55,7 +57,6 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { InlineRef } from "../inline-ref";
 import type { LinkDrawer } from "../markdown-message";
 import {
   AutomationChipCard,
@@ -96,9 +97,13 @@ import { AgentMark } from "./tab-look";
  * browser, its card saying its address. A Linear issue's chip, a pull
  * request's, and a GitHub issue's say the state it stands in after their
  * name, a pull request's and a GitHub issue's wearing GitHub's mark for it,
- * and a bare one is called by its key and title, as
- * the workspace's own Linear or GitHub App answers them on the service
- * (`use-link-standing.ts`); its card then says its key and state, and a
+ * as the workspace's own Linear or GitHub App answers them on the service
+ * (`use-link-standing.ts`). A pull request or a GitHub issue GitHub answered
+ * for is then called by its number alone, `#42`, its repository's name
+ * before it where that is not the task's, `relay#42`, whatever words its
+ * link was written with, so a pasted address, an agent's `[@#42](…)`, and
+ * its `[@the fix](…)` draw one chip; a bare Linear issue is called by its
+ * key and title. Its card then says its title, its key and state, and a
  * pull request's its size, who opened it and when, its branches, labels,
  * and counts (`pull-request-card-notes.tsx`), in its address's place,
  * which it says only while its provider has answered nothing. A page an
@@ -552,6 +557,27 @@ function bareName(
   }
 }
 
+/**
+ * What a pull request's or a GitHub issue's chip is called once GitHub
+ * answered for it, whatever words its link was written with: its number,
+ * and its repository's name before it where that is not `repository`, the
+ * task's; nothing for any other mention, or one GitHub answered nothing for.
+ */
+function githubName(
+  mention: Mention,
+  standing: LinkStanding | undefined,
+  repository: string | null,
+): string | undefined {
+  if (mention.kind !== MENTION_KIND.LINK || standing === undefined) return undefined;
+  if (standing.pullRequest === undefined && standing.issue === undefined) return undefined;
+  const address = pullRequestAddressOf(mention.url) ?? issueAddressOf(mention.url);
+  const own =
+    address !== undefined &&
+    repository !== null &&
+    address.repository.toLowerCase() === repository.toLowerCase();
+  return own ? `#${address.number}` : standing.key;
+}
+
 /** A mention in words: its chip, a button that opens what it names where it can, hanging its card. */
 function MentionChip({
   mention,
@@ -575,7 +601,9 @@ function MentionChip({
     taskId: doors.taskId,
     workspace: doors.place.workspace,
   });
-  const name = bareName(mention, written, bare, known, standing);
+  const name =
+    githubName(mention, standing, doors.place.repository) ??
+    bareName(mention, written, bare, known, standing);
   const state = mentionState(mention, doors);
   const press = pressOf(mention, target, state, doors, openLink);
   const card = (
