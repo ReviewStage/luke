@@ -1349,7 +1349,7 @@ ul.actor-stack {
 }
 
 /* A repository's plans under a header in the headings' voice, drawn as a
-   row with the plan rows' own hover: its fold (`sidebar-group-header.tsx`),
+   row with the task rows' own hover: its fold (`sidebar-group-header.tsx`),
    a NavItem whose owner's picture gives way to the chevron, and at the end
    a ⋯ and a + that show while the header is hovered, holds focus, or has
    its menu open. */
