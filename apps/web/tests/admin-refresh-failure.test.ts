@@ -22,11 +22,15 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+type NoticeProps = Parameters<typeof RefreshFailureNotice>[0];
+
 /** A page holding the notice, and a way to draw it again with new props. */
-function mount(): {
-  page: HTMLElement;
-  draw: (props: { failure: string | undefined; refreshing: boolean; onRetry: () => void }) => void;
-} {
+interface Mounted {
+  readonly page: HTMLElement;
+  readonly draw: (props: NoticeProps) => void;
+}
+
+function mount(): Mounted {
   const page = document.createElement("div");
   document.body.append(page);
   const root = createRoot(page);

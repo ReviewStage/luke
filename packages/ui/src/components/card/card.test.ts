@@ -37,7 +37,10 @@ function draw(element: React.ReactElement): HTMLElement {
 test("a card shows what it holds at every padding", () => {
   for (const padding of Object.values(CARD_PADDING)) {
     const container = draw(
-      createElement(Card, { padding }, createElement("button", { type: "button" }, "Try again")),
+      createElement(Card, {
+        padding,
+        children: createElement("button", { type: "button" }, "Try again"),
+      }),
     );
     expect(container.querySelector("button")?.textContent).toBe("Try again");
   }
@@ -46,7 +49,11 @@ test("a card shows what it holds at every padding", () => {
 test("a card's hint is the whole card's, and its element reaches what measures it", () => {
   const ref = createRef<HTMLDivElement>();
   const container = draw(
-    createElement(Card, { title: "Counted since launch", ref }, createElement("p", null, "1,204")),
+    createElement(Card, {
+      title: "Counted since launch",
+      ref,
+      children: createElement("p", null, "1,204"),
+    }),
   );
   const paragraph = container.querySelector("p");
   expect(paragraph?.closest("[title]")?.getAttribute("title")).toBe("Counted since launch");
