@@ -207,6 +207,8 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
   const startIssue = (issue: LinearIssueSummary) => begin(taskNameOfIssue(issue), issue);
   // ⌘L from the card opens the Linear chip's menu, where the chip stands.
   const onCardKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // Note that a key an input method is composing with is its own, Safari's last one (229) among them.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     if (!searchesLinear || starting || !shortcutMatches(LINEAR_CHORD, event)) return;
     event.preventDefault();
     setLinearAsks((asks) => asks + 1);

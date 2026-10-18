@@ -719,6 +719,52 @@ test("typing in the Linear search narrows the issues at once, and once it rests 
   }
 });
 
+test("an issue Linear finds that sorts ahead of the highlighted one leaves the highlight, and Return, on the issue the arrows chose", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const redeploy: LinearIssueSummary = {
+      id: "issue-9",
+      identifier: "ENG-9",
+      title: "Redeploy the docs",
+      url: "https://linear.app/acme/issue/ENG-9",
+    };
+    const dashboard: LinearIssueSummary = {
+      id: "issue-400",
+      identifier: "ENG-400",
+      title: "Deploy dashboard",
+      url: "https://linear.app/acme/issue/ENG-400",
+    };
+    const card = await mount(
+      undefined,
+      undefined,
+      {},
+      [ISSUES[0] ?? assert.fail("the first issue"), redeploy],
+      (ask) => (ask.query === "deploy" ? [dashboard] : []),
+    );
+    await openLinear();
+    search("deploy");
+    await settle();
+    await card.press("ArrowDown", linearSearch());
+    const chosen = issueRows().highlighted;
+    await rest();
+    const answered = issueRows();
+    await card.press("Enter", linearSearch());
+
+    assert.equal(chosen, "Redeploy the docsENG-9");
+    assert.deepEqual(answered, {
+      rows: [
+        "Restack the deploy queueENG-1 · Todo",
+        "Deploy dashboardENG-400",
+        "Redeploy the docsENG-9",
+      ],
+      highlighted: "Redeploy the docsENG-9",
+    });
+    assert.deepEqual(card.fromIssues, ["issue-9"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("a link to an issue pasted in the Linear search asks Linear for that one issue, which is offered first and started by Return", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
@@ -756,14 +802,17 @@ test("Escape closes the Linear search and leaves the card with focus on the chip
   assert.deepEqual(card.starts, []);
 });
 
-test("Command-L from the name field opens the Linear search, and Escape hands focus back to the name", async () => {
+test("Command-L from the name field opens the Linear search, but not while an input method composes, and Escape hands focus back to the name", async () => {
   const card = await mount(undefined, undefined, {}, ISSUES);
+  await card.press("l", card.field(), { metaKey: true, isComposing: true });
+  const whileComposing = document.querySelector(LINEAR_SEARCH);
   await card.press("l", card.field(), { metaKey: true });
   const opened = document.activeElement === linearSearch();
   await card.press("Escape", linearSearch());
 
+  assert.equal(whileComposing !== null, false, "a composing key opens nothing");
   assert.equal(opened, true);
-  assert.equal(document.querySelector(LINEAR_SEARCH), null);
+  assert.equal(document.querySelector(LINEAR_SEARCH) !== null, false, "the search is closed");
   assert.equal(document.activeElement, card.field());
   assert.ok(card.dialog());
 });
@@ -787,7 +836,7 @@ test("opened on one of the workspace's issues, the card says so, starts named by
   assert.equal(card.field().value, "Invites expire");
   assert.equal(document.querySelector(LINEAR_CHIP), null, "no Linear chip is offered");
   await card.press("l", card.field(), { metaKey: true });
-  assert.equal(document.querySelector(LINEAR_SEARCH), null, "Command-L opens nothing");
+  assert.equal(document.querySelector(LINEAR_SEARCH) !== null, false, "Command-L opens nothing");
   await card.press("Enter", card.field());
 
   assert.deepEqual(card.starts, [["Invites expire", "acme/web"]]);

@@ -204,6 +204,12 @@ export function LinearIssueChip({
     setOpen(false);
     setTyped("");
   }
+  // Linear let go while the menu stood closes it too, so its coming back
+  // draws nothing until the chip is pressed again.
+  if (!connected && open) {
+    setOpen(false);
+    setTyped("");
+  }
 
   // Note that whether the menu stands is read through a ref, because an ask
   // is owed to its count alone and one made while it stands changes nothing.
