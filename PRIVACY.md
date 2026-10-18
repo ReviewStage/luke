@@ -1253,8 +1253,12 @@ and error, performance, and agent reports by Sentry.
   its attached files, every call's record, the commands waiting for your Mac with the
   record of when it last read, your own API keys, Luke's record of your
   Linear, Notion, Sentry, and Slack connections, and everything earlier
-  versions left there — and asks PostHog to erase your usage data and
-  recordings, which does not reach a recording never attached to your account.
+  versions left there — and asks PostHog to erase the person it holds for your
+  account with its usage data and recordings, which PostHog queues and carries
+  out shortly after rather than at once, and which does not reach a recording
+  never attached to your account. If PostHog cannot be reached, refuses, or
+  reports that it could not erase them, the account is deleted anyway and
+  PostHog keeps what it holds.
   Luke stops recording for the rest of the session, and starts again the next
   time you open it or sign in. Sentry reporting continues, and what Sentry
   already received is not tied to your account and is not erased with it. Deleting does not affect your Google or GitHub account
