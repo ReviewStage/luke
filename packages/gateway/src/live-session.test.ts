@@ -37,7 +37,7 @@ test("a create request carries the offer and the plan it is about, and nothing e
     taskId,
   });
   assert.equal(parse(voiceCreateLiveSessionParamsSchema, {}), undefined);
-  // Every call is about a plan: an offer about none is refused.
+  // Every call is about a task: an offer about none is refused.
   assert.equal(parse(voiceCreateLiveSessionParamsSchema, { sdp: offer }), undefined);
   assert.equal(parse(voiceCreateLiveSessionParamsSchema, { sdp: "", taskId }), undefined);
   assert.equal(

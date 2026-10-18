@@ -1,5 +1,5 @@
+import { EmptyState, type EmptyStateAction } from "@luke/ui";
 import { SearchXIcon } from "lucide-react";
-import { EmptyState } from "./empty-state";
 
 /**
  * not-found.tsx -- the window's one answer to a place it cannot show: a task, an agent, an automation, or an Inbox item that is not there for whoever opened it.
@@ -33,7 +33,7 @@ export function NotFound({
   action,
 }: {
   thing: NotFoundThing;
-  action?: React.ReactNode;
+  action?: EmptyStateAction | undefined;
 }): React.JSX.Element {
   return (
     <EmptyState icon={<SearchXIcon />} title={NOT_FOUND_TITLE} action={action}>

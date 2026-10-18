@@ -4,10 +4,11 @@ import assert from "node:assert/strict";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import { type CodeLines, TASK_CALL_FAILURE } from "@luke/features/tasks-view";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppPlatform } from "#testing/app-platform";
 import { runAppCommand } from "../app-commands";
 import { PagePane, type ReadPageSource } from "./page-pane";
 
@@ -15,7 +16,7 @@ import { PagePane, type ReadPageSource } from "./page-pane";
  * A page's tab as the developer meets it: the page drawn in a frame that
  * runs its scripts and nothing else, out of the screen recording, at its
  * newest version until they step back through the earlier ones, or its
- * HTML drawn as a File tab draws a file. Synthetic plans and pages
+ * HTML drawn as a File tab draws a file. Synthetic tasks and pages
  * throughout; main's read of a version's source is a door answering each
  * version's HTML as coloured lines.
  */
@@ -46,7 +47,7 @@ function sourceOf(version: number): CodeLines {
 
 const readSource: ReadPageSource = (version) => Promise.resolve({ lines: sourceOf(version) });
 
-/** Mounts the pane over the page as the plan lists it, answering what it draws and a way to list it again. */
+/** Mounts the pane over the page as the task lists it, answering what it draws and a way to list it again. */
 function mount(page: PageLine, read: ReadPageSource = readSource) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -79,6 +80,8 @@ function mount(page: PageLine, read: ReadPageSource = readSource) {
 }
 
 const versionUrl = (version: number) => pageFrameUrl({ taskId: TASK, pageId: FUNNEL.id, version });
+
+beforeEach(() => fakeAppPlatform({ pageFrameUrl }));
 
 test("a page is drawn at its newest version in a frame that runs its own scripts alone, left out of the recording", () => {
   const { container, frame } = mount(FUNNEL);

@@ -52,7 +52,7 @@ code, so **no internal route and no shared secret exist between two deployments.
 
 ## A turn's events are a projection
 
-**The five run seams and nothing wider — a slow step began, a planning turn
+**The five run seams and nothing wider — a slow step began, a brain turn
 queued a question, every action settled, one sentence of the reply, the turn
 ended. No tool part, no reasoning, no message.** A queued question is read off
 its `queue_question` call's input, because that call exists only to hand the

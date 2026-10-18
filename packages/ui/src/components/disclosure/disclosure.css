@@ -1,0 +1,134 @@
+/* disclosure.css -- a fold: its quiet summary row, a chevron turned down
+   while open, then the caller's glyph and words in the caption type, muted
+   until the pointer is over them; its body, in its caller's type, indented
+   past the chevron or flush with the row; and the motion a press plays as
+   the body lands or leaves, which any fold built on `useDisclosureFold`
+   shares. */
+
+@layer components {
+  .luke-disclosure {
+    min-width: 0;
+  }
+
+  .luke-disclosure-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    min-height: var(--luke-control-height);
+    padding: 0 var(--luke-space-4);
+    border-radius: var(--luke-control-radius);
+    color: var(--luke-color-text-muted);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    transition:
+      background-color var(--duration-hover, 0s) ease,
+      color var(--duration-hover, 0s) ease;
+  }
+
+  .luke-disclosure-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  /* A summary's words wrap rather than run past a narrow pane, an unbroken
+     name among them. */
+  .luke-disclosure-summary > :not(svg, .luke-disclosure-turn) {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .luke-disclosure-summary:hover {
+    background: var(--luke-color-fill-strong);
+    color: var(--luke-color-text);
+  }
+
+  /* A desktop row answers a press the way a Mac's list does, without the
+     web's pointing hand. */
+  [data-luke-profile="desktop"] .luke-disclosure-summary {
+    cursor: default;
+  }
+
+  .luke-disclosure-summary > svg,
+  .luke-disclosure-turn > svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+    flex: none;
+  }
+
+  .luke-disclosure-turn {
+    display: flex;
+    flex: none;
+    color: var(--luke-color-text-muted);
+    transition: transform var(--duration-hover, 0s) ease;
+  }
+
+  .luke-disclosure-turn[data-open="true"] {
+    transform: rotate(90deg);
+  }
+
+  .luke-disclosure-body[data-inset] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-4);
+    padding-top: var(--luke-space-4);
+  }
+
+  /* In past the chevron, at the transcript's own indent; a row's own glyph
+     and inset carry its words the rest of the way under the summary's. */
+  .luke-disclosure-body[data-inset="indented"] {
+    margin-left: var(--luke-space-24);
+  }
+
+  .luke-disclosure-body[data-inset="flush"] {
+    padding: var(--luke-space-4);
+  }
+
+  /* A fold a press opens or closes (`use-disclosure.ts`). Its body lands in
+     the layout at once and rides in on the pair an arriving element rides: a
+     fade, and a clip unrolling it from its top edge, on the panes' plain
+     ease-out, since a clip that overshot would cut nothing. Closing, it fades
+     out first and the layout lands once the fade is done. Nothing moves a
+     height, so the words never re-wrap mid-motion, and a body still growing
+     as it streams is unrolled by a fraction of its own box rather than a size
+     it was measured at. Only the press marks the root, so a find opening a
+     fold onto a match, or a row drawn again, appears at once. */
+  [data-disclosure="opening"] > .luke-disclosure-body {
+    animation:
+      luke-disclosure-fade var(--duration-quick, 0s) var(--motion-pane, ease-out) backwards,
+      luke-disclosure-unroll var(--duration-pane, 0s) var(--motion-pane, ease-out) backwards;
+  }
+
+  [data-disclosure="closing"] > .luke-disclosure-body {
+    animation: luke-disclosure-leave var(--duration-exit, 0s) var(--motion-exit, ease-out) forwards;
+    /* Note that the hold waits on every motion the body runs, and a body that
+       held focus would start the scrollbar's own fade as it lost it, so the
+       exit is the one motion it has. */
+    transition: none;
+  }
+
+  @keyframes luke-disclosure-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  /* Note that the clip names both ends, because a clip cannot be interpolated
+     from none: it would flip halfway through instead. */
+  @keyframes luke-disclosure-unroll {
+    from {
+      clip-path: inset(0 0 100% 0);
+    }
+    to {
+      clip-path: inset(0);
+    }
+  }
+
+  @keyframes luke-disclosure-leave {
+    to {
+      opacity: 0;
+    }
+  }
+}

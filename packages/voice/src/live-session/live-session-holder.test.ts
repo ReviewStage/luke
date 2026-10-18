@@ -16,9 +16,9 @@ import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../
 import { LiveSessionHolder } from "./live-session-holder.js";
 
 /**
- * The peer's holder of one hosted planning call, over a scripted source and
+ * The peer's holder of one hosted task call, over a scripted source and
  * sideband. What these hold to is the whole of what the desktop still sends
- * once the exchange is the service's: the plan at creation, the stop, the
+ * once the exchange is the service's: the task at creation, the stop, the
  * hang-up, and the idle report through the source's own door, and nothing on
  * a delegation, a transcript, or an acknowledgment, which are the service's
  * to read.
@@ -91,7 +91,7 @@ function settle() {
 interface Fixture {
   holder: LiveSessionHolder;
   sidebands: FakeSideband[];
-  /** The plan each session was created about, in order. */
+  /** The task each session was created about, in order. */
   tasks: string[];
   changes: VoiceLiveSessionChanged[];
   /** Every idle report the source's door was handed, in order. */
@@ -112,7 +112,7 @@ interface Fixture {
   tellWork(work: TaskWorkFrame): void;
   /** The service's word that Luke is ending the call, as the source's door would deliver it. */
   tellEnding(ending: TaskCallEndingFrame): void;
-  /** Every plan whose call the holder told its caller ended, in order. */
+  /** Every task whose call the holder told its caller ended, in order. */
   callsEnded: string[];
   created: number;
   sourceAvailable: boolean;

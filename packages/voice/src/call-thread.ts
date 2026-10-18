@@ -1,5 +1,5 @@
 /**
- * call-thread.ts -- the Call tab's one thread: what was said on the plan's calls, each planning turn's work placed under the line that asked for it.
+ * call-thread.ts -- the Call tab's one thread: what was said on the task's calls, each brain turn's work placed under the line that asked for it.
  *
  * The thread reads as a coding agent's transcript reads, the way a voice
  * call lands in a chat thread: the developer's lines and Luke's, call after
@@ -49,7 +49,7 @@ interface AskedAt {
   readonly fromMs: number;
 }
 
-/** A planning turn as the thread places it: its key, when it started, the rows of the lines it took as its ask and where each began, whether the voice asked for it, and the turn itself. */
+/** A brain turn as the thread places it: its key, when it started, the rows of the lines it took as its ask and where each began, whether the voice asked for it, and the turn itself. */
 export interface CallTurn<T> {
   readonly key: string;
   readonly startedAt: number;

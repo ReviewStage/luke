@@ -21,6 +21,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl } from "#testing/tasks-control";
 import { OpenFeedbackProvider } from "../open-feedback";
@@ -104,10 +106,7 @@ const QUESTION = "Which Mercury account should payouts draw from: Operating or P
 let root: Root | undefined;
 
 beforeEach(() => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { onMenuCommand: () => () => undefined, recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {
@@ -142,6 +141,8 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
       onOpen: () => opened.inbox.push("inbox"),
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
+      pages: undefined,
+      onRereadPages: () => undefined,
     },
     factoryView: { open: true, onOpen: () => undefined, onClose: () => undefined },
     ...overrides,
@@ -166,7 +167,7 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
   draw(plans);
   /** The same page drawn again with some of its control changed, as a newer read hands it. */
   const redraw = (patch: Partial<TasksControl>) => draw({ ...plans, ...patch });
-  /** The same page drawn again over another read of the plan list. */
+  /** The same page drawn again over another read of the task list. */
   const rerender = (next: readonly TaskSummary[]) =>
     draw({ ...plans, tasks: next, listed: { ...plans.listed, tasks: next } });
   return { page: container, opened, redraw, rerender };
@@ -215,7 +216,7 @@ test("each plan stands in its station, and what waits on the developer leads the
   // A draft with no agents stands nowhere; Talk holds only the task on a call.
   assert.deepEqual(rows(page, "talk"), []);
   assert.equal(
-    page.querySelector('section[data-step="talk"] .factory-idle')?.textContent,
+    page.querySelector('section[data-step="talk"] > p')?.textContent,
     "No task on a call",
   );
   assert.deepEqual(rows(page, "build"), [
@@ -267,14 +268,19 @@ test("the task on the call stands in Talk however old, and with nothing standing
   act(() => root?.unmount());
 
   const { page } = mount([old]);
-  assert.equal(page.querySelector(".empty-state p")?.textContent, "No agents at work");
+  assert.equal(page.querySelector(".luke-empty-state p")?.textContent, "No agents at work");
   assert.equal(page.querySelector("section[data-step]"), null);
-  assert.equal(page.querySelector(".factory-scroll button"), null);
+  assert.deepEqual(
+    [...page.querySelectorAll("button")].filter(
+      (each) => each.closest(".desktop-toolbar") === null,
+    ),
+    [],
+  );
 });
 
 test("until the plan list is read nothing stands, not even the empty state", () => {
   const { page } = mount([], { listRead: false });
-  assert.equal(page.querySelector(".factory-scroll")?.childElementCount, 0);
+  assert.equal(page.querySelector(".factory-board")?.childElementCount, 0);
 });
 
 test("a plan list that could not be read says so, and Retry reads it again", () => {
@@ -288,7 +294,7 @@ test("a plan list that could not be read says so, and Retry reads it again", () 
   });
   const alert = page.querySelector('[role="alert"]');
   assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
-  assert.equal(page.querySelector(".empty-state"), null);
+  assert.doesNotMatch(page.textContent ?? "", /No agents at work/u);
   const retry = [...(alert?.querySelectorAll("button") ?? [])].find(
     (each) => each.textContent === "Retry",
   );
@@ -486,20 +492,17 @@ test("a question a teammate's agent asks, which main does not count as the reade
     postedAt: NOW - HOUR,
     updatedAt: NOW - HOUR,
   };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-        }
-        const value: CodingAgentInboxAnswerView = {
-          items: request.payload.taskId === BILLING.id ? [asked] : [],
-          cursor: "1",
-        };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+      }
+      const value: CodingAgentInboxAnswerView = {
+        items: request.payload.taskId === BILLING.id ? [asked] : [],
+        cursor: "1",
+      };
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
     },
   });
   const { page } = mount([SEARCH, BILLING], {
@@ -522,22 +525,19 @@ test("a question a teammate's agent asks, which main does not count as the reade
 /** The bridge answering a plan's Inbox read as `answer` says, counting the reads. */
 function answerInbox(answer: (planId: string) => readonly InboxItem[] | undefined) {
   const counted = { reads: 0 };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-        }
-        counted.reads += 1;
-        const items = answer(request.payload.taskId);
-        if (items === undefined) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No service." });
-        }
-        const value: CodingAgentInboxAnswerView = { items, cursor: "1" };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+      }
+      counted.reads += 1;
+      const items = answer(request.payload.taskId);
+      if (items === undefined) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No service." });
+      }
+      const value: CodingAgentInboxAnswerView = { items, cursor: "1" };
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
     },
   });
   return counted;
@@ -709,16 +709,7 @@ test("an agent that fails while its row holds the keyboard keeps it, its row now
 
 test("a row's right-click offers Copy link, copying what a press on it opens: its task's link, its question's, its agent's, or its pull request's page", async () => {
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount([DRAFT, SEARCH, BILLING, INVITES], {
     callTaskId: DRAFT.id,
     workspace: {
@@ -786,16 +777,7 @@ test("an agent with no task stands in Build by its automation, opens its own pag
   };
   const pages: string[] = [];
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount([SEARCH], {
     workspace: {
       id: "workspace-personal",

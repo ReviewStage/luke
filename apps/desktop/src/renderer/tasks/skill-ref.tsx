@@ -1,6 +1,6 @@
+import { HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
 import { type SkillOption, skillWord } from "@luke/ui/skill-mention";
 import { BookOpenIcon } from "lucide-react";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { Tooltip } from "../tooltip";
 import { FileTypeIcon } from "./file-type-icon";
 
@@ -11,7 +11,7 @@ import { FileTypeIcon } from "./file-type-icon";
  * drawn: a sent message's chip, the composer's chip, the composer's list,
  * the card, and a coding agent's "Loaded skill" row. Each place that can
  * open the skill's file hangs the one card while the pointer rests on the
- * name, drawn from every card's parts (`hover-card.tsx`) and a plan card's
+ * name, drawn from every card's parts (`@luke/ui`'s `HoverCard`) and a task card's
  * rows (`task-card.tsx`): the skill's mark and name at its head, what it is
  * for under it, and its file's line, named from the repository's root,
  * which says and does not open, since every place hanging the card opens
@@ -22,7 +22,7 @@ import { FileTypeIcon } from "./file-type-icon";
  * agent's tab hangs that tab's card.
  */
 
-/** A skill a place can open: the skill as the plan's repository holds it, and what opens its `SKILL.md`. */
+/** A skill a place can open: the skill as the task's repository holds it, and what opens its `SKILL.md`. */
 export interface SkillSubject {
   readonly skill: SkillOption;
   readonly onOpen: () => void;
@@ -33,8 +33,8 @@ export function SkillCard({ subject }: { subject: SkillSubject }): React.JSX.Ele
   const { skill } = subject;
   return (
     <HoverCard data-skill-card="">
-      <CardHead glyph={<BookOpenIcon aria-hidden="true" />} name={skillWord(skill.name)} />
-      {skill.description === "" ? null : <CardNote>{skill.description}</CardNote>}
+      <HoverCardHead glyph={<BookOpenIcon aria-hidden="true" />} name={skillWord(skill.name)} />
+      {skill.description === "" ? null : <HoverCardNote>{skill.description}</HoverCardNote>}
       <span className="task-card-detail">
         <span className="task-card-glyph">
           <FileTypeIcon name={skill.path} />

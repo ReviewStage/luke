@@ -1,4 +1,3 @@
-import { createHash, randomBytes } from "node:crypto";
 import type { HostedAutomationClient } from "@luke/features";
 import {
   AUTOMATION_CALL_FAILURE,
@@ -17,8 +16,8 @@ import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Schema, type Scope } from "effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import type * as HttpClient from "effect/http/HttpClient";
+import { Base64Url, Hex } from "effect/encoding";
+import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
@@ -55,22 +54,40 @@ const UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
 /** The bytes of randomness in a webhook secret the host mints, as many as the service's own. */
 const WEBHOOK_SECRET_BYTES = 32;
 
+/** A fresh webhook secret: its random bytes as unpadded URL-safe Base64. */
+function mintedWebhookSecret(): string {
+  return Base64Url.encode(crypto.getRandomValues(new Uint8Array(WEBHOOK_SECRET_BYTES)));
+}
+
+/** The secret's SHA-256 as lowercase hex, the one form of it the service holds. */
+function webhookSecretHash(secret: string): Effect.Effect<string> {
+  return Effect.map(
+    Effect.promise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret))),
+    (digest) => Hex.encode(new Uint8Array(digest)),
+  );
+}
+
 export function composeAutomations(
   dependencies: AutomationsDependencies,
-): Effect.Effect<AutomationsComposer, never, Scope.Scope> {
-  return Effect.sync(() => composed(dependencies));
+): Effect.Effect<AutomationsComposer, never, Scope.Scope | HttpClient.HttpClient> {
+  return Effect.gen(function* () {
+    return composed(dependencies, yield* HttpClient.HttpClient);
+  });
 }
 
 /** The composer's one table, built from its seams; nothing here starts anything. */
-function composed(dependencies: AutomationsDependencies): AutomationsComposer {
+function composed(
+  dependencies: AutomationsDependencies,
+  http: HttpClient.HttpClient,
+): AutomationsComposer {
   const { kernel, account, client } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
-  /** The service asked behind the gate, over the ambient fetch client. */
+  /** The service asked behind the gate, over the host's own HTTP client. */
   const asked = <Answer>(
     call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
   ): Effect.Effect<Answer | typeof UNANSWERED> =>
-    gate() ? Effect.provide(call, FetchHttpClient.layer) : Effect.succeed(UNANSWERED);
+    gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
 
   /** The params read against the method's own schema, or the invalid-params refusal worded. */
   const read = <Params>(
@@ -88,7 +105,7 @@ function composed(dependencies: AutomationsDependencies): AutomationsComposer {
         const list = yield* read(
           automationListParamsSchema,
           params,
-          "a list names a plan, a workspace, or neither",
+          "a list names a task, a workspace, or neither",
         );
         return carried<AutomationListView>(yield* asked(client.list(list)));
       }),
@@ -134,11 +151,11 @@ function composed(dependencies: AutomationsDependencies): AutomationsComposer {
         if (!gate()) return carried<AutomationView>(UNANSWERED);
         // Note that the secret is minted here and only its hash leaves for the service, so the
         // service never holds it, and the window that asked is the one place it is answered.
-        const secret = randomBytes(WEBHOOK_SECRET_BYTES).toString("base64url");
+        const secret = mintedWebhookSecret();
         const replaced = yield* asked(
           client.replaceWebhookSecret({
             automationId: named.automationId,
-            webhookSecretHash: createHash("sha256").update(secret).digest("hex"),
+            webhookSecretHash: yield* webhookSecretHash(secret),
           }),
         );
         return carried<AutomationView>(

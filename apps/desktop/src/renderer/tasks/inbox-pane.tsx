@@ -1,8 +1,11 @@
 import type { FileChip } from "@luke/features/attachment-model";
+import { dictationKeywords } from "@luke/features/dictation-keywords";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
+  INBOX_MESSAGE_AUTHOR,
+  INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   type InboxBlock,
@@ -12,41 +15,53 @@ import {
   type InboxForm,
   type InboxImageBlock,
   type InboxItem,
-  type InboxReadResponse,
-  type InboxReplyKind,
+  type InboxMessage,
   inboxAnswerHeard,
   knownBlock,
   knownResponse,
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
-import { BackIcon, ChevronRightIcon } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  BADGE_TONE,
+  BackIcon,
+  Badge,
+  ChevronRightIcon,
+  DISCLOSURE_BODY,
+  Disclosure,
+  DisclosureBody,
+  DisclosureSummary,
+  ErrorState,
+  FoldingButton,
+  type FoldingButtonHint,
+  FormField,
+  GAP,
+  LAYOUT_ELEMENT,
+  Stack,
+  Switch,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  TextField,
+} from "@luke/ui";
+import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
+import { useClipped } from "@luke/ui/use-clipped";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
-import { ActorLine, ActorRef, AutomationCard } from "../actor-ref";
-import { Message, MessageContent } from "../ai-elements/message";
-import {
-  PROMPT_INPUT_STATUS,
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputTools,
-} from "../ai-elements/prompt-input";
+import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref";
+import { AttentionMark } from "../attention-mark";
 import { useAutomation } from "../automation-directory";
 import { TaskRef } from "../desktop/task-card";
-import { usePerson } from "../member-directory";
+import { useMemberDirectory, usePerson } from "../member-directory";
 import { PictureBlock } from "../picture-block";
-import { ReadFailure } from "../read-failure";
 import { Segmented } from "../segmented";
-import { BusyLabel, SpinnerRegion } from "../spinner";
-import { Switch } from "../switch";
+import { SpinnerRegion } from "../spinner";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
 import {
   AgentActorRef,
   AgentCard,
@@ -54,9 +69,11 @@ import {
   agentSubject,
   NOTHING_HELD,
 } from "./agent-ref";
+import { AttachedFileChips } from "./attached-file-chips";
 import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import type { ReadFileWindow } from "./file-tab";
+import { InboxAnswerBox } from "./inbox-answer-box";
 import {
   CODE_READ,
   CODE_READ_FAILED,
@@ -68,18 +85,26 @@ import {
   INBOX_HOLDER,
   type InboxDraft,
   type InboxHolder,
-  inboxReply,
+  inboxFileChips,
   itemWorkspaceId,
-  pressesOf,
+  NEEDS_YOU,
+  needsReader,
   proposedOptions,
+  readersItem,
   SETTLED_BY,
+  settledAt,
   settlementOf,
+  THREAD_ENTRY,
+  threadCut,
+  threadEntries,
   withChoice,
   withValue,
 } from "./inbox-model";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
 import { RelativeTime } from "./relative-time";
+import { SentWords } from "./skill-chip";
 import { type KindLook, TAB_KIND, tabLook } from "./tab-look";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { useMinute } from "./task-time";
 import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
@@ -89,12 +114,15 @@ import { opensAsLink } from "./use-open-link";
 import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
 
 /**
- * inbox-pane.tsx -- one inbox item at reading size: the agent's question as a message of a thread, everything it offered, and its answer, given in place or as it was given.
+ * inbox-pane.tsx -- one inbox item at reading size: a comment thread under the item's title, the agent's question, everything it offered, and its answer, given in place or as it was given.
  *
- * The pane is drawn from the agent tab's own pieces, so an item reads as
- * one more exchange with its agent: the agent's message
- * (`ai-elements/message.tsx`), its mark, name, and when it asked, then the
- * item's title and the blocks of context the agent wrote, Markdown as the
+ * The item reads as a comment thread, as an issue or a pull request does:
+ * its title leads as the thread's subject, with a muted line under it of
+ * its agent, when it asked, and where it stands, the attention mark on an
+ * item waiting on the developer. Each message under it is a comment, its
+ * writer's face in a column of its own, a line of name and when beside it,
+ * and a line down from the face joining it to the next. The agent's
+ * question comes first: the blocks of context the agent wrote, Markdown as the
  * transcript draws it, its links read under the item's own workspace, its
  * plan's or its agent's, a link as the transcript draws one, opened in the
  * browser where it is a web page, code as the Code tab draws a card
@@ -108,24 +136,36 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
  * message: a choice's options, one perhaps recommended, pressed one at a
  * time or several where the choice allows; a form's fields, each the
  * control Settings draws for its type; nothing for the rest. While the item
- * waits, the agent composer's box (`ai-elements/prompt-input.tsx`) is
+ * waits, the agent composer's box, its card and its field, with its `@`
+ * mentions, its skills, and its microphone (`inbox-answer-box.tsx`), is
  * docked under the thread for the note: an approval, a task, and an item
  * asking nothing are answered by presses in its footer, the one that holds
  * back and the one that goes ahead, as a confirm's are; words, a choice,
  * and a form by the box's own Send. A card whose agent need not hear back
  * says whether its answer will message the agent: a bare press does not, and
  * a typed note does. Once the item is settled,
- * nothing it offered goes: the options, or the presses it was answered by,
- * stand with the developer's pick marked and the rest stepped back, and
- * the developer's reply follows as their own bubble, what they wrote in it
- * and under it what they did, when, and whether the answer reached the
- * agent as a message or was kept for it to read; or the agent's message
- * says it took the item back, and why. A block or a response of a type
+ * what it offered folds to one line saying who picked which, which opens
+ * to the options, or the presses it was answered by, with the developer's
+ * pick marked and the rest stepped back; the developer's answer follows as
+ * their comment, when and whether it reached the agent as a message or was
+ * kept for it to read, then what they picked as a chip and what they
+ * wrote, their note drawn as the agent's tab draws a sent message, its
+ * mentions chips; or the agent's comment says it took the item back, and
+ * why. The thread's messages, a member's or the agent's, written at any
+ * point, stand among these comments in the order they were written, each
+ * by its writer's face and name, its files and its words drawn as an
+ * answer's are; a thread read cut to its latest says the earlier ones are
+ * in the agent's tab. The box stays docked on a settled item too, where it
+ * writes a message on the thread rather than an answer, the next item that
+ * needs the developer offered over it, and the reader's own message is
+ * scrolled into view inside the board as it lands. A block or a response of a type
  * this build does not know, one a newer service wrote, is drawn as a line
  * naming a newer Luke, so the rest still reads. The pane's bar is its
- * path, plan › agent, each crumb drawn as its tab in the plan's column,
+ * path, task › agent, each crumb drawn as its tab in the task's column,
  * opening what it names and hanging the card its sidebar row or tab
- * hangs, after a way back to the list where the item stands alone. Wherever the thread names the agent, its bylines and the line
+ * hangs, after a way back to the list where the item stands alone, and
+ * nothing else that opens the agent, since its name does. Wherever the
+ * thread names the agent, its subject's line, its comments, and the line
  * saying an answer was sent to it, the name is the agent's own reference
  * (`agent-ref.tsx`): its tab's card on hover, its tab on a press, an
  * archived agent's card saying so. Every time shows its moment in the
@@ -136,47 +176,36 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
  * viewer, drawn over the window outside it, is out of it on its own.
  */
 
-/** What the thread says under its item where the plan's inbox could not be read. */
+/** What the thread says under its item where the task's inbox could not be read. */
 const INBOX_FAILED_LINE = "The inbox could not be read.";
 
 /** What a card says of an image whose read did not answer. */
 const IMAGE_FAILED_LINE = "The image could not be read.";
 
-/** What a card's box asks for, by what the item asks; a text's own placeholder stands where the agent wrote one. */
-const NOTE_PLACEHOLDER = {
-  [INBOX_RESPONSE.CHOICE]: "Add a note, or answer in your own words",
-  [INBOX_RESPONSE.APPROVAL]: "Add a note for the agent",
-  [INBOX_RESPONSE.TEXT]: "Your answer",
-  [INBOX_RESPONSE.TODO]: "Add a note for the agent",
-  [INBOX_RESPONSE.FORM]: "Add a note for the agent",
-  [INBOX_RESPONSE.NONE]: "Add a note for the agent",
-} as const;
+/** What an answer says of the files whose read did not answer. */
+const FILES_FAILED_LINE = "Some files could not be read.";
 
 /** What a card says of a block or a response this build does not know. */
 const NEWER_LUKE = {
   BLOCK: "Open this in a newer Luke to see the rest.",
-  RESPONSE: "Answer this in a newer Luke.",
 } as const;
 
-/** How long ago a thread's line says something happened: muted a size down, in tabular figures, as a card's corner says it. */
-const THREAD_TIME_CLASS =
-  "text-[11.5px] whitespace-nowrap text-(color:--text-tertiary) tabular-nums";
-
-/**
- * What the box says on an item whose agent need not hear back: a bare
- * press, Done or Got it, is kept for the agent to read, and a typed note is
- * sent to it as a message, so the line says which the answer will be.
- */
-const QUIET_LINE = {
-  BARE: "Without a note, this won't message the agent.",
-  NOTED: "Your note will be sent to the agent.",
-} as const;
-
-/** What the box's Send is called. */
-const SEND = "Send to agent";
+/** How long ago a thread's line says something happened: in the caption type, quieter still, in tabular figures, as a card's corner says it (`.thread-time`, tasks.css). */
+const THREAD_TIME_CLASS = "thread-time";
 
 /** What the way back from an item standing alone to the list says it does. */
 const BACK_TO_INBOX = "Back to inbox";
+
+/**
+ * The way back's pill, which says where it goes and names Back's chord
+ * whether its word is folded away or not. Note that it drops the folded
+ * label it is handed, because the pill says more than the word does.
+ */
+const BackHint: FoldingButtonHint = ({ children }) => (
+  <Tooltip label={BACK_TO_INBOX} command={APP_COMMAND.BACK}>
+    {children}
+  </Tooltip>
+);
 
 /** A link block: a plain link where it is a web page, as a transcript's links are, else its label with the address beside it to copy. */
 export function LinkBlock({
@@ -198,7 +227,7 @@ export function LinkBlock({
   return (
     <Tooltip label={url}>
       <span className="text-link-inert">
-        {label} <span className="select-text text-muted-foreground">{url}</span>
+        {label} <span className="inbox-link-address">{url}</span>
       </span>
     </Tooltip>
   );
@@ -206,9 +235,9 @@ export function LinkBlock({
 
 /** What a code block reads its lines through and opens its file with. */
 export interface InboxCodeDoors {
-  /** The plan's repository, `owner/name`, which the lines are read through; none where the plan names none. */
+  /** The task's repository, `owner/name`, which the lines are read through; none where the task names none. */
   readonly repository: string | null;
-  /** Reads a window of a file of the plan's repository, as the File tab does. */
+  /** Reads a window of a file of the task's repository, as the File tab does. */
   readonly readFile: ReadFileWindow;
   /** Opens the file in the side panel's File tab at the commit named, the reference's lines lit. */
   readonly onOpenFile: (ref: CodeRef, commit: string) => void;
@@ -218,7 +247,7 @@ export interface InboxCodeDoors {
  * A code block: a card as the Code tab draws one, headed by the path and
  * the lines, the file opened in the File tab at the block's commit from
  * either, and the lines read from GitHub at that commit with a few around
- * them, the block's own lit; lines the plan cannot read say why, and open
+ * them, the block's own lit; lines the task cannot read say why, and open
  * nothing. Note that the read goes through a ref to the
  * latest door, so a parent drawing a fresh door does not read again, and
  * that an answer landing after the block changed or left is dropped.
@@ -268,7 +297,7 @@ function CodeBlock({
         codeRef={codeRef}
         note={undefined}
         copied={shown.kind === CODE_READ.READY ? copiedLines(shown.code) : undefined}
-        // Note that lines the plan does not read open nothing, because the File tab reads the plan's repository alone.
+        // Note that lines the task does not read open nothing, because the File tab reads the task's repository alone.
         onOpen={unread === undefined ? () => code.onOpenFile(codeRef, sha) : undefined}
       />
       {shown.kind === CODE_READ.READY ? (
@@ -276,13 +305,11 @@ function CodeBlock({
       ) : shown.kind === CODE_READ.READING ? (
         <SpinnerRegion label="Loading lines" />
       ) : (
-        <div className="file-tab-notice border-b-0">
+        <div className="file-tab-notice">
           {shown.again ? (
-            <ReadFailure line={shown.line} onRetry={() => setAsked((was) => was + 1)} />
+            <ErrorState onRetry={() => setAsked((was) => was + 1)}>{shown.line}</ErrorState>
           ) : (
-            <p className="m-0" role="alert">
-              {shown.line}
-            </p>
+            <p role="alert">{shown.line}</p>
           )}
         </div>
       )}
@@ -324,7 +351,9 @@ function ImageBlock({
   if ("failed" in image) {
     return (
       <div data-inbox-image-failed="">
-        <ReadFailure line={IMAGE_FAILED_LINE} onRetry={() => onRetryImage(block.attachmentId)} />
+        <ErrorState onRetry={() => onRetryImage(block.attachmentId)}>
+          {IMAGE_FAILED_LINE}
+        </ErrorState>
       </div>
     );
   }
@@ -385,7 +414,7 @@ function KnownBlock({
       );
     case INBOX_BLOCK.LINK:
       return (
-        <p className="m-0" data-inbox-link="">
+        <p className="inbox-words">
           <LinkBlock url={block.url} label={block.label} openLink={openLink} />
         </p>
       );
@@ -424,7 +453,7 @@ function Blocks({
 }): React.JSX.Element | null {
   if (item.blocks.length === 0) return null;
   return (
-    <div className="flex flex-col gap-2" data-inbox-blocks="">
+    <Stack gap={GAP.CONTROL}>
       {item.blocks.map((block, index) =>
         // Blocks have no key of their own, and are never reordered: a change to an item draws them whole again.
         knownBlock(block) ? (
@@ -439,20 +468,20 @@ function Blocks({
             code={code}
           />
         ) : (
-          <p key={index} className="m-0 text-muted-foreground" data-inbox-unknown="">
+          <Text key={index} tone={TEXT_TONE.MUTED}>
             {NEWER_LUKE.BLOCK}
-          </p>
+          </Text>
         ),
       )}
-    </div>
+    </Stack>
   );
 }
 
 /**
  * An option's head: its label, what is said of it beside the label, and,
  * where the agent recommended it, a badge at the option's top right, so it
- * stands in one place however the label wraps. The badge is filled with
- * the accent while the item waits and steps back to the quiet badge once
+ * stands in one place however the label wraps. The badge wears the
+ * working tone while the item waits and steps back to the quiet badge once
  * it is settled, when the recommendation is history rather than a call to
  * act. It is drawn inside the option alone, so wherever an option is drawn
  * it wears it.
@@ -471,13 +500,13 @@ function OptionHead({
   return (
     <span className="inbox-option-head">
       <span className="inbox-option-label">
-        <span className="font-medium">{label}</span>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+          {label}
+        </Text>
         {children}
       </span>
       {recommended ? (
-        <span className="inbox-recommended" data-settled={String(settled)}>
-          Recommended
-        </span>
+        <Badge tone={settled ? BADGE_TONE.NEUTRAL : BADGE_TONE.WORKING}>Recommended</Badge>
       ) : null}
     </span>
   );
@@ -497,7 +526,7 @@ export function ChoiceOptions({
 }): React.JSX.Element {
   const multiple = choice.multiple === true;
   return (
-    <div className="flex flex-col gap-1" data-inbox-choice={multiple ? "multiple" : "one"}>
+    <Stack gap={GAP.TIGHT}>
       {choice.options.map((option) => (
         <button
           key={option.label}
@@ -513,14 +542,18 @@ export function ChoiceOptions({
             settled={false}
           />
           {option.detail === undefined ? null : (
-            <span className="text-muted-foreground">{option.detail}</span>
+            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+              {option.detail}
+            </Text>
           )}
         </button>
       ))}
       {multiple ? (
-        <p className="m-0 text-[12px] text-muted-foreground">Pick any that apply.</p>
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          Pick any that apply.
+        </Text>
       ) : null}
-    </div>
+    </Stack>
   );
 }
 
@@ -534,8 +567,13 @@ function FieldName({ field }: { field: InboxField }): React.JSX.Element {
   );
 }
 
+/** What a field says under its control where it must be filled. */
+function requiredWords(field: InboxField): string | undefined {
+  return field.required === true ? "Required" : undefined;
+}
+
 /** One field of a form: the control Settings draws for its type, holding what the developer put in it. */
-function FormField({
+function InboxFormField({
   field,
   draft,
   disabled,
@@ -551,27 +589,42 @@ function FormField({
     onDraft(withValue(draft, field.label, next));
   switch (field.type) {
     case INBOX_FIELD.TEXT:
-    case INBOX_FIELD.NUMBER: {
-      const number = field.type === INBOX_FIELD.NUMBER;
       return (
-        <label className="flex flex-col gap-1" data-inbox-field={field.type}>
-          <FieldName field={field} />
-          <input
-            className="settings-input inbox-field-input"
-            type={number ? "number" : "text"}
-            maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
-            value={value === undefined ? "" : String(value)}
-            disabled={disabled}
-            onChange={(event) => {
-              const typed = event.currentTarget.value;
-              if (typed === "") return set(undefined);
-              const parsed = event.currentTarget.valueAsNumber;
-              set(number ? (Number.isFinite(parsed) ? parsed : undefined) : typed);
-            }}
-          />
-        </label>
+        <div data-inbox-field={field.type}>
+          <FormField label={field.label} description={requiredWords(field)}>
+            {(control) => (
+              <TextField
+                field={control}
+                maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+                value={value === undefined ? "" : String(value)}
+                disabled={disabled}
+                onChange={(typed) => set(typed === "" ? undefined : typed)}
+              />
+            )}
+          </FormField>
+        </div>
       );
-    }
+    case INBOX_FIELD.NUMBER:
+      return (
+        <div data-inbox-field={field.type}>
+          <FormField label={field.label} description={requiredWords(field)}>
+            {(control) => (
+              <input
+                id={control.id}
+                aria-describedby={control["aria-describedby"]}
+                className="settings-input inbox-field-input"
+                type="number"
+                value={value === undefined ? "" : String(value)}
+                disabled={disabled}
+                onChange={(event) => {
+                  const parsed = event.currentTarget.valueAsNumber;
+                  set(Number.isFinite(parsed) ? parsed : undefined);
+                }}
+              />
+            )}
+          </FormField>
+        </div>
+      );
     case INBOX_FIELD.SELECT:
       return (
         <div className="settings-row settings-row-wrapping" data-inbox-field={field.type}>
@@ -610,9 +663,9 @@ export function FormFields({
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
   return (
-    <div className="flex flex-col gap-2" data-inbox-form="">
+    <Stack gap={GAP.CONTROL}>
       {form.fields.map((field) => (
-        <FormField
+        <InboxFormField
           key={field.label}
           field={field}
           draft={draft}
@@ -620,68 +673,8 @@ export function FormFields({
           onDraft={onDraft}
         />
       ))}
-    </div>
+    </Stack>
   );
-}
-
-/** The presses that send a card, in the box's footer: its response's where it is answered by a press, Send for the rest. */
-function SendPresses({
-  item,
-  draft,
-  sending,
-  onAnswer,
-}: {
-  item: InboxItem;
-  draft: InboxDraft;
-  sending: boolean;
-  onAnswer: (press?: InboxReplyKind) => void;
-}): React.JSX.Element {
-  const presses = pressesOf(item.response);
-  if (presses !== undefined) {
-    const { back, ahead } = presses;
-    return (
-      <div className="inbox-presses flex gap-(--control-gap)">
-        {back === undefined ? null : (
-          <button
-            type="button"
-            className="toolbar-button"
-            disabled={sending}
-            onClick={() => onAnswer(back.reply)}
-          >
-            {back.label}
-          </button>
-        )}
-        <button
-          type="button"
-          className="primary-button"
-          disabled={sending}
-          onClick={() => onAnswer(ahead.reply)}
-        >
-          <BusyLabel busy={sending} label="Sending">
-            {ahead.label}
-          </BusyLabel>
-        </button>
-      </div>
-    );
-  }
-  return (
-    <Tooltip label={SEND}>
-      <PromptInputSubmit
-        aria-label={SEND}
-        status={sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY}
-        disabled={sending || inboxReply(item, draft) === undefined}
-      />
-    </Tooltip>
-  );
-}
-
-/** What the card's box asks for: the agent's own placeholder on a text, its response's words otherwise. */
-function placeholderOf(response: InboxReadResponse): string {
-  if (!knownResponse(response)) return "";
-  if (response.type === INBOX_RESPONSE.TEXT && response.placeholder !== undefined) {
-    return response.placeholder;
-  }
-  return NOTE_PLACEHOLDER[response.type];
 }
 
 /** The controls an item's response puts between its blocks and its box: a choice's options, a form's fields, nothing for the rest. */
@@ -725,7 +718,10 @@ function AgentName({ by }: { by: ItemAgent }): React.JSX.Element {
 /** What a settled item's line says of where the answer went: to the agent as a message, its name its reference, or, a bare press on an item asking nothing back, kept for it to read. */
 function Delivered({ item, by }: { item: InboxItem; by: ItemAgent }): React.JSX.Element {
   // Note that an answered item the wire carries without its answer was heard where it asked to be.
-  const heard = item.answer === undefined ? item.needsReply : inboxAnswerHeard(item, item.answer);
+  const heard =
+    item.answer === undefined
+      ? item.needsReply
+      : inboxAnswerHeard(item, item.answer, item.answerFiles);
   if (!heard) return <>Saved for the agent to read</>;
   return (
     <ActorLine>
@@ -748,7 +744,7 @@ function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
   const options = proposedOptions(item);
   if (options.length === 0) return null;
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="What the agent offered">
+    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} aria-label="What the agent offered">
       {options.map((option) => (
         <li key={option.label} className="inbox-option" data-picked={String(option.picked)}>
           <OptionHead label={option.label} recommended={option.recommended} settled>
@@ -763,69 +759,241 @@ function Proposal({ item }: { item: InboxItem }): React.JSX.Element | null {
             ) : null}
           </OptionHead>
           {option.detail === undefined ? null : (
-            <span className="text-muted-foreground">{option.detail}</span>
+            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+              {option.detail}
+            </Text>
           )}
         </li>
       ))}
-    </ul>
+    </Stack>
   );
 }
 
-/** Who wrote a message of the thread and when: the agent's tile and its name, which hang its card and open its tab, and what it did how long ago. */
-function Byline({
-  by,
-  did,
-  at,
-  now,
+/** How many options a settled item's fold says it offered. */
+function optionsWords(count: number): string {
+  return count === 1 ? "1 option" : `${count} options`;
+}
+
+/**
+ * What a settled item offered, folded to one line, as the transcript folds
+ * a finished step: how many options there were and who picked which, "2
+ * options · you picked Retry once", or that they were offered where the
+ * agent took the item back. Opened, it shows them as they were
+ * (`Proposal`).
+ */
+function Offered({ item }: { item: InboxItem }): React.JSX.Element | null {
+  const answerer = usePerson(item.answeredBy);
+  const options = proposedOptions(item);
+  if (options.length === 0) return null;
+  const picked = options.filter((option) => option.picked).map((option) => option.label);
+  const who = actorName(answerer, { sentence: true });
+  const summary =
+    picked.length === 0
+      ? `${optionsWords(options.length)} offered`
+      : `${optionsWords(options.length)} · ${who} picked ${picked.join(", ")}`;
+  return (
+    <Disclosure data-inbox-offered="">
+      <DisclosureSummary>
+        <span>{summary}</span>
+      </DisclosureSummary>
+      <DisclosureBody inset={DISCLOSURE_BODY.FLUSH}>
+        <Proposal item={item} />
+      </DisclosureBody>
+    </Disclosure>
+  );
+}
+
+/** Which message of the thread a comment is: the agent's question, the developer's answer, the agent taking the item back, or a message on the thread. */
+const COMMENT = {
+  ASKED: "asked",
+  ANSWERED: "answered",
+  WITHDRAWN: "withdrawn",
+  MESSAGE: "message",
+} as const;
+
+type CommentKind = (typeof COMMENT)[keyof typeof COMMENT];
+
+/**
+ * One message of the thread as a comment: its writer's face in a column of
+ * its own, then a line of who and when, and what they wrote under it, a
+ * line down from the face joining it to the next. The writer is named
+ * once, by name alone, since the face already stands beside it.
+ */
+function Comment({
+  kind,
+  face,
+  head,
+  messageId,
+  children,
 }: {
-  by: ItemAgent;
-  did: string;
-  at: number;
-  now: number;
+  kind: CommentKind;
+  face: Actor;
+  head: React.ReactNode;
+  /** The message a thread's message comment draws, which a send scrolls to. */
+  messageId?: string | undefined;
+  children?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="flex min-w-0 items-center gap-(--glyph-gap) text-[12.5px] text-muted-foreground">
-      <span className="inbox-byline-agent">
-        <AgentName by={by} />
+    <li className="inbox-comment" data-inbox-comment={kind} data-message-id={messageId}>
+      <span className="inbox-comment-face">
+        <ActorMark actor={face} size={ACTOR_SIZE.ROW} />
       </span>
-      <span className="shrink-0">
-        {did} <RelativeTime className={THREAD_TIME_CLASS} at={at} now={now} />
-      </span>
-    </div>
+      <div className="inbox-comment-main">
+        <div className="inbox-comment-head">{head}</div>
+        {children === undefined ? null : <div className="inbox-comment-body">{children}</div>}
+      </div>
+    </li>
   );
 }
 
-/** What the developer has said, under their own bubble: who answered, by their disc and name, what they did, when, and where the answer went. */
+/** A comment's writer by name, which hangs their card and opens their page or tab. */
+function CommentName({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <span className="inbox-comment-name">{children}</span>;
+}
+
+/** A word set as the start of a sentence. */
+function sentenceCased(words: string): string {
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+}
+
+/**
+ * What the developer's answer leads with: what they picked, the options'
+ * labels, or, where they picked none and wrote nothing, what they did,
+ * "Acknowledged it"; nothing where their words say it.
+ */
+function pickOf(item: InboxItem, did: string, words: string | undefined): string | undefined {
+  const picked = proposedOptions(item).filter((option) => option.picked);
+  if (picked.length > 0) return picked.map((option) => option.label).join(", ");
+  return words === undefined ? sentenceCased(did) : undefined;
+}
+
+/** The files of one comment, and how their bytes are read. */
+interface CommentFilesProps {
+  itemId: string;
+  files: NonNullable<InboxItem["answerFiles"]>;
+  images: TaskInboxControl["images"];
+  onImage: TaskInboxControl["onImage"];
+  onRetryImage: TaskInboxControl["onRetryImage"];
+}
+
+/**
+ * The files the developer's answer or a message on the thread carried, as
+ * the agent's tab draws a sent message's (`attached-file-chips.tsx`): each
+ * asks for its bytes as it is first drawn, through the same read an image
+ * block's picture takes, and is drawn by its name alone until they land;
+ * where a read did not answer, a line under the files says so with Retry,
+ * as an image block's does.
+ */
+function CommentFiles({
+  itemId,
+  files,
+  images,
+  onImage,
+  onRetryImage,
+}: CommentFilesProps): React.ReactNode {
+  useEffect(() => {
+    for (const file of files) {
+      if (!images.has(file.attachmentId)) onImage(itemId, file.attachmentId);
+    }
+  }, [files, images, itemId, onImage]);
+  const failed = files.filter((file) => {
+    const read = images.get(file.attachmentId);
+    return read !== undefined && "failed" in read;
+  });
+  return (
+    <>
+      <AttachedFileChips files={inboxFileChips(files, images)} />
+      {failed.length === 0 ? null : (
+        <div data-inbox-files-failed="">
+          <ErrorState
+            onRetry={() => {
+              for (const file of failed) onRetryImage(file.attachmentId);
+            }}
+          >
+            {FILES_FAILED_LINE}
+          </ErrorState>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** No files, one array so a comment that has none hands down the same one. */
+const NO_FILES: NonNullable<InboxItem["answerFiles"]> = [];
+
+/** The developer's answer as their comment: who answered, by their face and name, when, and where it went, then what they picked as a chip, the files they attached, and what they wrote. */
 function Answered({
   item,
   by,
   now,
+  images,
+  onImage,
+  onRetryImage,
 }: {
   item: InboxItem;
   by: ItemAgent;
   now: number;
+  images: TaskInboxControl["images"];
+  onImage: TaskInboxControl["onImage"];
+  onRetryImage: TaskInboxControl["onRetryImage"];
 }): React.JSX.Element | null {
   const answerer = usePerson(item.answeredBy);
   const settled = settlementOf(item);
   if (settled === undefined) return null;
   if (settled.by === SETTLED_BY.AGENT) return null;
+  // Files alone are the developer's own words where they wrote none, so no "Answered it" chip stands over them.
+  const filesSay =
+    (item.answerFiles ?? []).length > 0 && item.answer?.reply === INBOX_REPLY.ANSWERED
+      ? ""
+      : undefined;
+  const pick = pickOf(item, settled.did, settled.values ?? settled.note ?? filesSay);
   return (
-    <Message from="user" data-inbox-answer="">
-      {settled.words === undefined ? null : (
-        <MessageContent>
-          <p className="m-0 whitespace-pre-line select-text">{settled.words}</p>
-        </MessageContent>
+    <Comment
+      kind={COMMENT.ANSWERED}
+      face={answerer}
+      head={
+        <>
+          <CommentName>
+            <ActorRef actor={answerer} />
+          </CommentName>
+          <span className="inbox-comment-when">
+            <RelativeTime
+              className={THREAD_TIME_CLASS}
+              at={settledAt(item) ?? item.updatedAt}
+              now={now}
+            />{" "}
+            · <Delivered item={item} by={by} />
+          </span>
+        </>
+      }
+    >
+      {pick === undefined ? null : (
+        <span className="inbox-pick" data-inbox-pick="">
+          <CheckIcon aria-hidden="true" />
+          <span>{pick}</span>
+        </span>
       )}
-      <p className="m-0 text-[11.5px] text-muted-foreground">
-        <ActorRef actor={answerer} /> {settled.did} ·{" "}
-        <RelativeTime className={THREAD_TIME_CLASS} at={item.updatedAt} now={now} /> ·{" "}
-        <Delivered item={item} by={by} />
-      </p>
-    </Message>
+      {settled.values === undefined ? null : (
+        <p className="inbox-words inbox-lines">{settled.values}</p>
+      )}
+      <CommentFiles
+        itemId={item.id}
+        files={item.answerFiles ?? NO_FILES}
+        images={images}
+        onImage={onImage}
+        onRetryImage={onRetryImage}
+      />
+      {/* The note is drawn as the agent's tab draws a message, so a mention it holds is its chip. */}
+      {settled.note === undefined ? null : (
+        <div className="inbox-words" data-inbox-note="">
+          <SentWords text={settled.note} />
+        </div>
+      )}
+    </Comment>
   );
 }
 
-/** The agent taking an item back, as one more message of its own: when, and why where it said. */
+/** The agent taking an item back, as one more comment of its own: when, and why where it said. */
 function Withdrawn({
   item,
   by,
@@ -838,86 +1006,330 @@ function Withdrawn({
   const settled = settlementOf(item);
   if (settled?.by !== SETTLED_BY.AGENT) return null;
   return (
-    <Message from="assistant" data-inbox-withdrawn="">
-      <Byline by={by} did="withdrew this" at={item.updatedAt} now={now} />
-      {settled.words === undefined ? null : (
-        <MessageContent className="inbox-indent">
-          <p className="m-0 select-text">{settled.words}</p>
-        </MessageContent>
-      )}
-    </Message>
+    <Comment
+      kind={COMMENT.WITHDRAWN}
+      face={by.subject.tile}
+      head={
+        <>
+          <CommentName>
+            <AgentName by={by} />
+          </CommentName>
+          <span className="inbox-comment-when">
+            withdrew this{" "}
+            <RelativeTime
+              className={THREAD_TIME_CLASS}
+              at={settledAt(item) ?? item.updatedAt}
+              now={now}
+            />
+          </span>
+        </>
+      }
+    >
+      {settled.words === undefined ? undefined : <p className="inbox-words">{settled.words}</p>}
+    </Comment>
   );
 }
 
-/** The box an open item is answered in, docked under its thread as an agent's composer is under its transcript, a note that it was not sent under the card as the composer's is. */
-function AnswerBox({
+/**
+ * One message on the thread as its writer's comment: a member by their
+ * face and name, "You" for the reader's own, someone unnamed where their
+ * account is gone; the agent by its tile and name, as its question is.
+ * The files it carried are drawn as an answer's are, then its words as the
+ * agent's tab draws a sent message, its mentions chips; a message of files
+ * alone draws them alone.
+ */
+function Message({
   item,
+  message,
+  by,
+  now,
+  images,
+  onImage,
+  onRetryImage,
+}: {
+  item: InboxItem;
+  message: InboxMessage;
+  by: ItemAgent;
+  now: number;
+  images: TaskInboxControl["images"];
+  onImage: TaskInboxControl["onImage"];
+  onRetryImage: TaskInboxControl["onRetryImage"];
+}): React.JSX.Element {
+  const member = usePerson(message.member);
+  const fromAgent = message.author === INBOX_MESSAGE_AUTHOR.AGENT;
+  return (
+    <Comment
+      kind={COMMENT.MESSAGE}
+      face={fromAgent ? by.subject.tile : member}
+      messageId={message.id}
+      head={
+        <>
+          <CommentName>
+            {fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} />}
+          </CommentName>
+          <span className="inbox-comment-when">
+            <RelativeTime className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
+          </span>
+        </>
+      }
+    >
+      <CommentFiles
+        itemId={item.id}
+        files={message.files ?? NO_FILES}
+        images={images}
+        onImage={onImage}
+        onRetryImage={onRetryImage}
+      />
+      {message.text === "" ? null : (
+        <div className="inbox-words" data-inbox-message-text="">
+          <SentWords text={message.text} />
+        </div>
+      )}
+    </Comment>
+  );
+}
+
+/** Where a thread read carries only its latest messages: a line saying the earlier ones stand in the agent's tab, the agent's name opening it. */
+function EarlierMessages({ by }: { by: ItemAgent }): React.JSX.Element {
+  return (
+    <li className="inbox-thread-earlier" data-inbox-earlier="">
+      <ActorLine>
+        {"Earlier messages are in "}
+        <AgentName by={by} />
+        {"’s tab"}
+      </ActorLine>
+    </li>
+  );
+}
+
+/**
+ * What follows the question, in the order it was written: the thread's
+ * messages, and where it was settled, the answer or the agent taking it
+ * back; a line first where the thread read carries only its latest
+ * messages.
+ */
+function ThreadAfter({
+  item,
+  by,
+  now,
   control,
 }: {
   item: InboxItem;
+  by: ItemAgent;
+  now: number;
   control: TaskInboxControl;
 }): React.JSX.Element {
-  const draft = control.draftOf(item);
-  const sending = control.sending.has(item.id);
-  const note = control.notes.get(item.id);
-  const byPress = pressesOf(item.response) !== undefined;
-  const placeholder = placeholderOf(item.response);
+  const { images, onImage, onRetryImage } = control;
   return (
-    <div className="agent-composer">
-      {knownResponse(item.response) ? (
-        <PromptInput
-          className="inbox-answer"
-          data-presses={byPress ? "" : undefined}
-          // A press answers an approval, a task, and an item asking nothing, so its box's Enter sends nothing.
-          onSubmit={() => (byPress ? undefined : control.onAnswer(item, draft))}
-        >
-          <PromptInputTextarea
-            aria-label={placeholder}
-            placeholder={placeholder}
-            maxLength={INBOX_BOUNDS.MAX_NOTE_CHARS}
-            value={draft.note}
-            disabled={sending}
-            onChange={(event) =>
-              control.onDraft(item, { ...draft, note: event.currentTarget.value })
-            }
+    <>
+      {threadCut(item) ? <EarlierMessages by={by} /> : null}
+      {threadEntries(item).map((entry) =>
+        entry.kind === THREAD_ENTRY.SETTLED ? (
+          <SettledComments
+            key="settled"
+            item={item}
+            by={by}
+            now={now}
+            images={images}
+            onImage={onImage}
+            onRetryImage={onRetryImage}
           />
-          <PromptInputFooter className="inbox-answer-foot">
-            <PromptInputTools className="inbox-answer-quiet px-1 text-[12px] text-muted-foreground">
-              {item.needsReply ? null : (
-                <span data-inbox-quiet="">
-                  {draft.note.trim() === "" ? QUIET_LINE.BARE : QUIET_LINE.NOTED}
-                </span>
-              )}
-            </PromptInputTools>
-            <SendPresses
-              item={item}
-              draft={draft}
-              sending={sending}
-              onAnswer={(press) => control.onAnswer(item, draft, press)}
-            />
-          </PromptInputFooter>
-        </PromptInput>
-      ) : (
-        <p className="m-0 text-muted-foreground" data-inbox-unknown="">
-          {NEWER_LUKE.RESPONSE}
-        </p>
+        ) : (
+          <Message
+            key={entry.message.id}
+            item={item}
+            message={entry.message}
+            by={by}
+            now={now}
+            images={images}
+            onImage={onImage}
+            onRetryImage={onRetryImage}
+          />
+        ),
       )}
-      {note === undefined ? null : (
-        <p className="error-message agent-composer-note" role="alert">
-          {note}
-        </p>
-      )}
-    </div>
+    </>
   );
+}
+
+/** The comment a settled item was settled by: the developer's answer, or the agent taking it back. */
+function SettledComments({
+  item,
+  by,
+  now,
+  images,
+  onImage,
+  onRetryImage,
+}: {
+  item: InboxItem;
+  by: ItemAgent;
+  now: number;
+  images: TaskInboxControl["images"];
+  onImage: TaskInboxControl["onImage"];
+  onRetryImage: TaskInboxControl["onRetryImage"];
+}): React.JSX.Element {
+  return (
+    <>
+      <Answered
+        item={item}
+        by={by}
+        now={now}
+        images={images}
+        onImage={onImage}
+        onRetryImage={onRetryImage}
+      />
+      <Withdrawn item={item} by={by} now={now} />
+    </>
+  );
+}
+
+/**
+ * Scrolls the board to a message of the reader's own the moment it lands
+ * on the thread, inside the board's own scroller, since the pane may still
+ * be sliding in (`AGENTS.md`'s panel motion): far enough that its foot
+ * stands above the box, and no further than its head. A message another
+ * wrote, or another item opened, scrolls nothing.
+ */
+function useScrollToOwnMessage(
+  board: React.RefObject<HTMLDivElement | null>,
+  item: InboxItem,
+  readerId: string | undefined,
+): void {
+  const last = item.messages?.at(-1);
+  const own =
+    last !== undefined &&
+    last.author === INBOX_MESSAGE_AUTHOR.MEMBER &&
+    readerId !== undefined &&
+    last.member?.userId === readerId;
+  const seen = useRef({ itemId: item.id, lastId: last?.id });
+  useLayoutEffect(() => {
+    const was = seen.current;
+    seen.current = { itemId: item.id, lastId: last?.id };
+    const scroller = board.current;
+    if (!own || scroller === null || was.itemId !== item.id || was.lastId === last?.id) return;
+    const comment = scroller.querySelector(`[data-message-id="${CSS.escape(last.id)}"]`);
+    if (comment === null) return;
+    const room = scroller.getBoundingClientRect();
+    const box = comment.getBoundingClientRect();
+    const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom) || 0;
+    const under = box.bottom - (room.bottom - padding);
+    if (under > 0) scroller.scrollTop += Math.min(under, box.top - room.top);
+  }, [board, item.id, last, own]);
+}
+
+/** What the subject's line says the item stands at, by its status. */
+const STANDING_WORDS = {
+  [INBOX_STATUS.OPEN]: NEEDS_YOU.LABEL,
+  [INBOX_STATUS.ANSWERED]: "Answered",
+  [INBOX_STATUS.CLOSED]: "Withdrawn",
+} as const;
+
+/**
+ * Where the item stands, in the subject's line. An item that needs the
+ * reader, open and asked by an agent they started (`needsReader`), wears the
+ * attention mark, which only answering it takes away; a teammate's open item
+ * waits on the teammate, named by their face and name, which any member may
+ * still answer; a settled one says how it was settled.
+ */
+function Standing({
+  item,
+  readerId,
+}: {
+  item: InboxItem;
+  readerId: string | undefined;
+}): React.JSX.Element {
+  const directory = useMemberDirectory();
+  const reader = directory.readerId ?? readerId;
+  const waitsOn =
+    item.status === INBOX_STATUS.OPEN && !readersItem(item, reader)
+      ? personActor(item.startedBy, directory.members, reader, directory.former)
+      : undefined;
+  if (waitsOn !== undefined) {
+    return (
+      <span className="inbox-standing" data-status={item.status} data-waiting="true">
+        <ActorLine>
+          {"Waiting on "}
+          <ActorRef actor={waitsOn} sentence />
+        </ActorLine>
+      </span>
+    );
+  }
+  return (
+    <span className="inbox-standing" data-status={item.status}>
+      {needsReader(item, reader) ? <AttentionMark /> : null}
+      {STANDING_WORDS[item.status]}
+    </span>
+  );
+}
+
+/**
+ * The thread's subject, as a plan or a pull request leads with one: the
+ * item's title, and under it a muted line of its agent, which hangs its
+ * card and opens its tab, when it asked, and where the item stands: needing
+ * the reader, waiting on the teammate whose agent asks it, or settled.
+ */
+function Subject({
+  item,
+  by,
+  readerId,
+  now,
+}: {
+  item: InboxItem;
+  by: ItemAgent;
+  readerId: string | undefined;
+  now: number;
+}): React.JSX.Element {
+  return (
+    <header className="inbox-subject">
+      <h2 className="inbox-subject-title" data-inbox-title="">
+        {cardTitle(item.title)}
+      </h2>
+      <p className="inbox-subject-line">
+        <span className="inbox-subject-agent">
+          <AgentName by={by} />
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>
+          asked <RelativeTime className={THREAD_TIME_CLASS} at={item.postedAt} now={now} />
+        </span>
+        <span aria-hidden="true">·</span>
+        <Standing item={item} readerId={readerId} />
+      </p>
+    </header>
+  );
+}
+
+/** The box's mentions where the pane is handed them; the page's own where it is not. */
+function AnswerMentions({
+  value,
+  children,
+}: {
+  value: TaskMentionsValue | undefined;
+  children: React.ReactNode;
+}): React.ReactNode {
+  return value === undefined ? children : <TaskMentions value={value}>{children}</TaskMentions>;
+}
+
+/** The words a dictation into an item's box is likely to say: its repository's, its title's, and the paths its blocks name. */
+function answerKeywords(holder: InboxHolder, item: InboxItem): readonly string[] {
+  const repository =
+    holder.kind === INBOX_HOLDER.TASK ? holder.task.repository : holder.repository || null;
+  const body = item.blocks
+    .flatMap((block) => {
+      if (!knownBlock(block)) return [];
+      if (block.type === INBOX_BLOCK.MARKDOWN) return [block.text];
+      return block.type === INBOX_BLOCK.CODE ? [block.path] : [];
+    })
+    .join("\n");
+  return dictationKeywords({ repository, title: item.title, body });
 }
 
 /** What the pane's crumbs open, and the cards they hang. */
 export interface InboxPaneDoors {
-  /** Opens what holds the item: its plan, or its automation's page; nothing where there is none to open. */
+  /** Opens what holds the item: its task, or its automation's page; nothing where there is none to open. */
   readonly onOpenHolder: (() => void) | undefined;
-  /** The plan's hover card, as its sidebar row hangs it; none for an automation. */
+  /** The task's hover card, as its sidebar row hangs it; none for an automation. */
   readonly taskCard: React.ReactNode;
-  /** Opens the agent's tab on its plan. */
+  /** Opens the agent's tab on its task. */
   readonly onOpenAgent: (agentId: string) => void;
   /** Opens a link block's web page in the browser (`use-open-link.ts`). */
   readonly openLink: (url: string) => void;
@@ -975,11 +1387,11 @@ function AutomationCrumb({
 }
 
 /**
- * The pane's path, plan › agent, each crumb drawn as its tab is in the
- * plan's column, the plan's document glyph and the agent's mark: each opens
- * what it names, the plan or the agent's tab, and hangs the card its
- * sidebar row or tab hangs, the plan's crumb as every place naming the
- * plan does (`PlanRef`). An agent with no plan stands under the automation
+ * The pane's path, task › agent, each crumb drawn as its tab is in the
+ * task's column, the task's document glyph and the agent's mark: each opens
+ * what it names, the task or the agent's tab, and hangs the card its
+ * sidebar row or tab hangs, the task's crumb as every place naming the
+ * task does (`TaskRef`). An agent with no task stands under the automation
  * that started it instead, by its clock and name, which hang its card and
  * open the automation's page where that can be opened. An agent this window does
  * not list, one started on another Mac, hangs a card saying so and still
@@ -1028,16 +1440,19 @@ function Crumbs({
 }
 
 /**
- * One item at reading size, as a thread: under the pane's crumbs, the
- * agent's message, its name and when it asked, the item's title, its
- * blocks, and what it offers; then what came of it. While the item waits,
- * a choice's options and a form's fields are pressed in the message, and
- * the box is docked at the pane's foot. Once it is settled, the options
- * stand with the developer's pick marked, and the developer's reply follows
- * as their bubble, with what they did, when, and whether it reached the
- * agent; or the agent's own message says it took the item back, and why;
- * and where the box stood, the next item that needs the developer is
- * offered (`inbox-pager.tsx`).
+ * One item at reading size, as a comment thread: under the pane's crumbs,
+ * the item's title as the thread's subject, with its agent, when it asked,
+ * and where it stands; then the agent's question as the first comment, its
+ * blocks and what it offers, and what came of it as the comments after.
+ * While the item waits, a choice's options and a form's fields are pressed
+ * in the question, and the box is docked at the pane's foot. Once it is
+ * settled, the options fold to one line saying who picked which, and the
+ * developer's answer follows as their comment, when and whether it reached
+ * the agent, their pick as a chip over their words; or the agent's own
+ * comment says it took the item back, and why; the thread's messages
+ * stand among them by when they were written; and over the box, which now
+ * writes a message on the thread, the next item that needs the developer
+ * is offered (`inbox-pager.tsx`).
  * Where the item stands alone, the whole Inbox wide, the crumbs follow a
  * way back to the list (`inbox-columns.ts`), its tooltip naming Back's
  * chord, which goes back as Escape does, and the bar ends in the pager,
@@ -1053,11 +1468,12 @@ export function InboxPane({
   onBack,
   pager,
   next,
+  mentions,
 }: {
-  /** What holds the item: its plan, or the automation that started its agent with no plan. */
+  /** What holds the item: its task, or the automation that started its agent with no task. */
   holder: InboxHolder;
   item: InboxItem;
-  /** The live read of the item's plan, or of its agent with no plan, which answers it and holds its draft. */
+  /** The live read of the item's task, or of its agent with no task, which answers it and holds its draft. */
   control: TaskInboxControl;
   agents: CodingAgentsControl;
   doors: InboxPaneDoors;
@@ -1067,8 +1483,10 @@ export function InboxPane({
   onBack: (() => void) | undefined;
   /** Where the item stands in the list and the steps either side, drawn at the bar's end where the item stands alone among others. */
   pager: InboxPager | undefined;
-  /** The next item that needs the developer, offered where the box stood once the item is settled. */
+  /** The next item that needs the developer, offered over the box once the item is settled. */
   next: InboxNext | undefined;
+  /** What the box's `@` offers where the page around the pane hands nothing, as the window's Inbox does; the page's own otherwise. */
+  mentions?: TaskMentionsValue | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
@@ -1076,6 +1494,8 @@ export function InboxPane({
   useLayoutEffect(() => {
     if (board.current !== null) board.current.scrollTop = 0;
   }, [item.id]);
+  const directory = useMemberDirectory();
+  useScrollToOwnMessage(board, item, directory.readerId ?? agents.me);
   const by: ItemAgent = {
     subject: agentSubject(agents, item.agentId, NOTHING_HELD, false),
     models: agents.models,
@@ -1089,17 +1509,7 @@ export function InboxPane({
     <section className="inbox-view-items" aria-label={cardTitle(item.title)} hidden={hidden}>
       <header className="desktop-toolbar">
         {onBack === undefined ? null : (
-          <Tooltip label={BACK_TO_INBOX} command={APP_COMMAND.BACK}>
-            <button
-              type="button"
-              className="toolbar-button inbox-back"
-              aria-label="Inbox"
-              onClick={onBack}
-            >
-              <BackIcon />
-              <span className="inbox-back-word">Inbox</span>
-            </button>
-          </Tooltip>
+          <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
         )}
         <Crumbs holder={holder} by={by} doors={doors} />
         {pager === undefined ||
@@ -1110,17 +1520,27 @@ export function InboxPane({
       <div className="desktop-inbox">
         <div
           // The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there.
-          className={`inbox-board scroll-fade ph-no-capture flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-(--section-gap) ${open ? "agent-log-over-composer" : "pb-5"}`}
+          className="inbox-board scroll-fade agent-log-over-composer ph-no-capture"
           data-item-id={item.id}
           ref={board}
         >
           <WordsWorkspace value={workspaceId}>
-            <Message from="assistant">
-              <Byline by={by} did="asked" at={item.postedAt} now={now} />
-              <MessageContent className="inbox-indent">
-                <h3 className="m-0 font-medium text-foreground" data-inbox-title="">
-                  {cardTitle(item.title)}
-                </h3>
+            <Subject item={item} by={by} readerId={agents.me} now={now} />
+            <ol className="inbox-thread" aria-label="Thread">
+              <Comment
+                kind={COMMENT.ASKED}
+                face={by.subject.tile}
+                head={
+                  <>
+                    <CommentName>
+                      <AgentName by={by} />
+                    </CommentName>
+                    <span className="inbox-comment-when">
+                      <RelativeTime className={THREAD_TIME_CLASS} at={item.postedAt} now={now} />
+                    </span>
+                  </>
+                }
+              >
                 <Blocks
                   item={item}
                   images={control.images}
@@ -1137,22 +1557,28 @@ export function InboxPane({
                     onDraft={(next) => control.onDraft(item, next)}
                   />
                 ) : (
-                  <Proposal item={item} />
+                  // Keyed by its item, so the fold opened on one item stands closed on the next.
+                  <Offered key={item.id} item={item} />
                 )}
-              </MessageContent>
-            </Message>
-            <Answered item={item} by={by} now={now} />
-            <Withdrawn item={item} by={by} now={now} />
+              </Comment>
+              <ThreadAfter item={item} by={by} now={now} control={control} />
+            </ol>
           </WordsWorkspace>
           {control.failed ? (
-            <ReadFailure line={INBOX_FAILED_LINE} onRetry={control.onRetry} />
+            <ErrorState onRetry={control.onRetry}>{INBOX_FAILED_LINE}</ErrorState>
           ) : null}
         </div>
-        {open ? (
-          <AnswerBox item={item} control={control} />
-        ) : next === undefined ? null : (
-          <InboxNextUp next={next} />
-        )}
+        {open || next === undefined ? null : <InboxNextUp next={next} />}
+        <AnswerMentions value={mentions}>
+          <InboxAnswerBox
+            item={item}
+            control={control}
+            agent={by.subject.agent}
+            agentName={by.subject.name}
+            skills={agents.readSkills}
+            keywords={answerKeywords(holder, item)}
+          />
+        </AnswerMentions>
       </div>
     </section>
   );

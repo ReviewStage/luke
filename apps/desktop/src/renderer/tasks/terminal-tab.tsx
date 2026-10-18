@@ -1,13 +1,13 @@
 import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/features/terminal-model";
+import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import { useMemo } from "react";
-import { SHORTCUT_KEY } from "#shared/shortcuts";
+import { TERMINAL_LOAD_FAILED } from "../bundle-loader";
 import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab";
 import { Shortcut } from "../shortcut";
 import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { TreeToggle, usePaneRoom } from "./file-view";
 import { AgentGlyph } from "./tab-look";
-import { TERMINAL_LOAD_FAILED } from "./terminal-bundle";
 import { TerminalShells } from "./terminal-shells";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { useTerminalSession } from "./use-terminal-session";
@@ -115,7 +115,7 @@ export function TerminalTab({
   agents: CodingAgentsControl;
   /** Whether the tab is on screen, the one moment it holds a connection. */
   shown: boolean;
-  /** Opens the agent's own tab in the plan's column. */
+  /** Opens the agent's own tab in the task's column. */
   onOpenAgent: () => void;
   /** Closes the tab, as an archived agent's does. */
   onClose: () => void;

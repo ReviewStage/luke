@@ -45,7 +45,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The switcher over the plans given, in sight or folded away. */
+/** The switcher over the tasks given, in sight or folded away. */
 function mount(tasks: Partial<TasksControl>) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -88,7 +88,7 @@ function open(switcher: HTMLButtonElement | null): void {
 
 /** An item's label, the words beside its glyph. */
 function labelOf(item: HTMLElement): string | null {
-  return item.querySelector(".task-menu-label")?.textContent ?? null;
+  return item.querySelector(".luke-menu-item-label")?.textContent ?? null;
 }
 
 /** Chooses the open menu's item by its label. */
@@ -212,6 +212,41 @@ function nameWorkspace(page: { switcher: () => HTMLButtonElement | null }, name:
   return field;
 }
 
+test("a name typed after a refusal keeps the card up, takes the refusal away, and can still be created", async () => {
+  const asked: string[] = [];
+  const page = mount({
+    workspaces: [PERSONAL],
+    workspace: PERSONAL,
+    onCreateWorkspace: (name) => {
+      asked.push(name);
+      return Promise.resolve(undefined);
+    },
+  });
+  const field = nameWorkspace(page, "");
+  await act(async () => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  const refused = document.querySelector('[role="alertdialog"] [role="alert"]')?.textContent;
+
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, "P");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const typed = document.querySelector<HTMLInputElement>(
+    '[role="alertdialog"] input[aria-label="Workspace name"]',
+  )?.value;
+  const refusalAfterTyping = document.querySelector('[role="alertdialog"] [role="alert"]');
+  await act(async () => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+
+  assert.equal(refused, "Name the workspace.");
+  assert.equal(typed, "P", "the card stays up with what was typed");
+  assert.equal(refusalAfterTyping, null);
+  assert.deepEqual(asked, ["P"]);
+});
+
 test("New workspace opens on an empty name each time, so a cancelled name is not offered again", () => {
   const page = mount({ workspaces: [PERSONAL], workspace: PERSONAL });
   nameWorkspace(page, "Platform");
@@ -248,7 +283,7 @@ test("Enter while an input method composes creates nothing, and a press dragged 
     );
   });
   const backdrop =
-    document.querySelector<HTMLElement>(".confirm-dialog-backdrop") ?? assert.fail("no backdrop");
+    document.querySelector('[aria-modal="true"]')?.parentElement ?? assert.fail("no backdrop");
   act(() => {
     field.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
     backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -303,7 +338,7 @@ test("each workspace in the menu says who shares it under its name, to the eye a
     .slice(0, 4)
     .map((item) => [
       labelOf(item),
-      item.querySelector(".menu-item-detail")?.textContent,
+      item.querySelector(".luke-menu-item-detail")?.textContent,
       item.getAttribute("aria-label"),
     ]);
 

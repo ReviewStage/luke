@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string"
+    },
+    "additions": {
+      "type": "number",
+      "minimum": 0
+    },
+    "deletions": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "path",
+    "additions",
+    "deletions"
+  ],
+  "additionalProperties": false
+}

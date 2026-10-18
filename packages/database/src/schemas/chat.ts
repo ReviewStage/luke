@@ -27,7 +27,7 @@ import {
 import { timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
-import { task } from "./plan.js";
+import { task } from "./task.js";
 
 /** A fixed value spelled into a constraint or an index's condition, which take no parameter. */
 const literal = (value: string) => sql.raw(`'${value}'`);
@@ -90,8 +90,8 @@ export const chatMember = pgTable(
     userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
     /** The coding agent, on an agent's member; null once the agent is deleted. */
     agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
-    /** The plan, on a planner's member; null once the plan is deleted. */
-    planId: uuid("plan_id").references(() => task.id, { onDelete: "set null" }),
+    /** The task, on its Luke's member; null once the task is deleted. */
+    planId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
     /** The member's handle, without its `@`, minted once. */
     handle: text("handle").notNull(),
     /** The member's place among its workspace's members of its kind, from one: an agent's `N`. */
@@ -112,7 +112,7 @@ export const chatMember = pgTable(
     // A handle names one person or agent of the workspace; every planner is `luke`.
     uniqueIndex("chat_member_organization_handle")
       .on(table.organizationId, table.handle)
-      .where(sql`${table.kind} <> ${literal(MEMBER_KIND.PLANNER)}`),
+      .where(sql`${table.kind} <> ${literal(MEMBER_KIND.LUKE)}`),
     uniqueIndex("chat_member_organization_kind_ordinal").on(
       table.organizationId,
       table.kind,
@@ -123,12 +123,12 @@ export const chatMember = pgTable(
       .on(table.organizationId, table.userId)
       .where(sql`${table.userId} is not null`),
     uniqueIndex("chat_member_agent").on(table.agentId).where(sql`${table.agentId} is not null`),
-    uniqueIndex("chat_member_plan").on(table.planId).where(sql`${table.planId} is not null`),
+    uniqueIndex("chat_member_task").on(table.planId).where(sql`${table.planId} is not null`),
     check(
       "chat_member_id_of_kind",
       sql`(${table.kind} = ${literal(MEMBER_KIND.HUMAN)}) = (${table.userId} is not null)
         and (${table.agentId} is null or ${table.kind} = ${literal(MEMBER_KIND.AGENT)})
-        and (${table.planId} is null or ${table.kind} = ${literal(MEMBER_KIND.PLANNER)})`,
+        and (${table.planId} is null or ${table.kind} = ${literal(MEMBER_KIND.LUKE)})`,
     ),
   ],
 );
@@ -144,7 +144,7 @@ export const chatChannel = pgTable(
     /** The channel's name, without its `#`; null for a DM. */
     name: text("name"),
     /** The plan, on a plan's channel. */
-    planId: uuid("plan_id").references(() => task.id, { onDelete: "cascade" }),
+    planId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
     /** A DM's member whose id sorts first. */
     dmAMemberId: uuid("dm_a_member_id").references((): AnyPgColumn => chatMember.id, {
       onDelete: "cascade",
@@ -168,7 +168,7 @@ export const chatChannel = pgTable(
     uniqueIndex("chat_channel_organization_dm")
       .on(table.organizationId, table.dmAMemberId, table.dmBMemberId)
       .where(sql`${table.kind} = ${literal(CHANNEL_KIND.DM)}`),
-    uniqueIndex("chat_channel_plan")
+    uniqueIndex("chat_channel_task")
       .on(table.planId)
       .where(sql`${table.kind} = ${literal(CHANNEL_KIND.PLAN)}`),
     // The workspace's channels are read on every look of the window's held read.

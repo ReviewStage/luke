@@ -8,20 +8,32 @@ import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wi
 import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
-import { ResetIcon } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  ConfirmDialog,
+  type DialogQuestion,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  IconButton,
+  ResetIcon,
+  SettingsPage,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useConfirmDialog,
+} from "@luke/ui";
 import type { PersonActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act";
 import { BANNER_LOOK, Banner } from "../banner";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import type { TaskReader } from "../tasks/edit-ref";
 import { PlanBody } from "../tasks/plan-body";
 import type { PlanEditDoor } from "../tasks/use-plan-editing";
 import { TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
-import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-dialog";
 
 /**
  * plan-template-page.tsx -- Settings › Plan template: the Markdown every new plan starts as a copy of, drawn and edited as a plan is.
@@ -39,7 +51,7 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-
  * template of its own. The reset asks first, since it replaces every word of
  * the account's, kept since only in the template's history, and waits for a
  * save already out so the default lands last. A quiet note under the
- * title, drawn as an archived plan's banner is, says what the template is
+ * title, drawn as an archived task's banner is, says what the template is
  * for.
  *
  * The template is the account's, kept on the service, so the page reads it
@@ -55,7 +67,7 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "./confirm-
  * neither the words nor the rhythm of the typing.
  */
 
-/** The page's name, which the template is drawn under as a plan's title, and its versions too. */
+/** The page's name, which the template is drawn under as a task's title, and its versions too. */
 export const TEMPLATE_TITLE = "Plan template";
 
 /** What the page says. */
@@ -68,13 +80,13 @@ const PAGE_LINE = {
   RESET_FAILED: "The template could not be reset. Try again.",
 } as const;
 
-/** The id the template is drawn under as a plan's document, which names no plan of the account's. */
+/** The id the template is drawn under as a plan's document, which names no task of the account's. */
 export const TEMPLATE_DOCUMENT_ID = "plan-template";
 
 /** The workspace the template's document names: none, since the template is the account's own and stands in no workspace. */
 const TEMPLATE_WORKSPACE_ID = "plan-template";
 
-/** What the title line's button that opens the template's version history says, as a plan's menu item says it. */
+/** What the title line's button that opens the template's version history says, as a task's menu item says it. */
 const HISTORY_LABEL = "Version history";
 
 /** Where the page stands with the service's template. */
@@ -285,7 +297,7 @@ function useTemplate(signedIn: boolean, act: ActHandle["act"]): TemplateControl 
 }
 
 /**
- * The note under the template's title, drawn as an archived plan's banner
+ * The note under the template's title, drawn as an archived task's banner
  * is: what the template is for. It is what a settings search for the
  * template lands on.
  */
@@ -301,8 +313,8 @@ function TemplateNote(): React.JSX.Element {
         </span>
       }
     >
-      <p className="document-banner-title">{PAGE_LINE.NOTE}</p>
-      <p className="document-banner-detail">{PAGE_LINE.NOTE_DETAIL}</p>
+      <Text variant={TEXT_VARIANT.SECTION}>{PAGE_LINE.NOTE}</Text>
+      <Text tone={TEXT_TONE.MUTED}>{PAGE_LINE.NOTE_DETAIL}</Text>
     </Banner>
   );
 }
@@ -310,7 +322,8 @@ function TemplateNote(): React.JSX.Element {
 /**
  * The page's actions at the right end of its title line, as every Settings
  * page carries its own: the version history, and Reset to default while the
- * account holds a template of its own.
+ * account holds a template of its own. They are `@luke/ui`'s quiet
+ * `IconButton` and outline `Button`.
  */
 function TitleActions({
   custom,
@@ -324,20 +337,12 @@ function TitleActions({
   return (
     <span className="task-title-actions">
       <Tooltip label={HISTORY_LABEL}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={HISTORY_LABEL}
-          onClick={onShowHistory}
-        >
-          <HistoryIcon />
-        </button>
+        <IconButton icon={<HistoryIcon />} label={HISTORY_LABEL} onClick={onShowHistory} />
       </Tooltip>
       {custom ? (
-        <button type="button" className="toolbar-button bordered-button" onClick={onReset}>
-          <ResetIcon />
+        <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ResetIcon />} onClick={onReset}>
           Reset to default
-        </button>
+        </Button>
       ) : null}
     </span>
   );
@@ -399,22 +404,14 @@ function TemplateState({
   if (template.read === TEMPLATE_READ.FAILED) {
     return (
       <div className="desktop-empty">
-        <ReadFailure
-          line={PAGE_LINE.READ_FAILED}
-          onRetry={template.retry}
-          place={READ_FAILURE_PLACE.CENTRED}
-        />
+        <ErrorState onRetry={template.retry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {PAGE_LINE.READ_FAILED}
+        </ErrorState>
       </div>
     );
   }
   // While the read is out the page is its name alone, where every page's stands, and the rest arrives whole.
-  return (
-    <div className="settings-page-scroll scroll-fade-top" aria-busy="true">
-      <header className="settings-page-head">
-        <h1 className="settings-page-title">{TEMPLATE_TITLE}</h1>
-      </header>
-    </div>
-  );
+  return <SettingsPage title={TEMPLATE_TITLE}>{null}</SettingsPage>;
 }
 
 /**
@@ -436,7 +433,11 @@ export function PlanTemplatePage({
   const template = useTemplate(signedIn, act);
   const drawn = account !== undefined && template.read === TEMPLATE_READ.READ;
   return (
-    <section className="settings-page" aria-label={TEMPLATE_TITLE}>
+    <section
+      className="settings-page"
+      aria-label={TEMPLATE_TITLE}
+      aria-busy={signedIn && template.read === TEMPLATE_READ.READING ? true : undefined}
+    >
       {/* Settings has no top bar: the page's title and its actions stand in the page. */}
       <div className="desktop-drag-strip" />
       {drawn ? (

@@ -23,6 +23,10 @@ export {
   type HostedCodingAgentClientOptions,
 } from "./coding-agent-client.js";
 export {
+  HostedFactoryWorldClient,
+  type HostedFactoryWorldClientOptions,
+} from "./factory-world-client.js";
+export {
   GITHUB_CONNECTION_CALL_FAILURE,
   type GitHubConnectionCallFailure,
   type GitHubConnectionCallResult,

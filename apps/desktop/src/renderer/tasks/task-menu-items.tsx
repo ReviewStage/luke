@@ -7,18 +7,18 @@ import { LINK_COPY } from "../copy-feedback";
 import type { MenuAction } from "../desktop/action-menu";
 
 /**
- * plan-menu-items.tsx -- the items a plan's ⋯ menu and the ⋯ beside its title both offer: Copy link, Mark as unread, Rename, and Version history.
+ * task-menu-items.tsx -- the items a task's ⋯ menu and the ⋯ beside its title both offer: Copy link, Mark as unread, Rename, and Version history.
  *
  * Each menu says what pressing one does where it is drawn, so the sidebar's
  * Rename edits the row and the title's edits the title, but both draw the
- * item the same way. The link is the plan's own address on tryluke.dev,
+ * item the same way. The link is the task's own address on tryluke.dev,
  * written by the mention encoder (`@luke/features/mention-link`) as a mention
- * of the plan is, so it opens the plan in the app as a mention's chip does.
+ * of the task is, so it opens the task in the app as a mention's chip does.
  * Mark as unread turns to Mark as read on a task already unread, as Mail,
  * Slack, and Linear offer it (`use-plan-looks.ts`).
  */
 
-/** Where a plan's links are written: its workspace by slug, or by id until the workspaces are read, and its repository. */
+/** Where a task's links are written: its workspace by slug, or by id until the workspaces are read, and its repository. */
 export function taskLinkPlace(
   workspaces: readonly Workspace[],
   task: Pick<TaskSummary, "workspaceId" | "repository">,

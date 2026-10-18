@@ -25,7 +25,7 @@ const AGENT = "00000000-0000-4000-8000-0000000000a2";
 const LUKE = "00000000-0000-4000-8000-0000000000a3";
 const MARIA = "00000000-0000-4000-8000-0000000000a4";
 const AGENT_ID = "00000000-0000-4000-8000-0000000000b1";
-const PLAN_ID = "00000000-0000-4000-8000-0000000000c1";
+const TASK_ID = "00000000-0000-4000-8000-0000000000c1";
 
 const GENERAL: ChatChannel = {
   id: "general",
@@ -37,7 +37,7 @@ const PLAN: ChatChannel = {
   id: "plan",
   kind: CHANNEL_KIND.PLAN,
   name: "invites",
-  planId: PLAN_ID,
+  planId: TASK_ID,
   archived: false,
 };
 const TOPIC: ChatChannel = {
@@ -73,7 +73,7 @@ const NAMES: ChatNames = {
       },
     ],
   ]),
-  plans: new Map([[PLAN_ID, "Teammate invitations"]]),
+  plans: new Map([[TASK_ID, "Teammate invitations"]]),
   selfName: "Dean Stratakos",
 };
 
@@ -118,7 +118,7 @@ function chatOf(readSeq: number, messages: readonly ChatMessage[]): ChatAnswer {
     members: [
       { id: ME, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false },
       { id: AGENT, kind: MEMBER_KIND.AGENT, handle: "agent-2", agentId: AGENT_ID, left: false },
-      { id: LUKE, kind: MEMBER_KIND.PLANNER, handle: "luke", planId: PLAN_ID, left: false },
+      { id: LUKE, kind: MEMBER_KIND.LUKE, handle: "luke", planId: TASK_ID, left: false },
       { id: MARIA, kind: MEMBER_KIND.HUMAN, handle: "maria", left: false },
     ],
     channels: [WITH_AGENT, TOPIC, OLD, PLAN, WITH_MARIA, GENERAL],
@@ -182,6 +182,43 @@ test("the rail counts For you, lists #general, then the plans' channels, then th
   );
 });
 
+test("a channel read further on its own cursor counts only what came past that, and leaves every other channel counted from the cursor everywhere", () => {
+  const chat = {
+    ...chatOf(3, [
+      message(4, AGENT, WITH_AGENT.id),
+      message(5, AGENT, PLAN.id),
+      message(6, MARIA, PLAN.id),
+      message(7, MARIA, PLAN.id),
+    ]),
+    reads: [{ channelId: PLAN.id, readSeq: 6 }],
+  };
+  const rail = chatRail(chat, NAMES);
+  assert.deepEqual(
+    rail.channels.map((row) => [row.label, row.unread]),
+    [
+      ["general", 0],
+      ["invites", 1],
+      ["alpha", 0],
+    ],
+  );
+  assert.deepEqual(
+    rail.direct.map((row) => [row.label, row.unread]),
+    [
+      ["agent-2", 1],
+      ["maria", 0],
+    ],
+  );
+});
+
+test("a message changed past the reader's cursor counts unread again, as the service counts it, though it was posted before", () => {
+  const chat = {
+    ...chatOf(3, [message(2, AGENT, PLAN.id, { touchedSeq: 7 }), message(3, MARIA, PLAN.id)]),
+    reads: [{ channelId: PLAN.id, readSeq: 5 }],
+  };
+  const rail = chatRail(chat, NAMES);
+  assert.equal(rail.channels.find((row) => row.label === "invites")?.unread, 1);
+});
+
 test("a channel reads as its roots in the order posted, each with its thread's replies under it, and a reply whose root was not read stands as a root", () => {
   const chat = chatOf(0, [
     message(3, MARIA, PLAN.id, { parentId: "m1" }),
@@ -204,7 +241,7 @@ test("a channel reads as its roots in the order posted, each with its thread's r
   );
 });
 
-test("a line names an agent by its title, a plan's planner as Luke, the reader by their own name, and anyone else by their handle", () => {
+test("a line names an agent by its title, a task's Luke as Luke, the reader by their own name, and anyone else by their handle", () => {
   const chat = chatOf(0, []);
   assert.deepEqual(
     [AGENT, LUKE, ME, MARIA].map((id) => {

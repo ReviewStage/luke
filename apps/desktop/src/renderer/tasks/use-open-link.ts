@@ -1,8 +1,9 @@
 import { LINK_PLACE, type LinkPlace, type ReadLink, readLink } from "@luke/features/luke-link";
 import { decodeMention, MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
-import { ACT_KIND, isGitHubAddress, isWebAddress } from "@luke/host/acts";
+import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
+import { pullRequestAgentOf } from "@luke/ui/pull-request-link";
 import { createContext, useCallback, useContext, useMemo } from "react";
-import { useAct } from "../act";
+import { appPlatform } from "../app-platform";
 
 /**
  * use-open-link.ts -- how a link in written words opens: a transcript's, the Call tab's, an agent tab's, or an Inbox item's.
@@ -23,12 +24,54 @@ import { useAct } from "../act";
  * and neither asks first. An address neither act takes — a `file:`, a
  * `javascript:`, another app's scheme — is no link, and the surface draws
  * its words going nowhere.
+ *
+ * A place may open some links where it stands before the window does
+ * (`OpenHereProvider`), as the window's Inbox opens a file, a page, or a pull
+ * request of the item's task in the panel beside the item rather than
+ * leaving for the task, and a task, or an agent with no task, opens a pull
+ * request one of its agents opened in that agent's Pull request tab rather
+ * than on GitHub (`openPullRequestsHere`).
  */
 
 const OpenLinkContext = createContext<((link: ReadLink) => void) | undefined>(undefined);
 
 /** Hands the window's opener for a place in Luke to everything under it. */
 export const OpenLinkProvider = OpenLinkContext.Provider;
+
+/** Opens a link where the place stands, answering whether it did; one it did not is the window's to open. */
+export type OpenHere = (href: string) => boolean;
+
+const OpenHereContext = createContext<OpenHere | undefined>(undefined);
+
+/** Hands everything under it the place's own opener, asked first of every link opened there. */
+export const OpenHereProvider = OpenHereContext.Provider;
+
+/**
+ * A place's opener for its agents' pull requests: a link to the page on
+ * GitHub of one of them, however it is spelled, opens through `open`, the
+ * agent's Pull request tab, and any other link is the window's. `drawn` is
+ * the agents whose tabs the place draws, none before they are read. Note that
+ * an agent's pull request whose tab the place no longer draws, an archived
+ * agent's on a task, is the window's, since claiming it would open nothing.
+ */
+export function openPullRequestsHere(
+  agents: {
+    readonly pullRequests: ReadonlyMap<string, { readonly url: string }>;
+    readonly agentIds: readonly string[] | undefined;
+  },
+  open: (agentId: string) => void,
+): OpenHere {
+  return (href) => {
+    const { pullRequests, agentIds: drawn } = agents;
+    const opened = [...pullRequests].flatMap(([agentId, { url }]) =>
+      drawn === undefined || drawn.includes(agentId) ? [{ agentId, url }] : [],
+    );
+    const agentId = pullRequestAgentOf(href, opened);
+    if (agentId === undefined) return false;
+    open(agentId);
+    return true;
+  };
+}
 
 /** The place a mention of a plan, or of one of its sections, names. */
 function placeOfMention(mention: PlanMention): LinkPlace {
@@ -49,9 +92,13 @@ export function useOpenTask(): ((mention: PlanMention) => void) | undefined {
   );
 }
 
-/** The window's opener for a place in Luke, as a link names it; nothing outside the window. */
-export function useOpenPlace(): ((link: ReadLink) => void) | undefined {
-  return useContext(OpenLinkContext);
+/** The window's opener for a place in Luke, as a link to it would open it, one of an agent's messages among them; nothing outside the window. */
+export function useOpenPlace(): ((place: LinkPlace) => void) | undefined {
+  const open = useContext(OpenLinkContext);
+  return useMemo(
+    () => (open === undefined ? undefined : (place: LinkPlace) => open({ workspace: "", place })),
+    [open],
+  );
 }
 
 /**
@@ -74,21 +121,22 @@ function lukeLinkOf(href: string): ReadLink | undefined {
     : undefined;
 }
 
-/** Opens a link {@link opensAsLink} admits: a Luke link in the window where it can be, anything else in the browser, over the act it belongs to. */
+/** Opens a link {@link opensAsLink} admits: a Luke link in the window where it can be, anything else in the browser, over the capability it belongs to. */
 export function useOpenLink(): (href: string) => void {
-  const { tell } = useAct();
   const openPlace = useContext(OpenLinkContext);
+  const openHere = useContext(OpenHereContext);
   return useCallback(
     (href: string) => {
+      if (openHere?.(href) === true) return;
       const link = openPlace === undefined ? undefined : lukeLinkOf(href);
       if (openPlace !== undefined && link !== undefined) {
         openPlace(link);
       } else if (isGitHubAddress(href)) {
-        tell(ACT_KIND.GITHUB_OPEN, { url: href });
+        appPlatform().openGitHub(href);
       } else {
-        tell(ACT_KIND.WEB_OPEN, { url: href });
+        appPlatform().openWeb(href);
       }
     },
-    [tell, openPlace],
+    [openPlace, openHere],
   );
 }

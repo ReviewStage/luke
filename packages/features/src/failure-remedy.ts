@@ -7,22 +7,22 @@ import { INTEGRATION_NAME, type IntegrationProvider } from "./integration-wire.j
 export const FAILURE_REASON = {
   RECONNECT_INTEGRATION: "reconnect-integration",
   API_KEY: "api-key",
-  /** The plan's workspace has no GitHub connected: Settings › Workspace connects it. */
+  /** The task's workspace has no GitHub connected: Settings › Workspace connects it. */
   CONNECT_GITHUB: "connect-github",
-  /** The plan's workspace's GitHub was uninstalled or suspended: Settings › Workspace connects it again. */
+  /** The task's workspace's GitHub was uninstalled or suspended: Settings › Workspace connects it again. */
   RECONNECT_GITHUB: "reconnect-github",
   /** The installation was not given the repository: its settings page on GitHub gives it. */
   ADD_REPOSITORY: "add-repository",
-  /** The repository is not one the workspace can reach at all: the plan names another. */
+  /** The repository is not one the workspace can reach at all: the task names another. */
   CHOOSE_REPOSITORY: "choose-repository",
-  /** The repository's owner is connected to another workspace of the account's: the plan moves there. */
+  /** The repository's owner is connected to another workspace of the account's: the task moves there. */
   MOVE_TASK: "move-plan",
   OTHER: "other",
 } as const;
 
 export type FailureReason = (typeof FAILURE_REASON)[keyof typeof FAILURE_REASON];
 
-/** The remedies that mend a plan's repository in the plan's own place, and so name the plan. */
+/** The remedies that mend a task's repository in the task's own place, and so name the task. */
 type TaskRemedyReason =
   | typeof FAILURE_REASON.CONNECT_GITHUB
   | typeof FAILURE_REASON.RECONNECT_GITHUB
@@ -51,7 +51,7 @@ export type Failure =
       readonly reason: typeof FAILURE_REASON.MOVE_TASK;
       readonly text: string;
       readonly taskId: string;
-      /** The workspace the plan moves to, whose name the press says. */
+      /** The workspace the task moves to, whose name the press says. */
       readonly workspace: { readonly id: string; readonly name: string };
     }
   | {

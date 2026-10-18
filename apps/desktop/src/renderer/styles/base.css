@@ -12,10 +12,9 @@
      edges, accent, states, and shadows, is `@luke/ui`'s desktop palette
      (`tokens/palettes.css`), keyed on the root's `data-luke-profile` and
      `data-luke-theme`, and its theme is `system`, so it follows the Mac's
-     appearance and Luke's own Theme setting through it. This file's old names
-     for those colours (`--text-primary`, `--hairline`, …) are aliases of it
-     (`tokens/legacy.css`). What stays here is the window's own: whose voice
-     is live, the code's and the terminal's inks, a file icon's. */
+     appearance and Luke's own Theme setting through it. What stays here is
+     the window's own: whose voice is live, the code's and the terminal's
+     inks, a file icon's. */
 
   /* Whose voice is live, so a glance says who is talking. Your turn is green,
      which is nowhere else on the surface and so belongs to you alone; Luke
@@ -23,26 +22,11 @@
      live and in progress, which is what a reply is. Both the meter and the face
      read from here, so the two can never disagree about who has the turn. */
   --voice-developer: #7fe0ac;
-  --voice-luke: var(--state-working);
-  /* How thick the keyboard's ring is and how far it stands off the control's
-     edge; its colour is the palette's accent. The reach is how far the ring
-     stands past the control's
-     edge: a scroller pads by it, so the ring of a row laid edge to edge in
-     it is not clipped. A box that clips what it holds keeps the ring whole
-     one of two ways. One whose clip is only there to hold in what runs long
-     clips past the ring, `overflow: clip` with `overflow-clip-margin` the
-     room; note that the room names its box, because Chromium drops a bare
-     `calc()` there and clips at the edge after all. One whose clip is an
-     edge it draws, a card, sets the offset to the inset for everything in
-     it, so the ring is drawn inside the control, on the card's side of the
-     edge. */
-  --focus-ring-width: 2px;
-  --focus-ring-offset: 1px;
-  --focus-ring-inset: calc(-1 * var(--focus-ring-width));
-  --focus-ring-reach: calc(var(--focus-ring-width) + var(--focus-ring-offset));
-  --focus-ring-room: padding-box var(--focus-ring-reach);
+  --voice-luke: var(--luke-color-working);
+  /* The keyboard's ring, how thick and how far off the edge, is the
+     profile's `--luke-focus-ring-*` (`tokens/profiles.css`). */
   /* The caption strip's ground, opaque because the document scrolls on beneath it. */
-  --surface-caption: #16161b;
+  --surface-caption: var(--luke-color-overlay);
   /* The code on screen, in the ground and inks of the theme the host colours
      it with (`plan-code.ts`), and its lines pointed at in that theme's blue. */
   --code-ground: #0d1117;
@@ -56,8 +40,8 @@
      words a changed line changed in a deeper tint of the same, and the mark
      at a changed line's edge in the colour itself. Each is mixed from the
      palette's own, which flips with the appearance, so none is restated. */
-  --diff-added-mark: var(--state-complete);
-  --diff-removed-mark: var(--danger);
+  --diff-added-mark: var(--luke-color-complete);
+  --diff-removed-mark: var(--luke-color-danger);
   --diff-added-ground: color-mix(in srgb, var(--diff-added-mark) 14%, transparent);
   --diff-removed-ground: color-mix(in srgb, var(--diff-removed-mark) 14%, transparent);
   --diff-added-word: color-mix(in srgb, var(--diff-added-mark) 34%, transparent);
@@ -69,11 +53,13 @@
      canvas, which reads none of this itself, so the bundle reads each one
      off the host and draws again when the appearance flips
      (`terminal/terminal-theme.ts`). */
-  --terminal-ground: var(--desktop-well);
+  /* The well's own colour in each appearance rather than `--luke-color-well`,
+     because xterm takes the property's text and cannot read a `light-dark()`. */
+  --terminal-ground: #0f0f12;
   --terminal-text: var(--code-text);
   --terminal-cursor: var(--code-text);
   --terminal-selection: rgba(56, 139, 253, 0.4);
-  /* The scrollbar's ink, restated rather than read through `--scrollbar`,
+  /* The scrollbar's ink, restated rather than read through `--luke-color-scrollbar`,
      because the canvas is handed the token's computed text, and the shared
      palette's is a `light-dark()` pair the terminal cannot parse. */
   --terminal-scrollbar: rgba(255, 255, 255, 0.18);
@@ -154,13 +140,13 @@
 @media (prefers-color-scheme: light) {
   :root {
     --voice-developer: #17784a;
-    --surface-caption: #fff;
     --code-ground: #fff;
     --code-text: #1f2328;
     --code-line-number: rgba(31, 35, 40, 0.5);
     --code-line-number-pointed: rgba(31, 35, 40, 0.85);
     --code-pointed: rgba(9, 105, 218, 0.08);
     --code-pointed-edge: #0969da;
+    --terminal-ground: #f8f8f9;
     --terminal-selection: rgba(9, 105, 218, 0.2);
     --terminal-scrollbar: rgba(0, 0, 0, 0.2);
     --terminal-black: #24292f;
@@ -203,7 +189,9 @@
    banner, a bar at its foot, a band stuck inside it, or the window's drag
    strip. Content dissolves over `--scroll-fade` rather than being sliced
    against that edge. A scroller wears `scroll-fade` to fade at both edges,
-   or `scroll-fade-top` where only its top meets something pinned.
+   or `scroll-fade-top` where only its top meets something pinned; the
+   shared settings page, which takes no class of the window's, fades as
+   `scroll-fade-top` by its place under a Settings page's drag strip.
 
    Each edge's depth is a registered length that a scroll timeline eases
    from none to `--scroll-fade` over the first (or the last) `--scroll-fade`
@@ -250,7 +238,8 @@
 }
 
 .scroll-fade,
-.scroll-fade-top {
+.scroll-fade-top,
+.settings-page > .luke-settings-page {
   --scroll-fade-mask: linear-gradient(
     to bottom,
     #000 var(--fade-inset-top),
@@ -274,7 +263,8 @@
   scroll-padding-bottom: var(--scroll-fade);
 }
 
-.scroll-fade-top {
+.scroll-fade-top,
+.settings-page > .luke-settings-page {
   animation-name: scroll-fade-start, none;
 }
 
@@ -363,8 +353,8 @@
     [role="menuitemcheckbox"],
     [tabindex]:not([tabindex="-1"])
   ):focus-visible:not(:has(> [data-focus-ring])) {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-offset);
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: var(--luke-focus-ring-offset);
   }
 
   /* A control whose drawn shape is a part of it, a picture tile's picture
@@ -376,8 +366,8 @@
   }
 
   :root[data-keyboard="true"] :focus-visible > [data-focus-ring] {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-offset);
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: var(--luke-focus-ring-offset);
   }
 
   /* The keyboard scrolls a control in with its ring's reach to spare, so a
@@ -399,7 +389,7 @@
     [role="menuitemcheckbox"],
     [tabindex]:not([tabindex="-1"])
   ) {
-    scroll-margin: var(--focus-ring-reach);
+    scroll-margin: var(--luke-focus-ring-reach);
   }
 
   :root:not([data-keyboard="true"])
@@ -415,8 +405,8 @@
      caret without ringing the composer around it. */
   :is(textarea, [contenteditable], input:not([type="checkbox"])):focus-visible,
   .field-well:has(:is(textarea, [contenteditable], input):not(.menu-surface *):focus-visible) {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: calc(var(--focus-ring-width) / -2);
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: calc(var(--luke-focus-ring-width) / -2);
   }
 }
 
@@ -430,14 +420,32 @@ body,
      or scrollIntoView can drag the whole window's content out of. */
   overflow: clip;
   background: transparent;
-  -webkit-user-select: none;
-  user-select: none;
 }
 
-/* The one place a selection is wanted: a credential being pasted. */
-.settings-input {
-  -webkit-user-select: text;
-  user-select: text;
+/* Words are selectable wherever they are read, so any line the window draws,
+   a failure's sentence, a heading, a row's detail, can be copied. A control
+   is pressed rather than read, so its words never select: a press, a tab, a
+   menu's row, a switch, a label that presses what it names, a glyph, and
+   whatever is dragged, where a selection would start in place of the drag. */
+:where(
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="menuitemcheckbox"],
+  [role="menuitemradio"],
+  [role="option"],
+  [role="switch"],
+  [role="slider"],
+  [role="separator"],
+  summary,
+  label,
+  svg,
+  img,
+  [draggable="true"]
+) {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Luke's face ------------------------------------------------------------ */
@@ -452,7 +460,7 @@ body,
   height: 18px;
   flex: 0 0 auto;
   overflow: visible;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   transition: color var(--duration-quick) var(--motion-exit);
 }
 
@@ -512,7 +520,7 @@ body,
   display: inline-flex;
   height: 12px;
   align-items: center;
-  gap: 4px;
+  gap: var(--luke-space-4);
 }
 
 /* The dots keep the generated `success` cycle's beat — luke-success-2, 2s, the
@@ -527,7 +535,7 @@ body,
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--text-secondary);
+  background: var(--luke-color-text-muted);
   opacity: 0.35;
   animation-duration: 2s;
   animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
@@ -615,15 +623,15 @@ body,
   position: absolute;
   z-index: 6;
   left: 50%;
-  padding: 8px 14px 10px;
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-14);
   /* Opaque, because the document scrolls on beneath it. */
   background: var(--surface-caption);
-  box-shadow: 0 8px 24px var(--shadow-soft);
+  box-shadow: 0 var(--luke-space-8) var(--luke-space-24) var(--luke-color-shadow-soft);
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 6px);
+  transform: translate(-50%, var(--luke-space-6));
   transition:
     opacity var(--duration-exit) var(--motion-exit),
     transform var(--duration-exit) var(--motion-exit);
@@ -639,11 +647,10 @@ body,
 
 /* Who is speaking, in the colour their meter wears in the sidebar. */
 .voice-caption-speaker {
-  margin: 0 0 2px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  line-height: 16px;
+  margin: 0 0 var(--luke-space-2);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .voice-caption[data-tone="luke"] .voice-caption-speaker {
@@ -660,7 +667,7 @@ body,
    lines leave through it. The fade rides a scroll timeline, so it stands only
    while the words overflow and a caption that fits is left whole. */
 .voice-caption-words {
-  max-height: 44px;
+  max-height: calc(2 * var(--luke-type-dialog-leading));
   overflow: hidden;
   animation: caption-overflow-fade linear both;
   animation-timeline: scroll(self block);
@@ -676,25 +683,25 @@ body,
   }
 }
 
-/* Mirrors the 44px above: two of these lines. */
+/* Mirrors the height above: two of these lines. */
 .voice-caption-text {
   display: block;
-  color: var(--text-primary);
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 22px;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-dialog-leading);
 }
 
 /* A voice failure borrows the strip in the `.error-message` red, because it
    is a fault being reported rather than words being spoken. */
 .voice-caption[data-tone="error"] .voice-caption-text {
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 /* A state notice borrows it more quietly, in the attention orange: temporary
    unavailability must not wear a fault's red. */
 .voice-caption[data-tone="notice"] .voice-caption-text {
-  color: var(--state-attention);
+  color: var(--luke-color-attention);
 }
 
 /* A quote in a failure or a notice keeps the tone's colour and is set off by
@@ -713,10 +720,10 @@ body,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 9px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--hairline);
+  gap: var(--luke-control-gap);
+  margin-top: var(--luke-space-8);
+  padding-top: var(--luke-space-8);
+  border-top: 1px solid var(--luke-color-border);
   pointer-events: auto;
 }
 
@@ -724,31 +731,12 @@ body,
    do something; the caption above it keeps its own colour. */
 .volume-hint-text {
   overflow: hidden;
-  color: var(--state-attention);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
+  color: var(--luke-color-attention);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
+  line-height: var(--luke-type-caption-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.volume-hint-dismiss {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  height: 20px;
-  padding: 0 9px;
-  border-radius: 10px;
-  background: var(--raised);
-  color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 600;
-  transition: background-color var(--duration-hover) ease;
-  white-space: nowrap;
-}
-
-.volume-hint-dismiss:hover {
-  background: var(--raised-strong);
 }
 
 /* Where a piece of work stands, on its own glyph (`state-glyph.tsx`). Working,
@@ -782,7 +770,7 @@ body,
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  color: var(--danger);
+  color: var(--luke-color-danger);
 }
 
 .failed-mark > svg {
@@ -799,7 +787,7 @@ body,
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .draft-mark > svg {
@@ -808,13 +796,14 @@ body,
 }
 
 /* A fault's words, in the danger text colour: a refusal under the row or
-   the dialog it answers, a press that did not land, and a read that did not
-   (`read-failure.tsx`). The one class for them, so a failure reads alike
-   wherever it is said. */
+   the dialog it answers, and a press that did not land. The one class for
+   them, so a failure reads alike wherever it is said. A read that did not
+   land is said more quietly, its glyph alone in red (`@luke/ui`'s
+   `ErrorState`). */
 .error-message {
   margin: 0;
-  color: var(--danger-text);
-  font-size: 12px;
+  color: var(--luke-color-danger-text);
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The mark an agent at work wears (`working-mark.tsx`): two pixels and their
@@ -906,54 +895,6 @@ svg.working-mark[viewBox] {
   white-space: nowrap;
 }
 
-/* Disclosures ------------------------------------------------------------ */
-
-/* A fold a press opens or closes (`use-disclosure.ts`). Its body lands in the
-   layout at once and rides in on the pair an arriving element rides: a fade,
-   and a clip unrolling it from its top edge, on the panes' plain ease-out,
-   since a clip that overshot would cut nothing. Closing, it fades out first
-   and the layout lands once the fade is done. Nothing moves a height, so the
-   words never re-wrap mid-motion, and a body still growing as it streams is
-   unrolled by a fraction of its own box rather than a size it was measured
-   at. Only the press marks the root, so a find opening a fold onto a match,
-   or a row drawn again, appears at once. */
-[data-disclosure="opening"] > .disclosure-body {
-  animation:
-    disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
-    disclosure-unroll var(--duration-pane) var(--motion-pane) backwards;
-}
-
-[data-disclosure="closing"] > .disclosure-body {
-  animation: disclosure-leave var(--duration-exit) var(--motion-exit) forwards;
-  /* Note that the hold waits on every motion the body runs, and a body that
-     held focus would start the scrollbar's own fade (desktop.css) as it
-     lost it, so the exit is the one motion it has. */
-  transition: none;
-}
-
-@keyframes disclosure-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-/* Note that the clip names both ends, because a clip cannot be interpolated
-   from none: it would flip halfway through instead. */
-@keyframes disclosure-unroll {
-  from {
-    clip-path: inset(0 0 100% 0);
-  }
-  to {
-    clip-path: inset(0);
-  }
-}
-
-@keyframes disclosure-leave {
-  to {
-    opacity: 0;
-  }
-}
-
 /* Evidence capture screenshots a fixed moment after the renderer reports ready,
    so without this a capture could land mid-transition and the PNGs would stop
    being reproducible.
@@ -967,6 +908,8 @@ svg.working-mark[viewBox] {
   --duration-hover: 0s;
   --duration-pane: 0s;
   --row-stagger: 0s;
+  /* A late state shows at once, so a capture never waits on its delay. */
+  --late-delay: 0s;
   /* Luke blinks and sways on a loop with no end to wait for, so a capture would
      otherwise land wherever in it the shutter happened to fall. Held on its
      first frame, he is the same face in every PNG. The working rows' spinners
@@ -988,6 +931,9 @@ svg.working-mark[viewBox] {
     --duration-fast: 1ms;
     --duration-pane: 1ms;
     --row-stagger: 0ms;
+    /* A late state's wait (`--late-delay`) stands: it holds back a blip that
+       heals at once rather than moving anything, and zeroing it would
+       flash every blip on screen. */
     /* Idle motion is the one thing here that no one asked for, so it is the
        first thing to stop: Luke sits still, upright, with his eyes open. The
        spinner holds too — a working row still says Working in words. */

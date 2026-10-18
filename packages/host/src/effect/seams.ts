@@ -5,7 +5,10 @@
  * so a composer states the seams it reaches in its own requirements instead of
  * taking a kernel that holds all of them.
  */
+import type { OpenConsent } from "@luke/credentials";
+import type { OpenSocket } from "@luke/voice";
 import { type ConfigProvider, Context, Layer, Logger } from "effect";
+import type { OpenTerminalSocket } from "../compose-terminals.js";
 import type { RunMode as RunModeFacts } from "../run-mode.js";
 import type { SecretCipher as SecretCipherSeam } from "../settings-store.js";
 
@@ -46,6 +49,41 @@ export interface IdSourceSeam {
 }
 
 export class IdSource extends Context.Service<IdSource, IdSourceSeam>()("@luke/host/IdSource") {}
+
+/**
+ * The voice sideband's WebSocket to the service. It arrives rather than being
+ * built here, because the only implementation so far is over `ws`
+ * (`@luke/host/node`), and a host that imported it could not load where `ws`
+ * does not.
+ */
+export class VoiceSocket extends Context.Service<VoiceSocket, OpenSocket>()(
+  "@luke/host/VoiceSocket",
+) {}
+
+/**
+ * A terminal's relay WebSocket, on the same terms as the voice socket. Only
+ * the terminals concern asks for it, so an assembly that leaves terminals out
+ * is handed none.
+ */
+export class TerminalSocket extends Context.Service<TerminalSocket, OpenTerminalSocket>()(
+  "@luke/host/TerminalSocket",
+) {}
+
+/**
+ * How the account's sign-in asks the developer's consent: each trip the
+ * session manager words — the sign-in and the session hand-off — is stood up
+ * by `open`. It arrives rather than being built here, because the only
+ * implementation so far is the desktop's loopback over `node:http`
+ * (`@luke/credentials/node`), and a host that imported it could not load in a
+ * browser, which would sign in its own way.
+ */
+export interface SignInConsentSeam {
+  readonly open: OpenConsent;
+}
+
+export class SignInConsent extends Context.Service<SignInConsent, SignInConsentSeam>()(
+  "@luke/host/SignInConsent",
+) {}
 
 /**
  * Where a line about the host's own running goes. The service answers the
@@ -91,7 +129,7 @@ export class ShutdownSignal extends Context.Service<ShutdownSignal, ShutdownSign
   "@luke/host/ShutdownSignal",
 ) {}
 
-/** Every seam tag a host composition stands on. */
+/** Every seam tag the host's kernel stands on; the assembly adds `VoiceSocket` and `SignInConsent`, and each platform concern it was built with adds its own. */
 export type HostSeamTags =
   | StateRoot
   | RunMode

@@ -7,7 +7,7 @@ import { OpenPage } from "../src/OpenPage";
 
 /**
  * The page a Luke link lands on in a browser, drawn from its own address: the
- * press hands the plan to the app in its own scheme, a press is followed by a
+ * press hands the task to the app in its own scheme, a press is followed by a
  * line saying what to check where nothing opened, and the way to Luke is the
  * landing page, never a download. Synthetic ids.
  */

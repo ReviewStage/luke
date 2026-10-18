@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, matchesGlob } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RESERVED_WORKSPACE_SLUGS } from "@luke/features/workspace-wire";
+import { temporaryDirectory } from "@luke/runtime/testing";
 import { test } from "vitest";
 import { webFunctions } from "../server/function-layout";
 import { apiRewrites, rewritesDrifted, vercelConfigSource } from "../server/function-rewrites";
@@ -41,10 +43,21 @@ interface Services {
   readonly [SERVICE.DEV]: Service;
 }
 
+interface Git {
+  readonly deploymentEnabled: Readonly<Record<string, boolean>>;
+}
+
+const VERCEL_JSON = readFileSync(
+  fileURLToPath(new URL("../../../vercel.json", import.meta.url)),
+  "utf8",
+);
+
 // SAFETY: the file is this repository's own vercel.json, read for its deployment shape.
-const vercel = JSON.parse(
-  readFileSync(fileURLToPath(new URL("../../../vercel.json", import.meta.url)), "utf8"),
-) as { services: Services; rewrites: readonly Rewrite[] };
+const vercel = JSON.parse(VERCEL_JSON) as {
+  git: Git;
+  services: Services;
+  rewrites: readonly Rewrite[];
+};
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
 
@@ -64,6 +77,44 @@ test("the /api/ rewrites are generated into the web service's routes, ahead of i
   assert.deepEqual(regenerated.services[SERVICE.WEB].routes, web.routes);
   // The generator carries every service whole, the coder's mount route included.
   assert.deepEqual(regenerated.services, vercel.services);
+});
+
+/** Whether Vercel deploys a push to the branch, by the `git.deploymentEnabled` globs, where a branch no glob names deploys. */
+function deploys(branch: string): boolean {
+  const refused = Object.entries(vercel.git.deploymentEnabled).some(
+    ([glob, enabled]) => !enabled && matchesGlob(branch, glob),
+  );
+  return !refused;
+}
+
+test("a GitHub merge-queue branch is not deployed, and every other branch is", () => {
+  for (const branch of [
+    "gh-readonly-queue/main/pr-3551-d1c107a6f00dbb4b1e5bd2d1b8f3a5c7e9d01234",
+    "gh-readonly-queue/release/1.2/pr-7-0123456789abcdef0123456789abcdef01234567",
+  ]) {
+    assert.equal(deploys(branch), false, branch);
+  }
+  for (const branch of [
+    "main",
+    "ci/vercel-no-merge-queue-deploys",
+    "conductor/some-workspace",
+    "pr-assets",
+    "gh-readonly-queue",
+  ]) {
+    assert.equal(deploys(branch), true, branch);
+  }
+});
+
+test("regenerating vercel.json gives back the committed file byte for byte", async () => {
+  assert.equal(await vercelConfigSource(WEB), VERCEL_JSON);
+});
+
+test("a vercel.json key the generator does not know refuses the generation rather than being dropped", async (t) => {
+  const root = await temporaryDirectory(t, "luke-vercel-config-");
+  const web = join(root, "apps", "web");
+  mkdirSync(web, { recursive: true });
+  writeFileSync(join(root, "vercel.json"), JSON.stringify({ ...vercel, images: { sizes: [256] } }));
+  await assert.rejects(vercelConfigSource(web), /images/u);
 });
 
 /**

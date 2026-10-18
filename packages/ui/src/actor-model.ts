@@ -82,6 +82,8 @@ export type Actor =
       readonly kind: typeof ACTOR_KIND.AGENT;
       /** The agent's id, which tells two agents of one name apart; absent where an older service named none. */
       readonly agentId?: string | undefined;
+      /** The task the agent works on, where the place naming it knows it, which its card and its tab are read under. */
+      readonly taskId?: string | undefined;
       readonly name: string;
       readonly provider: ModelProvider | undefined;
       readonly state: ActorState;
@@ -131,7 +133,7 @@ export const ROLE_WORDS = {
 /** Luke, who is always the same actor. */
 export const LUKE_ACTOR: Actor = { kind: ACTOR_KIND.LUKE };
 
-/** How many hues an identity's letter is drawn on: `--workspace-hue-1` through `--workspace-hue-6`. */
+/** How many hues an identity's letter is drawn on: `--luke-color-identity-1` through `--luke-color-identity-6`. */
 const IDENTITY_HUES = 6;
 
 /** Splits a name into the characters a reader sees, an emoji's parts as one. */
@@ -292,9 +294,9 @@ export function accountActor(account: {
 }
 
 /**
- * Who created a plan, for the reader: the member `createdBy` names, read
+ * Who created a task, for the reader: the member `createdBy` names, read
  * against the members. Note that a service before `createdBy` names only
- * the owner's id, so the reader's own plan is drawn as their `account`, as
+ * the owner's id, so the reader's own task is drawn as their `account`, as
  * the members list them where they do, and another member's as the members
  * list that id; where neither knows a name, the creator is someone unnamed,
  * never a face with no name.
@@ -350,7 +352,7 @@ export interface EditReader {
   readonly owner?: PersonActor | undefined;
 }
 
-/** A coding agent an edit names, as the window found it among the plan's agents: its harness and where its work stands. */
+/** A coding agent an edit names, as the window found it among the task's agents: its harness and where its work stands. */
 export interface EditAgent {
   readonly provider: ModelProvider | undefined;
   readonly state: ActorState;

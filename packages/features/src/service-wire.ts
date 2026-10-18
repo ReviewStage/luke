@@ -59,8 +59,10 @@ export const HOSTED_API_ERROR = {
    * and the same request a moment later may be taken.
    */
   GITHUB_UNANSWERED: "github-unanswered",
-  /** The plan names no repository yet, so there is nothing for a coding agent to check out; the developer picks one first. */
+  /** The task names no repository yet, so there is nothing for a coding agent to check out; the developer picks one first. */
   NO_REPOSITORY: "no-repository",
+  /** The branch a coding agent was asked to start on is none of the repository's on GitHub; nothing was started. */
+  BRANCH_NOT_FOUND: "branch-not-found",
   /** The message spells more characters than one message to a coding agent may; shortened, it is taken. */
   MESSAGE_TOO_LONG: "message-too-long",
   /** The agent's session is still coming up and could not take the message yet; the same message a moment later is taken. */
@@ -68,7 +70,7 @@ export const HOSTED_API_ERROR = {
   /** The agent's session has ended for good: its sandbox cannot be reached again, and only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
   /**
-   * The plan is archived: it is read, and takes nothing — no edit, no call,
+   * The task is archived: it is read, and takes nothing — no edit, no call,
    * no agent started or sent a message — until it is brought back. Nothing
    * was written.
    */
@@ -125,7 +127,7 @@ export const countedNumber = EffectSchema.Finite.check(EffectSchema.isGreaterTha
  * Reads an answer of the service, or a frame it sent, dropping any key a
  * newer service added rather than refusing the whole answer. Every desktop
  * read of what the service answered goes through this, because a build that
- * refused an unknown key — v0.11.0 reading a plan — stops working the day
+ * refused an unknown key — v0.11.0 reading a task — stops working the day
  * the service adds one. A request frame the desktop builds, an IPC act, and
  * anything the service parses are read with `readEither` as declared,
  * refusing a key they do not name.

@@ -30,7 +30,7 @@ import type { TasksControl } from "./use-tasks-tab";
 export interface WaitingItems {
   readonly items: readonly InboxListed[];
   /** The plans whose items were read as main says they stand now, which `items` speaks for whole; a plan that changed since, its read out or failed, is not among them. */
-  readonly readPlans: ReadonlySet<string>;
+  readonly readTasks: ReadonlySet<string>;
   /** The agents with no plan whose items were read as main says they stand now, which `items` speaks for whole. */
   readonly readAgents: ReadonlySet<string>;
   readonly reading: boolean;
@@ -88,7 +88,7 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
   };
   return {
     items,
-    readPlans: read.current,
+    readTasks: read.current,
     readAgents: planless.current,
     reading,
     failed: read.failed || planless.failed,

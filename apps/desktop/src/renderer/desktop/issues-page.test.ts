@@ -9,12 +9,14 @@ import {
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { lineWords } from "#testing/actor-line";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
@@ -119,87 +121,79 @@ beforeEach(() => {
   heldCreates = undefined;
   changeRefused = false;
   copied = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.ISSUES_LIST) {
-          listed.push(request.payload.workspaceId);
-          const value = lists.shift() ?? {
-            issues: standing.filter((each) => each.archivedAt === null),
-          };
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.ISSUES_LIST) {
+        listed.push(request.payload.workspaceId);
+        const value = lists.shift() ?? {
+          issues: standing.filter((each) => each.archivedAt === null),
+        };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.ISSUES_CREATE) {
+        creates.push(request.payload);
+        if (createRefused) {
+          const value = { failure: ISSUE_CALL_FAILURE.INVALID };
           return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
-        if (request.kind === ACT_KIND.ISSUES_CREATE) {
-          creates.push(request.payload);
-          if (createRefused) {
-            const value = { failure: ISSUE_CALL_FAILURE.INVALID };
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-          }
-          const { title, status, priority } = request.payload;
-          const made = issue(standing.length + 1, {
-            title,
-            updatedAt: 1_000,
-            ...(status === undefined ? undefined : { status }),
-            ...(priority === undefined ? undefined : { priority }),
-          });
-          standing = [made, ...standing];
-          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } };
-          const held = heldCreates;
-          if (held === undefined) return Promise.resolve(done);
-          return new Promise((resolve) => held.push(() => resolve(done)));
-        }
-        if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-        }
-        if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
-        }
-        if (request.kind === ACT_KIND.ISSUES_READ) {
-          reads.push(request.payload.issueId);
-          const found = standing.find((each) => each.id === request.payload.issueId);
-          const value =
-            found === undefined ? { failure: ISSUE_CALL_FAILURE.NOT_FOUND } : { issue: found };
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-        }
-        if (request.kind === ACT_KIND.ISSUES_CHANGE) {
-          changes.push(request.payload);
-          const { issueId, change } = request.payload;
-          const was = standing.find((each) => each.id === issueId);
-          if (changeRefused) {
-            const refused = {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: { failure: ISSUE_CALL_FAILURE.UNANSWERED },
-            };
-            const held = heldChanges;
-            if (held === undefined) return Promise.resolve(refused);
-            return new Promise((resolve) => held.push(() => resolve(refused)));
-          }
-          if (was === undefined) {
-            const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-          }
-          const { archived, ...fields } = change;
-          const changed: Issue = {
-            ...was,
-            ...fields,
-            archivedAt: archived === undefined ? was.archivedAt : archived ? 5_000 : null,
-            updatedAt: was.updatedAt + 1,
+        const { title, status, priority } = request.payload;
+        const made = issue(standing.length + 1, {
+          title,
+          updatedAt: 1_000,
+          ...(status === undefined ? undefined : { status }),
+          ...(priority === undefined ? undefined : { priority }),
+        });
+        standing = [made, ...standing];
+        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: made } };
+        const held = heldCreates;
+        if (held === undefined) return Promise.resolve(done);
+        return new Promise((resolve) => held.push(() => resolve(done)));
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
+      }
+      if (request.kind === ACT_KIND.ISSUES_READ) {
+        reads.push(request.payload.issueId);
+        const found = standing.find((each) => each.id === request.payload.issueId);
+        const value =
+          found === undefined ? { failure: ISSUE_CALL_FAILURE.NOT_FOUND } : { issue: found };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.ISSUES_CHANGE) {
+        changes.push(request.payload);
+        const { issueId, change } = request.payload;
+        const was = standing.find((each) => each.id === issueId);
+        if (changeRefused) {
+          const refused = {
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { failure: ISSUE_CALL_FAILURE.UNANSWERED },
           };
-          standing = standing.map((each) => (each.id === issueId ? changed : each));
-          const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: changed } };
           const held = heldChanges;
-          if (held === undefined) return Promise.resolve(done);
-          return new Promise((resolve) => held.push(() => resolve(done)));
+          if (held === undefined) return Promise.resolve(refused);
+          return new Promise((resolve) => held.push(() => resolve(refused)));
         }
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-          copied.push(request.payload.words);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        if (was === undefined) {
+          const value = { failure: ISSUE_CALL_FAILURE.NOT_FOUND };
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
         }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      },
+        const { archived, ...fields } = change;
+        const changed: Issue = {
+          ...was,
+          ...fields,
+          archivedAt: archived === undefined ? was.archivedAt : archived ? 5_000 : null,
+          updatedAt: was.updatedAt + 1,
+        };
+        standing = standing.map((each) => (each.id === issueId ? changed : each));
+        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { issue: changed } };
+        const held = heldChanges;
+        if (held === undefined) return Promise.resolve(done);
+        return new Promise((resolve) => held.push(() => resolve(done)));
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
 });
@@ -280,8 +274,8 @@ async function settle(): Promise<void> {
 function groups(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll(".home-section, [data-issue-column]")]
     .map((group): [string, string[]] => [
-      group.querySelector(".home-section-title, .factory-head")?.textContent ?? "",
-      [...group.querySelectorAll(".sidebar-task-item")].map(
+      group.querySelector("h2")?.textContent ?? "",
+      [...group.querySelectorAll("li")].map(
         (row) =>
           `${row.querySelector(".issue-row-identifier")?.textContent} ${row.querySelector(".issue-row-title")?.textContent}`,
       ),
@@ -292,7 +286,7 @@ function groups(page: HTMLElement): [string, string[]][] {
 /** The board's columns, each its heading and its cards' identifiers, left to right. */
 function columns(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll("[data-issue-column]")].map((column) => [
-    column.querySelector(".factory-head")?.textContent ?? "",
+    column.querySelector("h2")?.textContent ?? "",
     [...column.querySelectorAll(".issue-row-identifier")].map((id) => id.textContent ?? ""),
   ]);
 }
@@ -654,7 +648,7 @@ test("under the title an issue's page says who filed it, by their face as the me
   const page = await openIssue(filed.id);
 
   assert.deepEqual(bylineOf(page), ["Created by Ada Lovelace · 3d ago", "Last edited · 2h ago"]);
-  const picture = page.querySelector<HTMLImageElement>(".issue-byline img.actor-picture");
+  const picture = page.querySelector<HTMLImageElement>(".issue-byline .actor-mark img");
   assert.ok(picture?.src.startsWith("https://avatars.githubusercontent.com/u/1"), "her picture");
 });
 
@@ -683,17 +677,6 @@ test("an issue whose creator is gone and unchanged since it was filed says only 
   await settle();
 
   assert.deepEqual(bylineOf(page), ["Created · 5h ago", "Last edited · 5h ago"]);
-});
-
-test("the list stands in the window's own frame: the Automations page's view and scroll, Home's sections and rows", async () => {
-  standing = [issue(1)];
-  const page = mount();
-  await settle();
-  showList();
-
-  assert.ok(page.querySelector("section.automations-view > .automations-scroll .home-column"));
-  assert.ok(page.querySelector(".home-section > h2.home-section-title > .home-section-count"));
-  assert.ok(page.querySelector(".home-section > ul.sidebar-tasks > li.sidebar-task-item.home-row"));
 });
 
 test("Archive asks first, then sends the archive and goes back to a list without the issue", async () => {
@@ -930,7 +913,7 @@ test("while a new issue is being filed its card's chips take no pick", async () 
   file("Flaky checkout test");
   await settle();
   const chips = [
-    ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] .settings-picker-chip"),
+    ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] button[aria-haspopup=dialog]"),
   ];
   const lockedWhileOut = chips.length === 2 && chips.every((chip) => chip.disabled);
   act(() => held[0]?.());
@@ -975,10 +958,7 @@ test("the page opens as a board: a column for every status in the order work mov
     ["Done1", ["ACME-1"]],
     ["Canceled", []],
   ]);
-  assert.equal(
-    page.querySelector("[data-issue-column='in-progress'] .factory-idle")?.textContent,
-    "No issues",
-  );
+  assert.equal(page.querySelector("[data-issue-column='in-progress'] p")?.textContent, "No issues");
   assert.equal(page.querySelector(".home-section"), null, "no list stands beside the board");
 });
 
@@ -1018,14 +998,22 @@ test("on the board ↓ and ↑ move down a column, ← and → to the nearest ca
 
 /**
  * The board laid out as a narrow window lays it: each column 300px wide,
- * side by side from the scroller's start, in a scroller 700px wide that
- * scrolls sideways. jsdom lays nothing out, so this answers the geometry the
- * browser would. Answers each scroller's sideways scroll as it stands.
+ * side by side from the page's scroll's start, in that scroll 700px wide,
+ * which scrolls sideways. jsdom lays nothing out and reads no stylesheet,
+ * so this answers the geometry and the overflow the browser would. Answers
+ * the page's sideways scroll as it stands.
  */
 function layBoardOut(): () => number {
   const COLUMN = 300;
   const scrolled = new WeakMap<Element, number>();
-  const scroller = () => document.querySelector(".issue-board-scroll");
+  const SCROLL = ".luke-collection-page-scroll";
+  const scroller = () => document.querySelector<HTMLElement>(SCROLL);
+  const computed = globalThis.getComputedStyle;
+  vi.spyOn(globalThis, "getComputedStyle").mockImplementation((element, pseudo) => {
+    const style = computed(element, pseudo);
+    if (element.matches(SCROLL)) style.overflowX = "auto";
+    return style;
+  });
   vi.spyOn(Element.prototype, "scrollLeft", "get").mockImplementation(function (this: Element) {
     return scrolled.get(this) ?? 0;
   });
@@ -1036,7 +1024,7 @@ function layBoardOut(): () => number {
     scrolled.set(this, left);
   });
   vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
-    return this.matches(".issue-board-scroll") ? 700 : 0;
+    return this.matches(SCROLL) ? 700 : 0;
   });
   vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
     this: HTMLElement,
@@ -1046,7 +1034,9 @@ function layBoardOut(): () => number {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const columns = [...document.querySelectorAll("[data-issue-column]")];
     const at = columns.indexOf(this);
-    const left = at < 0 ? 0 : at * COLUMN - (scrolled.get(scroller() ?? this) ?? 0);
+    const shift = scrolled.get(scroller() ?? this) ?? 0;
+    if (this.matches(".issue-board")) return new DOMRect(-shift, 0, columns.length * COLUMN, 0);
+    const left = at < 0 ? 0 : at * COLUMN - shift;
     return new DOMRect(left, 0, at < 0 ? 0 : COLUMN, 0);
   });
   return () => {
@@ -1090,8 +1080,7 @@ test("View options lays the page out as the list and back as the board, and an i
 
   showList();
   const listed = page.querySelector(".home-section") !== null;
-  const row = page.querySelector<HTMLButtonElement>(`[data-issue-id="${issue(1).id}"] button`);
-  assert.ok(row);
+  const row = listRowOf(page, issue(1));
   act(() => row.click());
   await settle();
   act(() => button("Issues").click());
@@ -1104,6 +1093,28 @@ test("View options lays the page out as the list and back as the board, and an i
   assert.ok(stillListed, "the list is what the page goes back to");
   assert.ok(page.querySelector("[data-issue-column]"), "Board lays it out as the board again");
   assert.equal(page.querySelector(".home-section"), null);
+});
+
+test("while the issues are read the list stands rows of blocks, said as reading, and the board stands nothing until its columns can", async () => {
+  standing = [issue(1)];
+  window.localStorage.setItem("luke.issuesLayout", JSON.stringify("list"));
+  const list = mount();
+  const reading = list.querySelector('[role="status"]')?.textContent;
+  await settle();
+  const read = list.querySelector('[role="status"]');
+  const listedGroups = groups(list);
+  act(() => root?.unmount());
+
+  window.localStorage.setItem("luke.issuesLayout", JSON.stringify("board"));
+  const board = mount();
+  const boardReading = board.querySelector('[role="status"]');
+  await settle();
+
+  assert.equal(reading, "Reading issues");
+  assert.equal(read, null);
+  assert.deepEqual(listedGroups, [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.equal(boardReading, null);
+  assert.deepEqual(columns(board)[0], ["Backlog1", ["ACME-1"]]);
 });
 
 test("the page opens again in the layout last chosen, the list after List and the board after Board", async () => {
@@ -1140,7 +1151,12 @@ test("a workspace with no issue yet still stands the board's columns, each sayin
     ["Done", []],
     ["Canceled", []],
   ]);
-  assert.equal(page.querySelectorAll(".factory-idle").length, 5);
+  assert.equal(
+    [...page.querySelectorAll("[data-issue-column] p")].filter(
+      (idle) => idle.textContent === "No issues",
+    ).length,
+    5,
+  );
 });
 
 test("once the page has come back from an issue, a layout chosen keeps the keyboard on View options rather than that issue's row", async () => {
@@ -1153,7 +1169,7 @@ test("once the page has come back from an issue, a layout chosen keeps the keybo
   await settle();
 
   assert.ok(page.querySelector(".home-section"), "the list stands");
-  assert.equal(document.activeElement?.closest("[data-issue-id]") ?? null, null);
+  assert.doesNotMatch(document.activeElement?.textContent ?? "", /ACME-1/u);
 });
 
 test("a column's + opens the new issue's card with that column's status chosen, the priority at its default, and the title holding the keyboard", async () => {
@@ -1208,4 +1224,341 @@ test("the toolbar's New issue and C still open the card on Backlog", async () =>
 
   assert.equal(fromButton, "Backlog");
   assert.equal(picked(document.body, "Status"), "Backlog");
+});
+
+/** The button a card or row draws for the issue given. */
+function cardOf(page: HTMLElement, issueId: string): HTMLButtonElement {
+  const found = page.querySelector<HTMLButtonElement>(`[data-issue-id="${issueId}"] > button`);
+  assert.ok(found, `no card for ${issueId}`);
+  return found;
+}
+
+/** The press of the list's row for the issue given, found by the identifier it reads. */
+function listRowOf(page: HTMLElement, listed: Issue): HTMLButtonElement {
+  const found = [...page.querySelectorAll<HTMLButtonElement>(".home-section button")].find((each) =>
+    each.textContent?.startsWith(`ACME-${listed.number}`),
+  );
+  assert.ok(found, `no row for ACME-${listed.number}`);
+  return found;
+}
+
+/** A right-click on an element, at a point in the window, as the pointer makes one. */
+function rightClick(target: HTMLElement): void {
+  act(() => {
+    target.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }),
+    );
+  });
+}
+
+/** Opens the submenu named in the menu standing open and picks its item. */
+function pickFrom(submenu: string, item: string): void {
+  act(() => menuItem(submenu).click());
+  act(() => menuItem(item).click());
+}
+
+test("a status picked from a card's right-click menu, the current one checked, is sent and moves the card to its new column", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  act(() => menuItem("Status").click());
+  assert.equal(menuItem("Backlog").getAttribute("aria-checked"), "true");
+  assert.equal(menuItem("Done").getAttribute("aria-checked"), "false");
+  act(() => menuItem("Done").click());
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page), [
+    ["Backlog", []],
+    ["Todo1", ["ACME-2"]],
+    ["In progress", []],
+    ["Done1", ["ACME-1"]],
+    ["Canceled", []],
+  ]);
+});
+
+test("a list row's menu opens from the keyboard with ⇧F10, and a priority picked there is sent and moves the row", async () => {
+  standing = [issue(1), issue(2, { priority: ISSUE_PRIORITY.LOW })];
+  const page = mount();
+  await settle();
+  showList();
+
+  const row = listRowOf(page, issue(1));
+  act(() => row.focus());
+  act(() => {
+    row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+  });
+  pickFrom("Priority", "Urgent");
+  await settle();
+
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { priority: ISSUE_PRIORITY.URGENT } },
+  ]);
+  assert.deepEqual(groups(page), [["Backlog2", ["ACME-1 Issue 1", "ACME-2 Issue 2"]]]);
+});
+
+test("a list row's right-click opens its menu, and Escape hands the keyboard back to the row", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+  showList();
+
+  const row = listRowOf(page, issue(2));
+  rightClick(row);
+  assert.ok(menuItem("Status"));
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  await settle();
+
+  assert.equal(document.querySelector("[role=menu]"), null);
+  assert.ok(document.activeElement === row, "the row holds the keyboard");
+});
+
+test("Archive from a card's menu asks first in the issue page's words, then sends the archive and takes the card off the board", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  act(() => menuItem("Archive").click());
+  assert.deepEqual(changes, [], "nothing is sent before the answer");
+  assert.match(
+    document.querySelector("[role=alertdialog]")?.textContent ?? "",
+    /Archive ACME-1\?/u,
+  );
+  act(() => dialogButton("Archive").click());
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { archived: true } }]);
+  assert.deepEqual(groups(page), [["Backlog1", ["ACME-2 Issue 2"]]]);
+  assert.equal(document.querySelector("[role=alertdialog]"), null, "the question is gone");
+});
+
+test("a card's menu offers Copy link, copying its issue's link under the listed workspace", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(2).id));
+  await act(async () => menuItem("Copy link").click());
+
+  assert.deepEqual(copied, [`https://tryluke.dev/${WORKSPACE.id}/issue/${issue(2).id}`]);
+  assert.deepEqual(changes, []);
+});
+
+test("a change from a card's menu the service refused leaves the card where it stood and says so", async () => {
+  standing = [issue(1)];
+  changeRefused = true;
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  pickFrom("Status", "Done");
+  await settle();
+
+  assert.equal(changes.length, 1);
+  assert.deepEqual(groups(page), [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.match(document.body.textContent ?? "", /Couldn't change the issue\. Try again\./u);
+});
+
+test("a card moved by a status picked from its menu keeps the keyboard in its new column", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+
+  const card = cardOf(page, issue(1).id);
+  act(() => card.focus());
+  act(() => {
+    card.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+  });
+  pickFrom("Status", "Done");
+  await settle();
+
+  const holding = document.activeElement?.closest<HTMLElement>("[data-issue-id]");
+  assert.equal(holding?.dataset.issueId, issue(1).id);
+  assert.equal(holding?.closest<HTMLElement>("[data-issue-column]")?.dataset.issueColumn, "done");
+});
+
+test("a list row moved by a status picked from its menu keeps the keyboard under its new heading", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+  showList();
+
+  const row = listRowOf(page, issue(1));
+  act(() => row.focus());
+  act(() => {
+    row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+  });
+  pickFrom("Status", "Done");
+  await settle();
+
+  const holding = document.activeElement;
+  assert.ok(holding instanceof HTMLButtonElement, "a row holds the keyboard");
+  assert.match(holding.textContent ?? "", /^ACME-1/u);
+  assert.equal(holding.closest("section")?.getAttribute("aria-label"), "Done");
+});
+
+test("a card moved once the developer has gone on to New issue takes no keyboard from its card", async () => {
+  standing = [issue(1), issue(2)];
+  heldChanges = [];
+  const held = heldChanges;
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(1).id));
+  pickFrom("Status", "Done");
+  act(() => button("New issue").click());
+  const field = composerField();
+  assert.ok(field, "the card's field stands");
+  act(() => field.focus());
+  act(() => held[0]?.());
+  await settle();
+
+  assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
+  assert.equal(document.activeElement, composerField());
+});
+
+/**
+ * The board laid out for a drag: each column 300px wide and 600px tall, side
+ * by side from the window's left, each card 40px tall, 50px apart, from
+ * 40px down its column. jsdom lays nothing out and captures no pointer, so
+ * this answers the geometry and the capture the browser would.
+ */
+function layCardsOut(page: HTMLElement): void {
+  const COLUMN = 300;
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const columns = [...document.querySelectorAll("[data-issue-column]")];
+    if (this.matches(".issue-board")) return new DOMRect(0, 0, columns.length * COLUMN, 600);
+    const at = columns.indexOf(this);
+    if (at >= 0) return new DOMRect(at * COLUMN, 0, COLUMN, 600);
+    const column = columns.indexOf(this.closest("[data-issue-column]") ?? this);
+    if (!this.matches("li[data-issue-id]") || column < 0) return new DOMRect();
+    const row = [...(this.parentElement?.children ?? [])].indexOf(this);
+    return new DOMRect(column * COLUMN + 8, 40 + row * 50, COLUMN - 16, 40);
+  });
+  for (const list of page.querySelectorAll(".issue-column-cards")) {
+    Object.assign(list, { setPointerCapture: () => undefined });
+  }
+}
+
+/** A pointer event at a point in the window, as the primary button makes one. */
+function pointer(type: string, x: number, y: number): PointerEvent {
+  return new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, pointerId: 1 });
+}
+
+/** What the board showed with a dragged card held over a point: the column marked as where it lands, and whether a copy of it was carried. */
+interface HeldDrag {
+  marked: string | undefined;
+  carried: boolean;
+}
+
+/**
+ * Presses a card, drags it to a point, and lets it go there, answering
+ * what the board showed with the pointer held there: the column marked as
+ * the one it would land in, and whether a copy of the card was carried.
+ */
+function dragCard(page: HTMLElement, issueId: string, to: { x: number; y: number }): HeldDrag {
+  const card = cardOf(page, issueId);
+  const box = card.closest("li")?.getBoundingClientRect() ?? assert.fail("the card stands");
+  const from = { x: box.x + 20, y: box.y + 20 };
+  let held: HeldDrag = { marked: undefined, carried: false };
+  act(() => {
+    card.dispatchEvent(pointer("pointerdown", from.x, from.y));
+    window.dispatchEvent(pointer("pointermove", from.x + 10, from.y));
+    window.dispatchEvent(pointer("pointermove", to.x, to.y));
+    held = {
+      marked:
+        page.querySelector<HTMLElement>("[data-drop-target='true']")?.dataset.issueColumn ??
+        undefined,
+      carried: page.querySelector(".issue-board > [data-carried]") !== null,
+    };
+    window.dispatchEvent(pointer("pointerup", to.x, to.y));
+  });
+  return held;
+}
+
+test("a Todo card dragged onto Done is carried there, Done marked as where it lands, and it is sent done and lands in Done", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO }), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  const held = dragCard(page, issue(1).id, { x: 1000, y: 120 });
+  await settle();
+
+  assert.deepEqual(held, { marked: ISSUE_STATUS.DONE, carried: true });
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page), [
+    ["Backlog", []],
+    ["Todo1", ["ACME-2"]],
+    ["In progress", []],
+    ["Done1", ["ACME-1"]],
+    ["Canceled", []],
+  ]);
+  assert.equal(
+    page.querySelectorAll("[data-carried], [data-dragging], [data-drop-target]").length,
+    0,
+  );
+  assert.deepEqual(opened, [], "the drop opens nothing");
+});
+
+test("a card let go over its own column sends nothing, and a press that does not move still opens it", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO }), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  const held = dragCard(page, issue(1).id, { x: 450, y: 400 });
+  await settle();
+  const card = cardOf(page, issue(1).id);
+  act(() => {
+    card.dispatchEvent(pointer("pointerdown", 350, 60));
+    window.dispatchEvent(pointer("pointerup", 350, 60));
+    card.click();
+  });
+  await settle();
+
+  assert.deepEqual(held, { marked: undefined, carried: true });
+  assert.deepEqual(changes, []);
+  assert.deepEqual(opened, [{ kind: ISSUES_PAGE.ISSUE, issueId: issue(1).id }]);
+});
+
+test("a card dragged onto Done whose change the service refused stays in Todo and says so", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO })];
+  changeRefused = true;
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  dragCard(page, issue(1).id, { x: 1000, y: 120 });
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page)[1], ["Todo1", ["ACME-1"]]);
+  assert.deepEqual(columns(page)[3], ["Done", []]);
+  assert.match(document.body.textContent ?? "", /Couldn't change the issue\. Try again\./u);
+});
+
+test("a card is sent the status of the column it is let go over, though the last move reported another", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  const card = cardOf(page, issue(1).id);
+  act(() => {
+    card.dispatchEvent(pointer("pointerdown", 350, 60));
+    window.dispatchEvent(pointer("pointermove", 750, 120));
+    window.dispatchEvent(pointer("pointerup", 1000, 120));
+  });
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
 });

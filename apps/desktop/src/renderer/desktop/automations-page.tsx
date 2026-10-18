@@ -17,21 +17,37 @@ import type { AutomationScope, AutomationSummary } from "@luke/features/automati
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  BUTTON_VARIANT,
+  Button,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  LIST_VARIANT,
+  List,
+  ListRow,
+  SETTINGS_SECTION_FRAME,
+  SettingsSection,
+  Switch,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useMenu,
+} from "@luke/ui";
 import { GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
-import { Fragment, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { Fragment, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
-import { StateGlyph, stateEndMark } from "../state-glyph";
-import { Switch } from "../switch";
+import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "../state-glyph";
 import { momentText, useMinute } from "../tasks/task-time";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
-import { ActionMenu, useActionMenu } from "./action-menu";
+import { Tooltip } from "../tooltip";
+import { ActionMenu } from "./action-menu";
 import { AutomationEditor } from "./automation-editor";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel";
@@ -41,7 +57,7 @@ import { useAutomations } from "./use-automations";
 /**
  * automations-page.tsx -- the window's Automations page: the listed workspace's automations, each with its owner beyond doubt, when it runs next, how its newest run went, and its switch.
  *
- * It stands in the plan's place beside the sidebar, as Factory does, and
+ * It stands in the task's place beside the sidebar, as Factory does, and
  * its sidebar row is marked while it does. Who owns an automation is the
  * one thing the list must never leave in doubt, so the workspace's
  * automations stand first and the account's personal ones after, under a
@@ -90,10 +106,12 @@ function OwnerCell({
 }): React.JSX.Element {
   const name = automationOwnerName(owner, workspace?.name);
   return (
-    <span className="automation-owner" data-owner={owner} title={name}>
-      <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
-      <span className="automation-owner-name">{name}</span>
-    </span>
+    <Tooltip label={name}>
+      <span className="automation-owner" data-owner={owner}>
+        <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
+        <span className="automation-owner-name">{name}</span>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -102,7 +120,10 @@ function OwnerCell({
  * stands, its name over what fires it, its owner, when it runs next, a
  * failure's mark, and its switch. Everything but the switch is one press
  * that opens its page, as a sidebar task's row is, so the row opens wherever
- * it is pressed and the switch beside the press only switches.
+ * it is pressed and the switch beside the press only switches. Its
+ * right-click offers Copy link, and hands focus back to its press as the
+ * menu closes; a right-click on the switch is the switch's own and opens
+ * nothing.
  */
 function AutomationRow({
   automation,
@@ -119,40 +140,52 @@ function AutomationRow({
 }): React.JSX.Element {
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
+  const press = useRef<HTMLElement | null>(null);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
+  // Note that the glyph is the row's decoration, so its working word is said beside the owner instead.
+  const working = state === GLYPH_STATE.WORKING ? glyphStateWords(state, false) : undefined;
   return (
-    <div className="automation-row" data-enabled={String(automation.enabled)}>
-      <button
-        type="button"
-        className="automation-row-open"
-        onClick={onOpen}
-        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
-      >
-        <StateGlyph glyph={<FiringGlyph kind={automation.trigger.kind} />} state={state} />
-        <span className="automation-row-copy">
-          <span className="automation-row-name">{automation.name}</span>
-          <span className="automation-row-detail">
-            {automationTriggerText(automation.trigger, automation.repositories ?? [])}
+    <>
+      <ListRow
+        ref={(node) => {
+          press.current = node;
+        }}
+        leading={
+          <StateGlyph glyph={<FiringGlyph kind={automation.trigger.kind} />} state={state} />
+        }
+        title={
+          <span className="automation-row-name" data-enabled={String(automation.enabled)}>
+            {automation.name}
           </span>
-        </span>
-        <OwnerCell
-          owner={automationOwner(automation)}
-          mine={automation.mine === true}
-          workspace={workspace}
-        />
-        <span
-          className="automation-row-when"
-          title={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
-        >
-          {automationNextText(automation, now)}
-        </span>
-        {stateEndMark(state, true)}
-      </button>
-      <Switch
-        checked={automation.enabled}
-        label={automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
-        onChange={(enabled) => onToggle(enabled)}
+        }
+        description={automationTriggerText(automation.trigger, automation.repositories ?? [])}
+        meta={
+          <span className="automation-row-meta">
+            {working === undefined ? null : <span className="luke-visually-hidden">{working}</span>}
+            <OwnerCell
+              owner={automationOwner(automation)}
+              mine={automation.mine === true}
+              workspace={workspace}
+            />
+            <Tooltip label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}>
+              <span className="automation-row-when">{automationNextText(automation, now)}</span>
+            </Tooltip>
+            {stateEndMark(state, true)}
+          </span>
+        }
+        actions={
+          <Switch
+            checked={automation.enabled}
+            label={
+              automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
+            }
+            onChange={(enabled) => onToggle(enabled)}
+            onContextMenu={(event) => event.stopPropagation()}
+          />
+        }
+        onPress={onOpen}
+        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu(press)}
       />
       {menu.drawn === undefined || copyLink === undefined ? null : (
         <ActionMenu
@@ -162,11 +195,16 @@ function AutomationRow({
           onClose={menu.close}
         />
       )}
-    </div>
+    </>
   );
 }
 
-/** The list, each owner's automations under its own heading where both stand. */
+/**
+ * The list, each owner's automations in a card, under its own heading where
+ * both stand. Note that a lone owner's card is still a region named by its
+ * owner, as a headed one is by its heading, so a reader moving by landmark
+ * hears whose automations they are either way.
+ */
 function AutomationList({
   groups,
   workspace,
@@ -182,31 +220,37 @@ function AutomationList({
 }): React.JSX.Element {
   return (
     <>
-      {groups.map((group) => (
-        <section
-          key={group.owner}
-          className="automation-group"
-          aria-label={automationOwnerName(group.owner, workspace?.name)}
-        >
-          {groups.length > 1 ? (
-            <h2 className="settings-group-title">
-              {automationOwnerName(group.owner, workspace?.name)}
-            </h2>
-          ) : null}
-          <div className="settings-card">
-            {group.automations.map((automation) => (
-              <AutomationRow
-                key={automation.id}
-                automation={automation}
-                workspace={workspace}
-                now={now}
-                onOpen={() => onOpen(automation)}
-                onToggle={(enabled) => onToggle(automation, enabled)}
-              />
-            ))}
+      {groups.map((group) => {
+        const name = automationOwnerName(group.owner, workspace?.name);
+        const card = (
+          <SettingsSection
+            title={groups.length > 1 ? name : undefined}
+            frame={SETTINGS_SECTION_FRAME.NONE}
+          >
+            <List label={name} variant={LIST_VARIANT.CARD}>
+              {group.automations.map((automation) => (
+                <AutomationRow
+                  key={automation.id}
+                  automation={automation}
+                  workspace={workspace}
+                  now={now}
+                  onOpen={() => onOpen(automation)}
+                  onToggle={(enabled) => onToggle(automation, enabled)}
+                />
+              ))}
+            </List>
+          </SettingsSection>
+        );
+        return groups.length > 1 ? (
+          <div key={group.owner} className="automation-group">
+            {card}
           </div>
-        </section>
-      ))}
+        ) : (
+          <section key={group.owner} className="automation-group" aria-label={name}>
+            {card}
+          </section>
+        );
+      })}
     </>
   );
 }
@@ -225,8 +269,12 @@ function SuggestedAutomations({
   onStart: (preset: AutomationPresetName) => void;
 }): React.JSX.Element {
   return (
-    <section className="settings-group automation-suggestions" aria-label="Suggested">
-      <h2 className="settings-group-title">Suggested</h2>
+    <section className="automation-suggestions" aria-label="Suggested">
+      <div className="automation-suggestions-head">
+        <Text variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.H2}>
+          Suggested
+        </Text>
+      </div>
       <div className="automation-suggestion-cards">
         {SUGGESTIONS.map(({ name, glyph }) => {
           const preset = automationPreset(name);
@@ -290,20 +338,21 @@ function ListPage({
         </div>
         <div className="desktop-toolbar-actions">
           <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
+          <Button
+            variant={BUTTON_VARIANT.OUTLINE}
+            icon={<PlusIcon />}
             disabled={workspace === undefined}
             onClick={openNew}
           >
-            <PlusIcon />
             New automation
-          </button>
+          </Button>
         </div>
       </header>
       <div className="automations-scroll scroll-fade-top">
         {read === undefined ? null : "failure" in read ? (
-          <ReadFailure line={UNREAD_LINE} onRetry={reload} place={READ_FAILURE_PLACE.CENTRED} />
+          <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {UNREAD_LINE}
+          </ErrorState>
         ) : groups.length === 0 ? (
           <div className="automations-empty">
             <EmptyState icon={<ZapIcon />}>No automations yet</EmptyState>
@@ -341,14 +390,15 @@ function UnreadPage({
     <section className="automations-view" aria-label="Automation">
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
-          <button type="button" className="toolbar-button" onClick={onBack}>
-            <ZapIcon />
+          <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
             Automations
-          </button>
+          </Button>
         </div>
       </header>
       <div className="automations-scroll scroll-fade-top">
-        <ReadFailure line={UNREAD_LINE} onRetry={onRetry} place={READ_FAILURE_PLACE.CENTRED} />
+        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {UNREAD_LINE}
+        </ErrorState>
       </div>
     </section>
   );
@@ -361,10 +411,9 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
     <section className="automations-view" aria-label="Automation">
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
-          <button type="button" className="toolbar-button" onClick={onBack}>
-            <ZapIcon />
+          <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
             Automations
-          </button>
+          </Button>
         </div>
       </header>
       <div className="automations-scroll scroll-fade-top">
@@ -375,7 +424,7 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
 }
 
 /**
- * The window's Automations pages, in the plan's place: the list, or one
+ * The window's Automations pages, in the task's place: the list, or one
  * automation's editor, or a new one's. The list is read once for all of
  * them, so an automation opened from it opens as it was listed, and an
  * edit is in the list the moment it lands.

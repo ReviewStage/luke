@@ -1,0 +1,27 @@
+/* card.css -- a card's edge, corner, and ground, and the room inside it for
+   each padding choice; what it holds sets itself. */
+
+@layer components {
+  .luke-card {
+    position: relative;
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-card-radius);
+    background: var(--luke-color-surface);
+    padding: var(--luke-card-inset);
+  }
+
+  /* Note that a flush card clips what it holds, because content drawn to its
+     edge would otherwise paint square corners over the card's round ones. */
+  .luke-card[data-padding="flush"] {
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .luke-card[data-padding="snug"] {
+    padding: var(--luke-card-inset-snug) var(--luke-card-inset);
+  }
+
+  .luke-card[data-padding="compact"] {
+    padding: var(--luke-card-inset-compact) var(--luke-card-inset);
+  }
+}

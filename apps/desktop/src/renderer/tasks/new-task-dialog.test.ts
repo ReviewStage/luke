@@ -4,9 +4,11 @@ import assert from "node:assert/strict";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
 import { OpenSettingsProvider } from "../open-settings";
@@ -14,8 +16,8 @@ import { NewTaskDialog } from "./new-task-dialog";
 import type { RepositoryChooser } from "./repository-chip";
 
 /**
- * New plan as the developer meets it: a card over the window holding the
- * plan's name, the repository chip, Cancel, and Create plan. Each test
+ * New task as the developer meets it: a card over the window holding the
+ * task's name, the repository chip, Cancel, and Create task. Each test
  * stands the dialog in an owner that opens it and puts it away as the tab
  * does, so closing is read as the card leaving the window.
  */
@@ -24,12 +26,8 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-      recordSurfaceEvent: () => undefined,
-    },
+  fakeAppBridge({
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
 });
 
@@ -49,16 +47,19 @@ async function settle(): Promise<void> {
 /**
  * The dialog open in its owner, a start answered by `answer` and each
  * start's name and repository written down; `preset` is the repository the
- * press that opened it chose, as a repository group's + does, and `issues`
- * the workspace's Linear issues where it has Linear connected.
+ * press that opened it chose, as a repository group's + does, `issues`
+ * the workspace's Linear issues where it has Linear connected, and `finds`
+ * what its Linear answers a search or an identifier with.
  */
 async function mount(
   answer: string | undefined = undefined,
   preset?: string,
   chooser: Partial<RepositoryChooser> = {},
   issues?: readonly LinearIssueSummary[],
+  finds: (ask: LinearIssuesAsk) => readonly LinearIssueSummary[] = () => [],
 ) {
   const starts: [string, string | null][] = [];
+  const asks: LinearIssuesAsk[] = [];
   const planned: boolean[] = [];
   const fromIssues: (string | undefined)[] = [];
   const control = tasksControl();
@@ -89,7 +90,14 @@ async function mount(
           return Promise.resolve(answer);
         },
         onClose: () => setOpen(false),
-        linearIssuesIn: () => (issues === undefined ? undefined : () => Promise.resolve(issues)),
+        linearIssuesIn: () =>
+          issues === undefined
+            ? undefined
+            : (ask?: LinearIssuesAsk) => {
+                if (ask === undefined) return Promise.resolve(issues);
+                asks.push(ask);
+                return Promise.resolve(finds(ask));
+              },
       },
     });
     return createElement(
@@ -128,6 +136,8 @@ async function mount(
   };
   return {
     starts,
+    /** Every search or identifier the card asked the workspace's Linear for. */
+    asks,
     /** The Linear issue each start came from, where it came from one. */
     fromIssues,
     /** Whether each start asked for its planning phase. */
@@ -626,4 +636,77 @@ test("a name no issue matches is the plain field it always was: nothing listed, 
   assert.equal(card.field().getAttribute("aria-expanded"), "false");
   assert.deepEqual(card.starts, [["Refactor billing", "acme/web"]]);
   assert.deepEqual(card.fromIssues, [undefined]);
+});
+
+/** Longer than the typing rests before Linear is searched. */
+const PAST_SEARCH_PAUSE = 300;
+
+/** The clock moved past the search's pause, and what the search answered drawn. */
+async function rest(): Promise<void> {
+  act(() => {
+    vi.advanceTimersByTime(PAST_SEARCH_PAUSE);
+  });
+  await settle();
+}
+
+/** An issue older than any the card read as it opened, which only Linear's own search finds. */
+const OLDER_ISSUE: LinearIssueSummary = {
+  id: "issue-301",
+  identifier: "ENG-301",
+  title: "Queue jumps on retry",
+  url: "https://linear.app/acme/issue/ENG-301",
+  state: "Backlog",
+};
+
+test("once the typing rests, Linear itself is searched for the words, and an issue it finds beyond those read stands after the ones read", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const card = await mount(undefined, undefined, {}, ISSUES, (ask) =>
+      ask.query === "deploy queue"
+        ? [OLDER_ISSUE, ISSUES[0] ?? assert.fail("the first issue")]
+        : [],
+    );
+    card.type("deploy");
+    await settle();
+    card.type("deploy queue");
+    await settle();
+    const before = { rows: matchRows().rows, asks: card.asks.length };
+    await rest();
+    const after = matchRows().rows;
+
+    assert.deepEqual(before, {
+      rows: ["Restack the deploy queueENG-1 · Todo", "Create task “deploy queue”"],
+      asks: 0,
+    });
+    assert.deepEqual(card.asks, [{ query: "deploy queue" }]);
+    assert.deepEqual(after, [
+      "Restack the deploy queueENG-1 · Todo",
+      "Queue jumps on retryENG-301 · Backlog",
+      "Create task “deploy queue”",
+    ]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a pasted link to an issue, or its key typed alone, asks Linear for that one issue, which is offered first and started by Return", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const card = await mount(undefined, undefined, {}, ISSUES, (ask) =>
+      ask.identifier === "ENG-301" ? [OLDER_ISSUE] : [],
+    );
+    card.type("https://linear.app/acme/issue/ENG-301/queue-jumps-on-retry");
+    await rest();
+    const listed = matchRows();
+    await card.press("Enter", card.field());
+    card.type("eng-301");
+    await rest();
+
+    assert.deepEqual(card.asks, [{ identifier: "ENG-301" }, { identifier: "ENG-301" }]);
+    assert.deepEqual(listed.highlighted, "Queue jumps on retryENG-301 · Backlog");
+    assert.deepEqual(card.starts, [["Queue jumps on retry", "acme/web"]]);
+    assert.deepEqual(card.fromIssues, ["issue-301"]);
+  } finally {
+    vi.useRealTimers();
+  }
 });

@@ -31,6 +31,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: HOSTED_HTTP_STATUS.BAD_GATEWAY,
   [HOSTED_API_ERROR.NO_REPOSITORY]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.BRANCH_NOT_FOUND]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.AGENT_NOT_READY]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -85,15 +86,17 @@ export const HOSTED_REFUSAL = {
   REPOSITORY_NOT_REACHABLE: { error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE },
   /** GitHub did not answer whether the workspace reaches the repository; nothing was written, and a retry may be taken. */
   GITHUB_UNANSWERED: { error: HOSTED_API_ERROR.GITHUB_UNANSWERED },
-  /** The plan names no repository, so no coding agent can be started on it; nothing was written. */
+  /** The task names no repository, so no coding agent can be started on it; nothing was written. */
   NO_REPOSITORY: { error: HOSTED_API_ERROR.NO_REPOSITORY },
+  /** The branch a coding agent was asked to start on is none of the repository's; nothing was written. */
+  BRANCH_NOT_FOUND: { error: HOSTED_API_ERROR.BRANCH_NOT_FOUND },
   /** The message to a coding agent spells more than the wire's bound; nothing was sent. */
   MESSAGE_TOO_LONG: { error: HOSTED_API_ERROR.MESSAGE_TOO_LONG },
   /** The agent's session is still coming up; the same message a moment later is taken. */
   AGENT_NOT_READY: { error: HOSTED_API_ERROR.AGENT_NOT_READY },
   /** eve no longer runs the agent's session, so nothing reaches its sandbox again; nothing was written. */
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
-  /** The plan is archived, so it takes nothing until it is brought back; nothing was written. */
+  /** The task is archived, so it takes nothing until it is brought back; nothing was written. */
   TASK_ARCHIVED: { error: HOSTED_API_ERROR.TASK_ARCHIVED },
   /** The account's role in the workspace does not allow this; nothing was written. */
   NOT_PERMITTED: { error: HOSTED_API_ERROR.NOT_PERMITTED },
@@ -127,7 +130,7 @@ export function hostedStoreOrUnavailable<A, R>(
 }
 
 /**
- * A plan write an archive may refuse: the archive answered as its own
+ * A task write an archive may refuse: the archive answered as its own
  * refusal, and a store failure as `hostedStoreOrUnavailable` answers one.
  */
 export function hostedStoreOrArchived<A, R>(

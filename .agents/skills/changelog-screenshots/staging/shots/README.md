@@ -14,8 +14,8 @@ stages one shot of `.context/shots/SPEC.md`. Only a fixture run stages one.
 
 - `shot-profiles.ts` maps each profile to its builder (one file per shot) and
   builds the spec once, lazily, so every reader gets the same objects.
-- `shot-spec.ts` is the shape: the planning view the Plans tab draws, the side
-  panel the plan opens with, the call (A only), canned act answers, what main
+- `shot-spec.ts` is the shape: the tasks view the Tasks tab draws, the side
+  panel the task opens with, the call (A only), canned act answers, what main
   would say waits in the Inbox, Settings › Integrations' labels, the layout,
   and extra staging steps.
 - `canned-acts.ts` is the act seam: `act.ts`'s one door asks it first. An
@@ -24,17 +24,17 @@ stages one shot of `.context/shots/SPEC.md`. Only a fixture run stages one.
   answer (in a fixture run, main answers "unanswered").
 - `use-shot-staging.ts` lays the window out once, step by step, as soon as each
   step's precondition is drawn: the sidebar fold, Settings' page, the version
-  history, the plan column's tab, side panel tabs (Changes, Page), a file tab,
+  history, the task column's tab, side panel tabs (Changes, Page), a file tab,
   full screen, and ⌘K with its query typed.
 - `account.ts` signs every shot in as Dean Stratakos with his photo
   (`dean-avatar.ts`, generated); `owner-pictures.ts` draws repository owner
   pictures as data URLs; `clock.ts` counts every timestamp back from launch;
-  `fixture-rebase.ts` moves the planning fixture's own timestamps for a shot
+  `fixture-rebase.ts` moves the tasks fixture's own timestamps for a shot
   that reuses it.
 - `plan-document.ts` holds the shared world: the "Teammate invitations" plan
   written through every heading, its section bylines, its siblings across
   acme/relay, acme/ledger, acme/web, and the ids everything agrees on.
-  `coding-agent.ts` holds the plan's coding agents (a finished "Add teammate
+  `coding-agent.ts` holds the task's coding agents (a finished "Add teammate
   invitations" with PR #214, a running "Invite emails") and their answers.
 
 Hooks into the app are marked `Throwaway:` in a comment: `act.ts`, `app.tsx`,

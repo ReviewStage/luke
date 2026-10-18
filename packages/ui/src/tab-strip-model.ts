@@ -1,9 +1,9 @@
 /**
  * tab-strip-model.ts -- what a tab of the window's two strips is, and how a strip orders, remembers, and replaces its tabs, as an editor's does.
  *
- * The plan's column and the side panel each hold a strip of tabs over the
- * open plan (the desktop's `planning/use-main-tabs.ts` and
- * `planning/use-side-panel.ts`). A tab is either a word
+ * The task's column and the side panel each hold a strip of tabs over the
+ * open task (the desktop's `tasks/use-main-tabs.ts` and
+ * `tasks/use-side-panel.ts`). A tab is either a word
  * its column names it by, such as the plan's own or the side panel's Board,
  * or an object naming what it shows: one coding agent, a draft agent not yet
  * started, one subagent, one file, one agent's changes, one agent's
@@ -11,7 +11,7 @@
  * same where they name the same thing, so a tab rebuilt on every render is
  * still the tab it was.
  *
- * Each strip keeps, per plan, the order the developer moved its tabs into
+ * Each strip keeps, per task, the order the developer moved its tabs into
  * and the tabs they viewed, the latest last. What follows is how both
  * strips read and change those two lists alike: a tab the order does not
  * hold stands after those it does, in its kind's place (`inTaskOrder`); a
@@ -24,13 +24,14 @@
 
 /**
  * What each kind of tab whose name is not its subject's is called, wherever
- * it is named (the desktop's `planning/tab-look.tsx`): the plan's Inbox, a
+ * it is named (the desktop's `tasks/tab-look.tsx`): the task's Inbox and Chat, a
  * draft agent's tab and the "+" row that opens one, an agent the window holds
- * nothing of, and an agent's Pull request before its agent is read. The side panel's fixed kinds
+ * nothing of, and an agent's Pull request before its pull request is read. The side panel's fixed kinds
  * are named beside their glyphs (`SIDE_PANEL_TAB_KIND`).
  */
 export const TAB_WORDS = {
   INBOX: "Inbox",
+  CHAT: "Chat",
   NEW_AGENT: "New coding agent",
   CODING_AGENT: "Coding agent",
   PULL_REQUEST: "Pull request",
@@ -38,9 +39,12 @@ export const TAB_WORDS = {
   MAC_TERMINAL: "This Mac",
 } as const;
 
-/** A Pull request tab's name for its agent's: the agent's own, after the word for what it shows. */
-export function pullRequestLabelOf(agentLabel: string): string {
-  return `${TAB_WORDS.PULL_REQUEST}: ${agentLabel}`;
+/** A Pull request tab's name once its pull request is read: the pull request's number, then its title, as GitHub names it. */
+export function pullRequestLabelOf(pullRequest: {
+  readonly number: number;
+  readonly title: string;
+}): string {
+  return `#${pullRequest.number} ${pullRequest.title}`;
 }
 
 /** One coding agent's tab, named by the agent it shows. */
@@ -53,20 +57,20 @@ export interface DraftStripTab {
   readonly draft: string;
 }
 
-/** A worker one of the plan's agents delegated to, as its tab carries it: the agent, and the task it handed over, which the tab names itself by. */
+/** A worker one of the task's agents delegated to, as its tab carries it: the agent, and the task it handed over, which the tab names itself by. */
 interface SubagentDelegation {
   readonly agent: string;
   readonly task: string;
 }
 
-/** One subagent's tab, named by the call that started it: on the open plan's work, or, with the delegation, on one of its agents' turns. */
+/** One subagent's tab, named by the call that started it: on the open task's work, or, with the delegation, on one of its agents' turns. */
 export interface SubagentStripTab {
   readonly subagent: string;
-  /** Absent for the planning worker, whose session the plan's work holds. */
+  /** Absent for the brain's worker, whose session the task's work holds. */
   readonly delegation?: SubagentDelegation;
 }
 
-/** One file's tab, named by the file's path in the open plan's repository. */
+/** One file's tab, named by the file's path in the open task's repository. */
 export interface FileStripTab {
   readonly file: string;
 }
@@ -86,7 +90,7 @@ export interface TerminalStripTab {
   readonly terminal: string;
 }
 
-/** One page's tab, named by the page an agent wrote for the plan. */
+/** One page's tab, named by the page an agent wrote for the task. */
 export interface PageStripTab {
   readonly page: string;
 }
@@ -234,7 +238,7 @@ export function tabKey(tab: StripTab): string {
 }
 
 /**
- * `drawn` in the plan's order: each tab `order` holds first, as it stands
+ * `drawn` in the task's order: each tab `order` holds first, as it stands
  * there, then the rest as they stood. Note that a tab never moved, such as
  * one just opened, so stands after every tab that was.
  */
@@ -248,7 +252,7 @@ export function inTaskOrder<T>(
 }
 
 /**
- * The plan's order written whole: the tabs `was` already held, those the
+ * The task's order written whole: the tabs `was` already held, those the
  * strip does not draw now among them, such as one closed, then the rest of
  * `strip`, the run of tabs the strip draws now, as it stands.
  */
@@ -257,7 +261,7 @@ function wholeOrder<T extends StripTab>(was: readonly T[], strip: readonly T[]):
 }
 
 /**
- * The plan's order with the tab opened at the end of `strip`, the run of
+ * The task's order with the tab opened at the end of `strip`, the run of
  * tabs the strip draws now, as an editor opens a file: the order written
  * whole (`wholeOrder`), so every tab keeps the place it is drawn in, then
  * the tab, taken from wherever the order held it. Nothing where the tab
@@ -273,7 +277,7 @@ export function openedOrder<T extends StripTab>(
 }
 
 /**
- * The plan's order with the tab moved to `to` in `strip`, the run of tabs
+ * The task's order with the tab moved to `to` in `strip`, the run of tabs
  * the strip draws now: the tabs the order already held, those the strip
  * does not draw now among them, such as one closed, then the rest of the
  * strip as it stands, the tab taken out and put back before the tab that

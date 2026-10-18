@@ -57,9 +57,6 @@ test("the sign-in buttons and the account's line each draw the provider's one ma
   assert.equal(markIn(button(ACCOUNT_PROVIDER.GOOGLE)), markOf(ACCOUNT_PROVIDER.GOOGLE));
   assert.equal(markIn(button(ACCOUNT_PROVIDER.GITHUB)), markOf(ACCOUNT_PROVIDER.GITHUB));
   for (const provider of [ACCOUNT_PROVIDER.GOOGLE, ACCOUNT_PROVIDER.GITHUB]) {
-    assert.equal(
-      markIn(accountLine(provider).querySelector(".settings-copy small")),
-      markOf(provider),
-    );
+    assert.equal(markIn(accountLine(provider)), markOf(provider));
   }
 });

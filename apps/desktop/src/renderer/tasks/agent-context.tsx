@@ -1,7 +1,7 @@
 import type { CodingAgentBrief, CodingAgentContext } from "@luke/features/coding-agent-wire";
-import { CloseIcon } from "@luke/ui";
-import { useEffect, useId, useRef, useState } from "react";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
+import { AnchoredPopover, POPOVER_ALIGN } from "@luke/ui";
+import { useId, useRef, useState } from "react";
+import { PopoverPanel } from "../popover-panel";
 import { Tooltip } from "../tooltip";
 import {
   contextFullLine,
@@ -25,7 +25,8 @@ import { useMinute } from "./task-time";
  * (`agent-context-model.ts`); its hover says the share in words. A press
  * opens a popover right above the ring, the model menu's width, from the
  * ring's trailing edge as the model menu hangs from its chip, since both
- * stand at the foot's right (`../anchored-popover.tsx`). It says the
+ * stand at the foot's right (`@luke/ui`'s `AnchoredPopover` and
+ * `PopoverPanel`). It says the
  * share and the total, draws the parts on one segmented bar, names each
  * part with its count beside a square of its colour, and under them the
  * cache, the step's answer, where eve compacts, and when it last did. The
@@ -82,40 +83,17 @@ function ContextPopover({
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
-  const box = useRef<HTMLDivElement>(null);
   const now = useMinute();
   const rows = contextRows(context, brief);
 
-  // The popover takes focus as it opens, so Escape and focus leaving it are heard.
-  useEffect(() => {
-    box.current?.focus();
-  }, []);
-
-  const onKey = (event: React.KeyboardEvent) => {
-    if (event.key !== "Escape") return;
-    event.stopPropagation();
-    onClose();
-  };
-
   return (
-    <div
-      ref={box}
+    <PopoverPanel
       id={id}
-      className="agent-context-popover"
-      role="dialog"
-      aria-label={CONTEXT_LABEL}
-      tabIndex={-1}
-      onKeyDown={onKey}
-      onBlur={(event) => onLeave(event.relatedTarget)}
+      title={CONTEXT_LABEL}
+      closeLabel="Close"
+      onDismiss={onClose}
+      onLeave={onLeave}
     >
-      <div className="agent-context-head">
-        <h2 className="agent-context-title">{CONTEXT_LABEL}</h2>
-        <Tooltip label="Close">
-          <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
-            <CloseIcon />
-          </button>
-        </Tooltip>
-      </div>
       <p className="agent-context-summary">
         <span className="agent-context-full">{contextFullLine(context)}</span>
         <span className="agent-context-total">{contextTotalLine(context)}</span>
@@ -148,7 +126,7 @@ function ContextPopover({
         ))}
       </dl>
       <p className="agent-context-note">As of the agent's last step. ~ marks an estimate.</p>
-    </div>
+    </PopoverPanel>
   );
 }
 

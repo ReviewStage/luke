@@ -32,7 +32,7 @@ import { LIGHT_APPEARANCE, terminalFindTints, terminalTheme } from "./terminal-t
 const SURFACE_CLASS = "terminal-surface";
 
 /** The token the terminal's typeface is read from, and the face it falls back to without one. */
-const FONT_TOKEN = "--font-mono";
+const FONT_TOKEN = "--luke-font-mono";
 const FALLBACK_FONT = "monospace";
 
 /**
@@ -162,7 +162,7 @@ export function mountTerminal(host: HTMLElement, props: TerminalProps): Terminal
     if (key.kind === TERMINAL_KEY.SHELL) return true;
     // Note that the press is claimed whole on its keydown, because the
     // keypress after it would type Return into the shell as well, and the
-    // window's keymap would read ⌘⌫ as deleting the plan.
+    // window's keymap would read ⌘⌫ as deleting the task.
     if (key.kind === TERMINAL_KEY.SEND && event.type === "keydown") {
       event.preventDefault();
       event.stopPropagation();

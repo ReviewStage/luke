@@ -6,6 +6,12 @@ import {
   type CodingAgentInboxAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
+import {
   INBOX_CURSOR_START,
   INBOX_REPLY,
   INBOX_RESPONSE,
@@ -15,6 +21,10 @@ import {
 } from "@luke/features/inbox-wire";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { experimentsOn } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { Effect } from "effect";
@@ -23,13 +33,16 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
+import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { relayout } from "#testing/resize-observer";
 import { runAppCommand, useAppKeymap } from "../app-commands";
+import { fixtureChat } from "../tasks/chat-fixture";
 import { MAIN_TAB } from "../tasks/use-main-tabs";
-import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
+import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import { NO_LOOKS } from "../tasks/use-task-looks";
 import "../file-tree/index";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
@@ -201,8 +214,9 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
   );
   assert.match(shown.map((column) => column.textContent).join(""), /Nothing needs you/u);
   assert.equal(
-    shown.find((column) => column.classList.contains("inbox-tasks"))?.querySelector(".empty-state")
-      ?.textContent,
+    shown
+      .find((column) => column.classList.contains("inbox-tasks"))
+      ?.querySelector(".luke-empty-state")?.textContent,
     "Nothing needs you",
     "the list standing alone stands the Inbox's empty state",
   );
@@ -307,10 +321,10 @@ async function narrowTaskInbox(
           ?.click(),
       ),
     rows: () =>
-      [...tab.querySelectorAll(".inbox-tasks .sidebar-task-name")].map((row) => row.textContent),
+      [...tab.querySelectorAll(".inbox-tasks .luke-list-row-title")].map((row) => row.textContent),
     /** Needs you's empty state in the list as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
     filteredOut: () => {
-      const empty = tab.querySelector(".inbox-tasks:not([hidden]) .empty-state");
+      const empty = tab.querySelector(".inbox-tasks:not([hidden]) .luke-empty-state");
       if (empty === null) return null;
       return [
         empty.querySelector("h3")?.textContent,
@@ -319,7 +333,9 @@ async function narrowTaskInbox(
       ];
     },
     showAll: () =>
-      act(() => tab.querySelector<HTMLButtonElement>(".inbox-tasks .empty-state button")?.click()),
+      act(() =>
+        tab.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button")?.click(),
+      ),
     pager: () => tab.querySelector(".inbox-pager-count")?.textContent ?? null,
     /** What the list says of a read that did not land, and whether it offers Retry. */
     failure: () => {
@@ -329,9 +345,12 @@ async function narrowTaskInbox(
       );
       return [alert?.textContent?.includes("The inbox could not be read.") ?? false, retry];
     },
-    back: () => tab.querySelector<HTMLButtonElement>("button.inbox-back"),
+    back: () =>
+      [
+        ...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
+      ].find((button) => button.textContent === "Inbox") ?? null,
     row: (title: string) =>
-      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-task")].find((each) =>
+      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li > button")].find((each) =>
         each.textContent?.includes(title),
       ),
     unmount: () => {
@@ -592,4 +611,205 @@ test("a plan's document opens on its Edited by line, with no crumb over it", () 
   assert.match(first?.textContent ?? "", /^Edited by .*Lee Park/u);
   act(() => root.unmount());
   container.remove();
+});
+
+test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation, and another pull request's, or an archived agent's, opens on GitHub", () => {
+  const agent: CodingAgentSummary = {
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    planId: TASK.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Batch the invitations",
+    createdAt: 3,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
+  const url = "https://github.com/acme/relay/pull/42";
+  const other = "https://github.com/acme/relay/pull/7";
+  const archived: CodingAgentSummary = {
+    ...agent,
+    id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+    title: "An earlier try",
+    archivedAt: 4,
+  };
+  const archivedUrl = "https://github.com/acme/relay/pull/9";
+  const opened: unknown[] = [];
+  const onGitHub: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.GITHUB_OPEN) onGitHub.push(request.payload.url);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+    },
+  });
+  const task: Task = {
+    ...TASK,
+    repository: "acme/relay",
+    document: {
+      body: `## Rollout\n\nShipped in [@relay#42](${url}/), after [@relay#7](${other}) and [@relay#9](${archivedUrl}).\n`,
+      assumptions: [],
+    },
+  };
+  const base = tasksControl();
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: task.id,
+            region: { kind: DOCUMENT_REGION.READY, task },
+            sidePanel: {
+              ...base.sidePanel,
+              onPullRequestView: (agentId, view) => opened.push({ agentId, view }),
+              onChoose: (tab) => opened.push(tab),
+            },
+            agents: codingAgentsControl({
+              agents: [agent],
+              archived: [archived],
+              agentIds: [agent.id],
+              pullRequests: new Map([
+                [
+                  agent.id,
+                  {
+                    number: 42,
+                    title: "Send invitations in batches",
+                    url,
+                    state: PULL_REQUEST_STATE.OPEN,
+                    checks: CHECK_SUMMARY.PASSING,
+                    additions: 12,
+                    deletions: 3,
+                    changedFiles: 2,
+                  },
+                ],
+                [
+                  archived.id,
+                  {
+                    number: 9,
+                    title: "Send invitations at once",
+                    url: archivedUrl,
+                    state: PULL_REQUEST_STATE.CLOSED,
+                    checks: CHECK_SUMMARY.NONE,
+                    additions: 4,
+                    deletions: 1,
+                    changedFiles: 1,
+                  },
+                ],
+              ]),
+            }),
+          }),
+        }),
+      ),
+    ),
+  );
+  const chip = (name: string) =>
+    [...container.querySelectorAll<HTMLButtonElement>(".desktop-document .mention-chip")].find(
+      (each) => each.querySelector(".mention-chip-label")?.textContent?.includes(name),
+    );
+
+  const own = chip("relay#42");
+  assert.ok(own, "the agent's pull request is its chip");
+  act(() => own.click());
+  assert.deepEqual(opened, [
+    { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
+    { changes: agent.id },
+  ]);
+  assert.deepEqual(onGitHub, [], "nothing opened on GitHub");
+
+  act(() => chip("relay#7")?.click());
+  assert.deepEqual(onGitHub, [other]);
+
+  // An archived agent's Pull request tab is not drawn on the task, so its pull request opens on GitHub.
+  act(() => chip("relay#9")?.click());
+  assert.deepEqual(onGitHub, [other, archivedUrl]);
+  assert.equal(opened.length, 2, "no tab was asked for");
+  act(() => root.unmount());
+  container.remove();
+});
+
+/** The task's column on its Chat tab over the fixture's chat, its plan channel this task's where `ownChannel`. */
+async function chatTabMounted(ownChannel: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const staged = fixtureChat({ fixtureMode: true }, 0);
+  assert.ok(staged);
+  const chat = {
+    ...staged,
+    answer: {
+      ...staged.answer,
+      channels: staged.answer.channels.map((channel) =>
+        ownChannel && channel.name === "teammate-invitations"
+          ? { ...channel, planId: TASK.id }
+          : channel,
+      ),
+    },
+  };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          captions: undefined,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: TASK.id,
+            region: { kind: DOCUMENT_REGION.READY, task: TASK },
+            mainTabs: {
+              ...tasksControl().mainTabs,
+              tabs: [MAIN_TAB.PLAN, MAIN_TAB.CHAT],
+              tab: MAIN_TAB.CHAT,
+            },
+            chatView: { ...tasksControl().chatView, available: true, chat },
+          }),
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  return { container, root };
+}
+
+test("a task's Chat tab shows its task channel at reading size, its composer posting there, and says so where the task has no channel yet", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const own = await chatTabMounted(true);
+  const tab = own.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
+  assert.ok(tab, "the task's Chat tab");
+  assert.equal(tab.querySelector(".chat-head-title")?.textContent, "# teammate-invitations");
+  assert.ok(tab.querySelector('textarea[aria-label="Message #teammate-invitations"]'));
+  assert.equal(tab.querySelectorAll(".chat-messages > .chat-message").length, 6);
+  act(() => own.root.unmount());
+  own.container.remove();
+
+  const none = await chatTabMounted(false);
+  assert.match(
+    none.container.querySelector("section.desktop-task-chat")?.textContent ?? "",
+    /Nothing is posted in this task's channel yet\./u,
+  );
+  act(() => none.root.unmount());
+  none.container.remove();
+});
+
+test("with Chat off for the account, a Chat tab kept on the task's strip draws nothing", async () => {
+  handState({});
+  const off = await chatTabMounted(true);
+  assert.equal(off.container.querySelector("section.desktop-task-chat"), null);
+  act(() => off.root.unmount());
+  off.container.remove();
 });

@@ -1,34 +1,24 @@
 import { FACE_ART } from "@luke/brand";
+import {
+  IconButtonLink,
+  MARK_PROVIDER,
+  ProviderMark,
+  TEXT_ELEMENT,
+  TEXT_FONT,
+  TEXT_LINK_CURRENT,
+  TEXT_LINK_HEIGHT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  TextLink,
+  type TextLinkCurrent,
+} from "@luke/ui";
 
 export const REPOSITORY_URL = "https://github.com/ReviewStage/luke";
 export const DMG_URL = `${REPOSITORY_URL}/releases/latest/download/Luke.dmg`;
 
-/**
- * GitHub's mark, drawn in `currentColor` so the stylesheet holds the color in
- * one place. Inlined for the same reason as the favicon: the page ships no
- * binary assets and fetches nothing at runtime.
- */
-const GITHUB_MARK_PATH =
-  "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z";
-
-/**
- * Both marks size at their call site rather than through a stylesheet rule, so
- * the one place a mark's box is decided is the place it is drawn.
- */
+/** A mark's box is decided at its call site, the one place it is drawn. */
 type MarkProps = { readonly className?: string };
-
-/**
- * Always decorative: every use either sits beside a visible label or hangs off
- * a link that carries its own `aria-label`, so announcing the mark as well
- * would only repeat what a reader already hears.
- */
-export function GitHubMark({ className = "block size-4" }: MarkProps): React.JSX.Element {
-  return (
-    <svg className={className} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path d={GITHUB_MARK_PATH} />
-    </svg>
-  );
-}
 
 /**
  * Luke's face, drawn from the generated `FACE_ART` constants so the web mark
@@ -59,98 +49,120 @@ export function LukeMark({ className = "block h-[18px] w-5" }: MarkProps): React
   );
 }
 
-/** Shared between every page so navigation and branding never drift apart. */
-export function SiteHeader(): React.JSX.Element {
+/** The pages the site's chrome links to, by the path each is served at. */
+export const SITE_PAGE = {
+  HOME: "/",
+  ABOUT: "/about",
+  CHANGELOG: "/changelog",
+  PRIVACY: "/privacy",
+} as const;
+
+export type SitePage = (typeof SITE_PAGE)[keyof typeof SITE_PAGE];
+
+/**
+ * Where the reader is: on `page` itself, or, `beneath` it, on a page of that
+ * part of the site (a release under the changelog).
+ */
+export type SitePlace = { readonly page: SitePage; readonly beneath?: boolean };
+
+/** What the chrome is told of the page it is drawn on: where the reader is. */
+type ChromeProps = { readonly current?: SitePlace };
+
+/**
+ * What a link to `page` says about it when the reader is at `place`: the
+ * current page where they are on it, and the current part of the site where
+ * they are beneath it, since the page they are on is not the one it links to.
+ */
+function currentOf(page: SitePage, place: SitePlace | undefined): TextLinkCurrent | undefined {
+  if (place?.page !== page) return undefined;
+  return place.beneath === true ? TEXT_LINK_CURRENT.SECTION : TEXT_LINK_CURRENT.PAGE;
+}
+
+/**
+ * Shared between every page so navigation and branding never drift apart:
+ * the wordmark and the links the banner holds, handed to PublicPage's
+ * `banner`; `current` marks where the reader is. Every link stands the
+ * web's 44px tall inside the 64px banner, so its hit target is the contract's
+ * without moving a word.
+ */
+export function SiteNavigation({ current }: ChromeProps): React.JSX.Element {
   return (
-    /* Sticky, so the changelog's long scroll keeps its way back. The bar owns
-       its ground — a translucent wash over blur with a hairline underneath —
-       because content sliding beneath an unbounded header reads as a glitch,
-       and the shell column moves inside so the wash runs the full bleed. */
-    <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-md">
-      <nav className="shell flex h-16 items-center justify-between">
-        <a
-          className="inline-flex items-center gap-2 font-brand text-base font-bold tracking-[-0.01em] no-underline"
-          href="/"
+    <nav aria-label="Site" className="flex items-center justify-between">
+      <a
+        className="inline-flex min-h-11 items-center gap-2 font-brand text-base font-bold tracking-[-0.01em] no-underline"
+        href={SITE_PAGE.HOME}
+        aria-current={currentOf(SITE_PAGE.HOME, current)}
+      >
+        <LukeMark />
+        Luke
+      </a>
+      <div className="flex items-center gap-4">
+        <TextLink
+          href={SITE_PAGE.ABOUT}
+          variant={TEXT_VARIANT.LABEL}
+          height={TEXT_LINK_HEIGHT.CONTROL}
+          current={currentOf(SITE_PAGE.ABOUT, current)}
         >
-          <LukeMark />
-          Luke
-        </a>
-        <div className="flex items-center gap-4">
-          <a
-            className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
-            href="/about"
-          >
-            About
-          </a>
-          <a
-            className="text-sm font-medium text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
-            href="/changelog"
-          >
-            Changelog
-          </a>
-          {/* Icon-only, so the padding buys a comfortable hit target and a focus
-              ring with room around the mark. The matching negative margin keeps
-              the mark optically aligned with the wordmark's edge rather than
-              inset from it. */}
-          <a
-            className="-mr-1.5 inline-flex items-center rounded-md p-1.5 text-muted-foreground transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
+          About
+        </TextLink>
+        <TextLink
+          href={SITE_PAGE.CHANGELOG}
+          variant={TEXT_VARIANT.LABEL}
+          height={TEXT_LINK_HEIGHT.CONTROL}
+          current={currentOf(SITE_PAGE.CHANGELOG, current)}
+        >
+          Changelog
+        </TextLink>
+        {/* The negative margins keep the mark where it stood beside its
+              44px square: 22px from the last link, and optically aligned with
+              the column's edge rather than inset from it. */}
+        <span className="-mr-3.5 -ml-2 flex">
+          <IconButtonLink
             href={REPOSITORY_URL}
-            aria-label="Luke on GitHub"
-          >
-            <GitHubMark className="block size-[18px]" />
-          </a>
-        </div>
-      </nav>
-    </header>
+            icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}
+            label="Luke on GitHub"
+          />
+        </span>
+      </div>
+    </nav>
   );
 }
 
-/** Shared between every page so the legal and license links never drift apart. */
-export function SiteFooter(): React.JSX.Element {
+/**
+ * Shared between every page so the legal and license links never drift
+ * apart: what PublicPage's `footer` holds under its rule.
+ */
+export function SiteFooterLinks({ current }: ChromeProps): React.JSX.Element {
   return (
-    <footer className="shell hairline pt-12 pb-16 font-mono text-xs text-muted-foreground">
+    <Text
+      as={TEXT_ELEMENT.DIV}
+      variant={TEXT_VARIANT.CAPTION}
+      tone={TEXT_TONE.MUTED}
+      font={TEXT_FONT.MONO}
+    >
       {/* The separator belongs to the gap between items rather than to any
-          item, so adding or reordering a link never leaves a stray dot. */}
+            item, so adding or reordering a link never leaves a stray dot. */}
       <div className="flex flex-wrap gap-2 [&>*+*]:before:mr-2 [&>*+*]:before:content-['·']">
         <span>Apache-2.0</span>
         <span>macOS 14+</span>
-        <a
-          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
-          href="/about"
-        >
+        <TextLink href={SITE_PAGE.ABOUT} current={currentOf(SITE_PAGE.ABOUT, current)}>
           About
-        </a>
-        <a
-          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
-          href="/changelog"
-        >
+        </TextLink>
+        <TextLink href={SITE_PAGE.CHANGELOG} current={currentOf(SITE_PAGE.CHANGELOG, current)}>
           Changelog
-        </a>
+        </TextLink>
         {/* The changelog's feed, as quiet as the rest of the footer: a reader
-            subscribes once, so it needs a way in, not a call to action. */}
-        <a
-          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
-          href="/changelog/rss.xml"
-        >
-          RSS
-        </a>
-        <a
-          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
-          href="/privacy"
-        >
+              subscribes once, so it needs a way in, not a call to action. */}
+        <TextLink href="/changelog/rss.xml">RSS</TextLink>
+        <TextLink href={SITE_PAGE.PRIVACY} current={currentOf(SITE_PAGE.PRIVACY, current)}>
           Privacy
-        </a>
-        <a
-          className="no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none"
-          href="mailto:founders@stagereview.app"
-        >
-          Contact
-        </a>
+        </TextLink>
+        <TextLink href="mailto:founders@stagereview.app">Contact</TextLink>
       </div>
       {/* The notice sits under its own rule at the foot of the column, the
-          way stagereview.app closes its footer, so the link row above stays a
-          row of links. */}
+            way stagereview.app closes its footer, so the link row above stays
+            a row of links. */}
       <p className="mt-8 border-t border-border pt-6">© 2026 Stage Inc.</p>
-    </footer>
+    </Text>
   );
 }

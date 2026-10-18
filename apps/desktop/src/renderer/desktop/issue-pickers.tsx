@@ -6,6 +6,7 @@ import {
   type IssuePriority,
   type IssueStatus,
 } from "@luke/features/issue-wire";
+import { CHIP_WIDTH } from "@luke/ui";
 import {
   CircleAlertIcon,
   CircleCheckIcon,
@@ -21,6 +22,7 @@ import {
 import type { MenuRow } from "../searchable-menu";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
+import { Tooltip } from "../tooltip";
 
 /**
  * issue-pickers.tsx -- an issue's status and priority as glyphs, and the two chips that change them.
@@ -51,7 +53,7 @@ const PRIORITY_GLYPH = {
 } as const satisfies Record<IssuePriority, React.ReactNode>;
 
 /** The priorities as the menu lists them, the most pressing first and the unweighed last. */
-const PRIORITY_ORDER: readonly IssuePriority[] = [
+export const PRIORITY_ORDER: readonly IssuePriority[] = [
   ISSUE_PRIORITY.URGENT,
   ISSUE_PRIORITY.HIGH,
   ISSUE_PRIORITY.MEDIUM,
@@ -74,15 +76,17 @@ export function PriorityMark({ priority }: { priority: IssuePriority }): React.J
   if (glyph === null) return null;
   const words = ISSUE_PRIORITY_WORDS[priority];
   return (
-    <span className="issue-priority-mark" data-priority={priority} title={words}>
-      {glyph}
-      <span className="visually-hidden">{words}</span>
-    </span>
+    <Tooltip label={words}>
+      <span className="issue-priority-mark" data-priority={priority}>
+        {glyph}
+        <span className="visually-hidden">{words}</span>
+      </span>
+    </Tooltip>
   );
 }
 
 /** A priority's mark on its chip and in its menu: a dash where the issue is unweighed. */
-function PriorityGlyph({ priority }: { priority: IssuePriority }): React.JSX.Element {
+export function PriorityGlyph({ priority }: { priority: IssuePriority }): React.JSX.Element {
   return (
     <span className="issue-priority-mark" data-priority={priority}>
       {PRIORITY_GLYPH[priority] ?? <EllipsisIcon />}
@@ -132,6 +136,7 @@ export function StatusMenu({
       rows={STATUS_ROWS}
       noMatch="No such status"
       align={PICKER_ALIGN.START}
+      width={CHIP_WIDTH.AUTO}
       disabled={disabled}
       onPick={(id) => {
         if (isStatus(id) && id !== status) onPick(id);
@@ -160,6 +165,7 @@ export function PriorityMenu({
       rows={PRIORITY_ROWS}
       noMatch="No such priority"
       align={PICKER_ALIGN.START}
+      width={CHIP_WIDTH.AUTO}
       disabled={disabled}
       onPick={(id) => {
         if (isPriority(id) && id !== priority) onPick(id);

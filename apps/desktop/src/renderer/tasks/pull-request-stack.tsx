@@ -1,9 +1,10 @@
 import type { PullRequestStackEntry } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { ACT_KIND } from "@luke/host/acts";
+import { dropBelowStart, useMenu } from "@luke/ui";
 import { GitPullRequestDraftIcon, GitPullRequestIcon, LayersIcon } from "lucide-react";
 import { useAct } from "../act";
-import { ActionMenu, dropBelowStart, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
 import { useOpenPlace } from "./use-open-link";
 
@@ -35,7 +36,7 @@ function useOpenEntry(): (entry: PullRequestStackEntry) => void {
   const openPlace = useOpenPlace();
   return (entry) => {
     if (entry.agent !== undefined && openPlace !== undefined) {
-      openPlace({ workspace: "", place: placeOf(entry.agent) });
+      openPlace(placeOf(entry.agent));
     } else {
       tell(ACT_KIND.GITHUB_OPEN, { url: entry.url });
     }
@@ -58,7 +59,7 @@ export function PullRequestStack({
 }): React.JSX.Element | null {
   const at = stack.findIndex((entry) => entry.number === number);
   const shown = stack.length > 1 && at !== -1;
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const open = useOpenEntry();
   if (!shown) return null;
   const label = `Stack, ${at + 1} of ${stack.length}`;

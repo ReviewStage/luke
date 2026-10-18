@@ -2,6 +2,7 @@ import { toolPartType } from "@luke/features/brain";
 import {
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  type MessageRole,
   type SchemaPath,
   type SchemaRead,
   type SchemaRefusal,
@@ -28,6 +29,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  max,
   notExists,
   or,
   sql,
@@ -309,6 +311,147 @@ export function listRecentMessages(
   return Effect.flatMap(
     findRecentMessages({ conversationId, userId, limit: pageLimit({ limit }) }),
     (selected) => readSelected([...selected].reverse(), tools),
+  );
+}
+
+const findTurnOpeners = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    userId: Schema.String,
+    turnIds: Schema.Array(Schema.String),
+  }),
+  Result: SelectedMessageRowSchema,
+  execute: (options) =>
+    Database.use((db) =>
+      db
+        .selectDistinctOn([messages.turnId], MESSAGE_FIELDS)
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+            inArray(messages.turnId, [...options.turnIds]),
+            isNotNull(messages.finishedAt),
+            eq(messages.role, MESSAGE_ROLE.USER),
+          ),
+        )
+        .orderBy(messages.turnId, asc(messages.seq)),
+    ),
+});
+
+/**
+ * The line that opened each turn asked, oldest first: the first finished
+ * user row that names the turn, since a line a turn took in mid-run names
+ * none. A turn no line opened, or one of another conversation, answers
+ * nothing.
+ */
+export function listTurnOpeners(
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  turnIds: readonly string[],
+): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
+  if (turnIds.length === 0) return Effect.succeed({ ok: true, value: [] });
+  return Effect.flatMap(findTurnOpeners({ conversationId, userId, turnIds }), (selected) =>
+    readSelected(
+      selected.toSorted((first, second) => first.seq - second.seq),
+      tools,
+    ),
+  );
+}
+
+const findMessagesBefore = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    userId: Schema.String,
+    before: Schema.Number,
+    limit: Schema.Number,
+  }),
+  Result: SelectedMessageRowSchema,
+  execute: (options) =>
+    Database.use((db) =>
+      db
+        .select(MESSAGE_FIELDS)
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+            lt(messages.seq, options.before),
+          ),
+        )
+        .orderBy(desc(messages.seq))
+        .limit(options.limit),
+    ),
+});
+
+/**
+ * The newest messages below a sequence, every role and finished or not, as
+ * each now stands, answered oldest first: a page of a transcript read back
+ * from its end, `before` the lowest sequence the reader holds so far. A page
+ * holds at most `limit` rows, and fewer only once nothing more stands below.
+ * A conversation that no longer stands, or another account's, answers none.
+ */
+export function listMessagesBefore(
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  before: number,
+  limit?: number,
+): Effect.Effect<MessageListRead, MessageReadFailure, DatabaseServices> {
+  return Effect.flatMap(
+    findMessagesBefore({
+      conversationId,
+      userId,
+      before,
+      limit: pageLimit({ ...(limit === undefined ? undefined : { limit }) }),
+    }),
+    (selected) => readSelected([...selected].reverse(), tools),
+  );
+}
+
+const findMessageSeq = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    userId: Schema.String,
+    messageId: Schema.String,
+    role: MessageRoleSchema,
+  }),
+  Result: Schema.Struct({ seq: Schema.Number }),
+  execute: (options) =>
+    Database.use((db) =>
+      db
+        .select({ seq: messages.seq })
+        .from(messages)
+        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+        .where(
+          and(
+            eq(messages.conversationId, options.conversationId),
+            eq(messages.userId, options.userId),
+            eq(messages.id, options.messageId),
+            eq(messages.role, options.role),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Where a message of the conversation in the role named stands, by its id,
+ * without reading its parts: what a read back from the end starts below.
+ * Nothing for a message that is not there in that role, and nothing in a
+ * conversation that no longer stands or another account's.
+ */
+export function messageSeqOf(
+  userId: string,
+  conversationId: string,
+  messageId: string,
+  role: MessageRole,
+): Effect.Effect<Option.Option<number>, MessageReadFailure, DatabaseServices> {
+  return Effect.map(
+    findMessageSeq({ conversationId, userId, messageId, role }),
+    Option.map((row) => row.seq),
   );
 }
 
@@ -713,9 +856,34 @@ export function latestTurnsOfReached(
   return latestTurnsRead(null, conversationIds);
 }
 
+const findTurnStoppedUnder = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationId: Schema.String, key: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ conversationId, key }) =>
+    Database.use((db) =>
+      db
+        .select({ id: turns.id })
+        .from(turns)
+        .where(and(eq(turns.conversationId, conversationId), eq(turns.cancelRequestKey, key)))
+        .limit(1),
+    ),
+});
+
+/**
+ * Whether a Stop made under the key stands on a turn of the conversation
+ * named, whoever owns it: what a tool call run again reads to find the turn
+ * it stopped. Only for an id a gate already read, as `latestTurnsOfReached`.
+ */
+export function turnStoppedUnderReached(
+  conversationId: string,
+  key: string,
+): Effect.Effect<boolean, MessageReadFailure, DatabaseServices> {
+  return Effect.map(findTurnStoppedUnder({ conversationId, key }), (rows) => rows.length > 0);
+}
+
 const AwaitingLinesRowSchema = Schema.Struct({
   conversationId: Schema.String,
-  lines: Schema.Number,
+  newestAt: InstantColumnSchema,
 });
 
 /**
@@ -759,15 +927,17 @@ export function noReceiptOfLine() {
 }
 
 /**
- * How many of the developer's lines stand in each coding-agent conversation
- * named with no turn yet: each is a message the session took and the next
- * turn will receive, which is what reads an idle agent as running again
- * until that turn opens. The kind is held here as the writer holds it when
- * it takes such a line, since a planning conversation's turnless user rows
- * are its spoken asks and wait for no turn of eve's. A line a turn already
- * received under another row (`noReceiptOfLine`) is not counted.
+ * When the newest of the developer's lines standing with no turn yet was
+ * written, in each coding-agent conversation named that holds one: each is
+ * a message the session took and the next turn will receive, which is what
+ * reads an idle agent as running again until that turn opens, for as long
+ * as the status allows it to wait (`coder-host/status.ts`). The kind is held
+ * here as the writer holds it when it takes such a line, since a task
+ * conversation's turnless user rows are its spoken asks and wait for no
+ * turn of eve's. A line a turn already received under another row
+ * (`noReceiptOfLine`) is not counted.
  */
-const countAwaitingLines = SqlSchema.findAll({
+const newestAwaitingLines = SqlSchema.findAll({
   Request: ConversationsReadSchema,
   Result: AwaitingLinesRowSchema,
   execute: ({ userId, conversationIds }) =>
@@ -775,7 +945,7 @@ const countAwaitingLines = SqlSchema.findAll({
       db
         .select({
           conversationId: messages.conversationId,
-          lines: sql<number>`count(*)::int`,
+          newestAt: max(messages.createdAt),
         })
         .from(messages)
         .innerJoin(conversations, eq(conversations.id, messages.conversationId))
@@ -828,26 +998,26 @@ export function sentLineStands(
 function awaitingLinesRead(
   userId: string | null,
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlySet<string>, MessageReadFailure, DatabaseServices> {
-  if (conversationIds.length === 0) return Effect.succeed(new Set());
+): Effect.Effect<ReadonlyMap<string, Date>, MessageReadFailure, DatabaseServices> {
+  if (conversationIds.length === 0) return Effect.succeed(new Map());
   return Effect.map(
-    countAwaitingLines({ userId, conversationIds }),
-    (rows) => new Set(rows.filter((row) => row.lines > 0).map((row) => row.conversationId)),
+    newestAwaitingLines({ userId, conversationIds }),
+    (rows) => new Map(rows.map((row) => [row.conversationId, row.newestAt])),
   );
 }
 
-/** The conversations among those named in which a developer's line awaits its turn; one with none is absent. */
+/** The conversations among those named in which a developer's line awaits its turn, each with when the newest such line was written; one with none is absent. */
 export function awaitingLinesOf(
   userId: string,
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlySet<string>, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<ReadonlyMap<string, Date>, MessageReadFailure, DatabaseServices> {
   return awaitingLinesRead(userId, conversationIds);
 }
 
-/** The conversations among those named, whoever owns them, in which a developer's line awaits its turn; only for ids a gate already read, as `latestTurnsOfReached`. */
+/** The conversations among those named, whoever owns them, in which a developer's line awaits its turn, each with when the newest was written; only for ids a gate already read, as `latestTurnsOfReached`. */
 export function awaitingLinesOfReached(
   conversationIds: readonly string[],
-): Effect.Effect<ReadonlySet<string>, MessageReadFailure, DatabaseServices> {
+): Effect.Effect<ReadonlyMap<string, Date>, MessageReadFailure, DatabaseServices> {
   return awaitingLinesRead(null, conversationIds);
 }
 

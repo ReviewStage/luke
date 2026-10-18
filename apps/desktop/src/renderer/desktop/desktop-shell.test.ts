@@ -8,6 +8,7 @@ import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -18,12 +19,13 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
-import { handState, stateWith } from "#testing/app-state";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_CAPABILITIES, handState, stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "#testing/document-task";
 import { tasksControl } from "#testing/tasks-control";
 import { useAct } from "../act";
+import { appBridge } from "../app-bridge";
 import { runAppCommand } from "../app-commands";
 import { callControls } from "../call/call-card";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
@@ -62,6 +64,7 @@ const SETTINGS: SettingsPanelProps = {
     onOpenSettings: ignore,
     onTest: ignore,
   },
+  capabilities: DESKTOP_CAPABILITIES,
   updates: {
     update: {
       status: UPDATE_STATUS.IDLE,
@@ -98,13 +101,8 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-    },
+  fakeAppBridge({
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
 });
 
@@ -159,7 +157,7 @@ function shellProps(
 
 /**
  * The window's shell on the home page with the sidebar folded, the Inbox
- * open over it or not, New plan opening its dialog and Cancel putting it
+ * open over it or not, New task opening its dialog and Cancel putting it
  * away as the tab does.
  */
 function mount(
@@ -186,6 +184,8 @@ function mount(
         onOpen: ignore,
         onClose: ignore,
         onChoose: ignore,
+        pages: undefined,
+        onRereadPages: () => undefined,
       },
       onNewTask: () => setAsked(true),
       newTask: { ...control.newTask, open: asked, onClose: () => setAsked(false) },
@@ -222,6 +222,19 @@ test("with the sidebar folded, New plan stands beside its toggle over the home p
   act(() => root?.unmount());
   root = undefined;
   assert.deepEqual(titleBarButtons(mount(true)), ["Show sidebar", "New task"]);
+});
+
+test("the title bar's buttons, each wrapped in its hint, tell a reader the chord that reaches them on the button itself", () => {
+  const controls = mount(false).querySelector(".title-bar-controls:not([data-edge])");
+  assert.ok(controls, "the title bar's buttons stand");
+  const chords = [...controls.querySelectorAll("button")].map((button) => [
+    button.getAttribute("aria-label"),
+    button.getAttribute("aria-keyshortcuts"),
+  ]);
+  assert.deepEqual(chords, [
+    ["Show sidebar", "Meta+B"],
+    ["New task", "Meta+N"],
+  ]);
 });
 
 test("the home page welcomes an account with no plan, and its New plan raises the dialog over the window, which Cancel puts away", () => {
@@ -356,7 +369,7 @@ test("a plan opened on its Inbox tab rather than its own is read at once, its ro
 });
 
 /** A second plan beside `DOCUMENT_PLAN`, saved after it. */
-const NOTES_PLAN: Task = {
+const NOTES_TASK: Task = {
   ...DOCUMENT_TASK,
   id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
   name: "Release notes",
@@ -427,9 +440,9 @@ function rowReadMark(name: string, choose = false): string | undefined {
 }
 
 test("Mark as unread on the task being looked at draws its row unread through a save landing as it stays, and until it is opened again", () => {
-  const draw = mountListing([DOCUMENT_TASK, NOTES_PLAN], {
+  const draw = mountListing([DOCUMENT_TASK, NOTES_TASK], {
     [DOCUMENT_TASK.id]: DOCUMENT_TASK.updatedAt,
-    [NOTES_PLAN.id]: NOTES_PLAN.updatedAt,
+    [NOTES_TASK.id]: NOTES_TASK.updatedAt,
   });
   draw(DOCUMENT_TASK);
   assert.equal(rowUnread(DOCUMENT_NAME), "false");
@@ -439,7 +452,7 @@ test("Mark as unread on the task being looked at draws its row unread through a 
   draw({ ...DOCUMENT_TASK, updatedAt: DOCUMENT_TASK.updatedAt + 1 });
   assert.equal(rowUnread(DOCUMENT_NAME), "true");
 
-  draw(NOTES_PLAN);
+  draw(NOTES_TASK);
   assert.equal(rowUnread(DOCUMENT_NAME), "true");
 
   draw(DOCUMENT_TASK);
@@ -447,21 +460,21 @@ test("Mark as unread on the task being looked at draws its row unread through a 
 });
 
 test("a task's menu offers Mark as read while its row is unread, which draws it read, and Mark as unread after", () => {
-  const draw = mountListing([DOCUMENT_TASK, NOTES_PLAN], {
+  const draw = mountListing([DOCUMENT_TASK, NOTES_TASK], {
     [DOCUMENT_TASK.id]: DOCUMENT_TASK.updatedAt,
-    [NOTES_PLAN.id]: NOTES_PLAN.updatedAt - 1,
+    [NOTES_TASK.id]: NOTES_TASK.updatedAt - 1,
   });
   draw(undefined);
-  assert.equal(rowUnread(NOTES_PLAN.name), "true");
+  assert.equal(rowUnread(NOTES_TASK.name), "true");
   assert.equal(rowReadMark(DOCUMENT_NAME), "Mark as unread");
 
-  assert.equal(rowReadMark(NOTES_PLAN.name, true), "Mark as read");
-  assert.equal(rowUnread(NOTES_PLAN.name), "false");
-  assert.equal(rowReadMark(NOTES_PLAN.name), "Mark as unread");
+  assert.equal(rowReadMark(NOTES_TASK.name, true), "Mark as read");
+  assert.equal(rowUnread(NOTES_TASK.name), "false");
+  assert.equal(rowReadMark(NOTES_TASK.name), "Mark as unread");
 
-  assert.equal(rowReadMark(NOTES_PLAN.name, true), "Mark as unread");
-  assert.equal(rowUnread(NOTES_PLAN.name), "true");
-  assert.equal(rowReadMark(NOTES_PLAN.name), "Mark as read");
+  assert.equal(rowReadMark(NOTES_TASK.name, true), "Mark as unread");
+  assert.equal(rowUnread(NOTES_TASK.name), "true");
+  assert.equal(rowReadMark(NOTES_TASK.name), "Mark as read");
 });
 
 /** Lets every promise settled so far run its continuations. */
@@ -613,10 +626,10 @@ test("the Automations page stands in the plan's place, titled for the listed wor
   assert.deepEqual(closed, ["closed"]);
 });
 
-/** The plan the call in progress is about, which none of the places below shows with its call bar. */
+/** The task the call in progress is about, which none of the places below shows with its call bar. */
 const CALL_TASK_NAME = "Checkout redesign";
 
-/** Every place in the window the developer can stand while a call goes on about another plan, as the shell is handed it. */
+/** Every place in the window the developer can stand while a call goes on about another task, as the shell is handed it. */
 const PLACE = {
   HOME: "home",
   OTHER_TASK: "another plan",
@@ -632,7 +645,7 @@ const PLACE = {
 
 type Place = (typeof PLACE)[keyof typeof PLACE];
 
-/** The column at the window's left in each place: the plans' sidebar, which folds, or a column of the place's own, which does not. */
+/** The column at the window's left in each place: the tasks' sidebar, which folds, or a column of the place's own, which does not. */
 const LEFT_COLUMN = {
   [PLACE.HOME]: { selector: "aside.desktop-sidebar", folds: true },
   [PLACE.OTHER_TASK]: { selector: "aside.desktop-sidebar", folds: true },
@@ -646,7 +659,7 @@ const LEFT_COLUMN = {
   [PLACE.VERSION_HISTORY]: { selector: 'nav[aria-label="Versions"]', folds: false },
 } as const satisfies Record<Place, { selector: string; folds: boolean }>;
 
-/** The tab and the plans' state that stand the window in a place. */
+/** The tab and the tasks' state that stand the window in a place. */
 function placed(place: Place) {
   const control = tasksControl();
   const onTask = {
@@ -674,7 +687,7 @@ function placed(place: Place) {
   };
 }
 
-/** The shell standing in a place with a call in progress about another plan, its card's presses sent as `App` sends them. */
+/** The shell standing in a place with a call in progress about another task, its card's presses sent as `App` sends them. */
 function CallShell({ place, folded }: { place: Place; folded: boolean }): React.JSX.Element {
   const { tell } = useAct();
   const { tab, tasks } = placed(place);
@@ -729,15 +742,12 @@ async function handBridge(): Promise<void> {
   await import("./desktop-settings");
   handState(experimentsOn(EXPERIMENT.FACTORY, EXPERIMENT.AUTOMATIONS));
   sentActs = [];
-  const bridge = window.luke;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...bridge,
-      act: (request: { kind: string }) => {
-        sentActs.push(request.kind);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      },
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: { kind: string }) => {
+      sentActs.push(request.kind);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
   });
 }
@@ -755,7 +765,7 @@ function cardStanding(page: HTMLElement, place: Place) {
   };
 }
 
-/** Presses the card's way back to the call's plan. */
+/** Presses the card's way back to the call's task. */
 function pressReturn(page: HTMLElement): void {
   const button = page.querySelector<HTMLButtonElement>(
     `section.call-card button[aria-label="Open ${CALL_TASK_NAME}"]`,
@@ -778,7 +788,9 @@ test("the side panel's toggle stands on a plan and on an agent's page, which kee
       root?.render(onRegistry(registry, createElement(CallShell, { place, folded: false }))),
     );
     await settle();
-    toggled[place] = container.querySelector("button.side-panel-toggle") !== null;
+    toggled[place] = [...container.querySelectorAll("button")].some((button) =>
+      ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
+    );
   }
   assert.deepEqual(toggled, {
     [PLACE.HOME]: false,
@@ -915,8 +927,8 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
 
-  const card = document.querySelector(".tooltip-card [data-task-card]");
-  assert.equal(card?.querySelector(".card-name")?.textContent, DOCUMENT_NAME);
+  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, DOCUMENT_NAME);
 });
 
 /** The sidebar's Chat row, where one stands. */
@@ -926,14 +938,14 @@ function chatRow(page: HTMLElement): HTMLButtonElement | undefined {
   );
 }
 
-test("the sidebar's Chat row stands only while the account has Chat on and a chat is read, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", async () => {
+test("the sidebar's Chat row stands only while the account has Chat on and a chat is available, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
-  assert.equal(chatRow(mount(false)), undefined, "no chat is read");
+  assert.equal(chatRow(mount(false)), undefined, "no chat is available");
   act(() => root?.unmount());
 
   let opened = 0;
   const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, chat, onOpen: () => (opened += 1) };
+  const view = { ...tasksControl().chatView, available: true, chat, onOpen: () => (opened += 1) };
   const page = mount(false, false, { chatView: view });
   await settle();
   const row = chatRow(page);
@@ -954,7 +966,12 @@ test("with Chat off for the account, its row stands nowhere, and Chat standing i
   handState({});
   const closed: string[] = [];
   const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, chat, onClose: () => closed.push("closed") };
+  const view = {
+    ...tasksControl().chatView,
+    available: true,
+    chat,
+    onClose: () => closed.push("closed"),
+  };
   const off = mount(false, false, { chatView: view });
   await settle();
   assert.equal(chatRow(off), undefined);
@@ -969,7 +986,7 @@ test("with Chat off for the account, its row stands nowhere, and Chat standing i
 
 test("a fixture run staged on Chat offers it with no account to turn its experiment on, where any other run does not", async () => {
   const chat = fixtureChat({ fixtureMode: true }, 0);
-  const view = { ...tasksControl().chatView, chat };
+  const view = { ...tasksControl().chatView, available: true, chat };
   const run = { ...stateWith({}, {}).run, fixtureMode: true };
   handState({}, { run: { ...run, profile: RUN_PROFILE.CHAT } });
   const staged = mount(false, false, { chatView: view });
@@ -982,4 +999,47 @@ test("a fixture run staged on Chat offers it with no account to turn its experim
   const other = mount(false, false, { chatView: view });
   await settle();
   assert.equal(chatRow(other), undefined, "another fixture run does not");
+});
+
+/** The offline status in the title bar beside the traffic lights, if one stands. */
+function titleBarOffline(page: HTMLElement): Element | null {
+  return page.querySelector('.title-bar-controls [role="status"][aria-label="Offline"]');
+}
+
+test("with the sidebar folded, the Mac offline says so in the title bar beside New task, and nothing does online", async () => {
+  handState({}, { network: { online: false } });
+  const offline = mount(false);
+  await settle();
+  assert.ok(titleBarOffline(offline), "the title bar says the Mac is offline");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState({}, { network: { online: true } });
+  const online = mount(false);
+  await settle();
+  assert.equal(titleBarOffline(online), null);
+});
+
+test("the sign-in, which needs the network, says over it when the Mac is offline", async () => {
+  handState({}, { network: { online: false } });
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  const props = shellProps(tasksControl(), PANEL_TAB.TASKS, ignore, {});
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopShell, {
+          ...props,
+          gates: { ...props.gates, accountRequired: true },
+          settings: { ...SETTINGS, account: { status: ACCOUNT_STATUS.SIGNED_OUT } },
+        }),
+      ),
+    ),
+  );
+  await settle();
+
+  assert.ok(container.querySelector(".desktop-onboarding"), "the sign-in stands");
+  assert.equal(titleBarOffline(container)?.textContent, "Offline");
 });

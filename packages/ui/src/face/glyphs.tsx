@@ -97,7 +97,7 @@ export function TrashIcon(): React.JSX.Element {
 
 /**
  * A push pin tilted the way 📌 is, as Slack, Notion, and Linear draw theirs:
- * keeps a plan at the head of the sidebar. Its paths are Tabler Icons'
+ * keeps a task at the head of the sidebar. Its paths are Tabler Icons'
  * `pin` (https://tabler.io/icons, MIT licence, copyright (c) 2020-2026
  * Paweł Kuna), drawn in our stroke.
  */
@@ -112,7 +112,7 @@ export function PinIcon(): React.JSX.Element {
 }
 
 /**
- * The tilted pin struck through: lets a pinned plan back among the rest. Its
+ * The tilted pin struck through: lets a pinned task back among the rest. Its
  * paths are Tabler Icons' `pinned-off` (https://tabler.io/icons, MIT licence,
  * copyright (c) 2020-2026 Paweł Kuna), drawn in our stroke.
  */
@@ -127,7 +127,7 @@ export function UnpinIcon(): React.JSX.Element {
   );
 }
 
-/** A box under its lid: puts a plan away under Archived. */
+/** A box under its lid: puts a task away under Archived. */
 export function ArchiveIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -138,7 +138,7 @@ export function ArchiveIcon(): React.JSX.Element {
   );
 }
 
-/** A box with an arrow rising out of it: brings an archived plan back. */
+/** A box with an arrow rising out of it: brings an archived task back. */
 export function UnarchiveIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -157,6 +157,35 @@ export function ResetIcon(): React.JSX.Element {
     <Glyph className="icon-button-glyph">
       <path d="M2.5 5.1v5.2h5.2" />
       <path d="M4.6 14.6a7.8 7.8 0 1 0 1.9-8.1L2.5 10.3" />
+    </Glyph>
+  );
+}
+
+/**
+ * An arrow turning round to where it began: tries again what did not land.
+ * Its paths are Lucide's `rotate-cw` (https://lucide.dev, ISC licence,
+ * copyright (c) Lucide Contributors 2022), drawn in our stroke.
+ */
+export function RetryIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+    </Glyph>
+  );
+}
+
+/**
+ * A ring round a mark of exclamation: something did not land. Its paths are
+ * Lucide's `circle-alert` (https://lucide.dev, ISC licence, copyright (c)
+ * Lucide Contributors 2022), drawn in our stroke.
+ */
+export function AlertIcon(): React.JSX.Element {
+  return (
+    <Glyph className="luke-glyph">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 8v4" />
+      <path d="M12 16h.01" />
     </Glyph>
   );
 }
@@ -298,6 +327,16 @@ export function UpdateIcon(): React.JSX.Element {
   );
 }
 
+/** An arrow up and to the right, set after a link's words: a press leaves the place for another. */
+export function ArrowUpRightIcon(): React.JSX.Element {
+  return (
+    <Glyph className="luke-text-link-out">
+      <path d="M7 17 17 7" />
+      <path d="M8 7h9v9" />
+    </Glyph>
+  );
+}
+
 /** Drawn rather than typed: a ↗ character depends on a font having one. */
 export function ExternalIcon(): React.JSX.Element {
   return (
@@ -309,7 +348,7 @@ export function ExternalIcon(): React.JSX.Element {
   );
 }
 
-/** An arrow back up and to the left: the way back to the plan a call is about. */
+/** An arrow back up and to the left: the way back to the task a call is about. */
 export function ReturnIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -515,7 +554,7 @@ export function AgentPlaceholderIcon(): React.JSX.Element {
   return <Glyph>{null}</Glyph>;
 }
 
-/** A page with its corner turned down and lines of text on it: the plan's own document. */
+/** A page with its corner turned down and lines of text on it: the task's own document. */
 export function DocumentIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -545,7 +584,7 @@ export function PlayIcon(): React.JSX.Element {
   );
 }
 
-/** A board on its stand with a line drawn across it: the plan's whiteboard. */
+/** A board on its stand with a line drawn across it: the task's whiteboard. */
 export function BoardIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -562,6 +601,15 @@ export function ChevronDownIcon(): React.JSX.Element {
   return (
     <Glyph className="settings-chevron">
       <path d="m5.8 9.4 6.2 6.2 6.2-6.2" />
+    </Glyph>
+  );
+}
+
+/** Points at a fold's body, turned down by its stylesheet while the fold is open. */
+export function FoldChevronIcon(): React.JSX.Element {
+  return (
+    <Glyph className="luke-disclosure-chevron">
+      <path d="m9.4 5.8 6.2 6.2-6.2 6.2" />
     </Glyph>
   );
 }

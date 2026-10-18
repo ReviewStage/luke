@@ -122,7 +122,7 @@ body {
   padding: var(--luke-space-24) var(--luke-page-inset) var(--luke-space-64);
 }
 
-.catalog-example h1 {
+.catalog-example-title {
   margin: 0 0 var(--luke-space-24);
   font-size: var(--luke-type-title-size);
   line-height: var(--luke-type-title-leading);
@@ -188,12 +188,71 @@ body {
   white-space: nowrap;
 }
 
+/* A popover's anchor, the positioned box that holds its button alone, and
+   the room the popover opens in: tall enough above the buttons to hold it. */
+.catalog-anchor {
+  position: relative;
+}
+
+.catalog-popover-stage {
+  max-width: 760px;
+  padding-top: 120px;
+}
+
+.catalog-popover {
+  padding: var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-ground);
+  box-shadow: 0 4px 16px var(--luke-color-shadow);
+}
+
+/* A short room that scrolls, its button low enough that the popover opens
+   above it until a scroll lifts the button toward the room's top. */
+.catalog-popover-room {
+  position: relative;
+  max-width: 560px;
+  height: 200px;
+  overflow: auto;
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-popover-scroll {
+  height: 480px;
+  padding: 140px var(--luke-space-12) 0;
+}
+
 /* An example's column of samples, each a row of its own. */
 .catalog-stack {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-12);
+}
+
+/* The row the menu example right-clicks, marked out so a reader sees where to press. */
+.catalog-menu-row {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: var(--luke-space-24) var(--luke-space-12);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+/* A row of attachment chips, with room above for the discs on their corners. */
+.catalog-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-12);
+  margin: 0;
+  padding: var(--luke-space-12) 0 0;
+  list-style: none;
 }
 
 /* A column narrower than a phone, where long words have to wrap. */
@@ -222,6 +281,66 @@ body {
   white-space: nowrap;
 }
 
+/* A bar a path gives way in, at its wide, narrow, and narrowest widths
+   (`Breadcrumbs`' `shownAt`, read off the `BreadcrumbBar` it holds). */
+.catalog-crumb-bar {
+  display: flex;
+  width: 600px;
+  max-width: 100%;
+  padding: var(--luke-space-4) var(--luke-space-6);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-crumb-bar-narrow {
+  width: 400px;
+}
+
+.catalog-crumb-bar-narrowest {
+  width: 240px;
+}
+
+/* A pane's room an empty state fills, tall enough to stand it above the middle. */
+.catalog-empty-room {
+  display: flex;
+  flex-direction: column;
+  height: 280px;
+}
+
+.catalog-empty-room-narrow {
+  width: 200px;
+}
+
+/* A region a failed read would have filled, its failure centred in it. */
+.catalog-error-region {
+  align-items: center;
+  justify-content: center;
+}
+
+.catalog-error-narrow {
+  width: 200px;
+}
+
+/* A list's foot that is itself its press, as an app draws one around
+   `RetryRowLabel`: a row in the caption's type, lit on hover. */
+.catalog-retry-row {
+  width: 100%;
+  padding: var(--luke-space-8);
+  border: 0;
+  border-radius: var(--luke-control-radius);
+  background: none;
+  color: var(--luke-color-text-muted);
+  font: inherit;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  text-align: left;
+}
+
+.catalog-retry-row:hover {
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
+}
+
 /* A dashed outline that shows the room an arrangement is given. */
 .catalog-frame {
   padding: var(--luke-space-8);
@@ -233,9 +352,146 @@ body {
   width: 160px;
 }
 
+/* A card in a column narrower than its words. */
+.catalog-card-narrow {
+  width: 200px;
+}
+
+/* A line a flush card's list draws, inset as a table's cell is, with a
+   hairline between it and the line above. */
+.catalog-card-row {
+  padding: var(--luke-space-12) var(--luke-space-20);
+}
+
+.catalog-card-row + .catalog-card-row {
+  border-top: 1px solid var(--luke-color-border);
+}
+
 /* A form's column at a settings page's measure. */
 .catalog-column {
   max-width: 360px;
+}
+
+/* A dialog's long words, which give way and scroll in a short window so the
+   answers under them stay on the card. */
+.catalog-dialog-scroll {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* A picture's card: its name and Close along the top, the picture under
+   it on its own ground. */
+.catalog-media-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-6) var(--luke-space-6) var(--luke-space-6) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.catalog-media-picture {
+  display: grid;
+  padding: var(--luke-space-48);
+  place-items: center;
+  background: var(--luke-color-surface);
+}
+
+/* The face gives way to a narrow or short window, so the card that fits it
+   never has to clip it: the window less the dimmed margin, the picture's
+   inset, the card's edge, and, for its height, the bar above it. */
+.catalog-media-picture > .luke-face {
+  width: min(
+    480px,
+    100vw -
+    2 *
+    (var(--luke-space-24) + var(--luke-space-48)) -
+    2px,
+    (100vh - 2 * (var(--luke-space-24) + var(--luke-space-48)) - 48px) *
+    3 / 2
+  );
+  height: auto;
+  aspect-ratio: 3 / 2;
+}
+
+/* The measure a settings page gives its sections. */
+.catalog-settings {
+  max-width: 560px;
+}
+
+.catalog-settings-narrow {
+  max-width: 320px;
+}
+
+/* The window or pane a settings page fills: a fixed height, so the page
+   scrolls inside it, and a dashed edge showing where the page's own edge is. */
+.catalog-settings-frame {
+  width: 100%;
+  max-width: 880px;
+  height: 480px;
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-settings-frame-narrow {
+  max-width: 400px;
+}
+
+/* The tooltip and hover card examples' control, whose wrapper is the hint's anchor and so wraps it exactly. */
+.catalog-hinted {
+  display: inline-flex;
+}
+
+/* A toolbar folding its buttons, as an app's container query does. */
+.catalog-folded {
+  --luke-fold: folded;
+}
+
+/* A toolbar whose corner resizes it, folding its buttons below 360px. */
+.catalog-folding-toolbar {
+  overflow: hidden;
+  width: 480px;
+  max-width: 100%;
+  padding: var(--luke-space-8);
+  border: 1px dashed var(--luke-color-border-strong);
+  resize: horizontal;
+  container: catalog-folding-toolbar / inline-size;
+}
+
+@container catalog-folding-toolbar (width < 360px) {
+  .catalog-folding-toolbar > * {
+    --luke-fold: folded;
+  }
+}
+
+/* A name renamed in place: the name, or its field, and Rename at its end.
+   In a well, the well is outlined and holds the field at a tab's width, as
+   a tab holds its name's field. */
+.catalog-inline-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  min-height: var(--luke-control-height);
+}
+
+.catalog-inline-edit > .luke-inline-edit {
+  flex: 1;
+}
+
+.catalog-inline-edit-well {
+  display: inline-flex;
+  padding: var(--luke-space-4) var(--luke-space-8);
+  border-radius: var(--luke-radius-6);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
+}
+
+.catalog-inline-edit-well:focus-within {
+  outline: 2px solid var(--luke-color-focus-ring);
+  outline-offset: -1px;
+}
+
+.catalog-inline-edit-well > .luke-inline-edit {
+  width: 24ch;
 }
 
 /* A bare text input standing in for a control an example holds. */
@@ -265,7 +521,13 @@ body {
   height: 120px;
 }
 
-/* Room a placeholder stands in, as wide as what it stands for. */
+/* Room a placeholder stands in, as wide as what it stands for; a block's
+   room is a plot's whole box. */
+.catalog-skeleton-block {
+  width: 240px;
+  height: 96px;
+}
+
 .catalog-skeleton-line {
   width: 160px;
 }
@@ -277,4 +539,135 @@ body {
 /* A row's item that takes the room its row leaves. */
 .catalog-grow {
   flex: 1;
+}
+
+/* A frame the size of a screen a page pattern fills: a tablet's width, or
+   a phone's, as tall as the window, so the page centres in it as it would. */
+.catalog-screens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-24);
+}
+
+.catalog-screen {
+  box-sizing: border-box;
+  width: 768px;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px dashed var(--luke-color-border-strong);
+  background: var(--luke-color-ground);
+}
+
+.catalog-screen-phone {
+  width: 320px;
+}
+
+/* A screen as tall as a window's content, so a collection page scrolls in it. */
+.catalog-screen-collection {
+  display: flex;
+  height: 480px;
+}
+
+/* A screen as tall as a window's content, so a detail page's columns
+   scroll in it. */
+.catalog-screen-detail {
+  display: flex;
+  height: 480px;
+}
+
+/* The window's toolbar a page under the toolbar frame stands still: one
+   row, its title at the toolbar's own 15px, a hairline under it, as the
+   desktop window draws it. */
+.catalog-window-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  min-height: 46px;
+  padding: var(--luke-space-8) var(--luke-page-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.catalog-window-toolbar-title {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: var(--luke-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A board's columns, each a card's width, which outrun a narrow screen so
+   the page scrolls them sideways. */
+.catalog-board {
+  display: flex;
+  gap: var(--luke-space-12);
+}
+
+.catalog-board-column {
+  flex: 1 0 220px;
+}
+
+/* A screen as tall as a window, which scrolls the public page it holds as a
+   document would, so its banner stands still at the top. */
+.catalog-screen-public {
+  height: 480px;
+  overflow-y: auto;
+}
+
+/* The words an example lays in a public page's banner and footer, as the
+   site's own chrome lays them. */
+.catalog-public-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-16);
+}
+
+.catalog-public-wordmark {
+  font-family: var(--luke-font-display);
+  font-weight: var(--luke-weight-bold);
+}
+
+.catalog-public-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-16);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-label-size);
+}
+
+.catalog-public-footer {
+  color: var(--luke-color-text-muted);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* A release in the wide page's example: its version and date on a rail
+   beside its notes, as the changelog lays them. */
+.catalog-public-release {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: var(--luke-space-40);
+}
+
+/* Luke's face at the size the OAuth cards open with. */
+.catalog-auth-mark {
+  display: block;
+  width: 52px;
+  height: 52px;
+  color: var(--luke-color-working);
+}
+
+.catalog-auth-mark svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* A provider's mark at a control's glyph size. */
+.catalog-auth-provider {
+  display: block;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }

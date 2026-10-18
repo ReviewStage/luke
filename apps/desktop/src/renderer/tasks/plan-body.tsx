@@ -6,15 +6,16 @@ import {
   type PlanMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
+import { planSections } from "@luke/features/plan-document";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
-import { EllipsisIcon } from "@luke/ui";
+import { Button, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
-import { type LinkDrawer, MarkdownMessage } from "../markdown-message";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
+import { type LinkDrawer, MarkdownMessage, type TaskToggler } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import { prefersReducedMotion } from "../use-reduced-motion";
 import {
@@ -50,15 +51,15 @@ import {
   type UnitView,
 } from "./task-reveal";
 import { agoText, momentText, sinceText, useMinute } from "./task-time";
-import { PlanTitle } from "./task-title";
+import { TaskTitle } from "./task-title";
 import { useOpenLink } from "./use-open-link";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks";
 
 /**
- * plan-body.tsx -- the open plan's document as it scrolls between the header and the microphone row, typing in each newer document as it arrives.
+ * plan-body.tsx -- the open task's document as it scrolls between the header and the microphone row, typing in each newer document as it arrives.
  *
- * Every document the host hands over for the open plan becomes the chase's
+ * Every document the host hands over for the open task becomes the chase's
  * target, whether a saved plan or a draft still being written, so a stream of
  * drafts is worked in by one continuous hand rather than restarting on each.
  * The view follows the caret, bringing a jump to the middle, unless the
@@ -79,28 +80,28 @@ import { NO_LOOKS, type TaskLooks } from "./use-task-looks";
  * line in the text, where it would stand over their words or a picture; a
  * picture of the plan, opened over the window, says who last changed its
  * section in the viewer's header instead. The sections changed since
- * the developer last looked at the plan on this Mac wear a still tint,
+ * the developer last looked at the task on this Mac wear a still tint,
  * counted under that line beside a face for each who changed them, until
- * they dismiss them or leave the plan (`use-task-looks.ts`).
- * The plan's name is drawn as the title over its text (`task-title.tsx`),
+ * they dismiss them or leave the task (`use-task-looks.ts`).
+ * The task's name is drawn as the title over its text (`task-title.tsx`),
  * and each section is known by its heading, and its link by the heading's
  * anchor (`sectionAnchors`). A Mermaid fence draws as its diagram once Luke
  * has finished typing it (`../plan-diagram.tsx`).
  *
- * On a plan's own page each section has a link: its ⋯, shown while the
+ * On a task's own page each section has a link: its ⋯, shown while the
  * pointer or the keyboard is on it, copies the section's address
  * (`@luke/features/mention-link`), which a transcript or the plan draws as
  * the section's chip wherever it is pasted, and a mention in the
  * plan's words is drawn as its chip (`mention-chip.tsx`), which opens the
  * section it names. The title has a ⋯ of its own, drawn as a section's is,
- * which copies the plan's link and offers Rename, where the title can be
+ * which copies the task's link and offers Rename, where the title can be
  * edited, and Version history, where the window opens it
  * (`task-menu-items.tsx`). Asked to show a section, the document scrolls
  * its own scroller to it, never `scrollIntoView`, which would scroll every box
  * around it too; a section the plan no longer holds leaves it at its top.
  */
 
-/** What a plan's own page does with its sections' links and its mentions: the slug of the workspace its links are written under, what opens the plan or a section a mention names, or a file's tab, and the section it was last asked to show. */
+/** What a task's own page does with its sections' links and its mentions: the slug of the workspace its links are written under, what opens the task or a section a mention names, or a file's tab, and the section it was last asked to show. */
 export interface SectionLinks {
   readonly workspace: string;
   readonly onOpen: (mention: PlanMention) => void;
@@ -116,7 +117,7 @@ export interface SectionReveal {
   readonly ask: number;
 }
 
-/** The plan a page's sections link to, and where its links are written. */
+/** The task a page's sections link to, and where its links are written. */
 interface LinkedTask {
   readonly taskId: string;
   readonly place: MentionPlace;
@@ -290,9 +291,7 @@ function ChangedLine({
         )}
       </span>
       <span aria-hidden="true">·</span>
-      <button type="button" className="toolbar-button quiet-button" onClick={looks.dismiss}>
-        Dismiss
-      </button>
+      <Button onClick={looks.dismiss}>Dismiss</Button>
     </p>
   );
 }
@@ -408,7 +407,7 @@ function opened(plan: Task): Chase {
 
 /**
  * The chase aimed at the plan as handed over now: a new target for the same
- * plan, a fresh start for another. Note that only the reader's own edit lands
+ * task, a fresh start for another. Note that only the reader's own edit lands
  * at once, because a teammate's arrives unseen and types in as Luke's does.
  */
 function aimed(chase: Chase, task: Task, reader: TaskReader): Chase {
@@ -470,10 +469,10 @@ function unitClass(view: UnitView, changed: boolean): string {
 }
 
 /**
- * What draws the plan's mentions as chips, on a plan's own page: a link
+ * What draws the plan's mentions as chips, on a task's own page: a link
  * whose destination names a mention, whoever wrote it (`linkMention`),
  * drawn against the anchors of the plan's headings as they stand; nothing
- * off a plan's page, where mentions stay words. Note that it is made again
+ * off a task's page, where mentions stay words. Note that it is made again
  * only when a heading changes, since every unit's words are drawn again
  * when it is, and that what opening one does is read as it is pressed.
  */
@@ -507,8 +506,24 @@ function useMentionChips(
 /** The door of a document nothing is edited through: every edit answered as unanswered. */
 const NO_EDIT: PlanEditDoor = () => Promise.reject(new Error("This plan cannot be edited here."));
 
-/** Where a title's draft goes when nothing else names the plan: nowhere. */
+/** Where a title's draft goes when nothing else names the task: nowhere. */
 const NO_DRAFT = (_name: string | undefined): void => undefined;
+
+/** A task item's opening as written: its list marker, then its box, unticked or ticked. */
+const TASK_ITEM = /^(?:[-*+]|\d{1,9}[.)])[ \t]+\[([ \txX])\]/u;
+
+/**
+ * The text with the task item whose marker starts at `at` ticked or
+ * cleared, every other character as it was; nothing where no task item
+ * starts there.
+ */
+function toggledTask(text: string, at: number): string | undefined {
+  const item = TASK_ITEM.exec(text.slice(at));
+  if (item === null) return undefined;
+  const box = at + item[0].length - 2;
+  const ticked = item[1] === "x" || item[1] === "X";
+  return `${text.slice(0, box)}${ticked ? " " : "x"}${text.slice(box + 1)}`;
+}
 
 /** A unit drawn with its section's byline, where a save has changed the section, and its ⋯, where it has a link. */
 function attributed(
@@ -544,26 +559,26 @@ function UnitMenu({
   /** Whether it is a Tab stop: only beside the document's one, its unit's block. */
   tabbable: boolean;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const trigger = menu.trigger();
   return (
     <>
-      <Tooltip label={label}>
-        <button
-          type="button"
-          className="icon-button plan-unit-more"
-          aria-label={label}
-          tabIndex={tabbable ? 0 : -1}
-          {...trigger}
-          onClick={(event) => {
-            // Note that the press stops here, because a click into a section opens its editor.
-            event.stopPropagation();
-            trigger.onClick(event);
-          }}
-        >
-          <EllipsisIcon />
-        </button>
-      </Tooltip>
+      {/* The box shows the ⋯ while the pointer or the keyboard is on its unit. */}
+      <span className="plan-unit-more">
+        <Tooltip label={label}>
+          <IconButton
+            icon={<EllipsisIcon />}
+            label={label}
+            tabbable={tabbable}
+            {...trigger}
+            onClick={(event) => {
+              // Note that the press stops here, because a click into a section opens its editor.
+              event.stopPropagation();
+              trigger.onClick(event);
+            }}
+          />
+        </Tooltip>
+      </span>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}
@@ -638,17 +653,20 @@ function DocumentUnit({
   linked,
   anchor,
   entry,
+  onTask,
 }: {
   view: UnitView;
   marks: SectionMarks;
   /** Draws the plan's mentions as chips; links are drawn as words without it. */
   link: LinkDrawer | undefined;
-  /** The plan whose sections have links, which each section's ⋯ copies; none off a plan's own page. */
+  /** The task whose sections have links, which each section's ⋯ copies; none off a task's own page. */
   linked: LinkedTask | undefined;
   /** The section's anchor, empty where its heading spells none. */
   anchor: string;
   /** Whether its ⋯ is a Tab stop: beside the document's one, its section's block, or on a document that cannot be edited. */
   entry: boolean;
+  /** Ticks or clears a task item pressed, offsets in the unit's words; every checkbox is read-only without it. */
+  onTask?: TaskToggler | undefined;
 }): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
   const openLink = useOpenLink();
@@ -662,6 +680,7 @@ function DocumentUnit({
       openLink={openLink}
       diagrams
       picture={picture}
+      onTask={onTask}
     />
   );
   const menu =
@@ -672,19 +691,19 @@ function DocumentUnit({
 }
 
 /**
- * The plan's document: its name as the title over its text. `live` is the
- * plan's call in progress, which keeps the caret waiting where the typing
+ * The task's document: its name as the title over its text. `live` is the
+ * task's call in progress, which keeps the caret waiting where the typing
  * last stopped; `onShowHistory` opens the plan's version history from the
  * "Edited by" line, on the plan as it stands, and from a section's, on the
  * revision of the save it names. With `onEdit`, the text is edited whole in
- * place, and with `onRename` the title too, its words drawn as the plan's
+ * place, and with `onRename` the title too, its words drawn as the task's
  * name through `onDraftName` as they are typed; without them the document is
  * drawn read-only. An editable plan with no text yet opens it, the caret at
  * its start, from a click anywhere on the panel's empty room, since it has no
  * section to click into. With `page` the document is drawn as a Settings page,
  * as the plan template is: the page's actions end the title's line, and the
  * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
- * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
+ * looked, which the task's region keeps (`use-task-looks.ts`); without them
  * none are. `readMark` is whether the plan is marked unread, which the
  * title's ⋯ offers to flip.
  */
@@ -706,20 +725,20 @@ export function PlanBody({
   live: boolean;
   onShowHistory?: ShowHistory;
   onEdit?: PlanEditDoor;
-  /** Renames the plan, from its title, answering whether the name was taken. */
+  /** Renames the task, from its title, answering whether the name was taken. */
   onRename?: (name: string) => Promise<boolean>;
-  /** Draws the name typed into the title wherever the plan is named, or none once it is left. */
+  /** Draws the name typed into the title wherever the task is named, or none once it is left. */
   onDraftName?: (name: string | undefined) => void;
   looks?: TaskLooks;
   /** Whether the plan is marked unread, and the mark the title's ⋯ sets; without it, the ⋯ offers none. */
   readMark?: ReadMark;
   /** The Settings page the document is drawn as: its actions and its note. */
   page?: { actions: React.ReactNode; note: React.ReactNode };
-  /** What the plan's own page does with its sections' links; without it, sections have none and mentions are words. */
+  /** What the task's own page does with its sections' links; without it, sections have none and mentions are words. */
   sectionLinks?: SectionLinks;
   /** Who reads it, whose own edits are named "you"; without it, no edit is. */
   reader?: TaskReader;
-  /** The plan's coding agents, among which an agent's edit is found and opened; without them, an agent is named alone. */
+  /** The task's coding agents, among which an agent's edit is found and opened; without them, an agent is named alone. */
   agents?: EditAgents;
 }): React.JSX.Element {
   const { views, behind, jumps } = useTaskChase(task, live, reader);
@@ -751,6 +770,8 @@ export function PlanBody({
   const scrolledAway = useRef(false);
   /** The caret's jumps when the view last followed it. */
   const followedJumps = useRef(jumps);
+  /** Whether a task item's tick is out, while which another press does nothing. */
+  const ticking = useRef(false);
 
   useEffect(() => {
     const element = scroller.current;
@@ -831,6 +852,32 @@ export function PlanBody({
   });
 
   const edited = lastEditOf(task);
+  // A task item is ticked from the drawn plan while its words stand whole and
+  // no editor is open, and saved through the editor's own door.
+  const cut = editable && editing.editor === undefined && !behind ? planSections(text ?? "") : [];
+  const taskToggler = (section: number): TaskToggler | undefined => {
+    const unit = cut[section];
+    if (onEdit === undefined || unit === undefined || unit.text !== views[section]?.words) {
+      return undefined;
+    }
+    // Note that one tick is out at a time, from the plan as drawn, so a door
+    // that keeps one text (the plan template's) is never asked from another;
+    // a press while one is out, or before the saved plan comes back, does nothing.
+    return (at) => {
+      const base = task.document.body;
+      const value = ticking.current ? undefined : toggledTask(base, unit.from + at);
+      if (value === undefined) return Promise.resolve(false);
+      ticking.current = true;
+      return onEdit({ document: { base, value } })
+        .then(
+          (answer) => "saved" in answer,
+          () => false,
+        )
+        .finally(() => {
+          ticking.current = false;
+        });
+    };
+  };
   // The document's one Tab stop: the block selected last while it still stands, or its title, or its first section.
   const standing =
     editing.cursor === EDITOR_PLACE.TITLE
@@ -858,6 +905,7 @@ export function PlanBody({
           linked={linked}
           anchor={anchors[section] ?? ""}
           entry={entry === view.id}
+          onTask={taskToggler(section)}
         />
       </DocumentBlock>
     ) : (
@@ -930,11 +978,11 @@ export function PlanBody({
               titleMenu,
             )
           ) : page === undefined ? (
-            attributed(<PlanTitle name={task.name} />, null, titleMenu)
+            attributed(<TaskTitle name={task.name} />, null, titleMenu)
           ) : (
             <header className="task-page-head">
               <div className="task-title-line">
-                <PlanTitle name={task.name} />
+                <TaskTitle name={task.name} />
                 {page.actions}
               </div>
               {editedNote}

@@ -70,7 +70,7 @@ test("Luke at work on the call's plan is read off the call's own activity, thoug
     brain: { action: "ls src" },
     notes: true,
   });
-  // The open plan's own activity is not the call's.
+  // The open task's own activity is not the call's.
   const other = { ...TASKS, activity: { planner: { action: "ls src" }, notes: false } };
   assert.deepEqual(callCard({ view: LISTENING, tasks: other }).status?.backend, {
     brain: undefined,
@@ -99,7 +99,7 @@ test("a call's plan the list does not hold is named from the open document, or p
     callCard({ view: { ...LISTENING, callTaskId: BILLING }, tasks: open }).taskName,
     "Billing export",
   );
-  assert.equal(callCard({ view: LISTENING, tasks: IDLE_TASKS_VIEW }).taskName, "Planning call");
+  assert.equal(callCard({ view: LISTENING, tasks: IDLE_TASKS_VIEW }).taskName, "Call");
 });
 
 test("a Luke window draws the card only with the keyboard, a call in progress, and anything but the call's plan on screen", () => {
@@ -107,7 +107,7 @@ test("a Luke window draws the card only with the keyboard, a call in progress, a
     callCardShown({ view, focused, taskShown });
   assert.equal(shown(LISTENING, true, BILLING), true);
   assert.equal(shown(LISTENING, true, undefined), true);
-  // The call's own plan has its call bar; a window without the keyboard leaves the call to the floating window.
+  // The call's own task has its call bar; a window without the keyboard leaves the call to the floating window.
   assert.equal(shown(LISTENING, true, INVITES), false);
   assert.equal(shown(LISTENING, false, BILLING), false);
   assert.equal(shown({ ...LISTENING, voiceStatus: LIVE_STATUS.CLOSING }, true, BILLING), false);

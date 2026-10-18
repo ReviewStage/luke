@@ -14,9 +14,9 @@ import { added } from "../testing/task-contents.js";
 import { PLAN_SCRIBE, type PlanDraft, planScribe } from "./plan-scribe.js";
 
 /**
- * The planning call's notetaker over a real plan row: a scripted model stands
+ * The task call's notetaker over a real task row: a scripted model stands
  * in for OpenAI and answers each run with the notes the test names, and the
- * live events are synthetic. What a test reads is what the Plans tab would:
+ * live events are synthetic. What a test reads is what the Tasks tab would:
  * the plan's saved document.
  */
 

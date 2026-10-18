@@ -68,7 +68,7 @@ test("an opening frame is either a create or an attach, told apart by type", () 
     VOICE_SERVICE_FRAME.SESSION_CREATE,
   );
   assert.equal(sessionOpeningFrameFromWire(attach)?.type, VOICE_SERVICE_FRAME.SESSION_ATTACH);
-  // Every call is about one plan: a create that names none, or names it in another shape, is refused.
+  // Every call is about one task: a create that names none, or names it in another shape, is refused.
   const { planId: _named, ...taskless } = createFrame();
   assert.equal(sessionOpeningFrameFromWire(taskless), undefined);
   assert.equal(sessionOpeningFrameFromWire(createFrame({ planId: "plan-1" })), undefined);

@@ -20,6 +20,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -67,7 +68,7 @@ const PLAN: TaskSummary = {
   updatedAt: 2,
   repository: "acme/relay",
 };
-const PLAN_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+const TASK_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const SWEEP_AGENT = "5d7e8f90-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
 
 /** An item an agent posted, asking only an acknowledgement, its one block the words given. */
@@ -118,7 +119,7 @@ afterEach(() => {
 /** The window's Inbox listing `listed`, holding the plan's items and the agent's given, and every pull request read it asked. */
 async function inbox(options: {
   listed: Workspace | undefined;
-  planItems: readonly InboxItem[];
+  taskItems: readonly InboxItem[];
   sweep: { readonly item: InboxItem; readonly workspaceId: string | undefined } | undefined;
   /** The account's workspaces as main's document holds them; Acme and Globex unless said. */
   workspaces?: readonly Workspace[];
@@ -133,44 +134,39 @@ async function inbox(options: {
       status: ACT_OUTCOME_STATUS.DONE,
       value: { items, cursor: "1" } satisfies CodingAgentInboxAnswerView,
     });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(state),
-      act: (request: Act): Promise<ActOutcome> => {
-        asked.push(request);
-        switch (request.kind) {
-          case ACT_KIND.TASKS_PULL_REQUEST: {
-            const pullRequest = PULL_REQUESTS.get(request.payload.repository);
-            return Promise.resolve({
-              status: ACT_OUTCOME_STATUS.DONE,
-              value:
-                pullRequest === undefined
-                  ? null
-                  : { ...pullRequest, state: PULL_REQUEST_STATE.MERGED },
-            });
-          }
-          case ACT_KIND.CODING_AGENTS_INBOX:
-            // A read past the cursor is held open while nothing changes, as the service holds it.
-            return request.payload.after === "0"
-              ? inboxOf(options.planItems)
-              : new Promise(() => undefined);
-          case ACT_KIND.CODING_AGENTS_AGENT_INBOX:
-            return request.payload.after === "0"
-              ? inboxOf(options.sweep === undefined ? [] : [options.sweep.item])
-              : new Promise(() => undefined);
-          case ACT_KIND.CODING_AGENTS_LIST:
-            return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: [] } });
-          default:
-            return Promise.resolve({
-              status: ACT_OUTCOME_STATUS.REFUSED,
-              reason: "Not in this test.",
-            });
+  fakeAppBridge({
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(state),
+    act: (request: Act): Promise<ActOutcome> => {
+      asked.push(request);
+      switch (request.kind) {
+        case ACT_KIND.TASKS_PULL_REQUEST: {
+          const pullRequest = PULL_REQUESTS.get(request.payload.repository);
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value:
+              pullRequest === undefined
+                ? null
+                : { ...pullRequest, state: PULL_REQUEST_STATE.MERGED },
+          });
         }
-      },
+        case ACT_KIND.CODING_AGENTS_INBOX:
+          // A read past the cursor is held open while nothing changes, as the service holds it.
+          return request.payload.after === "0"
+            ? inboxOf(options.taskItems)
+            : new Promise(() => undefined);
+        case ACT_KIND.CODING_AGENTS_AGENT_INBOX:
+          return request.payload.after === "0"
+            ? inboxOf(options.sweep === undefined ? [] : [options.sweep.item])
+            : new Promise(() => undefined);
+        case ACT_KIND.CODING_AGENTS_LIST:
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: [] } });
+        default:
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.REFUSED,
+            reason: "Not in this test.",
+          });
+      }
     },
   });
   const sweep = options.sweep;
@@ -182,13 +178,13 @@ async function inbox(options: {
         workspace: options.listed,
         tasks: [PLAN],
         inbox:
-          options.planItems.length === 0
+          options.taskItems.length === 0
             ? []
-            : [{ taskId: PLAN.id, items: options.planItems.map(waitingOf) }],
+            : [{ taskId: PLAN.id, items: options.taskItems.map(waitingOf) }],
         inboxTasks:
-          options.planItems.length === 0
+          options.taskItems.length === 0
             ? []
-            : [{ taskId: PLAN.id, items: options.planItems.length, updatedAt: 2_000 }],
+            : [{ taskId: PLAN.id, items: options.taskItems.length, updatedAt: 2_000 }],
         inboxTaskless: sweep === undefined ? [] : [waitingSweep(sweep.item, sweep.workspaceId)],
         inboxView: {
           open: true,
@@ -196,6 +192,8 @@ async function inbox(options: {
           onOpen: () => undefined,
           onClose: () => undefined,
           onChoose: setChosen,
+          pages: undefined,
+          onRereadPages: () => undefined,
         },
       }),
     });
@@ -231,7 +229,7 @@ function readThrough(asked: readonly Act[]): string[] {
 test("a plan's item in the window's Inbox reads its links through the plan's workspace, as its task does", async () => {
   const { container, asked } = await inbox({
     listed: ACME,
-    planItems: [item("a1b2c3d4-0000-4000-8000-000000000001", PLAN_AGENT, `Opened ${PULL}.`)],
+    taskItems: [item("a1b2c3d4-0000-4000-8000-000000000001", TASK_AGENT, `Opened ${PULL}.`)],
     sweep: undefined,
   });
 
@@ -243,7 +241,7 @@ test("an item of a workspace an older service answered with no slug still reads 
   const { slug: _slug, ...unslugged } = GLOBEX;
   const { container, asked } = await inbox({
     listed: undefined,
-    planItems: [],
+    taskItems: [],
     sweep: {
       item: item("a1b2c3d4-0000-4000-8000-000000000004", SWEEP_AGENT, `Opened ${LEDGER_PULL}.`),
       workspaceId: GLOBEX.id,
@@ -258,7 +256,7 @@ test("an item of a workspace an older service answered with no slug still reads 
 test("an item of an agent with no plan reads its links through the agent's own workspace, not the one the Inbox lists", async () => {
   const { container, asked } = await inbox({
     listed: undefined,
-    planItems: [],
+    taskItems: [],
     sweep: {
       item: item("a1b2c3d4-0000-4000-8000-000000000002", SWEEP_AGENT, `Opened ${LEDGER_PULL}.`),
       workspaceId: GLOBEX.id,
@@ -272,7 +270,7 @@ test("an item of an agent with no plan reads its links through the agent's own w
 test("an item whose workspace the service did not name reads nothing, and its link says what its address says, though the Inbox lists a workspace", async () => {
   const { container, asked } = await inbox({
     listed: ACME,
-    planItems: [],
+    taskItems: [],
     sweep: {
       item: item("a1b2c3d4-0000-4000-8000-000000000003", SWEEP_AGENT, `Opened ${PULL}.`),
       workspaceId: undefined,

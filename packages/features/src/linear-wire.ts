@@ -13,12 +13,13 @@ import { Schema as EffectSchema } from "effect";
  * integrations landing page. `POST /api/workspaces/linear/disconnect` ends
  * it and answers the workspace. `POST /api/workspaces/linear/issues`
  * answers the issues a member may start a plan from, newest changed first,
- * or those a search matches, or the one issue an identifier names, as a
- * link to it drawn in Luke's words asks for its title and state
- * (`linearIssueIdentifierOf`). A plan started from one names it by its id
- * (`planCreateRequestSchema`'s `linearIssueId`), and the service reads the
+ * or those a search matches, or the one issue an identifier names,
+ * as a link to it drawn in Luke's words, or a key or link pasted into New
+ * task, asks for its title and state (`linearIssueIdentifierOf`,
+ * `linearIssueIdentifierIn`). A plan started from one names it by its id
+ * (`taskCreateRequestSchema`'s `linearIssueId`), and the service reads the
  * issue itself through the workspace's grant and keeps what it read on the
- * plan (`planLinearIssueSchema`), so the plan keeps it after Linear is
+ * plan (`taskLinearIssueSchema`), so the plan keeps it after Linear is
  * disconnected. No answer carries a token. The requests that name a
  * workspace are `workspace-wire.ts`'s, beside its GitHub's.
  */
@@ -71,6 +72,17 @@ export function linearIssueIdentifierOf(href: string): string | undefined {
   if (first !== "" || step !== ISSUE_STEP || identifier === undefined) return undefined;
   const upper = identifier.toUpperCase();
   return LINEAR_IDENTIFIER.test(upper) ? upper : undefined;
+}
+
+/**
+ * The identifier of the issue words typed or pasted name whole: a link to
+ * one of Linear's issue pages, or its key alone, `ENG-123` in any case;
+ * nothing for any other words, a key among others included.
+ */
+export function linearIssueIdentifierIn(typed: string): string | undefined {
+  const words = typed.trim();
+  const upper = words.toUpperCase();
+  return LINEAR_IDENTIFIER.test(upper) ? upper : linearIssueIdentifierOf(words);
 }
 
 /** One issue as the picker lists it: what a person picks it by. */

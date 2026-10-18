@@ -1,0 +1,24 @@
+/* confirm-dialog.css -- what the act takes with it and its refusal, between
+   the shared dialog's title and its answers. The body is the part that
+   gives way and scrolls, so the title and the answers stay on screen
+   however short the window is. */
+
+@layer components {
+  .luke-confirm-dialog-body {
+    min-height: 0;
+    margin: 0;
+    overflow-y: auto;
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    overflow-wrap: anywhere;
+  }
+
+  .luke-confirm-dialog-refusal {
+    margin: 0;
+    color: var(--luke-color-danger-text);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    overflow-wrap: anywhere;
+  }
+}

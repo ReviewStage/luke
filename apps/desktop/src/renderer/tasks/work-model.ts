@@ -16,13 +16,13 @@ import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { cardTitle } from "./tool-call-model";
 
 /**
- * work-model.ts -- the open plan's Call tab as an agent's transcript reads: each planning turn one of Luke's messages, in the agent tab's own parts.
+ * work-model.ts -- the open task's Call tab as an agent's transcript reads: each of the brain's turns one of Luke's messages, in the agent tab's own parts.
  *
- * The plan's planning conversation is read as a coding agent's transcript
- * is (`planning.conversation`): each planning turn's journal one message, its
+ * The task's conversation with the brain is read as a coding agent's transcript
+ * is (`planning.conversation`): each brain turn's journal one message, its
  * parts as the AI SDK stored them, every string cut to the wire's bound,
  * naming its turn and the spoken lines that asked for it, and beside the
- * messages where each of the planner's workers stands, read from its own
+ * messages where each of the brain's workers stands, read from its own
  * session. Each journal is drawn with the agent tab's own component
  * (`agent-tab.tsx`), each call read by its tool's name as an agent's is. A
  * worker is a delegation's part, which the agent tab draws as a subagent's
@@ -43,7 +43,7 @@ export interface WorkCallRow {
   running: boolean;
 }
 
-/** A subagent's session as the plan's pages say it: its title, when its newest task began, and the pair it ran on, as far as the service said. Its transcript is its own tab's read. */
+/** A subagent's session as the task's pages say it: its title, when its newest task began, and the pair it ran on, as far as the service said. Its transcript is its own tab's read. */
 interface WorkSessionRow {
   title?: string;
   startedAt?: number;
@@ -51,7 +51,7 @@ interface WorkSessionRow {
   record: TurnRecord;
 }
 
-/** A subagent the planning model started: its call, the whole message it was handed, and its own session where any of it was read. */
+/** A subagent the brain started: its call, the whole message it was handed, and its own session where any of it was read. */
 export interface WorkWorkerBlock {
   call: WorkCallRow;
   /** The whole message the subagent was handed, which its line cuts to its job. */
@@ -121,13 +121,13 @@ export function workerChoice(worker: WorkWorkerBlock): ModelChoice | undefined {
   return { model: record.model, effort: record.effort ?? UNRECORDED_EFFORT };
 }
 
-/** The open plan's planning conversation as the window holds it; none before the first read lands. */
+/** The open task's conversation with the brain as the window holds it; none before the first read lands. */
 export type TaskConversation = CodingAgentMessagesAnswer | undefined;
 
 /**
- * The subagents the open plan's work holds, by the call that started each,
- * in the order started; none where the plan has had no turn or its work is
- * unread. A subagent's tab is held to them, as an agent's is to the plan's
+ * The subagents the open task's work holds, by the call that started each,
+ * in the order started; none where the task has had no turn or its work is
+ * unread. A subagent's tab is held to them, as an agent's is to the task's
  * agents.
  */
 export function workerCallIds(rows: readonly WorkTurnRow[]): readonly string[] {
@@ -180,6 +180,27 @@ export function agentListCallIds(conversation: TaskConversation): readonly strin
   );
 }
 
+/**
+ * The answered starts of the open plan's work by which Luke made a new
+ * task, by call id, so the tasks are read again as one lands and the new
+ * task stands in the sidebar; none where the plan has had no turn or its
+ * work is unread.
+ */
+export function newTaskCallIds(conversation: TaskConversation): readonly string[] {
+  const start = `${TOOL_PART_TYPE_PREFIX}${AGENT_TOOL.START_AGENT}`;
+  return (conversation?.messages ?? []).flatMap((message) =>
+    message.parts.flatMap((part) =>
+      isRecord(part) &&
+      part.type === start &&
+      isWireString(part.toolCallId) &&
+      isRecord(part.output) &&
+      isRecord(part.output.newTask)
+        ? [part.toolCallId]
+        : [],
+    ),
+  );
+}
+
 /** A call's state as the agent tab marks it, in the AI SDK's words: running only while it still moves. */
 function toolStateOf(call: WorkCallRow): ToolState {
   if (call.running) return TOOL_STATE.INPUT_AVAILABLE;
@@ -203,7 +224,7 @@ function settledJournal(journal: readonly WireValue[], moving: boolean): readonl
   );
 }
 
-/** Where a worker stands on the plan's work, by where its own session's page says it does. */
+/** Where a worker stands on the task's work, by where its own session's page says it does. */
 const WORK_STATE_OF_STATUS = {
   [CODING_AGENT_STATUS.STARTING]: TASK_WORK_STATE.RUNNING,
   [CODING_AGENT_STATUS.RUNNING]: TASK_WORK_STATE.RUNNING,
@@ -388,7 +409,7 @@ function rowOf(
 }
 
 /**
- * The open plan's turns as the tab draws them, oldest first, each one of
+ * The open task's turns as the tab draws them, oldest first, each one of
  * Luke's messages. A turn moves only while the call it ran on stands: a
  * call that ended leaves its last turn as it was last told, with nothing on
  * it still turning, and drawn as stopped. A worker moves while the call
