@@ -467,7 +467,7 @@
    being typed into is, and saying what to do: nobody has to guess the next
    keystroke is being listened for. */
 .shortcut-field[aria-pressed="true"] {
-  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
   outline-offset: -1px;
 }
 

@@ -251,7 +251,7 @@
   max-width: var(--plan-byline-room);
   /* Past the ring an actor's hover fill bleeds by, so the ring is drawn whole. */
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-room);
+  overflow-clip-margin: var(--luke-focus-ring-room);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -771,7 +771,7 @@
   /* Its own ground under the button, ringed and lifted off the lines, which
      the button's lit fill is laid over as a title bar's is. */
   .conversation-scroll {
-    --luke-button-ground: var(--desktop-well);
+    --luke-button-ground: var(--luke-color-well);
     position: absolute;
     bottom: var(--luke-space-16);
     left: 50%;
@@ -813,7 +813,7 @@
     min-width: 0;
     max-width: 100%;
     overflow: clip;
-    overflow-clip-margin: var(--focus-ring-room);
+    overflow-clip-margin: var(--luke-focus-ring-room);
     color: var(--luke-color-text);
     font-size: var(--luke-type-body-size);
     line-height: 1.625;
@@ -1069,13 +1069,6 @@
   user-select: text;
 }
 
-/* A typed field of an Inbox form: its name over its box. */
-.inbox-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-}
-
 /* A code card's failure stands at its foot, so it draws no rule under it. */
 .code-card > .file-tab-notice {
   border-bottom: 0;
@@ -1111,7 +1104,7 @@
   align-items: center;
   gap: var(--luke-icon-gap);
   padding: var(--luke-space-12) 0 var(--luke-space-8);
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
@@ -1146,7 +1139,7 @@
 /* The card clips at its rounded edge, against which its header's actions
    stand flush, so a ring inside it is drawn inside its control. */
 .code-card {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
   overflow: hidden;
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-10);
@@ -1347,7 +1340,7 @@ button.file-ref:hover .file-ref-path {
   min-width: 0;
   flex: 0 1 auto;
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-room);
+  overflow-clip-margin: var(--luke-focus-ring-room);
 }
 
 .file-breadcrumbs ol {
@@ -1475,7 +1468,7 @@ button.file-ref:hover .file-ref-path {
    (file-breadcrumbs.tsx). */
 .file-crumb-tree {
   position: fixed;
-  z-index: var(--z-menu);
+  z-index: var(--luke-z-menu);
   max-height: calc(100vh - 16px);
   -webkit-app-region: no-drag;
 }
@@ -1520,7 +1513,7 @@ button.file-ref:hover .file-ref-path {
   position: absolute;
   inset-block: 0;
   right: 0;
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
 }
 
 /* A pane beside a tab, a File or Changes tab's tree or a Terminal tab's
@@ -1559,8 +1552,8 @@ button.file-ref:hover .file-ref-path {
     inset-block: 0;
     right: 0;
     width: min(264px, calc(100% - var(--luke-space-48)));
-    background: var(--desktop-well);
-    box-shadow: var(--menu-shadow);
+    background: var(--luke-color-well);
+    box-shadow: var(--luke-menu-shadow);
   }
 
   .file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-pane {
@@ -1603,7 +1596,7 @@ button.file-ref:hover .file-ref-path {
     inset-block: 0;
     right: 0;
     width: min(264px, calc(100% - var(--luke-space-48)));
-    box-shadow: var(--menu-shadow);
+    box-shadow: var(--luke-menu-shadow);
   }
 
   .terminal-tab:is([data-pane-over="peek"], [data-pane-over="open"]) .terminal-shells {
@@ -1720,12 +1713,6 @@ button.file-ref:hover .file-ref-path {
   flex-direction: column;
 }
 
-/* The source's toggle reads as on while the source is shown, as the File
-   tab's tree toggle does. */
-.page-view-source-toggle[data-source="true"] {
-  color: var(--luke-color-text);
-}
-
 /* What became of a changed file, lettered quietly beside its path in a
    Changes tab's bar (agent-changes-tab.tsx), coloured as its row in the
    tree is. */
@@ -1809,7 +1796,7 @@ button.file-ref:hover .file-ref-path {
    cuts a long name in its middle by painting the cut over in that ground:
    a transparent one drew both halves of the name over one another. */
 .file-tree-host {
-  --trees-bg-override: var(--desktop-well);
+  --trees-bg-override: var(--luke-color-well);
   --trees-bg-muted-override: var(--luke-color-fill-hover);
   --trees-fg-override: var(--luke-color-text);
   --trees-fg-muted-override: var(--luke-color-text-muted);
@@ -1818,8 +1805,8 @@ button.file-ref:hover .file-ref-path {
   --trees-selected-focused-border-color-override: var(--luke-color-focus-ring);
   --trees-border-color-override: var(--luke-color-border);
   --trees-focus-ring-color-override: var(--luke-color-focus-ring);
-  --trees-focus-ring-width-override: var(--focus-ring-width);
-  --trees-focus-ring-offset-override: var(--focus-ring-inset);
+  --trees-focus-ring-width-override: var(--luke-focus-ring-width);
+  --trees-focus-ring-offset-override: var(--luke-focus-ring-inset);
   --trees-font-family-override: var(--luke-font-sans);
   --trees-font-size-override: var(--luke-type-caption-size);
   --trees-git-added-color-override: var(--luke-color-complete);
@@ -2473,7 +2460,7 @@ button.file-ref:hover .file-ref-path {
 }
 
 /* The checks, one boxed list, each row opening the check's page, folded
-   past five behind a quiet control along its foot. */
+   past five behind a quiet button under it. */
 .pull-request-checks {
   overflow: clip;
   border: 1px solid var(--luke-color-border);
@@ -2488,26 +2475,6 @@ button.file-ref:hover .file-ref-path {
 
 .pull-request-check-list > li + li {
   border-top: 1px solid var(--luke-color-border);
-}
-
-.pull-request-checks-fold {
-  display: block;
-  width: 100%;
-  padding: var(--luke-space-6) var(--boxed-inset);
-  border: 0;
-  border-top: 1px solid var(--luke-color-border);
-  background: none;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  text-align: center;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.pull-request-checks-fold:hover {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
 }
 
 /* A deployment's door to the address it serves, quiet at its row's end. */
@@ -2648,8 +2615,6 @@ button.pull-request-check:hover {
   display: inline-block;
   width: min(100%, 240px);
   aspect-ratio: 16 / 10;
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-fill-hover);
   vertical-align: middle;
 }
 
@@ -2673,7 +2638,7 @@ button.pull-request-check:hover {
 }
 
 .pull-request-thread {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
   min-width: 0;
   overflow: clip;
   border: 1px solid var(--luke-color-border);
@@ -2720,17 +2685,6 @@ button.pull-request-check:hover {
 
 /* Whether a thread was resolved or outdated, in the quiet badge a bot's
    name wears (desktop.css's `.actor-bot`). */
-.pull-request-thread-label {
-  flex: 0 0 auto;
-  padding: 0 var(--luke-space-6);
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* The preview (file-diff.tsx) stands in the box rather than filling a tab. */
 .pull-request-thread-lines {
   flex: none;
@@ -2773,6 +2727,7 @@ button.pull-request-check:hover {
 .pull-request-thread-actions-row {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--luke-control-gap);
 }
 
@@ -2793,10 +2748,6 @@ button.pull-request-check:hover {
 
 .pull-request-thread-reply-open:hover {
   border-color: var(--luke-color-border-strong);
-}
-
-.pull-request-thread-resolve {
-  margin-inline-start: auto;
 }
 
 .pull-request-thread-reply {
@@ -2873,7 +2824,7 @@ button.pull-request-check:hover {
 
 /* The edges run the lines' whole width, so their ring is drawn inside them. */
 .file-tab-edge:focus-visible {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
 }
 
 /* Luke's note over the lines it is on, in a File tab (file-note.tsx): a
@@ -2932,7 +2883,7 @@ button.pull-request-check:hover {
 
 /* The note's card clips what it holds, so its fold's ring is drawn inside. */
 .file-note-fold:focus-visible {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
 }
 
 .file-note-fold > svg:first-child {
@@ -2977,40 +2928,16 @@ button.pull-request-check:hover {
   white-space: nowrap;
 }
 
-.file-note-show {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  white-space: nowrap;
-}
-
-.file-note-show > svg {
-  display: none;
-  width: 14px;
-  height: 14px;
-}
-
 /* A narrow panel's note says its age in the link's pill, and the link
-   draws the Code tab's glyph alone, named still. */
+   folds to the Code tab's glyph alone, named still. */
 @container side-panel (max-width: 359px) {
-  .file-note-time,
-  .file-note-show-words {
+  .file-note-time {
     display: none;
   }
 
-  .file-note-show > svg {
-    display: block;
+  .file-note-header {
+    --luke-fold: folded;
   }
-}
-
-.file-note-show:hover {
-  color: var(--luke-color-text);
-  text-decoration: underline;
 }
 
 .file-note-words {
@@ -3049,7 +2976,7 @@ button.pull-request-check:hover {
   color: var(--code-text);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
-  line-height: 1.6;
+  line-height: var(--luke-type-reading-leading);
   -webkit-user-select: text;
   user-select: text;
 }
@@ -3290,7 +3217,7 @@ ol.transcript-list {
    input and the answer, a hairline between them, clipped to its corners so
    a focus ring draws inside it. */
 .tool-body {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
 
   margin: var(--luke-space-4) 0 var(--luke-space-4) var(--transcript-gutter);
   overflow: hidden;
@@ -3362,7 +3289,7 @@ ol.transcript-list {
    its quieter label; open, the plan stands under a hairline in the body
    type, its words running or, for a replay, its blocks stacked. */
 .plan-card {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
 
   overflow: clip;
   border: 1px solid var(--luke-color-border);
@@ -3538,7 +3465,7 @@ ol.transcript-list {
   color: var(--code-text);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
-  line-height: 1.6;
+  line-height: var(--luke-type-reading-leading);
   overflow-wrap: normal;
   tab-size: 2;
   white-space: pre;
@@ -3888,7 +3815,7 @@ button.draft-fork-quote:hover {
    has got, the item it is at cut to the line, and the chevron at its end,
    which opens onto the whole list under a hairline. */
 .todos-dock {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
 
   overflow: clip;
   border: 1px solid var(--luke-color-border);
@@ -4087,7 +4014,7 @@ button.draft-fork-quote:hover {
   flex-direction: column;
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-14);
-  background: var(--desktop-sidebar);
+  background: var(--luke-color-sidebar);
 }
 
 .prompt-input-footer {
@@ -4117,7 +4044,7 @@ button.draft-fork-quote:hover {
   justify-content: center;
   border-radius: var(--luke-radius-full);
   background: var(--luke-color-text);
-  color: var(--luke-color-ground);
+  color: var(--luke-color-ink-inverse);
   cursor: default;
   transition:
     color var(--duration-quick) var(--spring),
@@ -4562,7 +4489,7 @@ button.skill-chip:hover,
    entrance animates its `transform`. */
 .reply-to-selection {
   position: fixed;
-  z-index: var(--z-menu);
+  z-index: var(--luke-z-menu);
   padding: var(--luke-space-2);
   translate: -50% -100%;
   -webkit-app-region: no-drag;
@@ -4570,18 +4497,6 @@ button.skill-chip:hover,
 
 .reply-to-selection[data-below] {
   translate: -50% 0;
-}
-
-.reply-to-selection .toolbar-button {
-  height: 26px;
-  padding: 0 var(--luke-space-8);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-}
-
-.reply-to-selection .toolbar-button svg {
-  width: 14px;
-  height: 14px;
 }
 
 /* The files on a message: a row of chips (`@luke/ui`'s AttachmentChip) over
@@ -4859,7 +4774,7 @@ button.attached-file-face:hover img {
   min-width: 0;
   margin: 0 auto 0 var(--luke-space-12);
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-room);
+  overflow-clip-margin: var(--luke-focus-ring-room);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -4965,7 +4880,7 @@ button.attached-file-face:hover img {
   padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-14);
-  background: var(--desktop-sidebar);
+  background: var(--luke-color-sidebar);
 }
 
 .archived-composer .banner-row > svg {
@@ -5047,7 +4962,7 @@ button.attached-file-face:hover img {
   flex: 0 0 auto;
   flex-direction: column;
   border-left: 1px solid var(--luke-color-border);
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
 }
 
 /* A list on its way out has left the layout, the screen already standing in
@@ -5464,8 +5379,8 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 .agent-servers-page-head .provider-mark {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: none;
 }
 
@@ -6004,23 +5919,6 @@ button.inbox-option:hover:not(:disabled) {
   overflow-wrap: anywhere;
 }
 
-.inbox-recommended {
-  flex: none;
-  margin-top: 3px;
-  padding: 0 var(--luke-space-6);
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-accent);
-  color: var(--luke-color-on-accent);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.inbox-recommended[data-settled="true"] {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text-muted);
-}
-
 /* An image block on the Inbox (`inbox-pane.tsx`): a picture in written
    words, below, whose room around it is the card's gap between blocks. */
 [data-inbox-image] > .picture-block {
@@ -6155,22 +6053,6 @@ button.picture-frame {
   white-space: nowrap;
 }
 
-.picture-tool {
-  display: inline-flex;
-  height: 26px;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: 0 var(--luke-space-8);
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: transparent;
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
-}
-
 /* With no room above the picture inside the plan's scroller, as at its top,
    the tools stand inside the picture's top edge rather than be cut off. */
 .picture-tools[data-above="false"] {
@@ -6179,25 +6061,10 @@ button.picture-frame {
   translate: none;
 }
 
-/* A tool that is its glyph alone, in a column too narrow for its name, is square. */
-.picture-tools[data-worded="false"] .picture-tool {
-  width: 26px;
-  justify-content: center;
-  padding: 0;
-}
-
-.picture-tool:hover {
-  background: color-mix(in srgb, var(--luke-color-text) 8%, transparent);
-}
-
-.picture-tool > svg {
-  width: 14px;
-  height: 14px;
-  flex: none;
-}
-
-.picture-tool[data-tone="danger"] {
-  color: var(--luke-color-danger-text);
+/* A tool that is its glyph alone, in a column too narrow for its name, folds
+   its words away, named by its pill. */
+.picture-tools[data-worded="false"] {
+  --luke-fold: folded;
 }
 
 /* A field under a picture that describes it anew, in Settings' well. */
@@ -6223,7 +6090,7 @@ button.picture-frame {
   padding: var(--luke-space-6) var(--luke-space-8);
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-radius-8);
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
   color: var(--luke-color-text);
   font: inherit;
   font-size: var(--luke-type-body-size);

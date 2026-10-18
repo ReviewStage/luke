@@ -17,7 +17,7 @@ import { runAgent } from "../runtime.js";
  * its resolver can take (`host.admitDelegated`); each call is admitted again
  * as it runs, through the root eve then names. Every result is shown to the
  * model as the JSON it is, and a look at the board or at one of the plan's
- * pictures as its image (`planningModelOutput`).
+ * pictures as its image (`tasksModelOutput`).
  */
 export function hostedTools(
   offered: ReadonlySet<string> = BRAIN_TOOL_NAMES,
