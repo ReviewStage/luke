@@ -1112,6 +1112,23 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
+    "a Start naming a model runs that agent on it and leaves the account's default as it stands, which only Settings writes",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+
+        const started = yield* ask(
+          startAs(owner, task.id, { idempotencyKey: randomUUID(), model: SOL, effort: "low" }),
+        );
+
+        const { agent } = readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started);
+        assert.equal(agent.model, SOL);
+        assert.equal(agent.effort, "low");
+        assert.equal((yield* readAccountPreferences(owner))?.codingAgent, undefined);
+      }),
+  );
+
+  it.effect(
     "a Start on a plan whose workspace's account since reinstalled the App under an id GitHub does not know is refused as a connection that lapsed, and opens nothing",
     () =>
       Effect.gen(function* () {

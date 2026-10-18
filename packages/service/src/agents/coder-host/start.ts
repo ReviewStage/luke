@@ -1,9 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import {
-  chatEnabledFor,
-  readAccountPreferences,
-  writeAccountPreferences,
-} from "@luke/database/models/account-store";
+import { chatEnabledFor, readAccountPreferences } from "@luke/database/models/account-store";
 import { ensureMember } from "@luke/database/models/chat-store";
 import {
   type CodingAgent,
@@ -136,8 +132,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * transcript replayed after it (`replay.ts`) and its work, what it had not
  * pushed included, copied to a branch of its own (`snapshot.ts`), the note
  * after both with the files the note carries, and runs it on that agent's
- * choice and servers unless the ask names its own; the source's choice
- * never becomes the account's default, and an agent started from an
+ * choice and servers unless the ask names its own, and an agent started from an
  * automation's run is no run of that automation. Its mentions and servers
  * are read from the source's brief and the note, as a fresh start's would
  * be, and never from the replay. A continue is named after its source,
@@ -165,9 +160,9 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * under the same key starts afresh. An agent started is minted as a member
  * of its workspace's chat, `@agent-N` in the order agents were started,
  * so it answers to its handle before it ever posts; a mint that fails is
- * logged and left to the agent's first post or read. An ask that named a choice makes it
- * the account's default, so the menu's last choice and the default stay one
- * value. Who reaches eve is the caller's: the route holds the developer's
+ * logged and left to the agent's first post or read. A choice an ask names
+ * runs that one agent and is never kept as the account's default, which only
+ * Settings writes. Who reaches eve is the caller's: the route holds the developer's
  * own bearer, and the voice brain's and a coding agent's tool act as the
  * deployment for the account, which the coder channel's table admits for
  * exactly this opening, and its door for the cancel that stops a
@@ -326,8 +321,6 @@ export type StartAsk = StartPlace & {
   readonly choice: ModelChoice | undefined;
   readonly attachments?: readonly CodingAgentAttachment[] | undefined;
   readonly disabledServers?: readonly string[] | undefined;
-  /** Whether a named choice becomes the account's default, as a developer's own Start makes it; an automation's run keeps the default as it stands. */
-  readonly rememberChoice?: boolean;
   /** The automation whose run starts the agent; none for a Start by hand. */
   readonly automationId?: string | undefined;
   /** That automation's run as it starts the agent, which the agent keeps; none for a Start by hand. */
@@ -824,9 +817,6 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       kind: MEMBER_KIND.AGENT,
       agentId: agent.id,
     }).pipe(Effect.asVoid, Effect.catch(logStoreFailure));
-  }
-  if (ask.choice !== undefined && ask.rememberChoice !== false) {
-    yield* hostedStoreOrUnavailable(writeAccountPreferences(userId, { codingAgent: choice }));
   }
   return { agent, created };
 });
