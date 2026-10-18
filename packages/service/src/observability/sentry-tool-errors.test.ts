@@ -1,11 +1,3 @@
-import assert from "node:assert/strict";
-import { it } from "@effect/vitest";
-import * as Sentry from "@sentry/effect";
-import { generateText, jsonSchema, stepCountIs, tool } from "ai";
-import { MockLanguageModelV4 } from "ai/test";
-import { Effect } from "effect";
-import { recordingEveSentry, sentOfType } from "../testing/sentry-transport.js";
-
 /**
  * sentry-tool-errors.test.ts -- an agent's tool call that fails is answered
  * to the model, and Sentry keeps it as a breadcrumb rather than an issue.
@@ -13,6 +5,14 @@ import { recordingEveSentry, sentOfType } from "../testing/sentry-transport.js";
  * the model is a script. It stands in a file of its own because eve's start
  * installs process-wide integrations the web suite's tests do not expect.
  */
+
+import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
+import * as Sentry from "@sentry/effect";
+import { generateText, jsonSchema, stepCountIs, tool } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
+import { Effect } from "effect";
+import { recordingEveSentry, sentOfType } from "../testing/sentry-transport.js";
 
 /** The exception values of every error event sent, by type. */
 function exceptionTypes(sent: ReturnType<typeof recordingEveSentry>["sent"]): string[] {
