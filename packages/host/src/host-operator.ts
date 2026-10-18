@@ -64,6 +64,7 @@ import {
   type CodingAgentPullRequestParams,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
+  type CodingAgentReviewOptionsAnswerView,
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
@@ -90,6 +91,7 @@ import {
   codingAgentPageAnswerViewSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
+  codingAgentReviewOptionsAnswerViewSchema,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
@@ -573,6 +575,10 @@ export interface HostOperator {
   codingAgentOverviewPullRequest(
     params: CodingAgentPullRequestParams,
   ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
+  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, collaborators, and teams; or why there is no answer. */
+  codingAgentReviewOptions(
+    params: CodingAgentPullRequestParams,
+  ): Effect.Effect<CodingAgentReviewOptionsAnswerView>;
   /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
   codingAgentOverviewChecks(
     params: CodingAgentPullRequestParams,
@@ -1627,6 +1633,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
         }),
         codingAgentAnswer(codingAgentOverviewPullRequestAnswerViewSchema),
+      ),
+    codingAgentReviewOptions: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentReviewOptionsAnswerViewSchema),
       ),
     codingAgentOverviewChecks: (params) =>
       Effect.map(

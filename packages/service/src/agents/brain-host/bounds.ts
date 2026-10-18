@@ -1,3 +1,4 @@
+import { Duration } from "effect";
 import {
   BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
@@ -22,6 +23,14 @@ export const BRAIN_HOST = {
   SEED_MESSAGES: 60,
   /** The longest the seed grows, in characters, cut from the front. */
   SEED_CHARS: 40_000,
+  /**
+   * The snapshots Vercel keeps of a session's sandbox: the newest alone, which
+   * is all a resume reads, so snapshot storage stays flat however often it
+   * stops. An evicted one is deleted at once, and the kept one expires a
+   * month after it was last used, named here because Vercel's own pages
+   * disagree on the default.
+   */
+  SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(30), deleteEvicted: true },
 } as const;
 
 /** A conversation id as the header carries it: a uuid, and nothing else names a row. */

@@ -99,6 +99,12 @@ import {
 } from "./pull-request-comment-box";
 import { PullRequestLabels } from "./pull-request-labels";
 import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people";
+import {
+  LabelPicker,
+  ReviewerPicker,
+  type ReviewOptions,
+  useReviewOptions,
+} from "./pull-request-pickers";
 import { Reactions } from "./pull-request-reactions";
 import { PullRequestReview } from "./pull-request-review";
 import { PullRequestStack } from "./pull-request-stack";
@@ -1031,6 +1037,7 @@ function PullRequestHead({
   repository,
   shown,
   writes,
+  editing,
 }: {
   parts: OverviewParts;
   now: number;
@@ -1039,6 +1046,8 @@ function PullRequestHead({
   /** Whether the panel is on screen, which a merge asked about goes with. */
   shown: boolean;
   writes: PullRequestWrites;
+  /** What the reviewer and label pickers read, and whether the pull request is being read again after a change. */
+  editing: { readonly options: ReviewOptions; readonly refreshing: boolean };
 }): React.JSX.Element {
   const { pullRequest: part, conversation } = parts;
   if (part.kind === PART.PENDING) {
@@ -1064,7 +1073,10 @@ function PullRequestHead({
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return (
     <>
-      <PullRequestLabels labels={pullRequest.labels ?? []} />
+      <div className="pull-request-label-row">
+        <PullRequestLabels labels={pullRequest.labels ?? []} />
+        <LabelPicker labels={pullRequest.labels ?? []} writes={writes} {...editing} />
+      </div>
       <div className="pull-request-branch-row">
         <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
           <p className="pull-request-branches">
@@ -1082,7 +1094,18 @@ function PullRequestHead({
           {mergedAt === null ? null : "Merged "}
           <RelativeTime at={mergedAt ?? pullRequest.createdAt} now={now} ago />
         </span>
-        {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
+        <span className="pull-request-reviewers">
+          {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
+          {open ? (
+            <ReviewerPicker
+              author={author?.login}
+              requested={pullRequest.requested}
+              requestedTeams={pullRequest.requestedTeams ?? []}
+              writes={writes}
+              {...editing}
+            />
+          ) : null}
+        </span>
       </div>
       {open ? (
         <MergeLine
@@ -1662,6 +1685,7 @@ export function AgentPullRequestTab({
   const pendingReview = landed(parts.conversation)?.pendingReview;
   const picture = usePictureDrawer(agentId);
   const comment = usePullRequestComment(agentId, written);
+  const options = useReviewOptions(agentId, control.readReviewOptions);
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
@@ -1689,6 +1713,7 @@ export function AgentPullRequestTab({
                 repository={repository}
                 shown={shown}
                 writes={writes}
+                editing={{ options, refreshing: pullRequestRead.out }}
               />
             </header>
             <Tabs<PullRequestView>

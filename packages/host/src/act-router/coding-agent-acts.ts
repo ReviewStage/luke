@@ -41,6 +41,7 @@ import {
   type CodingAgentPullRequestParams,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
+  type CodingAgentReviewOptionsAnswerView,
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
@@ -117,6 +118,9 @@ export interface CodingAgentActsDependencies {
     codingAgentOverviewPullRequest(
       params: CodingAgentPullRequestParams,
     ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
+    codingAgentReviewOptions(
+      params: CodingAgentPullRequestParams,
+    ): Effect.Effect<CodingAgentReviewOptionsAnswerView>;
     codingAgentOverviewChecks(
       params: CodingAgentPullRequestParams,
     ): Effect.Effect<CodingAgentOverviewChecksAnswerView>;
@@ -207,6 +211,7 @@ export type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST
   | typeof ACT_KIND.CODING_AGENTS_CHANGES
   | typeof ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST
+  | typeof ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS
   | typeof ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS
   | typeof ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION
   | typeof ACT_KIND.CODING_AGENTS_GITHUB_IMAGE
@@ -353,6 +358,10 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST, sender);
       return host.codingAgentOverviewPullRequest(params);
+    },
+    [ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS, sender);
+      return host.codingAgentReviewOptions(params);
     },
     [ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS, sender);
