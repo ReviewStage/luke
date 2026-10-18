@@ -1049,6 +1049,33 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
   assert.deepEqual(footKeys(container), ["↑↓ Move", "↵ Mention", "⌫ All kinds", "esc Close"]);
 });
 
+/** The highlighted row, by its group and its name. */
+function highlighted(container: HTMLElement): [string | null, string] | undefined {
+  const row = container.querySelector('.mention-menu [role="option"][aria-selected="true"]');
+  if (row === null) return undefined;
+  return [
+    row.closest('[role="group"]')?.getAttribute("aria-label") ?? null,
+    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+  ];
+}
+
+test("End and Home take the highlight to the last row and the first, and Shift+Enter writes no mention", async () => {
+  const { container } = await box(taskPage());
+
+  typeInComposer(container, "See @");
+  await settle();
+  pressInComposer(container, "End");
+  const last = highlighted(container);
+  pressInComposer(container, "Home");
+  const first = highlighted(container);
+  pressInComposer(container, "Enter", { shiftKey: true });
+  await settle();
+
+  assert.deepEqual(last, ["Mention from", "Linear"]);
+  assert.deepEqual(first, ["Plan", "Goal"]);
+  assert.equal(composerEditor(container).querySelector(".mention-chip"), null);
+});
+
 test("Enter on a kind's row narrows the list to it, and ⌫ on its empty words widens it again, deleting nothing", async () => {
   const { container } = await wideBox();
 

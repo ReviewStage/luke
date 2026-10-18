@@ -24,6 +24,7 @@ import {
   TEXT_VARIANT,
   Text,
   UserIcon,
+  useComboboxField,
 } from "@luke/ui";
 import { type Actor, memberActor } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
@@ -54,9 +55,11 @@ import { AgentMark } from "./tab-look";
  *
  * The list opens the way the `/` list does (`skill-picker.tsx`), at the
  * word an editor reports (`ComposerTrigger`), the caret staying in the
- * editor throughout: ↑ and ↓ move the highlight, Enter or Tab write the
+ * editor throughout, its keys steered as any combobox's are
+ * (`@luke/ui`'s `useComboboxField`): ↑ and ↓ move the highlight, Home and
+ * End take it to the first row and the last, Enter or Tab write the
  * highlighted row as its mention, and Escape closes the list until the caret
- * leaves the word. Nothing typed after the `@`, it offers the task and its
+ * leaves the word. Keys an input method is composing with stay its own. Nothing typed after the `@`, it offers the task and its
  * sections; typed, it finds each kind's best few by the words typed, scored
  * as ⌘K scores them (cmdk's own filter), files and folders first, each
  * group in a fixed place so a later read never moves the rows above it.
@@ -1233,34 +1236,53 @@ export function useMentionPicker({
     else onChoose({ name: row.name, target: encodeMention(row.mention, place) });
   };
 
+  // ↑, ↓, Home, End, Enter and Escape steer the list as any combobox's do;
+  // ⌘Enter writes the highlighted row as a bare Enter does.
+  const field = useComboboxField({
+    open: shown,
+    active: at,
+    count: rows.length,
+    controls: undefined,
+    activeId: undefined,
+    onActiveChange: (index) => {
+      if (trigger !== undefined)
+        setHighlight({ start: trigger.start, query: trigger.query, at: index });
+    },
+    onChoose: (index) => {
+      const row = rows[index];
+      if (row !== undefined) choose(row);
+    },
+    onEnter: () => {
+      const row = rows[at];
+      if (row !== undefined) choose(row);
+    },
+    onEscape: () => {
+      if (trigger !== undefined) setClosedAt(trigger.start);
+    },
+  });
+
+  // The list's own keys come first: ⌫ widens, → opens, Tab writes, and a
+  // Shift+Enter is the editor's line break; with no row only Escape is the list's.
   const onKey = (event: KeyboardEvent): boolean => {
     if (!shown) return false;
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      setClosedAt(trigger.start);
-      return true;
-    }
     const bare = !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey;
     if (event.key === "Backspace" && bare && term === "" && back !== undefined) {
       back();
       return true;
     }
+    if (event.key === "Escape") return field.onKeyDown(event);
     const row = rows[at];
     if (row === undefined) return false;
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      const step = event.key === "ArrowDown" ? 1 : rows.length - 1;
-      setHighlight({ start: trigger.start, query: trigger.query, at: (at + step) % rows.length });
-      return true;
-    }
     if (event.key === "ArrowRight" && bare && opens(row)) {
       openRow(row);
       return true;
     }
-    if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") {
+    if (event.key === "Tab") {
       choose(row);
       return true;
     }
-    return false;
+    if (event.key === "Enter" && event.shiftKey) return false;
+    return field.onKeyDown(event);
   };
 
   // The foot names the keys the list hears now: → where a row opens, ⌫ where the list is narrowed.
