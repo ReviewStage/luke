@@ -800,7 +800,7 @@
 
 .mac-repository-command {
   flex: 1;
-  font-family: var(--luke-font-mono);
+  min-width: 0;
 }
 
 .mac-repository-name {

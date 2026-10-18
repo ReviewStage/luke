@@ -9,7 +9,7 @@ import {
   type TaskSectionIconColor,
   taskSectionIconSchema,
 } from "@luke/features/task-section-wire";
-import { Segmented } from "@luke/ui";
+import { Segmented, TextField } from "@luke/ui";
 import {
   emojiGroups,
   findEmoji,
@@ -507,15 +507,13 @@ export function SectionIconPicker({
             : "")}
       </p>
       {tab === ICON_TAB.EMOJI ? (
-        <input
-          className="dialog-name-field section-emoji-field"
-          aria-label="Any emoji"
+        <TextField
+          label="Any emoji"
           placeholder="Or type an emoji (⌃⌘Space)"
           spellCheck={false}
           value={typed}
           maxLength={TASK_SECTION_BOUNDS.MAX_EMOJI_UNITS}
-          onChange={(event) => {
-            const next = event.target.value;
+          onChange={(next) => {
             setTyped(next);
             const asked = { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: next.trim() };
             if (isSectionIcon(asked)) onIcon(asked);

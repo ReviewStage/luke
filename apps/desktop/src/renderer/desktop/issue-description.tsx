@@ -1,4 +1,5 @@
 import { ISSUE_BOUNDS } from "@luke/features/issue-wire";
+import { TEXT_FIELD_FONT, TextArea } from "@luke/ui";
 import { useLayoutEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "../markdown-message";
 
@@ -69,28 +70,18 @@ export function IssueDescription({
   if (editing) {
     return (
       <div className="issue-description-editor">
-        <textarea
+        <TextArea
           ref={field}
-          className="settings-input issue-description-field"
-          aria-label="Description"
+          label="Description"
           value={draft}
           maxLength={ISSUE_BOUNDS.MAX_DESCRIPTION_CHARS}
-          readOnly={saving}
-          aria-busy={saving}
-          onChange={(event) => setDraft(event.target.value)}
+          font={TEXT_FIELD_FONT.MONO}
+          rows={7}
+          busy={saving}
+          onChange={setDraft}
           onBlur={save}
-          onKeyDown={(event) => {
-            // Note that Escape goes no further than the field, because the window's own Escape would leave the issue as well.
-            if (event.key === "Escape") {
-              event.preventDefault();
-              event.stopPropagation();
-              revert();
-            }
-            if (event.key === "Enter" && event.metaKey) {
-              event.preventDefault();
-              save();
-            }
-          }}
+          onEscape={revert}
+          onSubmit={save}
         />
         {refused ? (
           <p className="issue-description-refused" role="status">

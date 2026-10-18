@@ -1,6 +1,7 @@
 import { MAC_REPOSITORY_BOUNDS, type MacRepository } from "@luke/features/mac-terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
+import { TEXT_FIELD_AUTO_COMPLETE, TEXT_FIELD_FONT, TextField } from "@luke/ui";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act";
 import { ReadFailed, SettingsGroup } from "./settings-group";
@@ -102,7 +103,6 @@ function MacRepositoryRow({
   );
   const typed = command.trim();
   const changed = typed !== savedCommand;
-  const id = `mac-repository-${repository.toLowerCase().replace(/[^a-z0-9]/gu, "-")}`;
   return (
     <div className="mac-repository">
       <form
@@ -112,20 +112,20 @@ function MacRepositoryRow({
           if (changed) write({ repository, command: typed === "" ? null : typed });
         }}
       >
-        <label className="settings-copy mac-repository-name" htmlFor={id}>
-          {repository}
-        </label>
-        <input
-          id={id}
-          className="settings-input mac-repository-command"
-          placeholder="pnpm dev"
-          autoComplete="off"
-          spellCheck={false}
-          maxLength={MAC_REPOSITORY_BOUNDS.MAX_COMMAND_CHARS}
-          value={command}
-          disabled={busy}
-          onChange={(event) => setCommand(event.target.value)}
-        />
+        <span className="settings-copy mac-repository-name">{repository}</span>
+        <span className="mac-repository-command">
+          <TextField
+            label={repository}
+            placeholder="pnpm dev"
+            autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+            spellCheck={false}
+            font={TEXT_FIELD_FONT.MONO}
+            maxLength={MAC_REPOSITORY_BOUNDS.MAX_COMMAND_CHARS}
+            value={command}
+            disabled={busy}
+            onChange={setCommand}
+          />
+        </span>
         <button type="submit" className="primary-button" disabled={busy || !changed}>
           Save
         </button>

@@ -113,14 +113,6 @@
   gap: var(--luke-space-6);
 }
 
-/* The field stands at least a few lines tall and grows by the developer's hand. */
-.issue-description-field {
-  min-height: 160px;
-  font-family: var(--luke-font-mono);
-  line-height: 1.5;
-  resize: vertical;
-}
-
 .issue-description-refused {
   margin: 0;
   color: var(--luke-color-danger-text);

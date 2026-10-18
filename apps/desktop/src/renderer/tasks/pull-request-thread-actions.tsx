@@ -3,6 +3,7 @@ import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_BOUNDS,
 } from "@luke/features/pull-request-write-wire";
+import { TextArea } from "@luke/ui";
 import { CircleCheckIcon, RotateCcwIcon } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes";
@@ -87,27 +88,17 @@ function ReplyForm({
 
   return (
     <div className="pull-request-thread-reply">
-      <textarea
+      <TextArea
         ref={field}
-        className="settings-input pull-request-thread-reply-field"
-        aria-label={THREAD_WORDS.REPLY_FIELD}
+        label={THREAD_WORDS.REPLY_FIELD}
         placeholder={THREAD_WORDS.REPLY_PLACEHOLDER}
         value={body}
         maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS}
-        readOnly={busy}
-        onChange={(event) => setBody(event.target.value)}
-        onKeyDown={(event) => {
-          // Note that Escape goes no further than the field, because the window's own Escape would leave the tab as well.
-          if (event.key === "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
-            if (!busy) onCancel();
-          }
-          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-            event.preventDefault();
-            send();
-          }
-        }}
+        rows={3}
+        busy={busy}
+        onChange={setBody}
+        onEscape={onCancel}
+        onSubmit={send}
       />
       <div className="pull-request-thread-reply-foot">
         <button type="button" className="toolbar-button" disabled={busy} onClick={onCancel}>

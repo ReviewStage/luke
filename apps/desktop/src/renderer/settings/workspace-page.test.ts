@@ -1834,11 +1834,7 @@ test("the Repositories group lists the workspace's repositories and those set he
   );
   assert.ok(group !== null);
   const field = (name: string) => {
-    const label = [...group.querySelectorAll<HTMLLabelElement>(".mac-repository-name")].find(
-      (each) => each.textContent === name,
-    );
-    const input =
-      label === undefined ? null : group.querySelector<HTMLInputElement>(`#${label.htmlFor}`);
+    const input = group.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`);
     assert.ok(input !== null, name);
     return input;
   };

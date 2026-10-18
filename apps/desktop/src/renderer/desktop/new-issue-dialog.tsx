@@ -6,7 +6,7 @@ import {
   type IssueStatus,
 } from "@luke/features/issue-wire";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
-import { DIALOG_SIZE, Dialog } from "@luke/ui";
+import { DIALOG_SIZE, Dialog, TextField } from "@luke/ui";
 import { useId, useRef, useState } from "react";
 import { Shortcut } from "../shortcut";
 import { BusyLabel } from "../spinner";
@@ -83,23 +83,17 @@ function NewIssueCard({
             New issue
           </h2>
         </div>
-        <input
+        <TextField
           ref={field}
-          type="text"
-          className="dialog-name-field"
-          aria-label="New issue title"
-          aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
+          label="New issue title"
+          keyShortcuts={shortcutAria(CREATE_CHORD)}
           placeholder="Issue title"
           maxLength={ISSUE_BOUNDS.MAX_TITLE_CHARS}
           spellCheck
           value={title}
           disabled={creating}
-          onChange={(event) => setTitle(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-            event.preventDefault();
-            create();
-          }}
+          onChange={setTitle}
+          onEnter={create}
         />
         <div className="issue-properties">
           <StatusMenu status={status} disabled={creating} onPick={setStatus} />

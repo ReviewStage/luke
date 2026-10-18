@@ -29,7 +29,10 @@ import {
   ErrorState,
   FoldingButton,
   type FoldingButtonHint,
+  FormField,
   Switch,
+  TEXT_FIELD_TYPE,
+  TextField,
 } from "@luke/ui";
 import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
@@ -552,7 +555,7 @@ function FieldName({ field }: { field: InboxField }): React.JSX.Element {
 }
 
 /** One field of a form: the control Settings draws for its type, holding what the developer put in it. */
-function FormField({
+function InboxFormField({
   field,
   draft,
   disabled,
@@ -568,27 +571,34 @@ function FormField({
     onDraft(withValue(draft, field.label, next));
   switch (field.type) {
     case INBOX_FIELD.TEXT:
-    case INBOX_FIELD.NUMBER: {
-      const number = field.type === INBOX_FIELD.NUMBER;
       return (
-        <label className="flex flex-col gap-1" data-inbox-field={field.type}>
-          <FieldName field={field} />
-          <input
-            className="settings-input inbox-field-input"
-            type={number ? "number" : "text"}
-            maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
-            value={value === undefined ? "" : String(value)}
-            disabled={disabled}
-            onChange={(event) => {
-              const typed = event.currentTarget.value;
-              if (typed === "") return set(undefined);
-              const parsed = event.currentTarget.valueAsNumber;
-              set(number ? (Number.isFinite(parsed) ? parsed : undefined) : typed);
-            }}
-          />
-        </label>
+        <FormField label={<FieldName field={field} />}>
+          {(control) => (
+            <TextField
+              field={control}
+              maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+              value={value === undefined ? "" : String(value)}
+              disabled={disabled}
+              onChange={(typed) => set(typed === "" ? undefined : typed)}
+            />
+          )}
+        </FormField>
       );
-    }
+    case INBOX_FIELD.NUMBER:
+      return (
+        <FormField label={<FieldName field={field} />}>
+          {(control) => (
+            <TextField
+              field={control}
+              type={TEXT_FIELD_TYPE.NUMBER}
+              maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+              value={value === undefined ? undefined : Number(value)}
+              disabled={disabled}
+              onChange={set}
+            />
+          )}
+        </FormField>
+      );
     case INBOX_FIELD.SELECT:
       return (
         <div className="settings-row settings-row-wrapping" data-inbox-field={field.type}>
@@ -629,7 +639,7 @@ export function FormFields({
   return (
     <div className="flex flex-col gap-2" data-inbox-form="">
       {form.fields.map((field) => (
-        <FormField
+        <InboxFormField
           key={field.label}
           field={field}
           draft={draft}
