@@ -383,6 +383,20 @@ type ChatStager = typeof import("./chat-fixture");
 /** What a post or an answer says where no chat is read to send it to. */
 const NO_CHAT_SERVICE = "Chat is not available yet.";
 
+/** One of the workspace's issues a new task starts from: its id and workspace, and its identifier and title, which the dialog names it by. */
+export interface NewTaskIssue {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly identifier: string;
+  readonly title: string;
+}
+
+/** What the press that opened New task chose: a repository (a repository group's +), or the issue the task starts from (an issue's Start task…). */
+export interface NewTaskPreset {
+  readonly repository?: string;
+  readonly issue?: NewTaskIssue;
+}
+
 /** Which Issues page stands: the list, or one issue's. */
 export const ISSUES_PAGE = {
   LIST: "list",
@@ -622,24 +636,26 @@ export interface TasksControl {
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
+  /** New task started from one of the workspace's issues: named by it, in its workspace, and linked to it once started; what an issue's Start task… asks. */
+  onNewTaskFrom: (issue: NewTaskIssue) => void;
   /** The New task dialog: whether it stands, what its press chose, and the two presses it makes. */
   newTask: {
     open: boolean;
-    /** The repository the press that opened the dialog chose, where it chose one. */
-    preset: { readonly repository: string } | undefined;
+    /** What the press that opened the dialog chose: a repository, or the issue the task starts from, where it chose one. */
+    preset: NewTaskPreset | undefined;
     /** The workspaces a task may start in, the account's every one. */
     workspaces: readonly Workspace[];
     /** The workspace the dialog starts the task in until another is chosen: the one listed; none before the workspaces are read. */
     workspaceId: string | undefined;
     /** The repository chip's list for a workspace, as the dialog chooses which the task starts in. */
     repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
-    /** Starts the plan on the repository given, or none, in the workspace given, with its planning phase or without it, from the Linear issue given where one was picked, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
+    /** Starts the plan on the repository given, or none, in the workspace given, with its planning phase or without it, from the Linear issue given where one was picked, or from the workspace's own issue the dialog was opened on, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
     start: (
       name: string,
       repository: string | null,
       workspaceId: string | undefined,
       planning: boolean,
-      linearIssueId?: string,
+      from?: { readonly linearIssueId?: string; readonly issueId?: string },
     ) => Promise<string | undefined>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
@@ -2238,7 +2254,7 @@ export function useTasksTab(input: {
     repository: string | null,
     workspaceId: string | undefined,
     planning: boolean,
-    linearIssueId?: string,
+    from: { readonly linearIssueId?: string; readonly issueId?: string } = {},
   ): Promise<string | undefined> => {
     const panelWasOpen = sidePanel.open;
     sidePanel.onSetOpen(false);
@@ -2250,7 +2266,8 @@ export function useTasksTab(input: {
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
-      ...(linearIssueId === undefined ? undefined : { linearIssueId }),
+      ...(from.linearIssueId === undefined ? undefined : { linearIssueId: from.linearIssueId }),
+      ...(from.issueId === undefined ? undefined : { issueId: from.issueId }),
       ...(planning ? undefined : { planning }),
     }).then(
       (answer) => {
@@ -2989,6 +3006,7 @@ export function useTasksTab(input: {
     },
     onNewTask: () => newTaskWith(undefined),
     onNewTaskIn: (repository) => newTaskWith({ repository }),
+    onNewTaskFrom: (issue) => newTaskWith({ issue }),
     newTask: {
       open: newTaskAsk !== undefined,
       preset: newTaskAsk?.preset,

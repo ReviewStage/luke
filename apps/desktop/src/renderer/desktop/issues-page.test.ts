@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { ISSUE_CALL_FAILURE, type IssueListView } from "@luke/features/issue-view";
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -30,12 +31,12 @@ import {
   type PlanEditorPlacement,
   type PlanEditorProps,
 } from "../plan-editor/contract";
-import { ISSUES_PAGE, type IssuesPlace } from "../tasks/use-tasks-tab";
+import { ISSUES_PAGE, type IssuesPlace, type NewTaskIssue } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
 import { IssuesPage } from "./issues-page";
 
 /**
- * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return opening a row, an issue's page saying who filed it and when it was filed and last changed, and a read that did not land said with a retry.
+ * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return opening a row, an issue's page saying who filed it and when it was filed and last changed and listing the tasks started from it, Start task… opening New task on an issue, and a read that did not land said with a retry.
  *
  * The service is a script at the act boundary; synthetic issues and words throughout.
  * The description's editor is the plan's TipTap bundle, tested beside it
@@ -179,6 +180,12 @@ let heldCreates: (() => void)[] | undefined;
 let changeRefused = false;
 /** Every text copied, in order. */
 let copied: string[] = [];
+/** The listed workspace's tasks, as the tab holds them. */
+let tasksListed: TaskSummary[] = [];
+/** Every issue New task was opened on, in order. */
+let newTasksFrom: NewTaskIssue[] = [];
+/** Every task opened, in order. */
+let tasksOpened: string[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
@@ -196,6 +203,9 @@ beforeEach(() => {
   heldCreates = undefined;
   changeRefused = false;
   copied = [];
+  tasksListed = [];
+  newTasksFrom = [];
+  tasksOpened = [];
   editors.length = 0;
   bundles = landed;
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
@@ -306,6 +316,9 @@ function Pages({
   const tasks = tasksControl({
     workspace,
     me: READER,
+    tasks: tasksListed,
+    onNewTaskFrom: (from) => newTasksFrom.push(from),
+    onSelect: (taskId) => tasksOpened.push(taskId),
     issuesView: {
       ...control.issuesView,
       open: true,
@@ -2006,4 +2019,73 @@ test("a card is sent the status of the column it is let go over, though the last
 
   assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
   assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
+});
+
+/** A task of the listed workspace, started from the issue given where one is. */
+function task(id: string, name: string, issueId?: string): TaskSummary {
+  return {
+    id,
+    workspaceId: WORKSPACE.id,
+    name,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: null,
+    ...(issueId === undefined ? undefined : { issueId }),
+  };
+}
+
+/** The tasks the issue's page lists as started from it, by name, in order; none where it draws no row. */
+function workOf(page: HTMLElement): string[] | undefined {
+  const row = page.querySelector(".issue-work");
+  if (row === null) return undefined;
+  return [...row.querySelectorAll("button")].map((each) => each.textContent ?? "");
+}
+
+test("an issue's ⋯ offers Start task…, which opens New task on the issue by its identifier and title, in its workspace", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  await openIssue(issue(1).id);
+
+  act(() => button("Issue actions").click());
+  act(() => menuItem("Start task…").click());
+
+  assert.deepEqual(newTasksFrom, [
+    { id: issue(1).id, workspaceId: WORKSPACE.id, identifier: "ACME-1", title: "Fix login" },
+  ]);
+  assert.deepEqual(changes, []);
+});
+
+test("a card's menu offers Start task… for its own issue", async () => {
+  standing = [issue(1), issue(2, { title: "Fix logout" })];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(2).id));
+  act(() => menuItem("Start task…").click());
+
+  assert.deepEqual(newTasksFrom, [
+    { id: issue(2).id, workspaceId: WORKSPACE.id, identifier: "ACME-2", title: "Fix logout" },
+  ]);
+});
+
+test("an issue's page lists the tasks started from it, and none of another issue's, each opening its task", async () => {
+  standing = [issue(1), issue(2)];
+  tasksListed = [
+    task("task-newer", "Fix login, again", issue(1).id),
+    task("task-other", "Fix logout", issue(2).id),
+    task("task-plain", "Tidy"),
+    task("task-older", "Fix login", issue(1).id),
+  ];
+  const page = await openIssue(issue(1).id);
+
+  assert.deepEqual(workOf(page), ["Fix login, again", "Fix login"]);
+  act(() => button("Open Fix login").click());
+  assert.deepEqual(tasksOpened, ["task-older"]);
+});
+
+test("an issue no task was started from draws no row of tasks", async () => {
+  standing = [issue(1), issue(2)];
+  tasksListed = [task("task-other", "Fix logout", issue(2).id), task("task-plain", "Tidy")];
+  const page = await openIssue(issue(1).id);
+
+  assert.equal(workOf(page), undefined);
 });

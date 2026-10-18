@@ -43,6 +43,7 @@ import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, IssueBoardSkeleton, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail, IssueDetailSkeleton } from "./issue-detail";
 import { IssueList, listRowIssue } from "./issue-list";
+import { type IssueWork, IssueWorkProvider } from "./issue-work";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
 import { type IssueChange, useIssue, useIssues } from "./use-issues";
 import { useRowKeys } from "./use-row-keys";
@@ -422,10 +423,23 @@ function IssuePage({
  * issue hands its row the keyboard.
  */
 export function IssuesPage({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+  const work: IssueWork = {
+    onStartTask: (issue, identifier) =>
+      tasks.onNewTaskFrom({
+        id: issue.id,
+        workspaceId: issue.workspaceId,
+        identifier,
+        title: issue.title,
+      }),
+    tasksOf: (issueId) => tasks.listed.tasks.filter((task) => task.issueId === issueId),
+    onOpenTask: tasks.onSelect,
+  };
   // Every Copy link on these pages is written under the listed workspace, whose issues they are.
   return (
     <LinkWorkspaceProvider value={tasks.workspace?.slug ?? tasks.workspace?.id}>
-      <IssuesPages tasks={tasks} />
+      <IssueWorkProvider value={work}>
+        <IssuesPages tasks={tasks} />
+      </IssueWorkProvider>
     </LinkWorkspaceProvider>
   );
 }

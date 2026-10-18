@@ -14,6 +14,7 @@ import { tasksControl } from "#testing/tasks-control";
 import { OpenSettingsProvider } from "../open-settings";
 import { NewTaskDialog } from "./new-task-dialog";
 import type { RepositoryChooser } from "./repository-chip";
+import type { NewTaskPreset } from "./use-tasks-tab";
 
 /**
  * New task as the developer meets it: a card over the window holding the
@@ -53,7 +54,7 @@ async function settle(): Promise<void> {
  */
 async function mount(
   answer: string | undefined = undefined,
-  preset?: string,
+  preset?: string | NewTaskPreset,
   chooser: Partial<RepositoryChooser> = {},
   issues?: readonly LinearIssueSummary[],
   finds: (ask: LinearIssuesAsk) => readonly LinearIssueSummary[] = () => [],
@@ -62,6 +63,8 @@ async function mount(
   const asks: LinearIssuesAsk[] = [];
   const planned: boolean[] = [];
   const fromIssues: (string | undefined)[] = [];
+  const fromWorkspaceIssues: (string | undefined)[] = [];
+  const startedIn: (string | undefined)[] = [];
   const control = tasksControl();
   let repositories: RepositoryChooser = {
     ...control.repositories,
@@ -75,18 +78,20 @@ async function mount(
       newTask: {
         ...control.newTask,
         open,
-        preset: preset === undefined ? undefined : { repository: preset },
+        preset: typeof preset === "string" ? { repository: preset } : preset,
         repositoriesIn: () => repositories,
         start: (
           name: string,
           repository: string | null,
-          _workspaceId: string | undefined,
+          workspaceId: string | undefined,
           planning: boolean,
-          linearIssueId?: string,
+          from?: { readonly linearIssueId?: string; readonly issueId?: string },
         ) => {
           starts.push([name, repository]);
           planned.push(planning);
-          fromIssues.push(linearIssueId);
+          fromIssues.push(from?.linearIssueId);
+          fromWorkspaceIssues.push(from?.issueId);
+          startedIn.push(workspaceId);
           return Promise.resolve(answer);
         },
         onClose: () => setOpen(false),
@@ -140,6 +145,10 @@ async function mount(
     asks,
     /** The Linear issue each start came from, where it came from one. */
     fromIssues,
+    /** The workspace's own issue each start came from, where it came from one. */
+    fromWorkspaceIssues,
+    /** The workspace each start asked for. */
+    startedIn,
     /** Whether each start asked for its planning phase. */
     planned,
     /** Every Settings link the dialog's presses followed. */
@@ -709,4 +718,33 @@ test("a pasted link to an issue, or its key typed alone, asks Linear for that on
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("opened on one of the workspace's issues, the card says so, starts named by the issue in its workspace, searches no Linear, and links the task to the issue", async () => {
+  const issue = {
+    id: "issue-1",
+    workspaceId: "workspace-2",
+    identifier: "ACME-7",
+    title: "Invites expire",
+  };
+  const linear: LinearIssueSummary = {
+    id: "linear-1",
+    identifier: "ENG-1",
+    title: "Invites expire in Linear",
+    url: "https://linear.app/acme/issue/ENG-1",
+  };
+  const card = await mount(undefined, { issue }, {}, [linear]);
+
+  assert.match(card.dialog()?.querySelector("h2")?.textContent ?? "", /^New task from ACME-7\b/);
+  assert.equal(card.field().value, "Invites expire");
+  assert.equal(card.field().placeholder, "Task name (optional)");
+  card.type("Invites expire");
+  await settle();
+  assert.equal(document.querySelector('[role="option"]'), null, "no Linear issue is offered");
+  await card.press("Enter", card.field());
+
+  assert.deepEqual(card.starts, [["Invites expire", "acme/web"]]);
+  assert.deepEqual(card.fromWorkspaceIssues, ["issue-1"]);
+  assert.deepEqual(card.fromIssues, [undefined]);
+  assert.deepEqual(card.startedIn, ["workspace-2"]);
 });

@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { organization, user } from "./auth.js";
+import { issue } from "./issue.js";
 import { conversations } from "./storage.js";
 
 /**
@@ -59,6 +60,13 @@ export const task = pgTable(
      */
     linearIssue: jsonb("linear_issue").$type<TaskLinearIssue>(),
     /**
+     * The workspace's own issue the task was started from (`issue.ts`), one
+     * of the same workspace, which a move to another workspace lets go;
+     * null for a task started from none, and once the issue is deleted. An
+     * issue may have many tasks, each an attempt at it.
+     */
+    issueId: uuid("issue_id").references(() => issue.id, { onDelete: "set null" }),
+    /**
      * @deprecated A pin is its reader's own now, in `plan_pin`
      * (`plan-pin.ts`), and nothing writes or reads this. It was the
      * workspace's, so a pin one member made stood for every member. It stands
@@ -79,6 +87,8 @@ export const task = pgTable(
     index("task_user_created").on(table.userId, table.createdAt),
     // A workspace's tasks, newest started first.
     index("task_organization_created").on(table.organizationId, table.createdAt),
+    // An issue's tasks, and the issue's deletion letting each of them go.
+    index("task_issue").on(table.issueId),
   ],
 );
 

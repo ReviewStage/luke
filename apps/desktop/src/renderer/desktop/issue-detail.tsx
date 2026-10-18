@@ -35,10 +35,11 @@ import {
 } from "./issue-actions";
 import { IssueDescription } from "./issue-description";
 import { PriorityMenu, StatusMenu } from "./issue-pickers";
+import { IssueWorkRow, useStartTaskItem } from "./issue-work";
 import type { IssueChange } from "./use-issues";
 
 /**
- * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, who filed it and when it was filed and last changed, its status and priority changed from their chips, its description written in place, its link copied, and its archive.
+ * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, who filed it and when it was filed and last changed, its status and priority changed from their chips, the tasks started from it, its description written in place, a task started from it, its link copied, and its archive.
  *
  * Every change is sent at once and the page draws the issue the service
  * answers, so what stands is what was kept; a change the service refused
@@ -81,21 +82,27 @@ export function IssueCrumbs({
   );
 }
 
-/** The toolbar: the path back to the list, and the issue's ⋯ menu: Copy link, and Archive. */
+/** The toolbar: the path back to the list, and the issue's ⋯ menu: Start task…, Copy link, and Archive. */
 function DetailToolbar({
-  issueId,
+  issue,
   identifier,
   onBack,
   onArchive,
 }: {
-  issueId: string;
+  issue: Issue;
   identifier: string;
   onBack: () => void;
   onArchive: () => void;
 }): React.JSX.Element {
   const menu = useMenu(true);
-  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.ISSUE, issueId });
+  const startTask = useStartTaskItem(issue, identifier);
+  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.ISSUE, issueId: issue.id });
   const archive = archiveItem(onArchive);
+  const groups = [
+    ...(startTask === undefined ? [] : [[startTask]]),
+    ...(copyLink === undefined ? [] : [[copyLink]]),
+    [archive],
+  ];
   return (
     <header className="desktop-toolbar">
       <div className="desktop-toolbar-heading">
@@ -110,7 +117,7 @@ function DetailToolbar({
           <ActionMenu
             label={ISSUE_ACTIONS_LABEL}
             menu={menu.drawn}
-            groups={copyLink === undefined ? [[archive]] : [[copyLink], [archive]]}
+            groups={groups}
             onClose={menu.close}
           />
         )}
@@ -249,7 +256,7 @@ export function IssueDetail({
         label={identifier}
         toolbar={
           <DetailToolbar
-            issueId={issue.id}
+            issue={issue}
             identifier={identifier}
             onBack={onBack}
             onArchive={archiving.ask}
@@ -268,6 +275,7 @@ export function IssueDetail({
                 onPick={(priority) => void onChange({ priority })}
               />
             </div>
+            <IssueWorkRow issue={issue} />
             <IssueDescription
               description={issue.description}
               onSave={(description) => onChange({ description })}
