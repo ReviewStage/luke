@@ -490,6 +490,10 @@ it.layer(getTestDB())("a plan's archive and its coding agents", (it) => {
         assert.deepEqual(read, [agentId]);
         assert.equal((yield* listedTask(dean, taskId)).archivedAt, undefined);
         assert.equal((yield* archiveOf(dean, agentId)).archivedAt, undefined);
+      }),
+  );
+});
+
 /** A call the account opened on the task, held by a connection; answers its live session id. */
 const openCall = (userId: string, taskId: string) =>
   Effect.gen(function* () {
