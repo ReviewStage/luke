@@ -9,7 +9,7 @@ import {
   type TaskSectionIconColor,
   taskSectionIconSchema,
 } from "@luke/features/task-section-wire";
-import { Segmented, TextField } from "@luke/ui";
+import { IconButton, Segmented, TextField } from "@luke/ui";
 import {
   emojiGroups,
   findEmoji,
@@ -459,15 +459,12 @@ export function SectionIconPicker({
           onChange={setTab}
         />
         <Tooltip label="No icon">
-          <button
-            type="button"
-            className="section-icon-choice"
-            aria-label="No icon"
-            aria-pressed={icon === undefined}
+          <IconButton
+            icon={<BanIcon />}
+            label="No icon"
+            pressed={icon === undefined}
             onClick={() => choose(undefined)}
-          >
-            <BanIcon />
-          </button>
+          />
         </Tooltip>
       </div>
       <input

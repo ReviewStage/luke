@@ -161,8 +161,8 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
           maxLength={TASK_SECTION_BOUNDS.MAX_TITLE_CHARS}
           value={title}
           disabled={confirm.busy}
-          onChange={(value) => {
-            setTitle(value);
+          onChange={(next) => {
+            setTitle(next);
             // Note that a refused answer has settled, so the refusal alone holds
             // the card up: the question is asked again rather than cleared, or
             // the first key typed after it would close the card.
