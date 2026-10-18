@@ -40,7 +40,8 @@ import { readTask } from "./task-store.js";
  * written only by the connection that still holds the row: the Mac re-attaches
  * within seconds, so the connection it replaced may write its detach after
  * the newer one attached, and that late stamp must not hand a live call to
- * the sweep.
+ * the sweep. A task's archive hands every open call on it to the sweep the
+ * same way, stamped as of the epoch whoever holds it (`task-store.ts`).
  *
  * The row also names the task the call was opened about, checked to be in a
  * workspace the account is a member of before anything is spent, and that binding is what a
