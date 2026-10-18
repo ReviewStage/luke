@@ -300,7 +300,7 @@ export function FactoryWorldPage({
   return (
     <div className="factory-world">
       {read === undefined ? (
-        <SpinnerRegion label="Reading the world" />
+        <SpinnerRegion label="Loading world" />
       ) : "failure" in read ? (
         <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {UNREAD_LINE}

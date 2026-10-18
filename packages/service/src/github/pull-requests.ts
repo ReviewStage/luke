@@ -619,13 +619,44 @@ function accountOf(record: typeof GitHubAccountSchema.Type): GitHubAccount {
   };
 }
 
+/** An App's bot whose avatar a caller knows without asking GitHub, by its login: Luke's own App's, by its App's id. */
+export interface KnownBot {
+  readonly login: string;
+  readonly avatarUrl: string;
+}
+
+/** A login as GitHub matches one, whatever its case, since a trailer may spell it otherwise than GitHub's own read. */
+function loginKey(login: string): string {
+  return login.toLowerCase();
+}
+
+/**
+ * The avatar of each App's bot by its login, whatever its case: the bots known beforehand,
+ * then every bot the read names elsewhere with the avatar GitHub gave it,
+ * which is its App's.
+ */
+function botAvatarsOf(
+  known: readonly KnownBot[],
+  named: readonly GitHubAccount[],
+): ReadonlyMap<string, string> {
+  const avatars = new Map(known.map((bot) => [loginKey(bot.login), bot.avatarUrl]));
+  for (const account of named) {
+    if (account.bot && account.avatarUrl !== undefined)
+      avatars.set(loginKey(account.login), account.avatarUrl);
+  }
+  return avatars;
+}
+
 /**
  * The accounts a commit's message names as co-authors by their noreply
  * addresses, in the order it names them. Note that only the message's last
  * paragraph is read, because that is where git reads trailers from, so a
  * trailer-shaped line quoted in the body names nobody.
  */
-function coAuthorsOf(message: string | undefined): readonly GitHubAccount[] {
+function coAuthorsOf(
+  message: string | undefined,
+  botAvatars: ReadonlyMap<string, string>,
+): readonly GitHubAccount[] {
   if (message === undefined) return [];
   const trailers =
     message
@@ -634,8 +665,10 @@ function coAuthorsOf(message: string | undefined): readonly GitHubAccount[] {
       .at(-1) ?? "";
   return [...trailers.matchAll(CO_AUTHOR_TRAILER)].map(([, id = "", login = ""]) => {
     const bot = login.endsWith(BOT_LOGIN_SUFFIX);
-    // Note that a bot's id is served an identicon, not its App's picture, so a bot co-author keeps its robot.
-    const avatarUrl = bot ? undefined : githubUserAvatarUrl({ id: Number(id) });
+    // Note that a bot's id is served an identicon, not its App's picture, so a bot co-author wears its App's avatar only where it is known, and its robot otherwise.
+    const avatarUrl = bot
+      ? botAvatars.get(loginKey(login))
+      : githubUserAvatarUrl({ id: Number(id) });
     return { id: Number(id), login, bot, avatarUrl };
   });
 }
@@ -731,13 +764,17 @@ const everyPage = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
  * review; every page of its reviews, since a reviewer stands by their
  * newest; and every page of its commits, since a later commit may be by
  * someone new, each commit naming its author and the co-authors its
- * message's trailers name by their noreply addresses. Each list is cut at the bound only once read whole. Nobody
- * where the repository holds no such pull request.
+ * message's trailers name by their noreply addresses. A bot co-author
+ * wears the avatar of a bot `known` names, or of the same bot named
+ * anywhere else in the read, and asks GitHub nothing more. Each list is cut
+ * at the bound only once read whole. Nobody where the repository holds no
+ * such pull request.
  */
 export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeople")(function* (
   token: Redacted.Redacted,
   fullName: string,
   number: number,
+  known: readonly KnownBot[] = [],
 ): Effect.fn.Return<PullRequestPeople, PullRequestReadFailure, HttpClient.HttpClient> {
   const path = `${repositoryPath(fullName)}/pulls/${number}`;
   const [pull, reviews, commits] = yield* Effect.all(
@@ -750,13 +787,24 @@ export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeopl
   );
   if (Option.isNone(pull)) return NOBODY;
   const requested = (pull.value.requested_reviewers ?? []).map(accountOf);
+  const author = pull.value.user === null ? undefined : accountOf(pull.value.user);
+  const reviewers = reviewersOf(reviews, requested);
+  const committers = commits.flatMap((commit) =>
+    commit.author === null ? [] : [accountOf(commit.author)],
+  );
+  const botAvatars = botAvatarsOf(known, [
+    ...(author === undefined ? [] : [author]),
+    ...requested,
+    ...reviews.flatMap((review) => (review.user === null ? [] : [accountOf(review.user)])),
+    ...committers,
+  ]);
   return {
-    author: pull.value.user === null ? undefined : accountOf(pull.value.user),
-    reviewers: reviewersOf(reviews, requested),
+    author,
+    reviewers,
     commitAuthors: distinctAccounts(
       commits.flatMap((commit) => [
         ...(commit.author === null ? [] : [accountOf(commit.author)]),
-        ...coAuthorsOf(commit.commit?.message),
+        ...coAuthorsOf(commit.commit?.message, botAvatars),
       ]),
     ),
     comments: commentsOf(reviews),

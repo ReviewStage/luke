@@ -181,7 +181,21 @@
   }
 }
 
-/* Who last edited the plan, over the document in the muted meta weight. */
+/* Who created the task and when, and who last edited its plan and when,
+   under its title, in the words of an issue's own line
+   (`.issue-byline`). Each phrase wraps whole onto the next line rather
+   than leaving a name cut from its time. */
+.plan-byline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4) var(--luke-space-16);
+  margin: 0 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* Who last edited the plan template, under its title in the muted meta weight. */
 .plan-edit-note {
   margin: 0 0 var(--luke-space-12);
   color: var(--luke-color-text-muted);
@@ -1767,21 +1781,11 @@
   gap: var(--luke-space-8);
 }
 
-.pull-request-review-field,
 .pull-request-review-preview {
   box-sizing: border-box;
   width: 100%;
   min-height: 96px;
   max-height: 240px;
-}
-
-.pull-request-review-field {
-  resize: vertical;
-  letter-spacing: 0;
-  line-height: 1.5;
-}
-
-.pull-request-review-preview {
   overflow-y: auto;
   padding: 9px 11px;
   border: 1px solid var(--luke-color-border);
@@ -1816,7 +1820,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .pull-request-branch-row > .pull-request-branches {
@@ -1828,20 +1832,20 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   height: 22px;
-  margin-top: var(--space-2);
-  padding: 0 var(--space-6);
-  border: 1px solid var(--hairline);
+  margin-top: var(--luke-space-2);
+  padding: 0 var(--luke-space-6);
+  border: 1px solid var(--luke-color-border);
   border-radius: 6px;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 11.5px;
 }
 
 .pull-request-stack:hover {
-  background: var(--raised);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
 }
 
 .pull-request-stack > svg {
@@ -1850,7 +1854,7 @@
 }
 
 .pull-request-stack-count {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1861,8 +1865,8 @@
 .pull-request-labels {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
-  margin: var(--space-6) 0 var(--space-2);
+  gap: var(--luke-space-4);
+  margin: var(--luke-space-6) 0 var(--luke-space-2);
   padding: 0 var(--row-inset);
   list-style: none;
 }
@@ -1870,11 +1874,11 @@
 .pull-request-label {
   max-width: 100%;
   overflow: hidden;
-  padding: 1px var(--space-8);
-  border: 1px solid var(--label-edge-dark, var(--hairline));
+  padding: 1px var(--luke-space-8);
+  border: 1px solid var(--label-edge-dark, var(--luke-color-border));
   border-radius: 999px;
   background: var(--label-fill-dark, transparent);
-  color: var(--label-words-dark, var(--text-secondary));
+  color: var(--label-words-dark, var(--luke-color-text-muted));
   font-size: 11px;
   font-weight: 500;
   line-height: 1.45;
@@ -1884,9 +1888,9 @@
 
 @media (prefers-color-scheme: light) {
   .pull-request-label {
-    border-color: var(--label-edge-light, var(--hairline));
+    border-color: var(--label-edge-light, var(--luke-color-border));
     background: var(--label-fill-light, transparent);
-    color: var(--label-words-light, var(--text-secondary));
+    color: var(--label-words-light, var(--luke-color-text-muted));
   }
 }
 
@@ -1894,7 +1898,7 @@
 .pull-request-reviewers-glyph {
   width: 14px;
   height: 14px;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .pull-request-page {
@@ -1967,6 +1971,63 @@
   height: 14px;
   flex: 0 0 auto;
   color: var(--merge-tone);
+}
+
+.pull-request-merge-words {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* The merge box's presses at the line's end (`merge-box.tsx`): what stands
+   of a merge already asked for, quiet, then the one press, a method's
+   press joined to the chevron that chooses the method. */
+.merge-box-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--luke-space-8);
+  margin-inline-start: auto;
+}
+
+.merge-box-note {
+  color: var(--luke-color-text-muted);
+}
+
+.merge-box-split {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.merge-box-press {
+  height: 26px;
+  padding: 0 var(--luke-space-8);
+  gap: var(--luke-space-4);
+  font-size: 12px;
+}
+
+.merge-box-press svg {
+  width: 13px;
+  height: 13px;
+}
+
+.merge-box-split > .merge-box-press:not(:last-child) {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.merge-box-picker {
+  height: 26px;
+  padding: 0 var(--luke-space-4);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  margin-inline-start: -1px;
+}
+
+.merge-box-picker svg {
+  width: 13px;
+  height: 13px;
 }
 
 [data-merge-tone="ready"] {
@@ -2210,29 +2271,29 @@ button.pull-request-check:hover {
    so the window's own type and card draw it, inset from the code's edges
    as GitHub's are; an outdated one stands in a list above the diff. */
 .diff-note {
-  padding: var(--space-6) var(--space-12);
+  padding: var(--luke-space-6) var(--luke-space-12);
   font-family: var(--luke-font-sans);
   white-space: normal;
 }
 
 .diff-inline-thread {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
   max-width: 720px;
   overflow: clip;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
 }
 
 .diff-outdated-threads {
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   margin: 0;
-  padding: var(--space-8) var(--space-12);
+  padding: var(--luke-space-8) var(--luke-space-12);
   list-style: none;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
 .pull-request-thread-head {
@@ -2344,15 +2405,6 @@ button.pull-request-check:hover {
   display: flex;
   flex-direction: column;
   gap: var(--luke-space-8);
-}
-
-.pull-request-thread-reply-field {
-  box-sizing: border-box;
-  min-height: 72px;
-  max-height: 240px;
-  resize: vertical;
-  letter-spacing: 0;
-  line-height: 1.5;
 }
 
 .pull-request-thread-reply-foot {
@@ -5449,33 +5501,11 @@ button.picture-frame {
   --luke-fold: folded;
 }
 
-/* A field under a picture that describes it anew, in Settings' well. */
+/* A field under a picture that describes it anew. */
 .picture-describe {
   display: grid;
   width: min(360px, 100%);
-  gap: var(--luke-space-6);
   margin: var(--luke-space-6) 0 var(--luke-space-12);
-  font-size: var(--luke-type-caption-size);
-}
-
-.picture-describe label {
-  display: grid;
-  gap: var(--luke-space-4);
-}
-
-.picture-describe-label {
-  color: var(--luke-color-text-muted);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.picture-describe-field {
-  padding: var(--luke-space-6) var(--luke-space-8);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-well);
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-body-size);
 }
 
 /* A picture waiting on its upload: the Mac's own bytes at half strength,
@@ -5622,11 +5652,4 @@ button.picture-frame {
   opacity: 0.45;
   outline: 2px dashed color-mix(in srgb, var(--luke-color-danger) 70%, transparent);
   outline-offset: 2px;
-}
-
-/* A form's text field takes Settings' well, but in the card's body type:
-   Settings' tracking is for a key's characters, not an answer's words. */
-.inbox-field-input {
-  font-size: var(--luke-type-body-size);
-  letter-spacing: 0;
 }

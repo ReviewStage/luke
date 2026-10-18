@@ -129,6 +129,10 @@ let openedOnGitHub: string[] = [];
 let pages: CodingAgentPageAnswerView[] = [];
 /** Every agent whose page was read, in order. */
 let read: string[] = [];
+/** Whether a read of the agent's page is held open until the test answers it with `answerHeld`. */
+let holdPage = false;
+/** Answers the read of the agent's page held open last. */
+let answerHeld: () => void = () => undefined;
 /** Every archive or Unarchive asked, as the act carried it. */
 let archives: { agentId: string; archived: boolean }[] = [];
 /** Whether an archive or Unarchive is refused, as an unanswered service refuses it. */
@@ -157,6 +161,8 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeEach(() => {
   pages = [{ agent: PAGE }];
   read = [];
+  holdPage = false;
+  answerHeld = () => undefined;
   archives = [];
   archiveRefused = false;
   members = undefined;
@@ -238,6 +244,11 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
         read.push(request.payload.agentId);
         const value = pages.length > 1 ? pages.shift() : pages[0];
+        if (holdPage) {
+          return new Promise((resolve) => {
+            answerHeld = () => resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+          });
+        }
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
       }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
@@ -690,6 +701,21 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md on G
     told.filter((each) => each.kind === ACT_KIND.GITHUB_OPEN).map((each) => each.payload),
     [{ url: "https://github.com/acme/relay/blob/HEAD/.agents/skills/release/SKILL.md" }],
   );
+});
+
+test("until the agent is read, its wait stands centred in the page's room rather than as a ring in its corner, and gives way to the agent once read", async () => {
+  holdPage = true;
+  const page = mount();
+  await settle();
+
+  const wait = page.querySelector('.agent-page [role="status"]');
+  assert.ok(wait, "the page says it is waiting");
+  assert.ok(wait.closest(".luke-spinner-region"), "the wait stands in a region filling the page");
+  assert.equal(page.querySelector("h1"), null);
+  answerHeld();
+  await settle();
+
+  assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
 });
 
 test("a read that did not land says so, and Retry reads the agent again and draws it", async () => {

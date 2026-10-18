@@ -23,7 +23,7 @@
     flex: 0 1 auto;
     overflow: clip;
     overflow-clip-margin: padding-box
-      calc(var(--focus-ring-width, 2px) + var(--focus-ring-offset, 1px));
+      calc(var(--luke-focus-ring-width) + var(--luke-focus-ring-offset));
   }
 
   .luke-breadcrumbs ol {

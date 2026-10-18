@@ -68,6 +68,11 @@ function githubUser(id: number, login: string) {
 const CHARLES = githubUser(1001, "charlespan");
 const PRIYA = githubUser(1002, "priyan");
 const LUKE = githubUser(GITHUB_FIXTURE_BOT.id, GITHUB_FIXTURE_BOT.login);
+/** Another App's bot, which GitHub draws by its App's logo, at its App's address. */
+const DEVIN = {
+  ...githubUser(1004, "devin-ai-integration[bot]"),
+  avatar_url: "https://avatars.githubusercontent.com/in/811515?v=4",
+};
 
 /** What a test changes of the pull request GitHub answers. */
 interface PullOverrides {
@@ -378,6 +383,12 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
                 submitted_at: "2026-10-15T09:45:00Z",
                 html_url: `${PAGE}#pullrequestreview-4`,
               },
+              {
+                user: DEVIN,
+                state: "COMMENTED",
+                body: "",
+                submitted_at: "2026-10-15T11:05:00Z",
+              },
             ],
           }),
         );
@@ -420,8 +431,16 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           [
             { by: asPriya, state: REVIEW_STATE.CHANGES_REQUESTED },
             { by: asCharles, state: REVIEW_STATE.APPROVED },
+            {
+              by: {
+                login: DEVIN.login,
+                bot: true,
+                avatarUrl: "https://avatars.githubusercontent.com/in/811515?v=4",
+              },
+              state: REVIEW_STATE.COMMENTED,
+            },
           ],
-          "the conversation names where each stands by their reviews",
+          "the conversation names where each stands by their reviews, an App's bot by its App's logo",
         );
         assert.deepEqual(overview.conversation, [
           {

@@ -54,6 +54,10 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.REPLY_TO_THREAD]: "Reply",
   [PULL_REQUEST_ACTION.RESOLVE_THREAD]: "Resolve conversation",
   [PULL_REQUEST_ACTION.UNRESOLVE_THREAD]: "Unresolve conversation",
+  [PULL_REQUEST_ACTION.MERGE]: "Merge",
+  [PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE]: "Enable auto-merge",
+  [PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE]: "Disable auto-merge",
+  [PULL_REQUEST_ACTION.DEQUEUE]: "Remove from queue",
 } as const satisfies Record<PullRequestAction, string>;
 
 /** The word for where the pull request stands, which the pill says. */
@@ -99,8 +103,12 @@ export interface PullRequestWrites {
   /** The change out now; none while nothing is. */
   readonly pending: PullRequestAction | undefined;
   readonly note: WriteNote | undefined;
-  /** Sends the change; `onDone` hears once GitHub made it, so the press that sent it can let go of what it held. */
-  readonly write: (request: PullRequestActionRequest, onDone?: () => void) => void;
+  /**
+   * Sends the change; `onDone` hears once GitHub made it, so the press that
+   * sent it can let go of what it held, and what it answers settles once
+   * GitHub answered and what it said is drawn, as a merge's question waits.
+   */
+  readonly write: (request: PullRequestActionRequest, onDone?: () => void) => Promise<void>;
   readonly dismiss: () => void;
 }
 
@@ -131,11 +139,11 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
   const out = useRef(false);
   const write = useCallback(
     (request: PullRequestActionRequest, onDone?: () => void) => {
-      if (out.current) return;
+      if (out.current) return Promise.resolve();
       out.current = true;
       setPending(request.action);
       setNote(undefined);
-      void act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, { agentId, request })
+      return act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, { agentId, request })
         .catch(
           (): CodingAgentPullRequestWriteAnswerView => ({
             failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,

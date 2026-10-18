@@ -33,7 +33,7 @@ import { ArchivedBanner } from "../tasks/archived-task";
 import { useChatOn } from "../tasks/chat-gate";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
-import { InboxList, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
+import { InboxList, InboxListSkeleton, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
 import {
   anyNeedsYou,
   firstChoice,
@@ -284,7 +284,7 @@ function TaskInboxTab({
         readerId={tasks.me}
         note={
           inbox.reading ? (
-            <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
+            <InboxListSkeleton />
           ) : inbox.failed && listed.length === 0 ? (
             <div className="sidebar-note">
               <ErrorState onRetry={inbox.onRetry}>The inbox could not be read.</ErrorState>

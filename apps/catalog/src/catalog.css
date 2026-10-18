@@ -669,6 +669,12 @@ body {
   font-size: var(--luke-type-caption-size);
 }
 
+/* A recording's stand-in in the landing's example, at the demo's own shape. */
+.catalog-public-media {
+  aspect-ratio: 1240 / 864;
+  background: var(--luke-color-fill-hover);
+}
+
 /* A release in the wide page's example: its version and date on a rail
    beside its notes, as the changelog lays them. */
 .catalog-public-release {
