@@ -2605,7 +2605,9 @@ ul.actor-stack {
   line-height: var(--luke-type-reading-leading);
 }
 
-.desktop-document .plan-body > * + * {
+/* A document's blocks, and the sections of a text drawn inside one block (an
+   issue's description), stand a section's gap apart. */
+.desktop-document :is(.plan-body, .document-sections) > * + * {
   margin-top: 1.5em;
 }
 
