@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "ea1f1786-fef1-4e88-a4fd-2a4c2ba66c3f",
+  "id": "aba5c498-5058-4618-95f5-dde09d9d6850",
   "prevIds": ["e1bb77f3-2db0-4223-a426-17e0f596955e"],
   "ddl": [
     {
@@ -5569,6 +5569,19 @@
       "generated": null,
       "identity": null,
       "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "integration_installation"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "account_label",
       "entityType": "columns",
       "schema": "public",
       "table": "integration_installation"

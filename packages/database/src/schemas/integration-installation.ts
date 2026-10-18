@@ -28,6 +28,8 @@ export const integrationInstallation = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     status: text("status").$type<IntegrationInstallationStatus>().notNull(),
+    /** The account's name at the provider (a Sentry organization's slug), as the settings row names it; null where none was read. */
+    accountLabel: text("account_label"),
     linkedByUserId: text("linked_by_user_id").references(() => user.id, {
       onDelete: "set null",
     }),

@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS "integration_installation" (
 	"external_id" text,
 	"organization_id" text NOT NULL,
 	"status" text NOT NULL,
+	"account_label" text,
 	"linked_by_user_id" text,
 	"created_at" timestamp with time zone NOT NULL,
 	"updated_at" timestamp with time zone NOT NULL,

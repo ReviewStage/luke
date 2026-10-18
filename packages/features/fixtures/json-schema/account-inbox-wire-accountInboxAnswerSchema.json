@@ -263,7 +263,8 @@
                   "repository-changed",
                   "paused",
                   "missed",
-                  "agent-gone"
+                  "agent-gone",
+                  "same-subject"
                 ]
               },
               {

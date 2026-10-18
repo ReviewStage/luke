@@ -27,6 +27,7 @@ import {
   PULL_REQUEST_MOMENT,
 } from "./automation-wire.js";
 import { INTEGRATION_PROVIDER } from "./integration-wire.js";
+import { SENTRY_LEVEL, SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "./trigger-catalog.js";
 
 /**
  * An automation as its editor holds it: a schedule read into the picker's
@@ -540,4 +541,31 @@ test("a preset's guards are the draft's and are what it is made with, a saved au
     automationDraft({ ...SAVED, guards: preset.guards }, DEFAULTS).guards,
     preset.guards,
   );
+});
+
+test("a Sentry trigger opens and writes back as it was given, and moves only where its event or filters do", () => {
+  const trigger = {
+    kind: AUTOMATION_TRIGGER.INTEGRATION,
+    provider: TRIGGER_PROVIDER.SENTRY,
+    event: SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED,
+    filters: { environment: ["production"], level: [SENTRY_LEVEL.ERROR, SENTRY_LEVEL.FATAL] },
+  } as const;
+  const saved = { ...SAVED, trigger };
+  const draft = automationDraft(saved, DEFAULTS);
+  const reordered = {
+    ...draft,
+    integrationTrigger: {
+      ...trigger,
+      filters: { ...trigger.filters, level: [SENTRY_LEVEL.FATAL, SENTRY_LEVEL.ERROR] },
+    },
+  };
+  const moved = {
+    ...draft,
+    integrationTrigger: { ...trigger, event: SENTRY_TRIGGER_EVENT.ISSUE_CREATED },
+  };
+
+  assert.deepEqual(createRequestOf(draft, "workspace-acme").trigger, trigger);
+  assert.equal(changeOf(draft, saved, DEFAULTS), undefined);
+  assert.ok(sameDraft(draft, reordered), "the same levels in another order are no change");
+  assert.deepEqual(changeOf(moved, saved, DEFAULTS), { trigger: moved.integrationTrigger });
 });

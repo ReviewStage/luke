@@ -50,12 +50,15 @@ export interface InstallationToLink {
   readonly externalId: string;
   readonly organizationId: string;
   readonly userId: string;
+  /** The account's name at the provider (a Sentry organization's slug); left out, the row's stands. */
+  readonly accountLabel?: string | undefined;
 }
 
 const InstallationRowSchema = Schema.Struct({
   provider: ProviderSchema,
   externalId: Schema.String,
   status: Schema.Literals(Object.values(INTEGRATION_INSTALLATION_STATUS)),
+  accountLabel: Schema.NullOr(Schema.String),
   linkedByUserId: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -86,6 +89,7 @@ const upsertInstallation = SqlSchema.findAll({
     externalId: Schema.String,
     organizationId: Schema.String,
     userId: Schema.String,
+    accountLabel: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
   Result: Schema.Struct({ externalId: Schema.String }),
@@ -98,6 +102,7 @@ const upsertInstallation = SqlSchema.findAll({
           externalId: row.externalId,
           organizationId: row.organizationId,
           status: INTEGRATION_INSTALLATION_STATUS.ACTIVE,
+          accountLabel: row.accountLabel,
           linkedByUserId: row.userId,
           createdAt: row.now,
           updatedAt: row.now,
@@ -107,6 +112,8 @@ const upsertInstallation = SqlSchema.findAll({
           set: {
             organizationId: sql`excluded.organization_id`,
             status: INTEGRATION_INSTALLATION_STATUS.ACTIVE,
+            // A link that read no label keeps the one the row holds.
+            accountLabel: sql`coalesce(excluded.account_label, ${integrationInstallation.accountLabel})`,
             linkedByUserId: sql`excluded.linked_by_user_id`,
             updatedAt: sql`excluded.updated_at`,
           },
@@ -163,6 +170,7 @@ const findWorkspaceInstallations = SqlSchema.findAll({
           provider: integrationInstallation.provider,
           externalId: integrationInstallation.externalId,
           status: integrationInstallation.status,
+          accountLabel: integrationInstallation.accountLabel,
           linkedByUserId: integrationInstallation.linkedByUserId,
           createdAt: integrationInstallation.createdAt,
           updatedAt: integrationInstallation.updatedAt,
@@ -237,8 +245,9 @@ export function linkIntegrationInstallation(
   link: InstallationToLink,
 ): TaskStoreEffect<InstallationLink> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(upsertInstallation({ ...link, now }), (rows) =>
-      rows.length > 0 ? INSTALLATION_LINK.LINKED : INSTALLATION_LINK.ALREADY_CONNECTED,
+    Effect.map(
+      upsertInstallation({ ...link, accountLabel: link.accountLabel ?? null, now }),
+      (rows) => (rows.length > 0 ? INSTALLATION_LINK.LINKED : INSTALLATION_LINK.ALREADY_CONNECTED),
     ),
   );
 }
