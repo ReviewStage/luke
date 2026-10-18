@@ -578,7 +578,7 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const [layout, setLayout] = useState<IssuesLayout>(() =>
     readKept(LAYOUT_KEY, storedLayout, ISSUES_LAYOUT.BOARD),
   );
-  const filter = useIssueFilter(workspace?.id);
+  const filter = useIssueFilter(tasks.me, workspace?.id);
   const [pages, setPages] = useState<HTMLDivElement | null>(null);
   const listedNow = useRef(workspace?.id);
   listedNow.current = workspace?.id;

@@ -187,6 +187,8 @@ let tasksArchived: TaskSummary[] = [];
 let newTasksFrom: NewTaskIssue[] = [];
 /** Every task opened, in order. */
 let tasksOpened: string[] = [];
+/** The account signed in as the page is drawn. */
+let signedIn = READER;
 
 beforeEach(() => {
   installScrollIntoView();
@@ -208,6 +210,7 @@ beforeEach(() => {
   tasksArchived = [];
   newTasksFrom = [];
   tasksOpened = [];
+  signedIn = READER;
   editors.length = 0;
   bundles = landed;
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
@@ -317,7 +320,7 @@ function Pages({
   const control = tasksControl({ workspace });
   const tasks = tasksControl({
     workspace,
-    me: READER,
+    me: signedIn,
     tasks: tasksListed,
     archived: tasksArchived,
     onNewTaskFrom: (from) => newTasksFrom.push(from),
@@ -2233,4 +2236,22 @@ test("a filter that keeps none of the workspace's issues says no issue matches, 
     ["Todo1", ["ACME-2 Issue 2"]],
   ]);
   assert.equal(saysFiltered(page), false);
+});
+
+test("a filter one account chose is not the filter of another account signed in on this Mac", async () => {
+  standing = [
+    issue(1, { creator: { userId: "user-ada", name: "Ada Lovelace" } }),
+    issue(2, { creator: { userId: READER, name: "Grace Hopper" } }),
+  ];
+  mount();
+  await settle();
+  chooseView("Me", "Created by");
+  act(() => root?.unmount());
+
+  signedIn = "user-ada";
+  const other = mount();
+  await settle();
+
+  assert.deepEqual(groups(other), [["Backlog2", ["ACME-2 Issue 2", "ACME-1 Issue 1"]]]);
+  assert.equal(saysFiltered(other), false);
 });
