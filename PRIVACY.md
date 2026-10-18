@@ -857,6 +857,18 @@ if you sign in before Luke quits, and is dropped otherwise. Nothing you type
 or say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text.
 
+Our service also counts, under the same account, the work done through it:
+a task or a workspace made, a coding agent started (with the model and effort
+it runs on, and whether an automation started it), a pull request an agent
+opened (as you or as Luke's GitHub App, and whether as a draft), an Inbox item
+answered, a Chat message you posted, an issue filed, an automation made (with
+what triggers it), and an integration connected or disconnected (with which
+provider). These counts are event names and values from a fixed list too, and
+carry no titles, names, repositories, branches, prompts, messages, or the
+words of any of them. They go from our service to PostHog, so PostHog never
+sees your network address for them, and deleting your account erases them
+with the rest of your usage data.
+
 **Screen recordings.** Luke records what his own panel draws, never your
 screen, your editor, your terminal, or any other app, and records its shape,
 not its words: before it leaves your Mac, every piece of text, and every
@@ -1028,7 +1040,8 @@ only when you press Send.
   Mac loads straight from Keyframe's public storage as the menu is drawn, so
   Keyframe sees your Mac's IP address then, as any site serving an image does;
   no referrer and nothing of yours is sent with it.
-- PostHog, for usage data and screen recordings from the Mac app. The counts
+- PostHog, for usage data and screen recordings from the Mac app, and the
+  counts our service makes of the work done through it. The counts
   go through our own service; the recordings go from Luke to PostHog directly.
 - Sentry, for the Mac app's crash and performance reports, and our service's
   and Luke's agents' error, performance, log, and agent reports, described

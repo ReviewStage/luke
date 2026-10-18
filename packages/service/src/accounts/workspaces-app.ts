@@ -42,6 +42,7 @@ import { readEither } from "@luke/wire/effect";
 import { type Cause, Clock, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { unparsedWire } from "../core.js";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { GitHubApp } from "../github/github-app.js";
 import { createConnectIntent, GITHUB_CONNECT_ROLES } from "../github/github-installations.js";
 import { logGitHubReadFailure } from "../github/github-refusal.js";
@@ -344,6 +345,7 @@ const workspacesEndpoint = Effect.fn("web/workspacesEndpoint")(function* (
   const organizationId = yield* pluginWriteOrUnavailable(
     createWorkspace(userId, asked.success.name, seams.workspaces),
   );
+  yield* recordServerEvent(SERVER_EVENT.WORKSPACE_CREATE, userId, {});
   const workspace = yield* answeredWorkspace(userId, organizationId);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { workspace });
 });

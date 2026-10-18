@@ -62,6 +62,7 @@ import {
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
+import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import {
   agentWorkspace,
@@ -1191,6 +1192,11 @@ const newTaskOf = (caller: AgentCaller, name: string) =>
       name,
       repository: reached.success.fullName,
       planning: false,
+    });
+    yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
+      source: SERVER_TASK_SOURCE.AGENT,
+      is_planning: false,
+      has_issue: false,
     });
     return Result.succeed(yield* newTaskReading(userId, workspace.value, made.id, made.name));
   });

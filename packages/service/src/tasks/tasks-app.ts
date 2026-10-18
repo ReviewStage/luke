@@ -71,6 +71,7 @@ import {
   unparsedWire,
   wireUuidSchema,
 } from "../core.js";
+import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -609,6 +610,11 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
       ...(planning === undefined ? undefined : { planning }),
     }),
   );
+  yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
+    source: SERVER_TASK_SOURCE.SIDEBAR,
+    is_planning: planning ?? false,
+    has_issue: issue !== undefined || issueId !== undefined,
+  });
   const answer: TaskStartAnswer =
     agent === undefined
       ? { plan: task }

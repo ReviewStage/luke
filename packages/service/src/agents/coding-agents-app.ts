@@ -72,6 +72,7 @@ import { Cache, Clock, Effect, Layer, Option, type Redacted, Result } from "effe
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { isRecord, isWireString, type UnparsedWireValue, unparsedWire } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { githubImage } from "../github/github-images.js";
 import {
@@ -1703,6 +1704,7 @@ const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
       asked.attachments,
     ),
   );
+  if (Option.isSome(answered)) yield* recordServerEvent(SERVER_EVENT.INBOX_ANSWER_SEND, userId, {});
   return Option.getOrUndefined(answered);
 });
 
