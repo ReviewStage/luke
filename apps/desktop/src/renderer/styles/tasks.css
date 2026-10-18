@@ -2332,6 +2332,45 @@ button.pull-request-check:hover {
   font-variant-numeric: tabular-nums;
 }
 
+/* A pill that gives or takes back the reader's own is a press: it fills on
+   hover, waits dimmed while any change is out, and the one whose change is
+   out pulses until GitHub answers. Add reaction is a pill of the same size
+   wearing its glyph. */
+button.pull-request-reaction {
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  transition: background-color var(--duration-hover) ease;
+}
+
+button.pull-request-reaction:hover:not(:disabled) {
+  background: var(--raised);
+}
+
+button.pull-request-reaction:disabled {
+  opacity: 0.6;
+}
+
+.pull-request-reaction[aria-busy="true"] {
+  animation: pull-request-reaction-wait 1.2s ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+@keyframes pull-request-reaction-wait {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.pull-request-reaction-add {
+  color: var(--text-tertiary);
+}
+
+.pull-request-reaction-add > svg {
+  width: 14px;
+  height: 14px;
+}
+
 .pull-request-reaction[data-mine="true"] {
   border-color: color-mix(in srgb, var(--focus-ring) 55%, transparent);
   background: color-mix(in srgb, var(--focus-ring) 14%, transparent);

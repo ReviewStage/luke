@@ -962,8 +962,9 @@ export type PullRequestDeployment = typeof pullRequestDeploymentSchema.Type;
 /**
  * One reaction a comment wears, as GitHub draws it under the comment: which
  * it is, how many reacted with it, and, where the read names them, the first
- * of them up to the bound, in GitHub's order. A reaction nobody gave is not
- * carried.
+ * of them up to the bound, in GitHub's order; and whether the member reading
+ * gave it, as GitHub answers their own sign-in, absent where it was not read
+ * so. A reaction nobody gave is not carried.
  */
 const reactionGroupSchema = EffectSchema.Struct({
   content: EffectSchema.Literals(Object.values(REACTION)),
@@ -973,7 +974,13 @@ const reactionGroupSchema = EffectSchema.Struct({
       EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_REACTORS),
     ),
   ),
+  mine: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
+
+/** GitHub's GraphQL id of what wears reactions, which a reaction is added to or taken from by; absent where the read named none. */
+const reactionSubjectSchema = EffectSchema.optionalKey(
+  EffectSchema.String.check(EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_NAME_CHARS)),
+);
 
 export type ReactionGroup = typeof reactionGroupSchema.Type;
 
@@ -986,7 +993,7 @@ const reactionsSchema = EffectSchema.Array(reactionGroupSchema).check(
  * One comment of a review thread: who; their words whole, as GitHub renders
  * them (`bodyHTML`), or, where GitHub sent no rendering, null with their
  * words as markdown in `body`; when, in epoch milliseconds; its page; and
- * the reactions it wears.
+ * the reactions it wears, with what they are added to it by (`subject`).
  */
 const reviewThreadCommentSchema = EffectSchema.Struct({
   by: githubPersonSchema,
@@ -995,6 +1002,7 @@ const reviewThreadCommentSchema = EffectSchema.Struct({
   at: countedNumber,
   url: EffectSchema.String,
   reactions: EffectSchema.optionalKey(reactionsSchema),
+  subject: reactionSubjectSchema,
 });
 
 const diffSideSchema = EffectSchema.Literals(Object.values(DIFF_SIDE));
@@ -1035,7 +1043,7 @@ export type ReviewThread = typeof reviewThreadSchema.Type;
  * words as markdown in `body`, empty otherwise; when, in epoch
  * milliseconds; its page; on a review, the threads on lines it started,
  * absent where it started none or from a service before them; and the
- * reactions it wears.
+ * reactions it wears, with what they are added to it by (`subject`).
  */
 const conversationEntrySchema = EffectSchema.Struct({
   kind: EffectSchema.Literals(Object.values(CONVERSATION_ENTRY)),
@@ -1051,6 +1059,7 @@ const conversationEntrySchema = EffectSchema.Struct({
     ),
   ),
   reactions: EffectSchema.optionalKey(reactionsSchema),
+  subject: reactionSubjectSchema,
 });
 
 export type ConversationEntry = typeof conversationEntrySchema.Type;
@@ -1141,6 +1150,7 @@ export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
       ),
       earlier: countedNumber,
       descriptionReactions: EffectSchema.optionalKey(reactionsSchema),
+      descriptionSubject: reactionSubjectSchema,
     }),
   ),
 });

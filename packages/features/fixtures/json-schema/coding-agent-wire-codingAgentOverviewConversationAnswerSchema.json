@@ -292,6 +292,9 @@
                                         "additionalProperties": false
                                       },
                                       "maxItems": 10
+                                    },
+                                    "mine": {
+                                      "type": "boolean"
                                     }
                                   },
                                   "required": [
@@ -301,6 +304,10 @@
                                   "additionalProperties": false
                                 },
                                 "maxItems": 8
+                              },
+                              "subject": {
+                                "type": "string",
+                                "maxLength": 255
                               }
                             },
                             "required": [
@@ -384,6 +391,9 @@
                             "additionalProperties": false
                           },
                           "maxItems": 10
+                        },
+                        "mine": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -393,6 +403,10 @@
                       "additionalProperties": false
                     },
                     "maxItems": 8
+                  },
+                  "subject": {
+                    "type": "string",
+                    "maxLength": 255
                   }
                 },
                 "required": [
@@ -458,6 +472,9 @@
                       "additionalProperties": false
                     },
                     "maxItems": 10
+                  },
+                  "mine": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -467,6 +484,10 @@
                 "additionalProperties": false
               },
               "maxItems": 8
+            },
+            "descriptionSubject": {
+              "type": "string",
+              "maxLength": 255
             }
           },
           "required": [

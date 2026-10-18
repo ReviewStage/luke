@@ -171,3 +171,70 @@ export const setPullRequestDraft = /* @__PURE__ */ Effect.fn("web/setPullRequest
     Schema.Unknown,
   );
 });
+
+/**
+ * What a reaction's subject is on, read on the member's token: its pull
+ * request's number, whichever of GitHub's four kinds it is (the pull
+ * request itself, a comment on it, a review, or a review's comment), and
+ * the repository holding it.
+ */
+const SUBJECT_QUERY = `query($subject: ID!) {
+  node(id: $subject) {
+    __typename
+    ... on PullRequest { number repository { nameWithOwner } }
+    ... on IssueComment { issue { number } repository { nameWithOwner } }
+    ... on PullRequestReview { pullRequest { number } repository { nameWithOwner } }
+    ... on PullRequestReviewComment { pullRequest { number } repository { nameWithOwner } }
+  }
+}`;
+
+const NumberedSchema = Schema.optionalKey(Schema.Struct({ number: Schema.Number }));
+
+const SubjectSchema = Schema.Struct({
+  node: Schema.NullOr(
+    Schema.Struct({
+      number: Schema.optionalKey(Schema.Number),
+      issue: NumberedSchema,
+      pullRequest: NumberedSchema,
+      repository: Schema.optionalKey(Schema.Struct({ nameWithOwner: Schema.String })),
+    }),
+  ),
+});
+
+/** What the member is told where a reaction names something that is not on this pull request. */
+const NOT_ON_PULL_REQUEST = "That comment is not on this pull request.";
+
+const ADD_REACTION_MUTATION = `mutation($subject: ID!, $content: ReactionContent!) {
+  addReaction(input: { subjectId: $subject, content: $content }) { reaction { content } }
+}`;
+
+const REMOVE_REACTION_MUTATION = `mutation($subject: ID!, $content: ReactionContent!) {
+  removeReaction(input: { subjectId: $subject, content: $content }) { reaction { content } }
+}`;
+
+/**
+ * A reaction given, or the member's own taken back where `add` says not, on
+ * the member's token: first what it names is held to this pull request, so
+ * a subject the tab never drew is GitHub's or Luke's refusal before anything
+ * is changed. `content` is the reaction in GitHub's GraphQL words.
+ */
+export const reactOnPullRequest = /* @__PURE__ */ Effect.fn("web/reactOnPullRequest")(function* (
+  token: Redacted.Redacted,
+  pullRequest: { readonly repository: string; readonly number: number },
+  reaction: { readonly subject: string; readonly content: string; readonly add: boolean },
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  const { subject, content, add } = reaction;
+  const read = yield* githubWrite(token, SUBJECT_QUERY, { subject }, SubjectSchema);
+  const node = read.node;
+  const number = node?.number ?? node?.issue?.number ?? node?.pullRequest?.number;
+  const repository = node?.repository?.nameWithOwner.toLowerCase();
+  if (number !== pullRequest.number || repository !== pullRequest.repository.toLowerCase()) {
+    return yield* refusalOf([NOT_ON_PULL_REQUEST]);
+  }
+  yield* githubWrite(
+    token,
+    add ? ADD_REACTION_MUTATION : REMOVE_REACTION_MUTATION,
+    { subject, content },
+    Schema.Unknown,
+  );
+});

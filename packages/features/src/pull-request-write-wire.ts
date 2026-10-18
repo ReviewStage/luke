@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { OVERVIEW_BOUNDS, REACTION } from "./coding-agent-wire.js";
 
 /**
  * pull-request-write-wire.ts -- a change a workspace member makes to a coding agent's pull request from its Pull request tab, and how GitHub took it.
@@ -26,14 +27,32 @@ export const PULL_REQUEST_ACTION = {
   READY_FOR_REVIEW: "ready-for-review",
   /** An open pull request turned back into a draft. */
   CONVERT_TO_DRAFT: "convert-to-draft",
+  /** A reaction given to the description, a comment, a review, or a thread comment. */
+  ADD_REACTION: "add-reaction",
+  /** The member's own reaction taken back. */
+  REMOVE_REACTION: "remove-reaction",
 } as const;
 
-export type PullRequestAction = (typeof PULL_REQUEST_ACTION)[keyof typeof PULL_REQUEST_ACTION];
-
-/** One change, as the tab asks the service to make it (POST). */
+/**
+ * One change, as the tab asks the service to make it (POST). A reaction
+ * names what it is on by the GraphQL id the conversation's read gave it
+ * (`subject`), which the service holds to this pull request before it
+ * reacts.
+ */
 export const pullRequestActionRequestSchema = EffectSchema.Union([
   EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.READY_FOR_REVIEW) }),
   EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.CONVERT_TO_DRAFT) }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literals([
+      PULL_REQUEST_ACTION.ADD_REACTION,
+      PULL_REQUEST_ACTION.REMOVE_REACTION,
+    ]),
+    subject: EffectSchema.String.check(
+      EffectSchema.isMinLength(1),
+      EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_NAME_CHARS),
+    ),
+    content: EffectSchema.Literals(Object.values(REACTION)),
+  }),
 ]);
 
 export type PullRequestActionRequest = typeof pullRequestActionRequestSchema.Type;

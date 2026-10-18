@@ -744,10 +744,12 @@ function ThreadCard({
   thread,
   now,
   picture,
+  writes,
 }: {
   thread: ReviewThread;
   now: number;
   picture: GitHubPictureDrawer;
+  writes: PullRequestWrites;
 }): React.JSX.Element {
   // A preview is a hunk's end in a card, drawn unified with its lines tinted whole, as stage-cli draws one.
   const look = { ...useDiffLook(false), inlineDiff: INLINE_DIFF.NONE };
@@ -794,7 +796,11 @@ function ThreadCard({
                   <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
                 </span>
                 <EntryWords entry={comment} picture={picture} />
-                <Reactions reactions={comment.reactions} />
+                <Reactions
+                  reactions={comment.reactions}
+                  subject={comment.subject}
+                  writes={writes}
+                />
               </li>
             ))}
           </ol>
@@ -818,10 +824,12 @@ function EntryCard({
   entry,
   now,
   picture,
+  writes,
 }: {
   entry: ConversationEntry;
   now: number;
   picture: GitHubPictureDrawer;
+  writes: PullRequestWrites;
 }): React.JSX.Element {
   const threads = entry.threads ?? [];
   return (
@@ -832,7 +840,7 @@ function EntryCard({
         <RelativeTime className="changes-comment-time" at={entry.at} now={now} />
       </span>
       <EntryWords entry={entry} picture={picture} />
-      <Reactions reactions={entry.reactions} />
+      <Reactions reactions={entry.reactions} subject={entry.subject} writes={writes} />
       {threads.length === 0 ? null : (
         <ol className="pull-request-threads">
           {threads.map((thread, at) => (
@@ -842,6 +850,7 @@ function EntryCard({
               thread={thread}
               now={now}
               picture={picture}
+              writes={writes}
             />
           ))}
         </ol>
@@ -1008,11 +1017,16 @@ function ChecksPart({
 function DescriptionPart({
   part,
   reactions,
+  subject,
   picture,
+  writes,
 }: {
   part: Part<CodingAgentOverviewPullRequest>;
   reactions: readonly ReactionGroup[] | undefined;
+  /** The GraphQL id a reaction is given to the description by, which the conversation's read names. */
+  subject: string | undefined;
   picture: GitHubPictureDrawer;
+  writes: PullRequestWrites;
 }): React.JSX.Element | null {
   if (part.kind === PART.FAILED || part.kind === PART.NONE) return null;
   return (
@@ -1029,7 +1043,9 @@ function DescriptionPart({
           <GitHubWords html={part.value.html} picture={picture} />
         </div>
       )}
-      {part.kind === PART.PENDING ? null : <Reactions reactions={reactions} />}
+      {part.kind === PART.PENDING ? null : (
+        <Reactions reactions={reactions} subject={subject} writes={writes} />
+      )}
     </Section>
   );
 }
@@ -1041,6 +1057,7 @@ function ConversationPart({
   url,
   now,
   picture,
+  writes,
 }: {
   parts: OverviewParts;
   filters: ConversationFiltersControl["filters"];
@@ -1048,6 +1065,7 @@ function ConversationPart({
   url: string | undefined;
   now: number;
   picture: GitHubPictureDrawer;
+  writes: PullRequestWrites;
 }): React.JSX.Element {
   const openLink = useOpenLink();
   const part = parts.conversation;
@@ -1096,7 +1114,7 @@ function ConversationPart({
       ) : (
         <ol className="pull-request-conversation">
           {shown.map((entry) => (
-            <EntryCard key={entry.url} entry={entry} now={now} picture={picture} />
+            <EntryCard key={entry.url} entry={entry} now={now} picture={picture} writes={writes} />
           ))}
         </ol>
       )}
@@ -1414,15 +1432,19 @@ function ConversationView({
   agentId,
   parts,
   url,
+  writes,
 }: {
   agentId: string;
   parts: OverviewParts;
   url: string | undefined;
+  /** The tab's changes, which a reaction is given or taken back through. */
+  writes: PullRequestWrites;
 }): React.JSX.Element {
   const now = useMinute();
   const picture = usePictureDrawer(agentId);
   const filters = useConversationFilters();
-  const conversation = landed(parts.conversation)?.conversation;
+  const read = landed(parts.conversation);
+  const conversation = read?.conversation;
   return (
     <>
       <ConversationFilterRow
@@ -1432,8 +1454,10 @@ function ConversationView({
       <div className="pull-request-page">
         <DescriptionPart
           part={parts.pullRequest}
-          reactions={landed(parts.conversation)?.descriptionReactions}
+          reactions={read?.descriptionReactions}
+          subject={read?.descriptionSubject}
           picture={picture}
+          writes={writes}
         />
         <ConversationPart
           parts={parts}
@@ -1441,6 +1465,7 @@ function ConversationView({
           url={url}
           now={now}
           picture={picture}
+          writes={writes}
         />
       </div>
     </>
@@ -1571,7 +1596,7 @@ export function AgentPullRequestTab({
             aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
             hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
           >
-            <ConversationView agentId={agentId} parts={parts} url={title?.url} />
+            <ConversationView agentId={agentId} parts={parts} url={title?.url} writes={writes} />
           </div>
           <div
             className="pull-request-view"

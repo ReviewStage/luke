@@ -186,7 +186,9 @@ let previews: DiffViewProps[] = [];
 /** Every change to the pull request the tab asked for, by agent, in order. */
 let changes: (readonly [string, PullRequestActionRequest])[] = [];
 /** How the service answers the next change asked for. */
-let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+let changeAnswer: PullRequestWriteAnswer | Promise<PullRequestWriteAnswer> = {
+  outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+};
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
@@ -213,7 +215,10 @@ beforeEach(() => {
         if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
         if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
           changes.push([request.payload.agentId, request.payload.request]);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: changeAnswer });
+          return Promise.resolve(changeAnswer).then((value) => ({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value,
+          }));
         }
         if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
           images.push(request.payload.src);
@@ -886,6 +891,113 @@ test("the description, a comment, a review, and a thread comment wear their reac
   assert.deepEqual(pills(commented ?? null), [
     ["👀2", "You and Charles Pan reacted with eyes", "true"],
   ]);
+});
+
+test("a reaction is pressed to take the reader's own back or give it, Add reaction offers GitHub's eight, the reaction pressed waits while its change is out with the state pill unmoved, and once GitHub answers the conversation is read again", async () => {
+  let reads = 0;
+  const answer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE } as const;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => {
+        reads += 1;
+        return Promise.resolve({
+          pullRequest: {
+            ...CONVERSATION,
+            descriptionSubject: "PR_42",
+            descriptionReactions: [
+              { content: REACTION.HEART, count: 2, by: [CHARLES_ON_GITHUB], mine: true },
+            ],
+            conversation: [
+              {
+                kind: CONVERSATION_ENTRY.COMMENT,
+                by: CHARLES_ON_GITHUB,
+                html: '<p dir="auto">Thanks.</p>',
+                body: "",
+                at: 3_000,
+                url: `${PAGE}#issuecomment-2`,
+                subject: "IC_2",
+                reactions: [{ content: REACTION.EYES, count: 1, by: [CHARLES_ON_GITHUB] }],
+              },
+            ],
+          },
+        });
+      },
+    }),
+  );
+  const description =
+    tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
+  const heart =
+    description.querySelector<HTMLButtonElement>("button.pull-request-reaction[data-mine]") ??
+    assert.fail("the description's heart is a press");
+  assert.equal(
+    heart.getAttribute("aria-pressed"),
+    "true",
+    "lit as the reader's, as their own sign-in read it",
+  );
+
+  const { promise, resolve } = Promise.withResolvers<PullRequestWriteAnswer>();
+  changeAnswer = promise;
+  act(() => heart.click());
+  assert.deepEqual(changes, [
+    [AGENT.id, { action: "remove-reaction", subject: "PR_42", content: REACTION.HEART }],
+  ]);
+  assert.equal(heart.getAttribute("aria-busy"), "true", "the heart waits on its change");
+  assert.ok(
+    [...tab.querySelectorAll<HTMLButtonElement>("button.pull-request-reaction")].every(
+      (each) => each.disabled,
+    ),
+    "every other press waits too",
+  );
+  assert.equal(
+    tab.querySelector(".pull-request-state")?.textContent,
+    "Open",
+    "the pill is unmoved",
+  );
+  const before = reads;
+  await act(async () => resolve(answer));
+  await settle();
+  assert.equal(reads, before + 1, "the conversation is read again once GitHub answers");
+
+  changeAnswer = promise;
+  const entry = tab.querySelector(".pull-request-entry") ?? assert.fail("the comment stands");
+  const add =
+    entry.querySelector<HTMLButtonElement>('[aria-label="Add reaction"]') ??
+    assert.fail("the comment offers Add reaction");
+  act(() => add.click());
+  const offered = words(document.body, '[role="menuitemcheckbox"]');
+  assert.deepEqual(offered, [
+    "👍Thumbs up",
+    "👎Thumbs down",
+    "😄Laugh",
+    "🎉Hooray",
+    "😕Confused",
+    "❤️Heart",
+    "🚀Rocket",
+    "👀Eyes",
+  ]);
+  const rocket =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find((each) =>
+      each.textContent?.endsWith("Rocket"),
+    ) ?? assert.fail("Add reaction offers Rocket");
+  const { promise: given, resolve: answerGiven } = Promise.withResolvers<PullRequestWriteAnswer>();
+  changeAnswer = given;
+  act(() => rocket.click());
+  assert.deepEqual(changes.at(-1), [
+    AGENT.id,
+    { action: "add-reaction", subject: "IC_2", content: REACTION.ROCKET },
+  ]);
+  assert.deepEqual(
+    [...entry.querySelectorAll(".pull-request-reaction:not(.pull-request-reaction-add)")].map(
+      (pill) => [pill.textContent, pill.getAttribute("aria-busy")],
+    ),
+    [
+      ["🚀1", "true"],
+      ["👀1", "false"],
+    ],
+    "a reaction nobody had given stands as the reader's while it is given",
+  );
+  await act(async () => answerGiven(answer));
+  await settle();
 });
 
 /** The switch of the Conversation's filter named as given. */

@@ -72,14 +72,20 @@ import {
   namedOverviewPullRequest,
 } from "../github/github-people.js";
 import { githubReadOrRefusal } from "../github/github-refusal.js";
-import { pullRequestNodeId, setPullRequestDraft } from "../github/pull-request-writes.js";
 import {
+  pullRequestNodeId,
+  reactOnPullRequest,
+  setPullRequestDraft,
+} from "../github/pull-request-writes.js";
+import {
+  GRAPHQL_REACTION_OF,
   type PullRequestReadFailure,
   pullRequestChecks,
   pullRequestConversation,
   pullRequestDeployments,
   pullRequestFiles,
   pullRequestOverview,
+  viewerReactionsOf,
 } from "../github/pull-requests.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -140,6 +146,7 @@ import {
 import {
   type MemberPullRequest,
   memberPullRequestWrite,
+  memberReadToken,
   writeAnswerOf,
 } from "./pull-request-write.js";
 
@@ -880,6 +887,8 @@ type OverviewRead<A> = (
   token: Redacted.Redacted,
   agent: CodingAgent,
   pullRequest: CodingAgentPullRequest,
+  /** The member reading, whose own reads mark what is theirs. */
+  userId: string,
 ) => Effect.Effect<A | null, PullRequestReadFailure, AgentsServices>;
 
 /**
@@ -903,7 +912,7 @@ const overviewPart = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
   const part = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
-    return yield* read(token, agent, pullRequest);
+    return yield* read(token, agent, pullRequest, userId);
   }).pipe(
     Effect.catch((failure) => {
       switch (failure._tag) {
@@ -918,7 +927,12 @@ const overviewPart = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
       }
     }),
   );
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest: part });
+  // Note that a part may carry what is the reader's own, such as the reactions they gave, so nothing on the way keeps it for anyone else.
+  return HttpServerResponse.setHeader(
+    hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest: part }),
+    "cache-control",
+    "private, no-store",
+  );
 });
 
 /**
@@ -960,17 +974,32 @@ const overviewChecksEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewCheck
   },
 );
 
+/** Which reactions the member gave on the pull request, read on their own token; none where they hold none GitHub takes. */
+const memberReactions = (userId: string, repository: string, number: number) =>
+  Effect.flatMap(memberReadToken(userId), (token) =>
+    token === undefined
+      ? Effect.succeed(undefined)
+      : viewerReactionsOf(token, repository, number),
+  );
+
 /**
  * GET reads the agent's pull request's conversation: its comments, its
  * reviews and their threads, and where each reviewer stands by their
- * reviews, its people named against the workspace's members.
+ * reviews, its people named against the workspace's members; and, read
+ * beside it on the member's own token, which reactions are theirs.
  */
 const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
   "web/agentOverviewConversationEndpoint",
 )(function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
-  return yield* overviewPart(seams, published, (token, agent, pullRequest) =>
-    Effect.flatMap(pullRequestConversation(token, agent.repository, pullRequest), (read) =>
-      namedOverviewConversation(agent, pullRequest.number, read),
+  return yield* overviewPart(seams, published, (token, agent, pullRequest, userId) =>
+    Effect.flatMap(
+      pullRequestConversation(
+        token,
+        agent.repository,
+        pullRequest,
+        memberReactions(userId, agent.repository, pullRequest.number),
+      ),
+      (read) => namedOverviewConversation(agent, pullRequest.number, read),
     ),
   );
 });
@@ -979,10 +1008,26 @@ const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
 function actionWrite(
   request: PullRequestActionRequest,
 ): (pullRequest: MemberPullRequest) => ReturnType<typeof setPullRequestDraft> {
-  return ({ token, repository, number }) =>
-    Effect.flatMap(pullRequestNodeId(token, repository, number), (id) =>
-      setPullRequestDraft(token, id, request.action === PULL_REQUEST_ACTION.CONVERT_TO_DRAFT),
-    );
+  return ({ token, repository, number }) => {
+    switch (request.action) {
+      case PULL_REQUEST_ACTION.READY_FOR_REVIEW:
+      case PULL_REQUEST_ACTION.CONVERT_TO_DRAFT:
+        return Effect.flatMap(pullRequestNodeId(token, repository, number), (id) =>
+          setPullRequestDraft(token, id, request.action === PULL_REQUEST_ACTION.CONVERT_TO_DRAFT),
+        );
+      case PULL_REQUEST_ACTION.ADD_REACTION:
+      case PULL_REQUEST_ACTION.REMOVE_REACTION:
+        return reactOnPullRequest(
+          token,
+          { repository, number },
+          {
+            subject: request.subject,
+            content: GRAPHQL_REACTION_OF[request.content],
+            add: request.action === PULL_REQUEST_ACTION.ADD_REACTION,
+          },
+        );
+    }
+  };
 }
 
 /**
