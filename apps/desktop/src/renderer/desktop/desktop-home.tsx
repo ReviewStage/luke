@@ -22,7 +22,7 @@ import {
 import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
-import { type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
@@ -292,7 +292,7 @@ type ComposerSlot = (slot: HTMLElement | null) => void;
  * own that whichever state stands, the page or the welcome, takes into its
  * place, so the list landing as a new account's welcome moves the composer
  * rather than mounting it afresh, and the words typed while it was read
- * stand. Note that the composer is drawn after the page, so its place is
+ * stand, the caret in them where it was. Note that the composer is drawn after the page, so its place is
  * taken before its words decide whether to take the caret.
  */
 function useComposerSlot(composer: ReactNode): readonly [ReactNode, ComposerSlot] {
@@ -301,9 +301,23 @@ function useComposerSlot(composer: ReactNode): readonly [ReactNode, ComposerSlot
     made.className = "home-composer ph-no-capture";
     return made;
   });
+  // What held the focus inside the box as its place went, given it back in the new one.
+  const held = useRef<HTMLElement | null>(null);
   const place = useCallback<ComposerSlot>(
     (slot) => {
-      if (slot !== null && box.parentNode !== slot) slot.append(box);
+      // Note that a place going is told before it leaves the page, while
+      // what holds the focus still holds it; the page drops the focus as the
+      // box leaves with it.
+      if (slot === null) {
+        const active = document.activeElement;
+        held.current = active instanceof HTMLElement && box.contains(active) ? active : null;
+        return;
+      }
+      if (box.parentNode !== slot) slot.append(box);
+      const was = held.current;
+      held.current = null;
+      const unfocused = document.activeElement === null || document.activeElement === document.body;
+      if (was !== null && unfocused && box.contains(was)) was.focus();
     },
     [box],
   );

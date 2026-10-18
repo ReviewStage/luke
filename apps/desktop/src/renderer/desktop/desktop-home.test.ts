@@ -695,6 +695,7 @@ test("words typed in the composer while the task list is read are still there on
     page.querySelector("[aria-label='Welcome'] .new-task-composer"),
     "the composer stands under Luke's line",
   );
+  assert.ok(document.activeElement === composerEditor(page), "the caret stays in the words");
   pressInComposer(page, "Enter");
   await settle();
 
