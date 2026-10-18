@@ -63,7 +63,7 @@ Change a name or shape that old code reads in steps, each in its own deployment.
 Two shortcuts skip the steps:
 
 - When only the code's name for a column changes, rename the property and keep the column, since Drizzle maps a property to any column name (`taskId: text("plan_id")`).
-- For a table rename, rename the table and create a view under the old name in the same migration: Postgres lets old code read and write a single-table view as if it were the table, so nothing has to be kept in step. Mark that migration `-- contract: "plan" stays readable and writable as a view` and drop the view in a later contract step.
+- For a table rename, rename the table and create a view under the old name in the same migration, aliasing any renamed column back to its old name. Postgres lets old code read and write a single-table view with no join or aggregate as if it were the table, `INSERT … ON CONFLICT (columns) DO UPDATE` and `RETURNING` included, so nothing has to be kept in step. `ON CONFLICT ON CONSTRAINT <name>` fails through a view, because the constraint belongs to the table; Drizzle's `onConflictDoUpdate` names columns, so check that the old code does too. Mark that migration `-- contract: "plan" stays readable and writable as a view` and drop the view in a later contract step.
 
 The same holds for any change that narrows what old code may do:
 
