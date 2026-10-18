@@ -1,5 +1,6 @@
 import {
   BUTTON_SHAPE,
+  BUTTON_SIZE,
   BUTTON_VARIANT,
   ComposeIcon,
   ExternalIcon,
@@ -64,7 +65,7 @@ function Acts({ busy = false }: { busy?: boolean }): React.JSX.Element {
   );
 }
 
-/** A release's presses: Restart on the working wash, and Download on the danger wash, round. */
+/** A release's presses: Restart on the working wash, and Download on the danger wash, round and compact. */
 function Tinted(): React.JSX.Element {
   return (
     <Inline gap={GAP.CONTROL}>
@@ -73,6 +74,7 @@ function Tinted(): React.JSX.Element {
         icon={<UpdateIcon />}
         variant={BUTTON_VARIANT.WORKING_TINT}
         shape={BUTTON_SHAPE.ROUND}
+        size={BUTTON_SIZE.COMPACT}
         hint={Hint}
       />
       <FoldingButton
@@ -80,6 +82,7 @@ function Tinted(): React.JSX.Element {
         icon={<ExternalIcon />}
         variant={BUTTON_VARIANT.DANGER_TINT}
         shape={BUTTON_SHAPE.ROUND}
+        size={BUTTON_SIZE.COMPACT}
         hint={Hint}
       />
     </Inline>

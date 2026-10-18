@@ -7,6 +7,7 @@ import { UPDATE_STATUS } from "@luke/settings/update";
 import { updateInSidebar } from "@luke/settings/update-row";
 import {
   BUTTON_SHAPE,
+  BUTTON_SIZE,
   BUTTON_VARIANT,
   type ButtonVariant,
   ConfirmDialog,
@@ -77,7 +78,7 @@ function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Ele
 }
 
 /**
- * One of the release's presses: a round pill, its glyph then its one word,
+ * One of the release's presses: a compact round pill, its glyph then its one word,
  * which a narrow foot folds to the glyph alone, named still. Its hint says
  * what a press does whether its word is drawn or not, since the word alone
  * says less.
@@ -107,6 +108,7 @@ function UpdatePill({
         icon={icon}
         variant={variant}
         shape={BUTTON_SHAPE.ROUND}
+        size={BUTTON_SIZE.COMPACT}
         onClick={onClick}
         hint={saying}
       />

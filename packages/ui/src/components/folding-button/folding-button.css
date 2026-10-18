@@ -20,8 +20,15 @@
       padding: 0;
     }
 
+    .luke-folding-button > .luke-button[data-size="compact"] {
+      width: var(--luke-space-24);
+    }
+
     /* Note that a round one's pill insets weigh more than the square's, so its disc says so again. */
-    .luke-folding-button > .luke-button[data-shape="round"]:not([data-icon-only="true"]) {
+    .luke-folding-button
+      > .luke-button:is([data-shape="round"][data-size], [data-shape="round"]):not(
+        [data-icon-only="true"]
+      ) {
       padding-inline: 0;
     }
 

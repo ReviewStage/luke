@@ -13,6 +13,7 @@ import {
   BUTTON_VARIANT,
   Button,
   type ButtonShape,
+  type ButtonSize,
   type ButtonVariant,
 } from "../button/button.js";
 
@@ -86,6 +87,7 @@ function FoldingBox({
   icon,
   variant,
   shape,
+  size,
   busy,
   disabled,
   onClick,
@@ -96,6 +98,7 @@ function FoldingBox({
   icon: ReactNode;
   variant: ButtonVariant;
   shape: ButtonShape | undefined;
+  size: ButtonSize | undefined;
   busy: string | undefined;
   disabled: boolean | undefined;
   onClick: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
@@ -107,6 +110,7 @@ function FoldingBox({
         icon={icon}
         variant={variant}
         shape={shape ?? BUTTON_SHAPE.SQUARE}
+        size={size}
         disabled={disabled}
         onClick={onClick}
         {...busyProps}
@@ -124,6 +128,7 @@ export function FoldingButton({
   icon,
   variant = BUTTON_VARIANT.QUIET,
   shape,
+  size,
   busy,
   disabled,
   onClick,
@@ -135,6 +140,8 @@ export function FoldingButton({
   variant?: ButtonVariant;
   /** Its outline: the control's corner, or round, a pill drawn and a disc folded. */
   shape?: ButtonShape | undefined;
+  /** How big it is: the control's own, or a row mark's height in the caption's type. */
+  size?: ButtonSize | undefined;
   /** While its press is out, what it is doing ("Running"): a ring stands over it under that name. */
   busy?: string | undefined;
   disabled?: boolean | undefined;
@@ -150,6 +157,7 @@ export function FoldingButton({
       icon={icon}
       variant={variant}
       shape={shape}
+      size={size}
       busy={busy}
       disabled={disabled}
       onClick={onClick}
