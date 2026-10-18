@@ -23,8 +23,13 @@ import { installScrollIntoView } from "#testing/scroll-into-view";
 import { landedBundles, onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand, useAppKeymap } from "../app-commands";
-import type { SideBundles } from "../bundle-loader";
-import type { PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
+import { type SideBundles, sideBundles } from "../bundle-loader";
+import {
+  PLACEMENT_END,
+  type PlanEditorModule,
+  type PlanEditorPlacement,
+  type PlanEditorProps,
+} from "../plan-editor/contract";
 import { ISSUES_PAGE, type IssuesPlace } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
 import { IssuesPage } from "./issues-page";
@@ -92,6 +97,8 @@ interface StandInEditor {
   readonly element: HTMLElement;
   text: string;
   destroyed: boolean;
+  /** Where each press on the text's room put the caret while the editor stood. */
+  readonly placed: PlanEditorPlacement[];
 }
 
 /** Every editor the description mounted, newest last. */
@@ -106,13 +113,23 @@ const EDITOR_STAND_IN: PlanEditorModule = {
     element.setAttribute("aria-label", props.label);
     element.tabIndex = 0;
     host.append(element);
-    const editor: StandInEditor = { props, element, text: props.markdown, destroyed: false };
+    const editor: StandInEditor = {
+      props,
+      element,
+      text: props.markdown,
+      destroyed: false,
+      placed: [],
+    };
     editors.push(editor);
     if (props.focus) element.focus();
     return {
       take: (_sent, merged) => ({ base: merged, text: merged }),
       chooseMention: () => undefined,
       markdown: () => editor.text,
+      focusAt: (placement) => {
+        editor.placed.push(placement);
+        element.focus();
+      },
       insertPictures: () => undefined,
       settlePicture: () => undefined,
       removePicture: () => undefined,
@@ -264,6 +281,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  for (const sheet of document.head.querySelectorAll("style[data-laid-out]")) sheet.remove();
 });
 
 /** The registry every render of one mount shares, so a render again is the same window. */
@@ -908,7 +926,117 @@ test("a click into the description opens the plan's editor in its place, the car
   );
 });
 
-test("Return on the description opens the editor with the caret at the end of its last section", async () => {
+/**
+ * The issue's page laid out as a window draws it: its main column scrolls,
+ * as its stylesheet says, and stands from 0 to 1000 across, and the
+ * description's words from 100 to 800 across and 200 to 240 down. Laid out
+ * before the page is drawn, as a window's stylesheet is.
+ */
+function layPageOut(): void {
+  const sheet = document.createElement("style");
+  sheet.dataset.laidOut = "";
+  sheet.textContent = ".luke-detail-page-main { overflow-y: auto; }";
+  document.head.append(sheet);
+  const wide = DOMRect.fromRect({ x: 0, y: 0, width: 1000, height: 900 });
+  const words = DOMRect.fromRect({ x: 100, y: 200, width: 700, height: 40 });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains("luke-detail-page-main") ? wide : words;
+  });
+}
+
+/** The page's main column, whose room is the description's way in. */
+function columnOf(page: HTMLElement): HTMLElement {
+  return (
+    page.querySelector<HTMLElement>(".luke-detail-page-main") ?? assert.fail("the page's column")
+  );
+}
+
+/** A press on `target` at the point given, its button going down and coming up; answers whether the press was taken. */
+function pressAt(target: Element, x: number, y: number): boolean {
+  const down = new MouseEvent("mousedown", {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+  });
+  act(() => {
+    target.dispatchEvent(down);
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y }));
+  });
+  return down.defaultPrevented;
+}
+
+test("a press anywhere on the page's room under an empty description opens its editor at the end", async () => {
+  standing = [issue(1)];
+  layPageOut();
+  const page = await openIssue(issue(1).id);
+  const column = columnOf(page);
+
+  const taken = pressAt(column, 400, 700);
+
+  assert.ok(!taken, "a drag from the room still selects, as a press on a page does");
+  assert.equal(openEditor().props.markdown, "");
+  assert.deepEqual(openEditor().props.placement, PLACEMENT_END);
+});
+
+test("a press on the room beside the description opens it on the nearest line, and one above it, by the title, opens nothing", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  layPageOut();
+  const page = await openIssue(issue(1).id);
+  const column = columnOf(page);
+  const body = page.querySelector(".plan-body") ?? assert.fail("the issue's body");
+
+  const aboveTaken = pressAt(body, 400, 120);
+  const openedAbove = editors.length;
+  pressAt(column, 900, 220);
+
+  assert.ok(!aboveTaken);
+  assert.equal(openedAbove, 0, "a press above the description opens nothing");
+  assert.deepEqual(
+    openEditor().props.placement,
+    { x: 799, y: 220 },
+    "the nearest line, at the words' own edge",
+  );
+});
+
+test("a press on the room while the description's editor loads is where the editor opens", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  const gate = Promise.withResolvers<PlanEditorModule>();
+  bundles = sideBundles({ planEditor: () => gate.promise });
+  layPageOut();
+  const page = await openIssue(issue(1).id);
+  const column = columnOf(page);
+
+  pressAt(column, 400, 700);
+  pressAt(column, 900, 220);
+  await act(async () => {
+    gate.resolve(EDITOR_STAND_IN);
+    await gate.promise;
+  });
+  await settle();
+
+  assert.deepEqual(openEditor().props.placement, { x: 799, y: 220 });
+});
+
+test("a press on the room while the description is open moves its caret to the end and keeps it open", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  layPageOut();
+  const page = await openIssue(issue(1).id);
+  const column = columnOf(page);
+  const editor = openDescription(page);
+
+  const taken = pressAt(column, 400, 700);
+  await settle();
+
+  assert.ok(taken, "the press keeps the keyboard in the editor");
+  assert.deepEqual(editor.placed, [PLACEMENT_END]);
+  assert.ok(!editor.destroyed);
+  assert.deepEqual(changes, []);
+});
+
+test("Return on the description opens the editor with the caret at the end of its text", async () => {
   standing = [issue(1, { description: "Fails on CI.\n\n## Steps\n\nRun it twice." })];
   const page = await openIssue(issue(1).id);
 
@@ -916,7 +1044,7 @@ test("Return on the description opens the editor with the caret at the end of it
   act(() => description.focus());
   press("Enter", description);
 
-  assert.deepEqual(openEditor().props.placement, { section: 1 });
+  assert.deepEqual(openEditor().props.placement, PLACEMENT_END);
   assert.equal(openEditor().props.markdown, "Fails on CI.\n\n## Steps\n\nRun it twice.");
 });
 
