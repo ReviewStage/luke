@@ -304,12 +304,8 @@ export function PickerRow({
   return (
     <SettingsRow
       density={density}
-      label={
-        <>
-          {picker.label}
-          {changed ? <ChangedMark /> : null}
-        </>
-      }
+      label={picker.label}
+      adornment={changed ? <ChangedMark /> : null}
       description={detail}
       error={error}
     >

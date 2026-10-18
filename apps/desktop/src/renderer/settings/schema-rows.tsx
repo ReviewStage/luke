@@ -25,16 +25,6 @@ type SettingOption = NonNullable<
 /** What the menu says when a search over a choice's values matches nothing. */
 const NO_MATCH = "Nothing matches.";
 
-/** A row's name, with the word it wears while its value differs from the default. */
-function rowLabel(label: string, changed: boolean): React.ReactNode {
-  return (
-    <>
-      {label}
-      {changed ? <ChangedMark /> : null}
-    </>
-  );
-}
-
 /** Where a pressed search result lands: the row's one control, for a row the schema names. */
 function anchorOf(id: string) {
   return isAppSettingId(id) ? searchAnchorProps(id) : undefined;
@@ -62,7 +52,12 @@ function SchemaSwitchRow({
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
   return (
-    <SettingsRow label={rowLabel(label, changed)} description={detail} error={rejection}>
+    <SettingsRow
+      label={label}
+      adornment={changed ? <ChangedMark /> : null}
+      description={detail}
+      error={rejection}
+    >
       {(control) => (
         <Switch
           {...anchorOf(id)}
@@ -110,7 +105,12 @@ function SchemaChoiceRow({
     if (options.some((option) => option.value === token)) run(token);
   };
   return (
-    <SettingsRow label={rowLabel(label, changed)} description={detail} error={rejection}>
+    <SettingsRow
+      label={label}
+      adornment={changed ? <ChangedMark /> : null}
+      description={detail}
+      error={rejection}
+    >
       {(control) =>
         search === undefined && !pictured ? (
           <Select

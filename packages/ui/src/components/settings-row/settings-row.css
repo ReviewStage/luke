@@ -5,15 +5,37 @@
    row stands bare, at a menu row's height, and keeps its controls beside
    its words at any width. A list row stands in the card as a card's row
    does, shorter and with its label at body weight, a line of a reference
-   list rather than a setting. */
+   list rather than a setting. What the row grows under its line stands
+   inset to its words past a leading mark, and an indented row starts at its
+   parent's words, past the parent's mark. */
 
 @layer components {
   /* Note that the row is its own container, and its padding is its body's,
      because the contract's 380px is the row's whole width wherever it
      stands, and a container query reads its container's content box. */
   .luke-settings-row {
+    /* The mark a provider's or a service's row leads with, which an indented
+       row and what a row grows under its line stand past. */
+    --luke-settings-row-mark-size: 20px;
+    --luke-settings-row-words-inset: calc(
+      var(--luke-settings-row-mark-size) +
+      var(--luke-space-12)
+    );
     container: luke-settings-row / inline-size;
     min-width: 0;
+  }
+
+  /* Note that the margin moves the row's rule with it, so the hairline
+     above an indented row starts at its parent's words too. */
+  .luke-settings-row[data-indent="mark"] {
+    margin-inline-start: calc(
+      var(--luke-settings-row-inline) +
+      var(--luke-settings-row-words-inset)
+    );
+  }
+
+  .luke-settings-row[data-indent="mark"] > .luke-settings-row-body {
+    padding-inline-start: 0;
   }
 
   .luke-settings-row-body {
@@ -81,6 +103,15 @@
     overflow-wrap: anywhere;
   }
 
+  /* The label and what rides its line, kept whole and wrapping between. */
+  .luke-settings-row-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--luke-space-2) var(--luke-space-6);
+    min-width: 0;
+  }
+
   .luke-settings-row-label {
     color: var(--luke-color-text);
     font-family: var(--luke-font-sans);
@@ -120,6 +151,14 @@
     justify-content: flex-end;
     gap: var(--luke-control-gap);
     min-width: 0;
+  }
+
+  .luke-settings-row-below {
+    min-width: 0;
+  }
+
+  .luke-settings-row-below[data-led="true"] {
+    padding-inline-start: var(--luke-settings-row-words-inset);
   }
 
   .luke-settings-row-controls:empty {

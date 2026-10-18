@@ -32,9 +32,15 @@ import {
   Button,
   ChevronRightIcon,
   ConfirmDialog,
+  ErrorState,
   ProviderMark,
+  SETTINGS_LINE_KIND,
   SearchField,
+  SettingsLine,
   SettingsSection,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   TrashIcon,
   useConfirmDialog,
 } from "@luke/ui";
@@ -62,7 +68,6 @@ import { Shortcut } from "../shortcut";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";
 import { commandKeyshortcuts } from "../tooltip";
 import { MenuRow } from "./menu-row";
-import { ReadFailed } from "./settings-group";
 
 /**
  * integrations-page.tsx -- Settings › Integrations: the services the account connects so Luke's agents can use them.
@@ -610,6 +615,7 @@ function IntegrationRow({
             ) : line === undefined ? null : (
               <RowLineText line={line} />
             ),
+          error: rejection,
           control: waiting ? (
             <>
               <Button variant={BUTTON_VARIANT.QUIET} disabled={connecting} onClick={connect}>
@@ -631,11 +637,6 @@ function IntegrationRow({
       {connected && tools.expanded && tools.shown.length > 0 ? (
         <RowToolsPanel id={panelId} name={name} tools={tools} />
       ) : null}
-      {rejection === undefined ? null : (
-        <p className="error-message" role="alert">
-          {rejection}
-        </p>
-      )}
       <ConfirmDialog
         confirm={disconnect}
         question={{
@@ -731,7 +732,9 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
   }, [query]);
 
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
-  if (!read && !statuses.readFailed) return <div className="settings-reading" aria-busy="true" />;
+  if (!read && !statuses.readFailed) {
+    return <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>Loading the integrations</SettingsLine>;
+  }
   const healthOf = (server: string) =>
     connectionHealth(integrationConnectionOf(server)?.provider ?? GITHUB, reads[server]);
   // Note that the rows stand in the order of their names within each
@@ -772,14 +775,16 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
     <>
       {statuses.readFailed ? (
         <SettingsSection>
-          <ReadFailed line={PAGE_LINE.READ_FAILED} onRetry={() => void statuses.read()} />
+          <SettingsLine>
+            <ErrorState onRetry={() => void statuses.read()}>{PAGE_LINE.READ_FAILED}</ErrorState>
+          </SettingsLine>
         </SettingsSection>
       ) : null}
-      {groups.length === 0 ? <p className="settings-note">{PAGE_LINE.NONE_OFFERED}</p> : null}
+      {groups.length === 0 ? <PageNote>{PAGE_LINE.NONE_OFFERED}</PageNote> : null}
       {groups.length > 0 && found.length === 0 ? (
-        <p className="settings-note" role="status">
-          {`No integrations or tools match “${query.trim()}”`}
-        </p>
+        <div role="status">
+          <PageNote>{`No integrations or tools match “${query.trim()}”`}</PageNote>
+        </div>
       ) : null}
       {found.map((group) => (
         <SettingsSection key={group.heading ?? "unread"} title={group.heading}>
@@ -806,6 +811,15 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
   );
 }
 
+/** A line the page says in its sections' place, in a description's muted words. */
+function PageNote({ children }: { children: string }): React.JSX.Element {
+  return (
+    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      {children}
+    </Text>
+  );
+}
+
 /** The page's rows under its own search, the query held here where Settings does not hand the page one. */
 function SearchedRows({ filter }: { filter: IntegrationsFilter | undefined }): React.JSX.Element {
   const [query, setQuery] = useState("");
@@ -826,9 +840,5 @@ export function IntegrationsSection({
   /** The page's search, where Settings holds its query. */
   filter?: IntegrationsFilter | undefined;
 }): React.JSX.Element {
-  return signedIn ? (
-    <SearchedRows filter={filter} />
-  ) : (
-    <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>
-  );
+  return signedIn ? <SearchedRows filter={filter} /> : <PageNote>{PAGE_LINE.SIGNED_OUT}</PageNote>;
 }

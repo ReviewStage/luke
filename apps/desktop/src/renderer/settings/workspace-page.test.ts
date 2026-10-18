@@ -29,7 +29,7 @@ import {
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
-import { ProviderMark } from "@luke/ui";
+import { ProviderMark, SettingsPage } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -515,6 +515,15 @@ async function confirm(verb: string): Promise<void> {
 const identity = (page: HTMLElement) =>
   page.querySelector<HTMLElement>(".menu-row") ?? assert.fail("no identity row");
 
+/** What a row says its last act was refused with, in its announced line, or nothing while that is empty. */
+const refusalOf = (within: Element) =>
+  [...within.querySelectorAll('[aria-live="polite"]')]
+    .map((each) => each.textContent)
+    .find((words) => words !== null && words !== "");
+
+/** Whether the settings page around what was drawn holds its sections back, as it does while a read is out. */
+const heldBack = (container: HTMLElement) => container.querySelector('[aria-busy="true"]') !== null;
+
 /** The workspace's name, as the identity row's label says it. */
 const nameShown = (page: HTMLElement) => identity(page).querySelector('[id$="label"]')?.textContent;
 
@@ -559,10 +568,7 @@ test("an admin's rename the service refuses says so under the row, and a member 
   await renameTo(admin.page, "Acme Labs", "Enter");
 
   assert.deepEqual(renames(), [{ workspaceId: ACME.id, name: "Acme Labs" }]);
-  assert.equal(
-    admin.page.querySelector('.menu-row + [role="alert"]')?.textContent,
-    WORKSPACE_NOT_PERMITTED_REFUSAL,
-  );
+  assert.equal(refusalOf(identity(admin.page)), WORKSPACE_NOT_PERMITTED_REFUSAL);
 
   const member = await mount(ACME);
   assert.equal(roleLine(member.page), "You're a member");
@@ -685,7 +691,7 @@ test("a photo the service refuses, a file that is no PNG, JPEG, or WebP, and a p
   stubCanvas(300, 300, webpBytes());
   refusePhoto = true;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const said = () => page.querySelector('.menu-row + [role="alert"]')?.textContent;
+  const said = () => refusalOf(identity(page));
 
   await pickPhoto(page, new File(["x"], "team.png", { type: "image/png" }));
   const refused = said();
@@ -818,11 +824,18 @@ test("while the members are being read the page holds itself back, and a read th
     listFailed: false,
     onRetryList: () => undefined,
   };
-  act(() => root.render(createElement(WorkspacePage, { control, readerId: READER_ID })));
-  const heldBack = container.querySelector(".settings-reading") !== null;
+  act(() =>
+    root.render(
+      createElement(SettingsPage, {
+        title: "Workspace",
+        children: createElement(WorkspacePage, { control, readerId: READER_ID }),
+      }),
+    ),
+  );
+  const whileReading = heldBack(container);
   await settle();
 
-  assert.equal(heldBack, true);
+  assert.equal(whileReading, true);
   assert.equal(
     container.querySelector('[role="alert"]')?.textContent,
     "The members could not be read.Retry",
@@ -831,7 +844,7 @@ test("while the members are being read the page holds itself back, and a read th
   act(() => button(container, "Retry").click());
   await settle();
   assert.ok(memberNamed(container, "Sam"));
-  assert.equal(container.querySelector(".settings-reading"), null);
+  assert.equal(heldBack(container), false);
 });
 
 test("an admin is offered Remove for a member but not for the owner, and Remove asks before it removes", async () => {
@@ -959,10 +972,7 @@ test("an admin is offered no role change, and a role change the service refuses 
   await chooseAction(memberNamed(asOwner.page, "Sam"), "Make admin");
 
   assert.deepEqual(adminSees, ["Remove from workspace"]);
-  assert.equal(
-    memberNamed(asOwner.page, "Sam").nextElementSibling?.textContent,
-    WORKSPACE_NOT_PERMITTED_REFUSAL,
-  );
+  assert.equal(refusalOf(memberNamed(asOwner.page, "Sam")), WORKSPACE_NOT_PERMITTED_REFUSAL);
 });
 
 /** The page's last group, the way out of the workspace, where it draws one. */
@@ -1355,10 +1365,7 @@ test("a GitHub page the browser could not open is said under the row, from Manag
   await settle();
 
   for (const { page } of [managed, unconnected]) {
-    assert.equal(
-      githubGroup(page).querySelector('.error-message[role="alert"]')?.textContent,
-      "Luke could not open your browser.",
-    );
+    assert.equal(refusalOf(githubGroup(page)), "Luke could not open your browser.");
   }
 });
 
@@ -1631,7 +1638,7 @@ test("Invite pressed again while one is on its way sends one invitation", async 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER, 2);
 
   assert.equal(sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITE).length, 1);
-  assert.equal(page.querySelector(".error-message"), null);
+  assert.equal(page.querySelector('[role="alert"]'), null);
 });
 
 test("an address already invited is said under the form, and a member is offered no invitations", async () => {
@@ -1641,10 +1648,7 @@ test("an address already invited is said under the form, and a member is offered
   const member = await mount(ACME);
   await settle();
 
-  assert.equal(
-    admin.page.querySelector('.error-message[role="alert"]')?.textContent,
-    ALREADY_INVITED_REFUSAL,
-  );
+  assert.equal(admin.page.querySelector('[role="alert"]')?.textContent, ALREADY_INVITED_REFUSAL);
   assert.deepEqual(invitationRows(admin.page), []);
   assert.equal(member.page.querySelector(".workspace-invite"), null);
   assert.equal(
@@ -1686,13 +1690,20 @@ test("a workspaces read that failed says so with Retry, which asks for them agai
       retried += 1;
     },
   };
-  act(() => root.render(createElement(WorkspacePage, { control, readerId: READER_ID })));
+  act(() =>
+    root.render(
+      createElement(SettingsPage, {
+        title: "Workspace",
+        children: createElement(WorkspacePage, { control, readerId: READER_ID }),
+      }),
+    ),
+  );
 
   assert.equal(
     container.querySelector('[role="alert"]')?.textContent,
     "Your workspaces could not be read.Retry",
   );
-  assert.equal(container.querySelector(".settings-reading"), null);
+  assert.equal(heldBack(container), false);
   act(() => button(container, "Retry").click());
   assert.equal(retried, 1);
 });
@@ -1833,18 +1844,17 @@ test("the Repositories group lists the workspace's repositories and those set he
     `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${SETTINGS_SECTION.MAC_REPOSITORIES}"]`,
   );
   assert.ok(group !== null);
+  const fields = () => [...group.querySelectorAll<HTMLInputElement>("input")];
   const field = (name: string) => {
-    const label = [...group.querySelectorAll<HTMLLabelElement>(".mac-repository-name")].find(
-      (each) => each.textContent === name,
+    const input = fields().find(
+      (each) => each.getAttribute("aria-label") === `${name} run command`,
     );
-    const input =
-      label === undefined ? null : group.querySelector<HTMLInputElement>(`#${label.htmlFor}`);
-    assert.ok(input !== null, name);
+    assert.ok(input !== undefined, name);
     return input;
   };
   assert.deepEqual(
-    [...group.querySelectorAll(".mac-repository-name")].map((each) => each.textContent),
-    ["acme/app", "acme/old"],
+    fields().map((each) => each.getAttribute("aria-label")),
+    ["acme/app run command", "acme/old run command"],
   );
   assert.equal(field("acme/app").value, "");
   assert.equal(field("acme/old").value, "make run");

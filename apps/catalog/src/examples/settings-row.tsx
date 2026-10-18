@@ -1,16 +1,23 @@
 import {
   AVATAR_SIZE,
   Avatar,
+  BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
+  MARK_PROVIDER,
+  ProviderMark,
   SETTINGS_ROW_DENSITY,
+  SETTINGS_ROW_INDENT,
   SettingsRow,
   type SettingsRowControl,
   SettingsSection,
   Switch,
+  TEXT_ELEMENT,
+  TEXT_FIELD_TYPE,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextField,
 } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
@@ -22,7 +29,10 @@ import { CatalogSection } from "../section";
  * words, each at a settings page's measure and in a column narrower than the
  * 380px its controls drop below its words under; compact rows in a
  * popover narrower than that, whose controls stay beside their words; and
- * list rows, a reference list's lines in a card, each a command and its chord.
+ * list rows, a reference list's lines in a card, each a command and its chord;
+ * and the slots: a Modified word riding a label, a key's field grown under
+ * its row with a refusal under that, and accounts indented under their
+ * provider's row.
  */
 
 /** A switch holding its own state, named `label` and described and failed by its row. */
@@ -71,6 +81,80 @@ function Rows(): React.JSX.Element {
             Choose repositories
           </Button>
         )}
+      </SettingsRow>
+    </SettingsSection>
+  );
+}
+
+/** A provider's mark, at the size a row's leading mark stands. */
+function Mark({ provider }: { provider: (typeof MARK_PROVIDER)[keyof typeof MARK_PROVIDER] }) {
+  return <ProviderMark provider={provider} className="catalog-settings-mark" />;
+}
+
+/** A key's field and its presses, grown under the key's row. */
+function KeyForm(): React.JSX.Element {
+  const [key, setKey] = useState("");
+  return (
+    <form className="catalog-settings-key" onSubmit={(event) => event.preventDefault()}>
+      <TextField
+        type={TEXT_FIELD_TYPE.PASSWORD}
+        label="Linear API key"
+        placeholder="Paste your Linear API key"
+        value={key}
+        onChange={setKey}
+      />
+      <Button variant={BUTTON_VARIANT.OUTLINE}>Cancel</Button>
+      <Button type={BUTTON_TYPE.SUBMIT} variant={BUTTON_VARIANT.PRIMARY}>
+        Save
+      </Button>
+    </form>
+  );
+}
+
+/** The row's slots: an adornment on the label's line, what a row grows below it, and indented rows. */
+function SlottedRows(): React.JSX.Element {
+  return (
+    <SettingsSection>
+      <SettingsRow
+        label="Show captions"
+        adornment={
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE} as={TEXT_ELEMENT.SPAN}>
+            Modified
+          </Text>
+        }
+      >
+        {(control) => <HeldSwitch label="Show captions" control={control} />}
+      </SettingsRow>
+      <SettingsRow
+        label="Linear"
+        leading={<Mark provider={MARK_PROVIDER.LINEAR} />}
+        below={<KeyForm />}
+        error="Linear did not accept this key. Check it and try again."
+      >
+        {() => null}
+      </SettingsRow>
+      <SettingsRow
+        label="GitHub"
+        description="Add accounts and choose repositories on GitHub."
+        leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
+      >
+        {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Manage on GitHub</Button>}
+      </SettingsRow>
+      <SettingsRow
+        indent={SETTINGS_ROW_INDENT.MARK}
+        label="acme"
+        description="Connected"
+        leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
+      >
+        {() => null}
+      </SettingsRow>
+      <SettingsRow
+        indent={SETTINGS_ROW_INDENT.MARK}
+        label="ada-lovelace"
+        description="Suspended on GitHub"
+        leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
+      >
+        {() => null}
       </SettingsRow>
     </SettingsSection>
   );
@@ -134,6 +218,16 @@ function SettingsRows(): React.JSX.Element {
       <CatalogSection id="settings-row-narrow" title="Narrower than 380px">
         <div className="catalog-settings catalog-settings-narrow">
           <Rows />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-row-slots" title="Adornment, below, and indented">
+        <div className="catalog-settings">
+          <SlottedRows />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-row-slots-narrow" title="The slots narrower than 380px">
+        <div className="catalog-settings catalog-settings-narrow">
+          <SlottedRows />
         </div>
       </CatalogSection>
       <CatalogSection id="settings-row-compact" title="Compact, in a popover">

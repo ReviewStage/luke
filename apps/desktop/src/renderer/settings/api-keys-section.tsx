@@ -14,7 +14,10 @@ import {
   BUTTON_VARIANT,
   Button,
   ConfirmDialog,
+  ErrorState,
   PencilIcon,
+  SETTINGS_LINE_KIND,
+  SettingsLine,
   SettingsSection,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
@@ -26,10 +29,8 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
 import { HarnessMark } from "../harness-marks";
-import { SpinnerRegion } from "../spinner";
 import { dayText } from "../tasks/task-time";
 import { MenuRow } from "./menu-row";
-import { ReadFailed } from "./settings-group";
 
 /**
  * api-keys-section.tsx -- Settings › Coding agents › API keys: the account's own Anthropic and OpenAI keys a coding agent runs on.
@@ -187,8 +188,8 @@ function ProviderKeyRow({
         ];
   const verified = stored?.status === PROVIDER_KEY_STATUS.VERIFIED;
 
-  // Note that the row, its field, and its refusal stand in one line of the
-  // card, so the card's rule runs above the row and not between its parts.
+  // Note that the row grows its field under its line and says its refusal
+  // under both, so the card's rule runs above the row and not between its parts.
   return (
     <div className="api-key">
       <MenuRow
@@ -217,6 +218,52 @@ function ProviderKeyRow({
                 {` · Added ${dayText(stored.addedAt)}`}
               </>
             ),
+          error: rejection,
+          below: editing ? (
+            <form
+              className="api-key-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                save();
+              }}
+              // Escape in the field closes the editor and nothing behind it: the
+              // window's own Escape would leave Settings. A composition's Escape is the IME's.
+              onKeyDown={(event) => {
+                if (event.target !== field.current) return;
+                if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
+                event.preventDefault();
+                event.stopPropagation();
+                cancel();
+              }}
+            >
+              <TextField
+                ref={field}
+                type={TEXT_FIELD_TYPE.PASSWORD}
+                autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+                label={`${name} API key`}
+                placeholder={`Paste your ${name} API key`}
+                spellCheck={false}
+                disabled={saving}
+                value={pasted}
+                onChange={(value) => {
+                  setPasted(value);
+                  setRejection(undefined);
+                }}
+              />
+              <Button variant={BUTTON_VARIANT.OUTLINE} disabled={saving} onClick={cancel}>
+                Cancel
+              </Button>
+              <Button
+                type={BUTTON_TYPE.SUBMIT}
+                variant={BUTTON_VARIANT.PRIMARY}
+                disabled={locked}
+                busy={saving}
+                busyLabel="Checking the key"
+              >
+                Save
+              </Button>
+            </form>
+          ) : null,
           control:
             stored === undefined && !editing ? (
               <Button
@@ -229,56 +276,6 @@ function ProviderKeyRow({
             ) : undefined,
         }}
       />
-      {editing ? (
-        <form
-          className="api-key-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            save();
-          }}
-          // Escape in the field closes the editor and nothing behind it: the
-          // window's own Escape would leave Settings. A composition's Escape is the IME's.
-          onKeyDown={(event) => {
-            if (event.target !== field.current) return;
-            if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
-            event.preventDefault();
-            event.stopPropagation();
-            cancel();
-          }}
-        >
-          <TextField
-            ref={field}
-            type={TEXT_FIELD_TYPE.PASSWORD}
-            autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
-            label={`${name} API key`}
-            placeholder={`Paste your ${name} API key`}
-            spellCheck={false}
-            disabled={saving}
-            value={pasted}
-            onChange={(value) => {
-              setPasted(value);
-              setRejection(undefined);
-            }}
-          />
-          <Button variant={BUTTON_VARIANT.OUTLINE} disabled={saving} onClick={cancel}>
-            Cancel
-          </Button>
-          <Button
-            type={BUTTON_TYPE.SUBMIT}
-            variant={BUTTON_VARIANT.PRIMARY}
-            disabled={locked}
-            busy={saving}
-            busyLabel="Checking the key"
-          >
-            Save
-          </Button>
-        </form>
-      ) : null}
-      {rejection === undefined ? null : (
-        <p className="error-message" role="alert">
-          {rejection}
-        </p>
-      )}
       <ConfirmDialog
         confirm={removal}
         question={{
@@ -372,7 +369,7 @@ export function ApiKeysSection({
     <div className={NO_CAPTURE}>
       <SettingsSection title="API keys">
         {!signedIn ? (
-          <p className="settings-card-line settings-note">{PAGE_LINE.SIGNED_OUT}</p>
+          <SettingsLine>{PAGE_LINE.SIGNED_OUT}</SettingsLine>
         ) : keys !== undefined ? (
           PROVIDERS.map((provider) => (
             <ProviderKeyRow
@@ -385,11 +382,13 @@ export function ApiKeysSection({
             />
           ))
         ) : readFailed ? (
-          <ReadFailed line={PAGE_LINE.FAILED} onRetry={() => setAttempt((count) => count + 1)} />
+          <SettingsLine>
+            <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
+              {PAGE_LINE.FAILED}
+            </ErrorState>
+          </SettingsLine>
         ) : (
-          <div className="settings-card-line settings-reading">
-            <SpinnerRegion label="Loading your keys" />
-          </div>
+          <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>Loading your keys</SettingsLine>
         )}
       </SettingsSection>
     </div>
