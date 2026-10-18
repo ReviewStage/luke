@@ -382,6 +382,9 @@ export const MESSAGE_RETIRED = "This agent has ended. Continue in a new one to c
 /** What the press that starts a new agent on another's whole transcript says. */
 export const CONTINUE_LABEL = "Continue in new agent";
 
+/** What that press says in the note of an agent already continued, beside Archive. */
+export const CONTINUE_AGAIN_LABEL = "Continue again";
+
 /** What the line naming the agents that continued another says before their chips. */
 export const CONTINUED_IN = "Continued in";
 
@@ -432,6 +435,34 @@ export function continuedByTitles(agent: CodingAgentSummary): ReadonlyMap<string
 /** Whether a turn's end line is where an agent may be continued: it failed, and not on a refused API key, which a new agent would meet the same. */
 export function endLineContinues(status: CodingAgentStatus, endReason: FailureReason): boolean {
   return status === CODING_AGENT_STATUS.FAILED && endReason !== FAILURE_REASON.API_KEY;
+}
+
+/** What a failed end line's row ends on: no press, a press that carries nothing, or one that carries the box's words and files. */
+export const END_PRESS = {
+  NONE: "none",
+  EMPTY: "empty",
+  CARRYING: "carrying",
+} as const;
+
+export type EndPress = (typeof END_PRESS)[keyof typeof END_PRESS];
+
+/**
+ * What the end line's row offers after its words: Continue where the line
+ * continues the agent (`endLineContinues`). Once another agent continued
+ * it, the press stays, so a continuation gone wrong can be tried again,
+ * and carries the box's words, since the box gave way to the continued
+ * note and nothing else shows them. A box closed on an ended agent offers
+ * the press itself, carrying its words, so the line offers none.
+ */
+export function endLinePress(input: {
+  readonly status: CodingAgentStatus;
+  readonly endReason: FailureReason;
+  readonly continued: boolean;
+  readonly boxClosed: boolean;
+}): EndPress {
+  if (!endLineContinues(input.status, input.endReason)) return END_PRESS.NONE;
+  if (input.continued) return END_PRESS.CARRYING;
+  return input.boxClosed ? END_PRESS.NONE : END_PRESS.EMPTY;
 }
 
 /** Said beside Start when the model or effort the menu chose could not be kept as the default. */

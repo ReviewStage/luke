@@ -658,7 +658,7 @@
   }
 
   .conversation-empty-wide {
-    max-width: 440px; /* off-scale: a one-line failure's measure */
+    max-width: 560px; /* off-scale: a one-line failure's measure, Continue beside it */
   }
 
   /* Its own ground under the button, ringed and lifted off the lines, which
@@ -3393,14 +3393,31 @@ ol.transcript-list {
 
 /* The block a transcript ends on once its turn was stopped or failed, or
    once another agent continued it (`agent-tab.tsx`'s AgentEndLine): the
-   end line, then under it the row the end leads on to, Continue in new
-   agent or Continued in. In an empty transcript the two stand as siblings
-   in the empty state's own centred column instead. */
+   end line's row, then under it Continued in, where an archive took the
+   box. In an empty transcript the two stand as siblings in the empty
+   state's own centred column instead. */
 .agent-end {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-8);
+}
+
+/* The end line's row: the line, then Continue in new agent after its words
+   (and after the cost), centred on the line's text. Note that the line is
+   one flex item, so a failure too long to share the row takes it whole and
+   the press wraps under it, never between its words; in the empty state
+   the row is centred as its column is. */
+.agent-end-row {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+.conversation-empty > .agent-end-row {
+  justify-content: center;
 }
 
 /* Note that it keeps the gap the log's `space-y-3` leaves under every block
@@ -3437,9 +3454,9 @@ ol.transcript-list {
   vertical-align: middle;
 }
 
-/* Where an agent may be continued (`continue-agent.tsx`), under a failed
-   turn's end line or in a closed box's note: Continue in new agent, and
-   why it did not start where it did not. */
+/* Where an agent may be continued (`continue-agent.tsx`), on a failed
+   turn's end line's row, in a closed box's note, or in a continued box's:
+   Continue in new agent, and why it did not start where it did not. */
 .agent-continue {
   display: inline-flex;
   flex-wrap: wrap;

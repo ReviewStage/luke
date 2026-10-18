@@ -3,7 +3,7 @@ import type { Failure } from "@luke/features/failure-remedy";
 import { BANNER_LOOK, Banner, BUTTON_VARIANT, Button, TEXT_TONE, Text } from "@luke/ui";
 import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { ArrowRightIcon } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts";
 import { useAgentArchive } from "../desktop/agent-archive";
 import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
@@ -12,11 +12,11 @@ import { useContinueDoor } from "./fork-action";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
- * continue-agent.tsx -- where an agent may be continued in a new one: the press that starts it on the agent's whole transcript, and, once it was, the agents that continued it.
+ * continue-agent.tsx -- where an agent may be continued in a new one: the press that starts it on the agent's whole transcript, and, once it was, the agents that continued it beside the press that continues it again.
  *
- * The press ends a failed turn's end line, and the note of a box closed
- * because the agent's session has ended, whose words and files it carries
- * on, so nothing typed is lost. Where the agent's tab opens drafts
+ * The press ends a failed turn's end line, on its row, and the note of a box
+ * closed because the agent's session has ended, whose words and files it
+ * carries on, so nothing typed is lost. Where the agent's tab opens drafts
  * (`useContinueDoor`), the press opens the task's draft as a continue of
  * the agent, the words and files laid in its box, and lets the closed box's
  * go at once: nothing is sent until the developer sends the draft, an empty
@@ -27,13 +27,16 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * did not start. Nothing offers it where no Start could run: on an
  * archived task, or an agent on none.
  *
- * Once any agent continues this one (`continuedByIds`), the press is gone
- * and the agents are named in one place, each by its chip, which opens its
- * tab: the note that takes the box's place (`ContinuedComposerNote`), with
- * Stop while a turn still runs and Archive, since a continued agent is done
- * with; or, where the box is taken by an archived task's note, the row at
- * the transcript's end (`ContinuedTrail`). A fork is no continuation, so a
- * source with only forks keeps its box.
+ * Once any agent continues this one (`continuedByIds`), the agents are
+ * named in one place, oldest first, each by its chip, which opens its tab:
+ * the note that takes the box's place (`ContinuedComposerNote`), with Stop
+ * while a turn still runs, Continue again, since a continuation may itself
+ * fail or go wrong, and Archive, since a continued agent is done with; or,
+ * where the box is taken by an archived task's note, the row at the
+ * transcript's end (`ContinuedTrail`). A failed end line keeps its press
+ * then too. Each press is a continue of its own, under a key of its own
+ * (`use-coding-agents.ts`). A fork is no continuation, so a source with
+ * only forks keeps its box.
  */
 
 /** What the continued box's note offers, worded once. */
@@ -65,6 +68,7 @@ export function ContinueAgent({
   control,
   carry,
   offers = true,
+  label = CONTINUE_LABEL,
 }: {
   agentId: string;
   control: Pick<CodingAgentsControl, "continueAgent">;
@@ -72,6 +76,8 @@ export function ContinueAgent({
   carry?: ContinueCarry | undefined;
   /** Whether the press may stand here, where no other place offers it. */
   offers?: boolean;
+  /** What the press says: Continue in new agent, or Continue again in a continued agent's note. */
+  label?: string;
 }): React.JSX.Element | null {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(undefined);
@@ -118,7 +124,7 @@ export function ContinueAgent({
         busyLabel={CONTINUED_COPY.CONTINUING}
         onClick={press}
       >
-        {CONTINUE_LABEL}
+        {label}
       </Button>
       {note === undefined ? null : (
         <span className="agent-continue-note" role="alert">
@@ -189,14 +195,16 @@ export function ContinuedTrail(doors: ContinuedDoors): React.JSX.Element {
 /**
  * The quiet note in a continued agent's box, framed as the box it replaces:
  * Continued in and the agents' chips, then Stop while a turn still runs,
- * and Archive, bordered as a housekeeping press is, which asks first where
- * archiving would stop a turn (`useAgentArchive`) and toasts with Undo once
- * it took. An agent already archived is offered no Archive.
+ * Continue again (`press`), and Archive, both bordered as a housekeeping
+ * press is; Archive asks first where archiving would stop a turn
+ * (`useAgentArchive`) and toasts with Undo once it took. An agent already
+ * archived is offered no Archive.
  */
 export function ContinuedComposerNote({
   agent,
   doors,
   stop,
+  press,
   control,
   shown,
 }: {
@@ -204,6 +212,8 @@ export function ContinuedComposerNote({
   doors: ContinuedDoors;
   /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
   stop?: (() => Promise<void>) | undefined;
+  /** Continue again (`ContinueAgent`), whatever the agent stands as; none where no Start could run. */
+  press?: ReactNode;
   control: CodingAgentsControl;
   /** Whether the tab is on screen, which the archive's question goes with. */
   shown: boolean;
@@ -222,7 +232,9 @@ export function ContinuedComposerNote({
             look={BANNER_LOOK.ROW}
             glyph={<ArrowRightIcon aria-hidden="true" />}
             actions={
-              stop === undefined && agent.archivedAt !== undefined ? undefined : (
+              stop === undefined &&
+              press === undefined &&
+              agent.archivedAt !== undefined ? undefined : (
                 <>
                   {stop === undefined ? null : (
                     <Button
@@ -233,6 +245,7 @@ export function ContinuedComposerNote({
                       {CONTINUED_COPY.STOP}
                     </Button>
                   )}
+                  {press}
                   {agent.archivedAt !== undefined ? null : (
                     <Button variant={BUTTON_VARIANT.OUTLINE} onClick={archive.action.onSelect}>
                       {CONTINUED_COPY.ARCHIVE}

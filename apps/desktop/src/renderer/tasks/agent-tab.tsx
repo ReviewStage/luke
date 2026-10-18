@@ -83,14 +83,16 @@ import {
   agentTabLabel,
   agentWorkingPhase,
   archivedByReading,
+  CONTINUE_AGAIN_LABEL,
   chatNoticeOf,
   continuedByIds,
   continuedByTitles,
   delegates,
   dockedTodos,
+  END_PRESS,
   type EndLineParts,
-  endLineContinues,
   endLineParts,
+  endLinePress,
   endLineReason,
   lineSender,
   macOwnerOf,
@@ -1248,6 +1250,30 @@ function AgentEndLine({
   );
 }
 
+/**
+ * The end line's row: the line, then the press it ends on (Continue in new
+ * agent), on one row, centred on the line's words, which wraps the press
+ * under them only where the column is too narrow for both.
+ */
+function AgentEndRow({
+  ended,
+  endReason,
+  onOpenApiKeys,
+  press,
+}: {
+  ended: EndLineParts;
+  endReason: FailureReason | undefined;
+  onOpenApiKeys: (() => void) | undefined;
+  press: ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className="agent-end-row">
+      <AgentEndLine ended={ended} endReason={endReason} onOpenApiKeys={onOpenApiKeys} />
+      {press}
+    </div>
+  );
+}
+
 /** The transcript as the tab draws it: the messages, or what stands in their place. */
 function AgentTranscriptView({
   messages,
@@ -1271,6 +1297,7 @@ function AgentTranscriptView({
   readerId,
   taskId,
   replay,
+  endPress,
   endTrail,
 }: {
   messages: readonly CodingAgentMessage[];
@@ -1311,7 +1338,9 @@ function AgentTranscriptView({
   taskId?: string | undefined;
   /** Where a replay its first message holds is drawn as its own card, between the brief and the note (`replay-card.tsx`); none where no replay is read, as on a worker's tab. */
   replay?: ReplayPlace | undefined;
-  /** The row under the end line, or at the transcript's end where it has none: Continue in new agent, or the agents that continued it (`continue-agent.tsx`). */
+  /** What the end line's row ends on, after its words: Continue in new agent (`continue-agent.tsx`); nothing where it has no end line. */
+  endPress?: ReactNode;
+  /** The row under the end line, or at the transcript's end where it has none: the agents that continued it, where an archive took the box (`continue-agent.tsx`). */
   endTrail?: ReactNode;
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
@@ -1399,7 +1428,12 @@ function AgentTranscriptView({
           {ended === undefined && endTrail === undefined ? null : (
             <div className="agent-end" data-ended={ended === undefined ? undefined : ""}>
               {ended === undefined ? null : (
-                <AgentEndLine ended={ended} endReason={endReason} onOpenApiKeys={onOpenApiKeys} />
+                <AgentEndRow
+                  ended={ended}
+                  endReason={endReason}
+                  onOpenApiKeys={onOpenApiKeys}
+                  press={endPress}
+                />
               )}
               {endTrail}
             </div>
@@ -1427,7 +1461,12 @@ function AgentTranscriptView({
           {ended === undefined ? (
             <Text tone={TEXT_TONE.MUTED}>{lead.startingLine}</Text>
           ) : (
-            <AgentEndLine ended={ended} endReason={endReason} onOpenApiKeys={onOpenApiKeys} />
+            <AgentEndRow
+              ended={ended}
+              endReason={endReason}
+              onOpenApiKeys={onOpenApiKeys}
+              press={endPress}
+            />
           )}
           {endTrail}
         </>
@@ -1468,6 +1507,7 @@ function AgentTabView({
   readerId,
   run,
   replay,
+  endPress,
   endTrail,
   closedRemedy,
   continuedNote,
@@ -1512,7 +1552,9 @@ function AgentTabView({
   starter?: string | undefined;
   /** The reader's own account id, whose messages the transcript names nobody over, and whose Mac its Mac commands say is theirs. */
   readerId?: string | undefined;
-  /** What a failed turn's end line ends on (`continue-agent.tsx`); none where it ends on its words. */
+  /** What a failed turn's end line ends on, on its row (`continue-agent.tsx`); none where it ends on its words. */
+  endPress?: ReactNode;
+  /** The row under the end line, or at the transcript's end: the agents that continued it, where an archive took the box. */
   endTrail?: ReactNode;
   /** What mends the box once it closed for good (`continue-agent.tsx`). */
   closedRemedy?: ReactNode;
@@ -1583,6 +1625,7 @@ function AgentTabView({
                 )}
                 endReason={endLineReason(transcript.failure, starter)}
                 onOpenApiKeys={onOpenApiKeys}
+                endPress={endPress}
                 endTrail={endTrail}
                 onRetry={transcript.onRetry}
                 overComposer
@@ -1766,6 +1809,18 @@ export function AgentTab({
     control,
     onOpenAgent: openAgent,
   };
+  // The box's words and files, which a press carries into the continue where it takes the box's place.
+  const carry = {
+    words: composer.unsent.words,
+    attachments: composer.unsent.attachments,
+    taskId: agent.planId,
+  };
+  const press = endLinePress({
+    status: agent.status,
+    endReason: endLineReason(transcript.failure, starter),
+    continued: continued.length > 0,
+    boxClosed: composer.closed !== undefined,
+  });
   return (
     <MessagePlaceProvider value={agentMessagePlace(agent, messages)}>
       <AgentTabView
@@ -1805,20 +1860,20 @@ export function AgentTab({
           onOpenTarget,
           openGitHub,
         })}
-        endTrail={
-          continued.length > 0 ? (
-            // Note that the box's note names them while it stands, so the transcript names them only where an archive took the box.
-            control.onUnarchive === undefined ? undefined : (
-              <ContinuedTrail {...continuedDoors} />
-            )
-          ) : endLineContinues(agent.status, endLineReason(transcript.failure, starter)) ? (
-            // Note that a box closed on an ended agent offers the press itself, carrying its words.
+        endPress={
+          press === END_PRESS.NONE ? undefined : (
             <ContinueAgent
               agentId={agent.id}
               control={control}
-              offers={composer.closed === undefined}
+              carry={press === END_PRESS.CARRYING ? carry : undefined}
             />
-          ) : undefined
+          )
+        }
+        endTrail={
+          // Note that the box's note names them while it stands, so the transcript names them only where an archive took the box.
+          continued.length === 0 || control.onUnarchive === undefined ? undefined : (
+            <ContinuedTrail {...continuedDoors} />
+          )
         }
         continuedNote={
           continued.length === 0 ? undefined : (
@@ -1830,22 +1885,22 @@ export function AgentTab({
                   ? () => control.onStop(agent.id)
                   : undefined
               }
+              press={
+                control.continueAgent === undefined ? undefined : (
+                  <ContinueAgent
+                    agentId={agent.id}
+                    control={control}
+                    carry={carry}
+                    label={CONTINUE_AGAIN_LABEL}
+                  />
+                )
+              }
               control={control}
               shown={shown}
             />
           )
         }
-        closedRemedy={
-          <ContinueAgent
-            agentId={agent.id}
-            control={control}
-            carry={{
-              words: composer.unsent.words,
-              attachments: composer.unsent.attachments,
-              taskId: agent.planId,
-            }}
-          />
-        }
+        closedRemedy={<ContinueAgent agentId={agent.id} control={control} carry={carry} />}
       />
     </MessagePlaceProvider>
   );

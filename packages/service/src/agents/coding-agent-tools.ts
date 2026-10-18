@@ -146,8 +146,9 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * made away again, and a call run again answers the agent and task it made.
  * A start may instead go on from another agent of the workspace, on that
  * agent's own task, as the Start route's continue and fork do: without a
- * message it continues an agent that has ended and that no other agent
- * continued yet, which its start then stops, and with one of its messages
+ * message it continues an agent that has ended, which its start then stops,
+ * one another agent already continued among them, whose earlier
+ * continuations its answer names, and with one of its messages
  * it forks it there, which leaves it going on; either is handed the
  * source's brief, its replay with Luke's summary of what does not fit, a
  * copy of its work, and the note, and takes no prompt and no branch. A read
@@ -335,14 +336,6 @@ export const START_CODING_AGENT_REFUSAL = {
 export const LIST_MODELS_REFUSAL = {
   UNAVAILABLE: "Not listed: the models could not be read just now. The call may be made again.",
 } as const;
-
-/** The refusal of a continue of an agent another agent already continued, naming that one so the caller goes on from it. */
-function alreadyContinued(mention: string, agentId: string): string {
-  return (
-    `Not started: that agent was already continued by ${mention} (agent id ${agentId}); ` +
-    "continue or message that one instead, or fork this one at a messageId."
-  );
-}
 
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
 const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
@@ -649,7 +642,9 @@ export const START_AGENT_TOOL = {
     `${AGENT_TOOL.LIST_MODELS} lists them before you name one. With from, it starts from ` +
     "another agent instead: continue an agent (or worker) " +
     "that failed, ended, or ran out of context, which is handed over and stopped, or fork one " +
-    "at a messageId to try another direction while it goes on. A start from another agent " +
+    "at a messageId to try another direction while it goes on. An agent already continued may " +
+    "be continued again, and the answer then names the earlier continuations by their id and " +
+    "mention (earlierContinuations). A start from another agent " +
     "copies its work and summarizes its transcript, so it may take a minute to answer.",
   inputSchema: START_AGENT_INPUT,
 } as const;
@@ -1286,12 +1281,24 @@ export function runMessageAgent(
   );
 }
 
-/** The task a start from another agent lands on, the source's own, once the source is read and found fit to start from; or why it is not. */
+/** An agent that already continued the one a start continues, as the start's answer names it: its id and its mention. */
+interface EarlierContinuation {
+  readonly id: string;
+  readonly mention: string;
+}
+
+/** Where a start from another agent lands: the source's own task, and, for a continue, the agents that already continued the source, oldest first. */
+interface SourceLanding {
+  readonly taskId: string;
+  readonly continuedBy: readonly EarlierContinuation[];
+}
+
+/** The task a start from another agent lands on, the source's own, once the source is read and found fit to start from, with the agents that already continued it; or why it is not. */
 const sourceLanding = (
   caller: AgentCaller,
   from: CodingAgentStartFrom,
   named: string | undefined,
-): Effect.Effect<Result.Result<string, string>, StoreFailure, DatabaseServices> =>
+): Effect.Effect<Result.Result<SourceLanding, string>, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
     const found = yield* workspaceAgentOf(caller, from.agentId);
     if (Option.isNone(found)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_SOURCE);
@@ -1307,26 +1314,42 @@ const sourceLanding = (
       const role = MESSAGE_ROLE.ASSISTANT;
       const at = yield* messageSeqOf(userId, conversationId, from.messageId, role);
       if (Option.isNone(at)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_MESSAGE);
-      return Result.succeed(source.taskId);
+      return Result.succeed({ taskId: source.taskId, continuedBy: [] });
     }
-    // A continue takes over work that has ended, and only once: a second would split it in two.
+    // A continue takes over work that has ended; one already continued is
+    // continued again, since a continuation may itself fail or go wrong, and
+    // the answer names the earlier ones so the caller knows they stand.
     const { status } = (yield* standingsOf([source]))(source);
     if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
       return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_RUNNING);
     }
     const userId = callerUserId(caller);
     const continuations = (yield* continuationsOf(userId, [source.id])).get(source.id) ?? [];
-    const continuation = continuations.find((each) => each.messageId === undefined);
-    if (continuation !== undefined) {
-      const mention = writtenMention(
-        { kind: MENTION_KIND.AGENT, taskId: source.taskId, agentId: continuation.agentId },
-        continuation.title ?? CONTINUATION_NAME,
-        yield* workspaceStepOf(userId, workspaceId),
-      );
-      return Result.fail(alreadyContinued(mention, continuation.agentId));
-    }
-    return Result.succeed(source.taskId);
+    const earlier = continuations.filter((each) => each.messageId === undefined);
+    const taskId = source.taskId;
+    if (earlier.length === 0) return Result.succeed({ taskId, continuedBy: [] });
+    const step = yield* workspaceStepOf(userId, workspaceId);
+    const continuedBy = earlier.map(
+      (each): EarlierContinuation => ({
+        id: each.agentId,
+        mention: writtenMention(
+          { kind: MENTION_KIND.AGENT, taskId, agentId: each.agentId },
+          each.title ?? CONTINUATION_NAME,
+          step,
+        ),
+      }),
+    );
+    return Result.succeed({ taskId, continuedBy });
   });
+
+/** What a continue's answer adds where other agents already continued its source: those agents, oldest first, the one it started left out; nothing otherwise. */
+function earlierContinuations(
+  continuedBy: readonly EarlierContinuation[] | undefined,
+  startedId: string,
+): WireRecord {
+  const earlier = (continuedBy ?? []).filter((each) => each.id !== startedId);
+  return earlier.length === 0 ? {} : { earlierContinuations: earlier.map((each) => ({ ...each })) };
+}
 
 /** A start's refusal in the model's words, said of the source where the start named one: one that is none of the caller's, or a message that is none of the source's. */
 function startFromRefusalWords(
@@ -1426,7 +1449,7 @@ export function runStartAgent(
         return agentToolRejected(making.failure);
       }
       const made = making?.success;
-      const taskId = landing?.success ?? made?.id ?? named ?? ownTask;
+      const taskId = landing?.success.taskId ?? made?.id ?? named ?? ownTask;
       if (taskId === null) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK);
       const started = yield* startCodingAgent(Effect.succeed(eve), userId, {
         taskId: taskId,
@@ -1458,6 +1481,7 @@ export function runStartAgent(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: yield* startedReading(started.success.agent, yield* offeredModels, ownTask),
         ...(made === undefined ? undefined : { newTask: { ...made } }),
+        ...earlierContinuations(landing?.success.continuedBy, started.success.agent.id),
       };
     }),
   );
