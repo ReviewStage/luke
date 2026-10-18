@@ -1,6 +1,8 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import type { IssueChange } from "@luke/panel/desktop/use-issues";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BREADCRUMBS_VARIANT,
@@ -24,7 +26,6 @@ import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag } from "../experiment-marks";
 import { usePerson } from "../member-directory";
 import { RelativeTime } from "../tasks/relative-time";
-import { useMinute } from "../tasks/task-time";
 import { Tooltip } from "../tooltip";
 import { ActionMenu } from "./action-menu";
 import {
@@ -36,7 +37,6 @@ import {
 import { IssueDescription } from "./issue-description";
 import { PriorityMenu, StatusMenu } from "./issue-pickers";
 import { IssueWorkRow, useStartTaskItem } from "./issue-work";
-import type { IssueChange } from "./use-issues";
 
 /**
  * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, who filed it and when it was filed and last changed, its status and priority changed from their chips, the tasks started from it, its description written in place, a task started from it, its link copied, and its archive.

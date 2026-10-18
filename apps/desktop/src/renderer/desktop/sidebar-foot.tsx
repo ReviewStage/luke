@@ -3,6 +3,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useCapability } from "@luke/panel/use-app-state";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -45,7 +46,6 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand } from "../app-commands";
 import { useOpenPerson } from "../person-door";
 import { Tooltip } from "../tooltip";
-import { useCapability } from "../use-app-state";
 import { ActionMenu, type MenuEntry } from "./action-menu";
 import { OfflineMark } from "./offline-mark";
 

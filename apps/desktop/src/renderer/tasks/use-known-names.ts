@@ -1,8 +1,8 @@
 import type { KnownNames } from "@luke/features/place-chip-model";
+import { useAppState } from "@luke/panel/use-app-state";
 import { useMemo } from "react";
 import { useAutomation } from "../automation-directory";
 import { useMemberDirectory } from "../member-directory";
-import { useAppState } from "../use-app-state";
 
 /**
  * use-known-names.ts -- the names the window already holds for places in Luke, by id, for a chip to call a Luke link by.

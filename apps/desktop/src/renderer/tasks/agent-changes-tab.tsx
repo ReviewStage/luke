@@ -13,6 +13,7 @@ import {
 import { imageTypeOfPath } from "@luke/features/github-image";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   Button,
@@ -72,7 +73,6 @@ import { useDiffLook, useSplitRoom } from "./file-diff";
 import { LinesMenu, useSaveText } from "./file-menu";
 import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, usePaneRoom } from "./file-view";
-import { useFileViewSettings } from "./file-view-settings";
 import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff";
 import { LineComment, type PendingReview } from "./line-comment";
 import { PullRequestMark } from "./pull-request-mark";

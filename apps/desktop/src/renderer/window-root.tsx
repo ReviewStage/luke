@@ -14,6 +14,8 @@ import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { AppBridge } from "@luke/host/bridge";
 import { installAppBridge } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
+import { rendererRegistry } from "@luke/panel/renderer-runtime";
+import { appStateFirstRead } from "@luke/panel/use-app-state";
 import * as Sentry from "@sentry/electron/renderer";
 import { Effect } from "effect";
 import type { ReactNode } from "react";
@@ -24,8 +26,6 @@ import {
   withoutAccessTokens,
 } from "#shared/sentry-breadcrumbs";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
-import { rendererRegistry } from "./renderer-runtime";
-import { appStateFirstRead } from "./use-app-state";
 
 /**
  * Installs the window's bridge and platform, starts its tracing, and draws

@@ -12,6 +12,8 @@ import {
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import type { RunsRead } from "@luke/panel/desktop/use-automation-runs";
+import { momentText, sinceText, useMinute } from "@luke/panel/tasks/task-time";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -35,12 +37,10 @@ import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { centreWithin, scrollerOf } from "../tasks/code-pane";
-import { momentText, sinceText, useMinute } from "../tasks/task-time";
 import { Tooltip } from "../tooltip";
 import { ActionMenu } from "./action-menu";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups";
 import { usePaneSlide } from "./pane-motion";
-import type { RunsRead } from "./use-automation-runs";
 import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge";
 
 /**

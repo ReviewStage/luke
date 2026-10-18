@@ -14,6 +14,7 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
+import { WordsWorkspace } from "@luke/panel/tasks/use-link-standing";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -27,7 +28,6 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { MentionNodeChip } from "./mention-chip";
 import { MentionedAgents } from "./mentioned-agent-card";
 import { TranscriptWords } from "./transcript-blocks";
-import { WordsWorkspace } from "./use-link-standing";
 
 /**
  * mentioned-agent-card.test.ts -- a chip of a coding agent the place has no

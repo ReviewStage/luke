@@ -23,6 +23,7 @@
 
 import { useAtomValue } from "@effect/atom-react/Hooks";
 import { appBridge } from "@luke/panel/app-bridge";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import {
   AVATAR_VIEW_SIGNAL,
   type AvatarViewOffer,
@@ -31,7 +32,6 @@ import {
 import { Duration, Effect, Option, Queue, type Scope, Stream, SubscriptionRef } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
-import { rendererRuntime } from "../renderer-runtime";
 import { gatherIce } from "../voice/live-peer";
 import { callAvatarAtom } from "./call-avatar";
 

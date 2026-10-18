@@ -5,6 +5,7 @@ import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { PlanRevisionLine } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import { useFormerMembers, useWorkspaceMembers } from "@luke/panel/tasks/use-workspace-members";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import type { DialogConfirm } from "@luke/ui";
@@ -56,7 +57,6 @@ import {
 } from "../tasks/plan-history-model";
 import { RelativeTime } from "../tasks/relative-time";
 import type { MentionedTask } from "../tasks/task-mentions";
-import { useMinute } from "../tasks/task-time";
 import {
   HISTORY_READ,
   type OpenedSections,

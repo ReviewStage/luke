@@ -26,6 +26,7 @@ import {
   ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
+import { dayAndTimeText } from "@luke/panel/tasks/task-time";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
@@ -42,7 +43,6 @@ import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { OpenPersonProvider } from "../person-door";
-import { dayAndTimeText } from "../tasks/task-time";
 import { ToastHost } from "../toast";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 

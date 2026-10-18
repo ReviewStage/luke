@@ -15,7 +15,9 @@ import {
 import { useAct } from "@luke/panel/act";
 import { appBridge } from "@luke/panel/app-bridge";
 import { appPlatform } from "@luke/panel/app-platform";
+import { prefetchMarkdownHtmlParser } from "@luke/panel/markdown-html-parser";
 import { ListedPullRequestsProvider, OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
+import { useAppState, useExperiment } from "@luke/panel/use-app-state";
 import { useSignIn } from "@luke/panel/use-sign-in";
 import { APP_SETTING_SCHEMA, EXPERIMENT, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
@@ -60,7 +62,6 @@ import { GitHubConnectProvider } from "./github-connect";
 import { useKeyboardModality } from "./keyboard-modality";
 import { useLastSignIn } from "./last-sign-in";
 import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand";
-import { prefetchMarkdownHtmlParser } from "./markdown-html-parser";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { OpenFeedbackProvider } from "./open-feedback";
 import { OpenSettingsProvider } from "./open-settings";
@@ -78,7 +79,6 @@ import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/re
 import { useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast";
 import { useUpdatedToast } from "./update-toast";
-import { useAppState, useExperiment } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
 import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view";
 import { useWindowFullScreen } from "./window-full-screen";

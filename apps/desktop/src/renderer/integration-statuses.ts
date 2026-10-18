@@ -20,10 +20,10 @@ import {
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { rendererRuntime } from "./renderer-runtime";
 
 /**
  * integration-statuses.ts -- where every one of the account's integrations stands, as every surface that draws one reads it.

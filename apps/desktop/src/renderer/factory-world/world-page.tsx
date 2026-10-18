@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
+import { useFactoryWorld } from "@luke/panel/factory-world/use-factory-world";
 import { cssCustomProperties, EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import {
   blastRadiusOf,
@@ -25,7 +26,6 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
 import { usePrefersReducedMotion } from "../use-reduced-motion";
 import type { FactorySceneHandle, FactorySceneModule, SceneHover } from "./contract";
 import type { WorldEntry } from "./registry";
-import { useFactoryWorld } from "./use-factory-world";
 import {
   PICK_KIND,
   type PickTarget,

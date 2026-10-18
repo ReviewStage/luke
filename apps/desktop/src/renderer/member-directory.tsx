@@ -5,9 +5,9 @@ import {
   useFormerMembersRead,
   useWorkspaceMembersRead,
 } from "@luke/panel/tasks/use-workspace-members";
+import { useAppState } from "@luke/panel/use-app-state";
 import { type Actor, accountActor, creatorActor, personActor } from "@luke/ui/actor-model";
 import { createContext, type ReactNode, useCallback, useContext } from "react";
-import { useAppState } from "./use-app-state";
 
 /**
  * member-directory.tsx -- the members of the workspace the open task lives in, read once for everything in the task that names a person.

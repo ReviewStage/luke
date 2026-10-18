@@ -15,9 +15,9 @@ import { MENTION_KIND, type Mention } from "@luke/features/mention-link";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { useAct } from "@luke/panel/act";
 import { createContext, useContext, useEffect, useState } from "react";
-import { useAppState } from "../use-app-state";
+import { useAct } from "../act.js";
+import { useAppState } from "../use-app-state.js";
 
 /**
  * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, where it stands, who it is with, and a pull request's lines added and removed, read through the workspace's own connection.
