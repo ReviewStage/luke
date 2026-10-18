@@ -114,6 +114,8 @@ let viewedAnswer: CodingAgentPullRequestViewedAnswerView = {
 };
 /** How many times the marks were read. */
 let viewedReads = 0;
+/** What the next read of the marks waits on, where a test holds it; none answers at once. */
+let viewedHeld: Promise<void> | undefined;
 
 const control = codingAgentsControl({
   agents: [AGENT],
@@ -121,7 +123,8 @@ const control = codingAgentsControl({
   models: [],
   readPullRequestViewed: () => {
     viewedReads += 1;
-    return Promise.resolve(viewedAnswer);
+    const answer = viewedAnswer;
+    return (viewedHeld ?? Promise.resolve()).then(() => answer);
   },
   readChanges: () =>
     Promise.resolve({
@@ -196,6 +199,7 @@ beforeEach(() => {
   commits = {};
   viewedAnswer = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
   viewedReads = 0;
+  viewedHeld = undefined;
   boxWidth = 900;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
@@ -1115,4 +1119,117 @@ test("the marks are read again with the files on Refresh changes, so the two des
   await flush();
 
   assert.equal(viewedReads, 2);
+});
+
+/** Every mark asked of the service, each held until the test answers it. */
+function holdMarks(): Array<{
+  readonly request: PullRequestActionRequest;
+  readonly answer: (answer: PullRequestWriteAnswer) => void;
+}> {
+  const held: Array<{
+    readonly request: PullRequestActionRequest;
+    readonly answer: (answer: PullRequestWriteAnswer) => void;
+  }> = [];
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+      }
+      const answered = Promise.withResolvers<ActOutcome>();
+      held.push({
+        request: request.payload.request,
+        answer: (value) => answered.resolve({ status: ACT_OUTCOME_STATUS.DONE, value }),
+      });
+      return answered.promise;
+    },
+  });
+  handSettings();
+  return held;
+}
+
+const DONE: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+
+test("presses on one file go to GitHub one at a time, the last of them winning, whatever order GitHub could have answered them in", async () => {
+  viewedAnswer = MARKED;
+  const held = holdMarks();
+  files = [changed("c.ts")];
+  await drawTab();
+
+  act(() => viewedBox("c.ts").click());
+  act(() => viewedBox("c.ts").click());
+  await flush();
+  assert.equal(held.length, 1, "the second press waits for the first");
+  assert.equal(viewedBox("c.ts").checked, false);
+
+  held[0]?.answer(DONE);
+  await flush();
+  assert.deepEqual(
+    held.map((each) => each.request),
+    [
+      { action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: "c.ts" },
+      { action: PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED, path: "c.ts" },
+    ],
+  );
+  held[1]?.answer(DONE);
+  await flush();
+  assert.equal(viewedBox("c.ts").checked, false);
+  assert.match(document.querySelector(".file-tree-foot")?.textContent ?? "", /0 \/ 1 viewed/u);
+});
+
+test("a read asked before a mark settled never undoes it, and a read that does not answer takes the boxes away", async () => {
+  viewedAnswer = MARKED;
+  const held = holdMarks();
+  files = [changed("c.ts")];
+  await drawTab();
+
+  // A refresh's read stays out while the member marks the file and GitHub takes it.
+  const reading = Promise.withResolvers<void>();
+  viewedHeld = reading.promise;
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+  await flush();
+  act(() => viewedBox("c.ts").click());
+  await flush();
+  held[0]?.answer(DONE);
+  await flush();
+  reading.resolve();
+  await flush();
+  assert.equal(viewedBox("c.ts").checked, true, "the read from before the mark leaves it standing");
+
+  viewedHeld = undefined;
+  viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
+  act(() => options?.click());
+  const again = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => again?.click());
+  await flush();
+  assert.equal(header("c.ts").querySelector(".diff-list-viewed") === null, true);
+});
+
+test("unmarking a deleted file opens it, and a press GitHub refuses puts back the fold chosen before", async () => {
+  viewedAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+    files: [{ path: "old.ts", state: FILE_VIEWED_STATE.VIEWED }],
+  };
+  let refuse = false;
+  answerMarks(() =>
+    refuse ? { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Locked." } : DONE,
+  );
+  files = [changed("old.ts", { status: CHANGED_FILE_STATUS.DELETED }), changed("new.ts")];
+  await drawTab();
+  assert.deepEqual(folds()[1], ["old.ts", true]);
+
+  act(() => viewedBox("old.ts").click());
+  await flush();
+  assert.deepEqual(folds()[1], ["old.ts", false], "unmarked, the deleted file opens");
+
+  refuse = true;
+  act(() => viewedBox("new.ts").click());
+  await flush();
+  assert.deepEqual(folds()[0], ["new.ts", false], "a refused mark leaves the file as it was");
 });

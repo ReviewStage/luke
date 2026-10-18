@@ -136,7 +136,8 @@ function chosenOr(chosen: ReadonlyMap<string, boolean>, path: string, otherwise:
 /** Which of the files the member marked viewed on GitHub, and the door that marks or unmarks one (`viewed-files.ts`). */
 export interface ViewedMarks {
   readonly viewed: (path: string) => boolean;
-  readonly toggle: (path: string) => void;
+  /** Marks or unmarks a file, answering once GitHub settled it whether the member's last press for it stands. */
+  readonly toggle: (path: string) => Promise<boolean>;
 }
 
 /** The list's state and doors: the files kept, each fold, the file stood on and the one at the top, and what the keys and controls do. */
@@ -201,18 +202,24 @@ export function useChangesList(
     (path: string) => setChosen((was) => new Map(was).set(path, folds.get(path) !== true)),
     [folds],
   );
-  // A file marked viewed folds, and one unmarked opens, whatever the developer chose for it before.
+  // A file marked viewed folds, and one unmarked opens, whatever was chosen for it before, which comes back where GitHub would not take the press.
   const markViewed = useCallback(
     (path: string) => {
       if (marks === undefined) return;
-      marks.toggle(path);
-      setChosen((was) => {
-        const next = new Map(was);
-        next.delete(path);
-        return next;
+      const before = chosen.get(path);
+      const folding = !marks.viewed(path);
+      setChosen((was) => new Map(was).set(path, folding));
+      void marks.toggle(path).then((stood) => {
+        if (stood) return;
+        setChosen((was) => {
+          const next = new Map(was);
+          if (before === undefined) next.delete(path);
+          else next.set(path, before);
+          return next;
+        });
       });
     },
-    [marks],
+    [marks, chosen],
   );
   const asSource = useCallback((path: string) => sources.has(path), [sources]);
   const toggleSource = useCallback((path: string) => setSources((was) => turned(was, path)), []);
