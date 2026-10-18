@@ -272,6 +272,7 @@ function TaskInboxTab({
         view={list}
         chosen={chosen?.item.id}
         columns={columns.shown}
+        rows={columns.rows}
         head={{
           shown,
           needsYou,

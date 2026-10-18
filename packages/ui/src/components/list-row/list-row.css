@@ -98,6 +98,12 @@
     font-weight: var(--luke-weight-medium);
   }
 
+  /* What has not been seen reads in the heavier weight until it is, as a
+     mail app's unread rows do. */
+  .luke-list-row[data-unread="true"] .luke-list-row-title {
+    font-weight: var(--luke-weight-bold);
+  }
+
   .luke-list-row-description,
   .luke-list-row-meta {
     color: var(--luke-color-text-muted);

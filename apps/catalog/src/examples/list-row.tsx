@@ -1,11 +1,21 @@
-import { EllipsisIcon, IconButton, List, ListRow, PencilIcon, TrashIcon, UserIcon } from "@luke/ui";
+import {
+  EllipsisIcon,
+  IconButton,
+  LIST_ROW_CURRENT,
+  List,
+  ListRow,
+  PencilIcon,
+  TrashIcon,
+  UserIcon,
+} from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * list-row.tsx -- a list's rows with their metadata and acts lined up, the
- * one open now, rows that open nothing, and long words in a narrow column.
+ * one open now, unread rows, rows that open nothing, and long words in a
+ * narrow column.
  */
 
 const MEMBERS = [
@@ -25,7 +35,7 @@ function Members(): React.JSX.Element {
           title={member.name}
           description={member.email}
           meta={member.role}
-          current={open === member.id}
+          current={open === member.id ? LIST_ROW_CURRENT.ITEM : undefined}
           onPress={() => setOpen(member.id)}
           actions={<IconButton icon={<EllipsisIcon />} label={`More for ${member.name}`} />}
         />
@@ -40,6 +50,21 @@ function ListRows(): React.JSX.Element {
       <CatalogSection id="list-row-rows" title="Rows that open, with their acts">
         <div className="catalog-column">
           <Members />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="list-row-unread" title="Unread rows beside read ones">
+        <div className="catalog-column">
+          <List label="Inbox items">
+            <ListRow title="Approve the release notes" meta="5m" unread onPress={() => undefined} />
+            <ListRow
+              title="Review the migration plan"
+              meta="1h"
+              current={LIST_ROW_CURRENT.PAGE}
+              unread
+              onPress={() => undefined}
+            />
+            <ListRow title="Pick a name for the workspace" meta="2d" onPress={() => undefined} />
+          </List>
         </div>
       </CatalogSection>
       <CatalogSection id="list-row-static" title="Rows that open nothing">

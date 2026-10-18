@@ -1,4 +1,13 @@
-import type { KeyboardEvent, MouseEvent, ReactNode, RefCallback } from "react";
+import type {
+  ComponentType,
+  FocusEventHandler,
+  KeyboardEvent,
+  MouseEvent,
+  PointerEventHandler,
+  ReactElement,
+  ReactNode,
+  RefCallback,
+} from "react";
 
 /**
  * list-row.tsx -- a List of rows, each a thing a collection holds: its title, a line under it, its metadata at the end, and the acts it offers beside it.
@@ -25,7 +34,40 @@ import type { KeyboardEvent, MouseEvent, ReactNode, RefCallback } from "react";
  * no keys, which would only be its acts'. `onContextMenu` hears a
  * right-click anywhere on the row, its acts included, so the app can open
  * its own menu there.
+ *
+ * The open row is current in one of two ways (`LIST_ROW_CURRENT`): the page
+ * shown beside the list, as an Inbox's item is, or the one item chosen in
+ * its set. An unread row's title stands in the heavier weight until it is
+ * read. A row that opens something may hang the app's hint from its press
+ * (`hint`), as a Button's hint hangs: the app's own tooltip, handed the
+ * words to raise and the press it wraps, whose pointer and focus handlers
+ * land on the press itself.
  */
+
+/** How the open row is current: the page shown beside the list, or the item chosen in its set. */
+export const LIST_ROW_CURRENT = {
+  PAGE: "page",
+  ITEM: "true",
+} as const;
+
+export type ListRowCurrent = (typeof LIST_ROW_CURRENT)[keyof typeof LIST_ROW_CURRENT];
+
+/** What a hint hands the press it wraps: when to show and go, and what it says of the press. */
+interface ListRowHintProps {
+  "aria-describedby"?: string | undefined;
+  "aria-keyshortcuts"?: string | undefined;
+  onPointerEnter?: PointerEventHandler<HTMLElement> | undefined;
+  onPointerLeave?: PointerEventHandler<HTMLElement> | undefined;
+  onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
+  onFocus?: FocusEventHandler<HTMLElement> | undefined;
+  onBlur?: FocusEventHandler<HTMLElement> | undefined;
+}
+
+/** The app's hint a row's press hangs: its words, and the press it wraps. */
+export type ListRowHint = ComponentType<{
+  label: string | undefined;
+  children: ReactElement<ListRowHintProps>;
+}>;
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
@@ -56,6 +98,8 @@ export function ListRow({
   actions,
   onPress,
   current,
+  unread,
+  hint,
   ref,
   onKeyDown,
   onContextMenu,
@@ -71,8 +115,12 @@ export function ListRow({
   actions?: ReactNode;
   /** What pressing the row does; a row without one is not a control. */
   onPress?: (() => void) | undefined;
-  /** Whether the row is the one open now, drawn and announced as current. */
-  current?: boolean | undefined;
+  /** How the row is the one open now, drawn and announced as current; nothing where it is not. */
+  current?: ListRowCurrent | undefined;
+  /** Whether what the row stands for has not been seen, its title in the heavier weight. */
+  unread?: boolean | undefined;
+  /** The app's hint hung from the row's press and the words it raises; a row that opens nothing raises none. */
+  hint?: { readonly Hint: ListRowHint; readonly label: string } | undefined;
   /** Handed the row's press, or its item where it opens nothing. A callback, so one list keeps each row's by its own key. */
   ref?: RefCallback<HTMLElement> | undefined;
   /** A key pressed on the row's press; a row that opens nothing hears none. */
@@ -96,28 +144,34 @@ export function ListRow({
       {said(meta) ? <span className="luke-list-row-meta">{meta}</span> : null}
     </>
   );
+  const press = onPress ? (
+    <button
+      ref={ref}
+      type="button"
+      className="luke-list-row-main"
+      aria-current={current}
+      onClick={onPress}
+      onKeyDown={onKeyDown}
+    >
+      {face}
+    </button>
+  ) : undefined;
   return (
     <li
       ref={onPress ? undefined : ref}
       className="luke-list-row"
-      data-current={current === true ? "true" : undefined}
+      data-current={current === undefined ? undefined : "true"}
+      data-unread={unread === true ? "true" : undefined}
       onContextMenu={onContextMenu}
     >
-      {onPress ? (
-        <button
-          ref={ref}
-          type="button"
-          className="luke-list-row-main"
-          aria-current={current === true ? "true" : undefined}
-          onClick={onPress}
-          onKeyDown={onKeyDown}
-        >
-          {face}
-        </button>
-      ) : (
-        <div className="luke-list-row-main" aria-current={current === true ? "true" : undefined}>
+      {press === undefined ? (
+        <div className="luke-list-row-main" aria-current={current}>
           {face}
         </div>
+      ) : hint === undefined ? (
+        press
+      ) : (
+        <hint.Hint label={hint.label}>{press}</hint.Hint>
       )}
       {said(actions) ? <div className="luke-list-row-actions">{actions}</div> : null}
     </li>
