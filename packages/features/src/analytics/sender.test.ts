@@ -220,9 +220,9 @@ it.effect("a day marked for one account is never sent under the next account's b
   }),
 );
 
-it.effect("a clock set back across midnight counts no day again", () =>
+it.effect("a clock that was wrong hides no real day, and costs one count at most", () =>
   Effect.gen(function* () {
-    let now = NEXT_NOON;
+    let now = Date.parse("2027-08-20T12:00:00.000Z");
     const options = {
       recordedDays: keptDays(),
       readAccountKey: () => Effect.succeed("ada@luke.test"),
@@ -230,8 +230,11 @@ it.effect("a clock set back across midnight counts no day again", () =>
     };
 
     assert.equal(yield* launch(options), 1);
+    // Corrected back a year: today was never counted, so it is, once.
     now = NOON;
+    assert.equal(yield* launch(options), 1);
     assert.equal(yield* launch(options), 0);
-    assert.equal(yield* launch(options), 0);
+    now = NEXT_NOON;
+    assert.equal(yield* launch(options), 1);
   }),
 );

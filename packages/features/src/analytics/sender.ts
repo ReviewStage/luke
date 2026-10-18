@@ -281,9 +281,9 @@ export class ProductEventSender {
       // queued this day while it was under way.
       if (accounts.get(account) === day) return;
       accounts.set(account, day);
-      // A kept day only moves forward, so one at or past today means today is
-      // counted already, a clock set back across midnight included.
-      if (kept !== undefined && kept >= day) return;
+      // Note that only the very day counts as kept, because a clock that was
+      // wrong must never hide a real day: it costs one count at most instead.
+      if (kept === day) return;
       this.#enqueue(name, properties, { name, discriminator, account, day });
     });
   }
