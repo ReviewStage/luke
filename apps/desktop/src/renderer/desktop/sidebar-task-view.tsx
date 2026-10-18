@@ -93,11 +93,11 @@ export function SidebarSectionHead({
 function filteredActor(
   createdBy: string,
   reader: ReturnType<typeof useMemberDirectory>,
-  plans: readonly TaskSummary[],
+  tasks: readonly TaskSummary[],
 ): Actor {
   const member = reader.members?.find((each) => each.userId === createdBy);
   if (member !== undefined) return memberActor(member, reader.readerId);
-  const named = plans.find((plan) => plan.createdBy?.userId === createdBy);
+  const named = tasks.find((task) => task.createdBy?.userId === createdBy);
   return creatorActor(named ?? { ownerId: createdBy }, reader, undefined);
 }
 

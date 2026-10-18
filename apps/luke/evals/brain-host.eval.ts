@@ -120,8 +120,8 @@ function readMessagesByTurn(run: Run, conversationId: string, turnId: string) {
 }
 
 /** The id of the task's conversation, opened on its first call; the task must stand. */
-async function taskConversation(run: Run, planId: string): Promise<string> {
-  const opened = await run(openTaskConversation(LOCAL_DEV_PRINCIPAL, planId));
+async function taskConversation(run: Run, taskId: string): Promise<string> {
+  const opened = await run(openTaskConversation(LOCAL_DEV_PRINCIPAL, taskId));
   assert.ok(Option.isSome(opened));
   return opened.value.conversationId;
 }
@@ -184,13 +184,13 @@ export default defineEval({
       // The brain is handed the saved document and answers in words;
       // the notetaker beside the call writes the plan, so the turn leaves the
       // document as it stood.
-      const plan = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
-      await run(savePlanText(LOCAL_DEV_PRINCIPAL, plan.id, PLAN_TEXT));
-      const taskConversationId = await taskConversation(run, plan.id);
+      const task = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
+      await run(savePlanText(LOCAL_DEV_PRINCIPAL, task.id, PLAN_TEXT));
+      const taskConversationId = await taskConversation(run, task.id);
       const tasks = await openSession(taskConversationId, PLAN_WORDS.FIRST);
       const tasksSession = await t.target.attachSession(tasks.sessionId);
       tasksSession.succeeded();
-      assert.deepEqual(await planDocument(run, plan.id), PLAN_SAVED);
+      assert.deepEqual(await planDocument(run, task.id), PLAN_SAVED);
 
       const turnId = hostTurnId(tasks.sessionId, "turn_0");
       const turn = await readTurnById(run, turnId);

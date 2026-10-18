@@ -452,12 +452,12 @@ function layOutRows(): void {
 
 /** The sidebar listing `plans` over `sections`, laid out down one column, what a drag asks heard by `asked`. */
 async function mountDraggable(
-  plans: readonly TaskSummary[],
+  summaries: readonly TaskSummary[],
   sections: TaskSections,
   asked: Asked,
 ): Promise<HTMLElement> {
   const tasks = tasksControl({
-    tasks: [...plans],
+    tasks: [...summaries],
     workspaces: [WORKSPACE],
     workspace: WORKSPACE,
     taskSections: sections,

@@ -118,7 +118,7 @@ function task(
   ago: number,
   agents: readonly TaskAgentLine[] = [],
 ): TaskSummary {
-  const plan: TaskSummary = {
+  const summary: TaskSummary = {
     id: `11111111-0000-4000-8000-${String(n).padStart(12, "0")}`,
     workspaceId: ACME.id,
     name,
@@ -128,9 +128,9 @@ function task(
     ownerId: createdBy.userId,
     createdBy,
   };
-  if (agents.length === 0) return plan;
+  if (agents.length === 0) return summary;
   return {
-    ...plan,
+    ...summary,
     agents: {
       total: agents.length,
       working: 0,
@@ -265,14 +265,14 @@ function mountWith(
   memberCount = MEMBERS.length,
 ) {
   const opened: Opened = { plans: [], agents: [], inbox: [], settings: [] };
-  const plans = tasksControl({
+  const tasks = tasksControl({
     me: DEAN.userId,
     workspace: { ...ACME, memberCount },
     tasks: TASKS,
     listed: { tasks: TASKS, archived: [], ...HOLDING },
     ...HOLDING,
-    onSelect: (planId) => opened.plans.push(planId),
-    onShowAgent: (planId, agentId) => opened.agents.push([planId, agentId]),
+    onSelect: (taskId) => opened.plans.push(taskId),
+    onShowAgent: (taskId, agentId) => opened.agents.push([taskId, agentId]),
     inboxView: {
       open: false,
       chosen: undefined,
@@ -294,7 +294,7 @@ function mountWith(
         createElement(
           OpenSettingsProvider,
           { value: (link: SettingsLink) => opened.settings.push(link) },
-          createElement(PersonPage, { tasks: plans, userId, name }),
+          createElement(PersonPage, { tasks: tasks, userId, name }),
         ),
       ),
     ),
