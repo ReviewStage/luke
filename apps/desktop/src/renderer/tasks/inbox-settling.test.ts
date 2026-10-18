@@ -196,11 +196,14 @@ test("the window keeps only its latest answers: the oldest taken gives way once 
   assert.equal(probe.drawn[200]?.status, INBOX_STATUS.ANSWERED);
 });
 
-test("another account signed in to the window draws its reads as they hold them, never the answers the last account sent, and an answer the last account had out moves nothing of its", () => {
+test("another account signed in to the window draws its reads as they hold them, never the answers the last account sent, and an answer the last account had out moves nothing of its; the same account learning its id keeps its own", () => {
   const registry = AtomRegistry.make();
   const probe: Probe = { count: 0, drawn: [], settler: undefined };
-  function Page({ account }: { account: string }) {
-    useInboxSettlingOwner({ id: account, email: `${account}@example.com` });
+  function Page({ account, id }: { account: string; id?: string }) {
+    useInboxSettlingOwner({
+      ...(id === undefined ? undefined : { id }),
+      email: `${account}@example.com`,
+    });
     probe.drawn = useSettledItems([ASKED]);
     probe.settler = useInboxSettler();
     return null;
@@ -213,6 +216,12 @@ test("another account signed in to the window draws its reads as they hold them,
   act(() => {
     sent = probe.settler?.answer(ASKED, NOTE);
   });
+  assert.equal(probe.drawn[0]?.status, INBOX_STATUS.ANSWERED);
+
+  // The same account's identity, stored without an id, learns it as it renews.
+  act(() =>
+    root?.render(onRegistry(registry, createElement(Page, { account: "dana", id: "user-dana" }))),
+  );
   assert.equal(probe.drawn[0]?.status, INBOX_STATUS.ANSWERED);
 
   signIn("charles");

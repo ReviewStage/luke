@@ -140,7 +140,7 @@ function changed(
   return next;
 }
 
-/** The account signed in to this window, whose sends the book holds: its id, or its address where its identity names none. */
+/** The account signed in to this window, whose sends the book holds, by its address. */
 type Owner = string | null;
 
 const ownerAtom = Atom.keepAlive(Atom.make<Owner>(null));
@@ -168,11 +168,10 @@ const settlingAtom = Atom.writable(
  * reads; a send still on its way when the account changes finds nothing of
  * its own in the next account's book, and moves nothing there.
  */
-export function useInboxSettlingOwner(
-  account: { readonly id?: string | undefined; readonly email: string } | undefined,
-): void {
+export function useInboxSettlingOwner(account: { readonly email: string } | undefined): void {
   const own = useAtomSet(ownerAtom);
-  const owner = account?.id ?? account?.email ?? null;
+  // Note that the book is the address's, never the id's, because an identity stored without an id learns it as it renews, and the book must not change hands then.
+  const owner = account?.email ?? null;
   useLayoutEffect(() => {
     own(owner);
   }, [own, owner]);
