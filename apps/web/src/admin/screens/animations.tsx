@@ -99,7 +99,7 @@ function AnimationCard({ entry }: { entry: AnimationEntry }): React.JSX.Element 
             return markup === undefined ? (
               <div
                 key={variant}
-                className={`${PREVIEW_FRAME} grid place-items-center border border-dashed border-border px-2 text-center`}
+                className={`${PREVIEW_FRAME} grid place-items-center border border-dashed border-(--luke-color-border) px-2 text-center`}
               >
                 <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                   No committed asset
@@ -140,7 +140,7 @@ export function AnimationsScreen({
   account: ViewerAccount | undefined;
   onSignOut: () => void;
 }): React.JSX.Element {
-  // SMIL loops answer to neither `--face-motion` nor `prefers-reduced-motion`,
+  // SMIL loops answer to neither `--luke-face-motion` nor `prefers-reduced-motion`,
   // so the page holds them still itself wherever the reader asked the system
   // for less motion, following the setting as it changes.
   const previewsRef = useRef<HTMLDivElement>(null);

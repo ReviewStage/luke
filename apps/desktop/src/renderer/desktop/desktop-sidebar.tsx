@@ -39,6 +39,7 @@ import {
   ErrorState,
   FolderIcon,
   IconButton,
+  NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
   PinIcon,
@@ -943,8 +944,9 @@ function SidebarHomeRow({
 /**
  * The Inbox's row, last of the rows heading the list and drawn as they are:
  * the tray, its name, and how many items wait on the developer across every
- * task at its end, the sum of the counts the Inbox's rows show, muted in
- * even figures as a group's count is, and nothing at none. Its chord takes the count's place while the row is hovered or
+ * task at its end, the sum of the counts the Inbox's rows show, in even
+ * figures and the accent's blue, since they wait on the developer, and
+ * nothing at none. Its chord takes the count's place while the row is hovered or
  * reached from the keyboard, as New task's and Search's show theirs. A press
  * opens the window's Inbox (`desktop-inbox.tsx`), and the row is the place
  * shown while it stands.
@@ -967,6 +969,7 @@ function SidebarInboxRow({
       count={{
         value: waiting,
         noun: waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many,
+        tone: NAV_COUNT_TONE.ACCENT,
       }}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
@@ -987,7 +990,7 @@ function waitingMessages(tasks: TasksControl): number {
 /**
  * Chat's row, under the Inbox's and drawn as it is: the glyph, its name, and
  * how many messages wait on the developer in For you at its end, in the
- * Inbox's muted figures, nothing at none. A press opens the window's Chat
+ * Inbox's even figures but muted, nothing at none. A press opens the window's Chat
  * (`desktop-chat.tsx`), and the row is the place shown while it stands.
  */
 function SidebarChatRow({

@@ -101,8 +101,9 @@ function ReleaseEntry({ release }: { readonly release: Release }): React.JSX.Ele
 }
 
 /* The navs stand under the notes' column, not centred on the page, so they
-   line up with what they page through; on one column there is no rail to clear. */
-const UNDER_NOTES = "ml-[calc(8.5rem+2.5rem)] pt-4 max-[640px]:ml-0";
+   line up with what they page through: clear of the entry's 8.5rem rail and
+   its `gap-10`, 176px in all; on one column there is no rail to clear. */
+const UNDER_NOTES = "ml-44 pt-4 max-[640px]:ml-0";
 
 /** The changelog's pages as numbers, the current one held, with a step to either side. */
 function PageNumbers({

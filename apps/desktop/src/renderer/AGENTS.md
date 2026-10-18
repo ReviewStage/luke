@@ -95,7 +95,7 @@ dialog goes on showing; a row holding a bare `useState(false)` keeps neither.
 `repository-checks.sh` runs `packages/brand/scripts/generate-brand-assets.mjs --check` and fails
 on drift, so the generated outputs cannot be hand-edited. What the check does not
 say is why the app draws the face rather than loading the SVGs: it needs
-`currentColor` and CSS animation, and `--face-motion` is what holds every loop
+`currentColor` and CSS animation, and `@luke/ui`'s `--luke-face-motion` is what holds every loop
 still for a capture run and for reduced motion. SMIL answers to neither.
 
 The face is still unless something is happening. A gesture plays once and a rest

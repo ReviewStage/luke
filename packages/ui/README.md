@@ -66,8 +66,12 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
 - **Motion** (`motion-tokens.css`, generated from `@luke/brand`'s tables by
   `pnpm --filter @luke/brand generate`; `motion.css`): `--luke-duration-*`,
   `--luke-spring-fast`, `--luke-motion-exit|pane`, `--luke-hint-delay`, and
-  `--luke-loop-motion`, the play state an endless loop holds. Reduced motion
-  zeroes the durations but hover's and pauses the loop. A component reads
+  `--luke-loop-motion`, the play state an endless loop holds, and
+  `--luke-face-motion`, the face's. Reduced motion zeroes the durations but
+  hover's and pauses both loops. The face's own rules are `face/face.css`, and
+  its motions `face/face-motion.css`, which `@luke/brand`'s
+  `generate-brand-assets.mjs` writes; an app sets only the face's size where
+  it lays one out. A component reads
   only `--luke-*` custom properties (`scripts/repository-checks.sh`).
 - **Placement hooks**: the few properties an app may set on a component's
   container, each the one way a measurement of the app's reaches inside.

@@ -10,10 +10,10 @@
 //
 //   packages/brand/assets/**.svg                              standalone assets (SMIL)
 //   packages/brand/src/generated/face-art.ts       the face and the wordmark's letters
-//   apps/desktop/src/renderer/styles/generated/face-motion.css  the motions, as @keyframes
+//   packages/ui/src/face/face-motion.css           the motions, as @keyframes
 //
 // The app draws the face itself rather than loading these SVGs, because it needs
-// what a baked asset cannot give it: `currentColor` and CSS animation, so the renderer's own motion tokens
+// what a baked asset cannot give it: `currentColor` and CSS animation, so `@luke/ui`'s motion tokens
 // can hold every loop still for a capture run or for reduced motion. Emitting
 // its two inputs from here keeps that second copy from being a second source.
 //
@@ -27,7 +27,7 @@ import { DMG_WINDOW } from "./dmg-window.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, "..", "assets");
-const APP_RENDERER = join(HERE, "..", "..", "..", "apps", "desktop", "src", "renderer");
+const UI_FACE = join(HERE, "..", "..", "ui", "src", "face");
 const SURFACE = join(HERE, "..", "src", "generated");
 
 // ---------- Palette ----------
@@ -777,13 +777,13 @@ function motionSvg(motion) {
 }
 
 // ---------- Motions as CSS ----------
-// The app cannot use the SMIL above: it needs the renderer's `--face-motion`
+// The app cannot use the SMIL above: it needs `@luke/ui`'s `--luke-face-motion`
 // token to be able to stop every loop at once, which only CSS animation offers.
 // Each layer, each eye, and each brow becomes one @keyframes and one rule that
 // names it. A part that eases every interval with one curve carries it on the
 // rule; only mixed curves become per-keyframe timing functions, which is the
 // only way CSS can express a keySplines list. No curve at all is linear, which
-// the wiring in base.css already says.
+// the wiring in face.css already says.
 const cssTime = (fraction) => `${+(fraction * 100).toFixed(4)}%`;
 
 // How each transform a part can play is written. Eye factors are scalars: a
@@ -905,19 +905,33 @@ function faceMotionCss() {
     "",
     "   One @keyframes per moving part, and one rule per part that names it. The",
     "   wiring these depend on — the layer stack, the play state, and the ink —",
-    "   lives with the rest of the renderer's motion vocabulary in base.css. */",
+    "   lives beside it in face.css, in the same `components` layer. */",
     "",
-    MOTION_NAMES.map((name) => motionCss(name, MOTIONS[name])).join("\n\n"),
-    "",
-    "/* The z's share one loop, each rising through its own window of it so they",
-    "   never rise as a group. The stagger is cut into the keyframes rather than",
-    "   carried as a delay: every glyph's first frame is invisible, so a paused",
-    "   loop — a capture run, reduced motion — shows no z at all. */",
-    "",
-    [...zBlocks, ...zRules].join("\n\n"),
+    "@layer components {",
+    indentCss(
+      [
+        MOTION_NAMES.map((name) => motionCss(name, MOTIONS[name])).join("\n\n"),
+        "",
+        "/* The z's share one loop, each rising through its own window of it so they",
+        "   never rise as a group. The stagger is cut into the keyframes rather than",
+        "   carried as a delay: every glyph's first frame is invisible, so a paused",
+        "   loop — a capture run, reduced motion — shows no z at all. */",
+        "",
+        [...zBlocks, ...zRules].join("\n\n"),
+      ].join("\n"),
+    ),
+    "}",
     "",
   ].join("\n");
 }
+
+// Every line of a block one level in, blank lines left blank, so the motions
+// sit inside their layer the way the formatter would write them.
+const indentCss = (css) =>
+  css
+    .split("\n")
+    .map((line) => (line === "" ? line : `  ${line}`))
+    .join("\n");
 
 // ---------- The face, as a renderer module ----------
 const tsList = (values) => values.join(", ");
@@ -984,7 +998,7 @@ function faceArtModule() {
 //
 // The face the renderer draws, in the artwork's own canvas coordinates, and the
 // vocabulary of things it can be doing. The motions themselves are @keyframes in
-// styles/face-motion.css, generated from the same table.
+// @luke/ui's face/face-motion.css, generated from the same table.
 
 /** Luke's face, on the 240x240 canvas every asset in packages/brand/assets/ is cut from. */
 export const FACE_ART = {
@@ -1474,13 +1488,13 @@ emit("dmg/luke-dmg-background.svg", dmg, "Drag Luke to Applications");
 for (const name of MOTION_NAMES) {
   emitModes(`motion/luke-${name}`, markSvg(motionSvg(MOTIONS[name])), `Luke — ${name}`);
 }
-// The desktop renderer's two inputs, from the same table the SVGs came from.
+// The face component's two inputs, from the same table the SVGs came from.
 put(join(SURFACE, "face-art.ts"), faceArtModule());
-put(join(APP_RENDERER, "styles", "generated", "face-motion.css"), faceMotionCss());
+put(join(UI_FACE, "face-motion.css"), faceMotionCss());
 
 if (!CHECK_ONLY) {
   process.stdout.write(`${written.length} SVGs written to packages/brand/assets/\n`);
-  process.stdout.write("face-art.ts written to @luke/brand and face-motion.css to the renderer\n");
+  process.stdout.write("face-art.ts written to @luke/brand and face-motion.css to @luke/ui\n");
 } else if (stale.length > 0) {
   process.stderr.write(
     `${stale.length} generated file(s) no longer match this script:\n${stale.join("\n")}\n` +

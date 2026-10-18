@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { test } from "vitest";
@@ -10,10 +10,12 @@ import { cloneFolder, openOnMacScript, worktreeFolder } from "./open-on-mac.js";
  * Open on this Mac's script over real Git and bash, an origin on disk
  * standing in for GitHub: the first run clones it into Luke's own folder
  * and makes a worktree at the agent's branch, and the shell opens there; a
- * later run after the agent pushes more moves the worktree forward and keeps
- * what was made in it; a clone over HTTPS that fails is made over SSH; a
- * branch that cannot be fetched is said and the shell still opens; and no
- * two branches share a worktree.
+ * later run after the agent pushes more, or force-pushes, brings the
+ * worktree to the branch's new head and keeps what Git ignores there; a
+ * worktree with the developer's own changes is left as it stands and its
+ * run command not run; a clone over HTTPS that fails is made over SSH; a
+ * branch that cannot be fetched is said and the shell still opens, its run
+ * command not run; and no two branches share a worktree.
  */
 
 const GIT_ENVIRONMENT = {
@@ -94,6 +96,8 @@ test(
     run(scratch, shell, script());
     assert.equal(git(worktree, ["rev-parse", "HEAD"]), first);
     assert.equal(shellOpenedIn(scratch), worktree);
+    // What an install leaves, which the repository ignores, as `node_modules` is.
+    writeFileSync(path.join(clone, ".git", "info", "exclude"), "installed.txt\n");
     writeFileSync(path.join(worktree, "installed.txt"), "");
     const second = push("second\n");
     run(scratch, shell, script());
@@ -146,12 +150,14 @@ test(
         clone,
         worktree: worktreeFolder(state, "acme/app", "luke/gone"),
         branch: "luke/gone",
+        command: "touch ran",
         remotes: { https: origin, ssh: origin },
       }),
     );
 
     assert.match(printed, /Could not bring luke\/gone onto this Mac/u);
     assert.equal(shellOpenedIn(scratch), clone);
+    assert.equal(existsSync(path.join(clone, "ran")), false);
   },
   GIT_DEADLINE,
 );
@@ -177,6 +183,65 @@ test(
     );
 
     assert.equal(readFileSync(path.join(worktree, "said.txt"), "utf8"), "it's $HOME");
+    assert.equal(shellOpenedIn(scratch), worktree);
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "a branch the agent force-pushed opens at its new head",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
+    const script = openOnMacScript({
+      repository: "acme/app",
+      clone: cloneFolder(state, "acme/app"),
+      worktree,
+      branch: "luke/fix-relay",
+      command: "touch ran",
+      remotes: { https: origin, ssh: origin },
+    });
+    run(scratch, shell, script);
+    git(worktree, ["clean", "--quiet", "--force"]);
+
+    git(origin, ["reset", "--quiet", "--hard", "main"]);
+    const rewritten = push("rewritten\n");
+    const printed = run(scratch, shell, script);
+
+    assert.doesNotMatch(printed, /Could not bring/u);
+    assert.equal(git(worktree, ["rev-parse", "HEAD"]), rewritten);
+    assert.equal(readFileSync(path.join(worktree, "README.md"), "utf8"), "rewritten\n");
+    assert.equal(existsSync(path.join(worktree, "ran")), true);
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "a worktree with the developer's own changes is left as it stands, and its run command not run",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    const first = push("first\n");
+    const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
+    const script = (command?: string) =>
+      openOnMacScript({
+        repository: "acme/app",
+        clone: cloneFolder(state, "acme/app"),
+        worktree,
+        branch: "luke/fix-relay",
+        command,
+        remotes: { https: origin, ssh: origin },
+      });
+    run(scratch, shell, script());
+    writeFileSync(path.join(worktree, "README.md"), "mine\n");
+
+    push("second\n");
+    const printed = run(scratch, shell, script("touch ran"));
+
+    assert.match(printed, /changes of its own/u);
+    assert.equal(git(worktree, ["rev-parse", "HEAD"]), first);
+    assert.equal(readFileSync(path.join(worktree, "README.md"), "utf8"), "mine\n");
+    assert.equal(existsSync(path.join(worktree, "ran")), false);
     assert.equal(shellOpenedIn(scratch), worktree);
   },
   GIT_DEADLINE,

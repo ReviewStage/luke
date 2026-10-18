@@ -3,8 +3,8 @@
  * stand under.
  *
  * A metric card names what it counts in the shared label role, the figure
- * large under it, and a hint in the body role beneath; the figure keeps its
- * own size, because no type role is a headline number. Words a card holds
+ * large under it in the page title's role, the largest the shared roles
+ * hold, and a hint in the body role beneath. Words a card holds
  * are the shared roles, so a card, a chart's heading, and a section read as
  * one set.
  */
@@ -26,15 +26,15 @@ import {
  * group sets its cards side by side, shares the row with them, never
  * narrower than its own figure.
  */
-const METRIC_CARD_GROUPED = "bg-card px-5 py-4 min-[720px]:flex-1 min-[720px]:basis-36";
+const METRIC_CARD_GROUPED =
+  "bg-(--luke-color-surface) px-5 py-4 min-[720px]:flex-1 min-[720px]:basis-36";
 
 /**
- * A figure stands on one line, never broken inside a number, against the
- * shared Stack's `overflow-wrap: anywhere` it stands in.
+ * A figure stands on one line, never broken inside a number: a line that
+ * may not wrap leaves the shared Text's `overflow-wrap: anywhere` no break to
+ * take.
  */
-const METRIC_FIGURE = "whitespace-nowrap [overflow-wrap:normal]";
-
-const METRIC_VALUE = `${METRIC_FIGURE} text-3xl font-semibold tabular-nums`;
+const METRIC_FIGURE = "whitespace-nowrap tabular-nums";
 
 /** A label bone's width, about the words it stands for. */
 const SKELETON_LABEL_WIDTH = "96px";
@@ -71,6 +71,17 @@ function MetricFrame({
     <Card padding={CARD_PADDING.COMPACT} title={title}>
       {children}
     </Card>
+  );
+}
+
+/** A card's figure, or the bone standing for it, on one line in the title role. */
+function MetricFigure({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className={METRIC_FIGURE}>
+      <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.TITLE}>
+        {children}
+      </Text>
+    </div>
   );
 }
 
@@ -122,7 +133,7 @@ export function StatCard({
 }): React.JSX.Element {
   return (
     <MetricCard label={label} hint={hint} title={title} grouped={grouped}>
-      <div className={METRIC_VALUE}>{value}</div>
+      <MetricFigure>{value}</MetricFigure>
     </MetricCard>
   );
 }
@@ -150,9 +161,9 @@ export function MetricCardSkeleton({
         </Text>
         <Stack gap={GAP.TIGHT}>
           {children ?? (
-            <div className={METRIC_VALUE}>
+            <MetricFigure>
               <Skeleton width={SKELETON_VALUE_WIDTH} />
-            </div>
+            </MetricFigure>
           )}
           {hint ? (
             <Text as={TEXT_ELEMENT.DIV}>
@@ -195,7 +206,7 @@ export const STAT_GROUP_COLUMNS = 3;
 export function StatGroup({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <Card padding={CARD_PADDING.FLUSH}>
-      <div className="flex flex-col gap-px bg-border min-[720px]:flex-row min-[720px]:flex-wrap">
+      <div className="flex flex-col gap-px bg-(--luke-color-border) min-[720px]:flex-row min-[720px]:flex-wrap">
         {children}
       </div>
     </Card>

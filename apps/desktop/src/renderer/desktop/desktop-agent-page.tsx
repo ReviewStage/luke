@@ -251,9 +251,11 @@ export function DesktopAgentPage({
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpenAutomations],
   );
-  // Note that an inbox call is the one row of a coding agent's own that opens a tab, a worker's opening through its delegation.
+  // Note that an inbox call is the one row of a coding agent's own that opens a tab, and a task's archive the one that opens
+  // another task, as the sidebar opens it, a worker's opening through its delegation.
   const openTarget = (target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.INBOX) tasks.inboxView.onOpen();
+    if (target.kind === TOOL_TARGET.TASK) tasks.onShowTask(target.task);
   };
   // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
   const openDelegation = (
