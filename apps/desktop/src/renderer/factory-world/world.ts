@@ -1,3 +1,4 @@
+import type { FactoryWorld } from "@luke/features/factory-world-wire";
 import type {
   BlastZone,
   FactoryWorldView,
@@ -64,6 +65,8 @@ export type WorldLayers = { readonly [Layer in WorldLayer]: boolean };
 export interface WorldState {
   /** The reading, as of the scrubber's instant. */
   readonly view: FactoryWorldView;
+  /** The snapshot the reading is of, as of the same instant: what the reading does not carry, the planned issues (`planned`) and the defects (`defects`), each placed on its `zonePaths`. */
+  readonly snapshot: FactoryWorld;
   /** Whether the instant is the snapshot's own, the scrubber at its end. */
   readonly live: boolean;
   /** What the developer chose, which the agent card describes. */

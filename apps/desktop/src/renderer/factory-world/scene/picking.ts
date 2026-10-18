@@ -135,6 +135,10 @@ export function scenePicking(): ScenePicking {
         -(pointer.y / pointer.height) * 2 + 1,
       );
       raycaster.setFromCamera(ndc, camera);
+      // Note that an instanced mesh keeps the bounds of its first raycast, so a world that moves its instances would be missed outside them.
+      for (const registration of registrations.values()) {
+        if (!("target" in registration)) registration.object.boundingSphere = null;
+      }
       const objects = [...registrations.keys()].filter(shown);
       for (const hit of raycaster.intersectObjects(objects, true)) {
         if (!shown(hit.object)) continue;

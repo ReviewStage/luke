@@ -152,8 +152,20 @@ export function mountScene(element: HTMLElement, props: FactorySceneProps): Fact
     picking,
     invalidate: redraw,
   };
-  world = props.world.create(host);
-  world.update(state);
+  // Note that a world that throws as it is set up takes the renderer down with it, since no handle reaches the page to unmount it by.
+  try {
+    world = props.world.create(host);
+    world.update(state);
+  } catch (failure) {
+    world?.dispose();
+    picking.clear();
+    rig.dispose();
+    disposeTree(scene);
+    renderer.dispose();
+    renderer.forceContextLoss();
+    canvas.remove();
+    throw failure;
+  }
   const created = world;
 
   const resize = new ResizeObserver(() => {

@@ -260,6 +260,11 @@ test("the listed workspace's world is read as the page opens, and the scene is m
     ["apps/desktop", "apps/web", "packages/core"],
   );
   assert.equal(lastState().live, true);
+  // Note that what the reading does not carry, the planned issues and the defects, reaches the world through the snapshot.
+  assert.deepEqual(
+    lastState().snapshot.planned.map((issue) => issue.identifier),
+    ["ENG-1"],
+  );
   assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped", "0Defects"]);
 });
 
@@ -390,6 +395,7 @@ test("the scrubber winds the world back: before a merge it is not shipped, the w
     time.dispatchEvent(new Event("input", { bubbles: true }));
   });
   assert.equal(lastState().live, false);
+  assert.equal(lastState().snapshot.snapshotAt, instant);
   assert.deepEqual(
     lastState().view.timeline.map((merged) => merged.number),
     [3400],
@@ -408,6 +414,33 @@ test("the scene rests while the page is off screen, and is taken down as the pag
   act(() => root?.unmount());
   root = undefined;
   assert.equal(scene.unmounts, 1);
+});
+
+test("a world the Mac cannot draw, its WebGL refused or its setup thrown, says so in the world's place", async () => {
+  const refusing: SideBundles = {
+    ...bundles,
+    factoryScene: sideBundles({
+      factoryScene: () =>
+        Promise.resolve({
+          mount: () => {
+            throw new Error("Error creating WebGL context.");
+          },
+        }),
+    }).factoryScene,
+  };
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        onSideBundles(refusing, createElement(Page, { tasks: control() })),
+      ),
+    ),
+  );
+  await settle();
+  assert.match(container.textContent ?? "", /The world could not be shown\./u);
+  assert.ok(container.querySelector(".factory-world-pipeline"), "the chrome still stands");
 });
 
 test("a scene bundle that could not be loaded says so in the world's place", async () => {

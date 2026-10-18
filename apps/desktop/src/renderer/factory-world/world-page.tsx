@@ -212,6 +212,7 @@ function WorldStage({
   const state = useMemo<WorldState>(
     () => ({
       view,
+      snapshot: asOf,
       live: instant === undefined,
       selected,
       hovered: hover?.target,
@@ -220,7 +221,7 @@ function WorldStage({
       still,
       dark,
     }),
-    [view, instant, selected, hover?.target, blast, layers, still, dark],
+    [view, asOf, instant, selected, hover?.target, blast, layers, still, dark],
   );
 
   const home = useCallback(() => {

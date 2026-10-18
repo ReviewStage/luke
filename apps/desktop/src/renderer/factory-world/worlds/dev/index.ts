@@ -5,6 +5,7 @@ import {
   BoxGeometry,
   CircleGeometry,
   Color,
+  CylinderGeometry,
   DirectionalLight,
   InstancedMesh,
   Mesh,
@@ -31,7 +32,9 @@ import {
  * colour where the selected agent's work ripples. Each agent is a diamond
  * over its primary zone in its state's signal, bobbing while motion runs.
  * Both are one instanced mesh each, as a world of a hundred agents should
- * be, and both register for picking per instance. It is also the smallest
+ * be, and both register for picking per instance. Planned issues and
+ * defects are tokens on the floor beside the zone each is placed on first,
+ * or on its rim where they are placed on none. It is also the smallest
  * example of the world interface (`../README.md`).
  */
 
@@ -85,13 +88,21 @@ export const world: WorldModule = {
       new MeshStandardMaterial({ roughness: 0.4 }),
       FACTORY_WORLD_BOUNDS.MAX_AGENTS,
     );
-    scene.add(zones, agents);
+    // Note that planned issues and defects are tokens on the floor beside the zone each is placed on first.
+    const markers = new InstancedMesh(
+      new CylinderGeometry(0.5, 0.5, 0.25, 6),
+      new MeshStandardMaterial({ roughness: 0.6 }),
+      FACTORY_WORLD_BOUNDS.MAX_PLANNED + FACTORY_WORLD_BOUNDS.MAX_DEFECTS,
+    );
+    scene.add(zones, agents, markers);
 
     let zoneTargets: PickTarget[] = [];
     let agentTargets: PickTarget[] = [];
     let agentBases: { x: number; y: number; z: number; bobs: boolean }[] = [];
     picking.addInstances(zones, (instanceId) => zoneTargets[instanceId]);
     picking.addInstances(agents, (instanceId) => agentTargets[instanceId]);
+    let markerTargets: PickTarget[] = [];
+    picking.addInstances(markers, (instanceId) => markerTargets[instanceId]);
 
     const placing = new Object3D();
     const tint = new Color();
@@ -165,6 +176,44 @@ export const world: WorldModule = {
         agents.count = drawn.length;
         if (agents.instanceColor !== null) agents.instanceColor.needsUpdate = true;
         placeAgents(0);
+
+        const marked = [
+          ...(layers.planned ? state.snapshot.planned : []).map((issue) => ({
+            target: { kind: PICK_KIND.PLANNED, id: issue.identifier },
+            zonePath: issue.zonePaths[0],
+            color: palette.signal.PLANNED,
+          })),
+          ...(layers.defects ? state.snapshot.defects : []).map((defect) => ({
+            target: { kind: PICK_KIND.DEFECT, id: defect.id },
+            zonePath: defect.zonePaths[0],
+            color: palette.signal.DEFECT,
+          })),
+        ];
+        markerTargets = marked.map(({ target }) => target);
+        const besideZone = new Map<string, number>();
+        marked.forEach(({ target, zonePath, color }, index) => {
+          const zone = zonePath === undefined ? undefined : view.zoneByPath.get(zonePath);
+          // Note that one placed on no zone stands on the floor's rim, spaced by its order.
+          const around = besideZone.get(zonePath ?? "") ?? 0;
+          besideZone.set(zonePath ?? "", around + 1);
+          const angle =
+            zone === undefined ? (index / Math.max(1, marked.length)) * Math.PI * 2 : around * 0.9;
+          const radius = zone === undefined ? SCALE * 3.9 : 0.6 + zone.footprint * 1.4 + 0.6;
+          placing.position.set(
+            (zone?.x ?? 0) * SCALE + Math.cos(angle) * radius,
+            0.15,
+            (zone?.y ?? 0) * SCALE + Math.sin(angle) * radius,
+          );
+          placing.rotation.set(0, 0, 0);
+          placing.scale.setScalar(1);
+          placing.updateMatrix();
+          markers.setMatrixAt(index, placing.matrix);
+          tint.set(chosen(state, target.kind, target.id) ? palette.signal.SELECTION : color);
+          markers.setColorAt(index, tint);
+        });
+        markers.count = marked.length;
+        markers.instanceMatrix.needsUpdate = true;
+        if (markers.instanceColor !== null) markers.instanceColor.needsUpdate = true;
       },
       frame: (_delta, elapsed) => placeAgents(elapsed),
       dispose: () => undefined,

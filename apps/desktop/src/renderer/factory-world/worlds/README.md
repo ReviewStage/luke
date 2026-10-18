@@ -68,6 +68,7 @@ What `update(state)` gets (`WorldState`), whole, on every change:
 | Field | What it is |
 | --- | --- |
 | `view` | The `FactoryWorldView` at the scrubber's instant: zones (layer, ring, `x`/`y`, `footprint`, `alive`), edges, agents (state, kind, `primaryZone`, `touched`, `buildSize`), timeline, and pipeline counts. |
+| `snapshot` | The `FactoryWorld` the view was read from, at the same instant. Draw the planned issues (`snapshot.planned`) and defects (`snapshot.defects`) from it, each placed on its `zonePaths`. |
 | `live` | `true` when the scrubber is at now. |
 | `selected`, `hovered` | `PickTarget`s (`{ kind, id }`) to highlight. Draw both in `SIGNAL_COLOR.SELECTION`. |
 | `blast` | The selected agent's blast radius: zone path to distance, where 0 means touched. Empty when no agent is selected. |
@@ -93,7 +94,8 @@ Don't rebuild any of this:
   leaves Factory.
 - **Picking:** raycasts first, then falls back to the nearest registered
   target within 18 px on screen. Hidden objects are never picked. A drag never
-  picks.
+  picks. An instanced mesh's bounds are recomputed on every pick, so moving
+  instances never makes them unpickable.
 - **Chrome, all DOM over the canvas:** the pipeline bar (its counts are the
   layer toggles), the hover label, the selection card (PR number, title, +/−
   bar, mini blast radius, and doors to the agent's page, the PR on GitHub and
