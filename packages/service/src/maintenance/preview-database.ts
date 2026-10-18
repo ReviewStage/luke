@@ -57,7 +57,7 @@ const PREVIEW_ENVIRONMENT = "preview";
 const POOLER_SUFFIX = "-pooler";
 
 /** Why a build refused to touch its database, in words that name no connection string. */
-export class PreviewDatabaseRefused extends Data.TaggedError("PreviewDatabaseRefused")<{
+class PreviewDatabaseRefused extends Data.TaggedError("PreviewDatabaseRefused")<{
   readonly reason: string;
 }> {}
 

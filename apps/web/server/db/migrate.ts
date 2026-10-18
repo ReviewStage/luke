@@ -5,6 +5,7 @@ import { runWebMigrations } from "@luke/database/core/migrator";
 import { waitingOutNeonComputeLimit } from "@luke/database/core/neon-compute-limit";
 import { databaseOverPgClient } from "@luke/database/core/query";
 import { POOL_LIMITS } from "@luke/service/db";
+import { preparePreviewDatabase } from "@luke/service/maintenance/preview-database";
 import { Config, Effect, Layer } from "effect";
 
 /**
@@ -18,12 +19,26 @@ import { Config, Effect, Layer } from "effect";
  */
 const migrationConnectionString = Config.Redacted("DATABASE_URL_UNPOOLED");
 
+/**
+ * The migrations, then, on a Preview, the branch of production's database made
+ * the Preview's own (`@luke/service/maintenance/preview-database`, which
+ * leaves every other build's database as it stands). It runs here rather than
+ * with the seed because it is the same kind of work, bulk statements on the
+ * direct connection Neon says admin work belongs on, and because a branch's
+ * first build should migrate the whole copy before it is cut down.
+ */
+const migrateAndPrepare = Effect.gen(function* () {
+  const applied = yield* runWebMigrations();
+  yield* Effect.logInfo(`Applied ${applied.length} migrations`, applied);
+  yield* preparePreviewDatabase(process.env);
+});
+
 const migrateConfiguredDatabase = Effect.gen(function* () {
   const url = yield* migrationConnectionString;
   // Note that the wait wraps the client's layer too, because Neon refuses the
   // compute as the connection opens, so each attempt needs a client of its own.
-  const applied = yield* waitingOutNeonComputeLimit(
-    runWebMigrations().pipe(
+  yield* waitingOutNeonComputeLimit(
+    migrateAndPrepare.pipe(
       Effect.provide(
         Layer.provideMerge(
           databaseOverPgClient,
@@ -32,7 +47,6 @@ const migrateConfiguredDatabase = Effect.gen(function* () {
       ),
     ),
   );
-  yield* Effect.logInfo(`Applied ${applied.length} migrations`, applied);
 });
 
 const executedPath = process.argv[1];

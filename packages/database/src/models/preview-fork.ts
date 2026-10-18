@@ -137,7 +137,10 @@ const emptied = (table: PgTable): PreviewForkEffect<void> =>
  * Neon sets `neon.endpoint_id` on every compute to the endpoint it serves, so
  * the answer is the server's own however the connection string reached it,
  * through a pooler, an alias, or a host naming another endpoint; a database
- * that is not Neon's sets none and is not production's.
+ * that is not Neon's sets none and is not production's. Neon does not
+ * document the setting, so this stands behind the caller's check of the
+ * connection string's host, which Neon does document, rather than in its
+ * place: a compute that stopped setting it would read as not production's.
  */
 const connectedToProduction = (productionEndpoint: string): PreviewForkEffect<boolean> =>
   Effect.map(

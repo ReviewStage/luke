@@ -87,10 +87,11 @@ vercel env run --environment production --scope stage-review -- \
   pnpm --filter @luke/web auth:seed
 ```
 
-On a Preview, the same step first makes the branch database the Preview's
-own, the first time a build reaches it
-(`packages/service/src/maintenance/preview-database.ts` decides,
-`packages/database/src/models/preview-fork.ts` runs). Neon branches it off
+On a Preview, `pnpm db:migrate` then makes the branch database the
+Preview's own, the first time a build reaches it, on the same direct
+connection the migrations run on, which is where Neon puts admin work
+(`apps/web/server/db/migrate.ts`; `packages/service/src/maintenance/preview-database.ts`
+decides, `packages/database/src/models/preview-fork.ts` runs). Neon branches it off
 production with every row production held, so it arrives with every account's
 words and with whatever was in flight: turns still running, coding agents at
 work, open calls, commands queued for a Mac, sandboxes queued to stop,
@@ -116,10 +117,14 @@ It runs only on a Preview's build that names both `LUKE_PREVIEW_WORKSPACES`
 and `LUKE_PRODUCTION_DATABASE_ENDPOINT` (production's Neon endpoint, its
 `ep-…` id), set for the Preview environment alone; without them a build
 leaves the copy as it stands. A Preview whose connection string names
-production's endpoint, whose database says it is that endpoint (Neon's own
-`neon.endpoint_id`, read before anything is touched, whatever name the
-connection reached it by), or whose database holds no member of the
-workspaces named, fails its build instead. Production's own `preview_fork` table stays empty,
+production's endpoint (the endpoint id Neon's documented hostnames carry,
+with or without `-pooler`), whose database says it is that endpoint, or whose
+database holds no member of the workspaces named, fails its build instead.
+The database's own word is the `neon.endpoint_id` setting every Neon compute
+carries, read before anything is touched whatever name the connection reached
+it by; Neon does not document that setting, so it is a second check behind
+the hostname's rather than the only one, and a compute without it reads as
+not production's. Production's own `preview_fork` table stays empty,
 so resetting a Preview's branch onto production in Neon has its next build
 cut it down again. Neon keeps the copy as it was in the branch's history for
 the project's history window, so this narrows what a Preview holds rather
