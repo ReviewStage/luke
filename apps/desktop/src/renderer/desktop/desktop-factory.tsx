@@ -4,9 +4,14 @@ import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/feat
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  COLLECTION_STATE,
+  CollectionPage,
+  type CollectionState,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  PAGE_FRAME,
+  PAGE_WIDTH,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -688,13 +693,29 @@ function Summary({ board }: { board: FactoryBoard }): React.JSX.Element {
   );
 }
 
+/** What the line's page is read as while the list is. */
+const READING_LINE = "Reading tasks";
+
 /** What the list says where it could not be read, as the sidebar says it. */
 const UNREAD_LINE = "Your tasks could not be read.";
 
 /** What Factory says where a task's questions could not be read, as Home says it of its items. */
 const QUESTIONS_UNREAD_LINE = "Some questions could not be read.";
 
-/** The window's Factory, in the task's place: the line as it stands now. */
+/**
+ * What the line's page stands. Note that until the list is read it stands
+ * nothing, since what the line says hangs on it and the page's loading rows
+ * are a list's shape, not the line's; a read that failed with nothing
+ * listed says so in the line's place, and one that failed over a list read
+ * before says so above the line.
+ */
+function lineState(plans: TasksControl, empty: boolean): CollectionState {
+  if (plans.listFailed && empty) return COLLECTION_STATE.ERROR;
+  if (!plans.listRead && !plans.listFailed) return COLLECTION_STATE.READY;
+  return empty ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
+}
+
+/** The window's Factory, in the task's place: the line as it stands now, or the world chosen in its place. */
 export function DesktopFactory({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
   const worlds = useFactoryWorlds();
   // Note that a world takes Escape first, for as long as it has a step back toward its overview to take.
@@ -715,55 +736,79 @@ export function DesktopFactory({ tasks: plans }: { tasks: TasksControl }): React
       board.blocked.length +
       board.shipped.length ===
     0;
+  const toolbar = (
+    <header className="desktop-toolbar">
+      <div className="desktop-toolbar-heading">
+        <h1 className="desktop-toolbar-title">Factory</h1>
+        <ExperimentTag />
+      </div>
+      <div className="desktop-toolbar-actions">
+        {worlds.offered.length === 0 ? null : <WorldPicker worlds={worlds} />}
+        <SendFeedbackButton experiment={EXPERIMENT.FACTORY} />
+      </div>
+    </header>
+  );
+  // A question that could not be read is not shown as though none waits, whatever the line stands.
+  const questionsUnread = questions.failed ? (
+    <ErrorState onRetry={questions.onRetry}>{QUESTIONS_UNREAD_LINE}</ErrorState>
+  ) : null;
+  const state = lineState(plans, empty);
   return (
-    <section className="factory-view" aria-label="Factory" ref={setRoot}>
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">Factory</h1>
-          <ExperimentTag />
-        </div>
-        <div className="desktop-toolbar-actions">
-          {worlds.offered.length === 0 ? null : <WorldPicker worlds={worlds} />}
-          <SendFeedbackButton experiment={EXPERIMENT.FACTORY} />
-        </div>
-      </header>
+    <div ref={setRoot} className="factory-pages">
       {worlds.chosen !== undefined ? (
-        <FactoryWorldPage
-          key={worlds.chosen.key}
-          tasks={plans}
-          entry={worlds.chosen}
-          backOut={backOut}
-        />
+        <section className="factory-view" aria-label="Factory">
+          {toolbar}
+          <FactoryWorldPage
+            key={worlds.chosen.key}
+            tasks={plans}
+            entry={worlds.chosen}
+            backOut={backOut}
+          />
+        </section>
       ) : (
-        <div className="factory-scroll scroll-fade-top">
-          {/* A question that could not be read is not shown as though none waits. */}
-          {questions.failed ? (
-            <ErrorState onRetry={questions.onRetry}>{QUESTIONS_UNREAD_LINE}</ErrorState>
-          ) : null}
-          {/* Until the list is read nothing stands, since what the line says hangs on it. A read that failed with nothing listed says so in the line's place; one that failed over a list read before says so above it. */}
-          {plans.listFailed && empty ? (
-            <ErrorState onRetry={plans.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-              {UNREAD_LINE}
-            </ErrorState>
-          ) : !plans.listRead && !plans.listFailed ? null : empty ? (
-            <EmptyState icon={<FactoryIcon />}>No agents at work</EmptyState>
-          ) : (
+        // The line stands across the room, its stations side by side wherever they fit.
+        <CollectionPage
+          frame={PAGE_FRAME.TOOLBAR}
+          width={PAGE_WIDTH.FULL}
+          label="Factory"
+          toolbar={toolbar}
+          state={state}
+          loadingLabel={READING_LINE}
+          empty={
             <>
-              {plans.listFailed ? (
-                <ErrorState onRetry={plans.onRetryList}>{UNREAD_LINE}</ErrorState>
-              ) : null}
-              <Summary board={board} />
-              {/* A teammate's task names its creator against the listed workspace's members. */}
-              {/* Copy link writes a row's link under the listed workspace, by its slug where it has one. */}
-              <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
-                <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-                  <Line tasks={plans} board={board} now={now} />
-                </MemberDirectory>
-              </LinkWorkspaceProvider>
+              {questionsUnread}
+              <EmptyState icon={<FactoryIcon />}>No agents at work</EmptyState>
             </>
-          )}
-        </div>
+          }
+          error={
+            <>
+              {questionsUnread}
+              <ErrorState onRetry={plans.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+                {UNREAD_LINE}
+              </ErrorState>
+            </>
+          }
+        >
+          <div className="factory-board">
+            {questionsUnread}
+            {!plans.listRead && !plans.listFailed ? null : (
+              <>
+                {plans.listFailed ? (
+                  <ErrorState onRetry={plans.onRetryList}>{UNREAD_LINE}</ErrorState>
+                ) : null}
+                <Summary board={board} />
+                {/* A teammate's task names its creator against the listed workspace's members. */}
+                {/* Copy link writes a row's link under the listed workspace, by its slug where it has one. */}
+                <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
+                  <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+                    <Line tasks={plans} board={board} now={now} />
+                  </MemberDirectory>
+                </LinkWorkspaceProvider>
+              </>
+            )}
+          </div>
+        </CollectionPage>
       )}
-    </section>
+    </div>
   );
 }
