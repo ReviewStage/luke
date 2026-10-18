@@ -3389,6 +3389,13 @@ button.draft-fork-quote:hover {
   padding: 0 var(--luke-space-16) var(--luke-space-8);
 }
 
+/* The agent's pull request's row (agent-published.tsx), pinned over the
+   composer under the docked to-do list on the same inset, so the row, the
+   list, and the composer's card line up. */
+.agent-published-dock {
+  padding: 0 var(--luke-space-16) var(--luke-space-8);
+}
+
 /* The docked list's card (transcript-blocks.tsx's `TranscriptTodosDock`),
    on the task card's look (`.plan-card`): one line saying how far the list
    has got, the item it is at cut to the line, and the chevron at its end,
@@ -5016,7 +5023,7 @@ button.attached-file-face:hover img {
   --context-part: var(--luke-color-text-muted);
 }
 
-/* The published chip's box (agent-published.tsx) draws no box of its
+/* The branch's chip's box (agent-published.tsx) draws no box of its
    own, so the chip stands in the composer's row as the row's own. */
 .agent-published-chip {
   display: contents;
@@ -5080,7 +5087,7 @@ button.attached-file-face:hover img {
   color: var(--luke-color-text-subtle);
 }
 
-/* The pull request's row at a finished transcript's end: a boxed line, the
+/* The pull request's row pinned over the composer: a boxed line, the
    whole of it the button that opens the pull request, drawn as the
    subagent's row is and for the same reason written here. The lines it
    adds and removes read in the success green and the danger red, in

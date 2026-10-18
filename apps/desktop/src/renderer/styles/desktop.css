@@ -2548,6 +2548,7 @@ ul.actor-stack {
 
 .desktop-agent [role="log"],
 .desktop-agent .agent-todos-dock,
+.desktop-agent .agent-published-dock,
 .desktop-agent .draft-fork-dock,
 .desktop-agent .agent-composer,
 .desktop-inbox .inbox-board,
@@ -4389,6 +4390,12 @@ button.integration-tool-head:hover,
   flex: none;
   margin-left: calc(-1 * var(--luke-space-6));
   color: var(--luke-color-text-subtle);
+}
+
+/* A placeholder row while the list is read stands in a row's own box, as
+   `.sidebar-task` pads it, but is no control: nothing to press or reach. */
+.factory-skeleton-row {
+  padding: var(--luke-space-8) var(--row-inset);
 }
 
 @container factory (width < 960px) {
@@ -6640,6 +6647,7 @@ button.integration-tool-head:hover,
    lines are read across all the width the developer gave the panel. */
 .side-panel-content [role="log"],
 .side-panel-content .agent-todos-dock,
+.side-panel-content .agent-published-dock,
 .side-panel-content .agent-composer {
   padding-inline: max(var(--luke-space-16), var(--reading-room));
 }
