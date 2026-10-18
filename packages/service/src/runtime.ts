@@ -19,6 +19,7 @@ import {
 } from "./integrations/integration-connect.js";
 import { sentryLogger } from "./observability/sentry.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
+import { sentryAppFromEnvironment } from "./triggers/sentry/sentry-app-config.js";
 
 /**
  * The deployment's own environment, read as these services are built rather
@@ -76,6 +77,7 @@ export const webServices = Layer.mergeAll(
   webSqlClient,
   hostedEnvironment,
   githubAppFromEnvironment,
+  sentryAppFromEnvironment,
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
   webLogger,

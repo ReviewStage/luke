@@ -268,6 +268,34 @@ while production's `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`
 hold the App's client id and secret, a Vercel project setting rather than anything in
 this repository. Nothing on the branch is Preview-specific.
 
+## The Luke Sentry integration
+
+Automations fire on Sentry's events (an issue alert whose action is Luke, a
+new issue) through Luke's own Sentry public integration, which a Sentry
+organization's owner installs on one Luke workspace; a delivery fires only
+the automations of the workspace its installation stands for
+(`integration_installation`, `@luke/database/models/integration-installation-store`).
+`src/triggers/sentry/sentry-app-config.ts`'s `SentryApp` is the integration
+as the web runtime builds it from `SENTRY_APP_SLUG` (the integration's slug,
+which its install address names), `SENTRY_APP_CLIENT_ID`, and
+`SENTRY_APP_CLIENT_SECRET` (the client secret, which both exchanges an
+install's code and signs every webhook delivery). A deployment missing any
+of them still builds the service, and every read of it answers
+`SentryAppNotConfigured` naming what was missing.
+
+To register the integration, in Sentry's Settings › Developer Settings ›
+Custom Integrations › Create New Integration, choose a public integration and set:
+
+- **Webhook URL**: `https://<deployment>/api/triggers/sentry`.
+- **Redirect URL**: `https://<deployment>/api/triggers/sentry/installed`.
+- **Verify Installation**: on, so an install completes only once Luke has exchanged its code.
+- **Permissions**: Issue & Event › Read, and Project › Read; nothing else.
+- **Webhooks**: Issue on.
+- **Alert Rule Action**: on, so an alert rule can name Luke as its action.
+
+Then copy the integration's slug, client id, and client secret into the three
+variables above for every environment that receives its deliveries.
+
 ## The admin group
 
 `src/admin/admin-app.ts` is the dashboard's route group: its four reads and the
