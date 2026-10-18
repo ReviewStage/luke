@@ -10,31 +10,31 @@ import {
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { runAppCommand, useAppKeymap } from "@luke/panel/app-commands";
+import {
+  PLACEMENT_END,
+  type PlanEditorModule,
+  type PlanEditorPlacement,
+  type PlanEditorProps,
+} from "@luke/panel/plan-editor/contract";
+import { lineWords } from "@luke/panel/testing/actor-line";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { relayout } from "@luke/panel/testing/resize-observer";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { ToastHost } from "@luke/panel/toast";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { lineWords } from "#testing/actor-line";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { onRegistry } from "#testing/copy-feedback";
 import { playMotions } from "#testing/pane-motion";
-import { relayout } from "#testing/resize-observer";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { landedBundles, onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
-import { runAppCommand, useAppKeymap } from "../app-commands";
 import { type SideBundles, sideBundles } from "../bundle-loader";
-import {
-  PLACEMENT_END,
-  type PlanEditorModule,
-  type PlanEditorPlacement,
-  type PlanEditorProps,
-} from "../plan-editor/contract";
 import { ISSUES_PAGE, type IssuesPlace, type NewTaskIssue } from "../tasks/use-tasks-tab";
-import { ToastHost } from "../toast";
 import { IssuesPage } from "./issues-page";
 
 /**

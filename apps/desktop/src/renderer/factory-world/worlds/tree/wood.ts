@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget, type WorldPicking } from "@luke/panel/factory-world/world";
 import { ZONE_LAYER } from "@luke/ui/factory-world";
 import {
   BufferGeometry,
@@ -28,7 +29,6 @@ import {
   type Vector4,
 } from "three";
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
-import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
 import {
   between,
   GLSL_NOISE,

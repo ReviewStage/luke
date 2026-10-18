@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import type { ShortcutControl } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { onRegistry } from "#testing/copy-feedback";
 import { ShortcutSection } from "./voice-keys";
 
 /**

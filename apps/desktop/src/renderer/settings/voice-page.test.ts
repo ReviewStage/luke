@@ -3,6 +3,8 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { DESKTOP_CAPABILITIES } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -14,8 +16,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { DESKTOP_CAPABILITIES } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
 
 /**

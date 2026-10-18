@@ -15,6 +15,21 @@ import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import {
+  appCommandOffered,
+  runAppCommand,
+  useAppCommand,
+  useMenuCommands,
+} from "@luke/panel/app-commands";
+import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import { useTaskLooks } from "@luke/panel/tasks/use-task-looks";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { DESKTOP_CAPABILITIES, handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { newestToastSays } from "@luke/panel/testing/toast";
+import { ToastHost } from "@luke/panel/toast";
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
@@ -26,22 +41,12 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { DESKTOP_CAPABILITIES, handState } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
-import { DOCUMENT_TASK } from "#testing/document-task";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
-import { newestToastSays } from "#testing/toast";
-import { appCommandOffered, runAppCommand, useAppCommand, useMenuCommands } from "../app-commands";
 import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand";
-import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { SIDE_PANEL_TAB, type SidePanelControl } from "../tasks/use-side-panel";
-import { useTaskLooks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
-import { ToastHost } from "../toast";
 import { CommandPalette } from "./command-palette";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { ListedAutomations } from "./listed-automations";

@@ -6,6 +6,13 @@ import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { runAppCommand } from "@luke/panel/app-commands";
+import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
+import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { DESKTOP_CAPABILITIES, handCapabilities } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { StripTab } from "@luke/ui/tab-strip-model";
@@ -14,16 +21,9 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { DESKTOP_CAPABILITIES, handCapabilities } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import { runAppCommand } from "../app-commands";
 import { DesktopTasks } from "../desktop/desktop-tasks";
-import { MAIN_TAB, type MainTab } from "./use-main-tabs";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel";
-import { NO_LOOKS } from "./use-task-looks";
 
 /**
  * Show terminal (⌘J) and New terminal from each place a developer can be,

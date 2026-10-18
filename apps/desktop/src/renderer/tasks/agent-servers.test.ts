@@ -8,11 +8,11 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import type { IntegrationStatuses } from "@luke/panel/integration-statuses";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import type { IntegrationStatuses } from "../integration-statuses";
 import { AgentServersButton } from "./agent-servers";
 
 /**

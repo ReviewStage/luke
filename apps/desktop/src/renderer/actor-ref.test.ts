@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -13,7 +14,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { onRegistry } from "#testing/copy-feedback";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "./actor-ref";
 
 /**

@@ -6,6 +6,7 @@ import {
   type FileChip,
   sizeLabel,
 } from "@luke/features/attachment-model";
+import { type ImageZoom, useImageZoom } from "@luke/panel/tasks/use-image-zoom";
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import { Button, CloseIcon, DIALOG_SIZE, Dialog, IconButton } from "@luke/ui";
 import {
@@ -19,7 +20,6 @@ import { useId } from "react";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { Tooltip } from "../tooltip";
 import { FileTypeIcon } from "./file-type-icon";
-import { type ImageZoom, useImageZoom } from "./use-image-zoom";
 
 /**
  * attachment-viewer.tsx -- a file on a message opened over the window, as Quick Look opens one: an image fitted to the window, a text file's numbered lines, or any other file by its icon with a way to save it.

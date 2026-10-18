@@ -1,5 +1,6 @@
 import type { CodingAgentPullRequest, CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
+import { HarnessMark } from "@luke/panel/harness-marks";
 import { AgentPlaceholderIcon, DocumentIcon, PlusIcon } from "@luke/ui";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
@@ -10,7 +11,6 @@ import {
   LaptopIcon,
   MessagesSquareIcon,
 } from "lucide-react";
-import { HarnessMark } from "../harness-marks";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { agentGlyphState, providerOf } from "./coding-agent-model";
 import { fileLook } from "./file-ref";

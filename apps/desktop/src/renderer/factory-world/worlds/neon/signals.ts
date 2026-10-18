@@ -1,3 +1,4 @@
+import type { WorldPalette } from "@luke/panel/factory-world/world";
 import {
   AdditiveBlending,
   BoxGeometry,
@@ -26,7 +27,6 @@ import {
   Vector3,
   Vector4,
 } from "three";
-import type { WorldPalette } from "../../world";
 import { COMMON_GLSL, OUTPUT_GLSL, type SharedUniforms } from "./glsl";
 import { seededRandom } from "./layout";
 

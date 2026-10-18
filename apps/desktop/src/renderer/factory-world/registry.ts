@@ -1,3 +1,4 @@
+import type { WorldModule } from "@luke/panel/factory-world/world";
 import {
   Building2Icon,
   CastleIcon,
@@ -12,7 +13,6 @@ import {
   TrainFrontIcon,
   TreeDeciduousIcon,
 } from "lucide-react";
-import type { WorldModule } from "./world";
 
 /**
  * registry.ts -- every world the Factory's picker offers after Board: its name, its glyph, and how its bundle is reached.

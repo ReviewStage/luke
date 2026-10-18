@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
+import { relayout } from "@luke/panel/testing/resize-observer";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { relayout } from "#testing/resize-observer";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentModelChip } from "./agent-model-chip";
 
 /**

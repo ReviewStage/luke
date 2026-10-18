@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import type { WorldPalette } from "@luke/panel/factory-world/world";
 import type { TimelineEntry } from "@luke/ui/factory-world";
 import {
   Color,
@@ -10,7 +11,6 @@ import {
   PlaneGeometry,
   Vector3,
 } from "three";
-import type { WorldPalette } from "../../world";
 import type { Building, Spot as BuildingSpot } from "./buildings";
 import { glowMaterial } from "./effects";
 import { col, PRIM, partGeo } from "./geo";

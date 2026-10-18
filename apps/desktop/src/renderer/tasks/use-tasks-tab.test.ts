@@ -29,6 +29,12 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
+import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
+import { handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { newestToastAction, newestToastSays } from "@luke/panel/testing/toast";
+import { ToastHost } from "@luke/panel/toast";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
@@ -54,13 +60,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { handState } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { installScrollIntoView } from "#testing/scroll-into-view";
-import { newestToastAction, newestToastSays } from "#testing/toast";
-import { ToastHost } from "../toast";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
-import { MAIN_TAB } from "./use-main-tabs";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
 import {
   AUTOMATIONS_PAGE,

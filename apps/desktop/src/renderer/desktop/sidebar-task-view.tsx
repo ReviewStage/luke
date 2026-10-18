@@ -1,4 +1,6 @@
 import type { TaskSummary } from "@luke/features/task-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { useMemberDirectory } from "@luke/panel/member-directory";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
@@ -24,8 +26,6 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { useAppCommand } from "../app-commands";
-import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import type { CountNoun } from "./sidebar-group-header";

@@ -1,18 +1,18 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import type { Issue } from "@luke/features/issue-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { usePaneSlide } from "@luke/panel/desktop/pane-motion";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
+import { EDGE_SIDE, useResizableEdge } from "@luke/panel/desktop/use-resizable-edge";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { CloseIcon, ExpandIcon, IconButton } from "@luke/ui";
 import { Schema } from "effect";
 import type React from "react";
 import { useState } from "react";
-import { useAppCommand } from "../app-commands";
 import { DocumentScroll } from "../tasks/document-frame";
 import { Tooltip } from "../tooltip";
 import { readKept, writeKept } from "./folded-groups";
 import { IssueDocument, IssueMenu } from "./issue-detail";
-import { usePaneSlide } from "./pane-motion";
-import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge";
 
 /**
  * issue-peek.tsx -- one issue read beside the Issues board or list rather than in its place: the issue's own document under a head of its identifier, Open as page, its ⋯ menu, and Close.

@@ -9,6 +9,7 @@ import {
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { HarnessMark } from "@luke/panel/harness-marks";
 import { dayText } from "@luke/panel/tasks/task-time";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
@@ -29,7 +30,6 @@ import {
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { HarnessMark } from "../harness-marks";
 import { MenuRow } from "./menu-row";
 
 /**

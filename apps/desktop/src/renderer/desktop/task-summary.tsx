@@ -1,4 +1,5 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
 import {
   HoverCard,
   HoverCardHead,
@@ -23,7 +24,6 @@ import { FileCard, newestFileNote } from "../tasks/file-ref";
 import { type InboxBoardView, NEEDS_YOU } from "../tasks/inbox-model";
 import { PageCard } from "../tasks/page-card";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
-import { MAIN_TAB } from "../tasks/use-main-tabs";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip";

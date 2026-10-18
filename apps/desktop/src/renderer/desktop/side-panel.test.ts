@@ -8,11 +8,11 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
-import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl } from "#testing/tasks-control";
 import { ChangesCard } from "../tasks/agent-changes-tab";
 import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref";

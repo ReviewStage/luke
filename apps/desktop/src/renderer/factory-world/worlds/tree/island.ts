@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget, type WorldPicking } from "@luke/panel/factory-world/world";
 import {
   BackSide,
   BoxGeometry,
@@ -30,7 +31,6 @@ import {
   Vector3,
 } from "three";
 import { mergeGeometries, mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
-import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
 import { GLOW_SHAPE, type GlowField } from "./glow";
 import {
   between,

@@ -3,7 +3,12 @@
 import assert from "node:assert/strict";
 import { VIDEO_AVATAR, VIDEO_AVATAR_COVER_ORIGIN } from "@luke/features/video-avatar";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { OpenFeedbackProvider } from "@luke/panel/open-feedback";
 import type { SettingsWrites } from "@luke/panel/settings/writes";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { DESKTOP_CAPABILITIES } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import {
   type AppSettingField,
   EXPERIMENT,
@@ -20,11 +25,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { DESKTOP_CAPABILITIES } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { installScrollIntoView } from "#testing/scroll-into-view";
-import { OpenFeedbackProvider } from "../open-feedback";
 import { ExperimentalPage } from "./experimental-page";
 
 /**

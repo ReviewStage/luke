@@ -3,15 +3,15 @@
 import assert from "node:assert/strict";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { OpenSettingsProvider } from "@luke/panel/open-settings";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
-import { OpenSettingsProvider } from "../open-settings";
 import { NewTaskDialog } from "./new-task-dialog";
 import type { RepositoryChooser } from "./repository-chip";
 import type { NewTaskPreset } from "./use-tasks-tab";

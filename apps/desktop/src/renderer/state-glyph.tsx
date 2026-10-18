@@ -21,10 +21,10 @@
  * `glyphStateWords` gives.
  */
 
+import { WorkingMark } from "@luke/panel/working-mark";
 import { CircleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Tooltip } from "./tooltip";
-import { WorkingMark } from "./working-mark";
 
 export const GLYPH_STATE = {
   WORKING: "working",

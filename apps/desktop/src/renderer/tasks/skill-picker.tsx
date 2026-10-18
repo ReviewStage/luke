@@ -1,3 +1,8 @@
+import type {
+  ComposerChip,
+  ComposerEditorHandle,
+  ComposerTrigger,
+} from "@luke/panel/plan-editor/contract";
 import {
   ALIGN,
   ComboboxList,
@@ -24,7 +29,6 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { ComposerChip, ComposerEditorHandle, ComposerTrigger } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { SkillCard } from "./skill-ref";
 

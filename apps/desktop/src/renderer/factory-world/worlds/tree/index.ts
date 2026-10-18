@@ -1,6 +1,11 @@
+import {
+  PICK_KIND,
+  type PickTarget,
+  type WorldModule,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
 import { type AgentView, agentDrawnUnder, type ZoneView } from "@luke/ui/factory-world";
 import { Color, Vector4 } from "three";
-import { PICK_KIND, type PickTarget, type WorldModule, type WorldState } from "../../world";
 import { gardeners } from "./gardeners";
 import { GLOW_BLEND, glowField } from "./glow";
 import { island } from "./island";

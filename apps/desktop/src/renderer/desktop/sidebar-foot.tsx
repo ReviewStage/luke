@@ -2,6 +2,7 @@ import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { runAppCommand } from "@luke/panel/app-commands";
 import { appPlatform } from "@luke/panel/app-platform";
 import { useCapability } from "@luke/panel/use-app-state";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -43,7 +44,6 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { runAppCommand } from "../app-commands";
 import { useOpenPerson } from "../person-door";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuEntry } from "./action-menu";

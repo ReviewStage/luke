@@ -4,6 +4,7 @@ import {
   REVIEW_STATE,
   type ReviewState,
 } from "@luke/features/coding-agent-wire";
+import { useMemberDirectory } from "@luke/panel/member-directory";
 import { type Actor, githubActor } from "@luke/ui/actor-model";
 import {
   CheckIcon,
@@ -15,7 +16,6 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActorLine, ActorRef, ActorStack, type StackFace } from "../actor-ref";
-import { useMemberDirectory } from "../member-directory";
 
 /**
  * pull-request-people.tsx -- who an agent's pull request names, drawn as every actor is: who opened it, its reviewers as a facepile wearing where each stands, and who authored its commits.

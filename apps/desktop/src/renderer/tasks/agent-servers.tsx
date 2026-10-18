@@ -10,6 +10,9 @@ import {
   INTEGRATION_STATUS,
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
+import { useIntegrationGrant } from "@luke/panel/integration-grant";
+import type { IntegrationStatuses } from "@luke/panel/integration-statuses";
+import { useIntegrationTools } from "@luke/panel/integration-tools";
 import {
   AnchoredPopover,
   ArrowLeftIcon,
@@ -65,10 +68,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useIntegrationGrant } from "../integration-grant";
-import type { IntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
-import { useIntegrationTools } from "../integration-tools";
 import { PopoverPanel } from "../popover-panel";
 import { Highlighted } from "../search-field";
 import { Tooltip } from "../tooltip";

@@ -16,7 +16,11 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { TILE_SIZE, WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
+import { encodeImage } from "@luke/panel/feedback-images";
+import { MacRepositoriesGroup } from "@luke/panel/settings/mac-repository-settings";
 import { dayAndTimeText } from "@luke/panel/tasks/task-time";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
 import { useCapability } from "@luke/panel/use-app-state";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
@@ -67,12 +71,8 @@ import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu } from "../desktop/action-menu";
 import { sharedWords } from "../desktop/workspace-ref";
-import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
-import { encodeImage } from "../feedback-images";
 import { useOpenPerson } from "../person-door";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { wholeWordsHint } from "../tooltip";
-import { MacRepositoriesGroup } from "./mac-repository-settings";
 import { MenuRow } from "./menu-row";
 
 /**

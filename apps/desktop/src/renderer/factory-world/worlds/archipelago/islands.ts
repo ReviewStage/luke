@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget, type WorldPicking } from "@luke/panel/factory-world/world";
 import { ZONE_LAYER, type ZoneLayer, type ZoneView } from "@luke/ui/factory-world";
 import {
   AdditiveBlending,
@@ -27,7 +28,6 @@ import {
   SphereGeometry,
   Vector3,
 } from "three";
-import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
 import {
   airshipHull,
   antenna,

@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import type { WorldPalette } from "@luke/panel/factory-world/world";
 import {
   AdditiveBlending,
   Color,
@@ -10,7 +11,6 @@ import {
   ShaderMaterial,
   Vector4,
 } from "three";
-import type { WorldPalette } from "../../world";
 import { glowingMaterial, glowMaterial, hdrMaterial } from "./effects";
 import { col } from "./geo";
 

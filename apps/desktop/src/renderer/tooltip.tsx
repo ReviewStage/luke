@@ -49,6 +49,7 @@
 import { useAtomSet } from "@effect/atom-react";
 import { MOTION_DELAY_MS } from "@luke/brand";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { Shortcut } from "@luke/panel/shortcut";
 import {
   APP_SHORTCUTS,
   type KeyedCommand,
@@ -82,7 +83,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { Shortcut } from "./shortcut";
 
 /**
  * How long after one pill goes the next shows at once. Note that it is the

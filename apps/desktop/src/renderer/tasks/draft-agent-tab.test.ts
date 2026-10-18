@@ -16,25 +16,28 @@ import {
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { GitHubConnectProvider } from "@luke/panel/github-connect";
+import { OpenSettingsProvider } from "@luke/panel/open-settings";
+import {
+  type RepositoryRemedyDoors,
+  RepositoryRemedyProvider,
+} from "@luke/panel/tasks/repository-remedy";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
   editorBundleLanded,
   installEditorLayout,
   pressInComposer,
 } from "#testing/composer";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { GitHubConnectProvider } from "../github-connect";
-import { OpenSettingsProvider } from "../open-settings";
 import { startFailureNote } from "./coding-agent-model";
 import { DraftAgentTab } from "./draft-agent-tab";
-import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 
 /**

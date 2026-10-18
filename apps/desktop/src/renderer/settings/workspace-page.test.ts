@@ -27,6 +27,12 @@ import {
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
 import { dayAndTimeText } from "@luke/panel/tasks/task-time";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { DESKTOP_CAPABILITIES, handCapabilities } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { relayout } from "@luke/panel/testing/resize-observer";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { ToastHost } from "@luke/panel/toast";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
@@ -36,14 +42,8 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { DESKTOP_CAPABILITIES, handCapabilities } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { relayout } from "#testing/resize-observer";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { OpenPersonProvider } from "../person-door";
-import { ToastHost } from "../toast";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
 /**

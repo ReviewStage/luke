@@ -3,11 +3,11 @@
 import assert from "node:assert/strict";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
+import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
-import { markdownHtmlParserLanded } from "#testing/markdown";
 import { TranscriptWords } from "./tasks/transcript-blocks";
 
 /**

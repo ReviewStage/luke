@@ -1,9 +1,9 @@
+import type { ComposerQuote } from "@luke/panel/plan-editor/contract";
 import { BUTTON_SIZE, Button, IconButton } from "@luke/ui";
 import { replyOf } from "@luke/ui/reply-quote";
 import { ReplyIcon, XIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import type { ComposerQuote } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 
 /**

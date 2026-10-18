@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS, type FactoryDefect } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget } from "@luke/panel/factory-world/world";
 import type { SIGNAL_COLOR } from "@luke/ui/factory-world";
 import {
   BufferAttribute,
@@ -23,7 +24,6 @@ import {
   SphereGeometry,
   Vector3,
 } from "three";
-import { PICK_KIND, type PickTarget } from "../../world";
 import type { Sparks, Streaks } from "./effects";
 import { basisFromZ, between, box, clamp, clean, hashOf, merged, seeded, TAU, v3 } from "./kit";
 import { EFFECT, type EffectUniforms, effectMaterial, SHADER_OUTPUT } from "./materials";

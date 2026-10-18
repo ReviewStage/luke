@@ -29,6 +29,19 @@ import type { Task } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { runAppCommand } from "@luke/panel/app-commands";
+import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
+import {
+  DESKTOP_CAPABILITIES,
+  handCapabilities,
+  handState,
+  stateWith,
+} from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { newestToastSays } from "@luke/panel/testing/toast";
+import { ToastHost } from "@luke/panel/toast";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -38,20 +51,12 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { DESKTOP_CAPABILITIES, handCapabilities, handState, stateWith } from "#testing/app-state";
 import { editorBundleLanded, installEditorLayout, typeInComposer } from "#testing/composer";
-import { onRegistry } from "#testing/copy-feedback";
-import { markdownHtmlParserLanded } from "#testing/markdown";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
-import { newestToastSays } from "#testing/toast";
-import { runAppCommand } from "../app-commands";
 import { archiveWords } from "../tasks/coding-agent-model";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { ToastHost } from "../toast";
 import { DesktopAgentPage } from "./desktop-agent-page";
 
 /**
