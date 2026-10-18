@@ -621,11 +621,14 @@ if [[ -n "$node_reaching_effect" ]]; then
     exit 1
 fi
 
-# A deployment's migration runs while the deployment before it still serves
-# the old names, so a migration newer than the cutoff renames no table and no
-# column in place (`packages/database/src/core/migration-renames.ts`): the
-# Oct 17 plan-to-task rename broke the 26 turns then running.
-pnpm --silent --filter @luke/database check:renames
+# A deployment's migration runs while the deployment before it, and every
+# coding agent run pinned to it for up to 25 hours, still serves the old names,
+# so a new migration renames or drops no table, column, type, or view unless it
+# is marked `-- contract: <why old readers have drained>`
+# (`packages/database/src/core/migration-contractions.ts`, the db-migrations
+# skill's "Expand, migrate, contract"): the Oct 17 plan-to-task rename broke
+# the 26 turns then running.
+pnpm --silent --filter @luke/database check:contractions
 
 # A `var(--name)` with no fallback, where nothing declares `--name`, fails
 # nothing: the declaration it stands in is invalid at computed-value time, so a

@@ -12,10 +12,14 @@
  * parses none of them.
  */
 
-/** Where the caret goes as the editor opens: where a click landed, or the end of a section; the start of the text without either. */
+/** Where the caret goes as the editor opens: where a click landed, the end of a section, or the end of the text; the start of the text without any. */
 export type PlanEditorPlacement =
   | { readonly x: number; readonly y: number }
-  | { readonly section: number };
+  | { readonly section: number }
+  | typeof PLACEMENT_END;
+
+/** The caret at the end of the text, as a press on the room under its last line puts it. */
+export const PLACEMENT_END = { end: true } as const;
 
 /** What the document hands the editor as it mounts it in place of the text's drawn sections. */
 export interface PlanEditorProps {
@@ -164,6 +168,8 @@ export interface PlanEditorHandle {
   readonly chooseMention: (mention: MentionNode) => void;
   /** The text as the editor holds it now, ahead of the draft it hands over once typing pauses. */
   readonly markdown: () => string;
+  /** The caret put where the placement says and the editor focused, as a press on the text's room does while it is open. */
+  readonly focusAt: (placement: PlanEditorPlacement) => void;
   /** Image files laid in as pictures after the block the caret stands in, each handed to the panel to keep. */
   readonly insertPictures: (files: readonly File[]) => void;
   /** The picture waiting on `upload` given its address, kept at last, which the text now names. */

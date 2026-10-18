@@ -112,17 +112,17 @@ function dollars(costUsd: number): string {
   return costUsd > 0 && costUsd < LEAST_CENTS ? "<$0.01" : `$${costUsd.toFixed(2)}`;
 }
 
-/** The dollars some turns cost, where the service put a price on every step; nothing where it could not. */
-function costLabel(usage: CodingAgentUsage | undefined): string | undefined {
-  return usage?.costUsd === undefined ? undefined : dollars(usage.costUsd);
-}
-
-/** What the agent has cost, for the model menu's foot: "This agent: 1.2M tokens · $0.42", the dollars left off where unknown; nothing before a turn settled. */
+/**
+ * What the agent has cost, for the model menu's foot: "This agent: 1.2M
+ * tokens · $0.42", the dollars left off where the service could not price
+ * every step; nothing before a turn settled. Note that this is the one
+ * place the window draws a price, and it is the whole run's, the agent's
+ * own turns and its workers', at the catalog's list prices.
+ */
 export function agentUsageLine(usage: CodingAgentUsage | undefined): string | undefined {
   if (usage === undefined) return undefined;
   const tokens = `${compactCount(usage.inputTokens + usage.outputTokens)} tokens`;
-  const cost = costLabel(usage);
-  return `This agent: ${cost === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${cost}`}`;
+  return `This agent: ${usage.costUsd === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${dollars(usage.costUsd)}`}`;
 }
 
 /**
@@ -274,53 +274,40 @@ export function lineSender(
   }
 }
 
-/** The parts of the line a transcript ends on: its words, what the turn cost where known, and whether it tells of a failure, which is drawn as one. */
+/** The parts of the line a transcript ends on: its words, and whether it tells of a failure, which is drawn as one. */
 export interface EndLineParts {
   readonly words: string;
-  readonly cost?: string | undefined;
   readonly failed: boolean;
 }
 
 /**
  * The quiet line a transcript ends on once its turn failed or was stopped,
- * in parts, so its words and its cost can be drawn apart; nothing for an
- * agent still writing or one that completed. A teammate's agent names its
- * starter's key, since it runs on theirs and not the reader's. An agent
- * another already `continued` is not told to start a new one.
+ * in parts, so its words and its failed mark can be drawn apart; nothing
+ * for an agent still writing or one that completed. A teammate's agent
+ * names its starter's key, since it runs on theirs and not the reader's.
+ * An agent another already `continued` is not told to start a new one.
+ * Note that it names no price, because a price in the window means the
+ * whole run's, which the model menu's foot says (`agentUsageLine`).
  */
 export function endLineParts(
   status: CodingAgentStatus,
   failure: CodingAgentFailure | undefined,
-  turnUsage?: CodingAgentUsage,
   starter?: string,
   continued = false,
 ): EndLineParts | undefined {
-  const cost = costLabel(turnUsage);
   switch (status) {
     case CODING_AGENT_STATUS.CANCELLED:
-      return { words: "Stopped", cost, failed: false };
+      return { words: "Stopped", failed: false };
     case CODING_AGENT_STATUS.FAILED: {
       const words =
         failure === undefined ? undefined : agentFailureWords(failure, starter, continued);
-      return { words: words === undefined ? "Failed" : `Failed: ${words}`, cost, failed: true };
+      return { words: words === undefined ? "Failed" : `Failed: ${words}`, failed: true };
     }
     case CODING_AGENT_STATUS.STARTING:
     case CODING_AGENT_STATUS.RUNNING:
     case CODING_AGENT_STATUS.COMPLETED:
       return undefined;
   }
-}
-
-/** The end line as one string (`endLineParts`), for a hover card and a notification, which draw it as words alone. */
-export function endLine(
-  status: CodingAgentStatus,
-  failure: CodingAgentFailure | undefined,
-  turnUsage?: CodingAgentUsage,
-  starter?: string,
-): string | undefined {
-  const parts = endLineParts(status, failure, turnUsage, starter);
-  if (parts === undefined) return undefined;
-  return parts.cost === undefined ? parts.words : `${parts.words}${LINE_SEPARATOR}${parts.cost}`;
 }
 
 /** What mends a failed turn from its end line: the API keys' page for a key refused; nothing else there is the developer's to mend. */

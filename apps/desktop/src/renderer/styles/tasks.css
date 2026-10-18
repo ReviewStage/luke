@@ -1905,20 +1905,8 @@
    content inset, its dismissal at the row's end. */
 .pull-request-write-note {
   flex: 0 0 auto;
-  margin: 0;
   padding: var(--luke-space-4) var(--column-inset) var(--luke-space-4) var(--content-inset);
   border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.pull-request-write-note .failure-note-words {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.pull-request-write-dismiss {
-  margin-inline-start: auto;
 }
 
 /* The bar's Review press and the panel it opens (`pull-request-review.tsx`):
@@ -1955,17 +1943,6 @@
 
 .pull-request-review-preview > p:only-child {
   margin: 0;
-}
-
-.pull-request-review-note {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.pull-request-review-note .failure-note-words {
-  flex: 1 1 auto;
-  min-width: 0;
 }
 
 .pull-request-review-foot {
@@ -2597,17 +2574,6 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--luke-control-gap);
-}
-
-.pull-request-thread-note {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.pull-request-thread-note .failure-note-words {
-  flex: 1 1 auto;
-  min-width: 0;
 }
 
 /* The reactions under a description or a comment, as GitHub draws them:
@@ -3466,14 +3432,6 @@ ol.transcript-list {
   color: var(--luke-color-danger-text);
 }
 
-.agent-end-dot {
-  margin: 0 var(--luke-space-4);
-}
-
-.agent-end-cost {
-  white-space: nowrap;
-}
-
 .agent-end-remedy {
   margin-left: var(--luke-space-8);
   vertical-align: middle;
@@ -3912,10 +3870,13 @@ ol.transcript-list {
   padding: 0 var(--luke-space-16) var(--luke-space-12);
 }
 
+/* A message that did not go: the failure's line (`ErrorState`), and under
+   it, where the agent takes no more, the press that continues it. */
 .agent-composer-note {
   display: flex;
-  align-items: center;
-  gap: var(--luke-space-8);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-4);
   padding-left: var(--luke-space-4);
 }
 
@@ -4127,6 +4088,12 @@ ol.transcript-list {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* What a send found the answer lacking reads in the attention ink, as the
+   item's own mark does, until it is filled. */
+.inbox-answer-quiet [data-wanting] {
+  color: var(--luke-color-attention);
 }
 
 .inbox-presses {
@@ -5530,13 +5497,9 @@ button.picture-frame {
   line-height: var(--luke-type-caption-leading);
 }
 
-.picture-status.failure-note {
-  gap: var(--luke-space-4);
-  color: var(--luke-color-danger-text);
-}
-
-.picture-status .failure-note-words {
-  margin-right: var(--luke-space-4);
+.picture-failure {
+  display: block;
+  margin-top: var(--luke-space-6);
 }
 
 /* Several pictures an agent showed at once (`agent-pictures.tsx`): one

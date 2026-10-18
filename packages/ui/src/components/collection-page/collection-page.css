@@ -232,4 +232,12 @@
   .luke-collection-page-notice::after {
     flex: 3 1 0;
   }
+
+  /* An EmptyState, a centred ErrorState among them, stands itself a little
+     above the middle of the room it fills, so the notice hands it the whole
+     room rather than a sixth of it, which clipped a way on under its line. */
+  .luke-collection-page-notice:has(> .luke-empty-state)::before,
+  .luke-collection-page-notice:has(> .luke-empty-state)::after {
+    content: none;
+  }
 }

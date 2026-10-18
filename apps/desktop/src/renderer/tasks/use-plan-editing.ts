@@ -19,6 +19,7 @@ import type { TasksEditAnswer } from "@luke/features/tasks-view";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { useEffect, useRef, useState } from "react";
+import type { PlanEditorPlacement } from "../plan-editor/contract";
 import { rendererRuntime } from "../renderer-runtime";
 
 /**
@@ -52,9 +53,6 @@ export const EDITOR_PLACE = {
   TITLE: "title",
 } as const;
 
-/** Where an editor's caret goes as it opens: where a click landed, or the end of a section. */
-type EditorPlacement = { readonly x: number; readonly y: number } | { readonly section: number };
-
 /** A block of the document the keyboard selects: a section, by its unit's id, or the title. */
 export type EditorHost = number | typeof EDITOR_PLACE.TITLE;
 
@@ -62,8 +60,8 @@ export type EditorHost = number | typeof EDITOR_PLACE.TITLE;
 export interface PlanEditing {
   readonly editor: DocumentEditor | undefined;
   /** Where the editor's caret went as it opened; the start of the text without one. */
-  readonly placement: EditorPlacement | undefined;
-  readonly open: (placement?: EditorPlacement) => void;
+  readonly placement: PlanEditorPlacement | undefined;
+  readonly open: (placement?: PlanEditorPlacement) => void;
   readonly typeText: (text: string) => void;
   /** Ends the edit; `select` is the block the keyboard goes back to once the editor has gone. */
   readonly close: (select?: EditorHost) => void;
@@ -94,7 +92,7 @@ export function usePlanEditing(
   edit: PlanEditDoor,
 ): PlanEditing {
   const [editor, setEditor] = useState<DocumentEditor | undefined>(undefined);
-  const [placement, setPlacement] = useState<EditorPlacement | undefined>(undefined);
+  const [placement, setPlacement] = useState<PlanEditorPlacement | undefined>(undefined);
   const [selecting, setSelecting] = useState<EditorHost | undefined>(undefined);
   const [cursor, setCursor] = useState<EditorHost | undefined>(undefined);
   // The open editor's words not yet handed over, which a task leaving must save too.
