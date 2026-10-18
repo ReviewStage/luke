@@ -3664,6 +3664,42 @@ test("the attention mark stands before the time on the reader's own open item al
   ]);
 });
 
+test("a teammate's open item of an agent with no plan is listed under the automation that started it, wearing the teammate's face with no attention mark; Needs you leaves it out, and Group by person lists it under the teammate", async () => {
+  agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, startedBy: TEAMMATE }]]]);
+  const { page } = mount([{ ...waitingTaskless(QUARANTINE), startedBy: TEAMMATE.userId }]);
+  await settle();
+  const rows = listed(page);
+  assert.equal(
+    rows[rows.indexOf("# Nightly flake sweep") + 1],
+    "Quarantine the flaky test?",
+    rows.join(" | "),
+  );
+  const meta = rowNamed(page, "Quarantine the flaky test?").querySelector(".luke-list-row-meta");
+  assert.equal(meta?.querySelector(".attention-mark"), null);
+  assert.equal(meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
+  assert.equal(meta?.querySelector(".visually-hidden")?.textContent, "Waiting on Charles Pan");
+
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]')?.click());
+  assert.equal(
+    listed(page).includes("Quarantine the flaky test?"),
+    false,
+    listed(page).join(" | "),
+  );
+
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="Needs you"]')?.click());
+  act(() => page.querySelector<HTMLButtonElement>('button[aria-label="View options"]')?.click());
+  const byPersonChoice = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].find(
+    (each) => each.textContent === "Group by person",
+  );
+  act(() => byPersonChoice?.click());
+  const byPerson = listed(page);
+  assert.equal(
+    byPerson[byPerson.indexOf("# Charles Pan") + 1],
+    "Quarantine the flaky test?",
+    byPerson.join(" | "),
+  );
+});
+
 /** Whether a row reads as unread: its blue dot, its title in the unread weight, and "Unread" said to a reader, each `?` where only some stand. */
 function unreadOf(page: HTMLElement, title: string): boolean | "?" {
   const row = rowNamed(page, title);
