@@ -325,7 +325,7 @@ test("every moved option is drawn on its one page and on no other", () => {
 
 /** Types `words` into the sidebar's search, answering the pages whose result groups hold them. */
 function foundUnder(page: HTMLElement, words: string): (string | null)[] {
-  const field = page.querySelector<HTMLInputElement>("input.settings-search-input");
+  const field = page.querySelector<HTMLInputElement>('input[aria-label="Search settings"]');
   assert.ok(field, "the search field is drawn");
   act(() => {
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;

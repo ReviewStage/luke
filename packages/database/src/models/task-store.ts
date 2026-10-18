@@ -1089,7 +1089,7 @@ export function openTaskConversation(
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
         if (!(yield* attachTaskConversation(userId, taskId, opened.id))) {
-          return yield* Effect.die(new Error("the plan's new conversation did not attach"));
+          return yield* Effect.die(new Error("the task's new conversation did not attach"));
         }
         return Option.some({ conversationId: opened.id, ownerId: userId });
       }),
