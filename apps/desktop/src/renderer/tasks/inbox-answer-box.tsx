@@ -20,7 +20,7 @@ import {
 } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useRef, useState } from "react";
+import { type RefObject, useRef, useState } from "react";
 import {
   PromptInput,
   PromptInputFooter,
@@ -46,6 +46,7 @@ import {
   inboxReply,
   pickedWords,
 } from "./inbox-model";
+import { ComposerQuoteView, ReplyToSelection } from "./reply-to-selection";
 import type { SkillSource } from "./skill-picker";
 import type { TaskInboxControl } from "./use-task-inbox";
 
@@ -78,6 +79,15 @@ import type { TaskInboxControl } from "./use-task-inbox";
  * does. Unlike the agent's box, the field never takes the
  * caret as an item opens, because K and J step the list while the caret
  * is elsewhere.
+ *
+ * Words selected in the agent's part of the thread and answered with Reply
+ * are laid into the box as a quote block where the caret stands, the box
+ * then taking the caret, as the agent's own box takes them
+ * (`reply-to-selection.tsx`); a quote goes out as a Markdown blockquote,
+ * part of the answer or the message like any other words. The box stands
+ * Reply itself, over the thread it is handed, and only while its editor is
+ * loaded and takes a quote, never while an answer is out or a dictation
+ * holds it, since a press lets the selection go.
  *
  * A card whose agent need not hear back says whether its answer will
  * message the agent: a bare answer does not, and a typed note or an attached
@@ -242,6 +252,8 @@ interface AnswerBoxProps {
   skills: SkillSource | undefined;
   /** The words a dictation into the box is likely to say (`dictation-keywords.ts`). */
   keywords: readonly string[];
+  /** The thread whose agent's words the box stands Reply over, quoting them in. */
+  replyScope: RefObject<HTMLElement | null>;
   /** Takes the keyboard to what a send found the answer lacking, in the item's question or in the box. */
   onMissing: (missing: InboxMissing) => void;
 }
@@ -254,6 +266,7 @@ function AnswerCard({
   agentName,
   skills,
   keywords,
+  replyScope,
   onMissing,
   statuses,
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
@@ -350,6 +363,8 @@ function AnswerCard({
   const quiet = answering ? openQuietLine(item, draft, wanting) : undefined;
   const takes = !answering || knownResponse(item.response);
   const takesFiles = takes && !sending;
+  // Note that Reply stands only while the editor stands and takes a quote, since a press lets the selection go.
+  const quotes = takes && !sending && !dictating && module !== undefined;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
     <div
@@ -425,6 +440,7 @@ function AnswerCard({
               attach(pasted);
               return true;
             }}
+            quote={(quote) => <ComposerQuoteView quote={quote} held={sending} />}
           />
           <PromptInputFooter className="inbox-answer-foot">
             {dictating ? (
@@ -490,6 +506,14 @@ function AnswerCard({
           {note}
         </p>
       )}
+      {quotes ? (
+        <ReplyToSelection
+          scope={replyScope}
+          onReply={(words) => {
+            editor.current?.insertQuote(words);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
