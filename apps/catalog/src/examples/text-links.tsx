@@ -1,3 +1,10 @@
+/**
+ * text-links.tsx -- a quiet row of links at a control's height with the
+ * reader's place lifted, a quiet row in the surrounding caption type, an
+ * underlined link, an external one, and words with no address in a
+ * sentence, a heading's mono link, and a long link in a narrow column.
+ */
+
 import {
   GAP,
   Inline,
@@ -12,13 +19,6 @@ import {
 } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
-
-/**
- * text-links.tsx -- a quiet row of links at a control's height with the
- * reader's place lifted, a quiet row in the surrounding caption type, an
- * underlined link, an external one, and words with no address in a
- * sentence, a heading's mono link, and a long link in a narrow column.
- */
 
 function TextLinks(): React.JSX.Element {
   return (

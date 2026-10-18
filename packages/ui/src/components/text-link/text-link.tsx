@@ -1,10 +1,3 @@
-import type { FocusEventHandler, MouseEvent, PointerEventHandler, ReactNode } from "react";
-import { ArrowUpRightIcon } from "../../face/glyphs.js";
-import type { TextFont, TextVariant } from "../text/text.js";
-import { TEXT_LINK_LOOK, type TextLinkLook } from "./text-link-look.js";
-
-export { TEXT_LINK_LOOK, type TextLinkLook } from "./text-link-look.js";
-
 /**
  * text-link.tsx -- a link drawn as words: muted until the pointer or the reader's place lifts it, or underlined in a line of words.
  *
@@ -35,6 +28,13 @@ export { TEXT_LINK_LOOK, type TextLinkLook } from "./text-link-look.js";
  * An app's hint wraps a link and hands it the pointer and focus handlers it
  * shows and goes on (`HintProps`), which land on the link itself.
  */
+
+import type { FocusEventHandler, MouseEvent, PointerEventHandler, ReactNode } from "react";
+import { ArrowUpRightIcon } from "../../face/glyphs.js";
+import type { TextFont, TextVariant } from "../text/text.js";
+import { TEXT_LINK_LOOK, type TextLinkLook } from "./text-link-look.js";
+
+export { TEXT_LINK_LOOK, type TextLinkLook } from "./text-link-look.js";
 
 /** How tall a link stands: its words' own line, or a control's height. */
 export const TEXT_LINK_HEIGHT = {
