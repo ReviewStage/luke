@@ -30,7 +30,9 @@
  * the row's other controls, a list row's Pin and Archive, are then part of
  * its control, so the pointer crossing onto them leaves the card standing
  * and their own pills yield to it, while a press anywhere in the row takes
- * it down.
+ * it down; such a card hangs beside the row rather than its control, so the
+ * control giving its end up to those acts on hover never puts the card over
+ * the row.
  *
  * Taken down once it has shown, a pill or a card is held drawn through its
  * exit, inert, and only then taken out; one taken down while it still
@@ -156,11 +158,13 @@ interface AnchorProps {
 }
 
 /**
- * A pill standing: the control it names, when it began, whether it skipped
- * the wait, and whether its label says more than the control's own name.
+ * A pill standing: the control it names, the row a card hung from it hangs
+ * beside, when it began, whether it skipped the wait, and whether its label
+ * says more than the control's own name.
  */
 interface Shown {
   anchor: HTMLElement;
+  region: HTMLElement | undefined;
   since: number;
   instant: boolean;
   describes: boolean;
@@ -206,12 +210,17 @@ function Hint({
   onCardPress: () => void;
   onCardChoice: () => void;
 }): React.JSX.Element {
-  const { anchor, instant } = drawn.shown;
+  const { anchor, region, instant } = drawn.shown;
   const placed = { id, anchor, instant, leaving, ref: hold };
   if (card !== undefined) {
+    // Note that a card hung from a row hangs beside the whole row, because
+    // its control, the row's press, gives its end up to the row's acts as
+    // they come in on hover, and a card beside the press would stand over
+    // the row's end.
     return (
       <TooltipCard
         {...placed}
+        anchor={region ?? anchor}
         beside={cardBeside}
         onHover={onCard}
         onPress={onCardPress}
@@ -248,7 +257,7 @@ function Hint({
  * take it down once chosen, and stay the pointer's alone, so the card is a
  * description the keyboard never enters. `cardRegion` is the row the
  * control stands in, the whole of which counts as the control while its
- * card stands.
+ * card stands, and which the card hangs from in the control's place.
  */
 export function Tooltip({
   label,
@@ -330,15 +339,17 @@ export function Tooltip({
     unstack(hide);
     const now = performance.now();
     const name = anchor.getAttribute("aria-label") ?? anchor.textContent?.trim();
+    const row = region();
     setShown({
       anchor,
+      region: row,
       since: now,
       instant: now < warmUntil,
       describes: card !== undefined || name !== label,
     });
     standing.push({
       hide,
-      region: region(),
+      region: row,
       holds: (node) => pillElement.current?.contains(node) === true,
     });
   };
