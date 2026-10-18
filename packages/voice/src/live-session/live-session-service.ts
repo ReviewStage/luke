@@ -1096,6 +1096,9 @@ export class LiveSessionService {
   #arrivals(session: StandingSession): Effect.Effect<void> {
     return Stream.runForEach(session.sideband.arrivals, (arrival) => {
       if ("close" in arrival) {
+        // A socket gone with no close of the session's own, none asked for, may be a device that
+        // attaches again: what no ask carried is left for that call rather than handed on.
+        if (!session.closing) session.handsOver = false;
         this.#settle(session, {
           outcome: SIDEBAND_CLOSE_OUTCOME.CONNECTION_LOST,
           close: arrival.close,

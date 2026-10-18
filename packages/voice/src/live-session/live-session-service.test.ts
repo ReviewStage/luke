@@ -942,7 +942,7 @@ it.effect("a call whose every word an ask carried asks nothing more as it ends",
 );
 
 it.effect(
-  "the session closing of its own hands on the developer's undelegated words too, and a session let go of for its peer to attach to again hands on nothing",
+  "the session closing of its own hands on the developer's undelegated words too, and a session let go of, or whose socket dropped, for its peer to attach to again hands on nothing",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -961,5 +961,14 @@ it.effect(
       yield* detached.service.release();
       yield* settle();
       assert.deepEqual(detached.brain.asks, []);
+
+      // A socket gone with no close of the session's own, as the relay drops a detached device's.
+      const dropped = yield* fixture();
+      const lost = yield* dropped.open();
+      yield* settle();
+      lost.input("Make it four days.", 0, 900);
+      lost.dropConnection();
+      yield* settle();
+      assert.deepEqual(dropped.brain.asks, []);
     }),
 );
