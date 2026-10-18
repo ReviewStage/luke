@@ -98,15 +98,12 @@ test("a chip drawn as its mark alone is still named by its words", () => {
 function Removable(): React.JSX.Element | null {
   const [standing, setStanding] = useState(true);
   if (!standing) return null;
-  return createElement(
-    Chip,
-    {
-      look: CHIP_LOOK.FILTER,
-      removeLabel: "Show everyone's tasks",
-      onRemove: () => setStanding(false),
-    },
-    createElement(ChipName, null, "Created by me"),
-  );
+  return createElement(Chip, {
+    look: CHIP_LOOK.FILTER,
+    removeLabel: "Show everyone's tasks",
+    onRemove: () => setStanding(false),
+    children: createElement(ChipName, null, "Created by me"),
+  });
 }
 
 test("a removable chip is no press of its own, and its × named for what it does lifts it", () => {
