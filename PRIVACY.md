@@ -932,17 +932,18 @@ service's web functions send every error they did not handle or that ended
 work they run apart from a request (such as following a turn for a call, or
 standing the voice or terminal service), with its message, stack trace, and
 the lines of code around it; performance traces of a share of the requests
-they answer, each database query, and each request they
-make, with the method, address, and query parameters, the status, the
+they answer, each database query, and each request they make, with the
+method, the address and the names of its query parameters, the status, the
 browser's or app's user agent, and the query's text; every line they log;
 counts and timings; and, each minute, whether the scheduled sweep ran. They do
 not send a request's headers or body, the values of local variables, or the IP
 address a request came from. Luke's agents send what Sentry's SDK collects by
 default: every error they did not handle or that ended work they started
 apart from a turn, with its message, stack trace, the lines of code around it,
-and the values of local variables; performance traces
-of each request they answer, each database query, and each request they make,
-with their headers, bodies, query parameters, and database query parameters,
+and the values of local variables; performance traces of each request they
+answer, each database query, and each request they make, with their headers,
+bodies, addresses, the names of their query parameters, and database query
+parameters,
 and the IP address a request came from; every line they log; and Sentry's
 agent traces of each turn: the instructions and messages sent to the model
 (which include the plan, the conversation, what was said on a call, and what
@@ -951,9 +952,15 @@ an integration's answer), the model's replies, and each tool call with its
 arguments and result. In what the agents send, Sentry replaces a value whose
 name looks like a credential (such as `auth`, `token`, `secret`, `password`,
 `key`, or `session`) before it leaves, but not a credential written in free
-text, such as a key pasted into a conversation; the address and query
-parameters of a request the web functions trace are sent as the request
-carried them. Terminal tabs' bytes are not sent. What reaches
+text, such as a key pasted into a conversation. In the address of a request
+that the web functions or the agents give on a trace, an error, a breadcrumb,
+or a log line, the value of each query parameter and the fragment are replaced,
+and so is any part of its path shaped like a credential, such as a long token;
+the scheme, the host, the rest of the path, and the parameters' names are sent
+as the request carried them. An address written elsewhere, such as in a header,
+the words of an error or a log line, a tool call, or a message to the model, is
+sent as it was written. Terminal
+tabs' bytes are not sent. What reaches
 Sentry is kept under Sentry's retention, not tied to your account, and is not
 erased when you delete your account.
 
