@@ -927,6 +927,21 @@ export function PlanBody({
         });
     };
   };
+  // Each section's toggler is the same function from draw to draw, reading
+  // the section as it stands when a box is pressed, so a section whose words
+  // did not move is not parsed again (`MarkdownMessage`).
+  const latestToggler = useRef(taskToggler);
+  latestToggler.current = taskToggler;
+  const steadyTogglers = useRef(new Map<number, TaskToggler>());
+  const steadyToggler = (section: number): TaskToggler | undefined => {
+    if (taskToggler(section) === undefined) return undefined;
+    const kept = steadyTogglers.current.get(section);
+    if (kept !== undefined) return kept;
+    const toggle: TaskToggler = (at) =>
+      latestToggler.current(section)?.(at) ?? Promise.resolve(false);
+    steadyTogglers.current.set(section, toggle);
+    return toggle;
+  };
   // The document's one Tab stop: the block selected last while it still stands, or its title, or its first section.
   const standing =
     editing.cursor === EDITOR_PLACE.TITLE
@@ -954,7 +969,7 @@ export function PlanBody({
           linked={linked}
           anchor={anchors[section] ?? ""}
           entry={entry === view.id}
-          onTask={taskToggler(section)}
+          onTask={steadyToggler(section)}
         />
       </DocumentBlock>
     ) : (

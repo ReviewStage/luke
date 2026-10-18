@@ -2,7 +2,7 @@ import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { matchRanges } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
-import { createContext, type ReactNode, useContext, useMemo, useRef } from "react";
+import { createContext, memo, type ReactNode, useContext, useMemo, useRef } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PlanDiagram } from "./plan-diagram";
@@ -657,7 +657,7 @@ function keptUrl(url: string): string {
  * the same component reads at the caption's ten pixels and the plan's own
  * size.
  */
-export function MarkdownMessage({
+function MarkdownWords({
   words,
   className,
   edit,
@@ -754,3 +754,10 @@ export function MarkdownMessage({
     </div>
   );
 }
+
+/**
+ * Markdown drawn as Luke draws a message or a plan's section, parsed again
+ * only when what it is handed changes: a plan's page is drawn again on every
+ * page a running agent's tab hears, and its sections' words rarely move.
+ */
+export const MarkdownMessage = memo(MarkdownWords);

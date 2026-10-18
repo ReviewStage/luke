@@ -1167,8 +1167,19 @@ export function chatNoticeOf(message: CodingAgentMessage): ChatNoticeMetadata | 
 
 /** The parts of a message as the tab draws them, in the row's order. */
 export function agentParts(message: CodingAgentMessage): readonly AgentPart[] {
-  return message.parts.map(agentPart);
+  const read = partsRead.get(message);
+  if (read !== undefined) return read;
+  const parts = message.parts.map(agentPart);
+  partsRead.set(message, parts);
+  return parts;
 }
+
+/**
+ * Each message's parts as last read, by the message: a message is never
+ * changed in place (a page that rewrites one hands a new one), and a
+ * running agent's transcript reads every message's parts on every page.
+ */
+const partsRead = new WeakMap<CodingAgentMessage, readonly AgentPart[]>();
 
 /** How many of the agent's plan edits have answered, which is when the plan the window holds is behind the service's. */
 export function settledPlanEdits(messages: readonly CodingAgentMessage[]): number {
