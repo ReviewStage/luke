@@ -182,7 +182,9 @@ test("an integration's call keeps its row and gains its pictures as chips, one l
       ]),
     ],
   });
-  const chips = [...answered.container.querySelectorAll(".call-picture")];
+  const chips = [
+    ...answered.container.querySelectorAll('ul[aria-label="Pictures the call answered"] > li'),
+  ];
   assert.equal(chips.length, 2);
   assert.equal(chips[0]?.querySelector("img")?.getAttribute("alt"), "extract_images-1");
   assert.equal(chips[1]?.textContent, "Not kept6.4 MB");

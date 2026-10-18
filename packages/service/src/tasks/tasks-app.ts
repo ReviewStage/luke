@@ -70,8 +70,10 @@ import type { GitHubApp } from "../github/github-app.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
+  HOSTED_BYTES_HEADERS,
   HOSTED_REFUSAL,
   type HostedRefusal,
+  hostedBearerOnly,
   hostedJsonResponse,
   hostedNotFoundRoute,
   hostedRefusing,
@@ -264,17 +266,6 @@ const FILE_QUERY = {
 
 /** The query naming one picture of the plan by its id. */
 const ATTACHMENT_QUERY = "attachment";
-
-/**
- * The headers a picture's bytes are served under beside their type: the
- * browser is told not to sniff them for another type, since the type is
- * what the service sniffed them to be as they were kept, and nothing on the
- * way may keep a copy, since the bytes are a workspace's own.
- */
-const PICTURE_HEADERS = {
-  "x-content-type-options": "nosniff",
-  "cache-control": "private, no-store",
-} as const;
 
 /** A start or a change is a name and a repository's name at most, so a body past this is neither. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
@@ -565,6 +556,11 @@ const ONE_TASK_METHODS: ReadonlySet<string> = new Set([
  * then the task. An eve that refuses a Stop, an agent with a turn still coming
  * that no Stop can name yet, or an agent started while the others were
  * stopped, leaves the task standing and refused.
+ *
+ * It takes the developer's bearer alone (`hostedBearerOnly`), because the
+ * Stops and the retires reach eve over it: a browser's session cookie
+ * carries none eve takes, so a cookie's delete of an idle task would go on
+ * with every session of it left standing.
  */
 const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: TasksAppSeams,
@@ -573,6 +569,7 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   taskId: string,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
+  yield* hostedBearerOnly(request);
   const agents = yield* hostedStoreOrUnavailable(
     listCodingAgents(userId, taskId, { includeArchived: true }),
   );
@@ -1158,7 +1155,7 @@ const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/planAttachmentEndpoint
   return HttpServerResponse.uint8Array(found.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,
     contentType: found.value.contentType,
-    headers: PICTURE_HEADERS,
+    headers: HOSTED_BYTES_HEADERS,
   });
 });
 

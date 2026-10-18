@@ -3,7 +3,14 @@ import type { Task } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ComposeIcon, IconButton, SidebarIcon } from "@luke/ui";
+import {
+  ComposeIcon,
+  IconButton,
+  SettingsPage,
+  SettingsSectionsSkeleton,
+  SidebarIcon,
+  Skeleton,
+} from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
@@ -49,7 +56,7 @@ import { useWindowTitle } from "./window-title";
  * with the window, because the renderer bundle is parsed at every window
  * open, the voice window's included, and Settings is opened seldom
  * (`bundle-budget.json`). The chunk is a local file, so it stands a frame
- * later, over nothing in the meantime.
+ * later, over its frame of placeholders in the meantime (`SettingsLoading`).
  */
 const DesktopSettings = lazy(() =>
   import("./desktop-settings").then((loaded) => ({ default: loaded.DesktopSettings })),
@@ -108,14 +115,38 @@ function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Eleme
 }
 
 /**
- * What stands while Settings' chunk loads: nothing drawn, but Settings' own
- * way out, so Escape pressed in that frame leaves Settings as it would once
- * drawn, rather than falling through to the task behind it. It is gone as
- * Settings stands and offers the same command itself.
+ * How wide the placeholder title stands while Settings' chunk loads: a short
+ * page name's, five controls' height across. Note that it is a length rather
+ * than a share, because the title's line is only as wide as what it holds.
  */
-function SettingsLoading({ onExit }: { onExit: () => void }): null {
+const SETTINGS_SKELETON_TITLE = "calc(5 * var(--luke-control-height))";
+
+/** How many rows each placeholder section stands while Settings' chunk loads. */
+const SETTINGS_SKELETON = [3, 2] as const;
+
+/**
+ * What stands while Settings' chunk loads: its frame, the page list's column
+ * and a page of placeholder sections under a placeholder title, so Settings
+ * lands where the blocks stood; and Settings' own way out, so Escape pressed
+ * in that frame leaves Settings as it would once drawn, rather than falling
+ * through to the task behind it. It is gone as Settings stands and offers the
+ * same command itself.
+ */
+function SettingsLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_SETTINGS, onExit);
-  return null;
+  return (
+    <div className="desktop-settings">
+      <nav className="settings-pages" aria-label="Settings pages">
+        <div className="desktop-drag-strip" />
+      </nav>
+      <section className="settings-page" aria-label="Settings">
+        <div className="desktop-drag-strip" />
+        <SettingsPage title={<Skeleton width={SETTINGS_SKELETON_TITLE} />}>
+          <SettingsSectionsSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
+        </SettingsPage>
+      </section>
+    </div>
+  );
 }
 
 /** What stands between the developer and the window's own content: the account sign-in. */

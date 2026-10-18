@@ -1,5 +1,6 @@
 /* attachment-chip.css -- a file's chip, as tall as a thumbnail: a picture
-   fills it, any other file is its glyph, its name cut short, and its size.
+   fills it, any other file is its glyph, its name cut short, and its size;
+   a file still read or failed holds the spinner or its glyph.
    The face is the press that opens the file, washed under the pointer as a
    row is; the way off is a small disc over the chip's corner. */
 
@@ -41,7 +42,10 @@
     transition: background-color var(--duration-hover) ease;
   }
 
+  /* A thumbnail's place holds a picture, or a wait or a failure's glyph at
+     its middle. */
   .luke-attachment-chip[data-image="true"] .luke-attachment-chip-face {
+    justify-content: center;
     padding: 0;
   }
 

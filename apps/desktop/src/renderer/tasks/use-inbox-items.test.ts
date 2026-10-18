@@ -82,3 +82,27 @@ test("a plan that changed since its items were read is pending until a read of i
   assert.deepEqual([unread, read, control?.pending], [true, false, true]);
   assert.deepEqual(control?.items.get("acme-plan"), []);
 });
+
+test("asked to read again, every listed plan is read anew though main says none changed, its last items standing, and not pending, until the new read lands", async () => {
+  const answers: ((answer: CodingAgentInboxAnswerView) => void)[] = [];
+  const readInbox = (): Promise<CodingAgentInboxAnswerView> =>
+    new Promise((resolve) => answers.push(resolve));
+  let control: InboxItemsControl | undefined;
+  function Probe({ holdings }: { holdings: readonly AppInboxTaskHolding[] }) {
+    control = useInboxItems({ holdings, readInbox });
+    return null;
+  }
+  root = createRoot(document.createElement("div"));
+  act(() => root?.render(createElement(Probe, { holdings: [holding("acme-plan")] })));
+  await act(async () => answers[0]?.({ items: [], cursor: INBOX_CURSOR_START }));
+  await settle();
+  assert.equal(answers.length, 1);
+
+  act(() => control?.onReread());
+  await settle();
+  assert.equal(answers.length, 2, "the plan is read again");
+  assert.deepEqual([control?.pending, control?.items.get("acme-plan")], [false, []]);
+  await act(async () => answers[1]?.({ items: [], cursor: "2" }));
+  await settle();
+  assert.equal(answers.length, 2, "and once");
+});

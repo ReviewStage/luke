@@ -48,6 +48,7 @@ import { TestClock } from "effect/testing";
 import { githubInstallApp } from "../github/github-install-app.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxItem, postInboxItem } from "../inbox/inbox-store.js";
+import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   type FakeGitHub,
   GITHUB_FIXTURE_REFUSED_CODE,
@@ -1019,6 +1020,7 @@ const readPhoto = (seams: WorkspaceSeams, userId: string | undefined, workspaceI
       contentType: response.headers.get("content-type"),
       nosniff: response.headers.get("x-content-type-options"),
       cacheControl: response.headers.get("cache-control"),
+      policy: openedPagePolicy(response.headers),
       base64: Buffer.from(await response.arrayBuffer()).toString("base64"),
     }),
   );
@@ -1053,6 +1055,7 @@ it.effect(
           contentType: "image/png",
           nosniff: "nosniff",
           cacheControl: "private, no-store",
+          policy: SANDBOXED_PAGE,
           base64: png,
         });
         assert.equal(outsider.status, HOSTED_HTTP_STATUS.NOT_FOUND);

@@ -86,6 +86,12 @@ const FILE_TYPES: ReadonlyMap<string, GitHubImageType> = new Map([
   ["svg", GITHUB_IMAGE_TYPE.SVG],
 ]);
 
+/** The type a file of a repository is read as, by its path's extension; none for a path whose extension names no image the window draws. */
+export function imageTypeOfPath(path: string): GitHubImageType | undefined {
+  const extension = /\.([^./]+)$/u.exec(path)?.[1]?.toLowerCase() ?? "";
+  return FILE_TYPES.get(extension);
+}
+
 /** The segment `github.com/<owner>/<name>/raw/<ref>/<path>` names a repository's file under. */
 const RAW_SEGMENT = "raw";
 
@@ -131,8 +137,7 @@ function fileOf(segments: readonly string[]): GitHubFileImage | undefined {
   const decoded = segments.map(decodedSegment).filter((segment) => segment !== undefined);
   if (decoded.length !== segments.length || decoded.length < 4) return undefined;
   const [owner = "", name = "", ref = "", ...path] = decoded;
-  const extension = /\.([^.]+)$/u.exec(path.at(-1) ?? "")?.[1]?.toLowerCase() ?? "";
-  const contentType = FILE_TYPES.get(extension);
+  const contentType = imageTypeOfPath(path.at(-1) ?? "");
   if (contentType === undefined) return undefined;
   return {
     source: GITHUB_IMAGE_SOURCE.FILE,

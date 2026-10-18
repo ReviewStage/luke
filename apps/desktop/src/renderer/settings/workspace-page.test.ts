@@ -133,6 +133,8 @@ let macRepositories: MacRepository[] = [];
 let macSaveHeld: Promise<void> | undefined;
 /** The repositories the workspace reaches on GitHub, by full name. */
 let githubRepositories: string[] = [];
+/** While set, the read of the repositories the workspace reaches waits on it before it is answered. */
+let repositoriesHeld: Promise<void> | undefined;
 /** The automations the workspace holds, as the list answers them; absent, the list is not answered. */
 let automations: { name: string; mine?: boolean }[] | undefined;
 
@@ -294,6 +296,11 @@ function answer(request: Act): Promise<ActOutcome> {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
       return Promise.resolve(done({ automations: automations.map(automationOf) }));
     case ACT_KIND.TASKS_REPOSITORIES:
+      if (repositoriesHeld !== undefined) {
+        const held = repositoriesHeld;
+        repositoriesHeld = undefined;
+        return held.then(() => answer({ ...request }));
+      }
       return Promise.resolve(
         done({
           repositories: {
@@ -355,6 +362,7 @@ beforeEach(() => {
   macRepositories = [];
   macSaveHeld = undefined;
   githubRepositories = [];
+  repositoriesHeld = undefined;
   fakeAppBridge({ act: answer });
   handCapabilities(DESKTOP_CAPABILITIES);
 });
@@ -480,7 +488,7 @@ const invitationRows = (page: HTMLElement) =>
   );
 
 /** A pending invitation's address, its row's label. */
-const addressOf = (row: HTMLElement) => row.querySelector('[id$="label"] .settings-one-line');
+const addressOf = (row: HTMLElement) => row.querySelector('[id$="label"] .luke-one-line');
 
 /** The items of the ⋯ on `row`, or none where it draws no ⋯. */
 function rowActions(row: HTMLElement): string[] {
@@ -529,8 +537,21 @@ const refusalOf = (within: Element) =>
     .map((each) => each.textContent)
     .find((words) => words !== null && words !== "");
 
-/** Whether the settings page around what was drawn holds its sections back, as it does while a read is out. */
-const heldBack = (container: HTMLElement) => container.querySelector('[aria-busy="true"]') !== null;
+/** Whether anything drawn is busy, as a placeholder standing for a read still out is. */
+const busy = (container: HTMLElement) => container.querySelector('[aria-busy="true"]') !== null;
+
+/** The page's group a Settings link names by `anchor`. */
+const section = (page: HTMLElement, anchor: string) =>
+  page.querySelector<HTMLElement>(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${anchor}"]`) ??
+  assert.fail(`no ${anchor} group`);
+
+/** The placeholder standing for a read still out, what it says it reads, and how many rows it stands. */
+const placeholderOf = (within: Element) => {
+  const status = within.querySelector('[role="status"][aria-busy="true"]');
+  return status === null
+    ? undefined
+    : [status.textContent, status.querySelectorAll(".luke-settings-row").length];
+};
 
 /** The workspace's name, as the identity row's label says it. */
 const nameShown = (page: HTMLElement) => identity(page).querySelector('[id$="label"]')?.textContent;
@@ -790,7 +811,7 @@ test("a member's address and an invited one, where the row cuts them short, are 
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   await invite(page, LONG, WORKSPACE_ROLE.MEMBER);
   const addresses = [
-    memberNamed(page, "Sam").querySelector("p .settings-one-line"),
+    memberNamed(page, "Sam").querySelector("p .luke-one-line"),
     addressOf(invitationRows(page)[0] ?? assert.fail("no pending invitation")),
   ].map((words) => words ?? assert.fail("an address is not drawn"));
 
@@ -819,14 +840,14 @@ test("each member's row leads with their face, their picture where the read list
   );
 });
 
-test("while the members are being read the page holds itself back, and a read that failed says so with Retry", async () => {
+test("while the members are being read the rest of the page stands, a placeholder row for each member in theirs, and a read that failed says so with Retry", async () => {
   refuseMembersRead = true;
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const control: WorkspaceSettingsControl = {
-    workspaces: [FIRST, ACME],
+    workspaces: [FIRST, { ...ACME, memberCount: 3 }],
     workspaceId: ACME.id,
     onLeft: () => undefined,
     listFailed: false,
@@ -840,10 +861,14 @@ test("while the members are being read the page holds itself back, and a read th
       }),
     ),
   );
-  const whileReading = heldBack(container);
+  const members = section(container, SETTINGS_SECTION.MEMBERS);
+  const whileReading = {
+    members: placeholderOf(members),
+    identityHeld: identity(container).closest('[aria-busy="true"]') !== null,
+  };
   await settle();
 
-  assert.equal(whileReading, true);
+  assert.deepEqual(whileReading, { members: ["Loading the members", 3], identityHeld: false });
   assert.equal(
     container.querySelector('[role="alert"]')?.textContent,
     "The members could not be read.Retry",
@@ -852,7 +877,32 @@ test("while the members are being read the page holds itself back, and a read th
   act(() => button(container, "Retry").click());
   await settle();
   assert.ok(memberNamed(container, "Sam"));
-  assert.equal(heldBack(container), false);
+  assert.equal(busy(container), false);
+});
+
+test("before the workspaces are read, placeholder sections stand in the page's shape, saying what is read", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const control: WorkspaceSettingsControl = {
+    workspaces: [],
+    workspaceId: undefined,
+    onLeft: () => undefined,
+    listFailed: false,
+    onRetryList: () => undefined,
+  };
+  act(() =>
+    root.render(
+      createElement(SettingsPage, {
+        title: "Workspace",
+        children: createElement(WorkspacePage, { control, readerId: READER_ID }),
+      }),
+    ),
+  );
+
+  assert.deepEqual(placeholderOf(container), ["Loading your workspaces", 5]);
+  assert.equal(container.querySelectorAll('[role="status"] .luke-settings-section-card').length, 3);
 });
 
 test("an admin is offered Remove for a member but not for the owner, and Remove asks before it removes", async () => {
@@ -1711,7 +1761,7 @@ test("a workspaces read that failed says so with Retry, which asks for them agai
     container.querySelector('[role="alert"]')?.textContent,
     "Your workspaces could not be read.Retry",
   );
-  assert.equal(heldBack(container), false);
+  assert.equal(busy(container), false);
   act(() => button(container, "Retry").click());
   assert.equal(retried, 1);
 });
@@ -1842,6 +1892,23 @@ test("on a platform without this Mac's terminal, the Workspace page draws no Rep
 
   assert.equal(group(SETTINGS_SECTION.GITHUB_REPOSITORIES) !== null, true, "the page is drawn");
   assert.equal(group(SETTINGS_SECTION.MAC_REPOSITORIES) !== null, false);
+});
+
+test("while the repositories are read, placeholder rows stand in the Repositories group's, and the repositories land in their place", async () => {
+  githubRepositories = ["acme/app"];
+  const { promise: held, resolve: land } = Promise.withResolvers<void>();
+  repositoriesHeld = held;
+  const { page } = await mount(ACME);
+  const group = section(page, SETTINGS_SECTION.MAC_REPOSITORIES);
+
+  assert.deepEqual(placeholderOf(group), ["Loading the repositories", 2]);
+  land();
+  await settle();
+  assert.equal(placeholderOf(group), undefined);
+  assert.deepEqual(
+    [...group.querySelectorAll("input")].map((each) => each.getAttribute("aria-label")),
+    ["acme/app run command"],
+  );
 });
 
 test("the Repositories group lists the workspace's repositories and those set here, and saves a command typed on this Mac", async () => {

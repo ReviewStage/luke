@@ -826,6 +826,9 @@ export const CHANGES_BOUNDS = {
  * and removes; and its patch, every hunk of a unified diff from the first
  * `@@` header on, or null with why where it carries none.
  */
+/** A commit as GitHub names it: forty hex digits. */
+const commitShaSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{40}$/u));
+
 const changedFileSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   previousPath: EffectSchema.NullOr(EffectSchema.String),
@@ -894,12 +897,18 @@ const reviewCommentSchema = EffectSchema.Struct({
  * reviewers and where each stands, who authored its commits, and its
  * reviews that said something ride beside the files, each absent from a
  * service before them, and who the agent writes as absent too for an agent
- * whose first session never settled it.
+ * whose first session never settled it. The commits a changed image is read
+ * at ride beside them too (`headSha`, the pull request's head, and
+ * `baseSha`, where its head and base branch part, which GitHub's diff is
+ * counted from), each absent where it could not be read, and `baseSha`
+ * absent where no image the files change stood before them.
  */
 export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
     EffectSchema.Struct({
       url: EffectSchema.String,
+      headSha: EffectSchema.optionalKey(commitShaSchema),
+      baseSha: EffectSchema.optionalKey(commitShaSchema),
       files: EffectSchema.Array(changedFileSchema).check(
         EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_FILES),
       ),
