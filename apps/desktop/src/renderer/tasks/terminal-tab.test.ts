@@ -331,7 +331,7 @@ async function mount(
     standing: () => container.querySelector(".terminal-tab-standing")?.textContent,
     /** The slim bar's words, its action's label, or nothing without one. */
     bar: () => container.querySelector(".terminal-bar-words")?.textContent,
-    action: () => container.querySelector<HTMLButtonElement>(".terminal-bar-action"),
+    action: () => container.querySelector<HTMLButtonElement>(".terminal-bar-end button"),
     dimmed: () =>
       container.querySelector(".terminal-tab-screen")?.getAttribute("data-dim") === "true",
     /** A key pressed in the screen, as the window delivers it: its keypress only where its keydown went unclaimed. */

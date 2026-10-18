@@ -354,7 +354,7 @@
    press drawn as the line over the document's is. Note that both take the
    pointer although the line fades out, because a pointer on them is on
    their section, which shows it. */
-.plan-unit-byline > :is([data-actor-ref], .plan-edit-link) {
+.plan-unit-byline > :is([data-actor-ref], button) {
   pointer-events: auto;
 }
 
@@ -2474,20 +2474,58 @@
   min-width: 0;
 }
 
+/* The reactions under a description or a comment, as GitHub draws them:
+   a row of pills, each its emoji and how many gave it, the reader's own lit
+   in the accent. */
+.pull-request-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-section > .pull-request-reactions {
+  margin-top: var(--luke-space-8);
+  padding-inline: var(--row-inset);
+}
+
+.pull-request-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-2) var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: 999px;
+  color: var(--luke-color-text-muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.pull-request-reaction-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.pull-request-reaction[data-mine="true"] {
+  border-color: color-mix(in srgb, var(--luke-color-focus-ring) 55%, transparent);
+  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
+  color: var(--luke-color-text);
+}
+
 /* The earlier entries a read left on GitHub, counted where they would stand. */
 .pull-request-earlier {
   margin: 0 0 var(--luke-space-8);
   padding-inline: var(--row-inset);
 }
 
+/* What a read left on GitHub, counted as a press in the caption's type. */
 .pull-request-more {
   align-self: flex-start;
-  padding: 0;
-  border: 0;
-  background: none;
+  max-width: 100%;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
-  text-decoration: underline;
+  line-height: var(--luke-type-caption-leading);
 }
 
 .file-tab-snippet-label {
@@ -3466,10 +3504,6 @@ ol.transcript-list {
   color: var(--luke-color-text);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-button.draft-fork-quote:hover {
-  text-decoration: underline;
 }
 
 .draft-fork-drop {
@@ -4732,20 +4766,10 @@ button.attached-file-face:hover img {
   color: var(--luke-color-text-subtle);
 }
 
-.terminal-bar-action {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-accent);
-  font: inherit;
-  font-weight: var(--luke-weight-semibold);
-}
-
+/* The action's key, after its words, in the action's own ink. */
 .terminal-bar-key {
   --shortcut-ink: currentColor;
+  margin-inline-start: var(--luke-space-4);
 }
 
 /* An agent's mark heading a row (`agent-ref.tsx`'s `AgentMarkRef`), which

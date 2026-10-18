@@ -11,11 +11,13 @@ import {
   DisclosureBody,
   DisclosureSummary,
   Inline,
+  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextButton,
   TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
@@ -390,14 +392,11 @@ function ReplayFoot({
         </span>
       )}
       {onOpenTranscript === undefined ? null : (
-        <button
-          type="button"
-          className="text-link ml-auto cursor-pointer border-0 bg-transparent p-0 text-[12.5px] text-foreground"
-          data-replay-open=""
-          onClick={onOpenTranscript}
-        >
-          {FULL_TRANSCRIPT_WORDS} ›
-        </button>
+        <span className="ml-auto text-foreground" data-replay-open="">
+          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={onOpenTranscript}>
+            {FULL_TRANSCRIPT_WORDS} ›
+          </TextButton>
+        </span>
       )}
     </div>
   );

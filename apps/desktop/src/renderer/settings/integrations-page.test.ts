@@ -22,6 +22,7 @@ import {
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { SettingsPage } from "@luke/ui";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -229,9 +230,9 @@ async function settle(): Promise<void> {
 /**
  * The signed-in page once where every provider stands has been read, its
  * atoms under `registry` where one is given, as the window's root provides
- * its own.
+ * its own, and under its title in a settings page's frame where `framed`.
  */
-async function mount(registry?: AtomRegistry.AtomRegistry): Promise<HTMLElement> {
+async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -255,7 +256,12 @@ async function mount(registry?: AtomRegistry.AtomRegistry): Promise<HTMLElement>
           },
         },
       },
-      createElement(IntegrationsSection, { signedIn: true }),
+      framed
+        ? createElement(SettingsPage, {
+            title: "Integrations",
+            children: createElement(IntegrationsSection, { signedIn: true }),
+          })
+        : createElement(IntegrationsSection, { signedIn: true }),
     ),
   );
   act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
@@ -769,7 +775,7 @@ function toolName(tool: Element | null | undefined): string | null | undefined {
 function openRow(page: HTMLElement, name: string): void {
   act(() =>
     (
-      rowNamed(page, name).querySelector<HTMLButtonElement>(".integration-tools-toggle") ??
+      rowNamed(page, name).querySelector<HTMLButtonElement>(".integration-tools-line button") ??
       assert.fail(`${name}'s row opens onto its tools`)
     ).click(),
   );
@@ -848,7 +854,7 @@ test("a query keeps only the rows it found, opening one onto the tools it found,
   assert.deepEqual(sections(page), [["Connected", ["Vercel"]]]);
   assert.deepEqual(shownTools(page), [["get_deployment", undefined]]);
   assert.equal(
-    rowNamed(page, "Vercel").querySelector(".integration-tools-toggle")?.textContent,
+    rowNamed(page, "Vercel").querySelector(".integration-tools-line button")?.textContent,
     "1 of 3 tools match",
   );
   assert.equal(page.querySelector(".integration-tools-panel mark")?.textContent, "deploy");
@@ -883,6 +889,25 @@ test("a query that finds nothing says so, and clearing it brings every row back"
 
   assert.equal(rowNames(page).length, INTEGRATION_PROVIDER_LIST.length);
   assert.equal(document.activeElement, searchField(page));
+});
+
+test("while where the providers stand is read, the search stands usable above placeholder sections, and the rows land in their place", async () => {
+  holdReads = true;
+  const page = await mount(undefined, true);
+
+  const status = page.querySelector('[role="status"]') ?? assert.fail("no placeholder");
+  assert.equal(status.textContent, "Loading the integrations");
+  assert.equal(status.querySelectorAll(".luke-settings-section-card").length, 2);
+  // Note that the field is checked as a yes or no, because a failure's diff of an element would print the whole document.
+  assert.equal(searchField(page).closest('[aria-busy="true"]') === null, true);
+  await searchFor(page, "linear");
+  assert.equal(searchField(page).value, "linear");
+
+  for (const release of heldReads.splice(0)) act(() => release());
+  await settle();
+
+  assert.equal(page.querySelector('[role="status"]'), null);
+  assert.deepEqual(rowNames(page), ["Linear"]);
 });
 
 test("Command-F lands in the page's search, and Escape clears it, then lets go of the caret, never reaching the window", async () => {
@@ -926,7 +951,7 @@ test("a query that finds an integration by its own name opens nothing by itself,
   assert.deepEqual(shownTools(page), []);
   act(() =>
     (
-      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".integration-tools-toggle") ??
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".integration-tools-line button") ??
       assert.fail("Vercel's row opens onto its tools")
     ).click(),
   );
@@ -941,7 +966,7 @@ test("a row closed under one query opens again when that query comes back after 
 
   act(() =>
     (
-      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".integration-tools-toggle") ??
+      rowNamed(page, "Vercel").querySelector<HTMLButtonElement>(".integration-tools-line button") ??
       assert.fail("Vercel's row closes")
     ).click(),
   );

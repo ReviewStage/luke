@@ -19,6 +19,7 @@ import {
   MERGE_STATE,
   OVERVIEW_BOUNDS,
   PULL_REQUEST_STATE,
+  REACTION,
   REVIEW_STATE,
 } from "@luke/features/coding-agent-wire";
 import { Effect, Option, Redacted } from "effect";
@@ -960,6 +961,149 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           },
         ]);
         assert.equal(overview.earlier, 1, "the thread GitHub holds past the bound is counted");
+      }),
+  );
+
+  it.effect(
+    "the reactions the description, a comment, a review, and a thread comment wear come with the conversation, in GitHub's order, those given only, each naming who gave it as the conversation names people; a thread comment's, and a comment's the GraphQL read did not reach, counted only",
+    () =>
+      Effect.gen(function* () {
+        const charles = yield* linkedAccount(CHARLES.id);
+        const workspace = yield* openWorkspace(charles);
+        const asNode = (who: typeof CHARLES) => ({
+          __typename: who.type,
+          login: who.login.replace("[bot]", ""),
+          avatarUrl: who.avatar_url,
+          databaseId: who.id,
+        });
+        /** A reaction as GitHub's GraphQL answers one, naming those given. */
+        const group = (content: string, totalCount: number, nodes?: readonly object[]) => ({
+          content,
+          reactors: nodes === undefined ? { totalCount } : { totalCount, nodes },
+        });
+        const overview = yield* overviewOf(
+          workspace,
+          repository({
+            pull: pull(),
+            comments: [
+              {
+                id: 11,
+                user: PRIYA,
+                body: "Ship it.",
+                body_html: '<p dir="auto">Ship it.</p>',
+                created_at: "2026-10-15T10:00:00Z",
+                html_url: `${PAGE}#issuecomment-11`,
+              },
+              {
+                id: 12,
+                user: PRIYA,
+                body: "Merged it locally.",
+                body_html: '<p dir="auto">Merged it locally.</p>',
+                created_at: "2026-10-15T12:00:00Z",
+                html_url: `${PAGE}#issuecomment-12`,
+                reactions: { "+1": 2, "-1": 0, heart: 1, url: "https://api.github.com/x" },
+              },
+            ],
+            reviews: [
+              {
+                id: 5,
+                user: PRIYA,
+                state: "APPROVED",
+                body: "",
+                submitted_at: "2026-10-15T11:00:00Z",
+                html_url: `${PAGE}#pullrequestreview-5`,
+              },
+            ],
+            graphql: {
+              data: {
+                repository: {
+                  pullRequest: {
+                    reactionGroups: [
+                      group("THUMBS_UP", 0, []),
+                      group("ROCKET", 1, [asNode(LUKE)]),
+                      group("HEART", 2, [asNode(CHARLES), asNode(PRIYA)]),
+                      group("SPARKLES", 1, [asNode(PRIYA)]),
+                    ],
+                    comments: {
+                      nodes: [
+                        { databaseId: 11, reactionGroups: [group("EYES", 12, [asNode(CHARLES)])] },
+                      ],
+                    },
+                    reviews: { nodes: [{ databaseId: 5, reactionGroups: [] }] },
+                    reviewThreads: {
+                      totalCount: 1,
+                      nodes: [
+                        {
+                          id: "PRRT_reacted",
+                          path: "src/invite.ts",
+                          line: 12,
+                          startLine: null,
+                          originalLine: 12,
+                          originalStartLine: null,
+                          diffSide: "RIGHT",
+                          startDiffSide: null,
+                          isResolved: false,
+                          isOutdated: false,
+                          comments: {
+                            totalCount: 1,
+                            nodes: [
+                              {
+                                author: asNode(PRIYA),
+                                body: "Why once?",
+                                bodyHTML: '<p dir="auto">Why once?</p>',
+                                createdAt: "2026-10-15T10:59:00Z",
+                                url: `${PAGE}#discussion_r1`,
+                                diffHunk: "@@ -1 +1 @@\n-twice();\n+once();",
+                                pullRequestReview: { databaseId: 5, state: "APPROVED" },
+                                reactionGroups: [group("THUMBS_DOWN", 3), group("LAUGH", 0)],
+                              },
+                            ],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          }),
+        );
+
+        assert.ok(overview !== undefined);
+        const asCharles = {
+          login: CHARLES.login,
+          bot: false,
+          avatarUrl: CHARLES.avatar_url,
+          userId: charles,
+        };
+        const asPriya = { login: PRIYA.login, bot: false, avatarUrl: PRIYA.avatar_url };
+        assert.deepEqual(overview.descriptionReactions, [
+          { content: REACTION.HEART, count: 2, by: [asCharles, asPriya] },
+          {
+            content: REACTION.ROCKET,
+            count: 1,
+            by: [{ login: LUKE.login, bot: true, avatarUrl: LUKE.avatar_url }],
+          },
+        ]);
+        const [said, approved, past] = overview.conversation;
+        assert.deepEqual(said?.reactions, [{ content: REACTION.EYES, count: 12, by: [asCharles] }]);
+        assert.equal(approved?.state, REVIEW_STATE.APPROVED);
+        assert.equal(
+          approved !== undefined && "reactions" in approved,
+          false,
+          "none given, none carried",
+        );
+        assert.deepEqual(approved?.threads?.[0]?.comments[0]?.reactions, [
+          { content: REACTION.THUMBS_DOWN, count: 3 },
+        ]);
+        assert.deepEqual(
+          past?.reactions,
+          [
+            { content: REACTION.THUMBS_UP, count: 2 },
+            { content: REACTION.HEART, count: 1 },
+          ],
+          "a comment the GraphQL read did not reach is counted by its REST rollup",
+        );
       }),
   );
 

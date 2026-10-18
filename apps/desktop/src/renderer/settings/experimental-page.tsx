@@ -11,7 +11,15 @@ import {
   type SettingsRowsInput,
 } from "@luke/settings";
 import { EXPERIMENT_ANCHOR } from "@luke/settings/settings-anchors";
-import { EmptyState, SettingsSection, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  EmptyState,
+  SettingsSection,
+  TEXT_BUTTON_TONE,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  TextButton,
+} from "@luke/ui";
 import { FlaskConicalIcon } from "lucide-react";
 import { useAct } from "../act";
 import { useOpenFeedback } from "../open-feedback";
@@ -66,13 +74,9 @@ function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): 
       detail={
         <>
           {`${entry.detail} `}
-          <button
-            type="button"
-            className="settings-detail-act"
-            onClick={() => openFeedback(entry.key)}
-          >
+          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openFeedback(entry.key)}>
             Send feedback
-          </button>
+          </TextButton>
         </>
       }
       checked={on}

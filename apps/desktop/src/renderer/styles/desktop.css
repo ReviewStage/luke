@@ -2672,24 +2672,6 @@ ul.actor-stack {
   --luke-button-ground: var(--luke-color-ground);
 }
 
-/* The "Edited by" line opens the version history, so it is a press drawn as
-   the muted line it was, underlined only under the pointer or the keyboard. */
-.plan-edit-link {
-  padding: 0;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-
-.plan-edit-link:hover,
-.plan-edit-link:focus-visible {
-  color: var(--luke-color-text);
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-
 /* The "Edited by" line over the document wraps between its words and names
    rather than cutting a name short, so no name is ever cut to nothing beside
    the words around it. */
@@ -5145,10 +5127,6 @@ body:has(.app-stage[data-capture="true"])
   opacity: 1;
 }
 
-.chat-byline-action .chat-thread-toggle {
-  padding: 0;
-}
-
 .chat-author {
   font-weight: var(--luke-weight-semibold);
 }
@@ -5257,12 +5235,10 @@ body:has(.app-stage[data-capture="true"])
 }
 
 .chat-thread-toggle {
+  margin: 0;
   padding: var(--luke-space-4) 0;
-  border: 0;
-  background: none;
-  color: var(--voice-luke);
   font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-label-leading);
 }
 
 /* The composer at a place's foot, at the stream's reading measure: the box,
@@ -5713,9 +5689,9 @@ body:has(.app-stage[data-capture="true"])
   transform: translateX(-100%);
 }
 
-/* Who wrote the revision, on the one line over its sections: a row of its
-   own that goes where the revision was written, lit under the pointer as a
-   sidebar row is, where anywhere in the window wrote it. */
+/* Who wrote the revision, on the one line over its sections, their name
+   the press that goes where the revision was written, where anywhere in the
+   window wrote it. */
 .version-sections-head {
   display: flex;
   min-width: 0;
@@ -5724,18 +5700,7 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--luke-space-8);
   margin: var(--luke-space-8) 0;
   padding: var(--luke-space-6) var(--row-inset);
-  border-radius: var(--luke-control-radius);
-  background: none;
-  text-align: left;
   white-space: nowrap;
-}
-
-.version-sections-source {
-  transition: background-color var(--duration-hover) ease;
-}
-
-.version-sections-source:hover {
-  background: var(--luke-color-fill-hover);
 }
 
 /* The list's foot, a row in the caption's type whose failure wraps under
@@ -6849,25 +6814,6 @@ body:has(.app-stage[data-capture="true"])
    (`planning/server-card.tsx`), each row's words on the card's own column. */
 .luke-hover-card .integration-tool-list {
   margin-inline: calc(-1 * var(--row-inset));
-}
-
-/* A card's name that opens its subject, where the control hanging the card
-   opens nothing of its own: the name as drawn, washed on hover as a named
-   actor is. */
-.card-name-link {
-  padding: 0;
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.card-name-link:hover {
-  background: var(--luke-color-fill-hover);
-  box-shadow: 0 0 0 3px var(--luke-color-fill-hover);
 }
 
 /* Renamed in place, the label gives way to a field in the same type,
