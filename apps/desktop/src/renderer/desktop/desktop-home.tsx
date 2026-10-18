@@ -22,7 +22,8 @@ import {
 import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
-import { useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
 import {
@@ -274,15 +275,39 @@ function HomeRecent({
 function HomeComposer({ tasks }: { tasks: TasksControl }): React.JSX.Element | null {
   if (!tasks.signedIn) return null;
   return (
-    <div className="home-composer ph-no-capture">
-      <NewTaskComposer
-        newTask={{ ...tasks.newTask, preset: undefined }}
-        workspaceId={tasks.newTask.workspaceId}
-        from={undefined}
-        onLeave={letGoOfFocus}
-      />
-    </div>
+    <NewTaskComposer
+      newTask={{ ...tasks.newTask, preset: undefined }}
+      workspaceId={tasks.newTask.workspaceId}
+      from={undefined}
+      onLeave={letGoOfFocus}
+    />
   );
+}
+
+/** Where the page lays the composer: a box of its own, which the composer's one box is moved into. */
+type ComposerSlot = (slot: HTMLElement | null) => void;
+
+/**
+ * One composer for every state of the page, drawn into a box of the page's
+ * own that whichever state stands, the page or the welcome, takes into its
+ * place, so the list landing as a new account's welcome moves the composer
+ * rather than mounting it afresh, and the words typed while it was read
+ * stand. Note that the composer is drawn after the page, so its place is
+ * taken before its words decide whether to take the caret.
+ */
+function useComposerSlot(composer: ReactNode): readonly [ReactNode, ComposerSlot] {
+  const [box] = useState(() => {
+    const made = document.createElement("div");
+    made.className = "home-composer ph-no-capture";
+    return made;
+  });
+  const place = useCallback<ComposerSlot>(
+    (slot) => {
+      if (slot !== null && box.parentNode !== slot) slot.append(box);
+    },
+    [box],
+  );
+  return [createPortal(composer, box), place];
 }
 
 /** Hands the focus back to the page from whatever holds it, as Escape from an agent's box does. */
@@ -292,7 +317,7 @@ function letGoOfFocus(): void {
 }
 
 /** A new account's welcome: Luke's face and the line over the composer. */
-function Welcome({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+function Welcome({ place }: { place: ComposerSlot }): React.JSX.Element {
   return (
     <section className="home-welcome" aria-label="Welcome">
       <span className="home-welcome-face" aria-hidden="true">
@@ -301,7 +326,7 @@ function Welcome({ tasks }: { tasks: TasksControl }): React.JSX.Element {
       <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
         Start your first task
       </Text>
-      <HomeComposer tasks={tasks} />
+      <div className="home-composer-slot" ref={place} />
     </section>
   );
 }
@@ -383,26 +408,39 @@ export function DesktopHome({
     tasks.tasks.length === 0 &&
     tasks.archived.length === 0 &&
     !tasks.inboxTaskless.some((each) => waitsOnReader(each, tasks.me));
-  if (!reading && !tasks.listFailed && fresh) return <Welcome tasks={tasks} />;
+  const [composer, place] = useComposerSlot(<HomeComposer tasks={tasks} />);
+  if (!reading && !tasks.listFailed && fresh) {
+    return (
+      <>
+        <Welcome place={place} />
+        {composer}
+      </>
+    );
+  }
   // Note that the composer stands in one place while the list is read and
   // once it lands, so the list landing keeps the words typed while it was
   // read and the caret in them.
   return (
-    // Note that the rows the arrow keys move through are found inside this box, which lays nothing out.
-    <div className="home-rows" ref={setRows}>
-      <DetailPage title={reading ? <Skeleton width={SKELETON_GREETING} /> : greeting(accountName)}>
-        <HomeComposer tasks={tasks} />
-        {reading ? (
-          <SectionsSkeleton />
-        ) : (
-          // The Inbox's agent cards name who started each agent, and Recent's rows
-          // who created each teammate's task, read against the listed workspace's members.
-          <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
-            <HomeInbox tasks={tasks} now={now} />
-            <HomeRecent tasks={tasks} now={now} />
-          </MemberDirectory>
-        )}
-      </DetailPage>
-    </div>
+    <>
+      {/* Note that the rows the arrow keys move through are found inside this box, which lays nothing out. */}
+      <div className="home-rows" ref={setRows}>
+        <DetailPage
+          title={reading ? <Skeleton width={SKELETON_GREETING} /> : greeting(accountName)}
+        >
+          <div className="home-composer-slot" ref={place} />
+          {reading ? (
+            <SectionsSkeleton />
+          ) : (
+            // The Inbox's agent cards name who started each agent, and Recent's rows
+            // who created each teammate's task, read against the listed workspace's members.
+            <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+              <HomeInbox tasks={tasks} now={now} />
+              <HomeRecent tasks={tasks} now={now} />
+            </MemberDirectory>
+          )}
+        </DetailPage>
+      </div>
+      {composer}
+    </>
   );
 }

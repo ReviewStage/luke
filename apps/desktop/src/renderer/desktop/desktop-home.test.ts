@@ -669,6 +669,41 @@ test("words typed in the composer while the task list is read are still there on
   );
 });
 
+test("words typed in the composer while the task list is read are still there once it lands as a new account's welcome", async () => {
+  const none = { tasks: [], archived: [], inbox: [], inboxTasks: [] };
+  const { page, opened, tasks } = mount({
+    listRead: false,
+    tasks: [],
+    listed: none,
+    inbox: [],
+    inboxTasks: [],
+  });
+  await settle();
+  typeInComposer(page, "Create my first app");
+
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopHome, { tasks: { ...tasks, listRead: true }, accountName: "Dean" }),
+      ),
+    ),
+  );
+  await settle();
+  assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
+  assert.ok(
+    page.querySelector("[aria-label='Welcome'] .new-task-composer"),
+    "the composer stands under Luke's line",
+  );
+  pressInComposer(page, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    opened.started.map((each) => each.agent?.prompt),
+    ["Create my first app"],
+  );
+});
+
 test("Home lists every open item of the listed plans, a teammate's agent's included, though main counts only the account's own as waiting on it", async () => {
   // Billing's question is a teammate's agent's: main's account read holds the task, but waits the account on Invitations' alone.
   const { page } = mount({

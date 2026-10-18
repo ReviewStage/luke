@@ -6845,6 +6845,17 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-bottom: var(--luke-space-32);
 }
 
+/* Signed out, the page draws no composer, and its box takes no room. */
+.home-composer:empty {
+  display: none;
+}
+
+/* Where the page or the welcome lays the composer's one box
+   (`desktop-home.tsx`'s `useComposerSlot`), which lays nothing out itself. */
+.home-composer-slot {
+  display: contents;
+}
+
 .home-section {
   display: flex;
   flex-direction: column;
