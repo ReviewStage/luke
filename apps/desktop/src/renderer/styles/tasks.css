@@ -1467,9 +1467,9 @@
    bundle reserves for it (diff-view/index.ts's LIST_HEADER_HEIGHT). The file
    stage-cli's keys stand on is ringed as a focused control is. */
 .diff-list-head {
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--luke-color-border);
   background: var(--code-ground);
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-family: var(--luke-font-sans);
 }
 
@@ -1479,20 +1479,20 @@
   height: 33px;
   min-width: 0;
   align-items: center;
-  gap: var(--space-8);
-  padding: 0 var(--space-12) 0 var(--space-6);
-  background: var(--section-fill);
+  gap: var(--luke-space-8);
+  padding: 0 var(--luke-space-12) 0 var(--luke-space-6);
+  background: var(--luke-color-surface);
   font-size: 12px;
   white-space: nowrap;
 }
 
 .diff-list-head:not([data-collapsed]) > .diff-list-head-row {
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
 .diff-list-head[data-standing] {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: var(--focus-ring-inset);
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+  outline-offset: var(--luke-focus-ring-inset);
 }
 
 .diff-list-fold > svg {
@@ -1508,7 +1508,7 @@
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
-  font-family: var(--font-mono);
+  font-family: var(--luke-font-mono);
   text-overflow: ellipsis;
 }
 
@@ -1516,8 +1516,8 @@
    list (diff-view/index.ts draws it across the file's width). */
 .diff-list-notice {
   margin: 0;
-  padding: var(--space-12) var(--space-12) var(--space-12) 38px;
-  color: var(--text-secondary);
+  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) 38px;
+  color: var(--luke-color-text-muted);
   font-size: 12.5px;
 }
 
@@ -2338,29 +2338,29 @@ button.pull-request-check:hover {
    so the window's own type and card draw it, inset from the code's edges
    as GitHub's are; an outdated one stands in a list above the diff. */
 .diff-note {
-  padding: var(--space-6) var(--space-12);
+  padding: var(--luke-space-6) var(--luke-space-12);
   font-family: var(--luke-font-sans);
   white-space: normal;
 }
 
 .diff-inline-thread {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
   max-width: 720px;
   overflow: clip;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
 }
 
 .diff-outdated-threads {
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   margin: 0;
-  padding: var(--space-8) var(--space-12);
+  padding: var(--luke-space-8) var(--luke-space-12);
   list-style: none;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
 .pull-request-thread-head {
