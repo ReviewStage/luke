@@ -21,7 +21,17 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
-import { ProviderMark, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  Disclosure,
+  DisclosureBody,
+  DisclosureSummary,
+  INLINE_REF_LOOK,
+  InlineRef,
+  ProviderMark,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
@@ -99,9 +109,9 @@ import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
 import { linkChip } from "./mention-chip";
 import { ModelLabel } from "./model-label";
-import { useMentionDoors } from "./plan-mentions";
 import { usePlanPictureDrawer } from "./plan-pictures";
 import { SubagentMark } from "./tab-look";
+import { useMentionDoors } from "./task-mentions";
 import { cardTitle } from "./tool-call-model";
 import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
@@ -587,16 +597,16 @@ const CALL_ICON = {
  * the row it stands on is already the one that opens the agent and hangs
  * its card, and a second press or card inside it would be two targets for
  * one thing; so it takes the row's pointer and lifts with the row's hover
- * as a chip lifts with its own (tasks.css).
+ * as a chip lifts with its own.
  */
 function AgentCallChip({ agent }: { agent: Actor }): ReactNode {
   return (
-    <span className="mention-chip tool-agent-chip" data-kind="agent">
-      <span className="mention-chip-glyph">
-        <ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />
-      </span>
-      <span className="mention-chip-label">{actorName(agent)}</span>
-    </span>
+    <InlineRef
+      look={INLINE_REF_LOOK.PILL}
+      glyph={<ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />}
+      label={actorName(agent)}
+      data-tool-agent-ref=""
+    />
   );
 }
 
@@ -1029,17 +1039,13 @@ function TurnFold({
   children: ReactNode;
 }): ReactNode {
   return (
-    <Fold className="transcript-fold" defaultOpen={open} data-turn-fold="">
-      <FoldSummary
-        className="transcript-fold-line"
-        aria-label={failed ? `${summary}, ${CALL_FAILED_WORDS}` : undefined}
-      >
-        <FoldChevron />
+    <Disclosure defaultOpen={open} data-turn-fold="">
+      <DisclosureSummary aria-label={failed ? `${summary}, ${CALL_FAILED_WORDS}` : undefined}>
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
         {failed ? <ToolStateMark state={TOOL_STATE.OUTPUT_ERROR} /> : null}
-      </FoldSummary>
-      <FoldBody className="turn-fold-body">{children}</FoldBody>
-    </Fold>
+      </DisclosureSummary>
+      <DisclosureBody>{children}</DisclosureBody>
+    </Disclosure>
   );
 }
 

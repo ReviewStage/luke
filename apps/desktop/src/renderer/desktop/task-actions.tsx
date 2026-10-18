@@ -5,6 +5,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
+  BUTTON_SIZE,
   ConfirmDialog,
   CopyIcon,
   type DialogQuestion,
@@ -66,7 +67,7 @@ import { TaskStatusMark, taskCardOf } from "./task-card";
  * so both doors draw it the same way and Permanently delete can be drawn red.
  *
  * Copy link copies the plan's address on tryluke.dev, as the ⋯
- * beside the plan's title does (`plan-menu-items.tsx`). Mark as unread
+ * beside the plan's title does (`task-menu-items.tsx`). Mark as unread
  * draws the task's row in the unread weight until it next opens, and turns
  * to Mark as read on a task already unread. Rename edits the
  * name where the door draws it: the sidebar's row turns into a field, and
@@ -163,16 +164,14 @@ function SidebarTaskMarks({
           label={label}
           {...(current && mark === TASK_MARK.ARCHIVE ? { command: APP_COMMAND.ARCHIVE_TASK } : {})}
         >
-          <button
-            type="button"
-            className="sidebar-task-mark"
-            aria-label={label}
+          <IconButton
+            icon={icon}
+            label={label}
+            size={BUTTON_SIZE.COMPACT}
             disabled={disabled}
             onClick={() => tasks.onMarkTask(task.id, mark)}
             onContextMenu={onContextMenu}
-          >
-            {icon}
-          </button>
+          />
         </Tooltip>
       ))}
     </span>

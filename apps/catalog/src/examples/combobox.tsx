@@ -1,12 +1,23 @@
-import { Combobox, type ComboboxOption, ComposeIcon, MARK_PROVIDER, ProviderMark } from "@luke/ui";
+import {
+  Combobox,
+  ComboboxList,
+  type ComboboxOption,
+  ComposeIcon,
+  DocumentIcon,
+  FolderIcon,
+  MARK_PROVIDER,
+  ProviderMark,
+} from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * combobox.tsx -- a Combobox narrowing synthetic issues under a heading, with
- * the words as typed offered after them, open on a query; and in a narrow
- * column with a long title.
+ * the words as typed offered after them, open on a query; in a narrow
+ * column with a long title; and a list standing alone on a popover, as an
+ * editor's `@` hangs one, a row that opens a further list wearing its
+ * chevron, and its note where nothing matches.
  */
 
 /** Synthetic issues, as a tracker would list them. */
@@ -62,6 +73,30 @@ function Issues({ start }: { start: string }): React.JSX.Element {
   );
 }
 
+/** Synthetic mentions, as an editor's `@` would offer them: a file, a folder, and the kind a press narrows to. */
+const MENTIONS: readonly ComboboxOption[] = [
+  { id: "readme", label: "README.md", icon: <DocumentIcon />, detail: "docs" },
+  { id: "src", label: "src/", icon: <FolderIcon />, detail: "packages/ui" },
+  { id: "files", label: "Files and folders", icon: <FolderIcon />, detail: "2 files", opens: true },
+];
+
+/** A list standing alone over `options`, holding its own active option as an editor's caller would. */
+function Mentions({ options }: { options: readonly ComboboxOption[] }): React.JSX.Element {
+  const [active, setActive] = useState(0);
+  return (
+    <div className="catalog-popover catalog-column">
+      <ComboboxList
+        label="Mention"
+        groups={options.length === 0 ? [] : [{ label: "Files and folders", options }]}
+        active={active}
+        onActiveChange={setActive}
+        onChoose={setActive}
+        empty="Nothing matches"
+      />
+    </div>
+  );
+}
+
 function Comboboxes(): React.JSX.Element {
   return (
     <>
@@ -74,6 +109,12 @@ function Comboboxes(): React.JSX.Element {
         <div className="catalog-narrow">
           <Issues start="stacked" />
         </div>
+      </CatalogSection>
+      <CatalogSection id="combobox-list" title="A list standing alone, under an editor's words">
+        <Mentions options={MENTIONS} />
+      </CatalogSection>
+      <CatalogSection id="combobox-list-empty" title="A list standing alone, nothing matching">
+        <Mentions options={[]} />
       </CatalogSection>
     </>
   );

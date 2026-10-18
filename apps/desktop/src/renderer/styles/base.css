@@ -189,9 +189,7 @@
    banner, a bar at its foot, a band stuck inside it, or the window's drag
    strip. Content dissolves over `--scroll-fade` rather than being sliced
    against that edge. A scroller wears `scroll-fade` to fade at both edges,
-   or `scroll-fade-top` where only its top meets something pinned; the
-   shared settings page, which takes no class of the window's, fades as
-   `scroll-fade-top` by its place under a Settings page's drag strip.
+   or `scroll-fade-top` where only its top meets something pinned.
 
    Each edge's depth is a registered length that a scroll timeline eases
    from none to `--scroll-fade` over the first (or the last) `--scroll-fade`
@@ -238,8 +236,7 @@
 }
 
 .scroll-fade,
-.scroll-fade-top,
-.settings-page > .luke-settings-page {
+.scroll-fade-top {
   --scroll-fade-mask: linear-gradient(
     to bottom,
     #000 var(--fade-inset-top),
@@ -263,8 +260,7 @@
   scroll-padding-bottom: var(--scroll-fade);
 }
 
-.scroll-fade-top,
-.settings-page > .luke-settings-page {
+.scroll-fade-top {
   animation-name: scroll-fade-start, none;
 }
 
@@ -893,54 +889,6 @@ svg.working-mark[viewBox] {
   border: 0;
   clip-path: inset(50%);
   white-space: nowrap;
-}
-
-/* Disclosures ------------------------------------------------------------ */
-
-/* A fold a press opens or closes (`use-disclosure.ts`). Its body lands in the
-   layout at once and rides in on the pair an arriving element rides: a fade,
-   and a clip unrolling it from its top edge, on the panes' plain ease-out,
-   since a clip that overshot would cut nothing. Closing, it fades out first
-   and the layout lands once the fade is done. Nothing moves a height, so the
-   words never re-wrap mid-motion, and a body still growing as it streams is
-   unrolled by a fraction of its own box rather than a size it was measured
-   at. Only the press marks the root, so a find opening a fold onto a match,
-   or a row drawn again, appears at once. */
-[data-disclosure="opening"] > .disclosure-body {
-  animation:
-    disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
-    disclosure-unroll var(--duration-pane) var(--motion-pane) backwards;
-}
-
-[data-disclosure="closing"] > .disclosure-body {
-  animation: disclosure-leave var(--duration-exit) var(--motion-exit) forwards;
-  /* Note that the hold waits on every motion the body runs, and a body that
-     held focus would start the scrollbar's own fade (desktop.css) as it
-     lost it, so the exit is the one motion it has. */
-  transition: none;
-}
-
-@keyframes disclosure-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-/* Note that the clip names both ends, because a clip cannot be interpolated
-   from none: it would flip halfway through instead. */
-@keyframes disclosure-unroll {
-  from {
-    clip-path: inset(0 0 100% 0);
-  }
-  to {
-    clip-path: inset(0);
-  }
-}
-
-@keyframes disclosure-leave {
-  to {
-    opacity: 0;
-  }
 }
 
 /* Evidence capture screenshots a fixed moment after the renderer reports ready,

@@ -31,6 +31,21 @@ import { type ReactNode, useId } from "react";
  * padded at the card's inline inset, ruled, and stacking under 380px as a
  * card's row is, but at a list's tighter block inset and least height and
  * with its label at body weight.
+ *
+ * What rides the label's line without being its name, a Modified word or a
+ * mark that something needs a hand, is the row's `adornment`: it stands after
+ * the label, a short step off it, and the label alone still names the
+ * control. What the row itself grows under its line, a control that needs
+ * the row's whole width such as a gallery of faces, or the field a stored
+ * key is replaced in, is its `below`: it stands inside the row's rule, inset
+ * to the words where a mark leads them, handed the same ids, so the label
+ * still names it and the description and the error still describe it; the
+ * row's error stands under it, so a refusal reads after the thing refused.
+ * `below` is for content the row owns alone, never a layout of the page's:
+ * a page lays itself out with sections and rows. A row that belongs to the
+ * row above it, an account under its provider, is indented
+ * (`SETTINGS_ROW_INDENT.MARK`) to its parent's words, its rule starting
+ * there too, so the card reads as one subject with its parts under it.
  */
 
 /** How a row stands: padded in a section's card, a reference list's line in one, or bare inside a surface that insets it. */
@@ -41,6 +56,14 @@ export const SETTINGS_ROW_DENSITY = {
 } as const;
 
 export type SettingsRowDensity = (typeof SETTINGS_ROW_DENSITY)[keyof typeof SETTINGS_ROW_DENSITY];
+
+/** Where a row's edge stands: at the card's, or at the words of a parent row a mark leads. */
+export const SETTINGS_ROW_INDENT = {
+  NONE: "none",
+  MARK: "mark",
+} as const;
+
+export type SettingsRowIndent = (typeof SETTINGS_ROW_INDENT)[keyof typeof SETTINGS_ROW_INDENT];
 
 /** What a row hands the controls it holds. */
 export interface SettingsRowControl {
@@ -61,19 +84,28 @@ export function SettingsRow({
   description,
   error,
   leading,
+  adornment,
   density = SETTINGS_ROW_DENSITY.CARD,
+  indent = SETTINGS_ROW_INDENT.NONE,
   children,
+  below,
 }: {
   label: ReactNode;
   description?: ReactNode;
   /** The face or mark the row leads with, before its words, where it stands for something of its own. */
   leading?: ReactNode;
+  /** What rides the label's line after it without naming the control: a Modified word, a mark. */
+  adornment?: ReactNode;
   /** What went wrong with the last write, or nothing while none did. */
   error?: ReactNode;
   /** How the row stands; in a section's card where none is named. */
   density?: SettingsRowDensity | undefined;
-  /** The row's controls, handed the row's ids to name and describe them by. */
-  children: (control: SettingsRowControl) => ReactNode;
+  /** Where the row's edge stands; at the card's where none is named. */
+  indent?: SettingsRowIndent | undefined;
+  /** The row's controls at its end, handed the row's ids to name and describe them by. */
+  children?: ((control: SettingsRowControl) => ReactNode) | undefined;
+  /** What the row grows under its words and owns alone, handed the same ids; never a page's layout. */
+  below?: ((control: SettingsRowControl) => ReactNode) | undefined;
 }): React.JSX.Element {
   const id = useId();
   const labelId = `${id}label`;
@@ -81,19 +113,39 @@ export function SettingsRow({
   const errorId = `${id}error`;
   const failed = said(error);
   const described = said(description);
+  const led = said(leading);
   const describedBy = [described ? descriptionId : undefined, failed ? errorId : undefined]
     .filter((part) => part !== undefined)
     .join(" ");
+  const control: SettingsRowControl = {
+    labelId,
+    "aria-describedby": describedBy === "" ? undefined : describedBy,
+    "aria-invalid": failed ? true : undefined,
+  };
   return (
-    <div className="luke-settings-row" data-invalid={failed} data-density={density}>
+    <div
+      className="luke-settings-row"
+      data-invalid={failed}
+      data-density={density}
+      data-indent={indent}
+    >
       <div className="luke-settings-row-body">
         <div className="luke-settings-row-line">
           <div className="luke-settings-row-subject">
-            {said(leading) ? <div className="luke-settings-row-leading">{leading}</div> : null}
+            {led ? <div className="luke-settings-row-leading">{leading}</div> : null}
             <div className="luke-settings-row-copy">
-              <span className="luke-settings-row-label" id={labelId}>
-                {label}
-              </span>
+              {said(adornment) ? (
+                <div className="luke-settings-row-title">
+                  <span className="luke-settings-row-label" id={labelId}>
+                    {label}
+                  </span>
+                  {adornment}
+                </div>
+              ) : (
+                <span className="luke-settings-row-label" id={labelId}>
+                  {label}
+                </span>
+              )}
               {described ? (
                 <p className="luke-settings-row-description" id={descriptionId}>
                   {description}
@@ -101,14 +153,13 @@ export function SettingsRow({
               ) : null}
             </div>
           </div>
-          <div className="luke-settings-row-controls">
-            {children({
-              labelId,
-              "aria-describedby": describedBy === "" ? undefined : describedBy,
-              "aria-invalid": failed ? true : undefined,
-            })}
-          </div>
+          <div className="luke-settings-row-controls">{children?.(control)}</div>
         </div>
+        {below === undefined ? null : (
+          <div className="luke-settings-row-below" data-led={led}>
+            {below(control)}
+          </div>
+        )}
         <p className="luke-settings-row-error" id={errorId} aria-live="polite">
           {failed ? error : null}
         </p>

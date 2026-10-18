@@ -327,6 +327,16 @@ export function UpdateIcon(): React.JSX.Element {
   );
 }
 
+/** An arrow up and to the right, set after a link's words: a press leaves the place for another. */
+export function ArrowUpRightIcon(): React.JSX.Element {
+  return (
+    <Glyph className="luke-text-link-out">
+      <path d="M7 17 17 7" />
+      <path d="M8 7h9v9" />
+    </Glyph>
+  );
+}
+
 /** Drawn rather than typed: a ↗ character depends on a font having one. */
 export function ExternalIcon(): React.JSX.Element {
   return (
@@ -591,6 +601,15 @@ export function ChevronDownIcon(): React.JSX.Element {
   return (
     <Glyph className="settings-chevron">
       <path d="m5.8 9.4 6.2 6.2 6.2-6.2" />
+    </Glyph>
+  );
+}
+
+/** Points at a fold's body, turned down by its stylesheet while the fold is open. */
+export function FoldChevronIcon(): React.JSX.Element {
+  return (
+    <Glyph className="luke-disclosure-chevron">
+      <path d="m9.4 5.8 6.2 6.2-6.2 6.2" />
     </Glyph>
   );
 }

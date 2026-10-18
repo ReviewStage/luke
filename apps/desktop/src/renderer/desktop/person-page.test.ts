@@ -155,7 +155,7 @@ const RETRIES = task(1, "Relay retries on 502", CHARLES, 12 * MINUTE, [BACKOFF, 
 const CACHE = task(2, "Edge cache keys", DEAN, 3 * 60 * MINUTE, [CACHE_KEYS]);
 const DASHBOARD = task(3, "Retry budget dashboard", CHARLES, 2 * 24 * 60 * MINUTE);
 const SHIM = task(4, "Old auth shim removal", PRIYA, 9 * 24 * 60 * MINUTE);
-const PLANS = [RETRIES, CACHE, DASHBOARD, SHIM];
+const TASKS = [RETRIES, CACHE, DASHBOARD, SHIM];
 
 function item(n: number, title: string, agentId: string, ago: number): InboxItem {
   return {
@@ -268,8 +268,8 @@ function mountWith(
   const plans = tasksControl({
     me: DEAN.userId,
     workspace: { ...ACME, memberCount },
-    tasks: PLANS,
-    listed: { tasks: PLANS, archived: [], ...HOLDING },
+    tasks: TASKS,
+    listed: { tasks: TASKS, archived: [], ...HOLDING },
     ...HOLDING,
     onSelect: (planId) => opened.plans.push(planId),
     onShowAgent: (planId, agentId) => opened.agents.push([planId, agentId]),

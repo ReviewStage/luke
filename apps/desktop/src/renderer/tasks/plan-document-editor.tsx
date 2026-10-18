@@ -30,7 +30,7 @@ import {
   retargetedMention,
 } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
-import { usePlanMentions } from "./plan-mentions";
+import { useTaskMentions } from "./task-mentions";
 import { useKnownNames } from "./use-known-names";
 import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing";
 
@@ -102,7 +102,7 @@ function editsOnClick(target: EventTarget): boolean {
   // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item.
   return !(
     target instanceof Element &&
-    target.closest("a, button, input, .mention-chip, .plan-unit-row") !== null
+    target.closest("a, button, input, [data-mention-ref], .plan-unit-row") !== null
   );
 }
 
@@ -594,7 +594,7 @@ export function PlanDocumentEditor({
   // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
   const text = () => handle.current?.markdown() ?? editor.draft;
   // The plan's pages, agents, and pull requests are offered as the page's agents' boxes offer them.
-  const page = usePlanMentions();
+  const page = useTaskMentions();
   // A Luke address pasted whole is called by the name the window holds for what it names.
   const known = useKnownNames();
   const picker = useMentionPicker({

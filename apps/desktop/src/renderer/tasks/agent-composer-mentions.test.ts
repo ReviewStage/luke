@@ -53,14 +53,14 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { MemberDirectory } from "../member-directory";
 import { AgentComposer } from "./agent-composer";
+import type { SkillSource } from "./skill-picker";
 import {
   mentionablePullRequests,
-  PlanMentions,
-  type PlanMentionsValue,
-  planlessMentions,
+  TaskMentions,
+  type TaskMentionsValue,
+  tasklessMentions,
   useMentionAgentsReader,
-} from "./plan-mentions";
-import type { SkillSource } from "./skill-picker";
+} from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 import { OpenLinkProvider } from "./use-open-link";
@@ -281,7 +281,7 @@ async function settle(): Promise<void> {
 }
 
 /** What a task's page hands its places, every mention a chip was asked to open kept. */
-function planPage(opened: Mention[], repository = "acme/relay"): PlanMentionsValue {
+function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsValue {
   return {
     taskId: TASK_ID,
     taskName: "Invitations",
@@ -316,7 +316,7 @@ const STORE_AGENT = {
 const SELF_AGENT = { ...STORE_AGENT, id: SELF_ID, name: "Invite by email" };
 
 /** The plan's page holding its pages and agents, every link a chip was asked to open kept. */
-function taskPage(opened: Mention[] = []): PlanMentionsValue {
+function taskPage(opened: Mention[] = []): TaskMentionsValue {
   return { ...planPage(opened), pages: [PAGE], agents: [SELF_AGENT, STORE_AGENT] };
 }
 
@@ -333,20 +333,20 @@ function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource })
 }
 
 /** The node drawn on a task's page, or off any page where none is given; `redraw` draws it on the page given. */
-function drawing(node: ReactNode, page: PlanMentionsValue | undefined) {
+function drawing(node: ReactNode, page: TaskMentionsValue | undefined) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const registry = AtomRegistry.make();
-  const redraw = (on: PlanMentionsValue | undefined) =>
+  const redraw = (on: TaskMentionsValue | undefined) =>
     act(() =>
       root.render(
         onRegistry(
           registry,
           on === undefined
             ? createElement(Fragment, null, node)
-            : createElement(PlanMentions, { value: on, children: node }),
+            : createElement(TaskMentions, { value: on, children: node }),
         ),
       ),
     );
@@ -355,12 +355,12 @@ function drawing(node: ReactNode, page: PlanMentionsValue | undefined) {
 }
 
 /** The node drawn on a task's page, or off any page where none is given. */
-function drawn(node: ReactNode, page: PlanMentionsValue | undefined): HTMLElement {
+function drawn(node: ReactNode, page: TaskMentionsValue | undefined): HTMLElement {
   return drawing(node, page).container;
 }
 
 /** The box drawn, every message it sends written down. */
-async function box(page: PlanMentionsValue | undefined, skills: SkillSource = noSkills) {
+async function box(page: TaskMentionsValue | undefined, skills: SkillSource = noSkills) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
@@ -392,13 +392,15 @@ function carryingTarget(container: HTMLElement): string | undefined {
 function groupsListed(container: HTMLElement): [string | null, string[]][] {
   return [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) => [
     group.getAttribute("aria-label"),
-    [...group.querySelectorAll(".task-compose-menu-name")].map((name) => name.textContent ?? ""),
+    [...group.querySelectorAll(".luke-combobox-option-label")].map(
+      (name) => name.textContent ?? "",
+    ),
   ]);
 }
 
 /** The rows the list draws, by name. */
 function listed(container: HTMLElement): string[] {
-  return [...container.querySelectorAll(".mention-menu .task-compose-menu-name")].map(
+  return [...container.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
     (name) => name.textContent ?? "",
   );
 }
@@ -412,7 +414,7 @@ test("an @ typed in the box on a plan's page offers the plan's sections, and the
   pressInComposer(container, "ArrowDown");
   pressInComposer(container, "Enter");
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -425,7 +427,7 @@ test("an @ typed in the box on a plan's page offers the plan's sections, and the
 });
 
 test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no plan's sections", async () => {
-  const page = planlessMentions(
+  const page = tasklessMentions(
     { workspace: "acme", workspaceId: "workspace-1", repository: "acme/relay" },
     ignore,
   );
@@ -463,7 +465,7 @@ test("a sent message's mention is drawn on a plan's page as the chip that opens 
     planPage(opened),
   );
 
-  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
   assert.ok(chip, "the mention is a chip");
   act(() => chip.click());
 
@@ -485,7 +487,7 @@ test("off a plan's page a sent message's mention is still its chip, which opens 
     undefined,
   );
 
-  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
   assert.ok(chip !== null, "the mention is a chip");
   act(() => chip.click());
 
@@ -522,7 +524,7 @@ test("a sent message's mention of an MCP server is drawn on a plan's page as a c
     planPage(opened),
   );
 
-  const chip = container.querySelector(".mention-chip");
+  const chip = container.querySelector("[data-mention-ref]");
 
   assert.equal(chip?.tagName, "SPAN");
   assert.equal(chip?.textContent, "Linear");
@@ -639,7 +641,7 @@ test("a page of an integration's pasted into the box on a plan's page is drawn a
   typeInComposer(container, "Fix ");
   pasteInComposer(container, ISSUE_URL);
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -658,7 +660,7 @@ test("a sent message's page of an integration's is a chip that opens the page in
     planPage([]),
   );
 
-  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
   assert.ok(chip, "the page is a chip");
   act(() => chip.click());
 
@@ -674,7 +676,7 @@ test("off a plan's page a sent message's page of an integration's is still its c
     undefined,
   );
 
-  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
   assert.ok(chip !== null, "the page is a chip");
   act(() => chip.click());
 
@@ -706,7 +708,7 @@ test("a page picked from the @ list is drawn as its chip and sent as its link, w
   await settle();
   pressInComposer(container, "Enter");
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -755,7 +757,7 @@ test("a sent message's mention of a page or an agent is drawn as the chip that o
     taskPage(),
   );
 
-  const chips = [...container.querySelectorAll<HTMLButtonElement>("button.mention-chip")];
+  const chips = [...container.querySelectorAll<HTMLButtonElement>("button[data-mention-ref]")];
   for (const chip of chips) act(() => chip.click());
 
   assert.deepEqual(
@@ -775,7 +777,7 @@ test("a sent message's mention of a page or an agent is drawn as the chip that o
 /** The plan's page, its workspace's agents read through the window's own reader, the box drawn on it. */
 function WorkspacePage({ children }: { children: ReactNode }): ReactNode {
   const readAgents = useMentionAgentsReader("workspace-1", [BILLING], undefined);
-  return createElement(PlanMentions, { value: { ...taskPage(), readAgents }, children });
+  return createElement(TaskMentions, { value: { ...taskPage(), readAgents }, children });
 }
 
 /** The box on the plan's page that reads its workspace's agents, every message it sends written down. */
@@ -797,8 +799,8 @@ async function workspaceBox() {
 function agentsListed(container: HTMLElement): [string, string][] {
   return [...container.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')].map(
     (row) => [
-      row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-      row.querySelector(".mention-row-detail")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
     ],
   );
 }
@@ -903,7 +905,7 @@ test("a sent mention of an agent of another task or none hangs a card naming whe
     },
   );
 
-  const notes = [...container.querySelectorAll<HTMLElement>(".mention-chip")].map((chip) => {
+  const notes = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => {
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
@@ -929,7 +931,7 @@ test("a section's address pasted whole into the box on a plan's page is drawn as
   typeInComposer(container, "Follow ");
   pasteInComposer(container, address);
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -968,7 +970,7 @@ test("a page's address pasted in the app's own scheme is called by the name the 
   typeInComposer(container, "in ");
   pasteInComposer(container, file);
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -1005,8 +1007,8 @@ function kindsListed(container: HTMLElement): [string, string][] {
   return [
     ...container.querySelectorAll('.mention-menu [aria-label="Mention from"] [role="option"]'),
   ].map((row) => [
-    row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-    row.querySelector(".mention-row-detail")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
   ]);
 }
 
@@ -1016,7 +1018,7 @@ function highlightRow(container: HTMLElement, group: string, name: string): void
     const row = container.querySelector('.mention-menu [role="option"][aria-selected="true"]');
     return (
       row?.closest('[role="group"]')?.getAttribute("aria-label") === group &&
-      row.querySelector(".task-compose-menu-name")?.textContent === name
+      row.querySelector(".luke-combobox-option-label")?.textContent === name
     );
   };
   for (let press = 0; press < 40 && !held(); press += 1) pressInComposer(container, "ArrowDown");
@@ -1045,6 +1047,37 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
   assert.equal(crumb(container), "Pages");
   assert.deepEqual(groupsListed(container), [["Pages", ["Invites by week"]]]);
   assert.deepEqual(footKeys(container), ["↑↓ Move", "↵ Mention", "⌫ All kinds", "esc Close"]);
+});
+
+/** The highlighted row, by its group and its name. */
+function highlighted(container: HTMLElement): [string | null, string] | undefined {
+  const row = container.querySelector('.mention-menu [role="option"][aria-selected="true"]');
+  if (row === null) return undefined;
+  return [
+    row.closest('[role="group"]')?.getAttribute("aria-label") ?? null,
+    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+  ];
+}
+
+test("a bare End and Home take the highlight to the last row and the first, a modified one is left to the editor, and Shift+Enter writes no mention", async () => {
+  const { container } = await box(taskPage());
+
+  typeInComposer(container, "See @");
+  await settle();
+  pressInComposer(container, "End", { shiftKey: true });
+  pressInComposer(container, "Home", { metaKey: true });
+  const held = highlighted(container);
+  pressInComposer(container, "End");
+  const last = highlighted(container);
+  pressInComposer(container, "Home");
+  const first = highlighted(container);
+  pressInComposer(container, "Enter", { shiftKey: true });
+  await settle();
+
+  assert.deepEqual(held, ["Plan", "Goal"], "a modified Home or End is the editor's");
+  assert.deepEqual(last, ["Mention from", "Linear"]);
+  assert.deepEqual(first, ["Plan", "Goal"]);
+  assert.equal(composerEditor(container).querySelector("[data-mention-ref]"), null);
 });
 
 test("Enter on a kind's row narrows the list to it, and ⌫ on its empty words widens it again, deleting nothing", async () => {
@@ -1196,7 +1229,7 @@ const SEATS = pullRequest(3059, "feat(billing): bill by seat", PULL_REQUEST_STAT
 const SWEEP = pullRequest(3061, "test: sweep flaky tests", PULL_REQUEST_STATE.MERGED);
 
 /** The task's page whose agents published two pull requests, one of them by an archived agent and one by two agents. */
-function publishedPage(): PlanMentionsValue {
+function publishedPage(): TaskMentionsValue {
   return {
     ...taskPage(),
     pullRequests: mentionablePullRequests({
@@ -1218,8 +1251,8 @@ function pullRequestsListed(container: HTMLElement): [string, string, string | n
   return [
     ...container.querySelectorAll('.mention-menu [aria-label="Pull requests"] [role="option"]'),
   ].map((row) => [
-    row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-    row.querySelector(".mention-row-detail")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
     row.querySelector("[data-pull-request-state]")?.getAttribute("data-pull-request-state") ?? null,
   ]);
 }
@@ -1243,7 +1276,7 @@ test("a pull request picked from the @ list is drawn as its link's chip and sent
   await settle();
   pressInComposer(container, "Enter");
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -1312,8 +1345,8 @@ async function memberBox() {
 function peopleListed(container: HTMLElement): [string, string, string | null][] {
   return [...container.querySelectorAll('.mention-menu [aria-label="People"] [role="option"]')].map(
     (row) => [
-      row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-      row.querySelector(".mention-row-detail")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
       row.querySelector(".actor-mark")?.getAttribute("data-kind") ?? null,
     ],
   );
@@ -1344,7 +1377,7 @@ test("a person picked from the @ list is drawn as their chip and sent as their p
   await settle();
   pressInComposer(container, "Enter");
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip-label")];
+  const chips = [...composerEditor(container).querySelectorAll(".luke-inline-ref-label")];
   pressInComposer(container, "Enter");
   await settle();
 
@@ -1370,11 +1403,11 @@ test("a sent message's mention of a person is drawn as the chip wearing their ma
   );
   await settle();
 
-  const chip = container.querySelector<HTMLButtonElement>("button.mention-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-mention-ref]");
   assert.ok(chip);
   act(() => chip.click());
 
-  assert.equal(chip.querySelector(".mention-chip-label")?.textContent, "Dana");
+  assert.equal(chip.querySelector(".luke-inline-ref-label")?.textContent, "Dana");
   assert.equal(chip.dataset.kind, MENTION_KIND.PERSON);
   assert.equal(chip.querySelector(".actor-mark")?.getAttribute("data-kind"), ACTOR_KIND.PERSON);
   assert.deepEqual(opened, [
@@ -1402,7 +1435,7 @@ test("a person's page pasted into the box becomes their chip called by their nam
   typeInComposer(container, "not ");
   pasteInComposer(container, elsewhere);
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip-label")];
+  const chips = [...composerEditor(container).querySelectorAll(".luke-inline-ref-label")];
   pressInComposer(container, "Enter");
   await settle();
 

@@ -4,6 +4,7 @@ import {
   createOperatorClient,
   initialAppState,
   linkClientNotices,
+  linkNetworkWatch,
   type OperatorClient,
   publishAppStateChanges,
 } from "@luke/host/client";
@@ -21,6 +22,7 @@ import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
 import { HOST_CAPABILITY, NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer } from "effect";
+import { net } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
 import { electronNoticeDoors } from "../window/notice-doors";
@@ -273,6 +275,10 @@ export function composeDesktop(
         onPanelFocusChanged: windows.onPanelFocusChanged,
         report: config.report,
       }).pipe(Effect.provideService(AgentNoticeDoors, noticeDoors));
+      // A run that sends nothing, a fixture's or a capture's, is never offline.
+      if (config.runMode.sendsNetwork) {
+        yield* linkNetworkWatch({ state, isOnline: () => net.isOnline() });
+      }
       const updates = yield* createUpdateServiceHost({
         config,
         recordProductEvent: telemetry.recordProductEvent,

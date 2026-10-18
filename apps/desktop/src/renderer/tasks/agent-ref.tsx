@@ -1,10 +1,12 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
+import { INLINE_REF_LOOK } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { ActorRef } from "../actor-ref";
+import { ActorMark, ActorRef } from "../actor-ref";
 import type { HeldTranscripts } from "../desktop/strip-tabs";
+import { InlineRef } from "../inline-ref";
 import { Tooltip } from "../tooltip";
 import {
   AgentTabCard,
@@ -236,38 +238,58 @@ export function AgentCard({
 }
 
 /**
- * An agent named in place: what it is drawn as, its mark or its name or
- * both, as one button that hangs its tab's card while the pointer rests on
- * it and opens its tab on a press. With no `onOpen` it stands inside a row
- * whose press is the row's own, and hangs the card alone.
+ * An agent named in place: its glyph and the words it is named by, as one
+ * button that hangs its tab's card while the pointer rests on it and opens
+ * its tab on a press. With no `onOpen` it stands inside a row whose press is
+ * the row's own, and hangs the card alone.
  */
 export function AgentRef({
   subject,
   models,
   onOpen,
-  className,
-  children,
+  glyph,
+  label,
 }: {
   subject: AgentSubject;
   /** The catalog as last read, which names the agent's model on its card. */
   models: readonly CatalogModel[] | undefined;
   /** Opens the agent's tab; none inside a row whose own press does something else. */
   onOpen: (() => void) | undefined;
-  className?: string;
-  children: React.ReactNode;
+  glyph: React.ReactNode;
+  /** The words it is named by: its name, or where its work stands. */
+  label: string;
 }): React.JSX.Element {
-  const classes = className === undefined ? "agent-ref" : `agent-ref ${className}`;
+  return (
+    <InlineRef
+      look={INLINE_REF_LOOK.LINK}
+      glyph={glyph}
+      label={label}
+      onPress={onOpen === undefined ? undefined : () => onOpen()}
+      hintLabel={subject.name}
+      card={<AgentCard subject={subject} models={models} />}
+      data-agent-ref=""
+    />
+  );
+}
+
+/**
+ * An agent's mark alone, at the head of a row whose press is the row's own:
+ * it hangs the agent's tab's card while the pointer rests on it, and says
+ * nothing a reader of the row would hear twice.
+ */
+export function AgentMarkRef({
+  subject,
+  models,
+}: {
+  subject: AgentSubject;
+  /** The catalog as last read, which names the agent's model on its card. */
+  models: readonly CatalogModel[] | undefined;
+}): React.JSX.Element {
   return (
     <Tooltip label={subject.name} card={<AgentCard subject={subject} models={models} />}>
-      {onOpen === undefined ? (
-        <span className={classes} data-agent-ref="">
-          {children}
-        </span>
-      ) : (
-        <button type="button" className={classes} data-agent-ref="" onClick={onOpen}>
-          {children}
-        </button>
-      )}
+      <span className="agent-mark-ref" data-agent-ref="">
+        <ActorMark actor={subject.tile} />
+      </span>
     </Tooltip>
   );
 }
@@ -281,17 +303,21 @@ export function AgentActorRef({
   subject,
   models,
   onOpen,
+  nameOnly = false,
 }: {
   subject: AgentSubject;
   /** The catalog as last read, which names the agent's model on its card. */
   models: readonly CatalogModel[] | undefined;
   onOpen: () => void;
+  /** Whether the name stands without its tile, whose face the line already draws. */
+  nameOnly?: boolean;
 }): React.JSX.Element {
   return (
     <ActorRef
       actor={subject.tile}
       card={<AgentCard subject={subject} models={models} />}
       onOpen={onOpen}
+      nameOnly={nameOnly}
     />
   );
 }

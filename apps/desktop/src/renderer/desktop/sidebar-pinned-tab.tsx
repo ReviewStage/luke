@@ -1,12 +1,14 @@
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import {
+  BUTTON_SIZE,
   CopyIcon,
   DocumentIcon,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   HoverCardRule,
+  IconButton,
   UnpinIcon,
   useMenu,
 } from "@luke/ui";
@@ -313,15 +315,13 @@ export function SidebarPinnedTab({
       </Tooltip>
       <span className="sidebar-task-marks">
         <Tooltip label="Unpin">
-          <button
-            type="button"
-            className="sidebar-task-mark"
-            aria-label={`Unpin ${pin.label}`}
+          <IconButton
+            icon={<UnpinIcon />}
+            label={`Unpin ${pin.label}`}
+            size={BUTTON_SIZE.COMPACT}
             onClick={() => tasks.sidePanel.onUnpin(pin.task, pin.tab)}
             onContextMenu={showMenu}
-          >
-            <UnpinIcon />
-          </button>
+          />
         </Tooltip>
       </span>
       {menu.drawn === undefined ? null : (

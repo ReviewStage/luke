@@ -31,7 +31,7 @@ import {
 } from "./coder-host/status.js";
 
 /**
- * plan-agents.ts -- what each listed plan's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card, and the agents with no plan the list carries beside the plans.
+ * task-agents.ts -- what each listed task's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card, and the agents with no plan the list carries beside the plans.
  *
  * Four statements answer the whole list however many tasks it holds: the
  * agents of every task named with the pull request each last published,

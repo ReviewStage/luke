@@ -19,13 +19,13 @@ import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { agentTabLabel } from "../tasks/coding-agent-model";
-import {
-  PlanMentions,
-  type PlanMentionsValue,
-  planlessMentions,
-  useMentionAgentsReader,
-} from "../tasks/plan-mentions";
 import { SkillFiles } from "../tasks/skill-chip";
+import {
+  TaskMentions,
+  type TaskMentionsValue,
+  tasklessMentions,
+  useMentionAgentsReader,
+} from "../tasks/task-mentions";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { useCodingAgents } from "../tasks/use-coding-agents";
 import { WordsWorkspace } from "../tasks/use-link-standing";
@@ -61,14 +61,14 @@ import { useTabViews } from "./strip-tabs";
  * its id (`use-coding-agents.ts`'s `agentId`). ⌘F finds in it as in a
  * plan's column. An `@` in its box offers its repository's files, its
  * skills, and the servers, read through its workspace since no plan names
- * them (`planlessMentions`); a skill a message names is its chip, which
+ * them (`tasklessMentions`); a skill a message names is its chip, which
  * opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
  * File tab reads a repository no plan names; and a dictation listens for its repository and
  * its title. A row of its inbox calls opens the window's Inbox, since the
  * agent's items stand there and no plan's Inbox tab does. Beside it stands
  * the window's side panel, held by the agent while its page stands
  * (`use-plans-tab.ts`): a delegation's row opens its worker there, and its
- * Changes chip its pull request's changes, as on a task, and its toggle,
+ * pull request's chip its pull request, as on a task, and its toggle,
  * its width, and its keys are the plan's own; ⌘T opens its "+", the page's
  * one, since the agent's own column opens no tab. Its title names the agent as
  * its tab would, and its ⋯ offers its Copy link. An archived agent takes no message, so its composer gives
@@ -132,10 +132,10 @@ function AgentMentions({
   value,
   children,
 }: {
-  value: PlanMentionsValue | undefined;
+  value: TaskMentionsValue | undefined;
   children: React.ReactNode;
 }): React.ReactNode {
-  return value === undefined ? children : <PlanMentions value={value}>{children}</PlanMentions>;
+  return value === undefined ? children : <TaskMentions value={value}>{children}</TaskMentions>;
 }
 
 /**
@@ -255,7 +255,7 @@ export function DesktopAgentPage({
   const openTarget = (target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.INBOX) tasks.inboxView.onOpen();
   };
-  // A delegation's row opens its worker in the side panel, and the Changes chip the pull request's changes, as on a task.
+  // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
   const openDelegation = (
     agent: string,
     callId: string,
@@ -265,8 +265,6 @@ export function DesktopAgentPage({
     views.onWorkerStatus(callId, status);
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
-  const openChanges = (changed: string) =>
-    showPullRequest(sidePanel, control, changed, PULL_REQUEST_VIEW.FILES);
   const openPullRequest = (published: string) =>
     showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION);
   // A link in the agent's words to the pull request it opened opens that same tab rather than GitHub, as on a task.
@@ -298,7 +296,7 @@ export function DesktopAgentPage({
   const mentions =
     workspaceId === undefined || agentRepository === undefined
       ? undefined
-      : planlessMentions(
+      : tasklessMentions(
           { workspace: listed?.slug ?? workspaceId, workspaceId, repository: agentRepository },
           tasks.onShowMention,
           readMentionAgents,
@@ -372,7 +370,6 @@ export function DesktopAgentPage({
                           shown={shown}
                           views={views}
                           onOpenDelegation={openDelegation}
-                          onOpenChanges={openChanges}
                           onOpenPullRequest={openPullRequest}
                           onOpenTarget={openTarget}
                           cards={cards}

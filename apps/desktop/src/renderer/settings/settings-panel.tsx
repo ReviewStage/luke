@@ -3,6 +3,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { EXPERIMENTS, HOST_CAPABILITY, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
+import { TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { microphoneAccessRow, voiceAttentionNote } from "@luke/voice/microphone-access";
 import type {
   MicrophoneControl,
@@ -140,12 +141,16 @@ export function SettingsPanel({
             onDeleteAccount={onDeleteAccount}
           />
         ) : (
-          <p className="settings-note">Not signed in.</p>
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            Not signed in.
+          </Text>
         )
       ) : null}
 
       {view !== SETTINGS_VIEW.WORKSPACE ? null : !signedIn ? (
-        <p className="settings-note">Sign in to see your workspaces.</p>
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+          Sign in to see your workspaces.
+        </Text>
       ) : workspace ? (
         <WorkspacePage control={workspace} readerId={account.id} />
       ) : null}

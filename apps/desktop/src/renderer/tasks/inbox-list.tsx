@@ -1,7 +1,17 @@
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { DocumentIcon, EmptyState, IconButton, LIST_ROW_CURRENT, ListRow, useMenu } from "@luke/ui";
+import {
+  DocumentIcon,
+  EmptyState,
+  IconButton,
+  LIST_ROW_CURRENT,
+  ListRow,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
+  useMenu,
+} from "@luke/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -34,7 +44,7 @@ import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
-import { AgentRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
+import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
 import {
   INBOX_COLUMNS,
   type InboxColumnsShown,
@@ -114,6 +124,18 @@ const ITEM_ACTIONS = "Inbox item actions";
 
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
+
+/** What the list's placeholder rows say to a reader while its items are first read. */
+const READING_ITEMS = "Reading your inbox…";
+
+/** How wide each placeholder row's title stands, as a share of its line, so the rows read as titles of their own. */
+const SKELETON_TITLES = ["68%", "52%", "74%", "46%", "60%"] as const;
+
+/** How wide a placeholder row's time stands, as wide as a short "2h". */
+const SKELETON_TIME = "20px";
+
+/** How wide a placeholder row's mark stands, an agent's tile at its inline size (`.actor-mark`). */
+const SKELETON_MARK = "16px";
 
 /** What a press on Needs you does, as its tooltip says: list only what needs the developer, or everything again. */
 const NEEDS_YOU_PRESS = {
@@ -198,11 +220,7 @@ export function ItemMark({
 }): React.JSX.Element {
   const subject = itemSubject(holder, agentId, models, readerId);
   if (subject === undefined) return <ActorMark actor={UNNAMED_AGENT} />;
-  return (
-    <AgentRef subject={subject} models={models} onOpen={undefined}>
-      <ActorMark actor={subject.tile} />
-    </AgentRef>
-  );
+  return <AgentMarkRef subject={subject} models={models} />;
 }
 
 /**
@@ -503,6 +521,29 @@ export function NeedsYouEmpty({
 }
 
 /**
+ * The list while its items are first read: rows in an item's own row, a
+ * block where its agent's tile, its title, and its time will stand, so the
+ * items land where the blocks stood rather than a lone ring in the list's
+ * corner. The rows open nothing and the region says what is being read.
+ */
+export function InboxListSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label={READING_ITEMS}>
+      <ul className="sidebar-tasks">
+        {SKELETON_TITLES.map((width) => (
+          <ListRow
+            key={width}
+            leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />}
+            title={<Skeleton width={width} />}
+            meta={<Skeleton width={SKELETON_TIME} />}
+          />
+        ))}
+      </ul>
+    </SkeletonRegion>
+  );
+}
+
+/**
  * The list's head: the Inbox's name, and Needs you and, on the window's
  * Inbox, the view's menu at the list's top right; a task's own Inbox lists
  * one task's items in one run, so it has no menu. On the window's Inbox its
@@ -603,7 +644,7 @@ export function InboxList({
   /** The signed-in account's id, whose own agents' cards name no starter, where a teammate's name theirs. */
   readerId: string | undefined;
   head: InboxListHead;
-  /** What stands under the rows: the list's empty line, a spinner, or a read that did not answer. */
+  /** What stands under the rows: the list's empty line, placeholder rows while it is read, or a read that did not answer. */
   note: React.ReactNode;
   /** Which of the Inbox's columns stand. */
   columns: InboxColumnsShown;

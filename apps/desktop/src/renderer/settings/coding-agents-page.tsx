@@ -12,14 +12,21 @@ import {
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
-import { SettingsRow, SettingsSection } from "@luke/ui";
+import {
+  ErrorState,
+  SETTINGS_LINE_KIND,
+  SettingsLine,
+  SettingsRow,
+  SettingsSection,
+  TEXT_LINK_LOOK,
+  TextLink,
+} from "@luke/ui";
 import { actionRejection } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act";
 import { HarnessMark } from "../harness-marks";
 import { Segmented } from "../segmented";
-import { SpinnerRegion } from "../spinner";
 import {
   choiceModelId,
   choiceOn,
@@ -41,7 +48,6 @@ import {
 import { useOpenLink } from "../tasks/use-open-link";
 import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
-import { ReadFailed } from "./settings-group";
 import { SwitchRow } from "./switch-row";
 
 /**
@@ -223,8 +229,8 @@ function DefaultRows({
               {fastAskable ? (
                 <>
                   {" "}
-                  <a
-                    className="settings-detail-act"
+                  <TextLink
+                    look={TEXT_LINK_LOOK.UNDERLINED}
                     href={FAST_ACCESS_URL}
                     onClick={(event) => {
                       event.preventDefault();
@@ -232,7 +238,7 @@ function DefaultRows({
                     }}
                   >
                     {FAST_ACCESS_WORD}
-                  </a>
+                  </TextLink>
                 </>
               ) : null}
             </>
@@ -247,7 +253,8 @@ function DefaultRows({
             : runFast(choiceAt(choiceModelId(base, fast)))
         }
       />
-      <SettingsRow label="Effort">
+      {/* A refusal of any of the rows stands under them all, in the last row's error line. */}
+      <SettingsRow label="Effort" error={windows === undefined ? rejection : undefined}>
         {() => (
           <Segmented
             legend="Effort"
@@ -260,7 +267,7 @@ function DefaultRows({
         )}
       </SettingsRow>
       {windows === undefined ? null : (
-        <SettingsRow label="Context" description={longWindowNote(windows)}>
+        <SettingsRow label="Context" description={longWindowNote(windows)} error={rejection}>
           {() => (
             <Segmented
               legend="Context"
@@ -275,11 +282,6 @@ function DefaultRows({
           )}
         </SettingsRow>
       )}
-      {rejection !== undefined ? (
-        <p className="error-message" role="alert">
-          {rejection}
-        </p>
-      ) : null}
     </>
   );
 }
@@ -371,7 +373,7 @@ function CodingAgentsSection({
   return (
     <SettingsSection title="Default model">
       {!signedIn ? (
-        <p className="settings-card-line settings-note">{PAGE_LINE.SIGNED_OUT}</p>
+        <SettingsLine>{PAGE_LINE.SIGNED_OUT}</SettingsLine>
       ) : choice !== undefined && (models !== undefined || modelsFailed) ? (
         <DefaultRows
           choice={choice}
@@ -381,11 +383,13 @@ function CodingAgentsSection({
           onChange={write}
         />
       ) : readFailed ? (
-        <ReadFailed line={PAGE_LINE.FAILED} onRetry={() => setAttempt((count) => count + 1)} />
+        <SettingsLine>
+          <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
+            {PAGE_LINE.FAILED}
+          </ErrorState>
+        </SettingsLine>
       ) : (
-        <div className="settings-card-line settings-reading">
-          <SpinnerRegion label="Loading your default" />
-        </div>
+        <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>Loading your default</SettingsLine>
       )}
     </SettingsSection>
   );

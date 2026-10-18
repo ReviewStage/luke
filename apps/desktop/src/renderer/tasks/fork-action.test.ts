@@ -188,7 +188,7 @@ test("under a message, Forked to names the agents of the task forked at it in th
 
   const line = view.container.querySelector("[data-forked-to]");
   assert.equal(line?.textContent, "Forked toTry the queue,Try the cron");
-  const chips = [...(line?.querySelectorAll<HTMLElement>(".actor-ref") ?? [])];
+  const chips = [...(line?.querySelectorAll<HTMLElement>("[data-actor-ref]") ?? [])];
   assert.deepEqual(
     chips.map((chip) => chip.tagName),
     ["SPAN", "BUTTON"],

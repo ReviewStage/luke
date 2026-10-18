@@ -108,7 +108,7 @@ const RELEASES = [
   {
     version: "2.4.0",
     date: "October 9",
-    body: "Plans keep their place when you switch workspaces, and a long step wraps instead of running off the card.",
+    body: "Tasks keep their place when you switch workspaces, and a long step wraps instead of running off the card.",
   },
   {
     version: "2.3.1",

@@ -362,7 +362,7 @@ test("on the Call tab, a show_code row says its lines as the Code tab's card say
   head.innerHTML = renderToStaticMarkup(
     createElement(CodeCardHeader, { codeRef: ref, note, copied: undefined, onOpen: undefined }),
   );
-  const lines = head.querySelector(".file-ref-lines")?.textContent;
+  const lines = head.querySelector(".luke-inline-ref-state")?.textContent;
   assert.equal(lines, "Lines 3–5");
   const row = page.querySelector<HTMLElement>('button[data-call-id="c"]');
   assert.ok(row, "the row opens the file");
@@ -410,7 +410,10 @@ function spoken(id: string, role: TranscriptSpeaker, text: string): UIMessage {
 function seen(ref: Element | null): readonly (string | undefined)[] | undefined {
   if (!(ref instanceof HTMLElement)) return undefined;
   const picture = ref.querySelector("img")?.getAttribute("src") ?? undefined;
-  const named = [ref.dataset.kind, ref.querySelector(".actor-ref-name")?.textContent ?? undefined];
+  const named = [
+    ref.dataset.kind,
+    ref.querySelector(".luke-inline-ref-label")?.textContent ?? undefined,
+  ];
   return picture === undefined ? named : [...named, picture];
 }
 
@@ -455,10 +458,10 @@ test("a teammate's call is headed with their face and name, their lines carry it
     });
     const divider = page.querySelector("[data-checkpoint]");
     return {
-      heading: seen(divider?.querySelector(".actor-ref") ?? null),
+      heading: seen(divider?.querySelector("[data-actor-ref]") ?? null),
       line: divider?.textContent ?? "",
       senders: [...page.querySelectorAll(".message-sender")].map((each) =>
-        seen(each.querySelector(".actor-ref")),
+        seen(each.querySelector("[data-actor-ref]")),
       ),
     };
   };

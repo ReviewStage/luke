@@ -135,7 +135,7 @@ function Looker({ looked }: { looked: typeof DOCUMENT_TASK | undefined }): null 
 }
 
 /** The palette over `DOCUMENT_PLAN` drawn, looked at or covered as `looked` says, redrawn by the answer. */
-function paletteOverPlan(): (looked: typeof DOCUMENT_TASK | undefined) => void {
+function paletteOverTask(): (looked: typeof DOCUMENT_TASK | undefined) => void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   const registry = AtomRegistry.make();
@@ -185,7 +185,7 @@ function markRows(): string[] {
 }
 
 test("⌘K marks the task on screen unread and then read, and offers no mark for a task Settings or the Inbox covers", () => {
-  const draw = paletteOverPlan();
+  const draw = paletteOverTask();
   draw(undefined);
   assert.deepEqual(markRows(), []);
   act(() => {
@@ -635,7 +635,9 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     act(() => {
       row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
-    const words = document.querySelector(".luke-tooltip-card .actor-words .actor-ref")?.textContent;
+    const words = document.querySelector(
+      ".luke-tooltip-card .actor-words [data-actor-ref]",
+    )?.textContent;
     act(() => root.unmount());
     document.body.innerHTML = "";
     return words;

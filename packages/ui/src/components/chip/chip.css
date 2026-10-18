@@ -1,8 +1,9 @@
 /* chip.css -- the chip: a control of the shared contract in one of four
-   looks, giving way before the row around it does, its words cut short
-   rather than pushing past it. A mark beside the words is a size under the
-   control's glyph, and a menu's chevron is the small, muted one a menu
-   draws. */
+   looks, in a state's tone where it says one, at its place's width, giving
+   way before the row around it does, its words cut short rather than
+   pushing past it. A mark beside the words, a glyph or a picture, stands at
+   the control's glyph size, and a menu's chevron is the small, muted one a
+   menu draws. */
 
 @layer components {
   .luke-chip {
@@ -44,6 +45,13 @@
     white-space: nowrap;
   }
 
+  /* Words naming code, a branch, read in the code face at a caption's
+     size, as a terminal would print them. */
+  .luke-chip-name[data-mono="true"] {
+    font-family: var(--luke-font-mono);
+    font-size: var(--luke-type-caption-size);
+  }
+
   /* All a chip holds stands in one face, so an unavailable chip fades it
      once, whatever it holds: bare words, a name, a picture, a mark, or the
      chevron. */
@@ -55,7 +63,7 @@
     min-width: 0;
   }
 
-  .luke-chip-face > svg {
+  .luke-chip-face > :is(svg, img) {
     flex: none;
     width: var(--luke-control-icon);
     height: var(--luke-control-icon);
@@ -154,6 +162,117 @@
     border-color: var(--luke-color-border-selected);
     background: var(--luke-color-fill-selected);
     --luke-chip-ink: var(--luke-color-text);
+  }
+
+  /* A removable filter names one applied, so it stands as a pressed one
+     does; its × ends it, a round press inside its capsule. */
+  .luke-chip[data-removable="true"] {
+    gap: var(--luke-space-4);
+    padding-inline-end: var(--luke-space-4);
+    cursor: default;
+  }
+
+  .luke-chip[data-look="filter"][data-removable="true"] {
+    border-color: var(--luke-color-border-selected);
+    background: var(--luke-color-fill-selected);
+    --luke-chip-ink: var(--luke-color-text);
+  }
+
+  .luke-chip-remove {
+    display: grid;
+    flex: none;
+    width: calc(var(--luke-control-height) - var(--luke-space-12));
+    height: calc(var(--luke-control-height) - var(--luke-space-12));
+    place-items: center;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--luke-radius-full);
+    background: none;
+    color: var(--luke-color-text-muted);
+    cursor: inherit;
+  }
+
+  .luke-chip-remove:hover {
+    background: var(--luke-color-fill-strong);
+    color: var(--luke-color-text);
+  }
+
+  /* Note that the × is drawn a size under the chevron, because its glyph
+     carries the heavier stroke a small removal needs. */
+  .luke-chip-remove > svg {
+    width: 10px;
+    height: 10px;
+  }
+
+  /* A tone tints the chip in its state's ink, its hairline and its words in
+     the ink itself, whatever its look; under the pointer and while its menu
+     is open the tint deepens. */
+  .luke-chip[data-look][data-tone] {
+    border-color: color-mix(in srgb, var(--luke-chip-tone) 35%, transparent);
+    background: color-mix(in srgb, var(--luke-chip-tone) 12%, transparent);
+    --luke-chip-ink: var(--luke-chip-tone);
+  }
+
+  .luke-chip[data-look][data-tone]:where(
+    :hover:not(:disabled, [aria-disabled="true"], [data-removable]),
+    [aria-expanded="true"]
+  ) {
+    background: color-mix(in srgb, var(--luke-chip-tone) 22%, transparent);
+    --luke-chip-ink: var(--luke-chip-tone);
+  }
+
+  .luke-chip[data-tone="neutral"] {
+    --luke-chip-tone: var(--luke-color-text-muted);
+  }
+
+  .luke-chip[data-tone="attention"] {
+    --luke-chip-tone: var(--luke-color-attention);
+  }
+
+  .luke-chip[data-tone="complete"] {
+    --luke-chip-tone: var(--luke-color-complete);
+  }
+
+  .luke-chip[data-tone="merged"] {
+    --luke-chip-tone: var(--luke-color-merged);
+  }
+
+  .luke-chip[data-tone="danger"] {
+    --luke-chip-tone: var(--luke-color-danger-text);
+  }
+
+  /* The widths a place shares: the field column a settings row's pop-ups
+     stand in, at least that column, or half of it for a few short words. A
+     profile with no column (the site's) leaves each chip its words' width. */
+  .luke-chip[data-width="field"] {
+    width: var(--luke-select-field-width);
+  }
+
+  .luke-chip[data-width="min-field"] {
+    min-width: min(var(--luke-select-field-width), 100%);
+  }
+
+  .luke-chip[data-width="fixed"] {
+    width: calc(var(--luke-select-field-width) / 2);
+  }
+
+  /* Drawn as its mark alone, a chip squares its sides around it; its words
+     are still its name, read and drawn nowhere, and its chevron goes. */
+  .luke-chip[data-icon-only="true"] {
+    padding-inline: var(--luke-space-8);
+  }
+
+  .luke-chip[data-icon-only="true"] .luke-chip-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    clip-path: inset(50%);
+  }
+
+  .luke-chip[data-icon-only="true"] .luke-chip-face > .settings-chevron {
+    display: none;
   }
 
   /* Unavailable, a chip fades to 45%: a disabled one whole, one that keeps
