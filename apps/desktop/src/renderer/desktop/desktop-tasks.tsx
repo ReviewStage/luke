@@ -861,8 +861,8 @@ function PlanDocument({
                     {...drawing}
                     panel={drawing.panel}
                     unread={tasks.unreadTabs}
-                    holder={SIDE_PANEL_HOLDER.PLAN}
-                    planId={task.id}
+                    holder={SIDE_PANEL_HOLDER.TASK}
+                    taskId={task.id}
                     repository={task.repository}
                     board={tasks.board}
                     shownCode={tasks.shownCode}

@@ -246,7 +246,7 @@ afterEach(() => {
 
 /** Every door the page opens, in order. */
 interface Opened {
-  readonly plans: string[];
+  readonly tasks: string[];
   readonly agents: [string, string][];
   readonly inbox: (InboxChoice | "inbox")[];
   readonly settings: SettingsLink[];
@@ -264,14 +264,14 @@ function mountWith(
   name?: string,
   memberCount = MEMBERS.length,
 ) {
-  const opened: Opened = { plans: [], agents: [], inbox: [], settings: [] };
+  const opened: Opened = { tasks: [], agents: [], inbox: [], settings: [] };
   const tasks = tasksControl({
     me: DEAN.userId,
     workspace: { ...ACME, memberCount },
     tasks: TASKS,
     listed: { tasks: TASKS, archived: [], ...HOLDING },
     ...HOLDING,
-    onSelect: (taskId) => opened.plans.push(taskId),
+    onSelect: (taskId) => opened.tasks.push(taskId),
     onShowAgent: (taskId, agentId) => opened.agents.push([taskId, agentId]),
     inboxView: {
       open: false,
@@ -294,7 +294,7 @@ function mountWith(
         createElement(
           OpenSettingsProvider,
           { value: (link: SettingsLink) => opened.settings.push(link) },
-          createElement(PersonPage, { tasks: tasks, userId, name }),
+          createElement(PersonPage, { tasks, userId, name }),
         ),
       ),
     ),
@@ -384,7 +384,7 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
 
   assert.deepEqual(opened.agents, [[RETRIES.id, BACKOFF.id]]);
   assert.deepEqual(opened.inbox, ["inbox", { taskId: RETRIES.id, itemId: RETRY_429.id }]);
-  assert.deepEqual(opened.plans, [DASHBOARD.id]);
+  assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 
 test("a person's tasks wear no face of theirs, since the page's head already says whose they are", async () => {

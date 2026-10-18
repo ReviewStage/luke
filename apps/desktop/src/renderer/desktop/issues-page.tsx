@@ -154,7 +154,7 @@ function listState(read: ReturnType<typeof useIssues>["read"], onBoard: boolean)
 /** The list's page: the listed workspace's issues by status, a new one a press away. */
 function ListPage({
   root,
-  plans: tasks,
+  tasks,
   issues,
   focused,
   layout,
@@ -165,7 +165,7 @@ function ListPage({
 }: {
   /** What the arrows move through the rows of: the pages' own root. */
   root: HTMLElement | null;
-  plans: TasksControl;
+  tasks: TasksControl;
   issues: ReturnType<typeof useIssues>;
   /** The issue whose card or row takes the keyboard as it is drawn. */
   focused: string | undefined;
@@ -342,12 +342,12 @@ function DetailFrame({
  * it goes back to already holds what was kept.
  */
 function DetailPage({
-  plans: tasks,
+  tasks,
   issueId,
   issues,
   onBack,
 }: {
-  plans: TasksControl;
+  tasks: TasksControl;
   issueId: string;
   issues: ReturnType<typeof useIssues>;
   onBack: () => void;
@@ -450,7 +450,7 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
       {place.kind === ISSUES_PAGE.LIST ? (
         <ListPage
           root={pages}
-          plans={tasks}
+          tasks={tasks}
           issues={issues}
           focused={cameFrom}
           layout={layout}
@@ -468,7 +468,7 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
         // Keyed by the issue, so another issue's page holds nothing of the last's.
         <DetailPage
           key={place.issueId}
-          plans={tasks}
+          tasks={tasks}
           issueId={place.issueId}
           issues={issues}
           onBack={back}

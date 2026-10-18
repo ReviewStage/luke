@@ -382,7 +382,7 @@ export function DesktopAgentPage({
                         panel={drawing.panel}
                         unread={NO_UNREAD}
                         holder={SIDE_PANEL_HOLDER.AGENT}
-                        planId={agentId}
+                        taskId={agentId}
                         repository={agentRepository ?? null}
                         board={undefined}
                         shownCode={undefined}

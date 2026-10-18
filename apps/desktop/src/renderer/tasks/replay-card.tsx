@@ -413,14 +413,14 @@ export function ReplayCard({
   replay,
   sentAt,
   place,
-  planId: taskId,
+  taskId,
 }: {
   replay: Replay;
   /** When the agent's first message was sent, named after who started it; none where the transcript does not know. */
   sentAt?: number | undefined;
   place: ReplayPlace;
   /** The task the agents are of, under which a message of the source is opened; none where they are of none. */
-  planId: string | undefined;
+  taskId: string | undefined;
 }): React.JSX.Element {
   const { agentId, messageId } = replay;
   const source = useSource(agentId, place);

@@ -862,7 +862,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const { taskId } = found.success;
         if (taskId === null) return pictureNotLooked(PICTURE_LOOK_REFUSAL.TASKLESS);
         // The plan is read as the member whose turn this is, as `editPlan` writes it.
-        return yield* runLookAtPicture({ userId: admitted.caller, taskId: taskId }, input);
+        return yield* runLookAtPicture({ userId: admitted.caller, taskId }, input);
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(pictureNotLooked(PICTURE_LOOK_REFUSAL.UNAVAILABLE))),
@@ -896,7 +896,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         }
         const { id: agentId, taskId, repository } = found.success;
         const self = { kind: MEMBER_KIND.AGENT, agentId };
-        const reader = { userId: admitted.target.userId, planId: taskId, self };
+        const reader = { userId: admitted.target.userId, taskId, self };
         if (call.tool === CHAT_TOOL.READ) return yield* readAsAgent(reader, call.input);
         if (call.tool === CHAT_TOOL.RESOLVE) return yield* resolveAsAgent(reader, call.input);
         // An archived agent, or one on an archived task, posts nothing until it is brought back.
@@ -934,7 +934,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const { id: agentId, taskId } = found.success;
         return yield* chatDigest({
           userId: admitted.target.userId,
-          planId: taskId,
+          taskId,
           self: { kind: MEMBER_KIND.AGENT, agentId },
         });
       }).pipe(

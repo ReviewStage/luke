@@ -127,7 +127,7 @@ function AgentRow({
   tasks: TasksControl;
   now: number;
 }): React.JSX.Element {
-  const { plan: task, agent } = each;
+  const { task, agent } = each;
   const subject = lineSubject(agent, tasks.agents.models, tasks.me);
   return (
     <li className="sidebar-task-item home-row">

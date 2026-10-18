@@ -496,7 +496,7 @@ export const BRIDGE = {
     result: result<{
       messageId: string;
       workspaceId: string;
-      planId: string | null;
+      taskId: string | null;
       words: string;
       detail: string;
     }>(

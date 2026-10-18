@@ -417,7 +417,7 @@ const tasklessAgent = (
   patch: {
     readonly repository?: string;
     readonly createdAt?: Date;
-    readonly planId?: string;
+    readonly taskId?: string;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -429,7 +429,7 @@ const tasklessAgent = (
       organizationId,
       userId,
       conversationId,
-      ...(patch.planId === undefined ? undefined : { taskId: patch.planId }),
+      ...(patch.taskId === undefined ? undefined : { taskId: patch.taskId }),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       prompt: "Sweep the flaky tests.",
@@ -437,7 +437,7 @@ const tasklessAgent = (
       repositories: [patch.repository ?? "acme/api"],
       idempotencyKey: randomUUID(),
       ...(patch.createdAt === undefined ? undefined : { createdAt: patch.createdAt }),
-      ...(patch.planId === undefined ? undefined : { planId: patch.planId }),
+      ...(patch.taskId === undefined ? undefined : { planId: patch.taskId }),
     });
     return { agentId: id, conversationId };
   });
@@ -683,13 +683,13 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
             .where(eq(task.id, archivedTask.id)),
         );
         const onTask = yield* tasklessAgent(teammate, workspace, {
-          planId: invitations.id,
+          taskId: invitations.id,
           createdAt: at(15),
         });
         assert.deepEqual(
           ids(
             yield* listWorkspaceCodingAgents(starter, workspace, {
-              planId: invitations.id,
+              taskId: invitations.id,
               includeArchived: true,
               limit: 10,
             }),
@@ -800,7 +800,7 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan of an accoun
         const at = (hour: number) => new Date(`2026-10-14T${String(hour).padStart(2, "0")}:00:00Z`);
         const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
         const oldest = yield* tasklessAgent(starter, workspace, { createdAt: at(8) });
-        yield* tasklessAgent(starter, workspace, { createdAt: at(9), planId: task.id });
+        yield* tasklessAgent(starter, workspace, { createdAt: at(9), taskId: task.id });
         const archived = yield* tasklessAgent(teammate, workspace, { createdAt: at(10) });
         const newest = yield* tasklessAgent(teammate, workspace, { createdAt: at(11) });
         const outside = yield* tasklessAgent(outsider, elsewhere, { createdAt: at(12) });
@@ -936,7 +936,7 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace's world", 
         const archive = (agentId: string) =>
           Effect.asVoid(archiveCodingAgent(starter, agentId, true));
         const standing = yield* tasklessAgent(starter, workspace, {
-          planId: linked.id,
+          taskId: linked.id,
           createdAt: at(1),
         });
         const open = yield* tasklessAgent(starter, workspace, { createdAt: at(2) });
@@ -1144,7 +1144,7 @@ it.layer(getTestDB())("an agent's pin", (it) => {
         const dean = yield* openAccount;
         const workspace = yield* openWorkspace(dean);
         const task = yield* createTask(dean, { organizationId: workspace, name: "Billing" });
-        const { agentId } = yield* tasklessAgent(dean, workspace, { planId: task.id });
+        const { agentId } = yield* tasklessAgent(dean, workspace, { taskId: task.id });
 
         assert.ok(Option.isNone(yield* pinCodingAgent(dean, agentId, true)));
         assert.deepEqual(yield* pinnedOnes(agentId), []);

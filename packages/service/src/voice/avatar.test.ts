@@ -112,7 +112,7 @@ interface Stand {
   url(path: string): string;
   stop(): Promise<void>;
   readonly openAi: Awaited<ReturnType<typeof startFakeOpenAi>>;
-  readonly planId: string;
+  readonly taskId: string;
 }
 
 /** The service for one account holding one plan, with the avatar on the Keyframe given, or none. */
@@ -149,7 +149,7 @@ async function stand(keyframe: Layer.Layer<Keyframe> | undefined): Promise<Stand
   return {
     log,
     openAi,
-    planId: task.id,
+    taskId: task.id,
     url: (path) => `ws://127.0.0.1:${port}${path}`,
     stop: async () => {
       await database.run(Scope.close(scope, Exit.void));
@@ -168,7 +168,7 @@ async function openSession(context: Stand) {
     sdp: SDP_OFFER,
     voice: LIVE_VOICE.MARIN,
     input: [],
-    planId: context.planId,
+    planId: context.taskId,
   });
   const attach = await context.openAi.nextAttach();
   const upstream = readSocket(attach.socket);

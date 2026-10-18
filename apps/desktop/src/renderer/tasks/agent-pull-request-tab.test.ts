@@ -1819,7 +1819,7 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
   });
   const sibling = { id: "5a7c9e1b-3d5f-4b7d-9f1b-3d5f7b9d1f3a", taskId: AGENT.planId };
   const away = { id: "7c9e1b3d-5f7b-4d9f-8b3d-5f7b9d1f3b5d", taskId: elsewhere };
-  const planless = { id: "9e1b3d5f-7b9d-4f1b-8d5f-7b9d1f3b5d7f", taskId: null };
+  const taskless = { id: "9e1b3d5f-7b9d-4f1b-8d5f-7b9d1f3b5d7f", taskId: null };
   const links: ReadLink[] = [];
   const tab = await draw(
     controlAnswering({
@@ -1831,7 +1831,7 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
               entry(38, away),
               entry(40, sibling),
               entry(42, { id: AGENT.id, taskId: AGENT.planId }),
-              entry(44, planless),
+              entry(44, taskless),
               entry(46),
             ],
           },
@@ -1879,7 +1879,7 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
       place: { kind: LINK_PLACE.CHANGES, planId: AGENT.planId, agentId: sibling.id },
     },
     { workspace: "", place: { kind: LINK_PLACE.CHANGES, planId: elsewhere, agentId: away.id } },
-    { workspace: "", place: { kind: LINK_PLACE.AGENT, agentId: planless.id } },
+    { workspace: "", place: { kind: LINK_PLACE.AGENT, agentId: taskless.id } },
   ]);
   assert.deepEqual(opened, ["https://github.com/acme/relay/pull/46"]);
 });
