@@ -3,7 +3,7 @@ import {
   type FactoryDefect,
   type FactoryPlanned,
 } from "@luke/features/factory-world-wire";
-import { AGENT_STATE, type AgentView, ZONE_LAYER, type ZoneView } from "@luke/ui/factory-world";
+import { type AgentView, agentDrawnUnder, ZONE_LAYER, type ZoneView } from "@luke/ui/factory-world";
 import {
   CylinderGeometry,
   InstancedMesh,
@@ -281,7 +281,7 @@ export const world: WorldModule = {
           agents = view.agents;
           building = layers.building;
           masons.raise(
-            view.agents.filter((agent) => layers.building || agent.state === AGENT_STATE.FAILED),
+            view.agents.filter((agent) => agentDrawnUnder(agent, layers)),
             current.byPath,
             current.gates,
           );

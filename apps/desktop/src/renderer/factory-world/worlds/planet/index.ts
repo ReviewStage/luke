@@ -1,5 +1,5 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
-import { AGENT_STATE, type FactoryWorldView, type ZoneView } from "@luke/ui/factory-world";
+import { agentDrawnUnder, type FactoryWorldView, type ZoneView } from "@luke/ui/factory-world";
 import {
   CircleGeometry,
   Color,
@@ -245,9 +245,7 @@ export const world: WorldModule = {
     };
 
     const drawnAgents = (state: WorldState) =>
-      state.view.agents.filter(
-        (agent) => state.layers.building || agent.state === AGENT_STATE.FAILED,
-      );
+      state.view.agents.filter((agent) => agentDrawnUnder(agent, state.layers));
 
     const recast = (state: WorldState, placed: PlanetLayout, reshaped: boolean) => {
       const before = last;

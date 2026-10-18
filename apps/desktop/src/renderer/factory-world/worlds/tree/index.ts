@@ -1,4 +1,4 @@
-import { AGENT_STATE, type AgentView, type ZoneView } from "@luke/ui/factory-world";
+import { type AgentView, agentDrawnUnder, type ZoneView } from "@luke/ui/factory-world";
 import { Color, Vector4 } from "three";
 import { PICK_KIND, type PickTarget, type WorldModule, type WorldState } from "../../world";
 import { gardeners } from "./gardeners";
@@ -160,9 +160,7 @@ export const world: WorldModule = {
         grownFrom = view.zones;
 
         // Note that a failed agent is a defect as much as a builder, so it stands with the building layer off.
-        const agents = view.agents.filter(
-          (agent) => layers.building || agent.state === AGENT_STATE.FAILED,
-        );
+        const agents = view.agents.filter((agent) => agentDrawnUnder(agent, layers));
         if (
           plannedFrom === undefined ||
           plannedFrom.length !== agents.length ||

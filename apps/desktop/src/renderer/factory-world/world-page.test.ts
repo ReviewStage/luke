@@ -169,6 +169,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  pointed = undefined;
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
@@ -248,17 +249,24 @@ function drawn(): string[] {
     .map(([layer]) => layer);
 }
 
-/** The pointer coming to a count from outside the bar, or leaving the bar for the page. */
-function pointTo(page: HTMLElement, stage: HTMLButtonElement | undefined): void {
+let pointed: Element | undefined;
+
+/** The pointer moving from where it was to a count, to another part of the bar (an arrow between counts), or off the bar onto the page. */
+function pointTo(page: HTMLElement, to: Element | undefined): void {
+  const target = to ?? page;
   act(() => {
-    if (stage === undefined) {
-      const bar = page.querySelector(".factory-world-pipeline");
-      assert.ok(bar);
-      bar.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: page }));
-    } else {
-      stage.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: page }));
-    }
+    pointed?.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: target }));
+    target.dispatchEvent(
+      new MouseEvent("pointerover", { bubbles: true, relatedTarget: pointed ?? page }),
+    );
   });
+  pointed = to;
+}
+
+function arrow(page: HTMLElement): Element {
+  const found = page.querySelector(".factory-world-flow");
+  assert.ok(found);
+  return found;
 }
 
 function hover(target: SceneHover | undefined): void {
@@ -416,6 +424,26 @@ test("a press on a count keeps its layer alone until it is pressed again, and an
   act(() => button(page, "1Building").click());
   assert.deepEqual(pipeline(page), ["1Planned", "1Building", "2Shipped", "0Defects"]);
   assert.deepEqual(drawn(), ["planned", "building", "shipped", "defects"]);
+});
+
+test("the pointer leaving a count for the arrow beside it ends that count's preview", async () => {
+  const { page } = mount();
+  await settle();
+  pointTo(page, button(page, "2Shipped"));
+  assert.deepEqual(drawn(), ["shipped"]);
+  pointTo(page, arrow(page));
+  assert.deepEqual(drawn(), ["planned", "building", "shipped", "defects"]);
+  pointTo(page, undefined);
+});
+
+test("the pointer leaving the bar leaves the keyboard's preview standing, and the pointer's comes first while both rest", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => button(page, "0Defects").focus());
+  pointTo(page, button(page, "1Planned"));
+  assert.deepEqual(drawn(), ["planned"]);
+  pointTo(page, undefined);
+  assert.deepEqual(drawn(), ["defects"]);
 });
 
 test("the keyboard on a count previews its layer as the pointer does, and leaving the bar draws every layer again", async () => {

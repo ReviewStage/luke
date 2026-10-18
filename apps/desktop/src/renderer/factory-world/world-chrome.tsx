@@ -35,6 +35,7 @@ import {
   ListTodoIcon,
   XIcon,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { LinesChanged } from "../tasks/agent-published";
 import { dayAndTimeText } from "../tasks/task-time";
 import type { TasksControl } from "../tasks/use-tasks-tab";
@@ -118,25 +119,15 @@ export function PipelineBar({
   chosen: WorldLayer | undefined;
   /** A press on a count: its layer alone, or every layer again where it was the one pressed. */
   onChoose: (layer: WorldLayer) => void;
-  /** The pointer or the keyboard came to a count, or left the bar's counts. */
+  /** The count the pointer rests on, else the one the keyboard is on, or neither. */
   onPreview: (layer: WorldLayer | undefined) => void;
 }): React.JSX.Element {
+  // Note that the pointer and the keyboard are held apart, so one leaving a count never takes the other's preview with it.
+  const [pointed, setPointed] = useState<WorldLayer | undefined>(undefined);
+  const [focused, setFocused] = useState<WorldLayer | undefined>(undefined);
+  useEffect(() => onPreview(pointed ?? focused), [pointed, focused, onPreview]);
   return (
-    <fieldset
-      className="factory-world-pipeline"
-      aria-label="Layers"
-      onPointerOut={(event) => {
-        if (
-          !(
-            event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)
-          )
-        )
-          onPreview(undefined);
-      }}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) onPreview(undefined);
-      }}
-    >
+    <fieldset className="factory-world-pipeline" aria-label="Layers">
       {STAGES.map(({ layer, name, Icon, color }, index) => (
         <span key={layer} className="factory-world-stage-slot">
           {index === 0 ? null : (
@@ -153,9 +144,25 @@ export function PipelineBar({
             aria-pressed={chosen === layer}
             data-layer={layer}
             data-faded={chosen !== undefined && chosen !== layer ? "" : undefined}
-            onClick={() => onChoose(layer)}
-            onPointerOver={() => onPreview(layer)}
-            onFocus={() => onPreview(layer)}
+            onClick={() => {
+              onChoose(layer);
+              // Note that a press settles the preview: what is drawn now is the press, until the pointer or keyboard moves to another count.
+              setPointed(undefined);
+              setFocused(undefined);
+            }}
+            onPointerOver={() => setPointed(layer)}
+            onPointerOut={(event) => {
+              // Note that leaving a count for its own words keeps the preview, and for an arrow, a gap, or out of the bar ends it.
+              if (
+                !(
+                  event.relatedTarget instanceof Node &&
+                  event.currentTarget.contains(event.relatedTarget)
+                )
+              )
+                setPointed(undefined);
+            }}
+            onFocus={() => setFocused(layer)}
+            onBlur={() => setFocused(undefined)}
           >
             <span className="factory-world-signal" style={signalStyle(color)}>
               <Icon aria-hidden="true" />
