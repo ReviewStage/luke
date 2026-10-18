@@ -75,7 +75,8 @@ export interface EventsOptions {
 /**
  * Builds the documented batch document. Three of its fields are the whole
  * privacy posture, and each fails silently if got wrong: `distinct_id` sits
- * inside an item's properties, where a top-level one is accepted and dropped;
+ * at each item's top level, where PostHog's capture docs ask for it, and an
+ * item without one is answered 200 and silently dropped;
  * `$geoip_disable` is what keeps the processor from resolving an event with no
  * address to the data centre's own location; and `historical_migration` stays
  * false because this is live traffic rather than a backfill.
@@ -100,12 +101,12 @@ function batchDocument(
     batch: events.map((event, index) => {
       const properties = {
         ...event.properties,
-        distinct_id: userId,
         $geoip_disable: true,
         $lib: PRODUCT_EVENT_LIB,
       };
       return {
         event: event.name,
+        distinct_id: userId,
         timestamp: new Date(
           // Clamped into the shared window ending at this reader's own clock
           // — the same principle the review answer follows by stamping

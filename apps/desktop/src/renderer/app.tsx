@@ -84,7 +84,6 @@ import { FeedbackDialog } from "./feedback-dialog";
 import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { OpenPersonProvider } from "./person-door";
-import { applySessionReplay } from "./session-replay";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
 import { MessageRevealProvider } from "./tasks/message-links";
@@ -159,7 +158,7 @@ export function App(): React.JSX.Element {
   const run = state?.run;
   useEffect(() => {
     if (!sessionReplay || !run) return;
-    applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
+    appPlatform().applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
   }, [run, sessionReplay]);
   // The editor bundle loads once the panel has painted, so an agent's message box and a plan's editor find it there.
   const prefetchEditorBundle = usePrefetchEditorBundle();

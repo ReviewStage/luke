@@ -32,7 +32,9 @@ import {
   type InboxItem,
   type InboxMessage,
 } from "@luke/features/inbox-wire";
+import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
+import { pageFrameUrl } from "@luke/features/page-frame";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import {
   WORKSPACE_ROLE,
@@ -171,7 +173,17 @@ const HOLDING: readonly AppInboxTaskHolding[] = [
   { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
 ];
 
+/** A page of the billing task's, as a read of its pages lists it. */
+const FUNNEL = {
+  id: "3c4d5e6f-0000-4000-8000-000000000001",
+  title: "Invite funnel",
+  version: 2,
+  at: 1_000,
+};
+
 let root: Root | undefined;
+/** Each task's pages as a read of them answers. */
+let taskPages = new Map<string, readonly (typeof FUNNEL)[]>();
 /** The task's agents as the service lists them, archived ones among them. */
 let listedAgents: readonly CodingAgentSummary[] = [AGENT];
 /** Each task's inbox as the service answers a read of it from the start. */
@@ -241,6 +253,7 @@ beforeEach(() => {
   ]);
   heldRead = () => new Promise(() => undefined);
   startRead = undefined;
+  taskPages = new Map([[BILLING.id, [FUNNEL]]]);
   listedAgents = [AGENT];
   agentInboxes = new Map();
   agentReads = [];
@@ -250,7 +263,7 @@ beforeEach(() => {
   listedWorkspace = undefined;
   automations = [];
   copied = [];
-  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS, pageFrameUrl });
   pageAgents = new Map();
   imageReads = [];
   readMarks = [];
@@ -306,6 +319,12 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
+      }
+      if (request.kind === ACT_KIND.TASKS_PAGES) {
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { pages: taskPages.get(request.payload.taskId) ?? [] },
+        });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
@@ -567,6 +586,110 @@ test("the list holds every plan's items under the sidebar's group header for eac
     "▸ *Expire after 7 days?",
     "*Alert at 80%?",
   ]);
+});
+
+/** Presses Media previews in the view's menu, handing back whether it stood checked before. */
+function toggleMediaPreviews(page: HTMLElement): string | null {
+  const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  act(() => options?.click());
+  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find(
+    (each) => each.textContent?.includes("Media previews"),
+  );
+  assert.ok(item, "the view's menu offers Media previews");
+  const checked = item.getAttribute("aria-checked");
+  act(() => item.click());
+  return checked;
+}
+
+test("rows show no media until Media previews is checked in the view's menu, then the pictures and pages each item carries under its preview, and the choice outlives a relaunch", async () => {
+  const shot = {
+    type: INBOX_BLOCK.IMAGE,
+    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c70",
+    alt: "The chart",
+  };
+  const funnel = linkOf({ kind: LINK_PLACE.PAGE, planId: BILLING.id, pageId: FUNNEL.id }, "acme");
+  const words = { type: INBOX_BLOCK.MARKDOWN, text: `Compare [@Invite funnel](${funnel}).` };
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, blocks: [words, shot] }, RETRY]);
+  const mediaOf = (page: HTMLElement, title: string) => {
+    const strip = rowNamed(page, title).querySelector(".luke-list-row-attachments");
+    if (strip === null) return null;
+    return [...strip.children].map(
+      (tile) =>
+        tile.querySelector("img")?.getAttribute("src") ??
+        tile.querySelector("iframe")?.getAttribute("src") ??
+        "",
+    );
+  };
+  const landImages = async () => {
+    await settle();
+    for (const land of imageReads.splice(0)) land();
+    await settle();
+  };
+  let { page } = mount();
+  await landImages();
+  assert.equal(mediaOf(page, "Alert at 80%?"), null, "no media stand until asked for");
+
+  assert.equal(toggleMediaPreviews(page), "false");
+  await landImages();
+  assert.deepEqual(mediaOf(page, "Alert at 80%?"), [
+    pageFrameUrl({ taskId: BILLING.id, pageId: FUNNEL.id, version: FUNNEL.version }),
+    "data:image/png;base64,iVBORw0KGgo=",
+  ]);
+  assert.equal(mediaOf(page, "Expire after 7 days?"), null, "an item carrying none shows none");
+  assert.equal(
+    rowNamed(page, "Alert at 80%?").querySelector(".luke-list-row-description")?.textContent,
+    "Choice · 2 options, one recommended",
+    "the preview's words stand over the media",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  ({ page } = mount());
+  await landImages();
+  assert.equal(mediaOf(page, "Alert at 80%?")?.length, 2);
+  assert.equal(toggleMediaPreviews(page), "true");
+  assert.equal(mediaOf(page, "Alert at 80%?"), null);
+});
+
+test("a row's page is drawn at its newest version, read again once its item changes, as when its agent shows the page anew, holding its place until each version loads", async () => {
+  const funnel = linkOf({ kind: LINK_PLACE.PAGE, planId: INVITES.id, pageId: FUNNEL.id }, "acme");
+  const words = { type: INBOX_BLOCK.MARKDOWN, text: `See [the funnel](${funnel}).` };
+  inboxes.set(INVITES.id, [{ ...EXPIRY, blocks: [words] }]);
+  taskPages.set(INVITES.id, [FUNNEL]);
+  const frame = (page: HTMLElement) =>
+    rowNamed(page, "Expire after 7 days?").querySelector("iframe")?.getAttribute("src");
+  const { page } = mount();
+  await settle();
+  toggleMediaPreviews(page);
+  await settle();
+  assert.equal(
+    frame(page),
+    pageFrameUrl({ taskId: INVITES.id, pageId: FUNNEL.id, version: FUNNEL.version }),
+  );
+  const tile = () =>
+    rowNamed(page, "Expire after 7 days?").querySelector("iframe")?.parentElement?.dataset.loaded;
+  const loads = () =>
+    act(() => {
+      rowNamed(page, "Expire after 7 days?")
+        .querySelector("iframe")
+        ?.dispatchEvent(new Event("load", { bubbles: false }));
+    });
+  loads();
+  assert.equal(tile(), "true");
+
+  taskPages.set(INVITES.id, [{ ...FUNNEL, version: 3 }]);
+  inboxes.set(INVITES.id, [{ ...EXPIRY, blocks: [words], updatedAt: 6_000 }]);
+  act(() =>
+    setHolding([
+      { taskId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
+    ]),
+  );
+  await settle();
+  assert.equal(frame(page), pageFrameUrl({ taskId: INVITES.id, pageId: FUNNEL.id, version: 3 }));
+  assert.equal(tile(), "false", "the new version holds its place until it loads");
+  loads();
+  assert.equal(tile(), "true");
 });
 
 /** The line heading the developer's answer in the shown item's thread, as a reader hears it: who answered, when, and where it went. */
@@ -1029,7 +1152,7 @@ test("an approval is decided in its question, Approve and Decline two cards pick
   assert.deepEqual(answeredPicks(page), ["Decline"], "Enter left the pick standing");
 });
 
-test("a to-do is a task card in its question: a checkbox beside its step, the item's title, and a Couldn't do it pill under it, picked as a choice of two by a press, the arrows, or its number, and sent by the box's one Send", async () => {
+test("a to-do is a card of two picks in its question: its step, the item's title, over a Couldn't do it, picked as a choice of two by a press, the arrows, or its number, and sent by the box's one Send", async () => {
   onlyAsking({ type: INBOX_RESPONSE.TODO }, { title: "Add POSTMARK_SERVER_TOKEN to Vercel" });
   const { page } = mount();
   await settle();
@@ -1037,10 +1160,7 @@ test("a to-do is a task card in its question: a checkbox beside its step, the it
   const pane = itemPane(page);
   const [step, pill] = openOptions(pane);
   assert.ok(step && pill, "the card holds two picks");
-  assert.equal(
-    step.querySelector(".inbox-todo-words")?.textContent,
-    "Add POSTMARK_SERVER_TOKEN to Vercel",
-  );
+  assert.equal(step.textContent, "Add POSTMARK_SERVER_TOKEN to Vercel1");
   assert.equal(pill.textContent, "Couldn't do it2");
   assert.deepEqual([step.tabIndex, pill.tabIndex], [0, -1], "Tab lands on the step");
   assert.deepEqual(footPresses(pane), ["Dictate", "Send to agent"], "Done left the foot");
@@ -4235,7 +4355,16 @@ test("Mark all as read in the view's menu, under Group by, marks every unread it
     act(() => options.click());
     return menuWords();
   };
-  assert.deepEqual(openOptions(), ["Group by", "Sort", "—", "Whose", "—", "Mark all as read"]);
+  assert.deepEqual(openOptions(), [
+    "Group by",
+    "Sort",
+    "—",
+    "Whose",
+    "—",
+    "Media previews",
+    "—",
+    "Mark all as read",
+  ]);
   act(() => menuItem("Mark all as read").click());
   await settle();
   assert.deepEqual(readMarks, ["all:workspace-acme"]);
@@ -4666,4 +4795,54 @@ test("sorted by waiting longest from the view's menu, the open items stand first
     "*Expire after 7 days?",
     "How is a failed email retried?",
   ]);
+});
+
+test("an item marked read as it opened stays read once another plan's item is chosen, though the list's read of its plan, which a mark never moves, still holds it unread", async () => {
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, RETRY]);
+  // The plan's held read wakes on the mark, as the service wakes it, holding the item read.
+  const held = pending();
+  let asked = false;
+  heldRead = (taskId) => {
+    if (taskId !== BILLING.id || asked) return new Promise(() => undefined);
+    asked = true;
+    return held.promise;
+  };
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(readMarks, [`read:${THRESHOLD.id}`]);
+  assert.equal(unreadOf(page, "Alert at 80%?"), false);
+  await act(async () =>
+    held.settle({ items: [{ ...THRESHOLD, unread: false }, RETRY], cursor: "2" }),
+  );
+  await settle();
+  assert.equal(unreadOf(page, "Alert at 80%?"), false);
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  assert.equal(unreadOf(page, "Alert at 80%?"), false, "the list's older read brings no dot back");
+});
+
+test("a mark another window makes later on the same item stands once the plan's held read holds it, over the window's own earlier mark", async () => {
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, RETRY]);
+  // The plan's held reads land as the test says: its own mark heard, then another window's.
+  const reads: PendingRead[] = [pending(), pending()];
+  heldRead = (taskId) =>
+    taskId === BILLING.id
+      ? (reads.shift()?.promise ?? new Promise(() => undefined))
+      : new Promise(() => undefined);
+  const [own, other] = reads;
+  assert.ok(own !== undefined && other !== undefined);
+  const { page } = mount();
+  await settle();
+  assert.equal(unreadOf(page, "Alert at 80%?"), false);
+  await act(async () =>
+    own.settle({ items: [{ ...THRESHOLD, unread: false }, RETRY], cursor: "2" }),
+  );
+  await settle();
+  await act(async () =>
+    other.settle({ items: [{ ...THRESHOLD, unread: true }, RETRY], cursor: "3" }),
+  );
+  await settle();
+  assert.equal(unreadOf(page, "Alert at 80%?"), true);
 });

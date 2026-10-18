@@ -53,6 +53,8 @@ import {
   Badge,
   Button,
   CopyIcon,
+  DETAIL_PAGE_INSET,
+  DetailPage,
   DisclosureChevron,
   EmptyState,
   ErrorState,
@@ -61,6 +63,7 @@ import {
   LIST_VARIANT,
   List,
   ListRow,
+  PAGE_FRAME,
   ProviderMark,
   SKELETON_SHAPE,
   Skeleton,
@@ -1563,28 +1566,32 @@ function ConversationView({
   const filters = useConversationFilters();
   const conversation = landed(parts.conversation)?.conversation;
   return (
-    <>
-      <ConversationFilterRow
-        control={filters}
-        hidden={conversation === undefined ? undefined : conversationHidden(conversation)}
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Pull request conversation"
+      inset={DETAIL_PAGE_INSET.READING}
+      toolbar={
+        <ConversationFilterRow
+          control={filters}
+          hidden={conversation === undefined ? undefined : conversationHidden(conversation)}
+        />
+      }
+    >
+      <DescriptionPart
+        part={parts.pullRequest}
+        reactions={landed(parts.conversation)?.descriptionReactions}
+        subject={landed(parts.conversation)?.descriptionSubject}
+        picture={picture}
       />
-      <div className="pull-request-page">
-        <DescriptionPart
-          part={parts.pullRequest}
-          reactions={landed(parts.conversation)?.descriptionReactions}
-          subject={landed(parts.conversation)?.descriptionSubject}
-          picture={picture}
-        />
-        <ConversationPart
-          parts={parts}
-          filters={filters.filters}
-          url={url}
-          now={now}
-          picture={picture}
-        />
-        {conversation === undefined ? null : <PullRequestCommentBox comment={comment} />}
-      </div>
-    </>
+      <ConversationPart
+        parts={parts}
+        filters={filters.filters}
+        url={url}
+        now={now}
+        picture={picture}
+      />
+      {conversation === undefined ? null : <PullRequestCommentBox comment={comment} />}
+    </DetailPage>
   );
 }
 
@@ -1760,13 +1767,17 @@ export function AgentPullRequestTab({
               aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
               hidden={view !== PULL_REQUEST_VIEW.CHECKS}
             >
-              <div className="pull-request-page">
+              <DetailPage
+                frame={PAGE_FRAME.TOOLBAR}
+                label="Pull request checks"
+                inset={DETAIL_PAGE_INSET.READING}
+              >
                 <ChecksPart
                   agentId={agentId}
                   parts={parts}
                   live={shown && view === PULL_REQUEST_VIEW.CHECKS}
                 />
-              </div>
+              </DetailPage>
             </div>
           </>
         )}

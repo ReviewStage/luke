@@ -11,6 +11,7 @@ import {
   type InboxItem,
   type InboxMessage,
 } from "@luke/features/inbox-wire";
+import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
@@ -25,6 +26,7 @@ import {
   firstChoice,
   holderName,
   INBOX_GROUPING,
+  INBOX_MEDIA,
   INBOX_MISSING,
   INBOX_SHOW,
   INBOX_SORT,
@@ -39,11 +41,11 @@ import {
   inboxBoard,
   inboxCounts,
   inboxList,
+  inboxMedia,
   inboxMissing,
   inboxPreview,
   inboxReply,
   inboxSteps,
-  isUnread,
   listedItems,
   nextNeedingYou,
   numberedPick,
@@ -54,7 +56,6 @@ import {
   tasklessGroups,
   withChoice,
   withDecision,
-  withReadMarks,
   withValue,
 } from "./inbox-model";
 
@@ -1180,27 +1181,66 @@ test("the latest message on an item's thread is its preview, open or settled, le
   );
 });
 
-test("a read mark the window made stands over the item as it was marked, and gives way to the reads once the item changes again, as a message landing may make it unread", () => {
-  const holder = taskHolder(BILLING);
-  const unread = item({ id: "h1", unread: true, updatedAt: 2_000 });
-  const read = item({ id: "h2", updatedAt: 2_000 });
-  const marks = new Map([
-    ["h1", { unread: false, updatedAt: 2_000 }],
-    ["h2", { unread: true, updatedAt: 2_000 }],
+test("an item's media are its pictures and the pages it names, by any link outside code, in its blocks' order, each page of each task once, then its answer's and its thread's, a file that is no picture left out, and four at most", () => {
+  const task = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+  const pageLink = (pageId: string) =>
+    linkOf({ kind: LINK_PLACE.PAGE, planId: task, pageId }, "acme");
+  const funnel = "3c4d5e6f-0000-4000-8000-000000000001";
+  const pricing = "3c4d5e6f-0000-4000-8000-000000000002";
+  const shot = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c70";
+  const answered = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c71";
+  const sent = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c72";
+  const carrying = item({
+    id: "m1",
+    blocks: [
+      { type: INBOX_BLOCK.MARKDOWN, text: `See [@Invite funnel](${pageLink(funnel)}) first.` },
+      { type: INBOX_BLOCK.IMAGE, attachmentId: shot, alt: "The chart" },
+      { type: INBOX_BLOCK.LINK, url: pageLink(funnel), label: "Invite funnel again" },
+      { type: INBOX_BLOCK.LINK, url: "https://github.com/acme/relay/pull/42", label: "#42" },
+    ],
+    answerFiles: [
+      { attachmentId: answered, name: "notes.pdf", mediaType: "application/pdf" },
+      { attachmentId: answered, name: "after.png", mediaType: "image/png" },
+    ],
+  });
+  assert.deepEqual(inboxMedia(carrying), [
+    { kind: INBOX_MEDIA.PAGE, taskId: task, pageId: funnel },
+    { kind: INBOX_MEDIA.IMAGE, attachmentId: shot },
+    { kind: INBOX_MEDIA.IMAGE, attachmentId: answered },
   ]);
-  const unreadOf = (groups: ReturnType<typeof withReadMarks>) =>
-    groups.flatMap(({ items }) => items.map((each) => [each.id, isUnread(each)]));
-  assert.deepEqual(unreadOf(withReadMarks([{ holder, items: [unread, read] }], marks)), [
-    ["h1", false],
-    ["h2", true],
+  const threaded = {
+    ...carrying,
+    messages: [
+      {
+        id: "n1",
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: `Priced it on [the pricing page](${pageLink(pricing)}), then ${pageLink(funnel)} again.`,
+        files: [{ attachmentId: sent, name: "before.webp", mediaType: "image/webp" }],
+        createdAt: 2_000,
+      },
+    ],
+  } satisfies InboxItem;
+  assert.deepEqual(inboxMedia(threaded), [
+    { kind: INBOX_MEDIA.PAGE, taskId: task, pageId: funnel },
+    { kind: INBOX_MEDIA.IMAGE, attachmentId: shot },
+    { kind: INBOX_MEDIA.IMAGE, attachmentId: answered },
+    { kind: INBOX_MEDIA.PAGE, taskId: task, pageId: pricing },
   ]);
-  const changed = { ...unread, updatedAt: 3_000 };
-  assert.deepEqual(unreadOf(withReadMarks([{ holder, items: [changed, read] }], marks)), [
-    ["h1", true],
-    ["h2", true],
+  const elsewhere = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const twoTasks = item({
+    id: "m3",
+    blocks: [
+      { type: INBOX_BLOCK.MARKDOWN, text: `${pageLink(funnel)} and \`${pageLink(pricing)}\`` },
+      {
+        type: INBOX_BLOCK.LINK,
+        url: linkOf({ kind: LINK_PLACE.PAGE, planId: elsewhere, pageId: funnel }, "acme"),
+        label: "Its twin",
+      },
+    ],
+  });
+  assert.deepEqual(inboxMedia(twoTasks), [
+    { kind: INBOX_MEDIA.PAGE, taskId: task, pageId: funnel },
+    { kind: INBOX_MEDIA.PAGE, taskId: elsewhere, pageId: funnel },
   ]);
-  assert.deepEqual(unreadOf(withReadMarks([{ holder, items: [unread, read] }], new Map())), [
-    ["h1", true],
-    ["h2", false],
-  ]);
+  assert.deepEqual(inboxMedia(item({ id: "m2" })), []);
 });

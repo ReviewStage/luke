@@ -1,6 +1,8 @@
 import {
+  COMBOBOX_LIST_HEIGHT,
   Combobox,
   ComboboxList,
+  ComboboxListBox,
   type ComboboxOption,
   ComboboxOptionItem,
   ComposeIcon,
@@ -9,6 +11,7 @@ import {
   FolderIcon,
   MARK_PROVIDER,
   ProviderMark,
+  SearchField,
   useComboboxField,
 } from "@luke/ui";
 import { useState } from "react";
@@ -24,7 +27,9 @@ import { CatalogSection } from "../section";
  * search, holding the keys itself, with a model that cannot be chosen now,
  * the one chosen checked, and a note after them; and rows a list engine of
  * the app's owns, each drawn as `ComboboxOptionItem`, the second lit as the
- * engine's `aria-selected` says.
+ * engine's `aria-selected` says, in the box the engine owns too
+ * (`ComboboxListBox`); and that box filling a short card under a search
+ * row, as ⌘K's results do, scrolling inside itself.
  */
 
 /** Synthetic issues, as a tracker would list them. */
@@ -140,22 +145,46 @@ function Models(): React.JSX.Element {
   );
 }
 
-/** Rows as a list engine (cmdk) would hand them through its `asChild`, the second the engine's selected one. */
+/** Rows as a list engine (cmdk) would hand them through its `asChild`, in the box it owns, the second the engine's selected one. */
 function EngineRows(): React.JSX.Element {
   return (
-    <div className="catalog-popover catalog-column" role="listbox" aria-label="Results">
-      <ComboboxOptionItem
-        option={{ id: "new-task", label: "New task", icon: <ComposeIcon />, hint: "⌘N" }}
-        aria-selected={false}
-      />
-      <ComboboxOptionItem
-        option={{ id: "readme", label: "README.md", icon: <DocumentIcon />, detail: "docs" }}
-        aria-selected
-      />
-      <ComboboxOptionItem
-        option={{ id: "src", label: "src/", icon: <FolderIcon />, detail: "packages/ui" }}
-        aria-selected={false}
-      />
+    <div className="catalog-popover catalog-column">
+      <ComboboxListBox aria-label="Results">
+        <ComboboxOptionItem
+          option={{ id: "new-task", label: "New task", icon: <ComposeIcon />, hint: "⌘N" }}
+          aria-selected={false}
+        />
+        <ComboboxOptionItem
+          option={{ id: "readme", label: "README.md", icon: <DocumentIcon />, detail: "docs" }}
+          aria-selected
+        />
+        <ComboboxOptionItem
+          option={{ id: "src", label: "src/", icon: <FolderIcon />, detail: "packages/ui" }}
+          aria-selected={false}
+        />
+      </ComboboxListBox>
+    </div>
+  );
+}
+
+/** Synthetic files, more than a short card holds, as a palette's Files filter lists them. */
+const FILES = Array.from({ length: 12 }, (_, index) => ({
+  id: `file-${index}`,
+  label: `notes-${index + 1}.md`,
+  icon: <DocumentIcon />,
+  detail: "docs/notes",
+}));
+
+/** An engine's box filling a short card under its search row, as ⌘K's results fill its card, scrolling inside itself. */
+function EngineFill(): React.JSX.Element {
+  return (
+    <div className="catalog-popover catalog-column catalog-palette">
+      <SearchField label="Search files" value="notes" onChange={() => undefined} />
+      <ComboboxListBox aria-label="Files" height={COMBOBOX_LIST_HEIGHT.FILL}>
+        {FILES.map((option, index) => (
+          <ComboboxOptionItem key={option.id} option={option} aria-selected={index === 0} />
+        ))}
+      </ComboboxListBox>
     </div>
   );
 }
@@ -185,8 +214,14 @@ function Comboboxes(): React.JSX.Element {
       >
         <Models />
       </CatalogSection>
-      <CatalogSection id="combobox-engine-rows" title="Rows a list engine owns">
+      <CatalogSection id="combobox-engine-rows" title="Rows and a box a list engine owns">
         <EngineRows />
+      </CatalogSection>
+      <CatalogSection
+        id="combobox-engine-fill"
+        title="A list engine's box filling a short card, scrolling inside itself"
+      >
+        <EngineFill />
       </CatalogSection>
     </>
   );

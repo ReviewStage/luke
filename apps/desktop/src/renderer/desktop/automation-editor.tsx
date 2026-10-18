@@ -86,9 +86,11 @@ import {
   Chip,
   ChipName,
   ConfirmDialog,
+  DetailPage,
   EllipsisIcon,
   ErrorState,
   IconButton,
+  PAGE_FRAME,
   POPOVER_ALIGN,
   PROVIDER_MARK_SIZE,
   ProviderMark,
@@ -1730,7 +1732,7 @@ export function AutomationEditor({
     },
   );
   return (
-    <section className="automations-view" aria-label="Automation">
+    <div className="automations-view">
       <EditorToolbar
         automation={automation}
         dirty={dirty}
@@ -1744,7 +1746,7 @@ export function AutomationEditor({
         runsPanel={runsPanel}
       />
       <div ref={editorLayout} className="automation-editor-layout">
-        <div className="automations-scroll scroll-fade-top">
+        <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Automation">
           <div className="automation-editor">
             <TextField
               ref={nameField}
@@ -1780,7 +1782,7 @@ export function AutomationEditor({
               onDraft={editDraft}
             />
           </div>
-        </div>
+        </DetailPage>
         <AutomationRunsPanel
           panel={runsPanel}
           mine={automation === undefined || automation.mine === true}
@@ -1810,6 +1812,6 @@ export function AutomationEditor({
           running: "Deleting",
         }}
       />
-    </section>
+    </div>
   );
 }

@@ -1350,7 +1350,8 @@ in the task's repository under the same checks; an eve that
 did not take it discards the agent again (`discardCodingAgent`) and answers
 `unavailable`, so a retry starts afresh. A retry under the same key answers
 the agent the first Start made, 200 rather than 201, and opens nothing. A
-Start that named a model writes it as the account's default.
+model a Start names runs that agent alone: only Settings' write
+(`PUT /api/account/preferences`) changes the account's default.
 
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
 instant, status, `brief` (`plan` or `task`, what it was handed first, so its

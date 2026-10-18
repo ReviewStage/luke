@@ -60,6 +60,7 @@ import {
   TURN_ORIGIN,
   type WireRecord,
 } from "../../core.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
 import {
   ModelCatalog,
@@ -135,6 +136,15 @@ const SOL = "openai/gpt-6.1-sol";
 /** A model with a small window, which a long replay does not fit whole. */
 const SMALL_WINDOW = { model: "anthropic/claude-sonnet-4.9", tokens: 60_000 } as const;
 /** The model the agents run on, as the catalog offers it. */
+/** What the agents' tools counted, across the file; a test reads its own account's, from where it began. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** How many tasks the account was counted as making. */
+const tasksCounted = (userId: string) =>
+  ANALYTICS.recorded.filter(
+    (event) => event.userId === userId && event.name === SERVER_EVENT.TASK_CREATE,
+  ).length;
+
 const CATALOG: readonly OfferedModel[] = [
   {
     id: OPUS,
@@ -318,7 +328,7 @@ async function peerCaller(
     database.run(
       host
         .agentTools(admitted.success, { tool, input: unparsedWire(input), callId })
-        .pipe(Effect.provide(Layer.merge(services, catalog))),
+        .pipe(Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer))),
     );
 }
 
@@ -1416,6 +1426,7 @@ test("start_agent makes the new task it names in the caller's workspace, owned b
   const call = await peerCaller(hostOf(true), caller, eve.services);
   const name = "Invite expiry migration";
   const prompt = "Write the migration that adds the invitation's expiry.";
+  const countedBefore = tasksCounted(bob);
 
   const started = await call(CODER_TOOL.START_AGENT, { newTask: ` ${name} `, prompt }, "call-new");
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
@@ -1449,6 +1460,7 @@ test("start_agent makes the new task it names in the caller's workspace, owned b
   assert.deepEqual(again.newTask, started.newTask);
   assert.equal(eve.sent.length, 1);
   assert.deepEqual(await tasksNamed(bob, workspaceId, name), [taskId]);
+  assert.equal(tasksCounted(bob), countedBefore + 1, "the task is counted once, as Bob's");
 
   // A start the catalog refuses takes away the task made for it.
   const refused = await call(
@@ -1458,6 +1470,7 @@ test("start_agent makes the new task it names in the caller's workspace, owned b
   );
   assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(refused));
   assert.deepEqual(await tasksNamed(bob, workspaceId, "Refused"), []);
+  assert.equal(tasksCounted(bob), countedBefore + 1, "a task taken back is never counted");
 
   for (const input of [
     { newTask: "Both", taskId: tasks.billing, prompt },
@@ -1502,6 +1515,7 @@ test("start_agent run twice at once under one call's key keeps one new task: the
     raced = { agentId: agent.id, taskId: theirs.id };
   });
   const call = await peerCaller(hostOf(true), caller, eve.services);
+  const countedBefore = tasksCounted(caller.userId);
 
   racing = true;
   const answered = await call(CODER_TOOL.START_AGENT, { newTask: name, prompt }, "call-race");
@@ -1512,6 +1526,43 @@ test("start_agent run twice at once under one call's key keeps one new task: the
   assert.equal(answered.newTask.id, raced.taskId);
   assert.deepEqual(await tasksNamed(caller.userId, workspaceId, name), [raced.taskId]);
   assert.equal(eve.sent.length, 0, "no second agent's session is opened");
+  assert.equal(
+    tasksCounted(caller.userId),
+    countedBefore,
+    "the task this run took back is not counted",
+  );
+});
+
+test("start_agent's new task that another agent came to stand on while its own start failed is kept, and counted once", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const name = "Kept by another";
+  const prompt = "Write the migration that adds the invitation's expiry.";
+  // Another agent lands on the new task while this start confirms its repository, then GitHub fails this start.
+  let landing = true;
+  const eve = await fakeCoderEve(workspaceId, [], async () => {
+    // The new task's own repository check reaches GitHub before the task is made, so the landing waits for it.
+    const [taskId] = await tasksNamed(caller.userId, workspaceId, name);
+    if (!landing || taskId === undefined) return;
+    landing = false;
+    await claimed(caller.userId, {
+      ...AGENT_CHOICE,
+      idempotencyKey: "another",
+      taskId,
+      planSnapshot: null,
+      prompt,
+    });
+    // GitHub then does not answer this start, which is refused.
+    throw new Error("GitHub unreachable");
+  });
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const countedBefore = tasksCounted(caller.userId);
+
+  const answered = await call(CODER_TOOL.START_AGENT, { newTask: name, prompt }, "call-kept");
+  assert.equal(answered.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(answered));
+  assert.equal(landing, false, "the other agent landed");
+  assert.equal((await tasksNamed(caller.userId, workspaceId, name)).length, 1);
+  assert.equal(tasksCounted(caller.userId), countedBefore + 1, "the task that stands is counted");
 });
 
 test("an agent whose starter has left the workspace makes no task in it", async () => {

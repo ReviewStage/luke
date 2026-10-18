@@ -61,6 +61,8 @@ export const TASK_BOUNDS = {
   MAX_ASSUMPTION_CHARS: 2_000,
   /** The most characters a workspace's id may spell; the service mints them far shorter. */
   MAX_WORKSPACE_ID_CHARS: 200,
+  /** The most characters a task's brief may spell: as many as a coding agent's prompt (`CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS`). */
+  MAX_BRIEF_CHARS: 16_000,
 } as const;
 
 /** The name a plan started without one stands under until the developer renames it. */
@@ -161,7 +163,12 @@ function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: bool
  * agent on the task in the same request, as the agent's own Start would
  * (`taskAgentStartSchema`): it implies `planning: false`, so naming both is
  * refused, and the service refuses it without a repository, as it refuses
- * an agent's Start on a task with none, before anything is written.
+ * an agent's Start on a task with none, before anything is written. A
+ * brief is the developer's own words about the task, which Luke is handed
+ * beside the plan to plan from; one left out, or nothing but whitespace,
+ * starts the task with none. A brief beside `planning: false` or an `agent`
+ * is kept rather than refused, and goes unread until a call is opened on the
+ * task, since that start opens none.
  */
 export const taskCreateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(
@@ -173,6 +180,9 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   issueId: EffectSchema.optionalKey(wireUuidSchema),
   planning: EffectSchema.optionalKey(EffectSchema.Boolean),
   agent: EffectSchema.optionalKey(taskAgentStartSchema),
+  brief: EffectSchema.optionalKey(
+    EffectSchema.Trim.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BRIEF_CHARS)),
+  ),
 }).check(EffectSchema.makeFilter(agentStartsUnplanned));
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;

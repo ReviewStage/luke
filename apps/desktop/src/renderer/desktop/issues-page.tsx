@@ -59,6 +59,7 @@ import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
+import { openPullRequest } from "./desktop-factory";
 import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, IssueBoardSkeleton, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail, IssueDetailSkeleton, IssueDocumentPage } from "./issue-detail";
@@ -629,6 +630,7 @@ export function IssuesPage({ tasks }: { tasks: TasksControl }): React.JSX.Elemen
       ),
     tasksOf: (issueId) => tasksStartedFrom(issueId, tasks.listed),
     onOpenTask: tasks.onSelect,
+    onOpenPullRequest: (task, pullRequest) => openPullRequest(tasks, task, pullRequest),
   };
   // Every Copy link on these pages is written under the listed workspace, whose issues they are.
   return (

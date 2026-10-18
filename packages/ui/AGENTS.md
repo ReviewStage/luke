@@ -16,10 +16,10 @@ daily series, and animations roster).
   or `#main/` import. The desktop's bridge and the site's fetches stay in the
   app that mounts the component, and `repository-checks.sh` refuses either
   spelled under `src/`.
-- A component written in Tailwind utilities draws only with the tokens
-  `src/theme.css` names, and an app that mounts one imports that file, which
-  is what scans this package's sources into the app's stylesheet. The site
-  imports it for the chart; the desktop mounts no such component and does not.
+- A component draws with its own `luke-*` classes over the `--luke-*` tokens,
+  never an app's Tailwind theme, whose `--color-*` each app maps to a
+  different role; `repository-checks.sh` refuses a theme colour utility or the
+  `-(--name)` shorthand here. The chart's frame is `src/chart/chart.css`.
 - A module that pulls a heavy library gets a subpath of its own and stays out
   of the barrel: the chart is `@luke/ui/chart`, so recharts reaches only the
   bundle that draws a chart.

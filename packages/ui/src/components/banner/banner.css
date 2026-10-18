@@ -103,6 +103,22 @@
     color: var(--luke-banner-ink);
   }
 
+  /* A row: its glyph, its words' first line, and its presses share one
+     centre, the presses' own, so words or presses that wrap to a second
+     line leave the glyph on the first rather than centred between the
+     two. */
+  .luke-banner[data-look="row"] .luke-banner-row {
+    align-items: flex-start;
+  }
+
+  .luke-banner[data-look="row"] .luke-banner-glyph {
+    height: var(--luke-control-height);
+  }
+
+  .luke-banner[data-look="row"] .luke-banner-words {
+    padding-block: calc((var(--luke-control-height) - var(--luke-type-body-leading)) / 2);
+  }
+
   /* Narrow, the presses leave the words' line for one of their own beneath
      it, each as wide as the line allows, and the words wrap at their own
      width rather than being squeezed past it or cut short. */

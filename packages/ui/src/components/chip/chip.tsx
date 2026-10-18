@@ -29,6 +29,12 @@ import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
  * own: it names what stands, a filter applied, and ends in a × named for
  * what lifting it does.
  *
+ * A chip comes at the control's size, or compact (`size`), a caption
+ * line's pill, where it is one of a row of small counts (a pull request's
+ * reactions); a compact filter stands inside a hairline at rest, so the row
+ * reads as pills before one is pressed, and pressed is lit in the accent. A busy chip
+ * (`busy`), whose change is out, pulses until it is answered.
+ *
  * A chip that opens a menu of values ends in the menu's small, muted
  * chevron where `chevron` asks for one. Its words go in a `ChipName`, which
  * cuts them short rather than letting them push past the row around it, in
@@ -46,6 +52,14 @@ export const CHIP_LOOK = {
 } as const;
 
 export type ChipLook = (typeof CHIP_LOOK)[keyof typeof CHIP_LOOK];
+
+/** How big a chip is: the control's own, or a caption line's pill. */
+export const CHIP_SIZE = {
+  CONTROL: "control",
+  COMPACT: "compact",
+} as const;
+
+export type ChipSize = (typeof CHIP_SIZE)[keyof typeof CHIP_SIZE];
 
 /** Where the thing a chip names stands, in the state palette `Badge` says it in. */
 export const CHIP_TONE = {
@@ -80,6 +94,8 @@ interface ChipFace {
   tone?: ChipTone | undefined;
   /** How wide it stands; its words' own width where none is named. */
   width?: ChipWidth | undefined;
+  /** How big it is; the control's own size where none is named. */
+  size?: ChipSize | undefined;
   /** Whether it draws its mark alone, its words read as its name and drawn nowhere. */
   iconOnly?: boolean | undefined;
 }
@@ -88,8 +104,10 @@ interface ChipFace {
 type ButtonChipProps = ChipFace & {
   /** Whether the chip ends in a chevron, saying it opens a menu of values. */
   chevron?: boolean;
+  /** Whether a change it made is out, which it says, and pulses, until answered. */
+  busy?: boolean | undefined;
   onRemove?: never;
-} & Omit<ComponentPropsWithRef<"button">, "type" | "style" | "className">;
+} & Omit<ComponentPropsWithRef<"button">, "type" | "style" | "className" | "aria-busy">;
 
 /** A chip naming what stands, ended by the × that lifts it. */
 type RemovableChipProps = ChipFace & {
@@ -103,9 +121,16 @@ type RemovableChipProps = ChipFace & {
 export type ChipProps = ButtonChipProps | RemovableChipProps;
 
 /** The attributes a chip's face options draw as, on the button or the removable chip's box alike. */
-function faceAttributes({ look, tone, width = CHIP_WIDTH.AUTO, iconOnly = false }: ChipFace) {
+function faceAttributes({
+  look,
+  tone,
+  width = CHIP_WIDTH.AUTO,
+  size = CHIP_SIZE.CONTROL,
+  iconOnly = false,
+}: ChipFace) {
   return {
     "data-look": look,
+    "data-size": size === CHIP_SIZE.COMPACT ? size : undefined,
     "data-tone": tone,
     "data-width": width,
     "data-icon-only": iconOnly ? "true" : undefined,
@@ -137,13 +162,14 @@ function RemovableChip({
 /** A chip: a button in the look of its place, or a removable chip where `onRemove` is given. */
 export function Chip(props: ChipProps): React.JSX.Element {
   if (props.onRemove !== undefined) return <RemovableChip {...props} />;
-  const { look, tone, width, iconOnly, chevron = false, children, ...button } = props;
+  const { look, tone, width, size, iconOnly, chevron = false, busy, children, ...button } = props;
   return (
     <button
       type="button"
       {...button}
       className="luke-chip"
-      {...faceAttributes({ look, tone, width, iconOnly })}
+      aria-busy={busy === true ? true : undefined}
+      {...faceAttributes({ look, tone, width, size, iconOnly })}
     >
       <span className="luke-chip-face">
         {children}

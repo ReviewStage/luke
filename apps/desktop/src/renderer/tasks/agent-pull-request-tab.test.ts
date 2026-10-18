@@ -926,6 +926,9 @@ test("a review that only left line comments draws each thread under it: its file
   );
 });
 
+/** A reaction's pill in a row of them, a press or a count, named by who reacted. */
+const REACTION_PILL = '[aria-label*=" reacted with "]';
+
 test("the description, a comment, a review, and a thread comment wear their reactions under their words, each its emoji and count, the reader's own lit only where the read named them among who gave it", async () => {
   const dana = { login: "danak", bot: false, userId: "user-dana" };
   const review = {
@@ -980,10 +983,10 @@ test("the description, a comment, a review, and a thread comment wear their reac
   );
   /** Each pill under the element given: what it says to a reader, and whether it is lit as the reader's. */
   const pills = (under: Element | null) =>
-    [...(under?.querySelectorAll(".pull-request-reaction") ?? [])].map((pill) => [
+    [...(under?.querySelectorAll(REACTION_PILL) ?? [])].map((pill) => [
       pill.textContent,
       pill.getAttribute("aria-label"),
-      pill.getAttribute("data-mine"),
+      pill.getAttribute("aria-pressed") ?? pill.getAttribute("data-mine"),
     ]);
   assert.deepEqual(pills(tab.querySelector('[aria-label="Description"]')), [
     ["👍12", "Charles Pan, you, and 10 more reacted with thumbs up", "true"],
@@ -1030,7 +1033,7 @@ function heartOf(tab: HTMLElement): HTMLButtonElement | null {
   return (
     tab
       .querySelector('[aria-label="Description"]')
-      ?.querySelector<HTMLButtonElement>("button.pull-request-reaction[data-mine]") ?? null
+      ?.querySelector<HTMLButtonElement>(`button${REACTION_PILL}`) ?? null
   );
 }
 
@@ -1058,7 +1061,7 @@ test("a reaction is pressed to take the reader's own back, waits on its change w
   assert.ok(
     [
       ...tab.querySelectorAll<HTMLButtonElement>(
-        '[aria-label="Description"] button.pull-request-reaction',
+        `[aria-label="Description"] button${REACTION_PILL}`,
       ),
     ].every((each) => each.disabled),
     "the row's other presses wait too",
@@ -1089,7 +1092,7 @@ test("a reaction pressed again before the conversation is read again takes back 
   );
   const entry = tab.querySelector(".pull-request-entry") ?? assert.fail("the comment stands");
   const eyes =
-    entry.querySelector<HTMLButtonElement>("button.pull-request-reaction[data-mine]") ??
+    entry.querySelector<HTMLButtonElement>(`button${REACTION_PILL}`) ??
     assert.fail("the comment's eyes are a press");
   act(() => eyes.click());
   await settle();
@@ -1158,13 +1161,13 @@ test("Add reaction opens one row of GitHub's eight, each named, the arrows movin
     { action: PULL_REQUEST_ACTION.ADD_REACTION, subject: "IC_2", content: REACTION.ROCKET },
   ]);
   assert.deepEqual(
-    [...entry.querySelectorAll(".pull-request-reaction")].map((each) => [
+    [...entry.querySelectorAll(REACTION_PILL)].map((each) => [
       each.textContent,
       each.getAttribute("aria-busy"),
     ]),
     [
       ["🚀1", "true"],
-      ["👀1", "false"],
+      ["👀1", null],
     ],
     "a reaction nobody had given stands as the reader's while it is given",
   );
@@ -1573,7 +1576,7 @@ test("an agent with no pull request yet says so", async () => {
     }),
   );
   assert.match(none.textContent ?? "", /No pull request yet\./u);
-  assert.equal(none.querySelector(".pull-request-page"), null);
+  assert.equal(none.querySelector("section[aria-label='Pull request conversation']"), null);
 });
 
 test("the bar, the title, and the files' count stand from what Luke holds before any read lands; each part is a skeleton until its own read lands, and is drawn the moment it does, whatever the order", async () => {

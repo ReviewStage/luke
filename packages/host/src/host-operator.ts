@@ -1416,6 +1416,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("issueId" in request ? { issueId: request.issueId } : undefined),
           ...("planning" in request ? { planning: request.planning } : undefined),
           ...("agent" in request ? { agent: request.agent } : undefined),
+          ...("brief" in request ? { brief: request.brief } : undefined),
         }),
         (answer): TasksStartAnswer =>
           (answer.ok
