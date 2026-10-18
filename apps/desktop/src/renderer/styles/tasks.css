@@ -2107,6 +2107,44 @@
   user-select: text;
 }
 
+/* The title edited in place (`pull-request-writes.tsx`): its pencil stands
+   faint after the number until the title is hovered or the pencil focused,
+   and the field takes the title's own type and room. */
+.pull-request-title-edit {
+  width: 22px;
+  height: 22px;
+  margin-inline-start: var(--luke-space-2);
+  vertical-align: middle;
+  opacity: 0;
+}
+
+.pull-request-title-edit svg {
+  width: 13px;
+  height: 13px;
+}
+
+.pull-request-title-editable:hover .pull-request-title-edit,
+.pull-request-title-edit:focus-visible {
+  opacity: 1;
+}
+
+.pull-request-title-field {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-2);
+}
+
+.pull-request-title-input {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: var(--luke-space-2) var(--luke-space-4);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+  color: inherit;
+  font: inherit;
+}
+
 .pull-request-number {
   color: var(--luke-color-text-subtle);
   font-weight: var(--luke-weight-regular);
@@ -2151,8 +2189,8 @@
 }
 
 /* The merge box's presses at the line's end (`merge-box.tsx`): what stands
-   of a merge already asked for, quiet, then the one press, a method's
-   press joined to the chevron that chooses the method. */
+   of a merge already asked for, quiet, then the one press, `@luke/ui`'s
+   Button, or its SplitButton where a chevron chooses the method. */
 .merge-box-actions {
   display: inline-flex;
   flex: 0 0 auto;
@@ -2165,41 +2203,6 @@
 
 .merge-box-note {
   color: var(--luke-color-text-muted);
-}
-
-.merge-box-split {
-  display: inline-flex;
-  align-items: stretch;
-}
-
-.merge-box-press {
-  height: 26px;
-  padding: 0 var(--luke-space-8);
-  gap: var(--luke-space-4);
-  font-size: 12px;
-}
-
-.merge-box-press svg {
-  width: 13px;
-  height: 13px;
-}
-
-.merge-box-split > .merge-box-press:not(:last-child) {
-  border-start-end-radius: 0;
-  border-end-end-radius: 0;
-}
-
-.merge-box-picker {
-  height: 26px;
-  padding: 0 var(--luke-space-4);
-  border-start-start-radius: 0;
-  border-end-start-radius: 0;
-  margin-inline-start: -1px;
-}
-
-.merge-box-picker svg {
-  width: 13px;
-  height: 13px;
 }
 
 [data-merge-tone="ready"] {

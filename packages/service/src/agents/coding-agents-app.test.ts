@@ -1561,6 +1561,45 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
   );
 
   it.effect(
+    "closing, reopening, and retitling are each made on GitHub as the member, and a blank title is refused before GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({ otherToken: "ghu_teammate" });
+
+        const answers = [
+          yield* ask(actionAs(other, agent.id, "close")),
+          yield* ask(actionAs(other, agent.id, "reopen")),
+          yield* ask(
+            actionAs(other, agent.id, "edit-title", { title: "  Expire invitations weekly " }),
+          ),
+        ];
+        const blank = yield* ask(actionAs(other, agent.id, "edit-title", { title: "   " }));
+
+        assert.deepEqual(
+          answers.map((answer) => answer.body),
+          answers.map(() => ({ outcome: "done" })),
+        );
+        assert.deepEqual(
+          blank,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+        const id = PULL_REQUEST_NODE_ID;
+        assert.deepEqual(
+          calls.flatMap((call) => {
+            const mutation = mutationOf(call);
+            return mutation === undefined ? [] : [[mutation, call.variables]];
+          }),
+          [
+            ["closePullRequest", { id }],
+            ["reopenPullRequest", { id }],
+            ["updatePullRequest", { id, title: "Expire invitations weekly" }],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
     "a merge naming no head, or a head that is no commit, is refused before anything reaches GitHub",
     () =>
       Effect.gen(function* () {
