@@ -1,18 +1,10 @@
-import {
-  isRecord,
-  isWireNumber,
-  isWireString,
-  RATING_WORD,
-  type RatingWord,
-  type UnparsedWireValue,
-} from "@luke/wire";
+import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@luke/wire";
 import {
   APP_PANEL_TAB,
   APP_SETTING_ID,
   type AppPanelTab,
   type AppSettingId,
 } from "@luke/wire/app-settings";
-import { PROVIDER_ID, PROVIDER_ID_LIST, type ProviderId } from "@luke/wire/provider-identity";
 import { Schema } from "effect";
 import { parseReleaseVersion } from "./release-version.js";
 
@@ -36,13 +28,6 @@ export const PRODUCT_EVENT = {
   APP_DAY_ACTIVE: "app:day_active",
   ACCOUNT_SIGN_IN: "account:sign_in",
   ACCOUNT_ACTION: "account:action",
-  PROVIDER_CONNECT: "provider:connect",
-  PROVIDER_DISCONNECT: "provider:disconnect",
-  CALENDAR_CONNECT: "calendar:connect",
-  CALENDAR_DISCONNECT: "calendar:disconnect",
-  SESSION_OBSERVE: "session:observe",
-  SESSION_ACTION_SEND: "session:action_send",
-  PANEL_OPEN: "panel:open",
   PANEL_TAB_CHANGE: "panel:tab_change",
   SETTINGS_VIEW_OPEN: "settings:view_open",
   SETTINGS_RESET: "settings:reset",
@@ -50,14 +35,10 @@ export const PRODUCT_EVENT = {
   UPDATE_ACTION: "update:action",
   FEEDBACK_SEND: "feedback:send",
   VOICE_CALL_START: "voice:call_start",
-  INTRODUCTION_COMPLETE: "introduction:complete",
   VOICE_EXCHANGE: "voice:exchange",
   VOICE_PERMISSION: "voice:permission",
-  VOICE_ANNOUNCEMENT_SPEAK: "voice:announcement_speak",
-  VOICE_FIRST_ANNOUNCEMENT: "voice:first_announcement",
   SETTING_UPDATE: "setting:update",
   EXPERIMENT_TOGGLE: "experiment:toggle",
-  CONVERSATION_RATED: "conversation:rated",
 } as const;
 
 export type ProductEventName = (typeof PRODUCT_EVENT)[keyof typeof PRODUCT_EVENT];
@@ -74,7 +55,6 @@ export const ProductEventNameSchema = Schema.Literals(Object.values(PRODUCT_EVEN
  * against every name, so a compromised renderer gains no reach into the actions.
  */
 export const PRODUCT_SURFACE_EVENT = {
-  PANEL_OPEN: PRODUCT_EVENT.PANEL_OPEN,
   PANEL_TAB_CHANGE: PRODUCT_EVENT.PANEL_TAB_CHANGE,
   SETTINGS_VIEW_OPEN: PRODUCT_EVENT.SETTINGS_VIEW_OPEN,
   SEARCH_OPEN: PRODUCT_EVENT.SEARCH_OPEN,
@@ -96,27 +76,18 @@ export function isProductSurfaceEventName(
 
 export const PRODUCT_EVENT_PROPERTY = {
   APP_VERSION: "app_version",
-  CONNECTION_ID: "connection_id",
-  PROVIDER_ID: "provider_id",
-  CALENDAR_SOURCE: "calendar_source",
-  SESSION_COUNT: "session_count",
   IMAGE_COUNT: "image_count",
   SESSION_SOURCE: "session_source",
-  SESSION_ACTION: "session_action",
   ACCOUNT_ACTION: "account_action",
   UPDATE_ACTION: "update_action",
   PANEL_TAB: "panel_tab",
-  PANEL_SOURCE: "panel_source",
   SETTINGS_VIEW: "settings_view",
   SEARCH_SURFACE: "search_surface",
   EXCHANGE_KIND: "exchange_kind",
   PERMISSION_RESULT: "permission_result",
-  SIGN_IN_AGE: "sign_in_age",
   SETTING_ID: "setting_id",
   SETTING_VALUE: "setting_value",
   EXPERIMENT: "experiment",
-  RATING: "rating",
-  MESSAGE_KIND: "message_kind",
 } as const;
 
 type ProductEventProperty = (typeof PRODUCT_EVENT_PROPERTY)[keyof typeof PRODUCT_EVENT_PROPERTY];
@@ -130,31 +101,6 @@ export const PRODUCT_VOICE_SESSION_SOURCE = {
 
 export type ProductVoiceSessionSource =
   (typeof PRODUCT_VOICE_SESSION_SOURCE)[keyof typeof PRODUCT_VOICE_SESSION_SOURCE];
-
-/** Which action a session took, never what it carried. */
-export const PRODUCT_SESSION_ACTION = {
-  MESSAGE_SEND: "message_send",
-  CONTROL_RUN: "control_run",
-  SESSION_OPEN: "session_open",
-  TRANSCRIPT_READ: "transcript_read",
-  WORKSPACE_CREATE: "workspace_create",
-  WORKSPACE_RENAME: "workspace_rename",
-  SESSION_RENAME: "session_rename",
-  AGENT_ADD: "agent_add",
-} as const;
-
-export type ProductSessionAction =
-  (typeof PRODUCT_SESSION_ACTION)[keyof typeof PRODUCT_SESSION_ACTION];
-
-export const ProductSessionActionSchema = Schema.Literals(Object.values(PRODUCT_SESSION_ACTION));
-
-/** Which calendar a connection is to, never whose or what is on it. */
-export const PRODUCT_CALENDAR_SOURCE = {
-  GOOGLE: "google",
-  APPLE: "apple",
-} as const;
-
-type ProductCalendarSource = (typeof PRODUCT_CALENDAR_SOURCE)[keyof typeof PRODUCT_CALENDAR_SOURCE];
 
 /** Where a Luke account stands after an action, never who the account is. */
 export const PRODUCT_ACCOUNT_ACTION = {
@@ -192,19 +138,6 @@ const PRODUCT_PANEL_TAB = {
 } as const satisfies Record<string, AppPanelTab>;
 
 type ProductPanelTab = (typeof PRODUCT_PANEL_TAB)[keyof typeof PRODUCT_PANEL_TAB];
-
-/**
- * What opened the panel, never what was on it when it opened. The one the
- * build actually has: a press on the capsule. The notice band under the
- * housing draws without a press and there is no menu, so neither is listed — a
- * value nothing can emit would read on a dashboard as a way in that nobody
- * uses rather than one that does not exist.
- */
-export const PRODUCT_PANEL_SOURCE = {
-  CAPSULE: "capsule",
-} as const;
-
-type ProductPanelSource = (typeof PRODUCT_PANEL_SOURCE)[keyof typeof PRODUCT_PANEL_SOURCE];
 
 /**
  * Which settings page a row of the Settings sidebar opened. It repeats the settings
@@ -315,59 +248,6 @@ export const PRODUCT_EXPERIMENT = {
 export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];
 
 /**
- * Which kind of Luke's messages a rating landed on, never the message: a
- * reply to the developer, or a briefing he announced on his own. The verdict
- * itself travels as `RATING_WORD`, the stored event's own three words, a
- * withdrawal counted the same way as the verdict it took back; the note a
- * developer may leave with a rating is their free text and travels in the
- * rating request alone, never here, and no message id travels either.
- */
-export const PRODUCT_RATED_MESSAGE_KIND = {
-  REPLY: "reply",
-  ANNOUNCEMENT: "announcement",
-} as const;
-
-export type ProductRatedMessageKind =
-  (typeof PRODUCT_RATED_MESSAGE_KIND)[keyof typeof PRODUCT_RATED_MESSAGE_KIND];
-
-export const ProductRatedMessageKindSchema = Schema.Literals(
-  Object.values(PRODUCT_RATED_MESSAGE_KIND),
-);
-
-/**
- * How long after the account's first sign-in the first announcement was
- * spoken, as a rung rather than a duration for the reason counts travel as
- * buckets: an exact elapsed time is a fingerprint, where a rung answers the
- * one question the event asks — how quickly Luke proved his loop to a new
- * account. Each rung is the widest window the elapsed time still fits.
- */
-const PRODUCT_SIGN_IN_AGE = {
-  WITHIN_TEN_MINUTES: "within_ten_minutes",
-  WITHIN_HOUR: "within_hour",
-  WITHIN_DAY: "within_day",
-  WITHIN_WEEK: "within_week",
-  BEYOND_WEEK: "beyond_week",
-} as const;
-
-type ProductSignInAge = (typeof PRODUCT_SIGN_IN_AGE)[keyof typeof PRODUCT_SIGN_IN_AGE];
-
-const SIGN_IN_AGE_LADDER: readonly { limitMs: number; age: ProductSignInAge }[] = [
-  { limitMs: 10 * 60 * 1000, age: PRODUCT_SIGN_IN_AGE.WITHIN_TEN_MINUTES },
-  { limitMs: 60 * 60 * 1000, age: PRODUCT_SIGN_IN_AGE.WITHIN_HOUR },
-  { limitMs: 24 * 60 * 60 * 1000, age: PRODUCT_SIGN_IN_AGE.WITHIN_DAY },
-  { limitMs: 7 * 24 * 60 * 60 * 1000, age: PRODUCT_SIGN_IN_AGE.WITHIN_WEEK },
-];
-
-/** The narrowest rung an elapsed time fits; anything unreadable is the widest. */
-export function productSignInAge(elapsedMs: number): ProductSignInAge {
-  if (!Number.isFinite(elapsedMs)) return PRODUCT_SIGN_IN_AGE.BEYOND_WEEK;
-  return (
-    SIGN_IN_AGE_LADDER.find((rung) => elapsedMs < rung.limitMs)?.age ??
-    PRODUCT_SIGN_IN_AGE.BEYOND_WEEK
-  );
-}
-
-/**
  * The rungs every count travels on. A raw count is a weak fingerprint —
  * "137 Codex sessions" identifies a machine across days — where a rung says
  * the same thing about adoption and says it about a crowd rather than a
@@ -399,39 +279,20 @@ export function productSessionCountBucket(count: number): ProductSessionCountBuc
   );
 }
 
-/**
- * The connections a counted connect or disconnect may name: the Conductor key
- * an older build's Connections page held, so its counts still validate.
- */
-const PRODUCT_CONNECTION_ID = {
-  CONDUCTOR: PROVIDER_ID.CONDUCTOR,
-} as const;
-
-type ProductConnectionId = (typeof PRODUCT_CONNECTION_ID)[keyof typeof PRODUCT_CONNECTION_ID];
-
 interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.APP_VERSION]: string;
-  [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: ProductConnectionId;
-  [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: ProviderId;
-  [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: ProductCalendarSource;
-  [PRODUCT_EVENT_PROPERTY.SESSION_COUNT]: ProductSessionCountBucket;
   [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: ProductSessionCountBucket;
   [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE]: ProductVoiceSessionSource;
-  [PRODUCT_EVENT_PROPERTY.SESSION_ACTION]: ProductSessionAction;
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: ProductAccountAction;
   [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: ProductUpdateAction;
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: ProductPanelTab;
-  [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE]: ProductPanelSource;
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: ProductSettingsView;
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: ProductSearchSurface;
   [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND]: ProductExchangeKind;
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: ProductPermissionResult;
-  [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: ProductSignInAge;
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: AppSettingId;
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: ProductSettingValue;
   [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: ProductExperiment;
-  [PRODUCT_EVENT_PROPERTY.RATING]: RatingWord;
-  [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: ProductRatedMessageKind;
 }
 
 /**
@@ -441,32 +302,22 @@ interface ProductEventPropertyValue {
  */
 type EnumeratedProductEventProperty = Exclude<
   ProductEventProperty,
-  | typeof PRODUCT_EVENT_PROPERTY.APP_VERSION
-  | typeof PRODUCT_EVENT_PROPERTY.SESSION_COUNT
-  | typeof PRODUCT_EVENT_PROPERTY.IMAGE_COUNT
+  typeof PRODUCT_EVENT_PROPERTY.APP_VERSION | typeof PRODUCT_EVENT_PROPERTY.IMAGE_COUNT
 >;
 
 /** Every value each enumerable property may ever hold. */
 const PRODUCT_EVENT_PROPERTY_VALUES = {
-  [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: Object.values(PRODUCT_CONNECTION_ID),
-  [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: PROVIDER_ID_LIST,
-  [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: Object.values(PRODUCT_CALENDAR_SOURCE),
   [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE]: Object.values(PRODUCT_VOICE_SESSION_SOURCE),
-  [PRODUCT_EVENT_PROPERTY.SESSION_ACTION]: Object.values(PRODUCT_SESSION_ACTION),
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: Object.values(PRODUCT_ACCOUNT_ACTION),
   [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: Object.values(PRODUCT_UPDATE_ACTION),
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: Object.values(PRODUCT_PANEL_TAB),
-  [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE]: Object.values(PRODUCT_PANEL_SOURCE),
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: Object.values(PRODUCT_SETTINGS_VIEW),
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: Object.values(PRODUCT_SEARCH_SURFACE),
   [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND]: Object.values(PRODUCT_EXCHANGE_KIND),
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: Object.values(PRODUCT_PERMISSION_RESULT),
-  [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: Object.values(PRODUCT_SIGN_IN_AGE),
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: Object.values(APP_SETTING_ID),
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: Object.values(PRODUCT_SETTING_VALUE),
   [PRODUCT_EVENT_PROPERTY.EXPERIMENT]: Object.values(PRODUCT_EXPERIMENT),
-  [PRODUCT_EVENT_PROPERTY.RATING]: Object.values(RATING_WORD),
-  [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: Object.values(PRODUCT_RATED_MESSAGE_KIND),
 } as const satisfies Record<EnumeratedProductEventProperty, readonly string[]>;
 
 /**
@@ -480,11 +331,6 @@ const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.APP_DAY_ACTIVE]: [PRODUCT_EVENT_PROPERTY.APP_VERSION],
   [PRODUCT_EVENT.ACCOUNT_SIGN_IN]: [],
   [PRODUCT_EVENT.ACCOUNT_ACTION]: [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION],
-  [PRODUCT_EVENT.PROVIDER_CONNECT]: [PRODUCT_EVENT_PROPERTY.CONNECTION_ID],
-  [PRODUCT_EVENT.PROVIDER_DISCONNECT]: [PRODUCT_EVENT_PROPERTY.CONNECTION_ID],
-  [PRODUCT_EVENT.CALENDAR_CONNECT]: [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE],
-  [PRODUCT_EVENT.CALENDAR_DISCONNECT]: [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE],
-  [PRODUCT_EVENT.PANEL_OPEN]: [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE],
   [PRODUCT_EVENT.PANEL_TAB_CHANGE]: [PRODUCT_EVENT_PROPERTY.PANEL_TAB],
   [PRODUCT_EVENT.SETTINGS_VIEW_OPEN]: [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW],
   [PRODUCT_EVENT.SETTINGS_RESET]: [],
@@ -493,18 +339,7 @@ const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.FEEDBACK_SEND]: [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT],
   [PRODUCT_EVENT.VOICE_EXCHANGE]: [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND],
   [PRODUCT_EVENT.VOICE_PERMISSION]: [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT],
-  [PRODUCT_EVENT.SESSION_OBSERVE]: [
-    PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
-    PRODUCT_EVENT_PROPERTY.SESSION_COUNT,
-  ],
-  [PRODUCT_EVENT.SESSION_ACTION_SEND]: [
-    PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
-    PRODUCT_EVENT_PROPERTY.SESSION_ACTION,
-  ],
   [PRODUCT_EVENT.VOICE_CALL_START]: [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE],
-  [PRODUCT_EVENT.INTRODUCTION_COMPLETE]: [],
-  [PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK]: [],
-  [PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT]: [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE],
   [PRODUCT_EVENT.SETTING_UPDATE]: [
     PRODUCT_EVENT_PROPERTY.SETTING_ID,
     PRODUCT_EVENT_PROPERTY.SETTING_VALUE,
@@ -512,10 +347,6 @@ const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.EXPERIMENT_TOGGLE]: [
     PRODUCT_EVENT_PROPERTY.EXPERIMENT,
     PRODUCT_EVENT_PROPERTY.SETTING_VALUE,
-  ],
-  [PRODUCT_EVENT.CONVERSATION_RATED]: [
-    PRODUCT_EVENT_PROPERTY.RATING,
-    PRODUCT_EVENT_PROPERTY.MESSAGE_KIND,
   ],
 } as const satisfies { [Name in ProductEventName]: readonly ProductEventProperty[] };
 
@@ -554,6 +385,36 @@ export const PRODUCT_EVENT_BATCH_LIMIT = 50;
  */
 export const PRODUCT_EVENT_MAXIMUM_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Event names this vocabulary once held and no build since 0.8.0 emits. A
+ * batch from a 0.7.1 or older build may still carry one, and the batch reader
+ * refuses a batch whole on any name it does not know, so it skips these items
+ * instead and keeps the rest of that build's counts. A name that was never in
+ * the vocabulary is still refused. Delete this set once no build at or below
+ * 0.7.1 is active.
+ */
+const RETIRED_PRODUCT_EVENT = {
+  PROVIDER_CONNECT: "provider:connect",
+  PROVIDER_DISCONNECT: "provider:disconnect",
+  CALENDAR_CONNECT: "calendar:connect",
+  CALENDAR_DISCONNECT: "calendar:disconnect",
+  SESSION_OBSERVE: "session:observe",
+  SESSION_ACTION_SEND: "session:action_send",
+  PANEL_OPEN: "panel:open",
+  INTRODUCTION_COMPLETE: "introduction:complete",
+  VOICE_ANNOUNCEMENT_SPEAK: "voice:announcement_speak",
+  VOICE_FIRST_ANNOUNCEMENT: "voice:first_announcement",
+  CONVERSATION_RATED: "conversation:rated",
+} as const;
+
+const RETIRED_PRODUCT_EVENT_NAMES: ReadonlySet<string> = new Set(
+  Object.values(RETIRED_PRODUCT_EVENT),
+);
+
+function isRetiredProductEvent(value: UnparsedWireValue): boolean {
+  return isRecord(value) && isWireString(value.name) && RETIRED_PRODUCT_EVENT_NAMES.has(value.name);
+}
+
 type PropertyReader = {
   [Property in ProductEventProperty]: (
     value: UnparsedWireValue,
@@ -577,7 +438,7 @@ function bucketReader(value: UnparsedWireValue): ProductSessionCountBucket | und
 /**
  * How each property's value is read. Every enumerable property's reader comes
  * from that property's own declared set rather than from a second list, so the
- * two can never disagree; the three no set can enumerate are named here, which
+ * two can never disagree; the two no set can enumerate are named here, which
  * is what makes "no free text" a property of the type rather than a promise
  * about call sites: a version that is not `x.y.z` and a count that is not a
  * rung are both discarded.
@@ -595,7 +456,6 @@ const PRODUCT_EVENT_PROPERTY_READER: PropertyReader = {
   ) as Pick<PropertyReader, EnumeratedProductEventProperty>),
   [PRODUCT_EVENT_PROPERTY.APP_VERSION]: (value) =>
     isWireString(value) && parseReleaseVersion(value) ? value.trim() : undefined,
-  [PRODUCT_EVENT_PROPERTY.SESSION_COUNT]: bucketReader,
   [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: bucketReader,
 };
 
@@ -634,7 +494,9 @@ export function productEventFromWire(value: UnparsedWireValue): ProductEvent | u
 /**
  * Reads a whole batch, or nothing. One unreadable event refuses the batch
  * rather than trimming it: a partial acceptance would let a desktop bug show
- * up as a quiet gap in the counts instead of a refusal somebody notices.
+ * up as a quiet gap in the counts instead of a refusal somebody notices. The
+ * one exception is a retired name, which an older build still sends and which
+ * is skipped, so a batch of nothing but retired names reads as empty.
  */
 export function productEventBatchFromWire(value: UnparsedWireValue): ProductEventBatch | undefined {
   if (!isRecord(value) || !Array.isArray(value.events)) return undefined;
@@ -643,6 +505,7 @@ export function productEventBatchFromWire(value: UnparsedWireValue): ProductEven
   }
   const events: ProductEvent[] = [];
   for (const candidate of value.events) {
+    if (isRetiredProductEvent(candidate)) continue;
     const event = productEventFromWire(candidate);
     if (!event) return undefined;
     events.push(event);

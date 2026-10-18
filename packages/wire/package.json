@@ -9,7 +9,6 @@
     "./app-settings": "./src/app-settings/index.js",
     "./conversation": "./src/conversation/conversation.js",
     "./effect": "./src/effect/index.js",
-    "./provider-identity": "./src/provider-identity.js",
     "./testing": "./src/testing/index.js",
     "./ui-messages": "./src/ui-messages/index.js",
     "./wire-guard": "./src/wire-guard.js"

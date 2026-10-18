@@ -14,12 +14,9 @@ test("prose cannot pass as a property value", () => {
   const prose = "codex — /Users/me/luke on feature/x";
   assert.equal(
     productEventFromWire({
-      name: PRODUCT_EVENT.SESSION_OBSERVE,
+      name: PRODUCT_EVENT.SEARCH_OPEN,
       at: AT,
-      properties: {
-        [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: prose,
-        [PRODUCT_EVENT_PROPERTY.SESSION_COUNT]: 1,
-      },
+      properties: { [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: prose },
     }),
     undefined,
   );
