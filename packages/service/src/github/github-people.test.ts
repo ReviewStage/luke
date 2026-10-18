@@ -263,7 +263,7 @@ it.layer(getTestDB())("who a pull request names", (it) => {
   );
 
   it.effect(
-    "a pull request a developer opened with Luke's agent names Luke's bot among the commit authors, as the co-author its commits' trailers name by its noreply address, by its App's logo; another App's bot co-authoring there by the logo the read gives it elsewhere, and by its robot where the read gives none; a person co-authoring there by the avatar GitHub serves for their id; and a co-author at any other address, or a trailer-shaped line in a commit's body, is left out",
+    "a pull request a developer opened with Luke's agent names Luke's bot among the commit authors, as the co-author its commits' trailers name by its noreply address, by its App's logo; another App's bot co-authoring there, under any case, by the logo the read gives it elsewhere, past the reviewers' bound too, and by its robot where the read gives none; a person co-authoring there by the avatar GitHub serves for their id; and a co-author at any other address, or a trailer-shaped line in a commit's body, is left out",
     () =>
       Effect.gen(function* () {
         const charles = yield* linkedAccount(CHARLES.id);
@@ -274,7 +274,16 @@ it.layer(getTestDB())("who a pull request names", (it) => {
           workspace,
           repository({
             pull: { user: CHARLES, requested_reviewers: [] },
+            // Note that Devin reviews past the reviewers' bound, which still gives its co-authoring its logo.
             reviews: [
+              ...Array.from({ length: CHANGES_BOUNDS.MAX_PEOPLE }, (_, at) =>
+                review(
+                  githubUser(2000 + at, `reviewer${at}`),
+                  "APPROVED",
+                  "",
+                  "2026-10-15T09:00:00Z",
+                ),
+              ),
               review(DEVIN, "COMMENTED", "Found 1 potential issue.", "2026-10-15T10:00:00Z"),
             ],
             commits: [
@@ -299,7 +308,7 @@ it.layer(getTestDB())("who a pull request names", (it) => {
               {
                 author: CHARLES,
                 commit: {
-                  message: `Apply the review\n\nCo-authored-by: Devin <${DEVIN.id}+${DEVIN.login}@users.noreply.github.com>\nCo-authored-by: Renovate <${RENOVATE.id}+${RENOVATE.login}@users.noreply.github.com>`,
+                  message: `Apply the review\n\nCo-authored-by: Devin <${DEVIN.id}+Devin-AI-Integration[bot]@users.noreply.github.com>\nCo-authored-by: Renovate <${RENOVATE.id}+${RENOVATE.login}@users.noreply.github.com>`,
                 },
               },
             ],
@@ -321,7 +330,7 @@ it.layer(getTestDB())("who a pull request names", (it) => {
             bot: false,
             avatarUrl: "https://avatars.githubusercontent.com/u/1005?v=4",
           },
-          { login: DEVIN.login, bot: true, avatarUrl: DEVIN_AVATAR },
+          { login: "Devin-AI-Integration[bot]", bot: true, avatarUrl: DEVIN_AVATAR },
           { login: RENOVATE.login, bot: true },
         ]);
       }),

@@ -625,8 +625,13 @@ export interface KnownBot {
   readonly avatarUrl: string;
 }
 
+/** A login as GitHub matches one, whatever its case, since a trailer may spell it otherwise than GitHub's own read. */
+function loginKey(login: string): string {
+  return login.toLowerCase();
+}
+
 /**
- * The avatar of each App's bot by its login: the bots known beforehand,
+ * The avatar of each App's bot by its login, whatever its case: the bots known beforehand,
  * then every bot the read names elsewhere with the avatar GitHub gave it,
  * which is its App's.
  */
@@ -634,10 +639,10 @@ function botAvatarsOf(
   known: readonly KnownBot[],
   named: readonly GitHubAccount[],
 ): ReadonlyMap<string, string> {
-  const avatars = new Map(known.map((bot) => [bot.login, bot.avatarUrl]));
+  const avatars = new Map(known.map((bot) => [loginKey(bot.login), bot.avatarUrl]));
   for (const account of named) {
     if (account.bot && account.avatarUrl !== undefined)
-      avatars.set(account.login, account.avatarUrl);
+      avatars.set(loginKey(account.login), account.avatarUrl);
   }
   return avatars;
 }
@@ -661,7 +666,9 @@ function coAuthorsOf(
   return [...trailers.matchAll(CO_AUTHOR_TRAILER)].map(([, id = "", login = ""]) => {
     const bot = login.endsWith(BOT_LOGIN_SUFFIX);
     // Note that a bot's id is served an identicon, not its App's picture, so a bot co-author wears its App's avatar only where it is known, and its robot otherwise.
-    const avatarUrl = bot ? botAvatars.get(login) : githubUserAvatarUrl({ id: Number(id) });
+    const avatarUrl = bot
+      ? botAvatars.get(loginKey(login))
+      : githubUserAvatarUrl({ id: Number(id) });
     return { id: Number(id), login, bot, avatarUrl };
   });
 }
@@ -787,7 +794,8 @@ export const pullRequestPeople = /* @__PURE__ */ Effect.fn("web/pullRequestPeopl
   );
   const botAvatars = botAvatarsOf(known, [
     ...(author === undefined ? [] : [author]),
-    ...reviewers.map((reviewer) => reviewer.account),
+    ...requested,
+    ...reviews.flatMap((review) => (review.user === null ? [] : [accountOf(review.user)])),
     ...committers,
   ]);
   return {
