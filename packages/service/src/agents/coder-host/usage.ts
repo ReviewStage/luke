@@ -1,5 +1,4 @@
 import type { TurnUsageRow } from "@luke/database/models/coding-agent-store";
-import type { StoredTurnUsage } from "@luke/database/schemas/storage";
 import type { CodingAgentUsage } from "@luke/features/coding-agent-wire";
 import type { BrainRunUsage } from "../../core.js";
 import {
@@ -72,18 +71,4 @@ export function usageOfTurns(
     cachedInputTokens,
     ...(costUsd === undefined ? undefined : { costUsd: Number(costUsd.toFixed(USD_DECIMALS)) }),
   };
-}
-
-/** One turn's usage as the wire carries it, or nothing for a turn with none recorded yet. */
-export function usageOfTurn(
-  turn:
-    | (Pick<TurnUsageRow, "model" | "fastRefused"> & { readonly usage: StoredTurnUsage | null })
-    | undefined,
-  offered: readonly OfferedModel[],
-): CodingAgentUsage | undefined {
-  if (turn === undefined || turn.usage === null) return undefined;
-  return usageOfTurns(
-    [{ model: turn.model, usage: turn.usage, fastRefused: turn.fastRefused }],
-    offered,
-  );
 }

@@ -2528,6 +2528,7 @@
 .pull-request-reactions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--luke-space-4);
   margin: 0;
   padding: 0;
@@ -2553,6 +2554,54 @@
 
 .pull-request-reaction-count {
   font-variant-numeric: tabular-nums;
+}
+
+/* A pill that gives or takes back the reader's own is a press: it fills on
+   hover, waits dimmed while any change is out, and the one whose change is
+   out pulses until GitHub answers. */
+button.pull-request-reaction {
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  transition: background-color var(--duration-hover) ease;
+}
+
+button.pull-request-reaction:hover:not(:disabled) {
+  background: var(--luke-color-fill-hover);
+}
+
+button.pull-request-reaction:disabled {
+  opacity: 0.6;
+}
+
+.pull-request-reaction[aria-busy="true"] {
+  animation: pull-request-reaction-wait 1.2s ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+@keyframes pull-request-reaction-wait {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Add reaction's row of GitHub's eight, hung from its button: one compact
+   line of the app's icon buttons, each wearing its emoji at the dialog's
+   type size, wrapping where a narrow panel leaves less room than eight. */
+.pull-request-reaction-picker {
+  position: relative;
+}
+
+.pull-request-reaction-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-4);
+}
+
+.pull-request-reaction-emoji {
+  font-size: var(--luke-type-dialog-size);
+  line-height: 1;
 }
 
 .pull-request-reaction[data-mine="true"] {
@@ -3364,14 +3413,6 @@ ol.transcript-list {
   color: var(--luke-color-danger-text);
 }
 
-.agent-end-dot {
-  margin: 0 var(--luke-space-4);
-}
-
-.agent-end-cost {
-  white-space: nowrap;
-}
-
 .agent-end-remedy {
   margin-left: var(--luke-space-8);
   vertical-align: middle;
@@ -4029,6 +4070,12 @@ ol.transcript-list {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* What a send found the answer lacking reads in the attention ink, as the
+   item's own mark does, until it is filled. */
+.inbox-answer-quiet [data-wanting] {
+  color: var(--luke-color-attention);
 }
 
 .inbox-presses {

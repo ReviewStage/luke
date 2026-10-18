@@ -213,8 +213,9 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * keeps to its newest line while it is scrolled there. A link in the
  * transcript opens in the browser where it is a page on GitHub, which is
  * where the pull request the agent opened lives; every other address is
- * drawn and goes nowhere. A finished turn's line says what it cost where
- * the service priced it, as the stopped or failed line does too. Every word here is the agent's or the plan's, so the
+ * drawn and goes nowhere. No line here names a price: a price in the
+ * window is the whole run's, said only at the model menu's foot
+ * (`agentUsageLine`). Every word here is the agent's or the plan's, so the
  * root is left out of the screen recording (`ph-no-capture`) as a second
  * line behind the recording's text masking. Under the transcript stands
  * the composer (`agent-composer.tsx`), with no head above either: where
@@ -1207,9 +1208,9 @@ export function AgentMessage({
 
 /**
  * The line a transcript ends on once its turn was stopped or failed: a
- * failure's mark and its words in the danger ink, then what the turn cost,
- * quiet, after a dot; a stop's words quiet alike. A turn failed on the
- * reader's own refused key offers its API keys after them.
+ * failure's mark and its words in the danger ink; a stop's words quiet.
+ * A turn failed on the reader's own refused key offers its API keys after
+ * them.
  */
 function AgentEndLine({
   ended,
@@ -1221,15 +1222,6 @@ function AgentEndLine({
   onOpenApiKeys: (() => void) | undefined;
 }): React.JSX.Element {
   const mark = ended.failed ? stateEndMark(GLYPH_STATE.FAILED, false) : null;
-  const cost =
-    ended.cost === undefined ? null : (
-      <>
-        <span className="agent-end-dot" aria-hidden="true">
-          ·
-        </span>
-        <span className="agent-end-cost">{ended.cost}</span>
-      </>
-    );
   // Note that a key refused is mended in Settings, so its line offers the API keys after the words.
   const remedy =
     endReason === FAILURE_REASON.API_KEY
@@ -1244,7 +1236,6 @@ function AgentEndLine({
     >
       {mark}
       <span className="agent-end-words">{ended.words}</span>
-      {cost}
       {remedy === undefined ? null : (
         <button
           type="button"
@@ -1588,7 +1579,6 @@ function AgentTabView({
                 ended={endLineParts(
                   agent.status,
                   transcript.failure,
-                  transcript.turnUsage,
                   starter,
                   continuedNote !== undefined,
                 )}

@@ -929,7 +929,7 @@ function ThreadComments({
               <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
             </span>
             <EntryWords entry={comment} picture={picture} />
-            <Reactions reactions={comment.reactions} />
+            <Reactions reactions={comment.reactions} subject={comment.subject} />
           </li>
         ))}
       </ol>
@@ -1015,7 +1015,7 @@ function EntryCard({
         <RelativeTime className="changes-comment-time" at={entry.at} now={now} />
       </span>
       <EntryWords entry={entry} picture={picture} />
-      <Reactions reactions={entry.reactions} />
+      <Reactions reactions={entry.reactions} subject={entry.subject} />
       {threads.length === 0 ? null : (
         <ol className="pull-request-threads">
           {threads.map((thread, at) => (
@@ -1231,10 +1231,13 @@ function ChecksPart({
 function DescriptionPart({
   part,
   reactions,
+  subject,
   picture,
 }: {
   part: Part<CodingAgentOverviewPullRequest>;
   reactions: readonly ReactionGroup[] | undefined;
+  /** The GraphQL id a reaction is given to the description by, which the conversation's read names. */
+  subject: string | undefined;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element | null {
   if (part.kind === PART.FAILED || part.kind === PART.NONE) return null;
@@ -1252,7 +1255,7 @@ function DescriptionPart({
           <GitHubWords html={part.value.html} picture={picture} />
         </div>
       )}
-      {part.kind === PART.PENDING ? null : <Reactions reactions={reactions} />}
+      {part.kind === PART.PENDING ? null : <Reactions reactions={reactions} subject={subject} />}
     </Section>
   );
 }
@@ -1557,6 +1560,7 @@ function ConversationView({
         <DescriptionPart
           part={parts.pullRequest}
           reactions={landed(parts.conversation)?.descriptionReactions}
+          subject={landed(parts.conversation)?.descriptionSubject}
           picture={picture}
         />
         <ConversationPart

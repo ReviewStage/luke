@@ -65,7 +65,7 @@ import {
   codingAgentRunStartedAt,
   codingAgentStatusOf,
 } from "./status.js";
-import { usageOfTurn, usageOfTurns } from "./usage.js";
+import { usageOfTurns } from "./usage.js";
 
 /**
  * transcript.ts -- a coding agent's transcript past a cursor, held open while the agent runs.
@@ -140,8 +140,6 @@ export interface TranscriptPage {
   readonly failureReason?: CodingAgentFailure;
   /** What the agent has cost over every turn it and its workers settled; absent before one has. */
   readonly usage?: CodingAgentUsage;
-  /** What its newest turn cost; absent until that turn settles. */
-  readonly turnUsage?: CodingAgentUsage;
   /** What the agent's model's context holds, on its own transcript; absent before its first step and on a worker's. */
   readonly context?: CodingAgentContext;
   /** The delegations its newest turn still waits on, with when each worker began, on its own transcript; absent while none runs and on a worker's. */
@@ -377,9 +375,10 @@ const subagentStandingsOf = (
 
 /**
  * The page with what the agent has cost: every settled turn of its
- * conversation and its workers', and its newest turn, priced at the catalog
- * as the instance holds it now; a catalog it cannot read prices nothing,
- * so the tokens are told alone. On the agent's own transcript, with what
+ * conversation and its workers', summed and priced at the catalog as the
+ * instance holds it now; a catalog it cannot read prices nothing, so the
+ * tokens are told alone. Note that no one turn is priced apart, because a
+ * price the window draws means the whole run's. On the agent's own transcript, with what
  * its model's context holds, against the window the same catalog lists,
  * and every title its workers have so far, which land beside their starts
  * and so on no page of their own.
@@ -396,7 +395,6 @@ const withUsage = (
     const catalog = yield* ModelCatalog;
     const offered = yield* catalog.read.pipe(Effect.orElseSucceed(() => []));
     const usage = usageOfTurns(rows, offered);
-    const turnUsage = usageOfTurn(turn, offered);
     const context = own === undefined ? undefined : yield* contextOf(target, own, offered);
     const delegations =
       own !== undefined && WAITING_STATUSES.has(page.status)
@@ -407,7 +405,6 @@ const withUsage = (
     return {
       ...page,
       ...(usage === undefined ? undefined : { usage }),
-      ...(turnUsage === undefined ? undefined : { turnUsage }),
       ...(context === undefined ? undefined : { context }),
       ...(delegations.length === 0 ? undefined : { delegations }),
       ...(subagentTitles.length === 0 ? undefined : { subagentTitles }),

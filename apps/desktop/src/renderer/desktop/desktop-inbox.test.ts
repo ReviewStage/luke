@@ -65,6 +65,7 @@ import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import { appBridge } from "../app-bridge";
 import { runAppCommand, useAppKeymap } from "../app-commands";
+import { DRAFT_WORD } from "../draft-mark";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
@@ -657,8 +658,8 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   const { page } = mount();
   await settle();
   assert.deepEqual(optionHeads(page), [
-    "Retry 3 times over an hourRecommendedBacks off 5, 15, then 40 minutes.",
-    "Retry once",
+    "Retry 3 times over an hourRecommended1Backs off 5, 15, then 40 minutes.",
+    "Retry once2",
   ]);
 
   act(() => root?.unmount());
@@ -670,7 +671,196 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   inboxes.set(BILLING.id, [{ ...THRESHOLD, response }, RETRY]);
   const again = mount();
   await settle();
-  assert.deepEqual(optionHeads(again.page), ["Retry 3 times over an hour", "Retry once"]);
+  assert.deepEqual(optionHeads(again.page), ["Retry 3 times over an hour1", "Retry once2"]);
+});
+
+/** The open item's options, a choice's radios or checkboxes, in order. */
+function openOptions(pane: HTMLElement): HTMLButtonElement[] {
+  return [...pane.querySelectorAll<HTMLButtonElement>('[role="radio"], [role="checkbox"]')];
+}
+
+/** The labels of the open item's options that stand checked. */
+function checkedOptions(pane: HTMLElement): (string | null | undefined)[] {
+  return openOptions(pane)
+    .filter((option) => option.getAttribute("aria-checked") === "true")
+    .map((option) => option.querySelector(".luke-choice-label")?.textContent);
+}
+
+/** What the box's quiet line says, or nothing where it says nothing. */
+function quietWords(pane: HTMLElement): string | null {
+  return pane.querySelector("[data-inbox-quiet]")?.textContent ?? null;
+}
+
+/**
+ * A key pressed on an element as the browser presses it: a button's Enter
+ * and Space press the button unless a handler held the key back, which
+ * jsdom does not do of itself.
+ */
+function keyOn(target: Element, key: string, init: KeyboardEventInit = {}): void {
+  act(() => {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(event);
+    const presses = key === "Enter" || key === " ";
+    if (presses && !event.defaultPrevented && target instanceof HTMLButtonElement) target.click();
+  });
+}
+
+test("a waiting choice of one is a radio list, each option led by its radio and numbered at its right: a number key picks its option from the list's row and takes the keyboard there, Space picks the focused one, a number typed in the box picks nothing, and J still steps the list", async () => {
+  const keys = standKeymap();
+  const { page } = mount();
+  await settle();
+  const pane = itemPane(page);
+  assert.deepEqual(
+    openOptions(pane).map((option) => [
+      option.getAttribute("role"),
+      option.querySelector(".luke-choice-control")?.getAttribute("data-shape"),
+      option.getAttribute("aria-keyshortcuts"),
+    ]),
+    [
+      ["radio", "radio", "1"],
+      ["radio", "radio", "2"],
+    ],
+  );
+
+  const row = rowNamed(page, "Alert at 80%?");
+  act(() => row.focus());
+  pressKey("2", row);
+  assert.deepEqual(checkedOptions(pane), ["Retry once"]);
+  assert.equal(document.activeElement, openOptions(pane)[1], "the keyboard follows the pick");
+
+  const first = openOptions(pane)[0] ?? assert.fail("no first option");
+  act(() => first.focus());
+  keyOn(first, " ");
+  assert.deepEqual(checkedOptions(pane), ["Retry 3 times over an hour"]);
+
+  composerEditor(pane).focus();
+  pressKey("2", composerEditor(pane));
+  assert.deepEqual(
+    checkedOptions(pane),
+    ["Retry 3 times over an hour"],
+    "typing a number picks none",
+  );
+
+  act(() => first.focus());
+  pressKey("j", first);
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  act(() => keys.unmount());
+});
+
+test("Enter on a focused option sends the answer and never presses the option; with nothing picked, Enter there or in the box sends nothing, takes the keyboard to the options, and says on the box's foot what is missing until an option is picked", async () => {
+  const { page } = mount();
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.equal(document.activeElement, openOptions(pane)[0], "the keyboard goes to the options");
+  assert.equal(quietWords(pane), "Pick an option");
+  keyOn(openOptions(pane)[0] ?? assert.fail("no option"), "Enter");
+  await settle();
+  assert.deepEqual(sent, [], "an answer lacking its pick goes nowhere");
+  assert.deepEqual(checkedOptions(pane), [], "and Enter picked nothing");
+
+  const once = openOptions(pane)[1] ?? assert.fail("no second option");
+  act(() => once.click());
+  assert.equal(quietWords(pane), null, "the line goes once the pick is made");
+  keyOn(once, "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ reply, choices }) => ({ reply, choices })),
+    [{ reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] }],
+  );
+  assert.deepEqual(checkedOptions(pane), ["Retry once"], "Enter left the pick standing");
+});
+
+test("a waiting choice of several is a checkbox list whose box counts the picks on its foot: the arrows move along it picking nothing, a number key toggles its option, and Enter on a picked option sends every pick and lets none go", async () => {
+  inboxes.set(BILLING.id, [
+    {
+      ...THRESHOLD,
+      response: {
+        type: INBOX_RESPONSE.CHOICE,
+        multiple: true,
+        options: [{ label: "Email" }, { label: "Slack" }, { label: "Pager" }],
+      },
+    },
+    RETRY,
+  ]);
+  const { page } = mount();
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+  const boxes = () => openOptions(pane);
+  assert.deepEqual(
+    boxes().map((box) => box.querySelector(".luke-choice-control")?.getAttribute("data-shape")),
+    ["box", "box", "box"],
+  );
+  assert.equal(quietWords(pane), "Pick any that apply");
+  assert.equal(pane.textContent?.includes("Pick any that apply."), false, "no line under the list");
+
+  const email = boxes()[0] ?? assert.fail("no Email");
+  act(() => email.focus());
+  keyOn(email, "ArrowDown");
+  assert.equal(document.activeElement, boxes()[1]);
+  keyOn(boxes()[1] ?? assert.fail("no Slack"), "ArrowUp");
+  keyOn(email, "ArrowUp");
+  assert.equal(document.activeElement, boxes()[2], "the arrows wrap");
+  assert.deepEqual(checkedOptions(pane), [], "and pick nothing");
+
+  pressKey("3", document.activeElement ?? document.body);
+  pressKey("1", document.activeElement ?? document.body);
+  pressKey("2", document.activeElement ?? document.body);
+  pressKey("2", document.activeElement ?? document.body);
+  assert.deepEqual(checkedOptions(pane), ["Email", "Pager"]);
+  assert.equal(quietWords(pane), "2 picked");
+
+  keyOn(email, "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ reply, choices }) => ({ reply, choices })),
+    [{ reply: INBOX_REPLY.CHOSE, choices: ["Pager", "Email"] }],
+  );
+  assert.deepEqual(checkedOptions(pane), ["Email", "Pager"], "Enter let no pick go");
+});
+
+test("Enter in a form's field sends the form once its required fields are filled, and before that takes the keyboard to the first one left empty, the box's foot naming it", async () => {
+  inboxes.set(INVITES.id, [
+    {
+      ...EXPIRY,
+      response: {
+        type: INBOX_RESPONSE.FORM,
+        fields: [
+          { type: INBOX_FIELD.SELECT, label: "Severity", required: true, options: ["Low", "High"] },
+          { type: INBOX_FIELD.TEXT, label: "Reason" },
+        ],
+      },
+    },
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  const sent = heldAnswers();
+  const pane = itemPane(page);
+  const reason =
+    pane.querySelector<HTMLInputElement>('[data-inbox-field="text"] input') ??
+    assert.fail("no Reason field");
+
+  act(() => reason.focus());
+  keyOn(reason, "Enter");
+  await settle();
+  assert.deepEqual(sent, []);
+  assert.equal(document.activeElement, segment(segmentedGroup(pane, "Severity"), "Low"));
+  assert.equal(quietWords(pane), "Fill in Severity");
+
+  act(() => segment(segmentedGroup(pane, "Severity"), "High").click());
+  keyOn(reason, "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ reply, values }) => ({ reply, values })),
+    [{ reply: INBOX_REPLY.SUBMITTED, values: [{ label: "Severity", value: "High" }] }],
+  );
 });
 
 test("a settled choice whose pick is not the one recommended marks each apart: the pick by whose it was, and the recommended option by its badge", async () => {
@@ -1689,6 +1879,35 @@ test("an item's box is the agent's message box: it takes no caret as the item op
     sent.map(({ itemId, reply, note }) => ({ itemId, reply, note })),
     [{ itemId: THRESHOLD.id, reply: INBOX_REPLY.ANSWERED, note: "Use 90%\ninstead" }],
   );
+});
+
+/** Whether an item's row wears the Draft pencil. */
+function rowDrafted(page: HTMLElement, title: string): boolean {
+  return rowNamed(page, title).querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
+}
+
+test("an item whose box holds unsent words wears the Draft pencil on its row while another item is chosen, as a sidebar task's row does, and none while its box stands beside the list; with the list standing alone, the chosen item's row wears it too", async () => {
+  const { page } = mount();
+  await settle();
+  typeInComposer(itemPane(page), "Use 90% instead");
+  await settle();
+  assert.equal(rowDrafted(page, "Alert at 80%?"), false, "the chosen item's box shows its words");
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  assert.equal(rowDrafted(page, "Alert at 80%?"), true, "the draft is marked while away");
+  assert.equal(rowDrafted(page, "Expire after 7 days?"), false, "only the item holding it is");
+  assert.equal(rowDrafted(page, "How is a failed email retried?"), false);
+
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  assert.equal(composerEditor(itemPane(page)).textContent, "Use 90% instead");
+  assert.equal(rowDrafted(page, "Alert at 80%?"), false);
+  layOut(page, 800);
+  act(() => backToList(page).click());
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(rowDrafted(page, "Alert at 80%?"), true, "the list standing alone hides its box");
 });
 
 /** Hands `files` to the open item's box: picked in its hidden picker, or dropped on its card. */
