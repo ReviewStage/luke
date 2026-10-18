@@ -9,7 +9,7 @@ import {
   type InboxReplyKind,
   knownResponse,
 } from "@luke/features/inbox-wire";
-import { BUTTON_VARIANT, Button, IconButton, PlusIcon } from "@luke/ui";
+import { BUTTON_VARIANT, Button, IconButton, PlusIcon, TEXT_TONE, Text } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useRef, useState } from "react";
@@ -149,7 +149,7 @@ function SendPresses({
   if (presses !== undefined) {
     const { back, ahead } = presses;
     return (
-      <div className="inbox-presses flex gap-(--luke-control-gap)">
+      <div className="inbox-presses">
         {back === undefined ? null : (
           <Button disabled={held} onClick={() => onAnswer(back.reply)}>
             {back.label}
@@ -390,7 +390,7 @@ function AnswerCard({
                       attach(picked);
                     }}
                   />
-                  <span className="inbox-answer-quiet px-1 text-[12px] text-muted-foreground">
+                  <span className="inbox-answer-quiet">
                     {item.needsReply || !answering ? null : (
                       <span data-inbox-quiet="">{quietLine(draft)}</span>
                     )}
@@ -421,9 +421,7 @@ function AnswerCard({
           </PromptInputFooter>
         </PromptInput>
       ) : (
-        <p className="m-0 text-muted-foreground" data-inbox-unknown="">
-          {NEWER_LUKE}
-        </p>
+        <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE}</Text>
       )}
       {note === undefined ? null : (
         <p className="error-message agent-composer-note" role="alert">

@@ -275,7 +275,7 @@ function composed(
         const { taskId, includeArchived } = yield* read(
           codingAgentListParamsSchema,
           params,
-          "listing a plan's agents names one plan",
+          "listing a task's agents names one task",
         );
         const answer = yield* asked(client.list(taskId, includeArchived));
         return carried<CodingAgentListAnswer>(answer);
@@ -294,7 +294,7 @@ function composed(
         const { taskId, ...request } = yield* read(
           codingAgentStartParamsSchema,
           params,
-          "starting an agent names a plan and the press's own key",
+          "starting an agent names a task and the press's own key",
         );
         const answer = yield* asked(client.start(taskId, request));
         return carried<CodingAgentAgentAnswer>(answer);
@@ -464,7 +464,7 @@ function composed(
         const { taskId, after } = yield* read(
           codingAgentInboxParamsSchema,
           params,
-          "reading a plan's inbox names the plan and a cursor",
+          "reading a task's inbox names the task and a cursor",
         );
         const answer = yield* asked(client.inbox(taskId, after));
         return carried<CodingAgentInboxAnswerView>(answer);

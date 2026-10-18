@@ -442,7 +442,7 @@ const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
 const startingLinearIssue = (organizationId: string, issueId: string) =>
   linearOrRefused(
     throughWorkspaceLinear(organizationId, (token) => linearIssue(token, issueId)),
-    "Linear gave no issue to start a plan from",
+    "Linear gave no issue to start a task from",
   );
 
 /** Whether a list read asks for the archived tasks too; a build from before archiving never does. */

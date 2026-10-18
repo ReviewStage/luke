@@ -55,8 +55,8 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   | `--luke-field-gap`, `--luke-section-gap` | 16px | 16px | 16px |
   | `--luke-menu-row-height` | 32px | 44px | 32px |
 
-  The settings-row, dialog, and menu roles beside them (`--luke-settings-row-*`,
-  `--luke-dialog-*`, `--luke-menu-*`) are set the same way. `tokens.test.ts`
+  The settings-row, card, dialog, and menu roles beside them (`--luke-settings-row-*`,
+  `--luke-card-*`, `--luke-dialog-*`, `--luke-menu-*`) are set the same way. `tokens.test.ts`
   holds both profiles to one set of names.
 - **Palette** (`palettes.css`): semantic colours, `--luke-color-*` (`text`,
   `text-muted`, `ground`, `surface`, `overlay`, `fill-*`, `border*`, `accent*`,
@@ -96,7 +96,7 @@ What the barrel holds (`src/index.ts`):
 
 | Kind | Components |
 | --- | --- |
-| Type and layout | `Text`, `Stack`, `Inline` |
+| Type and layout | `Text`, `Stack`, `Inline`, `Card` |
 | Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `Chip`, `AttachmentChip`, `NavItem` |
 | Entry | `FormField`, `TextField`, `TextArea`, `SearchField`, `Checkbox`, `Switch`, `Segmented`, `Select`, `Combobox` |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `Skeleton`, `EmptyState`, `ErrorState` |
