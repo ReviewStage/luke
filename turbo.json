@@ -2,11 +2,17 @@
   "$schema": "https://turborepo.com/schema.json",
   "ui": "stream",
   // Strict mode hands a task only the variables named here and turbo's own
-  // short list (PATH, HOME, CI and the like), and none are named: no check
-  // reads the environment, and a task that never sees a secret can neither
-  // print one into a cached log nor bake one into a cached hash. The desktop
-  // build's Sentry token and DSN stay with `pnpm package`, which turbo never runs.
+  // short list (PATH, HOME, CI and the like). None named is a secret: a task
+  // that never sees one can neither print it into a cached log nor bake it
+  // into a cached hash. The desktop build's Sentry token and DSN stay with
+  // `pnpm package`, which turbo never runs.
   "envMode": "strict",
+  // Turborepo assumes a task is deterministic under the inputs it knows, and
+  // its global hash knows the lockfile, `globalDependencies`, `globalEnv` and
+  // its flags, never the OS, CPU architecture, or Node version. A test whose
+  // result depends on those would replay a Linux pass on a Mac, so
+  // `scripts/lib/turbo.mjs` names the platform here, in every task's hash.
+  "globalEnv": ["LUKE_TURBO_PLATFORM"],
   // Files outside every workspace that every workspace reads. The changelog
   // and the privacy notice only the web app reads, so they are inputs of its
   // own tasks (apps/web/turbo.json). The brand artwork the web app and the
