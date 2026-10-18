@@ -97,6 +97,10 @@ import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
  * the task and offers no Linear chip.
  */
 
+/** What the card says where a model picked on its chip was not kept as the account's default. */
+const DEFAULT_NOT_KEPT =
+  "The model could not be kept as your default. This agent still starts on it.";
+
 /** ⌘Return: a bare task from an Agent-mode box with nothing in it. */
 const BARE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
 
@@ -163,11 +167,12 @@ function IssueChip({
   );
 }
 
-/** The account's default model as read, and the chip's pick, which is written back as the default. */
+/** The account's default model as read, the chip's pick, which is written back as the default, and why that write did not take, where it did not. */
 function useDefaultChoice(
   newTask: TasksControl["newTask"],
-): readonly [ModelChoice | undefined, (next: ModelChoice) => void] {
+): readonly [ModelChoice | undefined, (next: ModelChoice) => void, string | undefined] {
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
+  const [refused, setRefused] = useState<string | undefined>(undefined);
   // Note that the control is read through a ref, because the tab hands a
   // new one on every render and the default is read once, as the card opens.
   const latest = useRef(newTask);
@@ -181,12 +186,17 @@ function useDefaultChoice(
       live = false;
     };
   }, []);
-  // A pick names the chip at once and is kept as the default, as Start's menu keeps it.
+  // A pick names the chip at once and is kept as the default, as Start's menu
+  // keeps it; a write that did not take says so under the card, and the
+  // agent still starts on the pick.
   const choose = (next: ModelChoice) => {
     setChoice(next);
-    void latest.current.writeDefault(next);
+    setRefused(undefined);
+    latest.current.writeDefault(next).then((answer) => {
+      setRefused("failure" in answer ? DEFAULT_NOT_KEPT : undefined);
+    });
   };
-  return [choice, choose];
+  return [choice, choose, refused];
 }
 
 export function NewTaskComposer({
@@ -217,7 +227,7 @@ export function NewTaskComposer({
   const [attachments, setAttachments] = useState<readonly CodingAgentAttachment[]>([]);
   const [issue, setIssue] = useState<LinearIssueSummary | undefined>(undefined);
   const [chosen, setChosen] = useState<string | null | undefined>(newTask.preset?.repository);
-  const [choice, choose] = useDefaultChoice(newTask);
+  const [choice, choose, choiceNote] = useDefaultChoice(newTask);
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(undefined);
   // How many times ⌘L asked the Linear chip to open its menu.
@@ -342,7 +352,7 @@ export function NewTaskComposer({
         wording={MODE_WORDS[mode]}
         sendsEmpty={planning || onIssue}
         sendable={!blocked}
-        model={planning || choice === undefined ? undefined : { choice, note: undefined, choose }}
+        model={planning || choice === undefined ? undefined : { choice, note: choiceNote, choose }}
         models={newTask.models}
         readModels={newTask.readModels}
         usage={undefined}

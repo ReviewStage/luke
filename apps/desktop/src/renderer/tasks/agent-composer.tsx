@@ -388,7 +388,7 @@ export function AgentComposer({
   actions?: ReactNode;
   /** Whether the round button may send at all, beside the words: New task's is held while Agent mode has no repository. */
   sendable?: boolean;
-  /** A key pressed in the field that neither its lists nor dictation took; answers whether it took it. */
+  /** A key pressed in the field that neither its lists nor dictation took, and none while a file is still being read; answers whether it took it. */
   onKey?: ((event: KeyboardEvent) => boolean) | undefined;
   /** What Escape in the field does where no list or dictation takes it; the field gives up the caret where none is given. */
   onLeave?: (() => void) | undefined;
@@ -438,11 +438,15 @@ export function AgentComposer({
       }
     });
   };
-  const lapsed = lapsedServer({
-    statusOf: statuses.statusOf,
-    accountsOf: statuses.accountsOf,
-    disabled: servers?.disabled ?? [],
-  });
+  // Note that a box handing no servers, as New task's, offers none to reconnect either.
+  const lapsed =
+    servers === undefined
+      ? undefined
+      : lapsedServer({
+          statusOf: statuses.statusOf,
+          accountsOf: statuses.accountsOf,
+          disabled: servers.disabled,
+        });
   const unloaded = AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined;
   const words =
     composer.closed ??
@@ -679,7 +683,11 @@ export function AgentComposer({
           maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
           takesFocus={!(focusedByOwner && mountedFirst)}
           {...pickers.field}
-          onKey={(event) => pickers.field.onKey(event) || onKey?.(event) === true}
+          onKey={(event) =>
+            pickers.field.onKey(event) ||
+            // A file still being read holds the owner's keys too, as it holds Send.
+            (reading === 0 && onKey?.(event) === true)
+          }
           onEnter={() => {
             if (room.current !== null) submitPromptInput(room.current);
           }}

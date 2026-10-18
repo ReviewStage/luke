@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import {
+  INTEGRATION_PROVIDER,
+  INTEGRATION_PROVIDER_LIST,
+  INTEGRATION_STATUS,
+  type IntegrationProvider,
+  type IntegrationStatus,
+} from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { OpenSettingsProvider } from "@luke/panel/open-settings";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
@@ -35,6 +43,14 @@ import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab"
  */
 
 const roots: Root[] = [];
+
+// SAFETY: the entries are built from INTEGRATION_PROVIDER_LIST, so every provider is a key.
+const UNAVAILABLE = Object.fromEntries(
+  INTEGRATION_PROVIDER_LIST.map((provider) => [provider, INTEGRATION_STATUS.UNAVAILABLE]),
+) as Record<IntegrationProvider, IntegrationStatus>;
+
+/** Whether the account refuses to keep a model as its default, as a service that did not answer refuses it. */
+let refuseDefault = false;
 
 /** The key New task keeps its mode under, which a test sets to stand the card in Plan mode. */
 const MODE_KEY = "luke.new-task-mode";
@@ -70,6 +86,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  refuseDefault = false;
   for (const root of roots.splice(0)) act(() => root.unmount());
   vi.restoreAllMocks();
   window.localStorage.clear();
@@ -130,7 +147,9 @@ async function mount(
         readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
         writeDefault: (choice: ModelChoice) => {
           defaults.push(choice);
-          return Promise.resolve({ choice });
+          return Promise.resolve(
+            refuseDefault ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { choice },
+          );
         },
         start: (
           name: string,
@@ -302,6 +321,69 @@ test("a model picked on the chip is kept as the account's default, and the agent
   const picked = card.defaults.at(-1);
   assert.equal(picked?.model, "anthropic/claude-opus-5.5-fast");
   assert.deepEqual(card.agents[0]?.choice, picked);
+});
+
+test("a model the account refuses to keep as its default says so under the card, and the agent still starts on it", async () => {
+  refuseDefault = true;
+  const card = await mount();
+  const chip =
+    document.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
+    assert.fail("the model chip stands");
+  act(() => chip.click());
+  const fast =
+    document.querySelector<HTMLButtonElement>('[role="switch"]') ??
+    assert.fail("the menu offers Fast");
+  act(() => fast.click());
+  await settle();
+  const said = card.note();
+  card.type("Speed up the build");
+  await card.key("Enter");
+
+  assert.match(said ?? "", /could not be kept as your default/u);
+  assert.equal(card.agents[0]?.choice?.model, "anthropic/claude-opus-5.5-fast");
+});
+
+test("a server whose sign-in expired is offered nowhere in the card, which hands an agent no servers", async () => {
+  fakeAppBridge({
+    act: (request: Act) =>
+      Promise.resolve(
+        request.kind === ACT_KIND.INTEGRATIONS_STATUS
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: {
+                integrations: {
+                  ...UNAVAILABLE,
+                  [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.EXPIRED,
+                },
+              },
+            }
+          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+      ),
+  });
+  const card = await mount();
+  await settle();
+
+  assert.equal(card.dialog()?.textContent?.includes("sign-in expired"), false);
+});
+
+test("Command-Return while a file is still being read starts no bare task", async () => {
+  const card = await mount();
+  const picker =
+    card.dialog()?.querySelector<HTMLInputElement>('input[type="file"]') ??
+    assert.fail("the + has its file picker");
+  const file = new File(["# Notes"], "notes.md", { type: "text/markdown" });
+  Object.defineProperty(picker, "files", { configurable: true, value: [file] });
+  act(() => {
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  pressInComposer(document, "Enter", { metaKey: true });
+  await settle();
+
+  assert.deepEqual(
+    card.agents.filter((agent) => agent === undefined),
+    [],
+    "no bare task starts",
+  );
 });
 
 test("Shift+Return is a new line, and the agent is handed both lines", async () => {
