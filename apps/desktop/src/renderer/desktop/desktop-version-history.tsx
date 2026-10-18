@@ -40,6 +40,7 @@ import type { NavigationHistory } from "../navigation-history";
 import { Shortcut } from "../shortcut";
 import { BusyLabel } from "../spinner";
 import { centreWithin } from "../tasks/code-pane";
+import { DocumentScroll } from "../tasks/document-frame";
 import {
   type ChangedSection,
   changedSections,
@@ -559,9 +560,9 @@ function VersionPage({
           </div>
         </header>
         <div className="desktop-document">
-          <div className="plan-document-scroll scroll-fade">
+          <DocumentScroll>
             <VersionSkeleton />
-          </div>
+          </DocumentScroll>
         </div>
       </>
     );

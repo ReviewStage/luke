@@ -13,13 +13,14 @@ import { Button, EllipsisIcon, IconButton, TextButton, useMenu } from "@luke/ui"
 import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActorRef, ActorStack } from "../actor-ref";
+import { ActorStack } from "../actor-ref";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { type LinkDrawer, MarkdownMessage, type TaskToggler } from "../markdown-message";
 import { useCreator } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { prefersReducedMotion } from "../use-reduced-motion";
+import { DocumentByline, DocumentScroll } from "./document-frame";
 import {
   type EditAgents,
   EditedBy,
@@ -38,7 +39,6 @@ import {
   useTextRoom,
 } from "./plan-document-editor";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
-import { RelativeTime } from "./relative-time";
 import {
   copyTaskLinkItem,
   markReadItem,
@@ -260,8 +260,8 @@ function EditedLine({
 
 /**
  * Who started the task and when, and who last edited its plan and when,
- * under its title, as an issue's page says it under its own
- * (`../desktop/issue-detail.tsx`): "Created by [Charles] Charles Pan · 3d
+ * under its title, in the line every document draws there
+ * (`DocumentByline`): "Created by [Charles] Charles Pan · 3d
  * ago" and "Last edited by [Luke] Luke · 2h ago", each phrase wrapping
  * whole. The people hang their cards, and the edit's time opens the plan's
  * version history where the window offers it. A plan nobody has edited
@@ -281,18 +281,13 @@ function PlanByline({
   // Note that the creator is named as the task's ⋯ names them, so a task the service names by its owner's id alone is still the reader's own.
   const creator = useCreator(task, place.reader.readerId);
   return (
-    <p className="plan-byline">
-      <span className="actor-line">
-        {"Created by "}
-        <ActorRef actor={creator} sentence />
-        {" · "}
-        <RelativeTime at={task.createdAt} now={place.now} ago />
-      </span>
-      {/* Note that the space between the phrases is read, not drawn: the line's gap draws it. */}
-      {edit === undefined ? null : (
-        <>
-          {" "}
-          <span className="actor-line plan-byline-edited">
+    <DocumentByline
+      creator={creator}
+      createdAt={task.createdAt}
+      now={place.now}
+      edited={
+        edit === undefined ? undefined : (
+          <>
             {edit.actor === PLAN_ACTOR.EARLIER ? "Last edited" : "Last edited by "}
             <EditedBy edit={edit} place={place} sentence />
             {" · "}
@@ -302,10 +297,10 @@ function PlanByline({
               label={`Edited ${agoText(edit.at, place.now)}. Show version history`}
               onShow={onShowHistory === undefined ? undefined : () => onShowHistory(undefined)}
             />
-          </span>
-        </>
-      )}
-    </p>
+          </>
+        )
+      }
+    />
   );
 }
 
@@ -997,7 +992,7 @@ export function PlanBody({
       text={task.document.body}
       sectionNote={(heading) => pictureNoteOf(marks, heading)}
     >
-      <div ref={scroller} className="plan-document-scroll scroll-fade">
+      <DocumentScroll ref={scroller}>
         {page === undefined ? null : <ChangedLine looks={looks} marks={marks} />}
         <div ref={body} className={BODY_CLASS}>
           {titled ? (
@@ -1047,7 +1042,7 @@ export function PlanBody({
             />
           )}
         </div>
-      </div>
+      </DocumentScroll>
     </PlanPictures>
   );
 }
