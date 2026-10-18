@@ -16,6 +16,9 @@ import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { appPlatform } from "@luke/panel/app-platform";
+import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
 import {
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
@@ -32,7 +35,6 @@ import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef } from "react";
-import { useAct } from "../act";
 import {
   ACTOR_SIZE,
   ActorLine,
@@ -51,7 +53,6 @@ import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
-import { appPlatform } from "../app-platform";
 import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
 import { InlineRef } from "../inline-ref";
@@ -98,10 +99,10 @@ import {
   macOwnerOf,
   messageWords,
   newestTodos,
-  newTaskCallIds,
   placedMessages,
   providerOf,
   settledPlanEdits,
+  sidebarCallIds,
   teammateStarter,
   turnStretches,
   WORKING_PHASE_WORDS,
@@ -167,7 +168,6 @@ import { useAgentServers } from "./use-agent-servers";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { useKnownNames } from "./use-known-names";
-import { useOpenPlace } from "./use-open-link";
 import { WorkedFor, WorkingLine } from "./working-time";
 
 /**
@@ -1752,14 +1752,15 @@ export function AgentTab({
     seenListCalls.current = new Set(listCalls);
     if (landed) readAgents();
   }, [listCalls, readAgents]);
-  // A start that made a new task adds it to the sidebar only once the tasks are read again.
-  const newTaskCalls = useMemo(() => newTaskCallIds(transcript.messages), [transcript.messages]);
-  const seenNewTaskCalls = useRef<ReadonlySet<string>>(new Set(newTaskCalls));
+  // A start that made a new task, or a call that made, deleted, or filled a section, changes the
+  // sidebar only once the tasks are read again.
+  const sidebarCalls = useMemo(() => sidebarCallIds(transcript.messages), [transcript.messages]);
+  const seenSidebarCalls = useRef<ReadonlySet<string>>(new Set(sidebarCalls));
   useEffect(() => {
-    const landed = newTaskCalls.some((id) => !seenNewTaskCalls.current.has(id));
-    seenNewTaskCalls.current = new Set(newTaskCalls);
+    const landed = sidebarCalls.some((id) => !seenSidebarCalls.current.has(id));
+    seenSidebarCalls.current = new Set(sidebarCalls);
     if (landed) tell(ACT_KIND.TASKS_REFRESH);
-  }, [newTaskCalls, tell]);
+  }, [sidebarCalls, tell]);
   const composer = useAgentComposer({
     agentId: agent.id,
     taskId: agent.planId,

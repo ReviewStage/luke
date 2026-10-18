@@ -1,9 +1,12 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import {
+  useFormerMembersRead,
+  useWorkspaceMembersRead,
+} from "@luke/panel/tasks/use-workspace-members";
 import { type Actor, accountActor, creatorActor, personActor } from "@luke/ui/actor-model";
 import { createContext, type ReactNode, useCallback, useContext } from "react";
-import { useFormerMembersRead, useWorkspaceMembersRead } from "./tasks/use-workspace-members";
 import { useAppState } from "./use-app-state";
 
 /**

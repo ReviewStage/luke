@@ -14,6 +14,7 @@ import {
 import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
+import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
 import { createTask, listTasks, readTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
@@ -36,6 +37,7 @@ import {
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
+import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
@@ -82,6 +84,7 @@ import {
   START_CODING_AGENT_REFUSAL,
   STOP_AGENT_REFUSAL,
 } from "../coding-agent-tools.js";
+import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
@@ -2172,5 +2175,99 @@ test("read_page reads a page a teammate showed on another task of the caller's w
   assert.deepEqual(await call(CODER_TOOL.READ_PAGE, { pageId: shown.id, version: 0 }), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: READ_PAGE_REFUSAL.UNREADABLE,
+  });
+});
+
+test("create_section, move_task, and delete_section keep the caller's starter's own sidebar sections of its workspace, as list_tasks then names them and the Mac reads them, once under the call's key, and reach no section or task of another workspace", async () => {
+  const { workspaceId, elsewhere, plans: taskIds, agents } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const sectionsOf = async (userId: string, inWorkspace: string) => {
+    const kept = await database.run(listTaskSections(userId));
+    const sections = kept.sections.filter((section) => section.workspaceId === inWorkspace);
+    const ids = new Set(sections.map((section) => section.id));
+    return { sections, entries: kept.entries.filter((entry) => ids.has(entry.sectionId)) };
+  };
+
+  const made = await call(CODER_TOOL.CREATE_SECTION, { title: " Growth ", emoji: "🚀" }, "call-1");
+  assert.equal(made.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(made));
+  assert.ok(isRecord(made.section) && isWireString(made.section.id));
+  const growth = made.section.id;
+  assert.equal(made.section.title, "Growth");
+  // The same call run again names the section it made, as it was made, and makes no second one.
+  assert.deepEqual(await call(CODER_TOOL.CREATE_SECTION, { title: "Billing" }, "call-1"), made);
+  const kept = await sectionsOf(caller.userId, workspaceId);
+  assert.deepEqual(
+    kept.sections.map((section) => [section.id, section.title, section.icon]),
+    [[growth, "Growth", { kind: "emoji", emoji: "🚀" }]],
+  );
+  assert.deepEqual(await call(CODER_TOOL.CREATE_SECTION, { title: "  " }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: TASK_SECTION_TOOL_REFUSAL.UNREADABLE_CREATE,
+  });
+
+  // A teammate's task moves into it, which list_tasks then names, and the teammate's own sidebar wears nothing.
+  const moved = await call(CODER_TOOL.MOVE_TASK, { taskId: taskIds.billing, sectionId: growth });
+  assert.deepEqual(moved, {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    task: { id: taskIds.billing, name: "Billing" },
+    section: { id: growth, title: "Growth" },
+  });
+  const listed = await call(CODER_TOOL.LIST_TASKS, {});
+  assert.deepEqual(listed.sections, [{ id: growth, title: "Growth" }]);
+  assert.ok(Array.isArray(listed.tasks));
+  assert.deepEqual(
+    Object.fromEntries(
+      listed.tasks.flatMap((task) => (isRecord(task) ? [[task.id, task.sectionId]] : [])),
+    ),
+    { [taskIds.billing]: growth, [taskIds.invitations]: null },
+  );
+  assert.deepEqual((await sectionsOf(teammates.userId, workspaceId)).sections, []);
+
+  // A section or a task of another workspace the starter is also in is none of the caller's.
+  const theirs = randomUUID();
+  const madeElsewhere = await database.run(
+    writeTaskSections(caller.userId, {
+      kind: TASK_SECTION_WRITE.CREATE,
+      id: theirs,
+      workspaceId: elsewhere,
+      title: "Elsewhere",
+    }),
+  );
+  assert.ok(Option.isSome(madeElsewhere));
+  assert.deepEqual(
+    await call(CODER_TOOL.MOVE_TASK, { taskId: taskIds.invitations, sectionId: theirs }),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: TASK_SECTION_TOOL_REFUSAL.NO_SECTION },
+  );
+  assert.deepEqual(
+    await call(CODER_TOOL.MOVE_TASK, { taskId: taskIds.elsewhere, sectionId: growth }),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: TASK_SECTION_TOOL_REFUSAL.NO_TASK },
+  );
+  assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: theirs }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: TASK_SECTION_TOOL_REFUSAL.NO_SECTION,
+  });
+  assert.deepEqual((await call(CODER_TOOL.LIST_TASKS, {})).sections, [
+    { id: growth, title: "Growth" },
+  ]);
+  assert.equal((await sectionsOf(caller.userId, elsewhere)).sections.length, 1);
+
+  // Moved out with no section named, it stands under Tasks again; moved back in, a delete puts it there too.
+  const out = await call(CODER_TOOL.MOVE_TASK, { taskId: taskIds.billing });
+  assert.equal(out.section, null, JSON.stringify(out));
+  assert.deepEqual((await sectionsOf(caller.userId, workspaceId)).entries, []);
+  await call(CODER_TOOL.MOVE_TASK, { taskId: taskIds.billing, sectionId: growth });
+  assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: growth }), {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    section: { id: growth, title: "Growth" },
+    tasksBackUnderTasks: 1,
+  });
+  assert.deepEqual(await sectionsOf(caller.userId, workspaceId), { sections: [], entries: [] });
+  const stillThere = await database.run(readTask(teammates.userId, taskIds.billing));
+  assert.ok(Option.isSome(stillThere), "deleting a section deletes none of its tasks");
+  assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: growth }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: TASK_SECTION_TOOL_REFUSAL.NO_SECTION,
   });
 });

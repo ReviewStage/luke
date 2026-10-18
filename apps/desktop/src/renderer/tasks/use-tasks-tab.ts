@@ -28,6 +28,9 @@ import {
   type AppInboxTasklessItem,
   RUN_PROFILE,
 } from "@luke/host/app-state";
+import type { ActHandle } from "@luke/panel/act";
+import { appPlatform } from "@luke/panel/app-platform";
+import { useInboxPages } from "@luke/panel/tasks/use-inbox-pages";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { callCard } from "@luke/ui/call-card-model";
@@ -115,8 +118,6 @@ import {
 import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ActHandle } from "../act";
-import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { useChosenWorkspace } from "../desktop/chosen-workspace";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
@@ -142,7 +143,6 @@ import {
 } from "./tasks-fixture";
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
-import { useInboxPages } from "./use-inbox-pages";
 import { useLastTask } from "./use-last-task";
 import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs";
 import { usePanelArrivals } from "./use-panel-arrivals";
@@ -167,7 +167,7 @@ import {
 } from "./use-side-panel";
 import { useWorkspaceChat } from "./use-workspace-chat";
 import { sayRestored } from "./version-view";
-import { agentListCallIds, newTaskCallIds, workerCallIds, workRowsOf } from "./work-model";
+import { agentListCallIds, sidebarCallIds, workerCallIds, workRowsOf } from "./work-model";
 
 /** A change to the sections drawn before the service answered it, and when it was asked. */
 interface PendingSectionWrite {
@@ -1319,20 +1319,20 @@ export function useTasksTab(input: {
     startsSeen.current = { taskId, ids: new Set(startedByLuke) };
     if (landed) readAgents();
   }, [startedByLuke, viewed.activeTaskId, readAgents]);
-  // A start of Luke's that made a new task adds it to the sidebar only once the tasks are read
-  // again, as one lands in the work of the task it was made on.
-  const newTasksByLuke = useMemo(() => newTaskCallIds(viewed.conversation), [viewed.conversation]);
-  const newTasksSeen = useRef<{ taskId: string | undefined; ids: ReadonlySet<string> }>({
+  // A call of Luke's that made a new task, or made, deleted, or filled a section, changes the
+  // sidebar only once the tasks are read again, as one lands in the work of the task it was made on.
+  const sidebarByLuke = useMemo(() => sidebarCallIds(viewed.conversation), [viewed.conversation]);
+  const sidebarSeen = useRef<{ taskId: string | undefined; ids: ReadonlySet<string> }>({
     taskId: undefined,
     ids: new Set(),
   });
   useEffect(() => {
-    const seen = newTasksSeen.current;
+    const seen = sidebarSeen.current;
     const taskId = viewed.activeTaskId;
-    const landed = seen.taskId === taskId && newTasksByLuke.some((callId) => !seen.ids.has(callId));
-    newTasksSeen.current = { taskId, ids: new Set(newTasksByLuke) };
+    const landed = seen.taskId === taskId && sidebarByLuke.some((callId) => !seen.ids.has(callId));
+    sidebarSeen.current = { taskId, ids: new Set(sidebarByLuke) };
     if (landed) tell(ACT_KIND.TASKS_REFRESH);
-  }, [newTasksByLuke, viewed.activeTaskId, tell]);
+  }, [sidebarByLuke, viewed.activeTaskId, tell]);
   // A file's tab is held to the files Luke showed on the task the same way.
   const files = useMemo(
     () => shownFiles(viewed.shownCode ?? []).map((ref) => ref.path),

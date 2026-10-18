@@ -36,6 +36,7 @@ import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
+import { appBridge } from "@luke/panel/app-bridge";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -63,7 +64,6 @@ import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
-import { appBridge } from "../app-bridge";
 import { runAppCommand, useAppKeymap } from "../app-commands";
 import { DRAFT_WORD } from "../draft-mark";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab";
@@ -4140,8 +4140,13 @@ test("a row swiped right marks its item: a long swipe marks an unread item read 
     DOMRect.fromRect({ width: 300, height: 56 }),
   );
   Object.assign(item, { setPointerCapture: () => undefined });
+  // Note that every event is stamped at one instant, since the swipe reads the hand's speed off the stamps and jsdom's come off the wall clock; never at 0, which React replaces with the wall clock's.
   const at = (type: string, x: number) =>
-    new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: 10, pointerId: 1 });
+    Object.defineProperty(
+      new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: 10, pointerId: 1 }),
+      "timeStamp",
+      { value: 1 },
+    );
   const swipe = (to: number) =>
     act(() => {
       const press = rowNamed(page, retry);

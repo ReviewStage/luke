@@ -7,8 +7,8 @@ import {
 } from "@luke/features/issue-view";
 import type { Issue } from "@luke/features/issue-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAct } from "../act";
 import { useMinute } from "../tasks/task-time";
 
 /**

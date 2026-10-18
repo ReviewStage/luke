@@ -17,6 +17,7 @@ import {
   type PullRequestActionRequest,
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { Badge, CHIP_LOOK, Chip, ChipName, ErrorState, useMenu } from "@luke/ui";
 import {
   CheckIcon,
@@ -27,7 +28,6 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-import { useAct } from "../act";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { useGitHubConnection } from "../github-connect";
 import { Tooltip } from "../tooltip";

@@ -1,5 +1,6 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { CodeToken, TaskCode, TaskCodeShowing } from "@luke/features/tasks-view";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { cssCustomProperties, IconButton } from "@luke/ui";
 import {
   type CodeFeedCall,
@@ -23,7 +24,6 @@ import { Tooltip } from "../tooltip";
 import { CallCheckpoint, CallEnded } from "./call-card";
 import { FileRef } from "./file-ref";
 import { useMentionLink } from "./task-mentions";
-import { useOpenLink } from "./use-open-link";
 
 /**
  * code-pane.tsx -- the code Luke put on screen on a task's calls: the side panel's Code tab, every snippet he showed, one card each, in the order he showed them.

@@ -10,8 +10,8 @@ import {
   PULL_REQUEST_WRITE_OUTCOME,
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "../act";
 import type { ViewedMarks } from "./changes-list";
 import { noteOf, type WriteNote } from "./pull-request-writes";
 
