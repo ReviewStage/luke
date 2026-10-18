@@ -38,17 +38,19 @@ export const SITE_EVENT = {
 export type SiteEvent = (typeof SITE_EVENT)[keyof typeof SITE_EVENT];
 
 /**
- * The pages of the OAuth sign-in flow. Their address carries the desktop's
- * signed authorization request — the state, the PKCE challenge, the redirect,
- * the expiry, and the signature — which is a live credential the funnel never
- * needs to count. So no half of this file may keep their address whole: the
- * recorder does not run on them (`disable_session_recording` below), and a
- * counted event's every address is cut to its path before it leaves
- * (`sanitizeAnalyticsUrls`).
+ * The pages of the OAuth sign-in flow, and the hand-off that follows it. Their
+ * address carries the desktop's signed authorization request — the state, the
+ * PKCE challenge, the redirect, the expiry, and the signature — or the Mac's
+ * own state, challenge, and loopback for its session, each a live step of a
+ * credential the funnel never needs to count. So no half of this file may
+ * keep their address whole: the recorder does not run on them
+ * (`disable_session_recording` below), and a counted event's every address is
+ * cut to its path before it leaves (`sanitizeAnalyticsUrls`).
  */
 const AUTH_PATH = {
   SIGN_IN: "/sign-in.html",
   CONSENT: "/consent.html",
+  DESKTOP_SESSION: "/desktop-session.html",
 } as const;
 
 const AUTH_PATHS: ReadonlySet<string> = new Set(Object.values(AUTH_PATH));
@@ -84,9 +86,27 @@ const AUTH_PARAMS: ReadonlySet<string> = new Set(Object.values(AUTH_PARAM));
 /** The library's console-log capture, which a project can switch on whatever `init` says. */
 const LOGS_SCRIPT = "/logs.js";
 
+/**
+ * Where the browser keeps the id of the last Better Auth session it counted a
+ * sign-in for, so a sign-in that passes more than one page that would count
+ * it (consent, where it is shown, then the desktop's hand-off) is counted once.
+ */
+const COUNTED_SESSION_KEY = "luke_site_sign_in_session";
+
 /** Whether the page now loading is one the sign-in flow's address serves. */
 function onAuthPage(): boolean {
   return AUTH_PATHS.has(window.location.pathname);
+}
+
+/** Whether this browser already counted a sign-in for `sessionId`, marking it counted if not. */
+function firstCountOf(sessionId: string): boolean {
+  try {
+    if (window.localStorage.getItem(COUNTED_SESSION_KEY) === sessionId) return false;
+    window.localStorage.setItem(COUNTED_SESSION_KEY, sessionId);
+  } catch {
+    // Storage refused: count it, since a double count beats none.
+  }
+  return true;
 }
 
 /**
@@ -193,8 +213,9 @@ export function startSiteAnalytics(): void {
       capture_pageleave: false,
       // Visitors stay personless until they sign in, which is both cheaper
       // and the honest shape: an anonymous visitor is not a person Luke
-      // knows. The identify at consent is what links their earlier page views
-      // to the account, so no aliasing is needed.
+      // knows. The identify where a sign-in completes (`completeSiteSignIn`)
+      // is what links their earlier page views to the account, so no aliasing
+      // is needed.
       person_profiles: "identified_only",
       // Autocapture's own two: an event says what was clicked and where, never
       // the words on it. Recording is configured separately below, because
@@ -205,6 +226,12 @@ export function startSiteAnalytics(): void {
       // recorder never runs on its pages, and no event or recording on any
       // page keeps a credential in an address.
       disable_session_recording: onAuthPage(),
+      // A sign-in page leaves for the desktop the moment its sign-in is
+      // counted, and the library gzips an unbatched event, the identify among
+      // them, on a promise before it posts it, which a page that has already
+      // left never gets to. Uncompressed, the post starts within the call, on a
+      // keepalive request the browser finishes after the page has gone.
+      disable_compression: onAuthPage(),
       before_send: (event) => event && sanitizeAnalyticsUrls(event),
       session_recording: {
         // The sign-in address is the only thing anybody types on this site,
@@ -272,4 +299,60 @@ export function identifySiteVisitor(userId: string, visitor: SiteVisitor = {}): 
 
 export function captureSiteEvent(event: SiteEvent): void {
   withClient((posthog) => posthog.capture(event));
+}
+
+/** What a completed sign-in left the browser holding, as Better Auth's `getSession` answers it. */
+export interface SiteSession {
+  readonly session: { readonly id: string };
+  readonly user: { readonly id: string; readonly name?: string; readonly email?: string };
+}
+
+/**
+ * How long a sign-in page may hold its hand-off for the session read the
+ * count needs, from when it starts reading (`signInCountDeadline`).
+ */
+const SIGN_IN_COUNT_DEADLINE_MS = 2_000;
+
+/**
+ * The deadline a sign-in page puts on its session read, as the read's own
+ * abort signal, so a read that stalls gives the sign-in up uncounted rather
+ * than holding the Mac's hand-off. Note that it is the fetch's own deadline,
+ * not a timer of this site's, which is what keeps it beside the read it bounds.
+ */
+export function signInCountDeadline(): AbortSignal {
+  return AbortSignal.timeout(SIGN_IN_COUNT_DEADLINE_MS);
+}
+
+/**
+ * Where the two halves of the funnel join: names the visitor by the account
+ * the browser just signed in as (`identifySiteVisitor`) and counts
+ * `site:sign_in_complete`, once per Better Auth session however many pages of
+ * the flow call it.
+ *
+ * It waits for the session (`signedIn`, which the caller starts reading
+ * beside its own work under `signInCountDeadline`), so a read that answers
+ * just after the caller's own work still counts, and one that stalls ends at
+ * the deadline, uncounted, because a sign-in page hands off to the desktop
+ * the moment this resolves. The client is waited for too: it is this site's
+ * own script, started as the page loaded, and loads or fails without reaching
+ * PostHog.
+ *
+ * Resolves once both have been handed to the browser to send, so the caller
+ * may leave the page on the next line. Note that the client is shut down to
+ * get there, because the library otherwise batches an event for a few
+ * seconds and flushes on unload, and a sign-in page leaves at once for the
+ * desktop's loopback; its shutdown sends what is queued as a beacon, which
+ * the browser delivers after the page has gone.
+ */
+export async function completeSiteSignIn(
+  signedIn: Promise<SiteSession | null | undefined>,
+): Promise<void> {
+  const posthog = await client?.catch(() => undefined);
+  if (!posthog) return;
+  const account = await signedIn.catch(() => undefined);
+  if (!account) return;
+  const { id, name, email } = account.user;
+  posthog.identify(id, { name, email });
+  if (firstCountOf(account.session.id)) posthog.capture(SITE_EVENT.SIGN_IN_COMPLETE);
+  await posthog.shutdown();
 }

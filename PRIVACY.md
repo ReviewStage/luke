@@ -1250,9 +1250,13 @@ sign-in or a link put there, and cuts a sign-in page's address to the page
 itself. It collects nothing else, whatever our PostHog project's settings
 say: no errors, nothing from your browser's console, no network requests,
 no page or network timings, no heatmaps, no chat widget, surveys, or product
-tours, and no feature flags. When you finish signing in, the site names you
-to PostHog by your account's id, name, and email address, which links your
-earlier visits to your account. Your browser contacts PostHog directly, so
+tours, and no feature flags. When you finish signing in, on the page that
+hands the sign-in back to Luke on your Mac, or on the consent page where one
+is shown, the site names you to PostHog by your account's id, name, and
+email address, which links your earlier visits to your account, and counts
+the sign-in once, remembering in your browser which sign-in it last counted.
+The hand-off page is one of the sign-in pages above: not recorded, its
+address cut to the page itself. Your browser contacts PostHog directly, so
 PostHog sees your network address, as it does for the app's recordings.
 
 A link to something in Luke, pasted into Slack, iMessage, or anywhere else
