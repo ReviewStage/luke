@@ -363,7 +363,9 @@ body,
 }
 
 /* A workspace's tile: a square of its hue with its first letter as its text,
-   at a row's glyph size. A loaded picture drops the hue (`data-hue`) and the
+   at a row's glyph size. Note that its corner is a share of its edge, so it
+   reads as one shape at every size, squarer than a person's square face
+   (`@luke/ui`'s Avatar) and never mistaken for a person's circle. A loaded picture drops the hue (`data-hue`) and the
    letter, so the square has no fill of its own and a transparent photo shows
    the surface it sits on. */
 .workspace-tile {
@@ -372,7 +374,7 @@ body,
   height: var(--luke-menu-glyph);
   flex: 0 0 auto;
   place-items: center;
-  border-radius: var(--luke-radius-6);
+  border-radius: 25%;
   color: var(--luke-color-on-identity);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
@@ -427,14 +429,12 @@ body,
 .workspace-tile[data-size="inline"] {
   width: 14px;
   height: 14px;
-  border-radius: var(--luke-radius-6);
   font-size: var(--luke-type-caption-size);
 }
 
 .workspace-tile[data-size="head"] {
   width: 32px;
   height: 32px;
-  border-radius: var(--luke-radius-8);
   font-size: var(--luke-type-dialog-size);
 }
 
@@ -1507,11 +1507,12 @@ ul.actor-stack {
 }
 
 /* An owner's picture stands in a glyph's slot (`repository-picture.tsx`): the
-   slot sizes it, and its corners are rounded and edged so a logo drawn on
-   white does not bleed into the ground around it. */
+   slot sizes it, and its corners are rounded, a share of its edge as a
+   workspace's tile's are, and edged so a logo drawn on white does not bleed
+   into the ground around it. */
 .repository-picture {
   flex: 0 0 auto;
-  border-radius: var(--luke-radius-6);
+  border-radius: 25%;
   outline: 1px solid var(--luke-color-border);
   outline-offset: -1px; /* off-scale */
   object-fit: cover;
@@ -7211,7 +7212,6 @@ body:has(.app-stage[data-capture="true"])
 .home-row-picture .repository-picture {
   width: 16px;
   height: 16px;
-  border-radius: var(--luke-radius-6);
 }
 
 /* A person's page (`person-page.tsx`): Home's column, headed by their face
