@@ -3,7 +3,15 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
-import { CallIcon, EmptyState, ERROR_STATE_PLACEMENT, ErrorState, RetryRowLabel } from "@luke/ui";
+import {
+  CallIcon,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  RetryRowLabel,
+  TEXT_BUTTON_LINES,
+  TextButton,
+} from "@luke/ui";
 import { LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
   type CallTurn,
@@ -129,7 +137,7 @@ function hasWork(message: CodingAgentMessage): boolean {
  * rather than asking again on its own.
  */
 function EarlierWork({ onLoad }: { onLoad: () => Promise<void> }): React.JSX.Element {
-  const row = useRef<HTMLButtonElement>(null);
+  const row = useRef<HTMLParagraphElement>(null);
   const [read, setRead] = useState<EarlierRead>(EARLIER_READ.IDLE);
   const load = useRef(() => {
     setRead(EARLIER_READ.READING);
@@ -148,21 +156,22 @@ function EarlierWork({ onLoad }: { onLoad: () => Promise<void> }): React.JSX.Ele
   }, [read]);
 
   return (
-    <button
-      ref={row}
-      type="button"
-      className="ai-trigger m-0 text-[11.5px] text-muted-foreground"
-      disabled={read === EARLIER_READ.READING}
-      onClick={() => load.current()}
-    >
-      <BusyLabel busy={read === EARLIER_READ.READING} label="Loading earlier work">
-        {read === EARLIER_READ.FAILED ? (
-          <RetryRowLabel failure={EARLIER_LINE[EARLIER_READ.FAILED]} />
-        ) : (
-          EARLIER_LINE[EARLIER_READ.IDLE]
-        )}
-      </BusyLabel>
-    </button>
+    <p ref={row} className="task-call-earlier">
+      <TextButton
+        lines={TEXT_BUTTON_LINES.TWO}
+        onClick={() => {
+          if (read !== EARLIER_READ.READING) load.current();
+        }}
+      >
+        <BusyLabel busy={read === EARLIER_READ.READING} label="Loading earlier work">
+          {read === EARLIER_READ.FAILED ? (
+            <RetryRowLabel failure={EARLIER_LINE[EARLIER_READ.FAILED]} />
+          ) : (
+            EARLIER_LINE[EARLIER_READ.IDLE]
+          )}
+        </BusyLabel>
+      </TextButton>
+    </p>
   );
 }
 

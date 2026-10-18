@@ -14,6 +14,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { appPlatform } from "@luke/panel/app-platform";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
+  Button,
   CopyIcon,
   DownloadIcon,
   EmptyState,
@@ -22,6 +23,7 @@ import {
   HoverCard,
   HoverCardHead,
   HoverCardNote,
+  IconButton,
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
@@ -400,14 +402,11 @@ function SourceToggle({
   const label = source ? LIST_WORDS.SHOW_IMAGE : LIST_WORDS.SHOW_SOURCE;
   return (
     <Tooltip label={label}>
-      <button
-        type="button"
-        className="icon-button diff-list-source"
-        aria-label={label}
+      <IconButton
+        icon={source ? <ImageIcon aria-hidden="true" /> : <CodeIcon aria-hidden="true" />}
+        label={label}
         onClick={onToggle}
-      >
-        {source ? <ImageIcon aria-hidden="true" /> : <CodeIcon aria-hidden="true" />}
-      </button>
+      />
     </Tooltip>
   );
 }
@@ -440,19 +439,18 @@ function FoldAllButton({ list }: { list: ChangesList }): React.JSX.Element {
   const label = list.allCollapsed ? LIST_WORDS.EXPAND_ALL : LIST_WORDS.COLLAPSE_ALL;
   return (
     <Tooltip label={label} chord={FOLD_CHORD.ALL}>
-      <button
-        type="button"
-        className="icon-button"
-        aria-label={label}
+      <IconButton
+        icon={
+          list.allCollapsed ? (
+            <ChevronsUpDownIcon aria-hidden="true" />
+          ) : (
+            <ChevronsDownUpIcon aria-hidden="true" />
+          )
+        }
+        label={label}
         disabled={list.kept.length === 0}
         onClick={list.toggleAll}
-      >
-        {list.allCollapsed ? (
-          <ChevronsUpDownIcon aria-hidden="true" />
-        ) : (
-          <ChevronsDownUpIcon aria-hidden="true" />
-        )}
-      </button>
+      />
     </Tooltip>
   );
 }
@@ -484,9 +482,7 @@ function FilesList({
           <p className="m-0">
             {LIST_WORDS.FILTERED} “<bdi>{query}</bdi>”
           </p>
-          <button type="button" className="toolbar-button" onClick={() => list.onQuery("")}>
-            {LIST_WORDS.CLEAR_FILTER}
-          </button>
+          <Button onClick={() => list.onQuery("")}>{LIST_WORDS.CLEAR_FILTER}</Button>
         </div>
       )}
       {list.kept.length === 0 ? (

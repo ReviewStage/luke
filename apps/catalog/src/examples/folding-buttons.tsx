@@ -1,6 +1,9 @@
 import {
+  BUTTON_SHAPE,
+  BUTTON_SIZE,
   BUTTON_VARIANT,
   ComposeIcon,
+  ExternalIcon,
   FoldingButton,
   type FoldingButtonHint,
   GAP,
@@ -8,6 +11,7 @@ import {
   PlusIcon,
   Stack,
   TooltipPill,
+  UpdateIcon,
 } from "@luke/ui";
 import { cloneElement, useId, useState } from "react";
 import type { Example } from "../examples";
@@ -15,8 +19,9 @@ import { CatalogSection } from "../section";
 
 /**
  * folding-buttons.tsx -- a toolbar's folding buttons with their words drawn,
- * folded to their glyphs, busy either way, and in a toolbar that folds them
- * once it is narrower than 360px, which its corner resizes. Folded, each
+ * folded to their glyphs, busy either way, round in the tinted looks a
+ * release's presses wear, and in a toolbar that folds them once it is
+ * narrower than 360px, which its corner resizes. Folded, each
  * raises its words in a pill while the pointer rests on it or the keyboard
  * reaches it: the catalog's own stand-in for the timing an app gives its
  * hints.
@@ -60,6 +65,30 @@ function Acts({ busy = false }: { busy?: boolean }): React.JSX.Element {
   );
 }
 
+/** A release's presses: Restart on the working wash, and Download on the danger wash, round and compact. */
+function Tinted(): React.JSX.Element {
+  return (
+    <Inline gap={GAP.CONTROL}>
+      <FoldingButton
+        label="Restart"
+        icon={<UpdateIcon />}
+        variant={BUTTON_VARIANT.WORKING_TINT}
+        shape={BUTTON_SHAPE.ROUND}
+        size={BUTTON_SIZE.COMPACT}
+        hint={Hint}
+      />
+      <FoldingButton
+        label="Download"
+        icon={<ExternalIcon />}
+        variant={BUTTON_VARIANT.DANGER_TINT}
+        shape={BUTTON_SHAPE.ROUND}
+        size={BUTTON_SIZE.COMPACT}
+        hint={Hint}
+      />
+    </Inline>
+  );
+}
+
 function FoldingButtons(): React.JSX.Element {
   return (
     <>
@@ -76,6 +105,14 @@ function FoldingButtons(): React.JSX.Element {
           <Acts busy />
           <div className="catalog-folded">
             <Acts busy />
+          </div>
+        </Stack>
+      </CatalogSection>
+      <CatalogSection id="folding-tinted" title="Round and tinted, drawn and folded">
+        <Stack gap={GAP.CONTROL}>
+          <Tinted />
+          <div className="catalog-folded">
+            <Tinted />
           </div>
         </Stack>
       </CatalogSection>

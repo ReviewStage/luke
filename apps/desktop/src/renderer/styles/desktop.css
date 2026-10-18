@@ -1562,52 +1562,16 @@ ul.actor-stack {
    urgency, so a wash rather than the accent's fill. Once installing it
    failed, the download it offers instead wears the failure's red. */
 .sidebar-update {
-  display: inline-flex;
+  display: flex;
   flex: none;
-  align-items: center;
-  gap: var(--luke-space-4);
-  height: 24px;
-  padding: 0 var(--luke-space-8);
-  border-radius: var(--luke-radius-full);
-  background: color-mix(in srgb, var(--luke-color-working) 14%, transparent);
-  color: var(--luke-color-working);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-  white-space: nowrap;
-  transition: background-color var(--duration-hover) ease;
-  -webkit-app-region: no-drag;
 }
 
-.sidebar-update:hover {
-  background: color-mix(in srgb, var(--luke-color-working) 22%, transparent);
-}
-
-.sidebar-update[data-failed="true"] {
-  background: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
-  color: var(--luke-color-danger-text);
-}
-
-.sidebar-update[data-failed="true"]:hover {
-  background: color-mix(in srgb, var(--luke-color-danger) 22%, transparent);
-}
-
-.sidebar-update svg {
-  width: 13px;
-  height: 13px;
-}
-
-/* A sidebar too narrow for the pill's word beside a name that reads draws
-   the pill as its glyph alone in a round as tall as the pill, so the name
-   keeps the room. The button's label and its hint still say what it does. */
+/* A sidebar too narrow for the pill's word beside a name that reads folds
+   the pill to its glyph alone in a round, so the name keeps the room. The
+   button's name and its hint still say what it does. */
 @container sidebar-foot (width < 220px) {
   .sidebar-update {
-    aspect-ratio: 1;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .sidebar-update-word {
-    display: none;
+    --luke-fold: folded;
   }
 }
 
@@ -1818,9 +1782,6 @@ ul.actor-stack {
 }
 
 .toolbar-button,
-.icon-button,
-.primary-button,
-.danger-button,
 .luke-button,
 .luke-chip,
 .luke-segment,
@@ -1833,178 +1794,50 @@ ul.actor-stack {
 
 /* Buttons --------------------------------------------------------------------- */
 
-/* Two buttons, drawn the way a native window's toolbar draws its own: a
-   labelled one (`.toolbar-button`) and a glyph alone in a square
-   (`.icon-button`), the title bar's expand, panel, and ⋯ buttons being the
-   first of those. Both are one control's box, corner, and glyph, with no
-   fill until the pointer is on them, and the labelled one fills with the
-   accent (`.primary-button`) for the act a place exists for, or with red
-   (`.danger-button`) for one that destroys. Every button that is not one of
-   these is a row, a tab, or a round control, and says why where it is drawn.
+/* A glyph of `@luke/ui`'s own drawn outside a button, at the control's
+   glyph size. */
+.icon-button-glyph {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: 0 0 auto;
+}
 
-   A button's hover lays the translucent fill over `--button-ground`, which is
-   nothing unless the button stands over something moving beneath it: the
-   title bar's panes, the transcript's lines. The glyph keeps its box
-   whatever the button's width, since a user-agent padding left on a button
-   is what once squeezed one narrower than the glyphs beside it. */
-.toolbar-button,
-.icon-button,
-.primary-button,
-.danger-button {
-  --button-ground: transparent;
-  /* The fill a button wears at rest, named so an unavailable one can fade it
-     rather than itself. */
-  --button-fill: transparent;
+/* The file tree's Retry, beside the words saying why it is empty
+   (`file-tree/index.ts`): a button the tree's own DOM builds, so it cannot
+   be `@luke/ui`'s, drawn as its quiet one is, in the muted voice of the
+   words it follows and lit on hover. */
+.toolbar-button {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
   gap: var(--luke-icon-gap);
   height: var(--luke-control-height);
-  padding: 0 var(--luke-space-12);
+  padding: 0 var(--luke-space-8);
   border-radius: var(--luke-control-radius);
-  background: var(--button-fill);
+  background: transparent;
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
   transition:
     background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease,
-    filter var(--duration-hover) ease;
+    color var(--duration-hover) ease;
 }
 
-.icon-button-glyph,
-.toolbar-button svg,
-.icon-button svg,
-.primary-button svg,
-.danger-button svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
+.toolbar-button svg {
+  width: 13px;
+  height: 13px;
   flex: 0 0 auto;
 }
 
-/* Square however tight its row, so only the tabs beside it give way, and
-   muted until the pointer is on it, as a toolbar's glyphs are. */
-.icon-button {
-  width: var(--luke-control-height);
-  padding: 0;
-  color: var(--luke-color-text-muted);
-}
-
-/* A state weighs a class and its pseudo-class alone, so a button that says
-   more of itself, Sign out's red hover or a muted call's tint, still wins. A
-   button whose menu is open keeps its hover for as long as the menu stands,
-   and a toggle (`aria-pressed`) is drawn on in the same fill for as long as
-   it is on: the summary's pin, the Inbox's Needs you, the file tree's
-   filter. */
-:is(.toolbar-button, .icon-button):hover:where(:not(:disabled, [aria-disabled="true"])),
-:is(.toolbar-button, .icon-button):where([aria-haspopup][aria-expanded="true"]),
-:is(.toolbar-button, .icon-button):where([aria-pressed="true"]) {
-  background: linear-gradient(var(--luke-color-fill-selected), var(--luke-color-fill-selected))
-    var(--button-ground);
+.toolbar-button:hover {
+  background: var(--luke-color-fill-selected);
   color: var(--luke-color-text);
 }
 
-:is(.toolbar-button, .icon-button):active:where(:not(:disabled, [aria-disabled="true"])) {
-  background: linear-gradient(var(--luke-color-fill-pressed), var(--luke-color-fill-pressed))
-    var(--button-ground);
-}
-
-.primary-button {
-  --button-fill: var(--luke-color-accent);
-  color: var(--luke-color-on-accent);
-}
-
-.danger-button {
-  --button-fill: var(--luke-color-danger-fill);
-  color: var(--luke-color-on-accent);
-}
-
-:is(.primary-button, .danger-button):hover:where(:not(:disabled, [aria-disabled="true"])) {
-  filter: brightness(1.1);
-}
-
-:is(.primary-button, .danger-button):active:where(:not(:disabled, [aria-disabled="true"])) {
-  filter: brightness(0.92);
-}
-
-/* Unavailable, a button fades to 45%. A disabled one is out of the tab order
-   and fades whole. One that says so with `aria-disabled` stays in it, so its
-   hover can say why, and fades its fill, its words, and its glyphs rather
-   than itself, because an opacity on the button would fade the keyboard's
-   ring (base.css) with it, and the ring is where the keyboard is. */
-:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where(:disabled) {
-  opacity: 0.45;
-}
-
-/* Its words and glyphs fade toward the window's ground, as they did when the
-   whole button faded over it, a filled button's included: faded over its
-   faded fill instead, they would fade twice. */
-:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where([aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--button-fill) 45%, transparent);
-  -webkit-text-fill-color: color-mix(in srgb, currentColor 45%, var(--surface-fill));
-}
-
-/* What it holds draws in that faded ink however it draws, words, a glyph's
-   stroke, or a wait's spinning arc, each in `currentColor`. Set on what the
-   button holds directly, so whatever is nested deeper inherits it and fades
-   once. */
-:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where([aria-disabled="true"])
-> * {
-  color: color-mix(in srgb, currentColor 45%, var(--surface-fill));
-  -webkit-text-fill-color: currentColor;
-}
-
-:is(.toolbar-button, .icon-button):where([aria-disabled="true"]) svg {
-  color: color-mix(in srgb, currentColor 45%, transparent);
-}
-
-/* A small act beside a line of words, a failure's retry
-   (`retry-button.tsx`) or a note's dismissal: a labelled toolbar button in
-   the muted voice of the words it follows, lit like any other on hover, and
-   tighter at its sides, since it stands beside words rather than in a
-   toolbar. */
-.quiet-button {
-  padding: 0 var(--luke-space-8);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* A labelled toolbar button inside a hairline, the edge Start's split button
-   draws: the act a settings row offers, which stands on a card rather than in
-   a toolbar and so needs its edge to read as a button at rest. A destructive
-   one keeps the same face and says so in red, as a destructive menu item
-   does; the red fill is the confirm dialog's alone. */
-.bordered-button {
-  border: 1px solid var(--luke-color-border);
-}
-
-.bordered-button[data-danger="true"] {
-  color: var(--luke-color-danger-text);
-}
-
-.bordered-button[data-danger="true"]:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--luke-color-danger) 12%, transparent);
-}
-
-.quiet-button svg {
-  width: 13px;
-  height: 13px;
-}
-
-/* A remedy pressed from a line of its own rather than a failure's (a
-   failure's is `@luke/ui`'s `ErrorState`): inside a hairline, at the words'
-   size, since it is the act the line is there for. */
-.failure-note-remedy {
-  height: 24px;
-  padding: 0 var(--luke-space-8);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-}
-
-.failure-note-remedy svg {
-  width: 13px;
-  height: 13px;
+.toolbar-button:active {
+  background: var(--luke-color-fill-pressed);
 }
 
 /* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
@@ -5761,19 +5594,11 @@ body:has(.app-stage[data-capture="true"])
 /* The list's foot, a row in the caption's type whose failure wraps under
    its words rather than being cut short. */
 .version-earlier {
-  margin-top: var(--luke-space-8);
+  margin: var(--luke-space-8) 0 0;
   padding: var(--luke-space-8) var(--row-inset);
-  border-radius: var(--luke-control-radius);
-  background: none;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-  text-align: left;
-}
-
-.version-earlier:hover:not(:disabled) {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
 }
 
 /* The page while a version is read (`version-view.tsx`): each section's
@@ -6526,7 +6351,7 @@ body:has(.app-stage[data-capture="true"])
   --tab-start: var(--row-inset);
   --tab-end: var(--luke-space-12);
   --tab-gap: var(--luke-icon-gap);
-  --tab-close: 20px;
+  --tab-close: var(--luke-space-24);
   --tab-close-inset: var(--luke-space-4);
   position: relative;
   display: flex;
@@ -6840,26 +6665,16 @@ body:has(.app-stage[data-capture="true"])
   width: 24ch;
 }
 
-/* The × keeps none of a button's own padding, which would leave its glyph
-   8px of the box's 20 and squeeze it narrower than every glyph beside it. */
+/* The ×, a row's compact mark, stands at the pill's end, out of the
+   label's way. */
 .tab-close {
   position: absolute;
   top: 50%;
   right: var(--tab-close-inset);
   display: flex;
-  width: var(--tab-close);
-  height: var(--tab-close);
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: var(--luke-color-text-subtle);
   opacity: 0;
   transform: translateY(-50%);
-  transition:
-    opacity var(--duration-hover) ease,
-    color var(--duration-hover) ease;
+  transition: opacity var(--duration-hover) ease;
 }
 
 .tab:hover .tab-close,
@@ -6893,18 +6708,6 @@ body:has(.app-stage[data-capture="true"])
 
 .tab[data-marked="true"]:not(:hover) .tab-close {
   opacity: 0;
-}
-
-/* Note that the × draws no ground under the pointer, because it is a glyph
-   on a pill that is already raised: only the glyph itself brightens. */
-.tab-close:hover {
-  color: var(--luke-color-text);
-}
-
-.tab-close svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: 0 0 auto;
 }
 
 /* What follows a tab's label, the Inbox's count, is muted as a model's
