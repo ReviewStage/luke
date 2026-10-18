@@ -308,13 +308,19 @@ export interface SiteSession {
 }
 
 /**
- * What `pending` has already settled to, without waiting for it: undefined
- * while it is still pending, or where it failed. Note that this reads as
- * "settled now" because `Promise.race` subscribes in order, so a promise that
- * has settled queues its answer ahead of the `undefined` beside it.
+ * How long a sign-in page may hold its hand-off for the session read the
+ * count needs, from when it starts reading (`signInCountDeadline`).
  */
-async function settledNow<Value>(pending: Promise<Value>): Promise<Value | undefined> {
-  return Promise.race([pending, undefined]).catch(() => undefined);
+const SIGN_IN_COUNT_DEADLINE_MS = 2_000;
+
+/**
+ * The deadline a sign-in page puts on its session read, as the read's own
+ * abort signal, so a read that stalls gives the sign-in up uncounted rather
+ * than holding the Mac's hand-off. Note that it is the fetch's own deadline,
+ * not a timer of this site's, which is what keeps it beside the read it bounds.
+ */
+export function signInCountDeadline(): AbortSignal {
+  return AbortSignal.timeout(SIGN_IN_COUNT_DEADLINE_MS);
 }
 
 /**
@@ -323,13 +329,13 @@ async function settledNow<Value>(pending: Promise<Value>): Promise<Value | undef
  * `site:sign_in_complete`, once per Better Auth session however many pages of
  * the flow call it.
  *
- * It waits on no request: the session (`signedIn`, which the caller starts
- * reading beside its own work) is used only where it has already arrived,
- * and the sign-in is not counted where it has not, because a sign-in page
- * hands off to the desktop the moment this resolves and a count is not worth
- * holding up the Mac's sign-in for. The client is waited for, because it is
- * this site's own script, started as the page loaded, and loads or fails
- * without reaching PostHog.
+ * It waits for the session (`signedIn`, which the caller starts reading
+ * beside its own work under `signInCountDeadline`), so a read that answers
+ * just after the caller's own work still counts, and one that stalls ends at
+ * the deadline, uncounted, because a sign-in page hands off to the desktop
+ * the moment this resolves. The client is waited for too: it is this site's
+ * own script, started as the page loaded, and loads or fails without reaching
+ * PostHog.
  *
  * Resolves once both have been handed to the browser to send, so the caller
  * may leave the page on the next line. Note that the client is shut down to
@@ -342,7 +348,7 @@ export async function completeSiteSignIn(
   signedIn: Promise<SiteSession | null | undefined>,
 ): Promise<void> {
   const posthog = await client?.catch(() => undefined);
-  const account = await settledNow(signedIn);
+  const account = await signedIn.catch(() => undefined);
   if (!posthog || !account) return;
   const { id, name, email } = account.user;
   posthog.identify(id, { name, email });

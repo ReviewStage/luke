@@ -69,12 +69,19 @@ async function sentEvents(): Promise<SentEvent[]> {
   return sent;
 }
 
-/** Whether Better Auth answers the session read at all, or leaves it hanging. */
+/** Whether Better Auth answers the session read, or leaves it hanging until its deadline. */
 let sessionAnswers = true;
 
+/** A request that never answers, failing as fetch does once its signal aborts. */
+function hanging(signal: AbortSignal | null | undefined): Promise<Response> {
+  return new Promise((_, reject) => {
+    signal?.addEventListener("abort", () => reject(signal.reason));
+  });
+}
+
 /** Better Auth's answers, by path; the analytics endpoints answer an empty object. */
-function answer(url: URL): Promise<Response> | Response {
-  if (url.pathname === SESSION_PATH && !sessionAnswers) return new Promise(() => undefined);
+function answer(url: URL, signal: AbortSignal | null | undefined): Promise<Response> | Response {
+  if (url.pathname === SESSION_PATH && !sessionAnswers) return hanging(signal);
   if (url.pathname === TRANSFER_PATH) {
     return Response.json({ electron_authorization_code: "code-for-the-mac" });
   }
@@ -84,8 +91,8 @@ function answer(url: URL): Promise<Response> | Response {
   return Response.json({});
 }
 
-/** The hand-off page as the Mac opens it, run until it leaves for the loopback. */
-async function openHandOff(): Promise<void> {
+/** The hand-off page as the Mac opens it, loaded but not yet run to its end. */
+async function loadHandOff(): Promise<void> {
   window.history.replaceState(
     null,
     "",
@@ -102,6 +109,11 @@ async function openHandOff(): Promise<void> {
   await act(async () => {
     await import("../src/desktop-session");
   });
+}
+
+/** The hand-off page as the Mac opens it, run until it leaves for the loopback. */
+async function openHandOff(): Promise<void> {
+  await loadHandOff();
   await vi.waitFor(() => assert.ok(timeline.includes("leave")));
 }
 
@@ -117,7 +129,7 @@ beforeAll(() => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
     if (url.pathname === CAPTURE_PATH) noteSend(Promise.resolve(String(init?.body)));
-    return answer(url);
+    return answer(url, init?.signal);
   });
   // Note that jsdom does not navigate: it reports each attempt on its own
   // console, which the environment exposes as `jsdom`.
@@ -156,14 +168,44 @@ test("a sign-in finished on the hand-off is identified and counted before the pa
   expect(JSON.stringify(events)).not.toMatch(/state-from-the-mac|challenge-from-the-mac|4810/);
 });
 
-test("a hand-off whose session read has not answered goes on to the Mac uncounted", async () => {
+test("a hand-off whose session read stalls goes on to the Mac at its deadline, uncounted", async () => {
   sessionAnswers = false;
+  // The read's deadline is the clock this page reads, so the test holds it.
+  const deadline = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
 
-  await openHandOff();
+  await loadHandOff();
+  await vi.waitFor(() => expect(timeout).toHaveBeenCalled());
+  expect(timeline).not.toContain("leave");
+  deadline.abort(new DOMException("The deadline passed.", "TimeoutError"));
+  await vi.waitFor(() => assert.ok(timeline.includes("leave")));
+  timeout.mockRestore();
 
   const events = await sentEvents();
   expect(events.map((event) => event.event)).not.toContain("site:sign_in_complete");
   expect(events.map((event) => event.event)).not.toContain("$identify");
+});
+
+test("a session read that answers after the page's own work still counts", async () => {
+  window.history.replaceState(null, "", "/consent.html");
+  vi.resetModules();
+  const { completeSiteSignIn, startSiteAnalytics } = await import("../src/analytics");
+  startSiteAnalytics();
+  let answerRead: (session: { session: { id: string }; user: typeof ACCOUNT }) => void = () => {};
+  const read = new Promise<{ session: { id: string }; user: typeof ACCOUNT }>((resolve) => {
+    answerRead = resolve;
+  });
+
+  await import("posthog-js");
+
+  const counting = completeSiteSignIn(read);
+  // A turn of the event loop, so the count is already waiting on the read.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  answerRead({ session: { id: "session-late" }, user: ACCOUNT });
+  await counting;
+
+  const counted = (await sentEvents()).filter((event) => event.event === "site:sign_in_complete");
+  expect(counted).toHaveLength(1);
 });
 
 test("a session that reaches a second page that counts is counted once", async () => {

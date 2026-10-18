@@ -30,7 +30,7 @@ import { createAuthClient } from "better-auth/react";
 import { Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { completeSiteSignIn, startSiteAnalytics } from "./analytics";
+import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
 import { ProviderChoices, SIGN_IN_FAILURE, useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 
@@ -67,10 +67,10 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
     return said("This link did not come from Luke", "Return to Luke and sign in again.");
   }
   // Note that the session is read beside the transfer rather than after it,
-  // so the sign-in can be counted without the hand-off waiting on anything
-  // but the transfer (`completeSiteSignIn`).
+  // and under a deadline, so counting the sign-in adds little to the
+  // hand-off and never holds it for long (`completeSiteSignIn`).
   const signedIn = authClient
-    .getSession()
+    .getSession({ fetchOptions: { signal: signInCountDeadline() } })
     .then((answer) => answer.data)
     .catch(() => null);
   const answered = await authClient.$fetch(TRANSFER_PATH, {

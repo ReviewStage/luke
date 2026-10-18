@@ -3,7 +3,7 @@ import { AUTH_STATUS_TONE, AuthPage } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { completeSiteSignIn, startSiteAnalytics } from "./analytics";
+import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
 import { LukeMark } from "./SiteChrome";
 import "./styles.css";
 
@@ -18,7 +18,7 @@ function Consent(): React.JSX.Element {
   const [failure, setFailure] = useState(false);
   useEffect(() => {
     const signedIn = authClient
-      .getSession()
+      .getSession({ fetchOptions: { signal: signInCountDeadline() } })
       .then((answer) => answer.data)
       .catch(() => null);
     void authClient.oauth2.consent({ accept: true }).then(async (result) => {
