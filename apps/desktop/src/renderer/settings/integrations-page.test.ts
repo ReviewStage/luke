@@ -28,7 +28,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { runAppCommand } from "../app-commands";
@@ -158,6 +158,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
+  vi.restoreAllMocks();
 });
 
 /** What the service answers an act the page sends, where the bridge answers it at all. */
@@ -1027,6 +1028,38 @@ test("the arrows, Home, and End move the tool an opened row holds, its page foll
     ),
     [-1, 0, -1],
   );
+});
+
+test("the arrows scroll an opened row's tool list, and only it, to keep the held tool in view", async () => {
+  connectVercelAndLinear();
+  const page = await mount();
+  openRow(page, "Vercel");
+  const list =
+    page.querySelector<HTMLElement>(".integration-tools-list") ?? assert.fail("the tool list");
+  // Note that jsdom lays nothing out, so the list shows one 30px row and each row stands 30px under the last, less what the list has scrolled.
+  const ROW = 30;
+  const rows = () => [...list.querySelectorAll<HTMLElement>('ul[aria-label$=" tools"] > li')];
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this === list ? ROW : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(ROW);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const at = rows().indexOf(this);
+    return new DOMRect(0, at < 0 ? 0 : at * ROW - list.scrollTop, 200, ROW);
+  });
+  act(() =>
+    page.querySelector<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')?.focus(),
+  );
+
+  keyAtFocus("ArrowDown");
+  keyAtFocus("ArrowDown");
+  assert.equal(list.scrollTop, 2 * ROW, "the third tool's row stands in the list's view");
+  keyAtFocus("Home");
+  assert.equal(list.scrollTop, 0, "the first tool's row stands in view again");
 });
 
 test("Return hands the focus to the held tool's page, and Escape or Left hands it back to its row, never leaving the page", async () => {
