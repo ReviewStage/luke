@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { Tooltip } from "./tooltip";
+import { onRegistry } from "./testing/copy-feedback.js";
+import { Tooltip } from "./tooltip.js";
 
 /**
  * tooltip.test.ts -- a card hung beside a row that names its row hangs past
