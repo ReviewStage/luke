@@ -2,7 +2,11 @@ import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
 import { BUTTON_VARIANT, Button } from "@luke/ui";
 import { useState } from "react";
 import { MarkdownField } from "./markdown-field";
-import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes";
+import {
+  PullRequestWriteNote,
+  type PullRequestWrites,
+  usePullRequestWrites,
+} from "./pull-request-writes";
 
 /**
  * pull-request-comment-box.tsx -- the comment box at the foot of an agent's pull request's Conversation, as GitHub's own: a new comment on the pull request itself, in Markdown.
@@ -13,7 +17,10 @@ import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-wri
  * its words go and the tab reads the conversation again, so the comment
  * stands in it; GitHub's refusal stands under the box in its own words,
  * with the sign-in offered where GitHub would not take the member's, and
- * the words written stay for another try.
+ * the words written stay for another try. The words are held by the tab
+ * (`usePullRequestComment`) rather than the box, so a read of the
+ * conversation that fails, which takes the box away until Retry, loses
+ * nothing written.
  */
 
 /** The box's own words. */
@@ -25,13 +32,27 @@ const COMMENT_WORDS = {
   SENDING: "Commenting",
 } as const;
 
+/** The comment being written, held for as long as the tab stands, and its own change. */
+export interface PullRequestComment {
+  readonly writes: PullRequestWrites;
+  readonly body: string;
+  readonly setBody: (body: string) => void;
+}
+
+/** The comment box's words and change, for the tab to hold across the box coming and going. */
+export function usePullRequestComment(agentId: string, onWritten: () => void): PullRequestComment {
+  const writes = usePullRequestWrites(agentId, onWritten);
+  const [body, setBody] = useState("");
+  return { writes, body, setBody };
+}
+
 /** The box: its heading, the words with their preview, GitHub's answer where it did not take the last one, and Comment, which ⌘↩ presses too. */
 export function PullRequestCommentBox({
-  writes,
+  comment,
 }: {
-  writes: PullRequestWrites;
+  comment: PullRequestComment;
 }): React.JSX.Element {
-  const [body, setBody] = useState("");
+  const { writes, body, setBody } = comment;
   const sending = writes.pending !== undefined;
   const blank = body.trim() === "";
   const send = () => {

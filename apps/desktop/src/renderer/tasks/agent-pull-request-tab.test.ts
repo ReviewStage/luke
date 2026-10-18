@@ -2629,3 +2629,48 @@ test("a comment GitHub refuses says so under the box in GitHub's own words, its 
     "Ping?",
   );
 });
+
+test("a comment being written outlives a read of the conversation that failed, standing in the box again once Retry reads it", async () => {
+  let reads = 0;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => {
+        reads += 1;
+        return Promise.resolve(
+          reads === 2
+            ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+            : { pullRequest: CONVERSATION },
+        );
+      },
+    }),
+  );
+  writeComment(tab, "Half a thought");
+
+  const more =
+    tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
+    assert.fail("the bar has a ⋯");
+  act(() => more.click());
+  const refresh =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === "Refresh pull request",
+    ) ?? assert.fail("the ⋯ offers Refresh");
+  await act(async () => refresh.click());
+  await settle();
+  assert.equal(
+    tab.querySelector(".pull-request-comment-box"),
+    null,
+    "the failed read takes it away",
+  );
+
+  const retry =
+    [...tab.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Retry",
+    ) ?? assert.fail("the failed conversation offers Retry");
+  await act(async () => retry.click());
+  await settle();
+
+  assert.equal(
+    tab.querySelector<HTMLTextAreaElement>(".pull-request-comment-box textarea")?.value,
+    "Half a thought",
+  );
+});

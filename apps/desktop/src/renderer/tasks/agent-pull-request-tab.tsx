@@ -91,7 +91,11 @@ import {
 import { PierreDiff, useDiffLook } from "./file-diff";
 import { useFileViewSettings } from "./file-view-settings";
 import { blockedWords, MergeActions } from "./merge-box";
-import { PullRequestCommentBox } from "./pull-request-comment-box";
+import {
+  type PullRequestComment,
+  PullRequestCommentBox,
+  usePullRequestComment,
+} from "./pull-request-comment-box";
 import { PullRequestLabels } from "./pull-request-labels";
 import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people";
 import { Reactions } from "./pull-request-reactions";
@@ -1501,8 +1505,8 @@ function ConversationView({
   agentId: string;
   parts: OverviewParts;
   url: string | undefined;
-  /** The comment box's own change, apart from the others, so it says its own answer under itself. */
-  comment: PullRequestWrites;
+  /** The comment box's words and its own change, held by the tab so the box may come and go. */
+  comment: PullRequestComment;
 }): React.JSX.Element {
   const now = useMinute();
   const picture = usePictureDrawer(agentId);
@@ -1527,7 +1531,7 @@ function ConversationView({
           now={now}
           picture={picture}
         />
-        {conversation === undefined ? null : <PullRequestCommentBox writes={comment} />}
+        {conversation === undefined ? null : <PullRequestCommentBox comment={comment} />}
       </div>
     </>
   );
@@ -1642,7 +1646,7 @@ export function AgentPullRequestTab({
   const writes = usePullRequestWrites(agentId, written);
   const review = usePullRequestWrites(agentId, written);
   const picture = usePictureDrawer(agentId);
-  const comment = usePullRequestWrites(agentId, written);
+  const comment = usePullRequestComment(agentId, written);
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
