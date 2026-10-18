@@ -121,6 +121,44 @@ test("a row held still while the sidebar scrolls beneath it lands where the scro
   assert.deepEqual(moves, [[0, 3]]);
 });
 
+test("a row held at the foot of the column that scrolls its list runs the column down, and lands where that carried it", () => {
+  const moves: [number, number][] = [];
+  const frames: FrameRequestCallback[] = [];
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((frame) => frames.push(frame));
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+  const list = drawn(6, (from, to) => moves.push([from, to]));
+  // A column 100 tall over the list's six rows, 180 of them, which scrolls 80 at most.
+  const column = list.parentElement ?? assert.fail("the list stands in a column");
+  column.style.overflowY = "auto";
+  Object.defineProperties(column, {
+    clientHeight: { value: 100 },
+    scrollHeight: { value: 6 * ROW_HEIGHT },
+    scrollTop: {
+      get: () => scrolled,
+      set: (to: number) => {
+        scrolled = Math.max(0, Math.min(80, to));
+      },
+    },
+  });
+  const laid = vi.spyOn(Element.prototype, "getBoundingClientRect");
+  const rowsLaid = laid.getMockImplementation() ?? assert.fail("the rows are laid out");
+  laid.mockImplementation(function (this: Element) {
+    return this === column ? DOMRect.fromRect({ width: 200, height: 100 }) : rowsLaid.call(this);
+  });
+  act(() => {
+    grip(list, 0).dispatchEvent(at("pointerdown", 10));
+    window.dispatchEvent(at("pointermove", 50));
+  });
+  assert.equal(scrolled, 0, "held away from the edges, the column stands still");
+  act(() => {
+    window.dispatchEvent(at("pointermove", 95));
+    for (let frame = frames.shift(); frame !== undefined; frame = frames.shift()) frame(0);
+    window.dispatchEvent(at("pointerup", 95));
+  });
+  assert.equal(scrolled, 80);
+  assert.deepEqual(moves, [[0, 5]]);
+});
+
 /** Lays out every element wearing `data-box="top height"` there, 200 wide, and every other nowhere. */
 function layOutByBoxes(): void {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
