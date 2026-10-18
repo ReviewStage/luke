@@ -1,23 +1,24 @@
 import { useAtomValue } from "@effect/atom-react";
 import { ISSUE_BOUNDS } from "@luke/features/issue-wire";
-import { planSections } from "@luke/features/plan-document";
 import { AsyncResult } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader";
 import { MarkdownMessage } from "../markdown-message";
 import { DiagramPreview } from "../plan-diagram";
-import type {
-  EditorDiagram,
-  PlanEditorHandle,
-  PlanEditorPlacement,
-  PlanEditorProps,
+import {
+  type EditorDiagram,
+  PLACEMENT_END,
+  type PlanEditorHandle,
+  type PlanEditorPlacement,
+  type PlanEditorProps,
 } from "../plan-editor/contract";
 import {
   EDITOR_LOAD_FAILED,
   editsOnClick,
   MountedPlanEditor,
   useEditorDrawings,
+  useTextRoom,
 } from "../tasks/plan-document-editor";
 import { useOpenLink } from "../tasks/use-open-link";
 
@@ -27,7 +28,10 @@ import { useOpenLink } from "../tasks/use-open-link";
  * At rest the description is drawn in the plan's read view, or a quiet line
  * asking for one where there is none; a click into its words opens the
  * plan's editor (`../plan-editor/`) in their place, the caret where the
- * click landed, and Return on the description opens it at the end. The
+ * click landed, and Return on the description opens it at the end, as does
+ * a press anywhere on the page's empty room under it; a press on the room
+ * beside it opens it on the nearest line (`useTextRoom`), and one while it
+ * is open moves its caret there. The
  * editor draws the words exactly as they were drawn, so nothing moves, and
  * writes the same Markdown: headings, lists, task items, tables, code, a
  * Mermaid block previewed as its diagram. Leaving the editor, Esc, or ⌘↩
@@ -51,11 +55,6 @@ const TOO_LONG_LINE = `The description is too long: keep it under ${ISSUE_BOUNDS
 
 /** The read view's class, which the editor's words wear too, so they stand where the drawn words stood. */
 const READ_CLASS = "plan-unit";
-
-/** The caret at the end of a description's words: the end of its last section. */
-function atEnd(description: string): PlanEditorPlacement {
-  return { section: Math.max(planSections(description).length - 1, 0) };
-}
 
 /**
  * The description in one room, open or not, so the words drawn while the
@@ -93,6 +92,7 @@ export function IssueDescription({
   const prefetchEditorBundle = usePrefetchEditorBundle();
   const openLink = useOpenLink();
   const diagrams = useEditorDrawings<EditorDiagram>();
+  const room = useRef<HTMLElement>(null);
 
   const typed = () => handle.current?.markdown() ?? drafted.current ?? description;
   const begin = (at: PlanEditorPlacement) => {
@@ -159,6 +159,15 @@ export function IssueDescription({
     }
   });
 
+  useTextRoom({
+    text: room,
+    box: () => room.current?.getBoundingClientRect(),
+    onPlace: (at) => {
+      if (!open) begin(at);
+      else handle.current?.focusAt(at);
+    },
+  });
+
   const drawn = (
     // biome-ignore lint/a11y/useSemanticElements: the description holds its words, headings and lists among them, not a form's controls, so it is no `<fieldset>`.
     <div
@@ -177,7 +186,7 @@ export function IssueDescription({
       onKeyDown={(event) => {
         if (event.key !== "Enter" || event.target !== event.currentTarget) return;
         event.preventDefault();
-        begin(atEnd(description));
+        begin(PLACEMENT_END);
       }}
     >
       {description === "" ? (
@@ -207,6 +216,7 @@ export function IssueDescription({
   // Note that the room stands open or not, so the words drawn while the bundle loads are the ones pressed.
   return (
     <section
+      ref={room}
       className={open ? "plan-document-editor ph-no-capture" : undefined}
       aria-label={editor === undefined ? undefined : "Editing the description"}
       aria-busy={open && editor === undefined ? true : undefined}

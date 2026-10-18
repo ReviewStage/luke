@@ -8,12 +8,17 @@ import { DIAGRAM_DRAWING, type DiagramModule } from "@luke/ui/diagram-contract";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "#testing/document-task";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import type { SideBundles } from "../bundle-loader";
-import type { PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
+import {
+  PLACEMENT_END,
+  type PlanEditorModule,
+  type PlanEditorPlacement,
+  type PlanEditorProps,
+} from "../plan-editor/contract";
 import { PlanBody } from "./plan-body";
 
 /**
@@ -27,14 +32,20 @@ const BODY = DOCUMENT_TASK.document.body;
 
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 
-/** Every editor the document mounted, newest last, with what it was handed and what it was asked to take. */
-const mounted: { props: PlanEditorProps; destroyed: boolean; took: [string, string][] }[] = [];
+/** Every editor the document mounted, newest last, with what it was handed, what it was asked to take, and where a press on its room put its caret. */
+const mounted: {
+  props: PlanEditorProps;
+  destroyed: boolean;
+  took: [string, string][];
+  placed: PlanEditorPlacement[];
+}[] = [];
 
 /** The stand-in for the editor's bundle: it records what it is handed and takes a merged answer whole. */
 const STAND_IN: PlanEditorModule = {
   mount: (_host, props) => {
     const took: [string, string][] = [];
-    const editor = { props, destroyed: false, took };
+    const placed: PlanEditorPlacement[] = [];
+    const editor = { props, destroyed: false, took, placed };
     mounted.push(editor);
     return {
       take: (sent, merged) => {
@@ -43,6 +54,9 @@ const STAND_IN: PlanEditorModule = {
       },
       chooseMention: () => undefined,
       markdown: () => props.markdown,
+      focusAt: (placement) => {
+        placed.push(placement);
+      },
       insertPictures: () => undefined,
       settlePicture: () => undefined,
       removePicture: () => undefined,
@@ -87,6 +101,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   mounted.length = 0;
@@ -326,22 +341,83 @@ test("a press on the name in a section's byline opens no editor, while a press o
   assert.equal(open().markdown, BODY);
 });
 
-test("a click on the panel's empty room opens an empty plan's text with the caret at its start, and opens nothing on a plan with text", () => {
-  const { container, render } = mount();
-  const scroller =
+/** Where the text's words stand in the window, as a laid-out page draws them: from 100 to 300 down, and 50 to 650 across. */
+function layTextOut(): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ x: 50, y: 100, width: 600, height: 200 }),
+  );
+}
+
+/** A press on `target` at the point given, as the pointer's button goes down and comes up; answers whether the press was taken. */
+function pressAt(target: Element, x: number, y: number): boolean {
+  const down = new MouseEvent("mousedown", {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+  });
+  act(() => {
+    target.dispatchEvent(down);
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y }));
+  });
+  return down.defaultPrevented;
+}
+
+function scrollerOf(container: HTMLElement): HTMLElement {
+  return (
     container.querySelector<HTMLElement>(".plan-document-scroll") ??
-    assert.fail("the document scrolls");
+    assert.fail("the document scrolls")
+  );
+}
 
-  act(() => scroller.click());
-  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
-  assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
-
+test("a press anywhere on an empty plan's room opens its text with the caret in it, taking the press", () => {
+  layTextOut();
+  const { container, render } = mount();
   render({ ...DOCUMENT_TASK, document: { body: "", assumptions: [] } });
-  act(() => scroller.click());
+  const scroller = scrollerOf(container);
+  const body = container.querySelector(".plan-body") ?? assert.fail("the body");
 
+  const taken = pressAt(scroller, 300, 900);
+
+  assert.ok(taken, "the press is the text's, so nothing else takes the keyboard");
   assert.equal(open().markdown, "");
-  assert.equal(open().placement, undefined, "the caret at the text's start");
+  assert.deepEqual(open().placement, PLACEMENT_END);
   assert.equal(title(container).textContent, DOCUMENT_NAME, "the title stays over the text");
+  assert.ok(body.contains(container.querySelector(".plan-document-editor")));
+});
+
+test("a press on a plan's room under its text opens it at the end, beside it on the nearest line, and above it nowhere", () => {
+  layTextOut();
+  const under = mount();
+  pressAt(scrollerOf(under.container), 300, 500);
+  const atEnd = open().placement;
+  under.unmount();
+
+  const beside = mount();
+  pressAt(scrollerOf(beside.container), 10, 180);
+  const onLine = open().placement;
+  beside.unmount();
+
+  const above = mount();
+  const taken = pressAt(scrollerOf(above.container), 300, 40);
+
+  assert.deepEqual(atEnd, PLACEMENT_END);
+  assert.deepEqual(onLine, { x: 51, y: 180 }, "the nearest line, at the text's own edge");
+  assert.ok(!taken, "a press above the text is not the text's");
+  assert.ok(above.container.querySelector(".plan-document-editor") === null, "no editor opened");
+});
+
+test("a press on the room while the text is open moves its caret there and keeps the editor open", () => {
+  layTextOut();
+  const { container } = mount();
+  act(() => block(container, "Goal").click());
+  const editor = mounted.at(-1) ?? assert.fail("an editor");
+
+  const taken = pressAt(scrollerOf(container), 300, 500);
+
+  assert.ok(taken, "the press keeps the keyboard in the editor");
+  assert.deepEqual(editor.placed, [PLACEMENT_END]);
+  assert.ok(!editor.destroyed, "the editor stays open");
 });
 
 test("words handed over and not yet saved are sent when the developer leaves the plan", async () => {

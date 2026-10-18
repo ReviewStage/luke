@@ -33,6 +33,8 @@ import {
   DocumentBlock,
   EditableTitle,
   PlanDocumentEditor,
+  textBoxOf,
+  useTextRoom,
 } from "./plan-document-editor";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
 import { RelativeTime } from "./relative-time";
@@ -434,19 +436,6 @@ const SCROLL_INTENT_EVENTS = ["wheel", "pointerdown", "keydown"] as const;
 /** The class of the column the title and the text stand in. */
 const BODY_CLASS = "plan-body";
 
-/**
- * Whether a click in the document's scroller landed on its empty room: the
- * scroller itself, or the column around the title, rather than on anything
- * drawn in it, and with no selection made by the press.
- */
-function landsOnEmptyRoom(event: React.MouseEvent<HTMLElement>): boolean {
-  const { target, currentTarget } = event;
-  const selection = window.getSelection();
-  if (selection !== null && !selection.isCollapsed) return false;
-  if (target === currentTarget) return true;
-  return target instanceof Element && target.classList.contains(BODY_CLASS);
-}
-
 function opened(task: Task): Chase {
   const { body } = task.document;
   return {
@@ -750,9 +739,10 @@ function DocumentUnit({
  * revision of the save it names. With `onEdit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the task's
  * name through `onDraftName` as they are typed; without them the document is
- * drawn read-only. An editable plan with no text yet opens it, the caret at
- * its start, from a click anywhere on the panel's empty room, since it has no
- * section to click into. With `page` the document is drawn as a Settings page,
+ * drawn read-only. An editable plan opens its text from a press on the
+ * panel's empty room, as a document editor's page does (`useTextRoom`): at
+ * the end under its last line, or anywhere where it has no text yet, and on
+ * the nearest line beside it. With `page` the document is drawn as a Settings page,
  * as the plan template is: the page's actions end the title's line, and the
  * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
  * looked, which the task's region keeps (`use-task-looks.ts`); without them
@@ -807,6 +797,17 @@ export function PlanBody({
     onShowHistory,
   };
   const scroller = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  // A press on the document's empty room opens its text there, at its end
+  // where it lands under the last line, or anywhere on a plan with no text
+  // yet, which has no section to click into; the open editor's own room
+  // moves its caret (`PlanDocumentEditor`).
+  useTextRoom({
+    text: body,
+    box: () => textBoxOf(body.current),
+    room: scroller,
+    onPlace: editable && editing.editor === undefined ? editing.open : undefined,
+  });
   // How many times Rename was chosen from the title's ⋯, each putting the caret in the title.
   const [renaming, setRenaming] = useState(0);
   const anchors = sectionAnchors(views.map((view) => view.heading));
@@ -978,9 +979,6 @@ export function PlanBody({
       <EditedLine edit={edited} place={place} onShowHistory={onShowHistory} />
     );
   const titled = editable && onRename !== undefined;
-  // An editable plan with no text yet has no section to click into, so a
-  // click on the panel's empty room opens the text with the caret at its start.
-  const blank = editable && editing.editor === undefined && task.document.body.trim() === "";
   const titleMenu =
     linked === undefined || page !== undefined ? null : (
       <TitleMenu
@@ -998,21 +996,9 @@ export function PlanBody({
       text={task.document.body}
       sectionNote={(heading) => pictureNoteOf(marks, heading)}
     >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: the click is the pointer's way into an empty plan; the keyboard's is the title's Return or ↓. */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard reaches the text through the title, which Tab enters. */}
-      <div
-        ref={scroller}
-        className="plan-document-scroll scroll-fade"
-        onClick={
-          blank
-            ? (event) => {
-                if (landsOnEmptyRoom(event)) editing.open();
-              }
-            : undefined
-        }
-      >
+      <div ref={scroller} className="plan-document-scroll scroll-fade">
         {page === undefined ? null : <ChangedLine looks={looks} marks={marks} />}
-        <div className={BODY_CLASS}>
+        <div ref={body} className={BODY_CLASS}>
           {titled ? (
             attributed(
               // Keyed by the plan, so words typed for one are saved to it as another opens.
@@ -1056,6 +1042,7 @@ export function PlanBody({
               drawn={sections}
               hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
               mentions={mentionDoors}
+              scroller={scroller}
             />
           )}
         </div>
