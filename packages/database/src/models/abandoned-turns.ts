@@ -271,8 +271,10 @@ export interface EndedSessionOptions {
  * relay's own end, so a turn that ended between the read and the write
  * keeps its own end and a repeat of the same end settles nothing again.
  * The turns are read a bounded batch at a time until a batch comes back
- * short or settles nothing, the second guarding against a batch whose turns
- * all ended meanwhile being read again for ever.
+ * short: a turn that ended meanwhile, by this call or another writer, drops
+ * out of the next read. A batch holding only turns already read, which a
+ * write the writer refused leaves open, ends the reads too, so they never
+ * go round for ever.
  */
 export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSession")(function* (
   writer: Pick<StoreWriter, "consume">,
@@ -281,10 +283,12 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
 ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
   const limit = options.limit ?? TURN_ABANDON.LIMIT;
   let settled = 0;
+  const read = new Set<string>();
   for (;;) {
     const lost = yield* endedSessionTurns({ runtimeSessionId, limit });
-    let settledNow = 0;
+    if (lost.every((turn) => read.has(turn.id))) return settled;
     for (const { cancelRequestedAt, ...turn } of lost) {
+      read.add(turn.id);
       const written = yield* settledLost(
         writer,
         turn,
@@ -293,9 +297,8 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
           : { status: BRAIN_REQUEST_STATUS.CANCELLED },
         options.now,
       );
-      if (written) settledNow += 1;
+      if (written) settled += 1;
     }
-    settled += settledNow;
-    if (lost.length < limit || settledNow === 0) return settled;
+    if (lost.length < limit) return settled;
   }
 });
