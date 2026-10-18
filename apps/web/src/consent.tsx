@@ -17,6 +17,10 @@ const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 function Consent(): React.JSX.Element {
   const [failure, setFailure] = useState(false);
   useEffect(() => {
+    const signedIn = authClient
+      .getSession()
+      .then((answer) => answer.data)
+      .catch(() => null);
     void authClient.oauth2.consent({ accept: true }).then(async (result) => {
       if (result.error) {
         setFailure(true);
@@ -25,7 +29,7 @@ function Consent(): React.JSX.Element {
       // Note that the desktop's client skips this page, so its hand-off
       // (`desktop-session.tsx`) is where a sign-in is usually counted; one
       // that passes both is counted once, by its session.
-      await completeSiteSignIn(async () => (await authClient.getSession()).data);
+      await completeSiteSignIn(signedIn);
     });
   }, []);
   return (

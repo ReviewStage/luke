@@ -308,11 +308,28 @@ export interface SiteSession {
 }
 
 /**
+ * What `pending` has already settled to, without waiting for it: undefined
+ * while it is still pending, or where it failed. Note that this reads as
+ * "settled now" because `Promise.race` subscribes in order, so a promise that
+ * has settled queues its answer ahead of the `undefined` beside it.
+ */
+async function settledNow<Value>(pending: Promise<Value>): Promise<Value | undefined> {
+  return Promise.race([pending, undefined]).catch(() => undefined);
+}
+
+/**
  * Where the two halves of the funnel join: names the visitor by the account
  * the browser just signed in as (`identifySiteVisitor`) and counts
  * `site:sign_in_complete`, once per Better Auth session however many pages of
- * the flow call it. The session is read through `readSession` only once the
- * client has loaded, so a build that counts nothing asks for nothing.
+ * the flow call it.
+ *
+ * It waits on no request: the session (`signedIn`, which the caller starts
+ * reading beside its own work) is used only where it has already arrived,
+ * and the sign-in is not counted where it has not, because a sign-in page
+ * hands off to the desktop the moment this resolves and a count is not worth
+ * holding up the Mac's sign-in for. The client is waited for, because it is
+ * this site's own script, started as the page loaded, and loads or fails
+ * without reaching PostHog.
  *
  * Resolves once both have been handed to the browser to send, so the caller
  * may leave the page on the next line. Note that the client is shut down to
@@ -322,14 +339,13 @@ export interface SiteSession {
  * the browser delivers after the page has gone.
  */
 export async function completeSiteSignIn(
-  readSession: () => Promise<SiteSession | null | undefined>,
+  signedIn: Promise<SiteSession | null | undefined>,
 ): Promise<void> {
   const posthog = await client?.catch(() => undefined);
-  if (!posthog) return;
-  const signedIn = await readSession().catch(() => undefined);
-  if (!signedIn) return;
-  const { id, name, email } = signedIn.user;
+  const account = await settledNow(signedIn);
+  if (!posthog || !account) return;
+  const { id, name, email } = account.user;
   posthog.identify(id, { name, email });
-  if (firstCountOf(signedIn.session.id)) posthog.capture(SITE_EVENT.SIGN_IN_COMPLETE);
+  if (firstCountOf(account.session.id)) posthog.capture(SITE_EVENT.SIGN_IN_COMPLETE);
   await posthog.shutdown();
 }

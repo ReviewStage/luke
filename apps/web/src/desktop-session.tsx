@@ -66,6 +66,13 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
   if (query === undefined) {
     return said("This link did not come from Luke", "Return to Luke and sign in again.");
   }
+  // Note that the session is read beside the transfer rather than after it,
+  // so the sign-in can be counted without the hand-off waiting on anything
+  // but the transfer (`completeSiteSignIn`).
+  const signedIn = authClient
+    .getSession()
+    .then((answer) => answer.data)
+    .catch(() => null);
   const answered = await authClient.$fetch(TRANSFER_PATH, {
     method: "POST",
     query: { ...query.transfer },
@@ -85,7 +92,7 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
   // the desktop's client skips consent and this is the one page of the flow
   // that runs on the session a sign-in just made; a count that fails never
   // stands between the Mac and its session.
-  await completeSiteSignIn(async () => (await authClient.getSession()).data).catch(() => undefined);
+  await completeSiteSignIn(signedIn).catch(() => undefined);
   window.location.replace(desktopSessionReturnUrl(query.returnTo, code, query.transfer.state));
   return WORKING;
 }

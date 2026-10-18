@@ -69,8 +69,12 @@ async function sentEvents(): Promise<SentEvent[]> {
   return sent;
 }
 
+/** Whether Better Auth answers the session read at all, or leaves it hanging. */
+let sessionAnswers = true;
+
 /** Better Auth's answers, by path; the analytics endpoints answer an empty object. */
-function answer(url: URL): Response {
+function answer(url: URL): Promise<Response> | Response {
+  if (url.pathname === SESSION_PATH && !sessionAnswers) return new Promise(() => undefined);
   if (url.pathname === TRANSFER_PATH) {
     return Response.json({ electron_authorization_code: "code-for-the-mac" });
   }
@@ -126,6 +130,7 @@ beforeEach(() => {
   timeline.length = 0;
   sent.length = 0;
   reading.length = 0;
+  sessionAnswers = true;
   window.localStorage.clear();
 });
 
@@ -151,12 +156,22 @@ test("a sign-in finished on the hand-off is identified and counted before the pa
   expect(JSON.stringify(events)).not.toMatch(/state-from-the-mac|challenge-from-the-mac|4810/);
 });
 
+test("a hand-off whose session read has not answered goes on to the Mac uncounted", async () => {
+  sessionAnswers = false;
+
+  await openHandOff();
+
+  const events = await sentEvents();
+  expect(events.map((event) => event.event)).not.toContain("site:sign_in_complete");
+  expect(events.map((event) => event.event)).not.toContain("$identify");
+});
+
 test("a session that reaches a second page that counts is counted once", async () => {
   window.history.replaceState(null, "", "/consent.html");
   vi.resetModules();
   const { completeSiteSignIn, startSiteAnalytics } = await import("../src/analytics");
   startSiteAnalytics();
-  const signedIn = (id: string) => async () => ({ session: { id }, user: ACCOUNT });
+  const signedIn = (id: string) => Promise.resolve({ session: { id }, user: ACCOUNT });
 
   await completeSiteSignIn(signedIn("session-a"));
   await completeSiteSignIn(signedIn("session-a"));
