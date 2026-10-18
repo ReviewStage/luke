@@ -1,7 +1,7 @@
 import {
+  Building2Icon,
   CastleIcon,
   CloudSunIcon,
-  Building2Icon,
   FlaskConicalIcon,
   type LucideIcon,
   SatelliteIcon,
