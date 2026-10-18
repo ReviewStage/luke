@@ -2,7 +2,8 @@
  * error-state.test.ts -- a failure is one alert saying its sentence and its
  * Retry; Retry is a button the keyboard can stand on and a press of it
  * tries again; a failure with no Retry says its sentence alone; the glyph
- * that marks it as a fault says nothing to a reader.
+ * that marks it as a fault says nothing to a reader; a row that is itself
+ * the retry says its failure as an alert and is named by it and Retry.
  */
 
 // @vitest-environment jsdom
@@ -10,7 +11,7 @@
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { ERROR_STATE_PLACEMENT, ErrorState } from "./error-state.js";
+import { ERROR_STATE_PLACEMENT, ErrorState, RetryRowLabel } from "./error-state.js";
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -84,3 +85,25 @@ for (const placement of Object.values(ERROR_STATE_PLACEMENT)) {
     expect(alert.textContent).toBe(LINE);
   });
 }
+
+test("a row that is itself the retry says its failure as an alert, is named by it and Retry, and its press tries again", () => {
+  const failure = "Could not read older versions.";
+  const pressed: string[] = [];
+  const alert = mountAlert(
+    createElement(
+      "button",
+      { type: "button", onClick: () => pressed.push("retry") },
+      createElement(RetryRowLabel, { failure }),
+    ),
+  );
+  expect(alert.textContent).toBe(failure);
+  const row = alert.closest("button");
+  expect(row?.textContent).toBe(`${failure} Retry`);
+  expect(
+    [...(row?.querySelectorAll("svg") ?? [])].every(
+      (glyph) => glyph.getAttribute("aria-hidden") === "true",
+    ),
+  ).toBe(true);
+  act(() => row?.click());
+  expect(pressed).toEqual(["retry"]);
+});

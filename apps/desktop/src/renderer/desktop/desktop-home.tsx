@@ -5,6 +5,8 @@ import {
   Button,
   ErrorState,
   FolderIcon,
+  List,
+  ListRow,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -43,9 +45,8 @@ import { useRowKeys } from "./use-row-keys";
  * greeting with New task beside it, then Inbox, every open Inbox item of the
  * workspace listed, a teammate's agent's among them, as the Inbox's own row draws it, the
  * task it is about after its title, a press opening the Inbox on it; then
- * Recent, the tasks of the workspace listed saved latest, each as the
- * sidebar draws a task, with its repository after its name, a press opening
- * it. Nothing waiting says so in the Inbox's own words. An account with no plan
+ * Recent, the tasks of the workspace listed saved latest, each a `ListRow`
+ * with its repository at its end before its time, a press opening it. Nothing waiting says so in the Inbox's own words. An account with no plan
  * yet in any workspace is welcomed instead: Luke's face, one line of what he does, and New
  * task. Nothing here names the sidebar, which may be folded away.
  *
@@ -89,7 +90,7 @@ function NewTaskButton({ tasks: plans }: { tasks: TasksControl }): React.JSX.Ele
   );
 }
 
-/** A plan as the sidebar draws it, its repository after its name: the owner's picture, the name, the repository, and its mark and time, led by its creator's face where a teammate created it. */
+/** A plan as a `ListRow`: the owner's picture, the name, and at its end the repository, its creator's face where a teammate created it, and its mark and time. */
 export function RecentRow({
   task: plan,
   pictures,
@@ -107,31 +108,32 @@ export function RecentRow({
   const teammate = teammateCreator(plan, useMemberDirectory());
   const creator = face ? teammate : undefined;
   return (
-    <li className="sidebar-task-item home-row">
-      <button type="button" className="sidebar-task" onClick={onOpen}>
-        <span className="sidebar-task-line">
-          <span className="home-row-picture">
-            {plan.repository === null ? (
-              <FolderIcon />
-            ) : (
-              <RepositoryPicture
-                repository={plan.repository}
-                pictures={pictures}
-                fallback={<FolderIcon />}
-              />
-            )}
-          </span>
-          <span className="sidebar-task-name">{plan.name}</span>
+    <ListRow
+      leading={
+        <span className="home-row-picture">
+          {plan.repository === null ? (
+            <FolderIcon />
+          ) : (
+            <RepositoryPicture
+              repository={plan.repository}
+              pictures={pictures}
+              fallback={<FolderIcon />}
+            />
+          )}
+        </span>
+      }
+      title={plan.name}
+      meta={
+        <span className="home-row-meta">
           <span className="home-row-context">{plan.repository ?? "No repository"}</span>
           {creator === undefined ? null : <CreatorHeard actor={creator} />}
-          <span className="sidebar-task-time">
-            {creator === undefined ? null : <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />}
-            <TaskStatusMark task={plan} />
-            <RelativeTime at={taskTime(plan, TASK_ORDER.UPDATED)} now={now} />
-          </span>
+          {creator === undefined ? null : <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />}
+          <TaskStatusMark task={plan} />
+          <RelativeTime at={taskTime(plan, TASK_ORDER.UPDATED)} now={now} />
         </span>
-      </button>
-    </li>
+      }
+      onPress={onOpen}
+    />
   );
 }
 
@@ -221,7 +223,7 @@ function HomeRecent({
         </div>
       ) : null}
       {recent.length === 0 ? null : (
-        <ul className="sidebar-tasks">
+        <List label="Recent">
           {recent.map((plan) => (
             <RecentRow
               key={plan.id}
@@ -231,7 +233,7 @@ function HomeRecent({
               onOpen={() => plans.onSelect(plan.id)}
             />
           ))}
-        </ul>
+        </List>
       )}
     </section>
   );

@@ -1,0 +1,32 @@
+name: Warm the pnpm store cache
+
+# setup-node keeps the pnpm store under a key of the runner's OS and
+# architecture and the hash of `pnpm-lock.yaml`, and saves it only when that
+# key missed. A cache is restored on its own branch or the default branch, so
+# a store saved on `main` is one every pull request and merge-group run
+# restores, rather than each saving its own. This saves it there: on a push
+# that changes the lockfile, the one file in the key, and weekly, because
+# GitHub evicts a cache no run has read in seven days.
+on:
+  push:
+    branches: [main]
+    paths: [pnpm-lock.yaml]
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  warm:
+    name: Warm the pnpm store
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
