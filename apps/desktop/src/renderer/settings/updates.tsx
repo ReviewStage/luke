@@ -6,6 +6,7 @@ import {
   Button,
   CheckIcon,
   ExternalIcon,
+  Progress,
   SettingsRow,
   SettingsSection,
 } from "@luke/ui";
@@ -95,11 +96,8 @@ export function UpdatesSection({
               row.failed ? undefined : (
                 <>
                   {row.detail}
-                  {row.progress === undefined ? null : (
-                    <span className="update-progress" aria-hidden="true">
-                      <span style={{ width: `${row.progress}%` }} />
-                    </span>
-                  )}
+                  {/* Note that the bar is the picture of the detail's numbers, so it says nothing to a reader. */}
+                  {row.progress === undefined ? null : <Progress value={row.progress} />}
                 </>
               )
             }

@@ -9,13 +9,13 @@ import {
   type TerminalsAnswer,
 } from "@luke/features/terminal-wire";
 import {
-  ACTIONS_SHOWN,
   CloseIcon,
   ConfirmDialog,
   ErrorState,
   IconButton,
   InlineEdit,
   LIST_DENSITY,
+  LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   List,
   ListRow,
@@ -213,7 +213,7 @@ function ShellRow({
         current={shown ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={renaming ? undefined : () => session.onChoose(shell.id)}
         onContextMenu={renaming ? undefined : menu.contextMenu(row)}
-        actionsShown={ACTIONS_SHOWN.ON_HOVER}
+        actionsAt={LIST_ROW_ACTIONS.HOVER}
         menuOpen={menu.open !== undefined}
         actions={
           renaming ? null : (

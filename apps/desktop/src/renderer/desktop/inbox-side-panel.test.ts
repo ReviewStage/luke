@@ -31,6 +31,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
+import { useAppKeymap } from "../app-commands";
 import { OpenLinkProvider } from "../tasks/use-open-link";
 import { useSidePanel } from "../tasks/use-side-panel";
 import type { InboxChoice } from "../tasks/use-tasks-tab";
@@ -114,6 +115,7 @@ let root: Root | undefined;
 
 beforeEach(() => {
   window.localStorage.clear();
+  readMarks = [];
 });
 
 afterEach(() => {
@@ -123,8 +125,17 @@ afterEach(() => {
 });
 
 /** Answers each act as the service would for the plan, its agent, and the pull request it opened. */
+/** Every read mark the Inbox sent, in order. */
+let readMarks: string[] = [];
+
 function answer(request: Act): Promise<ActOutcome> {
   switch (request.kind) {
+    case ACT_KIND.CODING_AGENTS_INBOX_READ_STATE:
+      readMarks.push(`${request.payload.unread ? "unread" : "read"}:${request.payload.itemId}`);
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { id: request.payload.itemId, unread: request.payload.unread },
+      });
     case ACT_KIND.CODING_AGENTS_INBOX:
       // A read past the cursor is held open while nothing changes, as the service holds it.
       return request.payload.after === "0"
@@ -264,4 +275,36 @@ test("a page the item names whose plan's pages did not answer asks for them agai
   await pressChip(container, "Invite funnel");
   assert.equal(left.rereads, 1);
   assert.equal(left.links.length, 0, "the page is still the panel's to open");
+});
+
+test("U marks the Inbox's item while the Inbox holds the keys, and not while the panel beside it does", async () => {
+  function Keymap() {
+    useAppKeymap(true);
+    return null;
+  }
+  const keys = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() => keys.render(createElement(Keymap)));
+  const { container } = await inbox();
+  const pressU = () =>
+    act(() => {
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "u", bubbles: true }));
+    });
+  pressU();
+  await settle();
+  assert.deepEqual(readMarks, [`unread:${ITEM.id}`], "the Inbox holds the keys");
+
+  await pressChip(container, "invites.ts");
+  const panel = container.querySelector<HTMLElement>(".side-panel");
+  assert.ok(panel, "the panel stands beside the Inbox");
+  act(() => {
+    panel.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  });
+  pressU();
+  await settle();
+  assert.deepEqual(
+    readMarks,
+    [`unread:${ITEM.id}`],
+    "the panel holds the keys, so U is not the Inbox's",
+  );
+  act(() => keys.unmount());
 });

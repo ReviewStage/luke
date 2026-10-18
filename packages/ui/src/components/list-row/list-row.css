@@ -190,8 +190,7 @@
   /* Beside its acts, the row's press gives its end inset to the acts,
      whatever its list's variant or density set it (so this rule stays below
      theirs); acts laid over its end on hover take none of it. */
-  .luke-list-row:not([data-actions="on-hover"]):has(> .luke-list-row-actions)
-  > .luke-list-row-main {
+  .luke-list-row:not([data-actions="hover"]):has(> .luke-list-row-actions) > .luke-list-row-main {
     padding-inline-end: 0;
   }
 
@@ -228,10 +227,14 @@
     font-weight: var(--luke-weight-medium);
   }
 
-  /* What has not been seen reads in the heavier weight until it is, as a
-     mail app's unread rows do. */
+  /* What has not been seen reads in a heavier weight, and its description
+     in the body's ink, until it is, as a mail app's unread threads do. */
   .luke-list-row[data-unread="true"] .luke-list-row-title {
-    font-weight: var(--luke-weight-bold);
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  .luke-list-row[data-unread="true"] .luke-list-row-description {
+    color: var(--luke-color-text);
   }
 
   .luke-list-row-description,
@@ -303,31 +306,46 @@
     opacity: 1;
   }
 
-  /* Acts shown on hover are laid over the row's end, where its metadata
-     stands, and take no room of the row's own: they step in, and the
-     metadata steps out, while the row is reached for or its menu is open. */
-  .luke-list-row[data-actions="on-hover"] {
+  /* Acts offered to the row in hand stand over its metadata's end, at the
+     title's line where the metadata stands there, and come in while the
+     pointer rests on the row, it holds the keyboard, or its menu is open,
+     the metadata stepping aside so nothing moves. The press keeps its end inset, since
+     the acts take no room beside it. */
+  .luke-list-row[data-actions="hover"] {
     position: relative;
   }
 
-  .luke-list-row[data-actions="on-hover"] > .luke-list-row-actions {
+  .luke-list-row[data-actions="hover"] > .luke-list-row-main {
+    padding-inline-end: var(--luke-space-12);
+  }
+
+  .luke-list-row[data-actions="hover"] > .luke-list-row-actions {
     position: absolute;
     inset-block: 0;
     inset-inline-end: 0;
     opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-hover) ease;
   }
 
-  .luke-list-row[data-actions="on-hover"]:is(:hover, :has(:focus-visible), [data-menu-open="true"])
+  .luke-list-row[data-actions="hover"][data-meta="title"] > .luke-list-row-actions {
+    inset-block: var(--luke-space-8) auto;
+    height: var(--luke-type-label-leading);
+  }
+
+  .luke-list-row[data-actions="hover"]:is(:hover, :has(:focus-visible), [data-menu-open="true"])
     > .luke-list-row-actions {
     opacity: 1;
+    pointer-events: auto;
   }
 
-  .luke-list-row[data-actions="on-hover"]:has(> .luke-list-row-actions):is(
-      :hover,
-      :has(:focus-visible),
-      [data-menu-open="true"]
-    )
-    .luke-list-row-meta {
+  /* Note that a row offering no acts keeps its metadata, since nothing
+     steps in for it. */
+  .luke-list-row[data-actions="hover"]:has(> .luke-list-row-actions):is(
+    :hover,
+    :has(:focus-visible),
+    [data-menu-open="true"]
+  ) .luke-list-row-meta {
     visibility: hidden;
   }
 

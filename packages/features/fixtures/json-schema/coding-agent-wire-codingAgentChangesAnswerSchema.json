@@ -9,6 +9,12 @@
             "url": {
               "type": "string"
             },
+            "headSha": {
+              "type": "string"
+            },
+            "baseSha": {
+              "type": "string"
+            },
             "files": {
               "type": "array",
               "items": {

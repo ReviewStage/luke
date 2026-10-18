@@ -1,8 +1,8 @@
 import {
-  ACTIONS_SHOWN,
   EllipsisIcon,
   IconButton,
   LIST_DENSITY,
+  LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   LIST_VARIANT,
@@ -147,7 +147,7 @@ function ListRows(): React.JSX.Element {
               meta="2h"
               current={LIST_ROW_CURRENT.ITEM}
               onPress={() => undefined}
-              actionsShown={ACTIONS_SHOWN.ON_HOVER}
+              actionsAt={LIST_ROW_ACTIONS.HOVER}
               actions={<IconButton icon={<TrashIcon />} label="Archive Ship the release" />}
             />
             <ListRow
@@ -155,7 +155,7 @@ function ListRows(): React.JSX.Element {
               description="luke"
               meta="1d"
               onPress={() => undefined}
-              actionsShown={ACTIONS_SHOWN.ON_HOVER}
+              actionsAt={LIST_ROW_ACTIONS.HOVER}
               menuOpen
               actions={
                 <IconButton

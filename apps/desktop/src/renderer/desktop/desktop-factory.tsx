@@ -38,6 +38,7 @@ import {
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
+import { AttentionMark } from "../attention-mark";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
@@ -351,15 +352,13 @@ function FactoryRow({
               {context === undefined ? null : <span className="home-row-context">{context}</span>}
               {actor === undefined ? null : <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
               {end}
+              {waiting ? (
+                <span className="inbox-row-attention">
+                  <AttentionMark />
+                  <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+                </span>
+              ) : null}
               <RelativeTime at={at} now={now} hint={false} />
-              {/* Note that the dot's place stands on every row, so the times line up whether a row wears one or not. */}
-              <span className="inbox-row-dot-place">
-                {waiting ? (
-                  <span className="inbox-row-dot">
-                    <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
-                  </span>
-                ) : null}
-              </span>
             </span>
           }
           unread={waiting}
@@ -697,7 +696,7 @@ function Summary({ board }: { board: FactoryBoard }): React.JSX.Element {
         </Text>
       ) : (
         <span className="factory-needs">
-          <span className="inbox-row-dot factory-head-dot" aria-hidden="true" />
+          <AttentionMark />
           <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
             {`${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
           </Text>

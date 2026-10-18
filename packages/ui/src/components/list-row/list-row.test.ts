@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
 import {
-  ACTIONS_SHOWN,
+  LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_META,
   List,
@@ -469,7 +469,7 @@ test("acts shown only on hover are still met by Tab after their row, and pressed
       children: createElement(ListRow, {
         title: "zsh",
         meta: "Running",
-        actionsShown: ACTIONS_SHOWN.ON_HOVER,
+        actionsAt: LIST_ROW_ACTIONS.HOVER,
         onPress: () => heard.push("show"),
         actions: createElement(IconButton, {
           icon: glyph(),

@@ -4,7 +4,6 @@ import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-w
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  ACTIONS_SHOWN,
   ArchiveIcon,
   BUTTON_SIZE,
   ConfirmDialog,
@@ -15,6 +14,7 @@ import {
   IconButton,
   InlineEdit,
   LIST_DENSITY,
+  LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
@@ -567,7 +567,7 @@ export function SidebarTask({
                 }
           }
           onContextMenu={rename.editing ? undefined : showMenu}
-          actionsShown={ACTIONS_SHOWN.ON_HOVER}
+          actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
             rename.editing ? null : (
               <SidebarTaskMarks

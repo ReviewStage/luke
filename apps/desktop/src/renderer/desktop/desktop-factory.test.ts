@@ -26,7 +26,6 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform
 import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl } from "#testing/tasks-control";
 import { OpenFeedbackProvider } from "../open-feedback";
-import { NEEDS_YOU } from "../tasks/inbox-model";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopFactory } from "./desktop-factory";
 
@@ -174,6 +173,23 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
   return { page: container, opened, redraw, rerender };
 }
 
+/**
+ * Whether a row waits on the developer, as it reads: ` (waits)` where its
+ * name stands in the unread weight and the attention mark before its time
+ * says "Needs you", none where neither, and ` (?)` where only one stands
+ * or it wears the blue dot that now means unread, so a half-drawn mark fails
+ * every listing.
+ */
+function waitsOf(row: Element): string {
+  const weight = row.closest("li")?.getAttribute("data-unread") === "true";
+  const mark =
+    row.querySelector(".home-row-meta .attention-mark") !== null &&
+    row.querySelector(".home-row-meta .visually-hidden")?.textContent === "Needs you";
+  if (row.querySelector(".inbox-row-unread, .inbox-row-dot") !== null) return " (?)";
+  if (weight && mark) return " (waits)";
+  return weight || mark ? " (?)" : "";
+}
+
 /** A station's rows as a reader scans them: each row's words and task, and whether it waits on the developer. */
 function rows(page: HTMLElement, step: string): string[] {
   const region = page.querySelector(`section[data-step="${step}"]`);
@@ -181,7 +197,7 @@ function rows(page: HTMLElement, step: string): string[] {
   return [...region.querySelectorAll("li > button")].map((row) => {
     const words = row.querySelector(".luke-list-row-title")?.firstChild?.textContent;
     const context = row.querySelector(".home-row-context")?.textContent;
-    const waits = row.textContent?.includes(NEEDS_YOU.LABEL) === true ? " (waits)" : "";
+    const waits = waitsOf(row);
     return `${words}${context === undefined ? "" : ` · ${context}`}${waits}`;
   });
 }
@@ -213,6 +229,10 @@ test("each plan stands in its station, and what waits on the developer leads the
   assert.equal(
     page.querySelector(".factory-summary")?.textContent,
     "2 need you·1 agent working·0 shipped today",
+  );
+  assert.ok(
+    page.querySelector(".factory-needs .attention-mark"),
+    "what needs you is counted beside the attention mark",
   );
   // A draft with no agents stands nowhere; Talk holds only the task on a call.
   assert.deepEqual(rows(page, "talk"), []);

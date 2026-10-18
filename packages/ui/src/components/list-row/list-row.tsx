@@ -51,11 +51,8 @@ import { useClipped } from "../../use-clipped.js";
  * in the sidebar's quieter ink (`LIST_ROW_INK.SIDEBAR`), lifted to the
  * text's own while the row is hovered, open, unread, or its menu is open.
  *
- * A row's acts stand beside it always, or only while the pointer is on the
- * row, it holds the keyboard, or its menu is open (`ACTIONS_SHOWN.ON_HOVER`),
- * laid over its metadata's place, which steps out for them, so a column of
- * rows keeps its times until one is reached for, as a Mac's sidebar keeps
- * them. A row whose menu is open (`menuOpen`) is ringed, as Finder rings
+ * Acts offered only to the row in hand also stand while its menu is open,
+ * and a row that offers none keeps its metadata in their place. A row whose menu is open (`menuOpen`) is ringed, as Finder rings
  * the row a right-click is about, so the menu is plainly about it. A row that goes somewhere deeper wears a
  * chevron at its end (`chevron`). A row whose press must leave the focus
  * where it is, on a search field beside the list that holds the keys, keeps
@@ -70,8 +67,9 @@ import { useClipped } from "../../use-clipped.js";
  *
  * The open row is current in one of two ways (`LIST_ROW_CURRENT`): the page
  * shown beside the list, as an Inbox's item is, or the one item chosen in
- * its set. An unread row's title stands in the heavier weight until it is
- * read. A row that opens something may hang the app's hint from its press
+ * its set. An unread row's title stands in the heavier weight, and its
+ * description in the body's ink, until it is read, as a mail app's unread
+ * thread does. A row that opens something may hang the app's hint from its press
  * (`hint`), as a Button's hint hangs: the app's own tooltip, handed the
  * words to raise and the press it wraps, whose pointer and focus handlers
  * land on the press itself.
@@ -79,7 +77,11 @@ import { useClipped } from "../../use-clipped.js";
  * A row's metadata stands at its middle, or, in a list read as a mail
  * app's is (`LIST_ROW_META.TITLE`), at the end of its title's line, the
  * description running the row's whole width under both and its leading
- * mark level with the title.
+ * mark level with the title. A row's acts stand beside it, or, in a list
+ * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), over
+ * its metadata's end while the pointer rests on it or it holds the
+ * keyboard, the metadata stepping aside as a sidebar row's time does for
+ * Pin and Archive.
 
  */
 
@@ -98,6 +100,14 @@ export const LIST_ROW_META = {
 } as const;
 
 export type ListRowMeta = (typeof LIST_ROW_META)[keyof typeof LIST_ROW_META];
+
+/** When a row's acts stand: always, beside it, or over its metadata's end only while the row is in hand. */
+export const LIST_ROW_ACTIONS = {
+  ALWAYS: "always",
+  HOVER: "hover",
+} as const;
+
+export type ListRowActions = (typeof LIST_ROW_ACTIONS)[keyof typeof LIST_ROW_ACTIONS];
 
 /** What a hint hands the press it wraps: when to show and go, and what it says of the press. */
 interface ListRowHintProps {
@@ -140,14 +150,6 @@ export const LIST_ROW_INK = {
 } as const;
 
 export type ListRowInk = (typeof LIST_ROW_INK)[keyof typeof LIST_ROW_INK];
-
-/** Whether a row's acts stand beside it always, or only while it is reached for, in its metadata's place. */
-export const ACTIONS_SHOWN = {
-  ALWAYS: "always",
-  ON_HOVER: "on-hover",
-} as const;
-
-export type ActionsShown = (typeof ACTIONS_SHOWN)[keyof typeof ACTIONS_SHOWN];
 
 /** A pointer's press that leaves the focus where it is. */
 function preventFocusMove(event: MouseEvent<HTMLElement>): void {
@@ -197,13 +199,13 @@ export function ListRow({
   meta,
   metaAt = LIST_ROW_META.MIDDLE,
   actions,
+  actionsAt = LIST_ROW_ACTIONS.ALWAYS,
   onPress,
   current,
   unread,
   hint,
   density,
   ink = LIST_ROW_INK.TEXT,
-  actionsShown = ACTIONS_SHOWN.ALWAYS,
   menuOpen = false,
   chevron = false,
   keepFocus = false,
@@ -226,6 +228,8 @@ export function ListRow({
   metaAt?: ListRowMeta;
   /** The row's own acts (an IconButton, a Button), each a control beside the row's press. */
   actions?: ReactNode;
+  /** When the acts stand: always, beside the row, or over its metadata's end while the row is hovered or holds the keyboard. */
+  actionsAt?: ListRowActions;
   /** What pressing the row does; a row without one is not a control. */
   onPress?: (() => void) | undefined;
   /** How the row is the one open now, drawn and announced as current; nothing where it is not. */
@@ -238,8 +242,6 @@ export function ListRow({
   density?: ListDensity | undefined;
   /** The ink its title rests in. */
   ink?: ListRowInk | undefined;
-  /** Whether its acts stand always, or only while the row is reached for, over its metadata. */
-  actionsShown?: ActionsShown | undefined;
   /** Whether the row's own menu is open, which rings it and keeps its acts shown. */
   menuOpen?: boolean | undefined;
   /** Whether a chevron at its end says the press goes somewhere deeper. */
@@ -318,11 +320,11 @@ export function ListRow({
       ref={onPress ? undefined : ref}
       className="luke-list-row"
       data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
+      data-actions={actionsAt === LIST_ROW_ACTIONS.HOVER ? actionsAt : undefined}
       data-current={current === undefined ? undefined : "true"}
       data-unread={unread === true ? "true" : undefined}
       data-density={density}
       data-ink={ink}
-      data-actions={actionsShown}
       data-menu-open={menuOpen ? "true" : undefined}
       onContextMenu={onContextMenu}
     >

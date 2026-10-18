@@ -8,13 +8,13 @@ import type { FormerMember, Workspace, WorkspaceMember } from "@luke/features/wo
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import type { DialogConfirm } from "@luke/ui";
 import {
-  ACTIONS_SHOWN,
   BackIcon,
   BUTTON_SIZE,
   EllipsisIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
+  LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   List,
   ListRow,
@@ -252,7 +252,7 @@ function RevisionRow({
         current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={onSelect}
         onContextMenu={offered ? showMenu : undefined}
-        actionsShown={ACTIONS_SHOWN.ON_HOVER}
+        actionsAt={LIST_ROW_ACTIONS.HOVER}
         menuOpen={menu.open !== undefined}
         actions={
           offered ? (

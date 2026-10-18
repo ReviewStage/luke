@@ -195,6 +195,10 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One message of the account's on an item's thread, open or settled, under the panel's own key; the item as it then stands, its thread with the message on it, or why there is no answer. */
   CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
+  /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
+  CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
+  /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */
+  CODING_AGENTS_INBOX_READ_ALL: "codingAgents.inboxReadAll",
   /** A workspace's chat past a cursor: what a person in it sees of it, held open by the service while nothing moved. */
   CODING_AGENTS_CHAT: "codingAgents.chat",
   /** A write to a workspace's chat as the account's own member: a post, an answer to an ask, a resolve, or how far it has read; what the write came to, or why there is no answer. */

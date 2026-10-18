@@ -155,7 +155,10 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   );
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "/release");
   assert.equal(card.querySelector(".luke-hover-card-note")?.textContent, RELEASE.description);
-  assert.equal(card.querySelector(".task-card-detail")?.textContent, RELEASE.path);
+  assert.equal(
+    card.querySelector('.luke-hover-card-row[data-look="detail"]')?.textContent,
+    RELEASE.path,
+  );
   assert.equal(
     card.querySelector("button")?.textContent,
     undefined,

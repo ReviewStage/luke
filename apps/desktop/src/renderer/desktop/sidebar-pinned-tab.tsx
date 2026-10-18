@@ -1,16 +1,19 @@
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import {
-  ACTIONS_SHOWN,
   BUTTON_SIZE,
   CopyIcon,
   DocumentIcon,
+  HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
+  HoverCardList,
   HoverCardNote,
+  HoverCardRow,
   HoverCardRule,
   IconButton,
   LIST_DENSITY,
+  LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
@@ -31,7 +34,7 @@ import { RowHint, RowHintOptions, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { agentTranscriptRead } from "./main-tabs";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs";
-import { CardDetail, PullRequestLine, RepositoryDetail } from "./task-card";
+import { PullRequestLine, RepositoryDetail } from "./task-card";
 
 /**
  * sidebar-pinned-tab.tsx -- a tab of the task's columns pinned to the sidebar: its row under Pinned, its Unpin, and its menu.
@@ -226,19 +229,22 @@ function PinnedTabCard({
   return (
     <HoverCard data-pinned-tab-card="">
       <HoverCardHead glyph={tabLook(pinSubject(pin, agent)).icon} name={pin.label} />
-      <div className="task-card-rows">
-        <CardDetail glyph={<DocumentIcon />} label={task.name} onPress={onOpenTask} />
-        {repository === null ? null : (
-          <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={openGitHub} />
-        )}
-      </div>
+      <HoverCardRow
+        look={HOVER_CARD_ROW_LOOK.DETAIL}
+        glyph={<DocumentIcon />}
+        label={task.name}
+        onPress={onOpenTask}
+      />
+      {repository === null ? null : (
+        <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={openGitHub} />
+      )}
       {gone ? <HoverCardNote>{GONE_NOTE}</HoverCardNote> : null}
       {pullRequest === undefined ? null : (
         <>
           <HoverCardRule />
-          <ul className="task-card-rows" aria-label="Pull request">
+          <HoverCardList label="Pull request">
             <PullRequestLine pullRequest={pullRequest} onOpenGitHub={openGitHub} />
-          </ul>
+          </HoverCardList>
         </>
       )}
     </HoverCard>
@@ -327,7 +333,7 @@ export function SidebarPinnedTab({
             if (!gone) onOpen();
           }}
           onContextMenu={showMenu}
-          actionsShown={ACTIONS_SHOWN.ON_HOVER}
+          actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
             <Tooltip label="Unpin">
               <IconButton
