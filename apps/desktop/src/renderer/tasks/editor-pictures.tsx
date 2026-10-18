@@ -3,6 +3,7 @@ import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-att
 import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { ErrorState } from "@luke/ui";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
@@ -18,7 +19,6 @@ import type {
   PlanEditorHandle,
   PlanEditorPictures,
 } from "../plan-editor/contract";
-import { RetryButton } from "../retry-button";
 import { Spinner } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures";
@@ -32,7 +32,7 @@ import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures";
  * its caption will stand, and keeps it on the plan (`planning.pictureKeep`).
  * Kept, the picture takes its address and the text writes its line; until
  * then the text writes nothing of it. A keep that fails says so in the same
- * place, as every failure is said (`failure-note.tsx`): its sentence, then
+ * place, as every failure is said (`@luke/ui`'s `ErrorState`): its sentence, then
  * Retry and Remove. A picture of another plan pasted in is read as that
  * plan's and kept again on this one, so this plan's readers can see it.
  * Selected, a picture offers its tools: Alt text and Caption, each a field
@@ -51,7 +51,6 @@ const UPLOAD_WORDS = {
   TOO_MANY: "This plan already holds as many pictures as it can.",
   NOT_COPIED: "The picture could not be read from its plan.",
   FAILED: "The image could not be uploaded.",
-  REMOVE: "Remove",
 } as const;
 
 /** What each of a selected picture's tools is called. */
@@ -147,14 +146,13 @@ function UploadingPicture({
           <span>{UPLOAD_WORDS.SENDING}</span>
         </span>
       ) : (
-        <span className="picture-status failure-note error-message" role="alert">
-          <span className="failure-note-words">
+        <span className="picture-failure">
+          <ErrorState
+            onRetry={upload?.kind === UPLOAD.FAILED ? onRetry : undefined}
+            onRemove={onRemove}
+          >
             {upload?.kind === UPLOAD.FAILED ? upload.reason : UPLOAD_WORDS.FAILED}
-          </span>
-          {upload?.kind === UPLOAD.FAILED ? <RetryButton onRetry={onRetry} /> : null}
-          <button type="button" className="toolbar-button quiet-button" onClick={onRemove}>
-            {UPLOAD_WORDS.REMOVE}
-          </button>
+          </ErrorState>
         </span>
       )}
     </span>

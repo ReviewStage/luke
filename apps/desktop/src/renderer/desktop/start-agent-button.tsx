@@ -1,9 +1,8 @@
-import { FAILURE_REASON } from "@luke/features/failure-remedy";
+import { FAILURE_REASON, remedyLabel, retriesBesideRemedy } from "@luke/features/failure-remedy";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { ChevronDownIcon, PlayIcon } from "@luke/ui";
+import { ChevronDownIcon, ErrorState, PlayIcon } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
-import { FailureNote } from "../failure-note";
 import { BusyLabel } from "../spinner";
 import { choiceLabel } from "../tasks/coding-agent-model";
 import { ModelMenu, settledChoice } from "../tasks/model-menu";
@@ -117,17 +116,31 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
     </button>
   );
 
+  const note = start.note;
+  const remedyWords = note === undefined ? undefined : remedyLabel(note);
+  const remedy = note === undefined ? undefined : repositoryRemedy(note, () => press());
   return (
     <div className="start-agent" ref={root} data-unavailable={String(unavailable)}>
-      {start.note !== undefined ? (
+      {note !== undefined ? (
         // Start itself is the retry of a plain refusal; a repository's remedy keeps Retry
         // beside it where it is finished elsewhere, and a move presses Start again by itself.
-        <FailureNote
-          failure={start.note}
-          className="error-message"
-          onRetry={start.note.reason === FAILURE_REASON.OTHER ? undefined : () => press()}
-          onRemedy={repositoryRemedy(start.note, () => press())}
-        />
+        <div className="start-agent-note">
+          <ErrorState
+            remedy={
+              remedyWords === undefined || remedy === undefined
+                ? undefined
+                : { label: remedyWords, onClick: remedy }
+            }
+            onRetry={
+              note.reason !== FAILURE_REASON.OTHER &&
+              (remedyWords === undefined || retriesBesideRemedy(note))
+                ? () => press()
+                : undefined
+            }
+          >
+            {note.text}
+          </ErrorState>
+        </div>
       ) : null}
       <div className="start-agent-split">
         {hint !== undefined ? <Tooltip label={hint}>{main}</Tooltip> : main}

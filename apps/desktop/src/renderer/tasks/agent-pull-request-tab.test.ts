@@ -1534,7 +1534,7 @@ test("a change GitHub refused says so in GitHub's own words until dismissed, and
     tab.querySelector<HTMLElement>(".pull-request-write-note") ??
     assert.fail("the tab says GitHub refused");
   assert.equal(
-    note.querySelector(".failure-note-words")?.textContent,
+    note.querySelector("[role='alert']")?.textContent,
     "GitHub said: Pull request is in the merge queue.",
   );
   assert.ok(reads > 1, "the pull request is read again after GitHub answered");
@@ -1639,7 +1639,7 @@ test("a review GitHub refuses says so in GitHub's own words inside the panel, ne
   await submitReview(panel, "Approve");
 
   assert.equal(
-    panel.querySelector(".pull-request-review-note .failure-note-words")?.textContent,
+    panel.querySelector(".pull-request-review-note [role='alert']")?.textContent,
     "GitHub said: Review Can not approve your own pull request",
   );
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
@@ -1848,7 +1848,7 @@ test("a reply GitHub refuses says so under its thread in GitHub's own words, its
   await settle();
 
   assert.equal(
-    withId.querySelector(".pull-request-thread-note .failure-note-words")?.textContent,
+    withId.querySelector(".pull-request-thread-note [role='alert']")?.textContent,
     "GitHub said: Pull request review thread is locked",
   );
   assert.equal(withId.querySelector("textarea")?.value, "Done.");

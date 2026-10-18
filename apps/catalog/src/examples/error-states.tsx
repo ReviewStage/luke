@@ -1,7 +1,8 @@
 /**
  * error-states.tsx -- a failed read among rows with Retry beside it, one
- * alone in its region with Retry under it, one with no Retry, and long
- * words in a pane narrower than the line.
+ * alone in its region with Retry under it, one with no Retry, ones with a
+ * remedy, Remove, or Dismiss beside Retry, and long words in a pane
+ * narrower than the line.
  */
 
 import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
@@ -29,6 +30,27 @@ function ErrorStates(): React.JSX.Element {
       <CatalogSection id="error-state-alone" title="No Retry">
         <div className="catalog-frame">
           <ErrorState>This file is too large to show.</ErrorState>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="error-state-remedy" title="A remedy beside Retry">
+        <div className="catalog-frame">
+          <ErrorState remedy={{ label: "Connect GitHub", onClick: stay }} onRetry={stay}>
+            This workspace has no GitHub connected.
+          </ErrorState>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="error-state-remove" title="Retry and Remove">
+        <div className="catalog-frame">
+          <ErrorState onRetry={stay} onRemove={stay}>
+            The picture could not be uploaded.
+          </ErrorState>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="error-state-dismiss" title="A remedy and Dismiss">
+        <div className="catalog-frame">
+          <ErrorState remedy={{ label: "Sign in with GitHub", onClick: stay }} onDismiss={stay}>
+            GitHub needs you to sign in again before it takes this change.
+          </ErrorState>
         </div>
       </CatalogSection>
       <CatalogSection id="error-state-narrow" title="Narrow pane, long words">

@@ -9,10 +9,16 @@ import {
   type CodingAgentUsage,
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
+import {
+  FAILURE_REASON,
+  type Failure,
+  remedyLabel,
+  retriesBesideRemedy,
+} from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
   EllipsisIcon,
+  ErrorState,
   IconButton,
   McpIcon,
   MicrophoneIcon,
@@ -34,7 +40,6 @@ import {
 } from "../ai-elements/prompt-input";
 import { useSideBundles } from "../bundle-loader";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { FailureNote } from "../failure-note";
 import { imageFiles } from "../feedback-images";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant";
 import { useIntegrationStatuses } from "../integration-statuses";
@@ -83,7 +88,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * there are words or files, disabled while there are neither and the agent
  * is idle, and Stop while there are neither and a turn runs, which is the
  * one Stop the tab has. A message that did not go stays in the box with why under the card
- * and what mends it (`../failure-note.tsx`): Retry, which sends it again
+ * and what mends it (`@luke/ui`'s `ErrorState`): Retry, which sends it again
  * under the same key, so a send whose answer was lost reaches the agent
  * once, or, for a repository out of reach, the press its reason names
  * (`repository-remedy.tsx`), a move of the task sending it again by itself
@@ -392,6 +397,8 @@ export function AgentComposer({
           repositoryRemedy(note, () => {
             if (latest.current.note === note) latest.current.retry();
           });
+  // Note that a remedy finished where Luke cannot watch keeps Retry beside it, since the same send goes once it is done.
+  const remedyWords = note === undefined ? undefined : remedyLabel(note);
   // Note that a closed box asks for nothing, since it takes nothing.
   const placeholder = closed ? "" : followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
 
@@ -683,14 +690,23 @@ export function AgentComposer({
         </PromptInputFooter>
       </PromptInput>
       {note !== undefined ? (
-        <FailureNote
-          failure={note}
-          className="error-message agent-composer-note"
-          onRetry={retries ? composer.retry : undefined}
-          onRemedy={remedy}
-        >
+        <div className="agent-composer-note">
+          <ErrorState
+            remedy={
+              remedyWords === undefined || remedy === undefined
+                ? undefined
+                : { label: remedyWords, onClick: remedy }
+            }
+            onRetry={
+              retries && (remedyWords === undefined || retriesBesideRemedy(note))
+                ? composer.retry
+                : undefined
+            }
+          >
+            {note.text}
+          </ErrorState>
           {closed ? closedRemedy : null}
-        </FailureNote>
+        </div>
       ) : null}
     </div>
   );
