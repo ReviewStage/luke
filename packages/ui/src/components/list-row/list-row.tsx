@@ -47,14 +47,16 @@ import { useClipped } from "../../use-clipped.js";
  * (`LIST_DENSITY.DENSE`), each one line a control's height, its title in the
  * body's type with its description after it on the same line, as a Mac's
  * sidebar lists. A row standing in a list of the app's own, one whose rows
- * the app drags, takes its density itself.
+ * the app drags, takes its density itself. A sidebar's row rests its title
+ * in the sidebar's quieter ink (`LIST_ROW_INK.SIDEBAR`), lifted to the
+ * text's own while the row is hovered, open, unread, or its menu is open.
  *
  * A row's acts stand beside it always, or only while the pointer is on the
  * row, it holds the keyboard, or its menu is open (`ACTIONS_SHOWN.ON_HOVER`),
  * laid over its metadata's place, which steps out for them, so a column of
  * rows keeps its times until one is reached for, as a Mac's sidebar keeps
- * them. A row whose menu is open (`menuOpen`) stays lit as the pointer lights
- * it, so the menu is seen to be its. A row that goes somewhere deeper wears a
+ * them. A row whose menu is open (`menuOpen`) is ringed, as Finder rings
+ * the row a right-click is about, so the menu is plainly about it. A row that goes somewhere deeper wears a
  * chevron at its end (`chevron`). A row whose press must leave the focus
  * where it is, on a search field beside the list that holds the keys, keeps
  * it (`keepFocus`), as a Button does; one of a roving list, which the
@@ -117,6 +119,14 @@ export const LIST_DENSITY = {
 
 export type ListDensity = (typeof LIST_DENSITY)[keyof typeof LIST_DENSITY];
 
+/** The ink a row's title rests in: the text's own, or a sidebar's quieter one, lifted to the text's while the row is reached for, open, or unread. */
+export const LIST_ROW_INK = {
+  TEXT: "text",
+  SIDEBAR: "sidebar",
+} as const;
+
+export type ListRowInk = (typeof LIST_ROW_INK)[keyof typeof LIST_ROW_INK];
+
 /** Whether a row's acts stand beside it always, or only while it is reached for, in its metadata's place. */
 export const ACTIONS_SHOWN = {
   ALWAYS: "always",
@@ -177,6 +187,7 @@ export function ListRow({
   unread,
   hint,
   density,
+  ink = LIST_ROW_INK.TEXT,
   actionsShown = ACTIONS_SHOWN.ALWAYS,
   menuOpen = false,
   chevron = false,
@@ -208,9 +219,11 @@ export function ListRow({
   hint?: { readonly Hint: ListRowHint; readonly label: string } | undefined;
   /** Its density where it stands in a list of the app's own rather than a `List`, which sets its rows'. */
   density?: ListDensity | undefined;
+  /** The ink its title rests in. */
+  ink?: ListRowInk | undefined;
   /** Whether its acts stand always, or only while the row is reached for, over its metadata. */
   actionsShown?: ActionsShown | undefined;
-  /** Whether the row's own menu is open, which keeps it lit and its acts shown. */
+  /** Whether the row's own menu is open, which rings it and keeps its acts shown. */
   menuOpen?: boolean | undefined;
   /** Whether a chevron at its end says the press goes somewhere deeper. */
   chevron?: boolean | undefined;
@@ -279,6 +292,7 @@ export function ListRow({
       data-current={current === undefined ? undefined : "true"}
       data-unread={unread === true ? "true" : undefined}
       data-density={density}
+      data-ink={ink}
       data-actions={actionsShown}
       data-menu-open={menuOpen ? "true" : undefined}
       onContextMenu={onContextMenu}

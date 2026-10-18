@@ -1348,8 +1348,8 @@ function PinnableTask(): React.JSX.Element {
 /** The names the sidebar's Pinned section lists, none while it stands nowhere. */
 function pinnedNames(): (string | null)[] {
   const section = document.querySelector('nav[aria-label="Pinned"]');
-  return [...(section?.querySelectorAll(".sidebar-task-name") ?? [])].map(
-    (name) => name.textContent,
+  return [...(section?.querySelectorAll(".luke-list-row-title") ?? [])].map(
+    (name) => name.firstChild?.textContent,
   );
 }
 

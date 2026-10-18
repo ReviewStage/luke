@@ -198,7 +198,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
   };
   /** The sidebar's row of a task. */
   const row = (name: string) =>
-    [...container.querySelectorAll<HTMLElement>(".sidebar-task-item")].find((each) =>
+    [...container.querySelectorAll<HTMLElement>("ul > li")].find((each) =>
       each.textContent?.includes(name),
     ) ?? assert.fail(`the sidebar lists ${name}`);
   return {
@@ -440,8 +440,8 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   await settle();
   return (name: string) =>
     (
-      [...container.querySelectorAll<HTMLElement>(".sidebar-task")].find(
-        (row) => row.querySelector(".sidebar-task-name")?.textContent === name,
+      [...container.querySelectorAll<HTMLElement>("ul > li > button")].find(
+        (row) => row.querySelector(".luke-list-row-title")?.firstChild?.textContent === name,
       ) ?? assert.fail(`the sidebar lists ${name}`)
     ).querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
 }
@@ -529,7 +529,7 @@ async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVIT
   await settle();
   const pencil = `[role="img"][aria-label="${DRAFT_WORD}"]`;
   return {
-    rowDrafted: () => container.querySelector(`.sidebar-task ${pencil}`) !== null,
+    rowDrafted: () => container.querySelector(`ul > li > button ${pencil}`) !== null,
     tabDrafted: (label: string) =>
       (
         [...container.querySelectorAll<HTMLElement>(".tab")].find(
@@ -673,7 +673,7 @@ async function inboxOn(item: InboxItem) {
       await settle();
     },
     drafted: () =>
-      container.querySelector(`.sidebar-task [role="img"][aria-label="${DRAFT_WORD}"]`) !== null,
+      container.querySelector(`ul > li > button [role="img"][aria-label="${DRAFT_WORD}"]`) !== null,
     reload: () => {
       for (const each of roots.splice(0)) act(() => each.unmount());
       container.remove();

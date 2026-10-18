@@ -1549,16 +1549,19 @@ ul.actor-stack {
 /* A pinned row's transform is a drag's (use-row-drag.ts): sliding aside for
    a row dragged past it on the motion tokens, and put back home the same
    way, so reduced motion and a capture run hold it still. */
-.sidebar-tasks > .sidebar-task-item {
-  transition: transform var(--duration-fast) var(--spring-fast);
+.sidebar-tasks > li {
+  position: relative;
+  transition:
+    transform var(--duration-fast) var(--spring-fast),
+    background-color var(--duration-hover) ease;
 }
 
 /* A row being dragged is lifted over the rows it passes: the open row's fill
    made opaque on the sidebar's ground, and a shadow beneath. It follows the
    pointer frame for frame, so its own transform eases nothing. */
-.sidebar-tasks > .sidebar-task-item[data-dragging="true"] {
+.sidebar-tasks > li[data-dragging="true"] {
   z-index: 2;
-  border-radius: 9px;
+  border-radius: var(--luke-control-radius);
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
     var(--desktop-sidebar);
@@ -1763,7 +1766,7 @@ ul.actor-stack {
   background: var(--luke-color-fill-hover);
 }
 
-.sidebar-tasks > .sidebar-task-item:is([data-drop-before="true"], [data-drop-after="true"])::after {
+.sidebar-tasks > li:is([data-drop-before="true"], [data-drop-after="true"])::after {
   position: absolute;
   right: var(--row-inset);
   left: var(--row-inset);
@@ -1774,11 +1777,11 @@ ul.actor-stack {
   pointer-events: none;
 }
 
-.sidebar-tasks > .sidebar-task-item[data-drop-before="true"]::after {
+.sidebar-tasks > li[data-drop-before="true"]::after {
   top: -2px;
 }
 
-.sidebar-tasks > .sidebar-task-item[data-drop-after="true"]::after {
+.sidebar-tasks > li[data-drop-after="true"]::after {
   bottom: -2px;
 }
 
@@ -2062,19 +2065,10 @@ ul.actor-stack {
 }
 
 /* A side panel tab pinned to the sidebar, in a plan row's shape: the tab's
-   glyph and name, which fades where it is cut short as a tab's does. The
-   name always leaves its Unpin's room at the end, so showing it cuts
-   nothing more. */
-.sidebar-pinned-tab .sidebar-task-line {
-  align-items: center;
-  gap: var(--luke-space-6);
-  padding-right: var(--sidebar-plan-mark);
-}
-
+   glyph, at the slot's own size so its row stands as tall as a plan's, and
+   its name. */
 .sidebar-pinned-tab-glyph {
   display: flex;
-  flex: none;
-  color: var(--luke-color-text-muted);
 }
 
 .sidebar-pinned-tab-glyph svg {
@@ -2082,27 +2076,13 @@ ul.actor-stack {
   height: 14px;
 }
 
-/* A glyph wearing where its work stands, an agent's, keeps to the slot's
-   own size, so its row stands as tall as a plan's. */
 .sidebar-pinned-tab-glyph .state-glyph {
   --state-glyph-size: 14px;
 }
 
-.sidebar-pinned-tab-name {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.sidebar-pinned-tab-name[data-overflow="true"] {
-  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
-}
-
 /* A pin whose plan no longer holds what it opens stands dimmed, still
    answering its hover, its Unpin, and its menu. */
-.sidebar-task[aria-disabled="true"] .sidebar-task-line {
+.sidebar-pinned-tab-gone {
   opacity: 0.55;
 }
 

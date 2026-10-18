@@ -211,8 +211,8 @@ function sectionHeader(sidebar: HTMLElement, title: string): HTMLElement {
 
 /** Opens the task named `name`'s menu, then its Move to section. */
 function openMoveToSection(sidebar: HTMLElement, name: string): void {
-  const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-task")].find((each) =>
-    each.textContent?.includes(name),
+  const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
+    (each) => each.textContent?.includes(name),
   );
   assert.ok(row);
   act(() => {
@@ -233,8 +233,8 @@ function dialogButton(label: string): HTMLButtonElement {
 /** The names of the tasks drawn under the region labelled `label`. */
 function namesIn(sidebar: HTMLElement, label: string): string[] {
   const region = sidebar.querySelector(`nav[aria-label="${label}"]`);
-  return [...(region?.querySelectorAll(".sidebar-task-name") ?? [])].map(
-    (name) => name.textContent ?? "",
+  return [...(region?.querySelectorAll(".luke-list-row-title") ?? [])].map(
+    (name) => name.firstChild?.textContent ?? "",
   );
 }
 
@@ -269,8 +269,8 @@ test("a task's Move to section puts it on top of the section chosen", async () =
   handState(experimentsOn(EXPERIMENT.SECTIONS));
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
-  const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-task")].find((each) =>
-    each.textContent?.includes("Retry audit"),
+  const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
+    (each) => each.textContent?.includes("Retry audit"),
   );
   assert.ok(row);
 
@@ -430,7 +430,7 @@ interface Asked {
  * stands over its own rows and no other's.
  */
 function layOutRows(): void {
-  const slots = () => [...document.querySelectorAll(".sidebar-task-item, .sidebar-section-empty")];
+  const slots = () => [...document.querySelectorAll(".sidebar-tasks > li, .sidebar-section-empty")];
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const all = slots();
     const own = all.indexOf(this);
@@ -483,7 +483,7 @@ const pointer = (type: string, y: number) =>
 
 /** Drags the row named `name` from its middle to `y` down the column and lets it go there. */
 function drag(sidebar: HTMLElement, name: string, y: number): void {
-  const label = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-task-name")].find(
+  const label = [...sidebar.querySelectorAll<HTMLElement>(".luke-list-row-title")].find(
     (each) => each.textContent === name,
   );
   const row = label?.closest("li") ?? assert.fail(`no ${name} in the sidebar`);

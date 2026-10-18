@@ -24,11 +24,16 @@
     transition: background-color var(--duration-hover) ease;
   }
 
-  /* The pointer lights a row that opens something, and its open menu keeps
-     it lit, never past the open row's own stronger fill. */
-  .luke-list-row:has(> button.luke-list-row-main):hover:not([data-current="true"]),
-  .luke-list-row[data-menu-open="true"]:not([data-current="true"]) {
+  /* The pointer lights a row that opens something, never past the open
+     row's own stronger fill. */
+  .luke-list-row:has(> button.luke-list-row-main):hover:not([data-current="true"]) {
     background: var(--luke-color-fill-hover);
+  }
+
+  /* A row whose menu is open is ringed, the way Finder rings the row a
+     right-click is about, so the menu is plainly about it. */
+  .luke-list-row[data-menu-open="true"] {
+    box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
   }
 
   .luke-list-row[data-current="true"] {
@@ -134,6 +139,32 @@
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
     > .luke-list-row-actions {
     padding-inline-end: var(--luke-space-8);
+  }
+
+  /* An unread dense row's title steps up to the semibold, enough beside
+     the regular a dense row reads in. */
+  :is(
+    .luke-list[data-density="dense"] > .luke-list-row,
+    .luke-list-row[data-density="dense"]
+  )[data-unread="true"] .luke-list-row-title {
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  /* A sidebar's row rests its title in the sidebar's quieter ink, lifted to
+     the text's own while it is reached for, open, unread, or its menu is. */
+  .luke-list-row[data-ink="sidebar"] .luke-list-row-title {
+    color: var(--luke-color-sidebar-ink);
+    transition: color var(--duration-hover) ease;
+  }
+
+  .luke-list-row[data-ink="sidebar"]:is(
+      :hover,
+      [data-current="true"],
+      [data-unread="true"],
+      [data-menu-open="true"]
+    )
+    .luke-list-row-title {
+    color: var(--luke-color-text);
   }
 
   /* Beside its acts, the row's press gives its end inset to the acts,
