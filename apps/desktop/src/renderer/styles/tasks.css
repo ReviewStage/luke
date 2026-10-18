@@ -3403,8 +3403,8 @@ ol.transcript-list {
   gap: var(--luke-space-8);
 }
 
-/* The end line's row: the line, then Continue in new agent after its words
-   (and after the cost), centred on the line's text. Note that the line is
+/* The end line's row: the line, then Continue in new agent (or Continue
+   again) after its words, centred on the line's text. Note that the line is
    one flex item, so a failure too long to share the row takes it whole and
    the press wraps under it, never between its words; in the empty state
    the row is centred as its column is. */

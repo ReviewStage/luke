@@ -386,7 +386,7 @@ const BOX_RETIRED = "This agent has ended.";
 /** What the press that starts a new agent on another's whole transcript says. */
 export const CONTINUE_LABEL = "Continue in new agent";
 
-/** What that press says in the note of an agent already continued, beside Archive. */
+/** What that press says once another agent continued the agent, in the same place on the failed end line. */
 export const CONTINUE_AGAIN_LABEL = "Continue again";
 
 /** What the line naming the agents that continued another says before their chips. */
@@ -442,20 +442,21 @@ export function endLineContinues(status: CodingAgentStatus, endReason: FailureRe
 }
 
 /**
- * Whether the end line's row ends on Continue in new agent, after its words:
- * where the line continues the agent (`endLineContinues`), unless another
- * place offers it, so one Continue stands on screen, never two. The note
- * of a continued agent's box offers Continue again (`noted`), and a box
- * closed on an ended agent offers the press itself, carrying its words.
+ * Whether the end line's row ends on Continue, after its words: where the
+ * line continues the agent (`endLineContinues`), as Continue in new agent,
+ * and once another agent continued it as Continue again, in the same place,
+ * since the continued note that takes the box offers none. Before then, a
+ * box closed on an ended agent offers the press itself, carrying its words,
+ * so the line offers none and one Continue stands on screen.
  */
 export function endLineOffersContinue(input: {
   readonly status: CodingAgentStatus;
   readonly endReason: FailureReason;
-  /** Whether the continued note stands in the box's place. */
-  readonly noted: boolean;
+  readonly continued: boolean;
   readonly boxClosed: boolean;
 }): boolean {
-  return endLineContinues(input.status, input.endReason) && !input.noted && !input.boxClosed;
+  if (!endLineContinues(input.status, input.endReason)) return false;
+  return input.continued || !input.boxClosed;
 }
 
 /** Said beside Start when the model or effort the menu chose could not be kept as the default. */
