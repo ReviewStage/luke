@@ -4511,10 +4511,15 @@ button.integration-tool-head:hover,
   flex: 1;
 }
 
+/* A column, so a wait or a failure standing in the scene's place fills the
+   stage and centres both ways; the scene and the chrome over it are
+   absolute, and the column moves none of them. */
 .factory-world-stage {
   position: relative;
+  display: flex;
   min-height: 0;
   flex: 1;
+  flex-direction: column;
   overflow: clip;
 }
 
@@ -5261,6 +5266,17 @@ button.integration-tool-head:hover,
   min-width: 0;
   min-height: 0;
   flex-direction: column;
+}
+
+/* A chat not read yet has no rail, so what stands in its place (a wait, a
+   failure, or no chat at all) takes the whole view rather than the rail's
+   column, and in a plan's Chat tab the whole column, centred in it. */
+.chat-view > .chat-stream:only-child {
+  grid-column: 1 / -1;
+}
+
+.task-chat {
+  flex: 1;
 }
 
 .chat-head {
