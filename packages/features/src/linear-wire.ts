@@ -17,9 +17,9 @@ import { Schema as EffectSchema } from "effect";
  * as a link to it drawn in Luke's words, or a key or link pasted into New
  * task, asks for its title and state (`linearIssueIdentifierOf`,
  * `linearIssueIdentifierIn`). A plan started from one names it by its id
- * (`planCreateRequestSchema`'s `linearIssueId`), and the service reads the
+ * (`taskCreateRequestSchema`'s `linearIssueId`), and the service reads the
  * issue itself through the workspace's grant and keeps what it read on the
- * plan (`planLinearIssueSchema`), so the plan keeps it after Linear is
+ * plan (`taskLinearIssueSchema`), so the plan keeps it after Linear is
  * disconnected. No answer carries a token. The requests that name a
  * workspace are `workspace-wire.ts`'s, beside its GitHub's.
  */

@@ -92,7 +92,7 @@
   /* Note that a card's row rings inside its press, because the card's
      corner clips whatever stands past its edge. */
   .luke-list[data-variant="card"] .luke-list-row-main:focus-visible {
-    outline-offset: calc(-1 * var(--focus-ring-width, 2px));
+    outline-offset: calc(-1 * var(--luke-focus-ring-width));
   }
 
   /* A compact row keeps its words and gives up some of the room around them. */
@@ -142,6 +142,12 @@
     font-size: var(--luke-type-label-size);
     line-height: var(--luke-type-label-leading);
     font-weight: var(--luke-weight-medium);
+  }
+
+  /* What has not been seen reads in the heavier weight until it is, as a
+     mail app's unread rows do. */
+  .luke-list-row[data-unread="true"] .luke-list-row-title {
+    font-weight: var(--luke-weight-bold);
   }
 
   .luke-list-row-description,

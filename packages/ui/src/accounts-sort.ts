@@ -1,4 +1,5 @@
 import { accountLabel } from "./account-initials.js";
+import { SORT_DIRECTION, type SortDirection } from "./sort-direction.js";
 
 /**
  * The account fields both admin tables' rows carry — the shared columns'
@@ -27,14 +28,6 @@ export const ACCOUNTS_SORT_KEY = {
 } as const;
 
 export type AccountsSortKey = (typeof ACCOUNTS_SORT_KEY)[keyof typeof ACCOUNTS_SORT_KEY];
-
-/** The values `aria-sort` takes, so the state is the announcement. */
-export const SORT_DIRECTION = {
-  ASCENDING: "ascending",
-  DESCENDING: "descending",
-} as const;
-
-type SortDirection = (typeof SORT_DIRECTION)[keyof typeof SORT_DIRECTION];
 
 /** A column's first press: names read forward, counts and dates largest first. */
 const ACCOUNTS_SORT_FIRST_DIRECTION = {

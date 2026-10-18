@@ -29,6 +29,7 @@ import {
 import { useAct } from "../act";
 import { PictureBlock } from "../picture-block";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { Tooltip } from "../tooltip";
 import { useAddToPlan } from "./add-to-plan";
 import { AttachmentViewer, type ViewerAction } from "./attachment-viewer";
 
@@ -290,26 +291,27 @@ function SetTile({
     ? { flex: "0 0 auto", width: `${String(Math.round(ratio * SET_ROW_PX.MANY))}px` }
     : { flexGrow: ratio, flexBasis: `${String(Math.round(ratio * SET_ROW_PX.FEW))}px` };
   return (
-    <button
-      type="button"
-      className="picture-set-tile"
-      style={shape}
-      aria-label={`Enlarge ${words}`}
-      title={many ? words : undefined}
-      onClick={onOpen}
-    >
-      <span className="picture-set-frame" data-focus-ring="" style={{ aspectRatio: aspect }}>
-        {shown.picture === undefined ? (
-          <TileFace state={undefined} words={words} />
-        ) : (
-          <TilePicture door={door} picture={shown.picture} words={words} />
+    <Tooltip label={many ? words : undefined}>
+      <button
+        type="button"
+        className="picture-set-tile"
+        style={shape}
+        aria-label={`Enlarge ${words}`}
+        onClick={onOpen}
+      >
+        <span className="picture-set-frame" data-focus-ring="" style={{ aspectRatio: aspect }}>
+          {shown.picture === undefined ? (
+            <TileFace state={undefined} words={words} />
+          ) : (
+            <TilePicture door={door} picture={shown.picture} words={words} />
+          )}
+          {more > 0 ? <span className="picture-set-more">+{more}</span> : null}
+        </span>
+        {many || shown.caption === "" ? null : (
+          <span className="picture-set-caption">{shown.caption}</span>
         )}
-        {more > 0 ? <span className="picture-set-more">+{more}</span> : null}
-      </span>
-      {many || shown.caption === "" ? null : (
-        <span className="picture-set-caption">{shown.caption}</span>
-      )}
-    </button>
+      </button>
+    </Tooltip>
   );
 }
 

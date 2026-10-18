@@ -1,4 +1,5 @@
-import { ACCOUNTS_SORT_KEY, type AccountsSort, SORT_DIRECTION } from "@luke/ui/accounts-sort";
+import { ACCOUNTS_SORT_KEY, type AccountsSort } from "@luke/ui/accounts-sort";
+import { SORT_DIRECTION } from "@luke/ui/sort-direction";
 
 interface RememberedFlag {
   read(): boolean;

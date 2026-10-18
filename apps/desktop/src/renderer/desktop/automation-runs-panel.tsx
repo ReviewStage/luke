@@ -17,6 +17,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   LIST_DENSITY,
+  LIST_ROW_CURRENT,
   List,
   ListRow,
   ProviderMark,
@@ -139,7 +140,7 @@ function RunRow({
             {stateEndMark(state, true)}
           </span>
         }
-        current={linked}
+        current={linked ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={agent === null ? undefined : () => onOpenAgent(agent.id)}
         onContextMenu={copyLink === undefined ? undefined : menu.contextMenu(row)}
       />

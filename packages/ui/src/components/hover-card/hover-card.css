@@ -168,14 +168,14 @@
      is the card's own glyph size. */
   .luke-hover-card-row-glyph {
     display: inline-flex;
-    width: 16px; /* off-scale: a menu row's glyph footprint */
+    width: var(--luke-menu-glyph);
     flex: none;
     justify-content: center;
   }
 
   .luke-hover-card-row-glyph > svg {
-    width: 16px;
-    height: 16px;
+    width: var(--luke-menu-glyph);
+    height: var(--luke-menu-glyph);
   }
 
   .luke-hover-card-row[data-look="detail"] .luke-hover-card-row-glyph > img {
@@ -207,6 +207,6 @@
     display: flex;
     height: 22px; /* off-scale: a count's line under the rows */
     align-items: center;
-    padding-left: calc(16px + var(--luke-icon-gap));
+    padding-left: calc(var(--luke-menu-glyph) + var(--luke-icon-gap));
   }
 }

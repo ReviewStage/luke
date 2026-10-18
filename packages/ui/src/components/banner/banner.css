@@ -88,7 +88,7 @@
     padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) var(--luke-space-16);
     border: 1px solid var(--luke-color-border-strong);
     border-radius: var(--luke-dialog-radius);
-    background: var(--luke-color-surface);
+    background: var(--luke-color-well);
   }
 
   .luke-banner[data-look="card"] .luke-banner-glyph {

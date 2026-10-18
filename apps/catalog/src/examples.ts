@@ -12,6 +12,7 @@ import { CHIPS_EXAMPLE } from "./examples/chips";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { COMBOBOX_EXAMPLE } from "./examples/combobox";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
+import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
 import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
@@ -25,6 +26,7 @@ import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
+import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
 import { PROGRESS_EXAMPLE } from "./examples/progress";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
@@ -72,6 +74,7 @@ export const EXAMPLES: readonly Example[] = [
   COLLECTION_PAGE_EXAMPLE,
   COMBOBOX_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
+  DATA_TABLE_EXAMPLE,
   DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
@@ -88,6 +91,7 @@ export const EXAMPLES: readonly Example[] = [
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
   ONE_LINE_EXAMPLE,
+  PAGINATION_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
   PROGRESS_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,

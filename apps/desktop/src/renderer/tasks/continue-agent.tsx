@@ -1,6 +1,6 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
-import { BANNER_LOOK, Banner, Button, TEXT_TONE, Text } from "@luke/ui";
+import { BANNER_LOOK, Banner, BUTTON_VARIANT, Button, TEXT_TONE, Text } from "@luke/ui";
 import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { ArrowRightIcon } from "lucide-react";
 import { useState } from "react";
@@ -41,6 +41,7 @@ const CONTINUED_COPY = {
   ARCHIVE: "Archive",
   STOP: "Stop",
   STOPPING: "Stopping",
+  CONTINUING: "Continuing in new agent",
 } as const;
 
 /** What a closed box hands the press: its words and the files attached to them, and the agent's task, under which they are kept. */
@@ -110,16 +111,15 @@ export function ContinueAgent({
   if (!offers || continueAgent === undefined) return null;
   return (
     <span className="agent-continue">
-      <button
-        type="button"
-        className="toolbar-button bordered-button failure-note-remedy"
-        disabled={busy}
-        aria-busy={busy}
+      <Button
+        variant={BUTTON_VARIANT.OUTLINE}
+        icon={<ArrowRightIcon aria-hidden="true" />}
+        busy={busy}
+        busyLabel={CONTINUED_COPY.CONTINUING}
         onClick={press}
       >
-        <ArrowRightIcon aria-hidden="true" />
         {CONTINUE_LABEL}
-      </button>
+      </Button>
       {note === undefined ? null : (
         <span className="agent-continue-note" role="alert">
           {note.text}
@@ -234,13 +234,9 @@ export function ContinuedComposerNote({
                     </Button>
                   )}
                   {agent.archivedAt !== undefined ? null : (
-                    <button
-                      type="button"
-                      className="toolbar-button bordered-button failure-note-remedy"
-                      onClick={archive.action.onSelect}
-                    >
+                    <Button variant={BUTTON_VARIANT.OUTLINE} onClick={archive.action.onSelect}>
                       {CONTINUED_COPY.ARCHIVE}
-                    </button>
+                    </Button>
                   )}
                 </>
               )
