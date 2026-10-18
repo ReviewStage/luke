@@ -315,7 +315,7 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   assert.match(call?.textContent ?? "", /"filePath":"src\/invite\.ts"/u);
   assert.match(call?.textContent ?? "", /export const INVITE_DAYS = 7;/u);
 
-  press(container.querySelector("[data-replay-open]"));
+  press(container.querySelector("[data-replay-open] button"));
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: SOURCE.id }]);
   assert.deepEqual(places, []);
 });
@@ -345,7 +345,7 @@ test("a fork trimmed of its earliest steps says Forked and its steps of how many
     container.querySelector("[data-replay-card] .luke-disclosure-body")?.textContent ?? "",
     /209 earlier steps were left out to keep the replay within its size limit\./u,
   );
-  press(container.querySelector("[data-replay-open]"));
+  press(container.querySelector("[data-replay-open] button"));
   assert.deepEqual(places, [
     { kind: LINK_PLACE.MESSAGE, planId: TASK_ID, agentId: SOURCE.id, messageId: FORKED_AT },
   ]);

@@ -786,7 +786,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       writeWork({
         ...(work.length === 0 ? undefined : { work }),
         ...(workEarlier === undefined ? undefined : { workEarlier }),
-        ...(shownCode.length === 0 ? undefined : { shownCode }),
+        // Note that code is written even where none was shown, because none read is what the Code tab says and none unread is what it waits on.
+        shownCode,
       });
     });
   }

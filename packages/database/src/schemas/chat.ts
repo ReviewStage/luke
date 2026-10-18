@@ -91,7 +91,7 @@ export const chatMember = pgTable(
     /** The coding agent, on an agent's member; null once the agent is deleted. */
     agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
     /** The task, on its Luke's member; null once the task is deleted. */
-    planId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
+    taskId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
     /** The member's handle, without its `@`, minted once. */
     handle: text("handle").notNull(),
     /** The member's place among its workspace's members of its kind, from one: an agent's `N`. */
@@ -123,12 +123,12 @@ export const chatMember = pgTable(
       .on(table.organizationId, table.userId)
       .where(sql`${table.userId} is not null`),
     uniqueIndex("chat_member_agent").on(table.agentId).where(sql`${table.agentId} is not null`),
-    uniqueIndex("chat_member_task").on(table.planId).where(sql`${table.planId} is not null`),
+    uniqueIndex("chat_member_task").on(table.taskId).where(sql`${table.taskId} is not null`),
     check(
       "chat_member_id_of_kind",
       sql`(${table.kind} = ${literal(MEMBER_KIND.HUMAN)}) = (${table.userId} is not null)
         and (${table.agentId} is null or ${table.kind} = ${literal(MEMBER_KIND.AGENT)})
-        and (${table.planId} is null or ${table.kind} = ${literal(MEMBER_KIND.LUKE)})`,
+        and (${table.taskId} is null or ${table.kind} = ${literal(MEMBER_KIND.LUKE)})`,
     ),
   ],
 );
@@ -144,7 +144,7 @@ export const chatChannel = pgTable(
     /** The channel's name, without its `#`; null for a DM. */
     name: text("name"),
     /** The plan, on a plan's channel. */
-    planId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
     /** A DM's member whose id sorts first. */
     dmAMemberId: uuid("dm_a_member_id").references((): AnyPgColumn => chatMember.id, {
       onDelete: "cascade",
@@ -169,8 +169,8 @@ export const chatChannel = pgTable(
       .on(table.organizationId, table.dmAMemberId, table.dmBMemberId)
       .where(sql`${table.kind} = ${literal(CHANNEL_KIND.DM)}`),
     uniqueIndex("chat_channel_task")
-      .on(table.planId)
-      .where(sql`${table.kind} = ${literal(CHANNEL_KIND.PLAN)}`),
+      .on(table.taskId)
+      .where(sql`${table.kind} = ${literal(CHANNEL_KIND.TASK)}`),
     // The workspace's channels are read on every look of the window's held read.
     index("chat_channel_organization_created").on(table.organizationId, table.createdAt),
     check(

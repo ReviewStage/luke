@@ -1030,7 +1030,23 @@ export const OVERVIEW_BOUNDS = {
   MAX_LABELS: 100,
   /** The most pull requests of a stack one read names, the pull request itself among them. */
   MAX_STACK: 30,
+  /** The most people one reaction names, the first GitHub lists, the rest counted. */
+  MAX_REACTORS: 10,
 } as const;
+
+/** The reactions GitHub offers on a comment, in the order it draws them. */
+export const REACTION = {
+  THUMBS_UP: "thumbs_up",
+  THUMBS_DOWN: "thumbs_down",
+  LAUGH: "laugh",
+  HOORAY: "hooray",
+  CONFUSED: "confused",
+  HEART: "heart",
+  ROCKET: "rocket",
+  EYES: "eyes",
+} as const;
+
+export type Reaction = (typeof REACTION)[keyof typeof REACTION];
 
 /** The side of a diff a review thread's line counts on: the old file's, or the new file's. */
 export const DIFF_SIDE = {
@@ -1083,9 +1099,33 @@ const pullRequestDeploymentSchema = EffectSchema.Struct({
 export type PullRequestDeployment = typeof pullRequestDeploymentSchema.Type;
 
 /**
+ * One reaction a comment wears, as GitHub draws it under the comment: which
+ * it is, how many reacted with it, and, where the read names them, the first
+ * of them up to the bound, in GitHub's order. A reaction nobody gave is not
+ * carried.
+ */
+const reactionGroupSchema = EffectSchema.Struct({
+  content: EffectSchema.Literals(Object.values(REACTION)),
+  count: countedNumber,
+  by: EffectSchema.optionalKey(
+    EffectSchema.Array(githubPersonSchema).check(
+      EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_REACTORS),
+    ),
+  ),
+});
+
+export type ReactionGroup = typeof reactionGroupSchema.Type;
+
+/** The reactions a comment wears, in GitHub's order, absent where it wears none or from a service before them. */
+const reactionsSchema = EffectSchema.Array(reactionGroupSchema).check(
+  EffectSchema.isMaxLength(Object.values(REACTION).length),
+);
+
+/**
  * One comment of a review thread: who; their words whole, as GitHub renders
  * them (`bodyHTML`), or, where GitHub sent no rendering, null with their
- * words as markdown in `body`; when, in epoch milliseconds; and its page.
+ * words as markdown in `body`; when, in epoch milliseconds; its page; and
+ * the reactions it wears.
  */
 const reviewThreadCommentSchema = EffectSchema.Struct({
   by: githubPersonSchema,
@@ -1093,6 +1133,7 @@ const reviewThreadCommentSchema = EffectSchema.Struct({
   body: EffectSchema.String,
   at: countedNumber,
   url: EffectSchema.String,
+  reactions: EffectSchema.optionalKey(reactionsSchema),
 });
 
 const diffSideSchema = EffectSchema.Literals(Object.values(DIFF_SIDE));
@@ -1134,8 +1175,9 @@ export type ReviewThread = typeof reviewThreadSchema.Type;
  * and where it left its reviewer; who; their words whole, as GitHub renders
  * them (`body_html`), or, where GitHub sent no rendering, null with their
  * words as markdown in `body`, empty otherwise; when, in epoch
- * milliseconds; its page; and, on a review, the threads on lines it
- * started, absent where it started none or from a service before them.
+ * milliseconds; its page; on a review, the threads on lines it started,
+ * absent where it started none or from a service before them; and the
+ * reactions it wears.
  */
 const conversationEntrySchema = EffectSchema.Struct({
   kind: EffectSchema.Literals(Object.values(CONVERSATION_ENTRY)),
@@ -1150,6 +1192,7 @@ const conversationEntrySchema = EffectSchema.Struct({
       EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_THREADS),
     ),
   ),
+  reactions: EffectSchema.optionalKey(reactionsSchema),
 });
 
 export type ConversationEntry = typeof conversationEntrySchema.Type;
@@ -1268,7 +1311,10 @@ export type CodingAgentOverviewChecks = NonNullable<
  * read's reviewers still asked for override; and its comments and reviews,
  * oldest first, its newest entries kept up to the bound, with how many
  * earlier ones were left on GitHub (`earlier`), review threads past their
- * bound among them. Null where the agent has opened no pull request yet.
+ * bound among them; and the reactions its description wears, read with the
+ * conversation rather than the description itself, since they are read in
+ * the same ask as the reactions of its comments. Null where the agent has
+ * opened no pull request yet.
  */
 export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
@@ -1280,6 +1326,7 @@ export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
         EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_ENTRIES),
       ),
       earlier: countedNumber,
+      descriptionReactions: EffectSchema.optionalKey(reactionsSchema),
     }),
   ),
 });

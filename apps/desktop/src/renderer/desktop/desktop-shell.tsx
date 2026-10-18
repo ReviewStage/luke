@@ -10,6 +10,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
+import { ExperimentTag } from "../experiment-marks";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory, WindowHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
@@ -24,6 +25,7 @@ import { useTaskLooks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type AutomationsPlace, type TasksControl } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
+import { AutomationListSkeleton } from "./automations-skeleton";
 import { useColumnDock } from "./column-dock";
 import { DesktopAgentPage } from "./desktop-agent-page";
 import { DesktopChat } from "./desktop-chat";
@@ -83,13 +85,26 @@ function IssuesLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
 }
 
 /**
- * What stands while the Automations pages' chunk loads: their empty frame,
- * and their own way out, so Escape pressed in that frame closes Automations
- * as the list would rather than falling through to the task behind it.
+ * What stands while the Automations pages' chunk loads: their frame, its
+ * toolbar's title over the list as quiet blocks, and their own way out, so
+ * Escape pressed in that frame closes Automations as the list would rather
+ * than falling through to the task behind it.
  */
 function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onExit);
-  return <section className="automations-view" aria-label="Automations" />;
+  return (
+    <section className="automations-view" aria-label="Automations">
+      <header className="desktop-toolbar">
+        <div className="desktop-toolbar-heading">
+          <h1 className="desktop-toolbar-title">Automations</h1>
+          <ExperimentTag />
+        </div>
+      </header>
+      <div className="automations-scroll scroll-fade-top">
+        <AutomationListSkeleton />
+      </div>
+    </section>
+  );
 }
 
 /**

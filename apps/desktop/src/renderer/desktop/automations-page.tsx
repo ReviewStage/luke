@@ -28,7 +28,11 @@ import {
   List,
   ListRow,
   SETTINGS_SECTION_FRAME,
+  SettingsRow,
   SettingsSection,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
   Switch,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -36,11 +40,12 @@ import {
   Text,
   useMenu,
 } from "@luke/ui";
-import { GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
+import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
+import { FoldingButton } from "../folding-button";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "../state-glyph";
 import { momentText, useMinute } from "../tasks/task-time";
@@ -50,8 +55,10 @@ import { Tooltip } from "../tooltip";
 import { ActionMenu } from "./action-menu";
 import { AutomationEditor } from "./automation-editor";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
-import { FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel";
+import { AutomationRunsPanel, FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel";
 import { automationNextText, automationOwnerName } from "./automation-words";
+import { AutomationListSkeleton } from "./automations-skeleton";
+import { useRunsPanel } from "./folded-groups";
 import { useAutomations } from "./use-automations";
 
 /**
@@ -78,6 +85,37 @@ const ROW_ACTIONS = "Automation actions";
 
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
+
+/** What an automation's placeholder page says to a reader while the list is first read. */
+const READING_AUTOMATION = "Reading the automation…";
+
+/**
+ * How an automation's placeholder page stands: each of the editor's groups
+ * every automation has, by its heading, over its rows' label and detail as
+ * shares of their lines, or over the prompt's field.
+ */
+const EDITOR_SKELETON = [
+  {
+    title: "Trigger",
+    rows: [
+      { label: "12%", detail: "46%" },
+      { label: "16%", detail: "34%" },
+    ],
+  },
+  { title: "Prompt", rows: [] },
+  {
+    title: "Runs",
+    rows: [
+      { label: "18%", detail: "40%" },
+      { label: "14%", detail: "52%" },
+    ],
+  },
+] as const;
+
+/** How wide an automation's placeholder name, its crumb, and a placeholder row's control stand. */
+const SKELETON_NAME = "40%";
+const SKELETON_CRUMB = "120px";
+const SKELETON_CONTROL = "160px";
 
 /** The presets the list suggests, in its order, each by the glyph of what fires it. */
 const SUGGESTIONS: readonly {
@@ -349,7 +387,9 @@ function ListPage({
         </div>
       </header>
       <div className="automations-scroll scroll-fade-top">
-        {read === undefined ? null : "failure" in read ? (
+        {read === undefined ? (
+          <AutomationListSkeleton />
+        ) : "failure" in read ? (
           <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
             {UNREAD_LINE}
           </ErrorState>
@@ -424,6 +464,92 @@ function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
 }
 
 /**
+ * The editor's form as quiet blocks: the name in the page title's type, then
+ * each group every automation has under its own heading, its rows' words and
+ * controls, and the prompt's field, so the editor lands where they stood.
+ */
+function EditorSkeleton(): React.JSX.Element {
+  return (
+    <div className="automation-editor">
+      <SkeletonRegion label={READING_AUTOMATION}>
+        <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.DIV}>
+          <Skeleton width={SKELETON_NAME} />
+        </Text>
+        <div className="automation-form">
+          {EDITOR_SKELETON.map(({ title, rows }) =>
+            rows.length === 0 ? (
+              <SettingsSection key={title} title={title} frame={SETTINGS_SECTION_FRAME.NONE}>
+                <div className="automation-prompt-skeleton">
+                  <Skeleton shape={SKELETON_SHAPE.BLOCK} />
+                </div>
+              </SettingsSection>
+            ) : (
+              <SettingsSection key={title} title={title}>
+                {rows.map(({ label, detail }) => (
+                  <SettingsRow
+                    key={label}
+                    label={<Skeleton width={label} />}
+                    description={<Skeleton width={detail} />}
+                  >
+                    {() => <Skeleton shape={SKELETON_SHAPE.CONTROL} width={SKELETON_CONTROL} />}
+                  </SettingsRow>
+                ))}
+              </SettingsSection>
+            ),
+          )}
+        </div>
+      </SkeletonRegion>
+    </div>
+  );
+}
+
+/**
+ * One automation's page opened before the list is first read, from a link,
+ * ⌘K, or a run's card: the editor's toolbar, its crumbs' way back to the list
+ * and a block where the automation's name will stand, over its form and its
+ * Runs panel as quiet blocks, until the list says what it holds.
+ */
+function ReadingPage({ onBack }: { onBack: () => void }): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
+  const runsPanel = useRunsPanel();
+  return (
+    <section className="automations-view" aria-label="Automation">
+      <header className="desktop-toolbar">
+        <div className="automation-toolbar">
+          <div className="desktop-toolbar-heading automation-toolbar-reading">
+            <nav className="automation-crumbs" aria-label="Path">
+              <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
+              <ChevronRightIcon aria-hidden="true" />
+              <span className="automation-crumb">
+                <Skeleton width={SKELETON_CRUMB} />
+              </span>
+            </nav>
+            <ExperimentTag />
+          </div>
+          <div className="desktop-toolbar-actions">
+            <SendFeedbackButton experiment={EXPERIMENT.AUTOMATIONS} />
+          </div>
+        </div>
+      </header>
+      <div className="automation-editor-layout">
+        <div className="automations-scroll scroll-fade-top">
+          <EditorSkeleton />
+        </div>
+        <AutomationRunsPanel
+          panel={runsPanel}
+          mine
+          created
+          automationId={undefined}
+          runs={undefined}
+          onRetry={() => undefined}
+          onOpenAgent={() => undefined}
+        />
+      </div>
+    </section>
+  );
+}
+
+/**
  * The window's Automations pages, in the task's place: the list, or one
  * automation's editor, or a new one's. The list is read once for all of
  * them, so an automation opened from it opens as it was listed, and an
@@ -442,6 +568,9 @@ export function AutomationsPage({ tasks }: { tasks: TasksControl }): React.JSX.E
 function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const view = tasks.automationsView;
   const workspace = tasks.workspace;
+  // Note that no list is asked for while no workspace is listed, which is
+  // while the workspaces are still read, so the pages stand as quiet blocks
+  // until one is, rather than calling the list empty or an automation gone.
   const automations = useAutomations(workspace?.id);
   // The automation the new page made, whose page is that same editor still, so what was typed while it was made stands.
   const [made, setMade] = useState<string | undefined>(undefined);
@@ -460,11 +589,7 @@ function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element
       ? listedAutomations.find((automation) => automation.id === place.automationId)
       : undefined;
   if (place.kind === AUTOMATIONS_PAGE.EDIT && opened === undefined) {
-    return read === undefined ? (
-      <section className="automations-view" aria-label="Automation" />
-    ) : (
-      <GonePage onBack={back} />
-    );
+    return read === undefined ? <ReadingPage onBack={back} /> : <GonePage onBack={back} />;
   }
   // Note that the account's first workspace is its personal one, where everything is its own.
   const offersOwner = workspace !== undefined && tasks.workspaces[0]?.id !== workspace.id;

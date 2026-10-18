@@ -48,6 +48,7 @@ export * from "./components/split-button/split-button.js";
 export * from "./components/switch/switch.js";
 export * from "./components/tabs/tabs.js";
 export * from "./components/text/text.js";
+export * from "./components/text-button/text-button.js";
 export * from "./components/text-field/text-field.js";
 export * from "./components/text-link/text-link.js";
 export * from "./components/tooltip/tooltip.js";

@@ -193,7 +193,7 @@ function useFactoryBoard(tasks: TasksControl, now: number): FactoryRead {
   const board = useMemo(
     () =>
       factoryBoard({
-        plans: listed,
+        tasks: listed,
         waiting,
         callTaskId: tasks.callTaskId,
         oneOff,
@@ -518,7 +518,7 @@ function Line({
     if (stop.kind === FACTORY_STOP.ONE_OFF_QUESTION || stop.kind === FACTORY_STOP.ONE_OFF_FAILED) {
       return oneOffStopRow(stop);
     }
-    const { plan: task } = stop;
+    const { task } = stop;
     if (stop.kind === FACTORY_STOP.QUESTION) {
       const agent = task.agents?.agents.find((each) => each.id === stop.item.agentId);
       return (
@@ -572,7 +572,7 @@ function Line({
         />
       );
     }
-    const { plan: task } = work;
+    const { task } = work;
     if (work.kind === FACTORY_WORK.AGENT) {
       const { agent } = work;
       return (
@@ -607,7 +607,7 @@ function Line({
       />
     );
   };
-  const blockRow = ({ kind, plan: task, pullRequest }: FactoryBlock) => (
+  const blockRow = ({ kind, task, pullRequest }: FactoryBlock) => (
     <FactoryRow
       key={pullRequest.url ?? pullRequest.number}
       slide={pullRequest.url ?? task.id}

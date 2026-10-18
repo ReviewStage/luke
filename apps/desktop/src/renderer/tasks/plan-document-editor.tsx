@@ -644,7 +644,7 @@ export function PlanDocumentEditor({
             retarget: (target, change) =>
               retargetedMention(task.id, mentions.place, target, change),
             pasted: (words) =>
-              pastedMentionNode(words, mentions.place, { known, planId: task.id, text }),
+              pastedMentionNode(words, mentions.place, { known, taskId: task.id, text }),
             namesMention: (target) =>
               decodeMention(target, mentions.place.repository) !== undefined,
           },

@@ -63,7 +63,9 @@ import {
   type PullRequestCheck,
   type PullRequestDeployment,
   type PullRequestState,
+  REACTION,
   REVIEW_STATE,
+  type Reaction,
   type ReviewState,
 } from "@luke/features/coding-agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
@@ -932,14 +934,45 @@ const ListedStatusesSchema = Schema.Struct({
   ),
 });
 
+/**
+ * How many gave each reaction, as a REST listing of an issue's comments
+ * rolls them up beside each comment, by the key it counts each under.
+ */
+const ReactionRollupSchema = Schema.Struct({
+  "+1": Schema.optionalKey(Schema.Number),
+  "-1": Schema.optionalKey(Schema.Number),
+  laugh: Schema.optionalKey(Schema.Number),
+  hooray: Schema.optionalKey(Schema.Number),
+  confused: Schema.optionalKey(Schema.Number),
+  heart: Schema.optionalKey(Schema.Number),
+  rocket: Schema.optionalKey(Schema.Number),
+  eyes: Schema.optionalKey(Schema.Number),
+});
+
+type ReactionRollup = typeof ReactionRollupSchema.Type;
+
+/** The key a REST rollup counts each reaction under. */
+const ROLLUP_KEY = {
+  [REACTION.THUMBS_UP]: "+1",
+  [REACTION.THUMBS_DOWN]: "-1",
+  [REACTION.LAUGH]: "laugh",
+  [REACTION.HOORAY]: "hooray",
+  [REACTION.CONFUSED]: "confused",
+  [REACTION.HEART]: "heart",
+  [REACTION.ROCKET]: "rocket",
+  [REACTION.EYES]: "eyes",
+} as const satisfies Record<Reaction, keyof ReactionRollup>;
+
 /** A pull request's comments, oldest first, as GitHub lists an issue's. */
 const IssueCommentsSchema = Schema.Array(
   Schema.Struct({
+    id: Schema.optionalKey(Schema.Number),
     user: Schema.NullOr(GitHubAccountSchema),
     body: Schema.optionalKey(Schema.NullOr(Schema.String)),
     body_html: Schema.optionalKey(Schema.NullOr(Schema.String)),
     created_at: Schema.String,
     html_url: Schema.String,
+    reactions: Schema.optionalKey(ReactionRollupSchema),
   }),
 );
 
@@ -991,6 +1024,15 @@ export interface GitHubOverviewConversation {
   readonly conversation: readonly GitHubConversationEntry[];
   /** How many earlier entries the bounds left on GitHub. */
   readonly earlier: number;
+  /** The reactions the pull request's description wears. */
+  readonly descriptionReactions: readonly GitHubReaction[];
+}
+
+/** One reaction a comment wears: which, how many gave it, and the first of them up to the bound where the read names them. */
+export interface GitHubReaction {
+  readonly content: Reaction;
+  readonly count: number;
+  readonly accounts: readonly GitHubAccount[] | undefined;
 }
 
 /** One entry of a pull request's conversation, its author as GitHub names them. */
@@ -1004,6 +1046,7 @@ interface GitHubConversationEntry {
   readonly url: string;
   /** The review threads a review started, oldest first; none on a comment. */
   readonly threads: readonly GitHubReviewThread[];
+  readonly reactions: readonly GitHubReaction[];
 }
 
 /** One comment of a review thread, its author as GitHub names them. */
@@ -1013,6 +1056,7 @@ interface GitHubThreadComment {
   readonly body: string;
   readonly at: number;
   readonly url: string;
+  readonly reactions: readonly GitHubReaction[];
 }
 
 /** One review thread as GitHub holds it: where it is, the hunk it was made on, where it stands, and its comments. */
@@ -1189,15 +1233,33 @@ function wordsOf(body: string | null | undefined, html: string | null | undefine
 }
 
 /**
- * The review threads of a pull request, newest kept up to the bound, each
- * with its first comments up to the bound and how many GitHub holds, in one
- * GraphQL read, since the REST listing names neither whether a thread was
- * resolved nor whether a push outdated it. A bot's GraphQL login lacks the
- * suffix its REST login wears, so the suffix is put back.
+ * What the REST listings do not say of a conversation, in one GraphQL read:
+ * the review threads of a pull request, newest kept up to the bound, each
+ * with its first comments up to the bound and how many GitHub holds, since
+ * the REST listing names neither whether a thread was resolved nor whether
+ * a push outdated it; and the reactions its description, its comments, its
+ * reviews, and its thread comments wear, which no REST listing of a review
+ * carries. The newest comments and reviews are read up to the bound on the
+ * conversation's entries; GraphQL counts the empty ones the conversation
+ * leaves out, so a comment kept past those is counted by the rollup its
+ * REST listing carries instead, naming nobody, and a review kept past a
+ * hundred newer ones, most of them a reply's wrapper, wears none.
+ * Each reaction names the first who gave it up to the bound, but a thread
+ * comment's only counts them: GitHub prices a read by the lists it may
+ * answer, and naming them under every thread comment costs fifty times the
+ * rest of the read. A bot's GraphQL login lacks the suffix its REST login
+ * wears, so the suffix is put back.
  */
-const REVIEW_THREADS_QUERY = `query ReviewThreads($owner: String!, $name: String!, $number: Int!) {
+const CONVERSATION_QUERY = `query Conversation($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
+      reactionGroups { ...Reaction }
+      comments(last: ${OVERVIEW_BOUNDS.MAX_ENTRIES}) {
+        nodes { databaseId reactionGroups { ...Reaction } }
+      }
+      reviews(last: ${OVERVIEW_BOUNDS.MAX_ENTRIES}) {
+        nodes { databaseId reactionGroups { ...Reaction } }
+      }
       reviewThreads(last: ${OVERVIEW_BOUNDS.MAX_THREADS}) {
         totalCount
         nodes {
@@ -1221,10 +1283,24 @@ const REVIEW_THREADS_QUERY = `query ReviewThreads($owner: String!, $name: String
               url
               diffHunk
               pullRequestReview { databaseId state }
+              reactionGroups { content reactors { totalCount } }
             }
           }
         }
       }
+    }
+  }
+}
+
+fragment Reaction on ReactionGroup {
+  content
+  reactors(first: ${OVERVIEW_BOUNDS.MAX_REACTORS}) {
+    totalCount
+    nodes {
+      __typename
+      ... on Actor { login avatarUrl }
+      ... on User { databaseId }
+      ... on Bot { databaseId }
     }
   }
 }`;
@@ -1247,15 +1323,63 @@ const GRAPHQL_PENDING = "PENDING";
 /** The account GitHub names a deleted account's comments by. */
 const GHOST: GitHubAccount = { id: 10_137, login: "ghost", bot: false, avatarUrl: undefined };
 
+/** GitHub's GraphQL words for each reaction (`ReactionContent`). */
+const GRAPHQL_REACTION_CONTENT = {
+  THUMBS_UP: "THUMBS_UP",
+  THUMBS_DOWN: "THUMBS_DOWN",
+  LAUGH: "LAUGH",
+  HOORAY: "HOORAY",
+  CONFUSED: "CONFUSED",
+  HEART: "HEART",
+  ROCKET: "ROCKET",
+  EYES: "EYES",
+} as const;
+
+const GRAPHQL_REACTION = new Map<string, Reaction>([
+  [GRAPHQL_REACTION_CONTENT.THUMBS_UP, REACTION.THUMBS_UP],
+  [GRAPHQL_REACTION_CONTENT.THUMBS_DOWN, REACTION.THUMBS_DOWN],
+  [GRAPHQL_REACTION_CONTENT.LAUGH, REACTION.LAUGH],
+  [GRAPHQL_REACTION_CONTENT.HOORAY, REACTION.HOORAY],
+  [GRAPHQL_REACTION_CONTENT.CONFUSED, REACTION.CONFUSED],
+  [GRAPHQL_REACTION_CONTENT.HEART, REACTION.HEART],
+  [GRAPHQL_REACTION_CONTENT.ROCKET, REACTION.ROCKET],
+  [GRAPHQL_REACTION_CONTENT.EYES, REACTION.EYES],
+]);
+
+/** The order GitHub draws reactions in. */
+const REACTION_ORDER: readonly Reaction[] = Object.values(REACTION);
+
+/** An account as GitHub's GraphQL names one: an author, or someone who reacted. */
+const GraphActorSchema = Schema.Struct({
+  __typename: Schema.String,
+  login: Schema.String,
+  avatarUrl: Schema.optionalKey(Schema.String),
+  databaseId: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+});
+
+/** One reaction as GitHub's GraphQL answers it: which, how many, and, where asked, the first who gave it. */
+const ReactionGroupSchema = Schema.Struct({
+  content: Schema.String,
+  reactors: Schema.Struct({
+    totalCount: Schema.Number,
+    nodes: Schema.optionalKey(Schema.Array(Schema.NullOr(GraphActorSchema))),
+  }),
+});
+
+const ReactionGroupsSchema = Schema.optionalKey(Schema.NullOr(Schema.Array(ReactionGroupSchema)));
+
+/** A comment or a review read for the reactions it wears, by GitHub's id for it. */
+const ReactedSchema = Schema.Struct({
+  databaseId: Schema.NullOr(Schema.Number),
+  reactionGroups: ReactionGroupsSchema,
+});
+
+const ReactedListSchema = Schema.optionalKey(
+  Schema.Struct({ nodes: Schema.Array(Schema.NullOr(ReactedSchema)) }),
+);
+
 const ThreadCommentSchema = Schema.Struct({
-  author: Schema.NullOr(
-    Schema.Struct({
-      __typename: Schema.String,
-      login: Schema.String,
-      avatarUrl: Schema.optionalKey(Schema.String),
-      databaseId: Schema.optionalKey(Schema.NullOr(Schema.Number)),
-    }),
-  ),
+  author: Schema.NullOr(GraphActorSchema),
   body: Schema.String,
   bodyHTML: Schema.optionalKey(Schema.NullOr(Schema.String)),
   createdAt: Schema.String,
@@ -1266,6 +1390,7 @@ const ThreadCommentSchema = Schema.Struct({
       Schema.Struct({ databaseId: Schema.NullOr(Schema.Number), state: Schema.String }),
     ),
   ),
+  reactionGroups: ReactionGroupsSchema,
 });
 
 const ThreadSchema = Schema.Struct({
@@ -1286,7 +1411,7 @@ const ThreadSchema = Schema.Struct({
 });
 
 /** GitHub's GraphQL answer: its data where it read any, and its errors where it met some. */
-const ReviewThreadsAnswerSchema = Schema.Struct({
+const ConversationAnswerSchema = Schema.Struct({
   data: Schema.optionalKey(
     Schema.NullOr(
       Schema.Struct({
@@ -1294,6 +1419,9 @@ const ReviewThreadsAnswerSchema = Schema.Struct({
           Schema.Struct({
             pullRequest: Schema.NullOr(
               Schema.Struct({
+                reactionGroups: ReactionGroupsSchema,
+                comments: ReactedListSchema,
+                reviews: ReactedListSchema,
                 reviewThreads: Schema.Struct({
                   totalCount: Schema.Number,
                   nodes: Schema.Array(Schema.NullOr(ThreadSchema)),
@@ -1308,16 +1436,33 @@ const ReviewThreadsAnswerSchema = Schema.Struct({
   errors: Schema.optionalKey(Schema.Array(Schema.Struct({ message: Schema.String }))),
 });
 
-/** A pull request's review threads as read, and how many past the bound were left on GitHub. */
-interface ReadThreads {
+/** The reactions a read names, by GitHub's id for what wears them. */
+type ReactionsById = ReadonlyMap<number, readonly GitHubReaction[]>;
+
+/**
+ * What the GraphQL read says of a conversation: its review threads, and how
+ * many past the bound were left on GitHub; and the reactions its
+ * description, comments, and reviews wear, the comments and reviews by
+ * GitHub's id for them.
+ */
+interface ReadGraph {
   readonly threads: readonly GitHubReviewThread[];
   readonly left: number;
+  readonly descriptionReactions: readonly GitHubReaction[];
+  readonly commentReactions: ReactionsById;
+  readonly reviewReactions: ReactionsById;
 }
 
-const NO_THREADS: ReadThreads = { threads: [], left: 0 };
+const NO_GRAPH: ReadGraph = {
+  threads: [],
+  left: 0,
+  descriptionReactions: [],
+  commentReactions: new Map(),
+  reviewReactions: new Map(),
+};
 
-/** A thread comment's author as the people hold them; a deleted account as GitHub's ghost. */
-function threadAccountOf(author: (typeof ThreadCommentSchema.Type)["author"]): GitHubAccount {
+/** An account as GitHub's GraphQL names one, as the people hold them; a deleted account as GitHub's ghost. */
+function threadAccountOf(author: typeof GraphActorSchema.Type | null): GitHubAccount {
   if (author === null) return GHOST;
   const bot = author.__typename === GRAPHQL_BOT;
   return {
@@ -1329,6 +1474,51 @@ function threadAccountOf(author: (typeof ThreadCommentSchema.Type)["author"]): G
     bot,
     avatarUrl: githubAvatarUrl(author.avatarUrl),
   };
+}
+
+/**
+ * The reactions something wears, in GitHub's order: those given, each with
+ * who GitHub named of those who gave it where the read asked; a reaction
+ * this service does not know of is left out.
+ */
+function reactionsOf(
+  groups: readonly (typeof ReactionGroupSchema.Type)[] | null | undefined,
+): readonly GitHubReaction[] {
+  const given = (groups ?? []).flatMap((group): GitHubReaction[] => {
+    const content = GRAPHQL_REACTION.get(group.content);
+    const { totalCount, nodes } = group.reactors;
+    if (content === undefined || totalCount === 0) return [];
+    const accounts = nodes?.flatMap((node) => (node === null ? [] : [threadAccountOf(node)]));
+    return [{ content, count: totalCount, accounts }];
+  });
+  return given.sort(
+    (a, b) => REACTION_ORDER.indexOf(a.content) - REACTION_ORDER.indexOf(b.content),
+  );
+}
+
+/** The reactions each of a list wears, by GitHub's id for it. */
+function reactionsById(
+  list: { readonly nodes: readonly (typeof ReactedSchema.Type | null)[] } | undefined,
+): ReactionsById {
+  const byId = new Map<number, readonly GitHubReaction[]>();
+  for (const node of list?.nodes ?? []) {
+    if (node?.databaseId != null) byId.set(node.databaseId, reactionsOf(node.reactionGroups));
+  }
+  return byId;
+}
+
+/** The reactions GitHub's id names, none where it names nothing the read reached. */
+function reactionsAt(byId: ReactionsById, id: number | undefined): readonly GitHubReaction[] {
+  return (id === undefined ? undefined : byId.get(id)) ?? [];
+}
+
+/** The reactions a REST rollup counts, in GitHub's order, those given, naming nobody. */
+function rolledUpReactions(rollup: ReactionRollup | undefined): readonly GitHubReaction[] {
+  if (rollup === undefined) return [];
+  return REACTION_ORDER.flatMap((content): GitHubReaction[] => {
+    const count = rollup[ROLLUP_KEY[content]] ?? 0;
+    return count === 0 ? [] : [{ content, count, accounts: undefined }];
+  });
 }
 
 function sideOf(side: string): DiffSide {
@@ -1361,6 +1551,7 @@ function threadOf(node: typeof ThreadSchema.Type): GitHubReviewThread | undefine
         ...words,
         at: timeOf(comment.createdAt) ?? 0,
         url: comment.url,
+        reactions: reactionsOf(comment.reactionGroups),
       };
     }),
     more: Math.max(0, node.comments.totalCount - read.length),
@@ -1368,38 +1559,42 @@ function threadOf(node: typeof ThreadSchema.Type): GitHubReviewThread | undefine
 }
 
 /**
- * The pull request's review threads, read over GraphQL on the token. Note
- * that a read that fails, or that GitHub answers only with errors, leaves
- * the threads out, said once in the log, because the rest of the overview
- * stands without them.
+ * The pull request's review threads and reactions, read over GraphQL on the
+ * token. Note that a read that fails, or that GitHub answers only with
+ * errors, leaves the threads and the reactions out, said once in the log,
+ * because the rest of the overview stands without them.
  */
-function reviewThreadsOf(
+function conversationGraphOf(
   token: Redacted.Redacted,
   fullName: string,
   number: number,
-): Effect.Effect<ReadThreads, never, HttpClient.HttpClient> {
+): Effect.Effect<ReadGraph, never, HttpClient.HttpClient> {
   const [owner = "", name = ""] = fullName.split("/");
   const request = githubPost(GRAPHQL_PATH, token, {
-    query: REVIEW_THREADS_QUERY,
+    query: CONVERSATION_QUERY,
     variables: { owner, name, number },
   });
   return Effect.scoped(
-    Effect.flatMap(send(request), (response) => readBody(response, ReviewThreadsAnswerSchema)),
+    Effect.flatMap(send(request), (response) => readBody(response, ConversationAnswerSchema)),
   ).pipe(
     Effect.flatMap((answer) => {
-      const listed = answer.data?.repository?.pullRequest?.reviewThreads;
-      if (listed === undefined) {
+      const pullRequest = answer.data?.repository?.pullRequest;
+      if (pullRequest == null) {
         return Effect.as(
           Effect.logWarning(
             `GitHub answered no review threads of pull request ${number} (${answer.errors?.length ?? 0} errors)`,
           ),
-          NO_THREADS,
+          NO_GRAPH,
         );
       }
+      const listed = pullRequest.reviewThreads;
       const nodes = listed.nodes.flatMap((node) => (node === null ? [] : [node]));
       return Effect.succeed({
         threads: nodes.flatMap((node) => threadOf(node) ?? []),
         left: Math.max(0, listed.totalCount - listed.nodes.length),
+        descriptionReactions: reactionsOf(pullRequest.reactionGroups),
+        commentReactions: reactionsById(pullRequest.comments),
+        reviewReactions: reactionsById(pullRequest.reviews),
       });
     }),
     Effect.catch((failure) =>
@@ -1407,7 +1602,7 @@ function reviewThreadsOf(
         Effect.logWarning(
           `the review threads of pull request ${number} were not read: ${failure._tag}`,
         ),
-        NO_THREADS,
+        NO_GRAPH,
       ),
     ),
   );
@@ -1434,6 +1629,7 @@ function threadEntryOf(thread: GitHubReviewThread, pageUrl: string): GitHubConve
     at: threadAt(thread),
     url: first?.url ?? pageUrl,
     threads: [thread],
+    reactions: [],
   };
 }
 
@@ -1456,7 +1652,7 @@ interface KeptConversation {
 function conversationOf(
   comments: typeof IssueCommentsSchema.Type,
   reviews: typeof ReviewsSchema.Type,
-  read: ReadThreads,
+  read: ReadGraph,
   pageUrl: string,
 ): KeptConversation {
   const byReview = new Map<number, GitHubReviewThread[]>();
@@ -1477,6 +1673,11 @@ function conversationOf(
         at: timeOf(comment.created_at) ?? 0,
         url: comment.html_url,
         threads: [],
+        // Note that a comment past the GraphQL read's newest hundred, which counts the empty ones the conversation leaves out, is counted by its REST rollup instead.
+        reactions:
+          comment.id !== undefined && read.commentReactions.has(comment.id)
+            ? reactionsAt(read.commentReactions, comment.id)
+            : rolledUpReactions(comment.reactions),
       },
     ];
   });
@@ -1496,6 +1697,7 @@ function conversationOf(
         at: timeOf(review.submitted_at) ?? 0,
         url: review.html_url ?? pageUrl,
         threads,
+        reactions: reactionsAt(read.reviewReactions, review.id),
       },
     ];
   });
@@ -1700,7 +1902,9 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
  * A pull request's conversation, read on the token: at once every page of
  * its comments, every page of its reviews, which both name where each
  * reviewer stands and join its comments as its conversation, and its review
- * threads, each under its review. `pageUrl` is the pull request's own page,
+ * threads, each under its review, with the reactions its description and
+ * every entry wear, read in the threads' one ask rather than one per
+ * comment. `pageUrl` is the pull request's own page,
  * which an entry GitHub names no page of opens. A pull request the
  * repository does not hold reads as nobody having said anything.
  */
@@ -1711,7 +1915,7 @@ export const pullRequestConversation = /* @__PURE__ */ Effect.fn("web/pullReques
     pullRequest: { readonly number: number; readonly url: string },
   ): Effect.fn.Return<GitHubOverviewConversation, PullRequestReadFailure, HttpClient.HttpClient> {
     const { number } = pullRequest;
-    const [comments, reviews, threads] = yield* Effect.all(
+    const [comments, reviews, graph] = yield* Effect.all(
       [
         everyPage(
           token,
@@ -1727,13 +1931,14 @@ export const pullRequestConversation = /* @__PURE__ */ Effect.fn("web/pullReques
           PEOPLE_MAX_PAGES.REVIEWS,
           true,
         ),
-        reviewThreadsOf(token, fullName, number),
+        conversationGraphOf(token, fullName, number),
       ],
       { concurrency: "unbounded" },
     );
     return {
       reviewers: reviewersOf(reviews, []),
-      ...conversationOf(comments, reviews, threads, pullRequest.url),
+      ...conversationOf(comments, reviews, graph, pullRequest.url),
+      descriptionReactions: graph.descriptionReactions,
     };
   },
 );

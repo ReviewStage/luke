@@ -59,7 +59,7 @@ function answered(messages: readonly ChatMessage[], cursor: string, readSeq = 0)
       { id: ME, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false },
       { id: AGENT, kind: MEMBER_KIND.AGENT, handle: "agent-2", left: false },
     ],
-    channels: [{ id: CHANNEL, kind: CHANNEL_KIND.PLAN, name: "invites", archived: false }],
+    channels: [{ id: CHANNEL, kind: CHANNEL_KIND.TASK, name: "invites", archived: false }],
     messages,
     cursor,
   };

@@ -8,7 +8,7 @@ import {
 } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
-import { Button, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
+import { Button, EllipsisIcon, IconButton, TextButton, useMenu } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -213,9 +213,7 @@ function EditTime({
     onShow === undefined ? (
       <span>{words}</span>
     ) : (
-      <button
-        type="button"
-        className="plan-edit-link"
+      <TextButton
         aria-label={label}
         onClick={(event) => {
           event.stopPropagation();
@@ -223,7 +221,7 @@ function EditTime({
         }}
       >
         {words}
-      </button>
+      </TextButton>
     );
   return short ? <Tooltip label={momentText(at)}>{time}</Tooltip> : time;
 }
@@ -996,7 +994,7 @@ export function PlanBody({
     );
   return (
     <PlanPictures
-      planId={task.id}
+      taskId={task.id}
       text={task.document.body}
       sectionNote={(heading) => pictureNoteOf(marks, heading)}
     >

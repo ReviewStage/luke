@@ -97,7 +97,7 @@ const openAgentTask = Effect.gen(function* () {
     prompt: null,
   });
   const agentId = Option.getOrThrow(started).agent.id;
-  return { owner, teammate, outsider, planId: task.id, agentId };
+  return { owner, teammate, outsider, taskId: task.id, agentId };
 });
 
 /** A call adding the one picture at the path given under the plan's approach. */
@@ -120,7 +120,7 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
     "a screenshot lands as its line under its section, kept as a picture every member reads and nobody else does, in a save that is the agent's, and the answer carries none of its bytes",
     () =>
       Effect.gen(function* () {
-        const { owner, teammate, outsider, planId: taskId, agentId } = yield* openAgentTask;
+        const { owner, teammate, outsider, taskId, agentId } = yield* openAgentTask;
         const sandbox = sandboxWith({ "shots/members.png": SCREENSHOT });
         const input = {
           pictures: pictureCall("shots/members.png").pictures,
@@ -128,7 +128,7 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
         };
 
         const answer = yield* recordPlanEdit(
-          { userId: owner, taskId: taskId },
+          { userId: owner, taskId },
           { agentId },
           unparsedWire(input),
           0,
@@ -177,7 +177,7 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
     "a missing file, a file that is no image, one past the bound, pictures past the plan's bound, and an archived plan each refuse the call, nothing is saved, and no picture kept before the refusal holds a place in the bound",
     () =>
       Effect.gen(function* () {
-        const { owner, planId: taskId, agentId } = yield* openAgentTask;
+        const { owner, taskId, agentId } = yield* openAgentTask;
         const full = yield* openAgentTask;
         const archived = yield* openAgentTask;
         const tooLarge = new Uint8Array(1_500_001);
@@ -190,14 +190,14 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
         // One place left, which a call adding two takes with its first before its second is refused.
         for (let kept = 1; kept < PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN; kept += 1) {
           const picture = { contentType: PICTURE_TYPE.PNG, bytes: SCREENSHOT };
-          const answer = yield* keepPlanAttachment(full.owner, full.planId, picture);
+          const answer = yield* keepPlanAttachment(full.owner, full.taskId, picture);
           assert.equal(answer.status, PLAN_ATTACHMENT_KEEP.KEPT);
         }
-        yield* updateTask(archived.owner, archived.planId, { archived: true });
+        yield* updateTask(archived.owner, archived.taskId, { archived: true });
         const before = Option.getOrThrow(yield* readTask(owner, taskId)).text;
-        const edit = (at: { owner: string; planId: string; agentId: string }, ...paths: string[]) =>
+        const edit = (at: { owner: string; taskId: string; agentId: string }, ...paths: string[]) =>
           recordPlanEdit(
-            { userId: at.owner, taskId: at.planId },
+            { userId: at.owner, taskId: at.taskId },
             { agentId: at.agentId },
             unparsedWire({
               notes: [],
@@ -206,7 +206,7 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
             0,
             sandbox,
           );
-        const own = { owner, planId: taskId, agentId };
+        const own = { owner, taskId, agentId };
 
         const answers = [
           yield* edit(own, "shots/missing.png"),

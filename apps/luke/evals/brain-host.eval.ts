@@ -299,7 +299,7 @@ export default defineEval({
       const { organizationId } = channel.value;
       const members = await run(roster(LOCAL_DEV_PRINCIPAL, organizationId));
       const luke = members.find(
-        (member) => member.kind === MEMBER_KIND.LUKE && member.planId === chatTask.id,
+        (member) => member.kind === MEMBER_KIND.LUKE && member.taskId === chatTask.id,
       );
       assert.ok(luke);
       const said = await run(

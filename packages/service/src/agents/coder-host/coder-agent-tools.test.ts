@@ -1877,7 +1877,7 @@ function sessionEndsOf(host: CoderHost) {
 }
 
 test("an agent whose session eve says failed reads as failed for its session's end at once, a repeated end changes nothing, and an unknown session, an idle agent, and an agent whose conversation recorded a newer session are left as they stood", async () => {
-  const { workspaceId, plans, agents } = await openWorkspaces();
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const host = hostOf(true);
   const call = await peerCaller(host, agents.caller, eve.services);
@@ -1891,10 +1891,10 @@ test("an agent whose session eve says failed reads as failed for its session's e
   ];
   const bob = agents.teammates.userId;
   await turnOn(agents.teammates, false);
-  const idle = await agentOn(bob, plans.billing);
+  const idle = await agentOn(bob, tasks.billing);
   await turnOn(idle, true);
   // A newer session recorded on the conversation since, whose turn is that session's own.
-  const rotated = await agentOn(bob, plans.billing);
+  const rotated = await agentOn(bob, tasks.billing);
   assert.equal(await database.run(claimRuntimeSession(rotated, sessionId(), new Date(NOW))), true);
   await turnOn(rotated, false);
 
