@@ -8,6 +8,7 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   Button,
+  DetailPage,
   ErrorState,
   FolderIcon,
   List,
@@ -44,8 +45,8 @@ import { TaskStatusMark } from "./task-card";
 /**
  * desktop-home.tsx -- the home page: the column the window rests on with no task open, saying what needs the developer and the tasks saved latest, and offering New task.
  *
- * It is one column at a reading measure, as a chat app's empty page is: a
- * greeting with New task beside it, then Inbox, every open Inbox item of the
+ * It is one page (`DetailPage`), as a chat app's empty page is: a greeting
+ * with New task at its end standing still over the scroll, then Inbox, every open Inbox item of the
  * workspace listed, a teammate's agent's among them, as the Inbox's own row draws it, the
  * task it is about after its title, a press opening the Inbox on it; then
  * Recent, the tasks of the workspace listed saved latest, each a `ListRow`
@@ -197,7 +198,7 @@ function HomeInbox({ tasks, now }: { tasks: TasksControl; now: number }): React.
         {empty ? null : <span className="home-section-count">{waiting.items.length}</span>}
       </h2>
       {empty ? null : (
-        <ul className="sidebar-tasks">
+        <List label={TAB_WORDS.INBOX}>
           {waiting.items.map((listed) => (
             <InboxItemRow
               key={listed.item.id}
@@ -210,7 +211,7 @@ function HomeInbox({ tasks, now }: { tasks: TasksControl; now: number }): React.
               onChoose={open}
             />
           ))}
-        </ul>
+        </List>
       )}
       {waiting.failed ? (
         <div className="home-note">
@@ -323,24 +324,19 @@ function RecentSkeleton(): React.JSX.Element {
  */
 function HomeSkeleton({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   return (
-    <div className="home-scroll scroll-fade-top">
-      <div className="home-column">
-        <header className="home-head">
-          <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.TITLE}>
-            <Skeleton width={SKELETON_GREETING} />
-          </Text>
-          <NewTaskButton tasks={tasks} />
-        </header>
-        <div className="home-section">
-          <HeadingSkeleton width={SKELETON_HEADING.INBOX} />
-          <InboxListSkeleton rows={INBOX_SKELETON_ROWS} context />
-        </div>
-        <div className="home-section">
-          <HeadingSkeleton width={SKELETON_HEADING.RECENT} />
-          <RecentSkeleton />
-        </div>
-      </div>
-    </div>
+    <DetailPage
+      title={<Skeleton width={SKELETON_GREETING} />}
+      actions={<NewTaskButton tasks={tasks} />}
+    >
+      <section className="home-section">
+        <HeadingSkeleton width={SKELETON_HEADING.INBOX} />
+        <InboxListSkeleton rows={INBOX_SKELETON_ROWS} context />
+      </section>
+      <section className="home-section">
+        <HeadingSkeleton width={SKELETON_HEADING.RECENT} />
+        <RecentSkeleton />
+      </section>
+    </DetailPage>
   );
 }
 
@@ -354,8 +350,8 @@ export function DesktopHome({
   accountName: string | undefined;
 }): React.JSX.Element {
   const now = useMinute();
-  const [column, setColumn] = useState<HTMLDivElement | null>(null);
-  useRowKeys(column, tasks.shown);
+  const [rows, setRows] = useState<HTMLDivElement | null>(null);
+  useRowKeys(rows, tasks.shown);
   if (!tasks.listRead && !tasks.listFailed) return <HomeSkeleton tasks={tasks} />;
   // Only an account with no task in any workspace, and nothing an agent with
   // no task waits on it for, is new; a workspace of its own with none still
@@ -370,17 +366,12 @@ export function DesktopHome({
     // The Inbox's agent cards name who started each agent, and Recent's rows
     // who created each teammate's task, read against the listed workspace's members.
     <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
-      <div className="home-scroll scroll-fade-top">
-        <div className="home-column" ref={setColumn}>
-          <header className="home-head">
-            <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
-              {greeting(accountName)}
-            </Text>
-            <NewTaskButton tasks={tasks} />
-          </header>
+      {/* Note that the rows the arrow keys move through are found inside this box, which lays nothing out. */}
+      <div className="home-rows" ref={setRows}>
+        <DetailPage title={greeting(accountName)} actions={<NewTaskButton tasks={tasks} />}>
           <HomeInbox tasks={tasks} now={now} />
           <HomeRecent tasks={tasks} now={now} />
-        </div>
+        </DetailPage>
       </div>
     </MemberDirectory>
   );

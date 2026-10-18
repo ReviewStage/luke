@@ -596,6 +596,11 @@ body {
   width: 320px;
 }
 
+/* A side panel's width, narrower than a page's measure and its insets. */
+.catalog-screen-panel {
+  width: 440px;
+}
+
 /* A screen as tall as a window's content, so a collection page scrolls in it. */
 .catalog-screen-collection {
   display: flex;

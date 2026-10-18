@@ -38,15 +38,22 @@
      one the narrow rule below may change. */
   .luke-detail-page > * {
     --luke-detail-page-side: max(
-      var(--luke-detail-page-inset),
+      var(--luke-detail-page-edge, var(--luke-detail-page-inset)),
       (100cqi - var(--luke-detail-page-width)) /
       2
     );
   }
 
+  /* At a column's inset the words stand as far in from the sides as tabs
+     read at the measure stand theirs, whatever the room; the page keeps its
+     own inset above and below. */
+  .luke-detail-page[data-inset="reading"] > * {
+    --luke-detail-page-edge: var(--luke-space-12);
+  }
+
   /* Across the whole room, the inset alone stands either side. */
   .luke-detail-page[data-width="full"] > * {
-    --luke-detail-page-side: var(--luke-detail-page-inset);
+    --luke-detail-page-side: var(--luke-detail-page-edge, var(--luke-detail-page-inset));
   }
 
   /* Under 480px of room a desktop page gives back half its inset. */
@@ -160,6 +167,23 @@
   .luke-detail-page-content {
     padding-bottom: var(--luke-detail-page-inset);
     overflow-wrap: anywhere;
+  }
+
+  /* A plain list in the content, straight or under one of its sections,
+     reaches past the column by its rows' inset, so a row's words open on
+     the title's edge and its fill runs out either side; its rows of blocks
+     while it is read reach as far. A card's list keeps to the column, its
+     edge the card's. */
+  .luke-detail-page-content > .luke-list[data-variant="plain"][data-density="regular"],
+  .luke-detail-page-content
+    > .luke-skeleton-region
+    > .luke-list[data-variant="plain"][data-density="regular"],
+  .luke-detail-page-content > section > .luke-list[data-variant="plain"][data-density="regular"],
+  .luke-detail-page-content
+    > section
+    > .luke-skeleton-region
+    > .luke-list[data-variant="plain"][data-density="regular"] {
+    margin-inline: calc(-1 * var(--luke-space-12));
   }
 
   /* Under a toolbar each column opens a section's gap below its hairline,
