@@ -15,14 +15,14 @@ import {
   type PullRequestActionRequest,
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { useMenu } from "@luke/ui";
-import { ChevronDownIcon, GitPullRequestDraftIcon, GitPullRequestIcon, XIcon } from "lucide-react";
+import { Badge, CHIP_LOOK, Chip, ChipName, useMenu } from "@luke/ui";
+import { GitPullRequestDraftIcon, GitPullRequestIcon, XIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useAct } from "../act";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { useGitHubConnection } from "../github-connect";
 import { Tooltip } from "../tooltip";
-import { PullRequestMark } from "./pull-request-mark";
+import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark";
 
 /**
  * pull-request-writes.tsx -- the changes a member makes to an agent's pull request from its Pull request tab, and what the tab says of each: the pill's menu of where the pull request stands, and the line under the bar where GitHub would not take one.
@@ -40,9 +40,10 @@ import { PullRequestMark } from "./pull-request-mark";
  * and Luke's own words where the change never reached GitHub.
  *
  * The pill is the one control here so far, as stage-cli's status pill is:
- * it opens a menu offering what may be done from where the pull request
- * stands, Ready for review for a draft and Convert to draft for one open,
- * and stays a plain pill once it is merged or closed. It and the line are
+ * `@luke/ui`'s pill chip in the tone of where the pull request stands, it
+ * opens a menu offering what may be done from there, Ready for review for
+ * a draft and Convert to draft for one open, and is a badge in that tone
+ * once it is merged or closed, with nothing left to press. It and the line are
  * drawn by whatever bar the tab wears, so they move with it.
  */
 
@@ -183,9 +184,9 @@ const ACTION_GLYPHS = {
 } as const satisfies Record<StateAction, React.JSX.Element>;
 
 /**
- * The pill saying where the pull request stands, in its colour; a press
+ * The pill saying where the pull request stands, in its tone; a press
  * opens the changes that may be made from there, and a pull request merged
- * or closed is a plain pill.
+ * or closed is a badge.
  */
 export function PullRequestStateMenu({
   pullRequest,
@@ -197,19 +198,13 @@ export function PullRequestStateMenu({
   const actions = actionsFrom(pullRequest.state);
   const menu = useMenu(actions.length > 0);
   const label = `Pull request ${STATE_WORDS[pullRequest.state]}`;
-  const inner = (
-    <>
-      <PullRequestMark pullRequest={pullRequest} />
-      {writes.pending === undefined
-        ? STATE_WORDS[pullRequest.state]
-        : `${ACTION_WORDS[writes.pending]}…`}
-    </>
-  );
+  const tone = PULL_REQUEST_TONE[pullRequest.state];
+  const mark = <PullRequestMark pullRequest={pullRequest} />;
   if (actions.length === 0) {
     return (
-      <span className="pull-request-state" data-pull-request-state={pullRequest.state}>
-        {inner}
-      </span>
+      <Badge tone={tone} icon={mark}>
+        {STATE_WORDS[pullRequest.state]}
+      </Badge>
     );
   }
   const items: MenuAction[] = actions.map((action) => ({
@@ -220,18 +215,22 @@ export function PullRequestStateMenu({
   }));
   return (
     <>
-      <button
-        type="button"
-        className="pull-request-state pull-request-state-button"
-        data-pull-request-state={pullRequest.state}
+      <Chip
+        look={CHIP_LOOK.PILL}
+        tone={tone}
+        chevron
         aria-label={label}
         aria-busy={writes.pending !== undefined}
         disabled={writes.pending !== undefined}
         {...menu.trigger()}
       >
-        {inner}
-        <ChevronDownIcon className="pull-request-state-chevron" aria-hidden="true" />
-      </button>
+        {mark}
+        <ChipName>
+          {writes.pending === undefined
+            ? STATE_WORDS[pullRequest.state]
+            : `${ACTION_WORDS[writes.pending]}…`}
+        </ChipName>
+      </Chip>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}

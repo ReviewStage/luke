@@ -4,11 +4,12 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { CHIP_LOOK, Chip } from "./chip.js";
+import { CHIP_LOOK, Chip, ChipName } from "./chip.js";
 
 /**
  * chip.test.ts -- a row of filter chips announces the one pressed, and a
- * press moves it there.
+ * press moves it there; a chip drawn as its mark alone keeps its words as
+ * its name; and a removable chip's × alone is a press, which lifts it.
  */
 
 declare global {
@@ -79,4 +80,43 @@ test("pressing a filter chip makes it the one pressed", () => {
   assert.deepEqual(pressed(), ["Files"]);
   act(() => chip("Plans").click());
   assert.deepEqual(pressed(), ["Plans"]);
+});
+
+test("a chip drawn as its mark alone is still named by its words", () => {
+  render(
+    createElement(
+      Chip,
+      { look: CHIP_LOOK.PILL, iconOnly: true },
+      createElement("svg", { "aria-hidden": "true" }),
+      createElement(ChipName, null, "feature/expiry"),
+    ),
+  );
+  assert.equal(chip("feature/expiry").textContent, "feature/expiry");
+});
+
+/** A removable chip whose caller lifts it, as the sidebar's view filter does. */
+function Removable(): React.JSX.Element | null {
+  const [standing, setStanding] = useState(true);
+  if (!standing) return null;
+  return createElement(
+    Chip,
+    {
+      look: CHIP_LOOK.FILTER,
+      removeLabel: "Show everyone's tasks",
+      onRemove: () => setStanding(false),
+    },
+    createElement(ChipName, null, "Created by me"),
+  );
+}
+
+test("a removable chip is no press of its own, and its × named for what it does lifts it", () => {
+  render(createElement(Removable));
+  const buttons = [...document.querySelectorAll("button")];
+  assert.deepEqual(
+    buttons.map((each) => each.getAttribute("aria-label")),
+    ["Show everyone's tasks"],
+  );
+  assert.ok(document.body.textContent?.includes("Created by me"));
+  act(() => buttons[0]?.click());
+  assert.equal(document.body.textContent, "");
 });

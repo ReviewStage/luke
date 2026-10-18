@@ -23,6 +23,7 @@ import {
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
+  CHIP_WIDTH,
   Chip,
   ChipName,
   ConfirmDialog,
@@ -825,6 +826,7 @@ function RoleChip({
     <span className="workspace-invite-role">
       <Chip
         look={CHIP_LOOK.FIELD}
+        width={CHIP_WIDTH.FIXED}
         chevron
         ref={door}
         aria-label={`Invite as ${ROLE_WORDS[value]}`}

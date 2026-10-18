@@ -792,62 +792,13 @@ button.sidebar-section-head-name:hover {
   pointer-events: none;
 }
 
-/* What the view filters by, under the Tasks head, each chip drawn as the
-   palette's chosen filter is, with the × that lifts it. */
+/* What the view filters by, under the Tasks head: a row of `@luke/ui`'s
+   removable filter chips (`sidebar-task-view.tsx`). */
 .sidebar-view-chips {
   display: flex;
   flex-wrap: wrap;
   gap: var(--luke-space-4);
   padding: 0 var(--luke-space-6) var(--luke-space-6);
-}
-
-.sidebar-view-chip {
-  display: inline-flex;
-  min-width: 0;
-  height: 22px; /* off-scale: a chip a row's half-step shorter than the palette's */
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: 0 var(--luke-space-2) 0 var(--luke-space-6);
-  border: 1px solid var(--luke-color-border-selected);
-  border-radius: 999px;
-  background: var(--luke-color-fill-selected);
-  color: var(--luke-color-text);
-  font-size: 12px;
-  font-weight: 500;
-  -webkit-app-region: no-drag;
-}
-
-.sidebar-view-chip-words {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-view-chip > svg {
-  width: 12px;
-  height: 12px;
-}
-
-.sidebar-view-chip button {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: none;
-  color: var(--luke-color-text-muted);
-}
-
-.sidebar-view-chip button:hover {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-}
-
-.sidebar-view-chip button svg {
-  width: 12px;
-  height: 12px;
 }
 
 /* A section's name over its rows, in the headings' voice: the sidebar's
@@ -2573,16 +2524,9 @@ ul.actor-stack {
 /* Chips ----------------------------------------------------------------------- */
 
 /* A chip is `@luke/ui`'s shared control (`chip.tsx`), its looks drawn by
-   `@luke/ui/styles.css`. What stays here is the window's own: the marks it
-   holds a size under the control's glyph, its menu's chevron at the size a
-   menu draws it (restated, since `.settings-chevron`'s own rule here would
-   otherwise win over the shared layer). */
-.luke-chip :is(.repository-picture, .provider-mark, .harness-mark) {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-}
-
+   `@luke/ui/styles.css`. What stays here is its menu's chevron at the size a
+   menu draws it, restated, since `.settings-chevron`'s own rule here would
+   otherwise win over the shared layer. */
 .luke-chip .settings-chevron {
   width: 12px;
   height: 12px;
@@ -5665,21 +5609,12 @@ button.integration-tool-head:hover,
 }
 
 /* A picker here grows from a Settings picker's width to name its whole
-   value, an event's or a zone's, rather than cut it short; the time stands
-   at that same width beside them. Where the window leaves the form narrow,
-   beside the sidebar and the runs, a picker gives way to the room rather
-   than run past its card. */
+   value, an event's or a zone's, rather than cut it short (its chip's
+   `CHIP_WIDTH.MIN_FIELD`); the time stands at that same width beside them.
+   Where the window leaves the form narrow, beside the sidebar and the runs,
+   a picker gives way to the room rather than run past its card. */
 .automation-form .settings-picker {
   max-width: 100%;
-}
-
-.automation-form .repository-chip > .luke-chip,
-.automation-form .settings-picker > .luke-chip,
-.automation-form .agent-model-chip .luke-chip,
-.automation-form .automation-model-picker > .luke-chip,
-.automation-form .agent-servers > .luke-chip {
-  width: auto;
-  min-width: min(200px, 100%);
 }
 
 /* A schedule's cron or time, or a review's rules file, at a picker's width beside them. */
@@ -8750,12 +8685,6 @@ button.automation-run:hover {
 :is(.new-issue, .new-task) .settings-picker {
   min-width: 0;
   flex-shrink: 1;
-}
-
-:is(.new-issue, .new-task) .repository-chip > .luke-chip,
-:is(.new-issue, .new-task) .settings-picker > .luke-chip {
-  width: auto;
-  max-width: 100%;
 }
 
 .dialog-name-field {

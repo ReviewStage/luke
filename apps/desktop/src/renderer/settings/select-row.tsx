@@ -1,4 +1,4 @@
-import type { SettingsRowDensity } from "@luke/ui";
+import type { ChipWidth, SettingsRowDensity } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { ACTOR_SIZE, PictureMark } from "../actor-ref";
@@ -24,6 +24,7 @@ export function SelectRow<Value extends string | number>({
   changed,
   busy: restBusy,
   density,
+  width,
   error,
   onChange,
 }: {
@@ -46,6 +47,8 @@ export function SelectRow<Value extends string | number>({
   busy?: boolean;
   /** How the row stands; in a settings card where none is named. */
   density?: SettingsRowDensity | undefined;
+  /** How wide its chip stands; the settings column where none is named. */
+  width?: ChipWidth | undefined;
   /** What stops the caller's own save at this row, said where no write of the row's was refused. */
   error?: string | undefined;
   // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
@@ -61,6 +64,7 @@ export function SelectRow<Value extends string | number>({
       changed={changed}
       error={rejection ?? error}
       density={density}
+      width={width}
       value={String(value)}
       valueLabel={chosen?.label ?? String(value)}
       valueIcon={

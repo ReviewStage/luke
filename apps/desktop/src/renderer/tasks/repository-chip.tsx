@@ -2,7 +2,15 @@ import type { GitHubRepository } from "@luke/features";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { CHIP_LOOK, Chip, type ChipLook, ChipName, GearIcon, ProviderMark } from "@luke/ui";
+import {
+  CHIP_LOOK,
+  Chip,
+  type ChipLook,
+  ChipName,
+  type ChipWidth,
+  GearIcon,
+  ProviderMark,
+} from "@luke/ui";
 import { repositoryFailureNote } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { RotateCwIcon } from "lucide-react";
@@ -181,6 +189,8 @@ export function RepositoryChip(props: {
   place: ChipPlace;
   /** A form row's chip: the edge its menu hangs from, the trailing one where none is named, as a Settings picker's does. */
   align?: PickerAlign | undefined;
+  /** A form row's chip: how wide it stands, its words' own width where none is named. */
+  width?: ChipWidth | undefined;
   /** A form row's chip: the ids of the row's words that describe it, its error among them while it has one. */
   describedBy?: string | undefined;
   /** A form row's chip: whether the row says its value is refused. */
@@ -309,6 +319,7 @@ export function RepositoryChip(props: {
         <Chip
           ref={trigger}
           look={PLACE_LOOK[props.place]}
+          width={props.width}
           chevron={props.place === CHIP_PLACE.FIELD}
           aria-describedby={props.describedBy}
           aria-invalid={props.invalid}

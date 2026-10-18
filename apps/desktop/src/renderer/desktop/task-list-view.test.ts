@@ -362,12 +362,12 @@ async function mountRead(
 
 /** The chip under the Tasks head, if one stands. */
 function chip(sidebar: HTMLElement): HTMLElement | null {
-  return sidebar.querySelector(".sidebar-view-chip");
+  return sidebar.querySelector<HTMLElement>(".sidebar-view-chips > *");
 }
 
 /** What the chip under the Tasks head says, its face left out. */
 function chipWords(sidebar: HTMLElement): string | undefined {
-  return chip(sidebar)?.querySelector(".sidebar-view-chip-words")?.textContent ?? undefined;
+  return chip(sidebar)?.querySelector(".luke-chip-name")?.textContent ?? undefined;
 }
 
 test("Created by › Me lists only your tasks, wearing no faces, says so in a chip and a dot, and the chip's × lists everyone's again", async () => {
