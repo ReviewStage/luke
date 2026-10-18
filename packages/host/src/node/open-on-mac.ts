@@ -112,8 +112,8 @@ export function openOnMacScript(input: {
     '      echo "▸ The worktree has changes of its own; left as it stands rather than overwritten."',
     "      return 1",
     "    fi",
-    // Note that a forced checkout takes the branch as it now stands, a force-push or a rebase among it, and leaves ignored files alone.
-    "    git checkout --quiet --detach --force FETCH_HEAD",
+    // Note that a checkout of the fetched head takes the branch as it now stands, a force-push or a rebase among it; with nothing changed there it has nothing to overwrite, and it leaves ignored files alone.
+    "    git checkout --quiet --detach FETCH_HEAD",
     "  else",
     '    mkdir -p "$(dirname "$worktree")"',
     '    git worktree add --detach "$worktree" FETCH_HEAD',
