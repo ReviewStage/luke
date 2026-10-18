@@ -155,7 +155,9 @@ async function opened(page?: PlanMentionsValue, plan: Task = PLAN) {
 function listed(container: HTMLElement): [string, string[]][] {
   return [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) => [
     group.getAttribute("aria-label") ?? "",
-    [...group.querySelectorAll(".task-compose-menu-name")].map((name) => name.textContent ?? ""),
+    [...group.querySelectorAll(".luke-combobox-option-label")].map(
+      (name) => name.textContent ?? "",
+    ),
   ]);
 }
 

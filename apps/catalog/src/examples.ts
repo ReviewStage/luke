@@ -5,6 +5,7 @@ import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { AVATARS_EXAMPLE } from "./examples/avatars";
 import { BADGES_EXAMPLE } from "./examples/badges";
 import { BANNERS_EXAMPLE } from "./examples/banners";
+import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CARDS_EXAMPLE } from "./examples/cards";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
@@ -15,6 +16,7 @@ import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
 import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
+import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
 import { FOLDING_BUTTONS_EXAMPLE } from "./examples/folding-buttons";
@@ -68,6 +70,7 @@ export const EXAMPLES: readonly Example[] = [
   AVATARS_EXAMPLE,
   BADGES_EXAMPLE,
   BANNERS_EXAMPLE,
+  BREADCRUMBS_EXAMPLE,
   BUTTONS_EXAMPLE,
   CARDS_EXAMPLE,
   CHIPS_EXAMPLE,
@@ -77,6 +80,7 @@ export const EXAMPLES: readonly Example[] = [
   DATA_TABLE_EXAMPLE,
   DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,
+  DISCLOSURES_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
   ERROR_STATES_EXAMPLE,
   FOLDING_BUTTONS_EXAMPLE,

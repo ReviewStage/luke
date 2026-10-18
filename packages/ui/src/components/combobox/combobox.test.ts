@@ -4,14 +4,17 @@ import assert from "node:assert/strict";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { Combobox, type ComboboxOption } from "./combobox.js";
+import { Combobox, ComboboxList, type ComboboxOption } from "./combobox.js";
 
 /**
  * combobox.test.ts -- the keys move the active option through the list and
  * Enter chooses it while the caret stays in the field, the active option is
  * the one a reader is told of, Escape shuts the list and is kept from what
  * stands behind it, an Enter held with Command passes the options by, and
- * keys an input method is composing with never reach the list.
+ * keys an input method is composing with never reach the list. A list
+ * standing alone, under an editor of its caller's, names its one group to a
+ * reader without drawing its heading, says so where nothing matches, and
+ * keeps a press from taking the caret.
  */
 
 declare global {
@@ -241,4 +244,66 @@ test("the list scrolls itself to keep the active option in view as the keys move
 
   assert.equal(down, 32);
   assert.equal(list.scrollTop, 0);
+});
+
+/** A list standing alone over `options`, as an editor's caller would hang it, with what it chose. */
+function mountList(options: readonly string[], headed: boolean) {
+  const chosen: string[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  function List(): React.JSX.Element {
+    const [active, setActive] = useState(0);
+    return createElement(ComboboxList, {
+      label: "Fruit",
+      groups: [
+        { label: "Stone fruit", options: options.map((name) => ({ id: name, label: name })) },
+      ],
+      active,
+      onActiveChange: setActive,
+      onChoose: (_index: number, option: ComboboxOption) => chosen.push(option.id),
+      headed,
+      empty: "Nothing matches",
+    });
+  }
+  act(() => root.render(createElement(List)));
+  return { container, chosen };
+}
+
+test("a list standing alone without headings still names its group, and a press chooses without taking the caret", () => {
+  const { container, chosen } = mountList(["Apricot", "Cherry"], false);
+  const group = container.querySelector('[role="listbox"] [role="group"]');
+  const cherry =
+    [...container.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (option) => option.textContent === "Cherry",
+    ) ?? assert.fail("Cherry");
+
+  act(() => {
+    cherry.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+  });
+  const active = container.querySelector('[aria-selected="true"]')?.textContent;
+  const mousedown = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+  act(() => {
+    cherry.dispatchEvent(mousedown);
+    cherry.click();
+  });
+
+  assert.equal(group?.getAttribute("aria-label"), "Stone fruit");
+  assert.equal(group?.textContent, "ApricotCherry", "no heading is drawn");
+  assert.equal(active, "Cherry");
+  assert.equal(mousedown.defaultPrevented, true);
+  assert.deepEqual(chosen, ["Cherry"]);
+});
+
+test("a list standing alone with headings draws them, and says so where nothing matches", () => {
+  const headed = mountList(["Apricot"], true);
+  const heading = headed.container.querySelector('[role="group"]')?.textContent;
+  const none = mountList([], true);
+
+  assert.equal(heading, "Stone fruitApricot");
+  assert.equal(none.container.querySelector('[role="option"]'), null);
+  assert.match(
+    none.container.querySelector('[role="listbox"]')?.textContent ?? "",
+    /Nothing matches/u,
+  );
 });

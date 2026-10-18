@@ -1,6 +1,13 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { TaskCode, TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
-import { ArrowLeftIcon, ArrowRightIcon, IconButton, ProviderMark, SidePanelIcon } from "@luke/ui";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  BreadcrumbBar,
+  IconButton,
+  ProviderMark,
+  SidePanelIcon,
+} from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { Fragment, type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import {
@@ -380,34 +387,36 @@ export function FileViewBar({
   const { browse } = path;
   return (
     <header className="file-view-bar">
-      {history === undefined ? null : <HistoryButtons history={history} />}
-      {browse === undefined ? (
-        <Tooltip label={path.path}>
-          <span className="file-view-path">
-            <bdi>{path.path}</bdi>
-          </span>
-        </Tooltip>
-      ) : (
-        <FileBreadcrumbs
-          repository={browse.repository}
-          path={path.path}
-          listFolder={browse.listFolder}
-          onOpen={browse.onOpen}
-        />
-      )}
-      {beside}
-      <div className="file-view-actions">
-        <Tooltip label="Open on GitHub">
-          <IconButton
-            icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
-            label="Open on GitHub"
-            disabled={onGitHub === undefined}
-            onClick={onGitHub}
+      <BreadcrumbBar>
+        {history === undefined ? null : <HistoryButtons history={history} />}
+        {browse === undefined ? (
+          <Tooltip label={path.path}>
+            <span className="file-view-path">
+              <bdi>{path.path}</bdi>
+            </span>
+          </Tooltip>
+        ) : (
+          <FileBreadcrumbs
+            repository={browse.repository}
+            path={path.path}
+            listFolder={browse.listFolder}
+            onOpen={browse.onOpen}
           />
-        </Tooltip>
-        {menu}
-        {tree === undefined ? null : <TreeToggle toggles={tree} />}
-      </div>
+        )}
+        {beside}
+        <div className="file-view-actions">
+          <Tooltip label="Open on GitHub">
+            <IconButton
+              icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+              label="Open on GitHub"
+              disabled={onGitHub === undefined}
+              onClick={onGitHub}
+            />
+          </Tooltip>
+          {menu}
+          {tree === undefined ? null : <TreeToggle toggles={tree} />}
+        </div>
+      </BreadcrumbBar>
     </header>
   );
 }

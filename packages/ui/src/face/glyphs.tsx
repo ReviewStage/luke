@@ -595,6 +595,15 @@ export function ChevronDownIcon(): React.JSX.Element {
   );
 }
 
+/** Points at a fold's body, turned down by its stylesheet while the fold is open. */
+export function FoldChevronIcon(): React.JSX.Element {
+  return (
+    <Glyph className="luke-disclosure-chevron">
+      <path d="m9.4 5.8 6.2 6.2-6.2 6.2" />
+    </Glyph>
+  );
+}
+
 /** A pair of angle brackets with a slash between them: code. */
 export function CodeIcon(): React.JSX.Element {
   return (

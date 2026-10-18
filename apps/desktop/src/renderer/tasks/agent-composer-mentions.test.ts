@@ -392,13 +392,15 @@ function carryingTarget(container: HTMLElement): string | undefined {
 function groupsListed(container: HTMLElement): [string | null, string[]][] {
   return [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) => [
     group.getAttribute("aria-label"),
-    [...group.querySelectorAll(".task-compose-menu-name")].map((name) => name.textContent ?? ""),
+    [...group.querySelectorAll(".luke-combobox-option-label")].map(
+      (name) => name.textContent ?? "",
+    ),
   ]);
 }
 
 /** The rows the list draws, by name. */
 function listed(container: HTMLElement): string[] {
-  return [...container.querySelectorAll(".mention-menu .task-compose-menu-name")].map(
+  return [...container.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
     (name) => name.textContent ?? "",
   );
 }
@@ -797,8 +799,8 @@ async function workspaceBox() {
 function agentsListed(container: HTMLElement): [string, string][] {
   return [...container.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')].map(
     (row) => [
-      row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-      row.querySelector(".mention-row-detail")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
     ],
   );
 }
@@ -1005,8 +1007,8 @@ function kindsListed(container: HTMLElement): [string, string][] {
   return [
     ...container.querySelectorAll('.mention-menu [aria-label="Mention from"] [role="option"]'),
   ].map((row) => [
-    row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-    row.querySelector(".mention-row-detail")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
   ]);
 }
 
@@ -1016,7 +1018,7 @@ function highlightRow(container: HTMLElement, group: string, name: string): void
     const row = container.querySelector('.mention-menu [role="option"][aria-selected="true"]');
     return (
       row?.closest('[role="group"]')?.getAttribute("aria-label") === group &&
-      row.querySelector(".task-compose-menu-name")?.textContent === name
+      row.querySelector(".luke-combobox-option-label")?.textContent === name
     );
   };
   for (let press = 0; press < 40 && !held(); press += 1) pressInComposer(container, "ArrowDown");
@@ -1045,6 +1047,37 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
   assert.equal(crumb(container), "Pages");
   assert.deepEqual(groupsListed(container), [["Pages", ["Invites by week"]]]);
   assert.deepEqual(footKeys(container), ["↑↓ Move", "↵ Mention", "⌫ All kinds", "esc Close"]);
+});
+
+/** The highlighted row, by its group and its name. */
+function highlighted(container: HTMLElement): [string | null, string] | undefined {
+  const row = container.querySelector('.mention-menu [role="option"][aria-selected="true"]');
+  if (row === null) return undefined;
+  return [
+    row.closest('[role="group"]')?.getAttribute("aria-label") ?? null,
+    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+  ];
+}
+
+test("a bare End and Home take the highlight to the last row and the first, a modified one is left to the editor, and Shift+Enter writes no mention", async () => {
+  const { container } = await box(taskPage());
+
+  typeInComposer(container, "See @");
+  await settle();
+  pressInComposer(container, "End", { shiftKey: true });
+  pressInComposer(container, "Home", { metaKey: true });
+  const held = highlighted(container);
+  pressInComposer(container, "End");
+  const last = highlighted(container);
+  pressInComposer(container, "Home");
+  const first = highlighted(container);
+  pressInComposer(container, "Enter", { shiftKey: true });
+  await settle();
+
+  assert.deepEqual(held, ["Plan", "Goal"], "a modified Home or End is the editor's");
+  assert.deepEqual(last, ["Mention from", "Linear"]);
+  assert.deepEqual(first, ["Plan", "Goal"]);
+  assert.equal(composerEditor(container).querySelector(".mention-chip"), null);
 });
 
 test("Enter on a kind's row narrows the list to it, and ⌫ on its empty words widens it again, deleting nothing", async () => {
@@ -1218,8 +1251,8 @@ function pullRequestsListed(container: HTMLElement): [string, string, string | n
   return [
     ...container.querySelectorAll('.mention-menu [aria-label="Pull requests"] [role="option"]'),
   ].map((row) => [
-    row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-    row.querySelector(".mention-row-detail")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
     row.querySelector("[data-pull-request-state]")?.getAttribute("data-pull-request-state") ?? null,
   ]);
 }
@@ -1312,8 +1345,8 @@ async function memberBox() {
 function peopleListed(container: HTMLElement): [string, string, string | null][] {
   return [...container.querySelectorAll('.mention-menu [aria-label="People"] [role="option"]')].map(
     (row) => [
-      row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-      row.querySelector(".mention-row-detail")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
       row.querySelector(".actor-mark")?.getAttribute("data-kind") ?? null,
     ],
   );

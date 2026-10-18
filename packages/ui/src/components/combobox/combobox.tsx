@@ -1,5 +1,6 @@
 import type { ReactNode, Ref } from "react";
 import { useId, useLayoutEffect, useRef } from "react";
+import { ChevronRightIcon } from "../../face/glyphs.js";
 import { useComboboxField } from "./use-combobox-field.js";
 
 /**
@@ -30,8 +31,15 @@ import { useComboboxField } from "./use-combobox-field.js";
  *
  * Options stand in groups, each with an optional heading, and the active
  * option counts across them, so a caller's index is one list's. Each option
- * draws a leading glyph, its name, a detail that gives way first, and a hint
- * at its end, such as the chord that chooses it.
+ * draws a leading glyph, its name, a detail that gives way first, a hint
+ * at its end, such as the chord that chooses it, and a chevron where
+ * choosing it opens a further list.
+ *
+ * The list stands on its own too (`ComboboxList`), for a caller whose words
+ * are typed in an editor of its own rather than a field this control owns:
+ * the caller reads the keys, steers the active option, and places the list,
+ * which draws the options as above, a note where none stands, and keeps
+ * every press from taking the caret out of the editor.
  */
 
 /** One option: what it is called, and what is drawn around its name. */
@@ -44,6 +52,8 @@ export interface ComboboxOption {
   readonly detail?: ReactNode;
   /** At the option's end: the chord that chooses it, or any short mark. */
   readonly hint?: ReactNode;
+  /** Whether choosing it opens a further list rather than choosing it, which a chevron at its end says. */
+  readonly opens?: boolean | undefined;
 }
 
 /** A run of options under a heading, or under none. */
@@ -89,6 +99,118 @@ function OptionRow({
       {option.hint === undefined ? null : (
         <span className="luke-combobox-option-hint">{option.hint}</span>
       )}
+      {option.opens === true ? (
+        <span className="luke-combobox-option-end">
+          <ChevronRightIcon />
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** The id of the option at `index` in the list `listId`. */
+function optionIdOf(listId: string, index: number): string {
+  return `${listId}-option-${index}`;
+}
+
+/**
+ * The `groups` of options as a listbox named `label`, `active` the one
+ * washed: a pointer moving over an option makes it active, a press chooses
+ * it, and no press anywhere on the list takes the caret from where the keys
+ * are read. The active option is kept in the list's own view.
+ */
+export function ComboboxList({
+  id,
+  label,
+  groups,
+  active,
+  onActiveChange,
+  onChoose,
+  headed = true,
+  empty,
+}: {
+  /** The listbox's id, which a field names in `aria-controls`; one is minted where none is given. */
+  id?: string | undefined;
+  /** The list's accessible name, what its options are. */
+  label: string;
+  groups: readonly ComboboxGroup[];
+  /** The active option, from zero across every group. */
+  active: number;
+  onActiveChange: (active: number) => void;
+  /** What a press on an option does, with its index across every group. */
+  onChoose: (index: number, option: ComboboxOption) => void;
+  /** Whether each group's heading is drawn; a list standing under a title that names its one group draws none, its group still named to a reader. */
+  headed?: boolean | undefined;
+  /** What the list says where it holds no option; nothing is said where none is given. */
+  empty?: string | undefined;
+}): React.JSX.Element {
+  const minted = useId();
+  const listId = id ?? minted;
+  const list = useRef<HTMLDivElement>(null);
+  const options = groups.flatMap((group) => group.options);
+  const at = Math.min(Math.max(active, 0), options.length - 1);
+  const choose = (index: number) => {
+    const option = options[index];
+    if (option !== undefined) onChoose(index, option);
+  };
+
+  // Note that the active option is scrolled into the list's own view by
+  // hand, because the caret stays where the keys are read, which no
+  // browser scrolls the list for, and `scrollIntoView` would scroll every
+  // box around it.
+  useLayoutEffect(() => {
+    const box = list.current;
+    const row = at < 0 ? null : document.getElementById(optionIdOf(listId, at));
+    if (box === null || row === null) return;
+    if (row.offsetTop < box.scrollTop) box.scrollTop = row.offsetTop;
+    const bottom = row.offsetTop + row.offsetHeight - box.clientHeight;
+    if (bottom > box.scrollTop) box.scrollTop = bottom;
+  });
+
+  let offset = 0;
+  const runs = groups.map((group) => {
+    const start = offset;
+    offset += group.options.length;
+    return { group, start };
+  });
+
+  return (
+    // Note that a press anywhere on the list keeps the caret where the keys are read.
+    <div
+      ref={list}
+      id={listId}
+      className="luke-combobox-list"
+      role="listbox"
+      aria-label={label}
+      onMouseDown={(event) => event.preventDefault()}
+    >
+      {runs.map(({ group, start }) => {
+        const rows = group.options.map((option, index) => (
+          <OptionRow
+            key={option.id}
+            id={optionIdOf(listId, start + index)}
+            option={option}
+            active={start + index === at}
+            onActive={() => onActiveChange(start + index)}
+            onChoose={() => choose(start + index)}
+          />
+        ));
+        if (group.label === undefined) return rows;
+        return (
+          // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
+          <div key={start} role="group" aria-label={group.label}>
+            {headed ? (
+              <div className="luke-combobox-heading" aria-hidden="true">
+                {group.label}
+              </div>
+            ) : null}
+            {rows}
+          </div>
+        );
+      })}
+      {options.length === 0 && empty !== undefined ? (
+        <p className="luke-combobox-empty">{empty}</p>
+      ) : null}
     </div>
   );
 }
@@ -142,11 +264,9 @@ export function Combobox({
   ref?: Ref<HTMLInputElement> | undefined;
 }): React.JSX.Element {
   const listId = useId();
-  const list = useRef<HTMLDivElement>(null);
   const options = groups.flatMap((group) => group.options);
   const shown = open && options.length > 0;
   const at = Math.min(Math.max(active, 0), options.length - 1);
-  const optionId = (index: number) => `${listId}-option-${index}`;
   const choose = (index: number) => {
     const option = options[index];
     if (option !== undefined) onChoose(index, option);
@@ -157,30 +277,11 @@ export function Combobox({
     active: at,
     count: options.length,
     controls: listId,
-    activeId: optionId(at),
+    activeId: optionIdOf(listId, at),
     onActiveChange,
     onChoose: choose,
     onEnter,
     onEscape,
-  });
-
-  // Note that the active option is scrolled into the list's own view by
-  // hand, because the caret stays in the field, which no browser scrolls
-  // the list for, and `scrollIntoView` would scroll every box around it.
-  useLayoutEffect(() => {
-    const box = list.current;
-    const row = shown ? document.getElementById(optionId(at)) : null;
-    if (box === null || row === null) return;
-    if (row.offsetTop < box.scrollTop) box.scrollTop = row.offsetTop;
-    const bottom = row.offsetTop + row.offsetHeight - box.clientHeight;
-    if (bottom > box.scrollTop) box.scrollTop = bottom;
-  });
-
-  let offset = 0;
-  const runs = groups.map((group) => {
-    const start = offset;
-    offset += group.options.length;
-    return { group, start };
   });
 
   return (
@@ -201,37 +302,14 @@ export function Combobox({
         onKeyDown={keys.onKeyDown}
       />
       {shown ? (
-        <div
-          ref={list}
+        <ComboboxList
           id={listId}
-          className="luke-combobox-list"
-          role="listbox"
-          aria-label={listLabel}
-          onMouseDown={(event) => event.preventDefault()}
-        >
-          {runs.map(({ group, start }) => {
-            const rows = group.options.map((option, index) => (
-              <OptionRow
-                key={option.id}
-                id={optionId(start + index)}
-                option={option}
-                active={start + index === at}
-                onActive={() => onActiveChange(start + index)}
-                onChoose={() => choose(start + index)}
-              />
-            ));
-            if (group.label === undefined) return rows;
-            return (
-              // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
-              <div key={start} role="group" aria-label={group.label}>
-                <div className="luke-combobox-heading" aria-hidden="true">
-                  {group.label}
-                </div>
-                {rows}
-              </div>
-            );
-          })}
-        </div>
+          label={listLabel}
+          groups={groups}
+          active={at}
+          onActiveChange={onActiveChange}
+          onChoose={onChoose}
+        />
       ) : null}
     </div>
   );
