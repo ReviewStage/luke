@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef } from "react";
+import { useId, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { useStagedFocus } from "./staged-focus.js";
 
 /**
@@ -23,6 +24,16 @@ import { useStagedFocus } from "./staged-focus.js";
  * measure, wider for a note being written, or fitted edge to edge to a file
  * shown; what it holds lays itself out inside. A dialog that takes files dropped on the dimmed window rings its
  * card while a drag it would take is over it.
+ *
+ * A dialog that asks something draws its parts in the card's own slots: its
+ * `title` at its head, which names the card, and its `actions` at its foot,
+ * Cancel first and the act last at the foot's end, each answer at a common
+ * width so a short verb is not a smaller target than Cancel beside it, with a
+ * tool of the dialog's own (attaching a screenshot) at the foot's start where
+ * it has one. What it holds between them is the part that gives way and
+ * scrolls, so its title and its answers stay on screen however short the
+ * window is. A dialog whose head is more than words (a picture's bar, a title
+ * holding a chip) draws its own and names the card by it (`labelledBy`).
  */
 
 /** What the card is to assistive technology: a dialog, or a question that must be answered before going on. */
@@ -61,13 +72,24 @@ const FOCUSABLE = [
   "[tabindex]:not(:disabled)",
 ].join(", ");
 
+/** What names the card: the title drawn at its head, or the id of a head the dialog draws itself. */
+type DialogName =
+  | {
+      /** The card's title, drawn at its head in the dialog's type. */
+      title: string;
+      labelledBy?: undefined;
+    }
+  | {
+      title?: undefined;
+      /** The id of the card's title, where the dialog draws its own head. */
+      labelledBy: string;
+    };
+
 /** What a dialog is told: who names it, whether it is at work, where focus lands, and how it is put away. */
-export interface DialogProps {
+export type DialogProps = DialogName & {
   role?: DialogRole | undefined;
   /** How wide the card stands, a question's measure unless asked. */
   size?: DialogSize | undefined;
-  /** The id of the card's title. */
-  labelledBy: string;
   /** The id of what the card says, where it is a question. */
   describedBy?: string | undefined;
   /** Whether the dialog is at work, its controls stilled. */
@@ -84,8 +106,12 @@ export interface DialogProps {
     | undefined;
   /** Whether a drag the dimmed window would take is over it, which rings the card that will take it. */
   dropping?: boolean | undefined;
+  /** The answers at the card's foot, at its end: Cancel first, the act last. */
+  actions?: React.ReactNode;
+  /** A tool of the dialog's own at the foot's start, before its answers. */
+  actionsStart?: React.ReactNode;
   children: React.ReactNode;
-}
+};
 
 /** Whether `first` comes before `second` in the document's order. */
 function precedes(first: Node, second: Node): boolean {
@@ -147,6 +173,7 @@ function useInvokerFocus(): void {
 export function Dialog({
   role = DIALOG_ROLE.DIALOG,
   size = DIALOG_SIZE.CONFIRM,
+  title,
   labelledBy,
   describedBy,
   busy = false,
@@ -155,9 +182,12 @@ export function Dialog({
   onKeyDown,
   dropTarget,
   dropping = false,
+  actions,
+  actionsStart,
   children,
 }: DialogProps): React.JSX.Element {
   const card = useRef<HTMLDivElement | null>(null);
+  const titleId = useId();
   const pressedBackdrop = useRef(false);
 
   useInvokerFocus();
@@ -210,12 +240,23 @@ export function Dialog({
         className="luke-dialog"
         role={role}
         aria-modal="true"
-        aria-labelledby={labelledBy}
+        aria-labelledby={labelledBy ?? titleId}
         aria-describedby={describedBy}
         aria-busy={busy}
         tabIndex={-1}
       >
+        {title === undefined ? null : (
+          <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
+            {title}
+          </Text>
+        )}
         {children}
+        {actions === undefined && actionsStart === undefined ? null : (
+          <div className="luke-dialog-foot">
+            {actionsStart}
+            <div className="luke-dialog-actions">{actions}</div>
+          </div>
+        )}
       </div>
     </div>,
     document.body,
