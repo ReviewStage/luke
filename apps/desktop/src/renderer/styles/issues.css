@@ -29,6 +29,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* In the list the identifier leads the row's title on its line, in the
+   column's width and the body's weight, so the titles start level. */
+.home-section .issue-row-identifier {
+  display: inline-block;
+  margin-inline-end: var(--luke-space-8);
+  font-weight: var(--luke-weight-regular);
+}
+
 /* Each status's glyph wears the state colour the rest of the window gives that standing. */
 .issue-status-glyph {
   display: inline-flex;

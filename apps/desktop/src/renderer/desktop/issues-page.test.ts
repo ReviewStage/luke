@@ -275,7 +275,7 @@ function groups(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll(".home-section, [data-issue-column]")]
     .map((group): [string, string[]] => [
       group.querySelector("h2")?.textContent ?? "",
-      [...group.querySelectorAll(".sidebar-task-item")].map(
+      [...group.querySelectorAll("li")].map(
         (row) =>
           `${row.querySelector(".issue-row-identifier")?.textContent} ${row.querySelector(".issue-row-title")?.textContent}`,
       ),
@@ -1070,8 +1070,7 @@ test("View options lays the page out as the list and back as the board, and an i
 
   showList();
   const listed = page.querySelector(".home-section") !== null;
-  const row = page.querySelector<HTMLButtonElement>(`[data-issue-id="${issue(1).id}"] button`);
-  assert.ok(row);
+  const row = listRowOf(page, issue(1));
   act(() => row.click());
   await settle();
   act(() => button("Issues").click());
@@ -1138,7 +1137,7 @@ test("once the page has come back from an issue, a layout chosen keeps the keybo
   await settle();
 
   assert.ok(page.querySelector(".home-section"), "the list stands");
-  assert.equal(document.activeElement?.closest("[data-issue-id]") ?? null, null);
+  assert.doesNotMatch(document.activeElement?.textContent ?? "", /ACME-1/u);
 });
 
 test("a column's + opens the new issue's card with that column's status chosen, the priority at its default, and the title holding the keyboard", async () => {
@@ -1202,6 +1201,15 @@ function cardOf(page: HTMLElement, issueId: string): HTMLButtonElement {
   return found;
 }
 
+/** The press of the list's row for the issue given, found by the identifier it reads. */
+function listRowOf(page: HTMLElement, listed: Issue): HTMLButtonElement {
+  const found = [...page.querySelectorAll<HTMLButtonElement>(".home-section button")].find((each) =>
+    each.textContent?.startsWith(`ACME-${listed.number}`),
+  );
+  assert.ok(found, `no row for ACME-${listed.number}`);
+  return found;
+}
+
 /** A right-click on an element, at a point in the window, as the pointer makes one. */
 function rightClick(target: HTMLElement): void {
   act(() => {
@@ -1245,7 +1253,7 @@ test("a list row's menu opens from the keyboard with ⇧F10, and a priority pick
   await settle();
   showList();
 
-  const row = cardOf(page, issue(1).id);
+  const row = listRowOf(page, issue(1));
   act(() => row.focus());
   act(() => {
     row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
@@ -1257,6 +1265,26 @@ test("a list row's menu opens from the keyboard with ⇧F10, and a priority pick
     { issueId: issue(1).id, change: { priority: ISSUE_PRIORITY.URGENT } },
   ]);
   assert.deepEqual(groups(page), [["Backlog2", ["ACME-1 Issue 1", "ACME-2 Issue 2"]]]);
+});
+
+test("a list row's right-click opens its menu, and Escape hands the keyboard back to the row", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+  showList();
+
+  const row = listRowOf(page, issue(2));
+  rightClick(row);
+  assert.ok(menuItem("Status"));
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  await settle();
+
+  assert.equal(document.querySelector("[role=menu]"), null);
+  assert.ok(document.activeElement === row, "the row holds the keyboard");
 });
 
 test("Archive from a card's menu asks first in the issue page's words, then sends the archive and takes the card off the board", async () => {

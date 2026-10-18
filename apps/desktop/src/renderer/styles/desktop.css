@@ -8640,6 +8640,19 @@ button.automation-run:hover {
   margin-left: auto;
 }
 
+/* A ListRow's metadata on Home, the Issues list, and a person's page: what
+   the row is about, a teammate's face, the row's mark, and its time, set
+   apart by the line's own gap and centred on it. */
+.home-row-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+}
+
+.home-row-meta > .home-row-context {
+  flex: 0 1 auto;
+}
+
 .home-row-picture {
   display: inline-flex;
   width: 16px;
