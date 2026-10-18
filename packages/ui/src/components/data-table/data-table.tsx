@@ -1,9 +1,10 @@
 import type { MouseEvent, ReactNode } from "react";
 import { SORT_DIRECTION, type SortDirection } from "../../sort-direction.js";
+import { CARD_PADDING, Card } from "../card/card.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 
 /**
- * data-table.tsx -- rows of records under headings that line up their columns, sortable where the caller sorts, in a frame that scrolls sideways on its own.
+ * data-table.tsx -- rows of records under headings that line up their columns, sortable where the caller sorts, in a flush Card that scrolls sideways on its own.
  *
  * A table is for records a reader compares across: counts, dates, the same
  * fields on every row. A collection read one thing at a time is a `List`.
@@ -149,13 +150,15 @@ export function DataTable<Row, Key extends string = string>({
 }): React.JSX.Element {
   if (rows.length === 0) {
     return (
-      <div className="luke-data-table" data-empty="true">
-        <Text tone={TEXT_TONE.MUTED}>{empty}</Text>
-      </div>
+      <Card>
+        <div className="luke-data-table-empty">
+          <Text tone={TEXT_TONE.MUTED}>{empty}</Text>
+        </div>
+      </Card>
     );
   }
   return (
-    <div className="luke-data-table">
+    <Card padding={CARD_PADDING.FLUSH}>
       <div className="luke-data-table-scroller">
         <table className="luke-data-table-table" aria-label={label} data-min-width={minWidth}>
           <thead>
@@ -193,6 +196,6 @@ export function DataTable<Row, Key extends string = string>({
           </tbody>
         </table>
       </div>
-    </div>
+    </Card>
   );
 }

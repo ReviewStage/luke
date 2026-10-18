@@ -246,13 +246,16 @@ async function settle(): Promise<void> {
   });
 }
 
+/** A row's name: an Inbox row's, or a `ListRow`'s title. */
+const NAME = ".sidebar-task-name, .luke-list-row-title";
+
 /** A section's rows as a reader scans them: each row's name, then its context. */
 function rows(page: HTMLElement, section: string): string[] {
   const region = page.querySelector(`section[aria-labelledby="${section}"]`);
   assert.ok(region, `${section} stands`);
-  return [...region.querySelectorAll(".sidebar-task")].map(
+  return [...region.querySelectorAll("li")].map(
     (row) =>
-      `${row.querySelector(".sidebar-task-name")?.textContent} · ${row.querySelector(".home-row-context")?.textContent}`,
+      `${row.querySelector(NAME)?.textContent} · ${row.querySelector(".home-row-context")?.textContent}`,
   );
 }
 
@@ -661,9 +664,9 @@ test("a recent task a teammate created wears their face before its time, and the
   await settle();
 
   const region = page.querySelector('section[aria-labelledby="home-recent"]');
-  const faces = [...(region?.querySelectorAll(".sidebar-task") ?? [])].flatMap((row) => {
-    const face = row.querySelector<HTMLImageElement>(".sidebar-task-time .actor-mark img");
-    return face === null ? [] : [[row.querySelector(".sidebar-task-name")?.textContent, face.src]];
+  const faces = [...(region?.querySelectorAll("li") ?? [])].flatMap((row) => {
+    const face = row.querySelector<HTMLImageElement>(".actor-mark img");
+    return face === null ? [] : [[row.querySelector(NAME)?.textContent, face.src]];
   });
   assert.deepEqual(faces, [[INVITES.name, CHARLES_PICTURE]]);
 });

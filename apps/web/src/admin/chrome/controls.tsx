@@ -1,4 +1,9 @@
 import { ADMIN_METRICS_WINDOW, type AdminMetricsWindow } from "@luke/service/admin/http";
+import { CARD_PADDING, Card } from "@luke/ui";
+
+const REFRESH_FAILED = "Refresh failed.";
+
+const STILL_SHOWING = "Still showing the earlier answer.";
 
 /** The page's one button treatment: sign out and try again both wear it. */
 export const PLAIN_BUTTON =
@@ -7,12 +12,13 @@ export const PLAIN_BUTTON =
 /**
  * The failure a refresh landed on an answer that stays shown: the numbers on
  * screen are still the last ones actually read, and this band says the newer
- * read did not arrive. The
- * status region stands in the page whether or not it has anything to say,
- * because a live region inserted together with its news is announced by
- * nothing; it holds the announcement alone, with the button beside it, so a
- * press flipping the button's label cannot re-announce the failure and the
- * button keeps its own role.
+ * read did not arrive. The status region stands in the page whether or not
+ * it has anything to say, because a live region inserted together with its
+ * news is announced by nothing; so it stands outside the band, which comes
+ * and goes, and says the failure to a reader while the band draws the same
+ * words for the eye. It holds the announcement alone, so a press flipping
+ * the button's label cannot re-announce the failure and the button keeps
+ * its own role.
  */
 export function RefreshFailureNotice({
   failure,
@@ -24,27 +30,24 @@ export function RefreshFailureNotice({
   onRetry: () => void;
 }): React.JSX.Element {
   return (
-    <div
-      className={
-        failure !== undefined
-          ? "mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-lg border border-border bg-card px-5 py-3 text-sm"
-          : undefined
-      }
-    >
-      <span role="status">
-        {failure !== undefined ? (
-          <>
-            <span className="font-medium text-attention">Refresh failed.</span>{" "}
-            <span className="text-muted-foreground">
-              Still showing the earlier answer. {failure}
-            </span>
-          </>
-        ) : null}
+    <div className={failure !== undefined ? "mt-6" : undefined}>
+      <span role="status" className="sr-only">
+        {failure !== undefined ? `${REFRESH_FAILED} ${STILL_SHOWING} ${failure}` : null}
       </span>
       {failure !== undefined ? (
-        <button type="button" className={PLAIN_BUTTON} onClick={onRetry} disabled={refreshing}>
-          {refreshing ? "Trying…" : "Try again"}
-        </button>
+        <Card padding={CARD_PADDING.SNUG}>
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-sm">
+            <span aria-hidden="true">
+              <span className="font-medium text-attention">{REFRESH_FAILED}</span>{" "}
+              <span className="text-muted-foreground">
+                {STILL_SHOWING} {failure}
+              </span>
+            </span>
+            <button type="button" className={PLAIN_BUTTON} onClick={onRetry} disabled={refreshing}>
+              {refreshing ? "Trying…" : "Try again"}
+            </button>
+          </div>
+        </Card>
       ) : null}
     </div>
   );

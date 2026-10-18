@@ -1,26 +1,20 @@
-/* data-table.css -- a DataTable's frame and its cells: a card's edge around
-   a scroller, headings over rows, each row ruled from the next, and a row
-   that opens something lit under the pointer. */
+/* data-table.css -- a DataTable's scroller and cells inside its Card:
+   headings over rows, each row ruled from the next, and a row that opens
+   something lit under the pointer. */
 
 @layer components {
-  .luke-data-table {
-    overflow: hidden;
-    border: 1px solid var(--luke-color-border);
-    border-radius: var(--luke-radius-14);
-    background: var(--luke-color-surface);
+  .luke-data-table-empty {
+    padding-block: var(--luke-space-12);
+    text-align: center;
+  }
+
+  /* The table's words set the body role; the Card around it frames them. */
+  .luke-data-table-scroller {
+    overflow-x: auto;
     color: var(--luke-color-text);
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-body-size);
     line-height: var(--luke-type-body-leading);
-  }
-
-  .luke-data-table[data-empty="true"] {
-    padding: var(--luke-space-32) var(--luke-space-20);
-    text-align: center;
-  }
-
-  .luke-data-table-scroller {
-    overflow-x: auto;
   }
 
   /* Note that every cell keeps to one line, because the type roles break
