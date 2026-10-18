@@ -3,11 +3,11 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INBOX_STATUS, type InboxItem, type InboxReply } from "@luke/features/inbox-wire";
 import type { AppInboxTask, AppInboxTasklessItem } from "@luke/host/app-state";
 import { Atom } from "effect/reactivity";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { appStateNow } from "../use-app-state";
 
 /**
- * inbox-settling.ts -- the window's own answers and messages on their way, laid over every read of the Inbox until each read holds them.
+ * inbox-settling.ts -- the window's own answers and messages, laid over every read of the Inbox until a read holds the item changed since.
  *
  * The window draws an item from several reads at once: the chosen task's
  * own held read (`use-task-inbox.ts`), every listed task's and every agent
@@ -18,17 +18,20 @@ import { appStateNow } from "../use-app-state";
  * alone came back from another, stale, read the moment the window drew from
  * that one instead, and left again once it caught up. So an answer is laid
  * here the moment it is sent, as the item would stand answered, and every
- * read draws it so until it holds the item settled, or at a newer revision,
- * since the agent posted it again; a stale read never brings it back. A
- * message on an item's thread, once the service took it, is laid the same
- * way, until a read holds the item as it changed then or later.
+ * read draws it so while it holds the item open at that revision or older;
+ * a read holding it settled draws it as it holds it. A message on an
+ * item's thread, once the service took it, is laid the same way over a read
+ * that does not hold it yet.
  *
- * As `use-inbox-read-marks.ts` keeps a mark until the reads catch up, each
- * read here says which items it is still behind on (`report`), and an entry
- * the service took is let go once no read is behind on it, or at once where
- * the service refused it, the item standing again as it was. A read that
- * holds the item at a newer revision lets go of it too, since what was
- * answered is no longer what the agent asks.
+ * An entry is let go where the service refused it, the item standing again
+ * as the reads hold it, or once a read holds the item changed since: at a
+ * newer revision, the agent having posted it again, or changed after the
+ * service's word on the send. Note that it is not let go once every read
+ * merely holds it, because a read asked before the send may still land
+ * after, and nothing but a later change says a read is past it. Main's
+ * read names no revision, so it is trusted again once it has been seen
+ * without the item: until then it is behind the answer, and after it, an
+ * item it lists is one the agent asked again.
  */
 
 /** What the window sent on an item. */
@@ -39,7 +42,7 @@ const SETTLING = {
 
 type SettlingKind = (typeof SETTLING)[keyof typeof SETTLING];
 
-/** One send the reads may not hold yet: the item as it stands once sent, the revision sent on, whether the service took it, and the book's version it was last moved in. */
+/** One send: the item as it stands once sent, the revision sent on, whether the service took it, and whether main's read was seen without the item since. */
 interface Settling {
   readonly kind: SettlingKind;
   readonly item: InboxItem;
@@ -47,147 +50,105 @@ interface Settling {
   /** The send it stands for, so a later send on the same item is not let go by an earlier one's word. */
   readonly sent: symbol;
   readonly taken: boolean;
-  readonly at: number;
-}
-
-/** Every entry by item, and a version moved with each change, which a read's word names as the one it drew. */
-interface Book {
-  readonly entries: ReadonlyMap<string, Settling>;
-  readonly version: number;
-}
-
-/** One read that draws items. */
-type Source = symbol;
-
-/** A read's word: which entries it is behind on, as of the book's version it drew. */
-interface Word {
-  readonly behind: ReadonlySet<string>;
-  readonly version: number;
-}
-
-interface Held {
-  readonly book: Book;
-  readonly words: ReadonlyMap<Source, Word>;
+  readonly mainCaughtUp: boolean;
 }
 
 type Change =
-  | { readonly lay: Omit<Settling, "at"> }
+  | { readonly lay: Omit<Settling, "mainCaughtUp"> }
   | { readonly take: { readonly sent: symbol; readonly item: InboxItem } }
   | { readonly refuse: symbol }
-  | {
-      readonly report: {
-        readonly source: Source;
-        readonly word: Word;
-        readonly passed: ReadonlySet<string>;
-      };
-    }
-  | { readonly leave: Source };
+  /** Reads hold these items changed since their entries. */
+  | { readonly passed: ReadonlySet<string> }
+  /** Main's read was seen without these items. */
+  | { readonly mainWithout: ReadonlySet<string> };
 
-const NOTHING_HELD: Held = { book: { entries: new Map(), version: 0 }, words: new Map() };
+const NOTHING_LAID: ReadonlyMap<string, Settling> = new Map();
 
 const NO_IDS: ReadonlySet<string> = new Set();
 
-/** Whether two sets hold the same ids. */
-function sameIds(one: ReadonlySet<string>, other: ReadonlySet<string>): boolean {
-  return one.size === other.size && [...other].every((id) => one.has(id));
-}
-
-/** The book with its entries moved on to `entries`, its version with them. */
-function moved(held: Held, entries: ReadonlyMap<string, Settling>): Held {
-  return { ...held, book: { entries, version: held.book.version + 1 } };
-}
-
-/**
- * The entries with every one let go that the service took and that every
- * read has drawn since and is not behind on; the very book where none is.
- * Note that a read that has not drawn an entry yet keeps it, because what
- * it last said was said of a book without it.
- */
-function caughtUp(held: Held): Held {
-  const words = [...held.words.values()];
-  const kept = [...held.book.entries].filter(
-    ([itemId, entry]) =>
-      !entry.taken || words.some((word) => word.version < entry.at || word.behind.has(itemId)),
-  );
-  return kept.length === held.book.entries.size ? held : moved(held, new Map(kept));
-}
-
 /** The entry for the send given, by item, where it still stands. */
-function entryOf(held: Held, sent: symbol): readonly [string, Settling] | undefined {
-  return [...held.book.entries].find(([, entry]) => entry.sent === sent);
+function entryOf(
+  entries: ReadonlyMap<string, Settling>,
+  sent: symbol,
+): readonly [string, Settling] | undefined {
+  return [...entries].find(([, entry]) => entry.sent === sent);
 }
 
-/** What the change makes of what the window holds. */
-function changed(held: Held, change: Change): Held {
-  const { entries, version } = held.book;
-  if ("lay" in change) {
-    return moved(
-      held,
-      new Map(entries).set(change.lay.item.id, { ...change.lay, at: version + 1 }),
-    );
-  }
-  if ("take" in change) {
-    const found = entryOf(held, change.take.sent);
-    if (found === undefined) return held;
-    const [itemId, entry] = found;
-    const taken = { ...entry, item: change.take.item, taken: true, at: version + 1 };
-    return moved(held, new Map(entries).set(itemId, taken));
-  }
-  if ("refuse" in change) {
-    const found = entryOf(held, change.refuse);
-    if (found === undefined) return held;
-    const kept = new Map(entries);
-    kept.delete(found[0]);
-    return moved(held, kept);
-  }
-  if ("leave" in change) {
-    if (!held.words.has(change.leave)) return held;
-    const words = new Map(held.words);
-    words.delete(change.leave);
-    return caughtUp({ ...held, words });
-  }
-  const { source, word, passed } = change.report;
-  const said = held.words.get(source);
-  const gone = [...passed].filter((itemId) => entries.has(itemId));
-  if (said?.version === word.version && sameIds(said.behind, word.behind) && gone.length === 0) {
-    return held;
-  }
-  const words = new Map(held.words).set(source, word);
-  if (gone.length === 0) return caughtUp({ ...held, words });
+/** The entries without those named; the very map where it holds none of them. */
+function without(
+  entries: ReadonlyMap<string, Settling>,
+  itemIds: Iterable<string>,
+): ReadonlyMap<string, Settling> {
+  const gone = [...itemIds].filter((itemId) => entries.has(itemId));
+  if (gone.length === 0) return entries;
   const kept = new Map(entries);
   for (const itemId of gone) kept.delete(itemId);
-  return caughtUp(moved({ ...held, words }, kept));
+  return kept;
 }
 
-/** What the window sent that the reads may not hold yet, kept for the window's life whichever page draws it. */
-const settlingAtom: Atom.Writable<Held, Change> = Atom.keepAlive(
+/** What the change makes of the entries. */
+function changed(
+  entries: ReadonlyMap<string, Settling>,
+  change: Change,
+): ReadonlyMap<string, Settling> {
+  if ("lay" in change) {
+    return new Map(entries).set(change.lay.item.id, { ...change.lay, mainCaughtUp: false });
+  }
+  if ("take" in change) {
+    const found = entryOf(entries, change.take.sent);
+    if (found === undefined) return entries;
+    const [itemId, entry] = found;
+    return new Map(entries).set(itemId, { ...entry, item: change.take.item, taken: true });
+  }
+  if ("refuse" in change) {
+    const found = entryOf(entries, change.refuse);
+    return found === undefined ? entries : without(entries, [found[0]]);
+  }
+  if ("passed" in change) return without(entries, change.passed);
+  const caught = [...change.mainWithout].filter(
+    (itemId) => entries.get(itemId)?.mainCaughtUp === false,
+  );
+  if (caught.length === 0) return entries;
+  const next = new Map(entries);
+  for (const itemId of caught) {
+    const entry = entries.get(itemId);
+    if (entry !== undefined) next.set(itemId, { ...entry, mainCaughtUp: true });
+  }
+  return next;
+}
+
+/** What the window sent, kept for the window's life whichever page draws it. */
+const settlingAtom: Atom.Writable<ReadonlyMap<string, Settling>, Change> = Atom.keepAlive(
   Atom.writable(
-    (): Held => NOTHING_HELD,
+    (): ReadonlyMap<string, Settling> => NOTHING_LAID,
     (ctx, change: Change) => ctx.setSelf(changed(ctx.get(settlingAtom), change)),
   ),
 );
 
-/** How a read's item stands under an entry: the entry's item where the read is behind it, nothing where the read holds it, and passed where the read holds a newer revision. */
+/** Whether a read holds the item changed since the entry: posted again, or changed after the service's word on the send. */
+function passedBy(read: InboxItem, entry: Settling): boolean {
+  return read.revision > entry.revision || (entry.taken && read.updatedAt > entry.item.updatedAt);
+}
+
+/** Whether a read holds the message the entry stands for: the newest on the service's thread. */
+function holdsMessage(read: InboxItem, entry: Settling): boolean {
+  const newest = entry.item.messages?.at(-1)?.id;
+  return newest === undefined || (read.messages ?? []).some((message) => message.id === newest);
+}
+
+/** How a read's item stands under an entry: the entry's item where the read is behind it, nothing where it holds the send, and passed where it holds a later change. */
 function overlaid(read: InboxItem, entry: Settling): InboxItem | "passed" | undefined {
-  if (read.revision > entry.revision) return "passed";
+  if (passedBy(read, entry)) return "passed";
   if (entry.kind === SETTLING.ANSWER) {
     return read.status === INBOX_STATUS.OPEN ? entry.item : undefined;
   }
-  return read.updatedAt < entry.item.updatedAt ? entry.item : undefined;
+  return holdsMessage(read, entry) ? undefined : entry.item;
 }
 
-/** A read's items with the entries laid over them: the very list where none is, and which the read is behind on and has passed. */
-interface Laid<A> {
-  readonly value: A;
-  readonly behind: ReadonlySet<string>;
-  readonly passed: ReadonlySet<string>;
-}
-
-/** The items as the window holds them, the entries laid over a read behind them. */
+/** The items as the window holds them, the entries laid over a read behind them, and the items the read has passed; the very list where none is laid. */
 function laidItems(
   items: readonly InboxItem[],
   entries: ReadonlyMap<string, Settling>,
-  behind: Set<string>,
   passed: Set<string>,
 ): readonly InboxItem[] {
   if (entries.size === 0) return items;
@@ -198,49 +159,34 @@ function laidItems(
     const over = overlaid(read, entry);
     if (over === "passed") passed.add(read.id);
     if (over === undefined || over === "passed") return read;
-    behind.add(read.id);
     moved = true;
     return over;
   });
   return moved ? laid : items;
 }
 
-/** Says, after each draw, which entries a read is behind on and which it has passed, and lets go of its word as it leaves. */
-function useReport(
-  version: number,
-  behind: ReadonlySet<string>,
-  passed: ReadonlySet<string>,
-): void {
+/** Lets go, after a draw, of the entries a read has passed. */
+function usePassed(passed: ReadonlySet<string>): void {
   const change = useAtomSet(settlingAtom);
-  const source = useRef<Source>(Symbol("inbox read"));
   useEffect(() => {
-    change({ report: { source: source.current, word: { behind, version }, passed } });
-  }, [change, version, behind, passed]);
-  useEffect(() => {
-    const own = source.current;
-    return () => change({ leave: own });
-  }, [change]);
+    if (passed.size > 0) change({ passed });
+  }, [change, passed]);
 }
 
-/** The book alone, so a read draws again only as an entry comes, goes, or is taken. */
-function useBook(): Book {
-  return useAtomValue(settlingAtom, (held) => held.book);
+/** The entries alone. */
+function useEntries(): ReadonlyMap<string, Settling> {
+  return useAtomValue(settlingAtom);
 }
 
-/** One read's items, the window's own answers and messages laid over them until the read holds them. */
+/** One read's items, the window's own answers and messages laid over them where the read is behind them. */
 export function useSettledItems(items: readonly InboxItem[]): readonly InboxItem[] {
-  const { entries, version } = useBook();
-  const laid = useMemo((): Laid<readonly InboxItem[]> => {
-    const behind = new Set<string>();
+  const entries = useEntries();
+  const laid = useMemo(() => {
     const passed = new Set<string>();
-    const value = laidItems(items, entries, behind, passed);
-    return {
-      value,
-      behind: behind.size === 0 ? NO_IDS : behind,
-      passed: passed.size === 0 ? NO_IDS : passed,
-    };
+    const value = laidItems(items, entries, passed);
+    return { value, passed: passed.size === 0 ? NO_IDS : passed };
   }, [items, entries]);
-  useReport(version, laid.behind, laid.passed);
+  usePassed(laid.passed);
   return laid.value;
 }
 
@@ -248,25 +194,20 @@ export function useSettledItems(items: readonly InboxItem[]): readonly InboxItem
 export function useSettledReads(
   reads: ReadonlyMap<string, readonly InboxItem[]>,
 ): ReadonlyMap<string, readonly InboxItem[]> {
-  const { entries, version } = useBook();
-  const laid = useMemo((): Laid<ReadonlyMap<string, readonly InboxItem[]>> => {
-    const behind = new Set<string>();
+  const entries = useEntries();
+  const laid = useMemo(() => {
     const passed = new Set<string>();
     let moved = false;
     const value = new Map(
       [...reads].map(([key, items]) => {
-        const over = laidItems(items, entries, behind, passed);
+        const over = laidItems(items, entries, passed);
         if (over !== items) moved = true;
         return [key, over] as const;
       }),
     );
-    return {
-      value: moved ? value : reads,
-      behind: behind.size === 0 ? NO_IDS : behind,
-      passed: passed.size === 0 ? NO_IDS : passed,
-    };
+    return { value: moved ? value : reads, passed: passed.size === 0 ? NO_IDS : passed };
   }, [reads, entries]);
-  useReport(version, laid.behind, laid.passed);
+  usePassed(laid.passed);
   return laid.value;
 }
 
@@ -278,34 +219,39 @@ export interface SettledWaiting {
 
 /**
  * Main's read of what waits, the items the window answered left out until
- * main no longer lists them, so a count drops the moment an answer is sent.
- * Note that main names no revision, so an item the agent posted again
- * stands once a read of its items holds the newer revision, which lets go
- * of the answer laid over it.
+ * main is first seen without them, so a count drops the moment an answer is
+ * sent and an item the agent asks again afterwards counts again.
  */
 export function useSettledWaiting(
   waiting: readonly AppInboxTask[],
   taskless: readonly AppInboxTasklessItem[],
 ): SettledWaiting {
-  const { entries, version } = useBook();
-  const laid = useMemo((): Laid<SettledWaiting> => {
+  const entries = useEntries();
+  const change = useAtomSet(settlingAtom);
+  const laid = useMemo(() => {
+    const listed = new Set(
+      [...waiting.flatMap((task) => task.items), ...taskless].map(({ id }) => id),
+    );
     // Note that an entry standing for a settled item hides it, a message laid since an answer among them.
-    const answered = (itemId: string) => {
+    const hidden = (itemId: string) => {
       const entry = entries.get(itemId);
-      return entry !== undefined && entry.item.status !== INBOX_STATUS.OPEN;
+      return entry !== undefined && !entry.mainCaughtUp && entry.item.status !== INBOX_STATUS.OPEN;
     };
-    const listed = [...waiting.flatMap((task) => task.items), ...taskless];
-    const behind = new Set(listed.map((item) => item.id).filter(answered));
-    if (behind.size === 0) return { value: { waiting, taskless }, behind: NO_IDS, passed: NO_IDS };
+    const seenWithout = [...entries.keys()].filter((itemId) => !listed.has(itemId));
+    const mainWithout = seenWithout.length === 0 ? NO_IDS : new Set(seenWithout);
+    if (![...listed].some(hidden)) return { value: { waiting, taskless }, mainWithout };
     const value = {
       waiting: waiting
-        .map((task) => ({ ...task, items: task.items.filter((item) => !answered(item.id)) }))
+        .map((task) => ({ ...task, items: task.items.filter((item) => !hidden(item.id)) }))
         .filter((task) => task.items.length > 0),
-      taskless: taskless.filter((item) => !answered(item.id)),
+      taskless: taskless.filter((item) => !hidden(item.id)),
     };
-    return { value, behind, passed: NO_IDS };
+    return { value, mainWithout };
   }, [waiting, taskless, entries]);
-  useReport(version, laid.behind, laid.passed);
+  const { mainWithout } = laid;
+  useEffect(() => {
+    if (mainWithout.size > 0) change({ mainWithout });
+  }, [change, mainWithout]);
   return laid.value;
 }
 
@@ -339,9 +285,9 @@ function answeredNow(item: InboxItem, answer: InboxReply, now: number): InboxIte
 export interface InboxSettler {
   /** Lays an answer on its item at once, as answered by the reader now; the send it stands for. */
   readonly answer: (item: InboxItem, answer: InboxReply) => symbol;
-  /** Lays a message's item as the service answered it, until the reads hold it. */
+  /** Lays a message's item as the service answered it, over every read that does not hold it yet. */
   readonly message: (item: InboxItem) => void;
-  /** The service took the send: the item as it answered, laid until the reads hold it. */
+  /** The service took the send: the item as it answered, laid over every read behind it. */
   readonly take: (sent: symbol, item: InboxItem) => void;
   /** The service did not take it, so the item stands as the reads hold it. */
   readonly refuse: (sent: symbol) => void;
