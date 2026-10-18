@@ -66,7 +66,7 @@ import {
   REVIEW_STATE,
   type ReviewState,
 } from "@luke/features/coding-agent-wire";
-import { githubImageOf } from "@luke/features/github-image";
+import { githubImageOf, imageTypeOfPath } from "@luke/features/github-image";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -100,8 +100,9 @@ export interface GitHubPullRequest {
   readonly openedAt?: number;
   readonly mergedAt?: number;
   readonly closedAt?: number;
-  /** The branch it merges into, where GitHub named it. */
+  /** The branch it merges into, and that branch's head as GitHub last counted it, where GitHub named them. */
   readonly baseRef?: string;
+  readonly baseSha?: string;
   /** Its labels, each by its name and its colour as GitHub's six hex digits. */
   readonly labels?: readonly GitHubLabel[];
   /** How many comments it holds, on its conversation and its diff together, where GitHub counted them. */
@@ -192,7 +193,7 @@ const PullRequestSchema = Schema.Struct({
   created_at: Schema.optional(Schema.String),
   merged_at: Schema.optional(Schema.NullOr(Schema.String)),
   closed_at: Schema.optional(Schema.NullOr(Schema.String)),
-  base: Schema.optional(Schema.Struct({ ref: Schema.String })),
+  base: Schema.optional(Schema.Struct({ ref: Schema.String, sha: Schema.optional(Schema.String) })),
   labels: Schema.optional(
     Schema.Array(Schema.Struct({ name: Schema.String, color: Schema.String })),
   ),
@@ -377,6 +378,7 @@ function pullRequestOf(record: typeof PullRequestSchema.Type): GitHubPullRequest
     ...(mergedAt === undefined ? undefined : { mergedAt }),
     ...(closedAt === undefined ? undefined : { closedAt }),
     ...(record.base === undefined ? undefined : { baseRef: record.base.ref }),
+    ...(record.base?.sha === undefined ? undefined : { baseSha: record.base.sha }),
     ...(record.labels === undefined ? undefined : { labels: record.labels }),
     ...(comments === undefined ? undefined : { comments }),
     ...(record.commits === undefined ? undefined : { commits: record.commits }),
@@ -577,6 +579,61 @@ export const pullRequestFiles = /* @__PURE__ */ Effect.fn("web/pullRequestFiles"
   }
   const kept = files.slice(0, CHANGES_BOUNDS.MAX_FILES);
   return { files: kept, truncated: pullRequest.changedFiles > kept.length };
+});
+
+/** Two commits compared, as far as where they part. */
+const CompareSchema = Schema.Struct({ merge_base_commit: Schema.Struct({ sha: Schema.String }) });
+
+/** The commits a pull request's changed images are read at: its head, and where it parts from its base branch, each where it was read. */
+export interface ImageCommits {
+  readonly headSha?: string;
+  readonly baseSha?: string;
+}
+
+/** Whether a changed file is an image whose before stands at the base: one changed in place, moved, or removed. */
+function imageWithBefore(file: CodingAgentChangedFile): boolean {
+  return (
+    file.status !== CHANGED_FILE_STATUS.ADDED &&
+    imageTypeOfPath(file.previousPath ?? file.path) !== undefined
+  );
+}
+
+/**
+ * The commits the files' changed images are read at: the pull request's
+ * head, and, only where an image stood before them, where its head and its
+ * base branch part, the merge base GitHub counts the files' changes from,
+ * read off one compare of the two asking for a single commit and file,
+ * since GitHub pages the rest. Note that the base branch's head is never
+ * answered in the merge base's place, because a base branch that changed
+ * the same image since would draw a before the pull request never had; a
+ * compare that does not land answers no merge base, and the window draws
+ * the after alone.
+ */
+export const imageCommits = /* @__PURE__ */ Effect.fn("web/imageCommits")(function* (
+  token: Redacted.Redacted,
+  fullName: string,
+  pullRequest: Option.Option<Pick<GitHubPullRequest, "headSha" | "baseSha">>,
+  files: readonly CodingAgentChangedFile[],
+): Effect.fn.Return<ImageCommits, never, HttpClient.HttpClient> {
+  if (Option.isNone(pullRequest)) return {};
+  const { headSha, baseSha } = pullRequest.value;
+  if (baseSha === undefined || !files.some(imageWithBefore)) return { headSha };
+  const request = githubRead(
+    `${repositoryPath(fullName)}/compare/${segment(baseSha)}...${segment(headSha)}`,
+    token,
+  ).pipe(HttpClientRequest.setUrlParams({ per_page: "1" }));
+  const compared = yield* readOptional(request, CompareSchema).pipe(
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(`a pull request's merge base could not be read: ${failure._tag}`),
+        Option.none(),
+      ),
+    ),
+  );
+  return Option.match(compared, {
+    onNone: () => ({ headSha }),
+    onSome: (compare) => ({ headSha, baseSha: compare.merge_base_commit.sha }),
+  });
 });
 
 /** A GitHub account as the people a pull request names hold it: GitHub's id, its login, whether it is an App's bot, and its avatar where GitHub's avatar host serves it. */
