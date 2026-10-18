@@ -8,6 +8,7 @@ import {
   CloseIcon,
   ConfirmDialog,
   IconButton,
+  LIST_DENSITY,
   List,
   ListRow,
   PlusIcon,
@@ -211,7 +212,7 @@ export function TerminalShells({
         <p className="terminal-shells-none">No shells.</p>
       ) : (
         <div className="terminal-shells-rows">
-          <List label="Shell list">
+          <List label="Shell list" density={LIST_DENSITY.COMPACT}>
             {shells.map((shell) => (
               <ShellRow
                 key={shell.id}

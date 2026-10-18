@@ -533,9 +533,13 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     checks.querySelector(".pull-request-count")?.textContent,
     "1 failed, 1 running, 1 passed",
   );
-  assert.deepEqual(words(tab, ".pull-request-check-name"), ["lint", "build", "test"]);
+  assert.deepEqual(words(tab, "li .luke-list-row-title"), [
+    "lint, failed",
+    "build, running",
+    "test, passed",
+  ]);
   assert.deepEqual(
-    words(tab, '.pull-request-check-time:not([role="timer"])'),
+    words(tab, 'li .luke-list-row-meta:not(:has([role="timer"]))'),
     ["1m 5s", "1m 5s"],
     "a finished check says how long it ran",
   );
@@ -566,7 +570,7 @@ it.effect(
       );
       yield* Effect.promise(() => choose(tab, "Checks"));
 
-      const rows = [...tab.querySelectorAll(".pull-request-check")];
+      const rows = [...tab.querySelectorAll('[aria-label="Check list"] > li')];
       assert.equal(
         rows[0]?.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
         "https://avatars.githubusercontent.com/in/15368?v=4&s=32",
@@ -591,7 +595,7 @@ it.effect(
       yield* TestClock.adjust("1 second");
       yield* Effect.promise(settle);
       assert.deepEqual(words(tab, '[role="timer"]'), ["1m 6s"], "the running one counts on");
-      assert.deepEqual(words(tab, '.pull-request-check-time:not([role="timer"])'), [
+      assert.deepEqual(words(tab, 'li .luke-list-row-meta:not(:has([role="timer"]))'), [
         "1m 5s",
         "1m 5s",
       ]);
@@ -640,21 +644,16 @@ test("the Checks tab lists the head's deployments over its checks: each environm
     tab.querySelector<HTMLElement>('[aria-label="Deployments"]') ??
     assert.fail("the deployments stand");
   assert.equal(deployments.querySelector(".pull-request-count")?.textContent, "2");
-  assert.deepEqual(words(deployments, ".pull-request-check-name"), [
+  assert.deepEqual(words(deployments, "li .luke-list-row-title"), [
     "Preview – luke-web",
     "staging",
   ]);
-  assert.deepEqual(
-    [...deployments.querySelectorAll('.pull-request-check-glyph[role="img"]')].map((each) =>
-      each.getAttribute("aria-label"),
-    ),
-    ["Deployed", "Failed"],
-  );
+  assert.deepEqual(words(deployments, "li .luke-list-row-description"), ["Deployed", "Failed"]);
   assert.equal(
     deployments.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
     "https://avatars.githubusercontent.com/in/8329?v=4&s=32",
   );
-  const buttons = deployments.querySelectorAll<HTMLButtonElement>("button.pull-request-check");
+  const buttons = deployments.querySelectorAll<HTMLButtonElement>("li > button");
   assert.equal(buttons.length, 1, "a deployment naming no address opens nothing");
   act(() => buttons[0]?.click());
   await settle();
@@ -676,23 +675,23 @@ test("past five checks the list folds behind Show all, keeping every one that fa
   const fold = () =>
     tab.querySelector<HTMLButtonElement>(".pull-request-checks-fold") ??
     assert.fail("the list folds");
-  assert.deepEqual(words(tab, ".pull-request-check-name"), [
-    "lint",
-    "build",
-    "test 0",
-    "test 1",
-    "test 2",
+  assert.deepEqual(words(tab, "li .luke-list-row-title"), [
+    "lint, failed",
+    "build, running",
+    "test 0, passed",
+    "test 1, passed",
+    "test 2, passed",
   ]);
   assert.equal(fold().textContent, "Show all 8");
   assert.equal(fold().getAttribute("aria-expanded"), "false");
 
   act(() => fold().click());
-  assert.equal(words(tab, ".pull-request-check-name").length, 8);
+  assert.equal(words(tab, "li .luke-list-row-title").length, 8);
   assert.equal(fold().textContent, "Show less");
   assert.equal(fold().getAttribute("aria-expanded"), "true");
 
   act(() => fold().click());
-  assert.equal(words(tab, ".pull-request-check-name").length, 5);
+  assert.equal(words(tab, "li .luke-list-row-title").length, 5);
 });
 
 test("a check that failed or still runs never folds away, however many there are, and five or fewer checks do not fold", async () => {
@@ -704,7 +703,7 @@ test("a check that failed or still runs never folds away, however many there are
     controlAnswering({ checks: () => Promise.resolve({ pullRequest: many }) }),
   );
   await choose(tab, "Checks");
-  assert.equal(words(tab, ".pull-request-check-name").length, 7);
+  assert.equal(words(tab, "li .luke-list-row-title").length, 7);
   assert.equal(tab.querySelector(".pull-request-checks-fold")?.textContent, "Show all 8");
 
   act(() => root?.unmount());
@@ -1050,10 +1049,10 @@ test("opened on its files, as the Changes chip opens it, the header stands above
   );
 
   await choose(tab, "Checks");
-  assert.deepEqual(words(shownPanel()[0] ?? tab, ".pull-request-check-name"), [
-    "lint",
-    "build",
-    "test",
+  assert.deepEqual(words(shownPanel()[0] ?? tab, "li .luke-list-row-title"), [
+    "lint, failed",
+    "build, running",
+    "test, passed",
   ]);
 
   await choose(tab, "Conversation");
@@ -1136,7 +1135,7 @@ test("a check that ran for no time, skipped or cancelled before it began, says n
     controlAnswering({ checks: () => Promise.resolve({ pullRequest: none }) }),
   );
   await choose(tab, "Checks");
-  assert.deepEqual(words(tab, ".pull-request-check-time"), ["1m 5s"]);
+  assert.deepEqual(words(tab, "li .luke-list-row-meta"), ["1m 5s"]);
 });
 
 test("a merged pull request says so on the bar, as its overview read it, says nothing of merging, and one with no description, checks, or comments says so", async () => {
@@ -1251,7 +1250,11 @@ test("the bar, the title, and the files' count stand from what Luke holds before
   checks.answer({ pullRequest: CHECKS });
   await settle();
   assert.deepEqual(waiting(tab), []);
-  assert.deepEqual(words(section("Checks"), ".pull-request-check-name"), ["lint", "build", "test"]);
+  assert.deepEqual(words(section("Checks"), "li .luke-list-row-title"), [
+    "lint, failed",
+    "build, running",
+    "test, passed",
+  ]);
 });
 
 /** A read answering each ask with the next of the answers given, the last again once they run out. */
@@ -1296,7 +1299,7 @@ test("a part whose read failed says so with a Retry that reads it alone, the oth
     assert.fail("the failed section offers a retry");
   act(() => retry.click());
   await settle();
-  assert.deepEqual(words(tab, ".pull-request-check-name"), ["retried"]);
+  assert.deepEqual(words(tab, "li .luke-list-row-title"), ["retried, passed"]);
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
     "Expire invitations #42",
@@ -1314,7 +1317,7 @@ test("a part whose read failed says so with a Retry that reads it alone, the oth
     ) ?? assert.fail("the ⋯ offers Refresh");
   await act(async () => refresh.click());
   await settle();
-  assert.deepEqual(words(tab, ".pull-request-check-name"), ["refreshed"]);
+  assert.deepEqual(words(tab, "li .luke-list-row-title"), ["refreshed, passed"]);
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
     "Expire invitations weekly #42",

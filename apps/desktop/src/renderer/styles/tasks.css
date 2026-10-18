@@ -2268,33 +2268,19 @@ button.file-ref:hover .file-ref-path {
   border-radius: var(--luke-control-radius);
 }
 
-/* The checks, one boxed list, each row opening the check's page, folded
-   past five behind a quiet control along its foot. */
-.pull-request-checks {
-  overflow: clip;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-}
-
-.pull-request-check-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.pull-request-check-list > li + li {
-  border-top: 1px solid var(--luke-color-border);
-}
-
+/* The checks, one card of rows (`@luke/ui`'s List), each opening the
+   check's page, folded past five behind a quiet control under the card. */
 .pull-request-checks-fold {
   display: block;
   width: 100%;
+  margin-top: var(--luke-space-4);
   padding: var(--luke-space-6) var(--boxed-inset);
   border: 0;
-  border-top: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
   background: none;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   text-align: center;
   transition:
     background-color var(--duration-hover) ease,
@@ -2324,26 +2310,11 @@ button.file-ref:hover .file-ref-path {
   object-fit: cover;
 }
 
-.pull-request-check {
-  display: flex;
-  width: 100%;
-  min-width: 0;
+/* A check's lead: its standing's glyph, then its App's avatar. */
+.pull-request-check-lead {
+  display: inline-flex;
   align-items: center;
   gap: var(--luke-space-8);
-  padding: var(--luke-space-6) var(--boxed-inset);
-  border: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font-size: 12.5px;
-  text-align: left;
-}
-
-button.pull-request-check {
-  transition: background-color var(--duration-hover) ease;
-}
-
-button.pull-request-check:hover {
-  background: var(--luke-color-fill-hover);
 }
 
 .pull-request-check-glyph {
@@ -2372,18 +2343,6 @@ button.pull-request-check:hover {
 
 [data-check-state="skipped"] {
   --check-tone: var(--luke-color-text-subtle);
-}
-
-.pull-request-check-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pull-request-check-time {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Words written on GitHub, drawn at the transcript's own size, a step over

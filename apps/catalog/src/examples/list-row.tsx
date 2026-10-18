@@ -1,4 +1,5 @@
 import {
+  ACTIONS_SHOWN,
   EllipsisIcon,
   IconButton,
   LIST_DENSITY,
@@ -109,6 +110,55 @@ function ListRows(): React.JSX.Element {
               title="Scheduled run"
               description="Finished"
               meta="1d"
+              onPress={() => undefined}
+            />
+          </List>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="list-row-dense" title="Dense rows, acts on hover">
+        <div className="catalog-narrow">
+          <List label="Plans" density={LIST_DENSITY.DENSE}>
+            <ListRow
+              title="Ship the release"
+              description="luke"
+              meta="2h"
+              current
+              onPress={() => undefined}
+              actionsShown={ACTIONS_SHOWN.ON_HOVER}
+              actions={<IconButton icon={<TrashIcon />} label="Archive Ship the release" />}
+            />
+            <ListRow
+              title="Draw the sidebar with the shared rows"
+              description="luke"
+              meta="1d"
+              onPress={() => undefined}
+              actionsShown={ACTIONS_SHOWN.ON_HOVER}
+              menuOpen
+              actions={
+                <IconButton
+                  icon={<TrashIcon />}
+                  label="Archive Draw the sidebar with the shared rows"
+                />
+              }
+            />
+            <ListRow title="Deleting a plan" meta="3d" disabled onPress={() => undefined} />
+          </List>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="list-row-chevron" title="Rows that go deeper">
+        <div className="catalog-narrow">
+          <List label="Tools" density={LIST_DENSITY.COMPACT}>
+            <ListRow
+              title="create_issue"
+              description="Opens an issue in a repository"
+              chevron
+              current
+              onPress={() => undefined}
+            />
+            <ListRow
+              title="list_issues"
+              description="Lists a repository's issues"
+              chevron
               onPress={() => undefined}
             />
           </List>
