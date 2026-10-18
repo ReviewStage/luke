@@ -713,6 +713,12 @@ node --input-type=module -e '
     process.exit(1);
   }
 ' "$LUKE_REPO_ROOT"
+# The unit of work is a task and a plan is the document inside it. The rename
+# from one to the other had to be finished twice by hand because new code kept
+# arriving under the old names, so a name or a file that calls a task a plan,
+# and a schema's plan-spelled SQL name the document does not own, fail here.
+# The allowlist and its reasons are `lib/task-names.mjs`'s.
+node "$LUKE_REPO_ROOT/scripts/task-names.mjs"
 
 # This is the one scan for secrets the repository runs (AGENTS.md's "Never"), and
 # a test fixture shaped like a provider's live credential is what GitHub's
