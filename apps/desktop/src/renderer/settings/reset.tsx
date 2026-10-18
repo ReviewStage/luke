@@ -7,7 +7,7 @@ import type {
   SettingsResetScope,
 } from "@luke/settings/wire";
 import { appSettingsView, SETTINGS_RESET_SCOPE } from "@luke/settings/wire";
-import { ResetIcon } from "@luke/ui";
+import { BUTTON_VARIANT, Button, ResetIcon } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
@@ -82,10 +82,13 @@ function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promis
  * to change nothing, the same reason a shortcut's own reset waits for a
  * chord. It ends the page's title line, quiet as a note's own act is, since
  * the title is what names the group it resets. One press is one ask of the
- * store; the control rests until the store answers, and a refusal is worded
- * beside it.
+ * store; the control rests until the store answers, and a refusal is said
+ * in a toast held as a failure is, since the page's title line has no row
+ * under it to say it in.
  * A reset that landed takes the control away with what it reset, so it is
  * said in a toast with an Undo, which writes back what the page held.
+ * The control is `@luke/ui`'s quiet `Button`, its glyph in the button's icon
+ * slot.
  */
 function ResetPageButton({
   scope,
@@ -100,7 +103,10 @@ function ResetPageButton({
   const reset = (asked: SettingsResetScope): Promise<ActionResult> => {
     const before = settings;
     return writes.reset(asked).then((result) => {
-      if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) return result;
+      if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+        toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        return result;
+      }
       const held = changedBy(before, appSettingsView(result.settings), asked);
       const undo = () =>
         writeBack(writes, held).then((taken) => {
@@ -115,24 +121,16 @@ function ResetPageButton({
       return result;
     });
   };
-  const { busy, rejection, run } = useSettingWrite(reset);
+  const { busy, run } = useSettingWrite(reset);
   return (
-    <>
-      {rejection ? (
-        <p className="error-message" role="alert">
-          {rejection}
-        </p>
-      ) : null}
-      <button
-        type="button"
-        className="toolbar-button quiet-button"
-        disabled={busy}
-        onClick={() => run(scope)}
-      >
-        <ResetIcon />
-        Reset to defaults
-      </button>
-    </>
+    <Button
+      variant={BUTTON_VARIANT.QUIET}
+      icon={<ResetIcon />}
+      disabled={busy}
+      onClick={() => run(scope)}
+    >
+      Reset to defaults
+    </Button>
   );
 }
 
@@ -155,6 +153,6 @@ export function pageResetControl(
   // SAFETY: `in` narrows the view to the pages the table names.
   const scope = PAGE_RESET[view as keyof typeof PAGE_RESET];
   if (!settings || !settingsScopeChanged(settings, scope)) return undefined;
-  // Keyed to the page, so a refusal said on one page is not carried to the next.
+  // Keyed to the page, so a press out on one page does not rest the next one's.
   return <ResetPageButton key={scope} scope={scope} settings={settings} writes={writes} />;
 }

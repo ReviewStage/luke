@@ -15,8 +15,10 @@ import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
-import { settingsView } from "@luke/settings/testing";
+import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
+import { experimentsOn, settingsView } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -24,8 +26,9 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
+import { DESKTOP_CAPABILITIES, handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { DOCUMENT_TASK } from "#testing/document-task";
@@ -90,6 +93,7 @@ function openPalette(
   readFiles: (taskId: string) => Promise<TasksTreeAnswer> = () =>
     Promise.reject(new Error("no repository is open")),
   page?: { agentId: string; workspaceId: string },
+  capabilities: readonly HostCapability[] = DESKTOP_CAPABILITIES,
 ): Sent {
   const sent: Sent = { tabs: [], views: [] };
   const host = document.createElement("div");
@@ -104,7 +108,13 @@ function openPalette(
         onTabChange: (tab) => sent.tabs.push(tab),
         tasks,
         settings: {
-          rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+          rows: {
+            settings: settingsView(),
+            voiceControlsDrawn: true,
+            accountDrawn: true,
+            capabilities,
+          },
+          capabilities,
           onViewChange: (view) => sent.views.push(view),
         },
         readFiles,
@@ -125,11 +135,11 @@ function Looker({ looked }: { looked: typeof DOCUMENT_TASK | undefined }): null 
 }
 
 /** The palette over `DOCUMENT_PLAN` drawn, looked at or covered as `looked` says, redrawn by the answer. */
-function paletteOverPlan(): (looked: typeof DOCUMENT_TASK | undefined) => void {
+function paletteOverTask(): (looked: typeof DOCUMENT_TASK | undefined) => void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   const registry = AtomRegistry.make();
-  const plans = tasksControl({
+  const tasks = tasksControl({
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     activeTaskId: DOCUMENT_TASK.id,
   });
@@ -146,9 +156,15 @@ function paletteOverPlan(): (looked: typeof DOCUMENT_TASK | undefined) => void {
               available: true,
               tab: PANEL_TAB.TASKS,
               onTabChange: () => undefined,
-              tasks: plans,
+              tasks: tasks,
               settings: {
-                rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+                rows: {
+                  settings: settingsView(),
+                  voiceControlsDrawn: true,
+                  accountDrawn: true,
+                  capabilities: DESKTOP_CAPABILITIES,
+                },
+                capabilities: DESKTOP_CAPABILITIES,
                 onViewChange: () => undefined,
               },
               readFiles: () => Promise.reject(new Error("no repository is open")),
@@ -169,7 +185,7 @@ function markRows(): string[] {
 }
 
 test("⌘K marks the task on screen unread and then read, and offers no mark for a task Settings or the Inbox covers", () => {
-  const draw = paletteOverPlan();
+  const draw = paletteOverTask();
   draw(undefined);
   assert.deepEqual(markRows(), []);
   act(() => {
@@ -260,6 +276,27 @@ test("the Settings filter lists every Settings page by its name, ahead of the se
   chooseFilter("Settings");
 
   assert.deepEqual(rows().slice(0, SETTINGS_PAGES.length), SETTINGS_PAGES);
+});
+
+test("on a platform without voice or Mac commands, the Settings filter lists neither page, and finds none of their rows", () => {
+  const offered = DESKTOP_CAPABILITIES.filter(
+    (each) => each !== HOST_CAPABILITY.VOICE && each !== HOST_CAPABILITY.MAC_COMMANDS,
+  );
+  const shown = SETTINGS_PAGES.filter((page) => page !== "Voice" && page !== "This Mac");
+  openPalette(undefined, undefined, undefined, offered);
+  chooseFilter("Settings");
+
+  assert.deepEqual(rows().slice(0, shown.length), shown);
+  type("Talk to Luke");
+  assert.equal(
+    rows().some((row) => row.includes("Talk to Luke")),
+    false,
+  );
+  type("Let agents run commands on this Mac");
+  assert.equal(
+    rows().some((row) => row.includes("Let agents run commands")),
+    false,
+  );
 });
 
 test("a page is found by its name, above every setting the query finds", () => {
@@ -382,8 +419,7 @@ function MenuWindow({ moves }: { moves: string[] }): null {
 
 test("the menu bar's Back and Forward, a mouse's side buttons among them, leave the window behind the palette alone", () => {
   let menuListener: ((command: AppCommand) => void) | undefined;
-  fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
+  fakeAppPlatform({
     onMenuCommand: (listener: (command: AppCommand) => void) => {
       menuListener = listener;
       return () => undefined;
@@ -517,7 +553,6 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
   } as const;
   const listed: (string | undefined)[] = [];
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (request: Act): Promise<ActOutcome> => {
       if (request.kind !== ACT_KIND.AUTOMATIONS_LIST) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
@@ -574,7 +609,13 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       onTabChange: () => undefined,
       tasks,
       settings: {
-        rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+        rows: {
+          settings: settingsView(),
+          voiceControlsDrawn: true,
+          accountDrawn: true,
+          capabilities: DESKTOP_CAPABILITIES,
+        },
+        capabilities: DESKTOP_CAPABILITIES,
         onViewChange: () => undefined,
       },
       readFiles: () => Promise.reject(new Error("no repository is open")),
@@ -594,7 +635,9 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     act(() => {
       row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
-    const words = document.querySelector(".luke-tooltip-card .actor-words .actor-ref")?.textContent;
+    const words = document.querySelector(
+      ".luke-tooltip-card .actor-words [data-actor-ref]",
+    )?.textContent;
     act(() => root.unmount());
     document.body.innerHTML = "";
     return words;
@@ -709,8 +752,8 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
         ]),
       }),
     }),
-    (planId) => {
-      read.push(planId);
+    (taskId) => {
+      read.push(taskId);
       return Promise.reject(new Error("not read here"));
     },
   );
@@ -925,13 +968,7 @@ test("a command ⌘K alone offers, the sidebar's Show my tasks, is listed by its
 /** Main's clipboard, keeping each copy the window asks of it. */
 function installClipboard(): string[] {
   const copied: string[] = [];
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-    recordSurfaceEvent: () => undefined,
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   return copied;
 }
 
@@ -1000,7 +1037,7 @@ test("⌥⌘C copies the link of what is open, the most specific first: the Inbo
   const automationId = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
   const listed = { workspaces: ON_AGENT_TAB.workspaces, workspace: ON_AGENT_TAB.workspaces[0] };
-  for (const plans of [
+  for (const tasks of [
     ON_AGENT_TAB,
     tasksControl({
       ...listed,
@@ -1020,7 +1057,7 @@ test("⌥⌘C copies the link of what is open, the most specific first: the Inbo
     }),
     tasksControl({ ...listed, factoryView: { ...tasksControl().factoryView, open: true } }),
   ]) {
-    openPalette(plans);
+    openPalette(tasks);
     act(() => {
       runAppCommand(APP_COMMAND.COMMAND_PALETTE);
       runAppCommand(APP_COMMAND.COPY_LINK);
@@ -1203,7 +1240,6 @@ test("People lists the listed workspace's members by name and role, the reader a
     },
   ];
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (request: Act): Promise<ActOutcome> =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
@@ -1277,12 +1313,12 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
 /** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */
 function PinnableTask(): React.JSX.Element {
   const [listed, setListed] = useState<Task>(DOCUMENT_TASK);
-  const plans = tasksControl({
+  const tasks = tasksControl({
     tasks: [listed],
     region: { kind: DOCUMENT_REGION.READY, task: listed },
     activeTaskId: listed.id,
-    onMarkTask: (planId, mark) => {
-      assert.equal(planId, listed.id);
+    onMarkTask: (taskId, mark) => {
+      assert.equal(taskId, listed.id);
       setListed(mark === TASK_MARK.PIN ? { ...DOCUMENT_TASK, pinnedAt: 5 } : DOCUMENT_TASK);
     },
   });
@@ -1290,14 +1326,20 @@ function PinnableTask(): React.JSX.Element {
     Fragment,
     null,
     createElement(Looker, { looked: listed }),
-    createElement(DesktopSidebar, sidebarProps(plans)),
+    createElement(DesktopSidebar, sidebarProps(tasks)),
     createElement(WindowPalette, {
       available: true,
       tab: PANEL_TAB.TASKS,
       onTabChange: () => undefined,
-      tasks: plans,
+      tasks: tasks,
       settings: {
-        rows: { settings: settingsView(), voiceControlsDrawn: true, accountDrawn: true },
+        rows: {
+          settings: settingsView(),
+          voiceControlsDrawn: true,
+          accountDrawn: true,
+          capabilities: DESKTOP_CAPABILITIES,
+        },
+        capabilities: DESKTOP_CAPABILITIES,
         onViewChange: () => undefined,
       },
       readFiles: () => Promise.reject(new Error("no repository is open")),
@@ -1343,4 +1385,70 @@ test("with a task open, ⌘K offers Pin task, which pins it under Pinned and tur
   press("Unpin task");
   assert.deepEqual(pinnedNames(), []);
   assert.deepEqual(pinRows(), ["Pin task"]);
+});
+
+/** The palette over the task given, under a registry of its own that reads the window's state as handed. */
+async function paletteUnderState(tasks: TasksControl): Promise<void> {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(WindowPalette, {
+          available: true,
+          tab: PANEL_TAB.TASKS,
+          onTabChange: () => undefined,
+          tasks,
+          settings: {
+            rows: {
+              settings: settingsView(),
+              voiceControlsDrawn: true,
+              accountDrawn: true,
+              capabilities: DESKTOP_CAPABILITIES,
+            },
+            capabilities: DESKTOP_CAPABILITIES,
+            onViewChange: () => undefined,
+          },
+          readFiles: () => Promise.reject(new Error("no repository is open")),
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
+  });
+}
+
+test("⌘K offers the open task's Chat tab only while the account has Chat on", async () => {
+  const tasks = tasksControl({
+    activeTaskId: "plan-1",
+    tasks: [
+      {
+        id: "plan-1",
+        workspaceId: "workspace-personal",
+        name: "Billing usage alerts",
+        createdAt: 1,
+        updatedAt: 2,
+        repository: null,
+      },
+    ],
+    chatView: { ...tasksControl().chatView, available: true },
+  });
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  await paletteUnderState(tasks);
+  chooseFilter("Agents");
+  assert.ok(rows().includes("Chat · Billing usage alerts"), "Chat on offers the task's Chat");
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+
+  handState({});
+  await paletteUnderState(tasks);
+  chooseFilter("Agents");
+  assert.ok(!rows().some((row) => row.startsWith("Chat")), "Chat off offers no Chat");
 });

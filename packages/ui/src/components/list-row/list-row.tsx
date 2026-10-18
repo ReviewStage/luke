@@ -1,4 +1,13 @@
-import type { ReactNode } from "react";
+import type {
+  ComponentType,
+  FocusEventHandler,
+  KeyboardEvent,
+  MouseEvent,
+  PointerEventHandler,
+  ReactElement,
+  ReactNode,
+  RefCallback,
+} from "react";
 
 /**
  * list-row.tsx -- a List of rows, each a thing a collection holds: its title, a line under it, its metadata at the end, and the acts it offers beside it.
@@ -17,7 +26,84 @@ import type { ReactNode } from "react";
  * that opens nothing is no control at all. The leading mark is decoration,
  * hidden from a reader, since the title says what the row is. The row owns
  * every length in it and takes no class or style.
+ *
+ * A keyboard-driven list (arrows or j/k between rows, a key to act on the
+ * one focused) reaches a row's press through `ref` and hears the keys
+ * pressed on it through `onKeyDown`; a row that opens nothing takes no
+ * focus, so its `ref` reaches its item, to scroll or measure, and it hears
+ * no keys, which would only be its acts'. `onContextMenu` hears a
+ * right-click anywhere on the row, its acts included, so the app can open
+ * its own menu there.
+ *
+ * The open row is current in one of two ways (`LIST_ROW_CURRENT`): the page
+ * shown beside the list, as an Inbox's item is, or the one item chosen in
+ * its set. An unread row's title stands in the heavier weight until it is
+ * read. A row that opens something may hang the app's hint from its press
+ * (`hint`), as a Button's hint hangs: the app's own tooltip, handed the
+ * words to raise and the press it wraps, whose pointer and focus handlers
+ * land on the press itself.
+ *
+ * A row's metadata stands at its middle, or, in a list read as a mail
+ * app's is (`LIST_ROW_META.TITLE`), at the end of its title's line, the
+ * description running the row's whole width under both and its leading
+ * mark level with the title.
+ *
+ * A list stands plain, its rows apart on the ground, each lit on its own;
+ * or as a card (`LIST_VARIANT.CARD`), its rows edge to edge on the card's
+ * ground with a hairline between each and the next, as a settings section's
+ * card holds its rows. A dense column, a narrow panel's history, sets its
+ * rows compact (`LIST_DENSITY.COMPACT`), a few pixels shorter and closer to
+ * their edges, the words unchanged.
  */
+
+/** How a list stands: its rows apart on the ground, or edge to edge in a card. */
+export const LIST_VARIANT = {
+  PLAIN: "plain",
+  CARD: "card",
+} as const;
+
+export type ListVariant = (typeof LIST_VARIANT)[keyof typeof LIST_VARIANT];
+
+/** How much room a list's rows keep around their words. */
+export const LIST_DENSITY = {
+  REGULAR: "regular",
+  COMPACT: "compact",
+} as const;
+
+export type ListDensity = (typeof LIST_DENSITY)[keyof typeof LIST_DENSITY];
+
+/** How the open row is current: the page shown beside the list, or the item chosen in its set. */
+export const LIST_ROW_CURRENT = {
+  PAGE: "page",
+  ITEM: "true",
+} as const;
+
+export type ListRowCurrent = (typeof LIST_ROW_CURRENT)[keyof typeof LIST_ROW_CURRENT];
+
+/** Where a row's metadata stands: at the row's middle, or at the end of its title's line. */
+export const LIST_ROW_META = {
+  MIDDLE: "middle",
+  TITLE: "title",
+} as const;
+
+export type ListRowMeta = (typeof LIST_ROW_META)[keyof typeof LIST_ROW_META];
+
+/** What a hint hands the press it wraps: when to show and go, and what it says of the press. */
+interface ListRowHintProps {
+  "aria-describedby"?: string | undefined;
+  "aria-keyshortcuts"?: string | undefined;
+  onPointerEnter?: PointerEventHandler<HTMLElement> | undefined;
+  onPointerLeave?: PointerEventHandler<HTMLElement> | undefined;
+  onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
+  onFocus?: FocusEventHandler<HTMLElement> | undefined;
+  onBlur?: FocusEventHandler<HTMLElement> | undefined;
+}
+
+/** The app's hint a row's press hangs: its words, and the press it wraps. */
+export type ListRowHint = ComponentType<{
+  label: string | undefined;
+  children: ReactElement<ListRowHintProps>;
+}>;
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
@@ -27,13 +113,17 @@ function said(words: ReactNode): boolean {
 /** A list of `ListRow`s, named by `label` for a reader moving between lists. */
 export function List({
   label,
+  variant = LIST_VARIANT.PLAIN,
+  density = LIST_DENSITY.REGULAR,
   children,
 }: {
   label: string;
+  variant?: ListVariant;
+  density?: ListDensity;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <ul className="luke-list" aria-label={label}>
+    <ul className="luke-list" data-variant={variant} data-density={density} aria-label={label}>
       {children}
     </ul>
   );
@@ -45,9 +135,15 @@ export function ListRow({
   title,
   description,
   meta,
+  metaAt = LIST_ROW_META.MIDDLE,
   actions,
   onPress,
   current,
+  unread,
+  hint,
+  ref,
+  onKeyDown,
+  onContextMenu,
 }: {
   /** A mark before the title (an avatar, a status's glyph), drawn as decoration. */
   leading?: ReactNode;
@@ -56,13 +152,27 @@ export function ListRow({
   description?: ReactNode;
   /** Metadata at the row's end, before its acts ("2h ago", "Owner"). */
   meta?: ReactNode;
+  /** Where the metadata stands: at the row's middle, or at the end of the title's line. */
+  metaAt?: ListRowMeta;
   /** The row's own acts (an IconButton, a Button), each a control beside the row's press. */
   actions?: ReactNode;
   /** What pressing the row does; a row without one is not a control. */
   onPress?: (() => void) | undefined;
-  /** Whether the row is the one open now, drawn and announced as current. */
-  current?: boolean | undefined;
+  /** How the row is the one open now, drawn and announced as current; nothing where it is not. */
+  current?: ListRowCurrent | undefined;
+  /** Whether what the row stands for has not been seen, its title in the heavier weight. */
+  unread?: boolean | undefined;
+  /** The app's hint hung from the row's press and the words it raises; a row that opens nothing raises none. */
+  hint?: { readonly Hint: ListRowHint; readonly label: string } | undefined;
+  /** Handed the row's press, or its item where it opens nothing. A callback, so one list keeps each row's by its own key. */
+  ref?: RefCallback<HTMLElement> | undefined;
+  /** A key pressed on the row's press; a row that opens nothing hears none. */
+  onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
+  /** A right-click, or the menu key, anywhere on the row. */
+  onContextMenu?: ((event: MouseEvent<HTMLElement>) => void) | undefined;
 }): React.JSX.Element {
+  const heading = <span className="luke-list-row-title">{title}</span>;
+  const metadata = said(meta) ? <span className="luke-list-row-meta">{meta}</span> : null;
   const face = (
     <>
       {said(leading) ? (
@@ -71,29 +181,50 @@ export function ListRow({
         </span>
       ) : null}
       <span className="luke-list-row-text">
-        <span className="luke-list-row-title">{title}</span>
+        {metaAt === LIST_ROW_META.TITLE ? (
+          <span className="luke-list-row-head">
+            {heading}
+            {metadata}
+          </span>
+        ) : (
+          heading
+        )}
         {said(description) ? (
           <span className="luke-list-row-description">{description}</span>
         ) : null}
       </span>
-      {said(meta) ? <span className="luke-list-row-meta">{meta}</span> : null}
+      {metaAt === LIST_ROW_META.TITLE ? null : metadata}
     </>
   );
+  const press = onPress ? (
+    <button
+      ref={ref}
+      type="button"
+      className="luke-list-row-main"
+      aria-current={current}
+      onClick={onPress}
+      onKeyDown={onKeyDown}
+    >
+      {face}
+    </button>
+  ) : undefined;
   return (
-    <li className="luke-list-row" data-current={current === true ? "true" : undefined}>
-      {onPress ? (
-        <button
-          type="button"
-          className="luke-list-row-main"
-          aria-current={current === true ? "true" : undefined}
-          onClick={onPress}
-        >
-          {face}
-        </button>
-      ) : (
-        <div className="luke-list-row-main" aria-current={current === true ? "true" : undefined}>
+    <li
+      ref={onPress ? undefined : ref}
+      className="luke-list-row"
+      data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
+      data-current={current === undefined ? undefined : "true"}
+      data-unread={unread === true ? "true" : undefined}
+      onContextMenu={onContextMenu}
+    >
+      {press === undefined ? (
+        <div className="luke-list-row-main" aria-current={current}>
           {face}
         </div>
+      ) : hint === undefined ? (
+        press
+      ) : (
+        <hint.Hint label={hint.label}>{press}</hint.Hint>
       )}
       {said(actions) ? <div className="luke-list-row-actions">{actions}</div> : null}
     </li>

@@ -5,6 +5,7 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
+import { memoryHistory } from "@luke/ui/history-adapter";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -13,7 +14,7 @@ import { afterEach, test } from "vitest";
 import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl } from "#testing/tasks-control";
-import { useWindowHistory, type WindowHistory } from "./navigation-history";
+import { installWindowHistory, useWindowHistory, type WindowHistory } from "./navigation-history";
 import { PANEL_TAB } from "./panel-tabs";
 import {
   AUTOMATIONS_PAGE,
@@ -31,8 +32,9 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's history over the Tasks tab as `plans` stands, restood by the returned setter. */
+/** The window's history over the Tasks tab as `plans` stands, restood by the returned setter, kept in a memory history of its own as a window's root installs one. */
 function mount(initial: TasksControl) {
+  installWindowHistory(memoryHistory());
   let history: WindowHistory | undefined;
   let restand: ((tasks: TasksControl) => void) | undefined;
   function Probe() {
@@ -119,7 +121,7 @@ test("a step back cancelled at the leave ask leaves the trail where the window s
     },
   });
   const homes: string[] = [];
-  const atPlan = asking(
+  const atTask = asking(
     tasksControl({
       page: TASKS_PAGE.DOCUMENT,
       activeTaskId: TASK_ID,
@@ -128,7 +130,7 @@ test("a step back cancelled at the leave ask leaves the trail where the window s
     }),
   );
   const window = mount(asking(tasksControl()));
-  window.stand(atPlan);
+  window.stand(atTask);
   assert.equal(window.history().canGoBack, true);
 
   standing = ask;

@@ -79,10 +79,10 @@ const openAgent = (
       repositories: [RELAY],
     };
     const userId = yield* openGithubUser(row);
-    const plan = yield* startTask(userId, { name: "Invitations", repository: RELAY_FULL_NAME });
-    yield* connectWorkspaceGitHub(plan.workspaceId, installation);
+    const task = yield* startTask(userId, { name: "Invitations", repository: RELAY_FULL_NAME });
+    yield* connectWorkspaceGitHub(task.workspaceId, installation);
     const started = yield* createCodingAgent(userId, {
-      taskId: plan.id,
+      taskId: task.id,
       idempotencyKey: "start-1",
       model: "anthropic/claude-opus-5.5",
       effort: "high",
@@ -235,6 +235,43 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
         );
         assert.equal(untitled.result.status, ACTION_RESULT_STATUS.REJECTED);
         assert.deepEqual(untitled.openings, []);
+      }),
+  );
+
+  it.effect(
+    "a base the agent names is the branch GitHub is asked to merge into, and a base GitHub does not know opens nothing and answers why",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent(31, CODING_AGENT_AUTHOR.DEVELOPER);
+        const stacked = { ...INPUT, base: "luke/teammate-invitations-store" };
+        // GitHub's own answer to a base it has no branch for: an error with a field and a code, and no message.
+        const unknownBase = () =>
+          Response.json(
+            {
+              message: "Validation Failed",
+              errors: [{ resource: "PullRequest", field: "base", code: "invalid" }],
+            },
+            { status: 422 },
+          );
+
+        const accepted = yield* open(agent, agent.target, opened, stacked);
+        const refused = yield* open(agent, agent.target, unknownBase, {
+          ...INPUT,
+          base: "luke/gone",
+        });
+
+        assert.equal(accepted.result.status, ACTION_RESULT_STATUS.ACCEPTED);
+        assert.equal(JSON.parse(accepted.openings[0]?.body ?? "{}").base, stacked.base);
+        assert.deepEqual(refused.result, {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: "Not opened: GitHub said: Validation Failed base invalid",
+        });
+        assert.ok(
+          refused.openings.every(
+            (sent) => sent.headers.get("authorization") === `Bearer ${DEVELOPER_TOKEN}`,
+          ),
+          "the App does not try in the developer's place",
+        );
       }),
   );
 

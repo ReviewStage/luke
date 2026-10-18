@@ -12,9 +12,16 @@ import {
   INLINE_DIFF,
   INLINE_DIFF_LABEL,
 } from "@luke/settings/diff-view";
-import { AnchoredPopover, CloseIcon, POPOVER_ALIGN } from "@luke/ui";
+import {
+  AnchoredPopover,
+  IconButton,
+  POPOVER_ALIGN,
+  SETTINGS_ROW_DENSITY,
+  SettingsRow,
+} from "@luke/ui";
 import { SlidersHorizontalIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { PopoverPanel } from "../popover-panel";
 import { Segmented } from "../segmented";
 import { ChangedMark } from "../settings/marks";
 import { PickerRow } from "../settings/picker-row";
@@ -70,7 +77,7 @@ function optionOf<Value extends string>(
   return options.find((option) => option.value === raw)?.value;
 }
 
-/** A setting's row of segments: its name, the settings' mark while changed, and the segments, wrapped under the name where the row is too narrow for both, as Settings wraps one. */
+/** A setting's row of segments, as compact as the popover's other rows: its name, the settings' mark while changed, why it is so where it says, and the segments. */
 function SegmentedRow<Value extends string>({
   label,
   detail,
@@ -87,16 +94,14 @@ function SegmentedRow<Value extends string>({
   onChange: (value: Value) => void;
 }): React.JSX.Element {
   return (
-    <div className="settings-row settings-row-wrapping">
-      <span className="settings-copy">
-        <strong>
-          {label}
-          {changed ? <ChangedMark /> : null}
-        </strong>
-        {detail === undefined ? null : <small>{detail}</small>}
-      </span>
-      <Segmented legend={label} options={options} value={value} onChange={onChange} />
-    </div>
+    <SettingsRow
+      density={SETTINGS_ROW_DENSITY.COMPACT}
+      label={label}
+      adornment={changed ? <ChangedMark /> : null}
+      description={detail}
+    >
+      {() => <Segmented legend={label} options={options} value={value} onChange={onChange} />}
+    </SettingsRow>
   );
 }
 
@@ -117,13 +122,9 @@ function ThemeRow<Id extends string>({
   const chosen = themes.find((theme) => theme.id === value);
   return (
     <PickerRow
+      density={SETTINGS_ROW_DENSITY.COMPACT}
       label={label}
-      copy={
-        <strong>
-          {label}
-          {changed ? <ChangedMark /> : null}
-        </strong>
-      }
+      changed={changed}
       value={value}
       valueLabel={chosen?.label ?? value}
       rows={themes.map((theme) => ({ id: theme.id, label: theme.label }))}
@@ -160,6 +161,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           onChange={(diffIndicators) => change("diffIndicators", diffIndicators)}
         />
         <SelectRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Inline diffs"
           value={settings.inlineDiff}
           options={INLINE_DIFF_OPTIONS}
@@ -170,18 +172,21 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
       </div>
       <div className="diff-settings-group">
         <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Backgrounds"
           checked={settings.diffBackgrounds}
           changed={changed("diffBackgrounds")}
           onChange={(diffBackgrounds) => change("diffBackgrounds", diffBackgrounds)}
         />
         <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Wrapping"
           checked={settings.wordWrap}
           changed={changed("wordWrap")}
           onChange={(wordWrap) => change("wordWrap", wordWrap)}
         />
         <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Line numbers"
           checked={settings.lineNumbers}
           changed={changed("lineNumbers")}
@@ -206,6 +211,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
       </div>
       <div className="diff-settings-group">
         <SelectRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Font"
           value={settings.diffFont}
           options={FONT_OPTIONS}
@@ -214,6 +220,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           onChange={(diffFont) => change("diffFont", diffFont)}
         />
         <SelectRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Font size"
           value={settings.diffFontSize}
           options={FONT_SIZE_OPTIONS}
@@ -222,6 +229,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           onChange={(diffFontSize) => change("diffFontSize", diffFontSize)}
         />
         <SelectRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Line height"
           value={settings.diffLineHeight}
           options={LINE_HEIGHT_OPTIONS}
@@ -230,6 +238,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
           onChange={(diffLineHeight) => change("diffLineHeight", diffLineHeight)}
         />
         <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Ligatures"
           checked={settings.diffLigatures}
           changed={changed("diffLigatures")}
@@ -238,6 +247,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
       </div>
       <div className="diff-settings-group">
         <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Minimize inline comments"
           checked={settings.diffMinimizeComments}
           changed={changed("diffMinimizeComments")}
@@ -248,7 +258,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
   );
 }
 
-/** The popover: its title and ×, then the rows; it takes the keyboard as it opens, so Escape and focus leaving it are heard. */
+/** The popover: its title and ×, then the rows (`PopoverPanel`). */
 function DiffSettingsPopover({
   id,
   roomy,
@@ -262,35 +272,16 @@ function DiffSettingsPopover({
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    box.current?.focus();
-  }, []);
   return (
-    <div
-      ref={box}
+    <PopoverPanel
       id={id}
-      className="diff-settings-popover"
-      role="dialog"
-      aria-label={DIFF_SETTINGS_LABEL}
-      tabIndex={-1}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
-        event.stopPropagation();
-        onClose();
-      }}
-      onBlur={(event) => onLeave(event.relatedTarget)}
+      title={DIFF_SETTINGS_LABEL}
+      closeLabel="Close"
+      onDismiss={onClose}
+      onLeave={onLeave}
     >
-      <div className="diff-settings-head">
-        <h2 className="diff-settings-title">{DIFF_SETTINGS_LABEL}</h2>
-        <Tooltip label="Close">
-          <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
-            <CloseIcon />
-          </button>
-        </Tooltip>
-      </div>
       <DiffSettingsRows roomy={roomy} />
-    </div>
+    </PopoverPanel>
   );
 }
 
@@ -312,18 +303,15 @@ export function DiffSettingsButton({
   return (
     <div className="diff-settings" ref={root}>
       <Tooltip label={DIFF_SETTINGS_LABEL}>
-        <button
+        <IconButton
           ref={trigger}
-          type="button"
-          className="icon-button"
-          aria-label={DIFF_SETTINGS_LABEL}
+          icon={<SlidersHorizontalIcon aria-hidden="true" />}
+          label={DIFF_SETTINGS_LABEL}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? popoverId : undefined}
           onClick={() => setOpen(!open)}
-        >
-          <SlidersHorizontalIcon aria-hidden="true" />
-        </button>
+        />
       </Tooltip>
       {open ? (
         <AnchoredPopover align={POPOVER_ALIGN.END}>

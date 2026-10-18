@@ -488,7 +488,7 @@ function personFields(id: string, rest: readonly string[], hash: string) {
 }
 
 /** The fields a plan's address on tryluke.dev spells, by either scheme: `/<workspace>/plan/<id>`, perhaps `#<anchor>`, or a page's or an agent's under it; or an agent's on no task, `/<workspace>/agent/<id>`; or a person's, `/<workspace>/person/<userId>`. */
-function planFields(url: URL) {
+function taskAddressFields(url: URL) {
   const [first, workspace, step, id, ...rest] = url.pathname.split("/");
   if (first !== "" || workspace === "" || id === undefined) return undefined;
   if (step === LINK.AGENT_STEP) return taskFields(undefined, [step, id, ...rest], url.hash);
@@ -567,7 +567,7 @@ function fieldsOf(target: string, repository: string | null) {
   const url = parsedUrl(target);
   if (url === undefined) return undefined;
   if (url.protocol === LEGACY.PROTOCOL) return legacyFields(url);
-  if (isLinkHome(url)) return planFields(url);
+  if (isLinkHome(url)) return taskAddressFields(url);
   // Note that a page of an integration's is read last, so a GitHub page that is a file of the task stays one.
   const fields = url.origin === GITHUB.ORIGIN ? repositoryFields(url, repository) : undefined;
   return fields ?? linkFields(url);
@@ -718,8 +718,8 @@ export function sectionAnchors(headings: readonly string[]): readonly string[] {
 
 /** A task's address, a section's with its anchor; the task's own where the anchor is empty. */
 function taskTarget(taskId: string, place: MentionPlace, anchor: string): string {
-  const plan = `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.TASK_STEP}/${encodedPart(taskId)}`;
-  return anchor === "" ? plan : `${plan}#${encodedPart(anchor)}`;
+  const task = `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.TASK_STEP}/${encodedPart(taskId)}`;
+  return anchor === "" ? task : `${task}#${encodedPart(anchor)}`;
 }
 
 /** A file's or a folder's page on GitHub, or the legacy form where the task has no repository to name it under. */

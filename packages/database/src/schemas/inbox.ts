@@ -29,7 +29,9 @@ import { task } from "./task.js";
  * the key the client sent it under, so an answer sent again after a lost
  * reply is taken once, or until the agent closes it, which writes why. The task is
  * the agent's, kept on the row so a task's inbox is read by one index, and
- * the account's open items are read by another. The row goes with its
+ * the account's open items are read by another. A message on the item's
+ * thread (`inbox-message.ts`) moves when it last changed and never when it
+ * was settled. The row goes with its
  * account, its task, and its agent alike. The columns
  * the fixed kinds stood in, `kind`, `details`, `options`, and
  * `recommended`, are declared no longer and wait on their drop
@@ -77,7 +79,26 @@ export const inboxItem = pgTable(
     /** Why the agent took the item back; null until it does. */
     closedReason: text("closed_reason"),
     postedAt: timestamptz("posted_at").notNull(),
+    /**
+     * When the item was last answered or closed; null while it is open, and
+     * on an item settled before the column was kept, which a read takes as
+     * its last change until a message on its thread first moves that, the
+     * write that keeps the old instant here (`inbox-store.ts`).
+     */
+    settledAt: timestamptz("settled_at"),
+    /** When the item last changed, by the agent, an answer, or a message on its thread. */
     updatedAt: timestamptz("updated_at").notNull(),
+    /**
+     * The instant every member without a read marker of their own
+     * (`inbox-item-read.ts`) has read the item through: the instant unread
+     * was first kept, on an item that stood before it, so no item that stood
+     * then reads unread until it changes again; null on an item posted
+     * since, whose every change is unread until read. The migration that
+     * added it stamped the standing rows through the column's default, in
+     * the catalog rather than by a write of each row, and then dropped the
+     * default.
+     */
+    readThrough: timestamptz("read_through"),
   },
   (table) => [
     // One item per key per agent: a post under a key it used is that item's write.

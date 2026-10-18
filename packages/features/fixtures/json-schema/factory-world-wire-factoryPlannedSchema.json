@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "properties": {
+    "identifier": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string"
+    },
+    "priority": {
+      "type": "integer",
+      "enum": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    "zonePaths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 16
+    }
+  },
+  "required": [
+    "identifier",
+    "title",
+    "url",
+    "zonePaths"
+  ],
+  "additionalProperties": false
+}

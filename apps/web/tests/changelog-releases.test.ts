@@ -5,7 +5,6 @@ import { test } from "vitest";
 import {
   CHANGELOG_VIEW,
   type ChangelogView,
-  changelogPagerItems,
   changelogRoutes,
   changelogViewForPath,
   parseReleases,
@@ -156,13 +155,4 @@ test("every route of the real changelog reads back, from its address, the view i
   for (const route of changelogRoutes(releases)) {
     assert.deepEqual(changelogViewForPath(releases, route.path), route.view, route.path);
   }
-});
-
-test("the pager shows every page while they fit, and elides the far ones once they don't", () => {
-  assert.deepEqual(changelogPagerItems(1, 3), [1, 2, 3]);
-  assert.deepEqual(changelogPagerItems(3, 5), [1, 2, 3, 4, 5]);
-  assert.deepEqual(changelogPagerItems(1, 21), [1, 2, undefined, 21]);
-  assert.deepEqual(changelogPagerItems(10, 21), [1, undefined, 9, 10, 11, undefined, 21]);
-  assert.deepEqual(changelogPagerItems(21, 21), [1, undefined, 20, 21]);
-  assert.deepEqual(changelogPagerItems(4, 21), [1, 2, 3, 4, 5, undefined, 21]);
 });

@@ -4,7 +4,7 @@
    own controls because it is the one thing here to press. */
 .sign-in-gate {
   display: flex;
-  width: min(320px, 100% - 2 * var(--space-24));
+  width: min(320px, 100% - 2 * var(--luke-space-24));
   margin: auto;
   flex-direction: column;
   align-items: center;
@@ -17,9 +17,9 @@
   place-items: center;
   width: 56px;
   height: 56px;
-  margin-bottom: var(--space-24);
-  border-radius: 16px;
-  background: var(--raised-strong);
+  margin-bottom: var(--luke-space-24);
+  border-radius: var(--luke-radius-14);
+  background: var(--luke-color-fill-strong);
 }
 
 .sign-in-face .luke-face {
@@ -27,128 +27,34 @@
   height: 32px;
 }
 
-.sign-in-gate h1 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.015em;
-}
-
 .sign-in-actions {
   display: flex;
   width: 100%;
-  margin-top: var(--space-32);
+  margin-top: var(--luke-space-32);
   flex-direction: column;
-  gap: var(--space-12);
+  gap: var(--luke-space-12);
 }
 
-/* Each button and its badge, the badge pinned to the button's top-right corner. */
-.sign-in-provider-slot {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Forty pixels tall, the height a devtool's sign-in button stands at, on the
-   window's control corner. The primary one is filled, drawn in the text
-   colour the way a composer's send press is — the provider last signed in
-   with, or Google with none kept — and the other is the quiet one beside it. */
-.sign-in-provider {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--glyph-gap);
-  height: 40px;
-  padding: 0 var(--space-16);
-  border-radius: var(--control-radius);
-  background: var(--raised);
-  box-shadow: inset 0 0 0 1px var(--hairline);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
-  -webkit-app-region: no-drag;
-  transition:
-    background-color var(--duration-hover) ease,
-    opacity var(--duration-hover) ease;
-}
-
-.sign-in-provider:hover:not(:disabled) {
-  background: var(--raised-strong);
-}
-
-.sign-in-provider[data-primary="true"] {
-  background: var(--text-primary);
-  box-shadow: none;
-  color: var(--desktop-ground);
-}
-
-.sign-in-provider[data-primary="true"]:hover:not(:disabled) {
-  background: var(--ink);
-}
-
-/* Held while a sign-in is out: the button waited on stays as it was, saying
-   so; the other steps back. */
-.sign-in-provider:disabled[data-waiting="false"],
-.sign-in-provider:disabled[data-waiting="false"] + .sign-in-last-used {
-  opacity: 0.4;
-}
-
-/* "Last used": a small pill hung on the top-right corner of the filled button
-   it marks, overhanging it, the way a devtool's sign-in marks the way in taken
-   last. It wears the button's own ink at a tint, the tint laid over the
-   button's fill rather than over nothing, so the half that overhangs the
-   ground is the same solid pill as the half over the button. Its border is
-   clear and only keeps the pill's box. It lets a press fall through to the
-   button. */
-.sign-in-last-used {
-  position: absolute;
-  top: -8px;
-  right: -6px;
-  padding: 0 var(--space-6);
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--desktop-ground) 16%, var(--text-primary));
-  color: color-mix(in srgb, var(--desktop-ground) 72%, transparent);
-  font-size: 10.5px;
-  font-weight: 560;
-  line-height: 16px;
-  white-space: nowrap;
-  pointer-events: none;
-  transition: opacity var(--duration-hover) ease;
-}
-
-/* The provider's own mark, at the size its guidelines draw beside a label,
-   and the spinner that stands in its place while its sign-in is waited on. */
-.sign-in-provider :is(.provider-mark, .sign-in-provider-wait) {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-}
-
-/* The one line under the buttons: what the wait is for and the way to take
-   it back, or why the last attempt did not land. */
+/* The one line under the buttons, a caption's height whether or not it says
+   anything: what the wait is for and the way to take it back, or why the
+   last attempt did not land, in the attention ink. */
 .sign-in-note {
-  min-height: 1lh;
-  margin-top: var(--space-20);
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
+  min-height: var(--luke-type-caption-leading);
+  margin-top: var(--luke-space-20);
 }
 
-.sign-in-note p {
+.sign-in-error {
   margin: 0;
-}
-
-.sign-in-note .sign-in-error {
-  color: var(--state-attention);
+  color: var(--luke-color-attention);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .sign-in-cancel {
   padding: 0;
   background: none;
-  color: var(--text-primary);
-  font-weight: 600;
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-semibold);
   -webkit-app-region: no-drag;
 }
 

@@ -1,5 +1,15 @@
 import type { TaskSummary } from "@luke/features/task-wire";
-import { ArchiveIcon, IconButton, useMenu } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  ArchiveIcon,
+  CHIP_LOOK,
+  Chip,
+  ChipName,
+  IconButton,
+  NAV_ITEM_VARIANT,
+  NavItem,
+  useMenu,
+} from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
 import { TASK_GROUPING, TASK_ORDER } from "@luke/ui/task-list-model";
 import {
@@ -11,10 +21,8 @@ import {
   SlidersHorizontalIcon,
   UserIcon,
   UsersIcon,
-  XIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { useMemberDirectory } from "../member-directory";
@@ -68,22 +76,21 @@ export function SidebarSectionHead({
       {onToggle === undefined ? (
         <span className="sidebar-section-head-name">{name}</span>
       ) : (
-        <button
-          type="button"
-          className="sidebar-section-head-name"
-          aria-expanded={folded !== true}
+        <NavItem
+          variant={NAV_ITEM_VARIANT.HEAD}
+          expanded={folded !== true}
+          count={
+            folded === true && count !== undefined
+              ? {
+                  value: count,
+                  noun: noun === undefined ? undefined : count === 1 ? noun.one : noun.many,
+                }
+              : undefined
+          }
           onClick={onToggle}
         >
           {name}
-          {folded === true && count !== undefined ? (
-            <span className="sidebar-section-head-count">
-              {count}
-              {noun === undefined ? null : (
-                <span className="luke-visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
-              )}
-            </span>
-          ) : null}
-        </button>
+        </NavItem>
       )}
       {children}
     </div>
@@ -94,11 +101,11 @@ export function SidebarSectionHead({
 function filteredActor(
   createdBy: string,
   reader: ReturnType<typeof useMemberDirectory>,
-  plans: readonly TaskSummary[],
+  tasks: readonly TaskSummary[],
 ): Actor {
   const member = reader.members?.find((each) => each.userId === createdBy);
   if (member !== undefined) return memberActor(member, reader.readerId);
-  const named = plans.find((plan) => plan.createdBy?.userId === createdBy);
+  const named = tasks.find((task) => task.createdBy?.userId === createdBy);
   return creatorActor(named ?? { ownerId: createdBy }, reader, undefined);
 }
 
@@ -265,7 +272,7 @@ export function TaskViewOptions({
   );
 }
 
-/** One chip under the Tasks head: what it says, led by a glyph, and its × that lifts it. */
+/** One chip under the Tasks head: `@luke/ui`'s removable filter, what it says led by a glyph, and its × that lifts it. */
 function ViewChip({
   glyph,
   words,
@@ -274,20 +281,15 @@ function ViewChip({
 }: {
   glyph: React.JSX.Element;
   words: string;
-  /** What the × does, said in its hint and to a screen reader. */
+  /** What the × does, said to a screen reader. */
   lift: string;
   onLift: () => void;
 }): React.JSX.Element {
   return (
-    <span className="sidebar-view-chip">
+    <Chip look={CHIP_LOOK.FILTER} removeLabel={lift} onRemove={onLift}>
       {glyph}
-      <span className="sidebar-view-chip-words">{words}</span>
-      <Tooltip label={lift}>
-        <button type="button" aria-label={lift} onClick={onLift}>
-          <XIcon />
-        </button>
-      </Tooltip>
-    </span>
+      <ChipName>{words}</ChipName>
+    </Chip>
   );
 }
 

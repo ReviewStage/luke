@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "fullName": {
+      "type": "string",
+      "maxLength": 140
+    },
+    "defaultBranch": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "fullName",
+    "defaultBranch"
+  ],
+  "additionalProperties": false
+}

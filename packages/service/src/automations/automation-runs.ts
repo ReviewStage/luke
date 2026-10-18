@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { TURN_ABANDON } from "@luke/database/models/abandoned-turns";
 import {
   type Automation,
   type AutomationRun,
@@ -49,7 +50,6 @@ import { failureKind } from "@luke/runtime/effect";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { EveSessions } from "../agents/brain-host/eve-sessions.js";
-import { CODER } from "../agents/coder-host/bounds.js";
 import { type StartServices, startCodingAgent } from "../agents/coder-host/start.js";
 import { codingAgentStatusOf } from "../agents/coder-host/status.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
@@ -398,8 +398,8 @@ const steerClaimed = Effect.fnUntraced(function* (
  * so a run waits on that agent's own work as on its earlier runs'.
  */
 const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: number) {
-  // An agent's run is bounded by its sandbox's day, so a run older than that holds no agent at work.
-  const since = new Date(now - CODER.SANDBOX_TIMEOUT_MS - Duration.toMillis(Duration.hours(1)));
+  // An agent's run is settled by the sweep past its bound, so a run older than that holds no agent at work.
+  const since = new Date(now - TURN_ABANDON.CODING_AGENT_AFTER_MS);
   const started = yield* startedRunAgents(automation.id, since);
   const target =
     automation.targetKind === AUTOMATION_TARGET.SAME_AGENT && automation.targetAgentId !== null
@@ -427,7 +427,7 @@ const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: 
       codingAgentStatusOf(turns.get(agent.conversationId), {
         createdAt: agent.createdAt,
         now,
-        lineAwaits: awaiting.has(agent.conversationId),
+        awaitingLineAt: awaiting.get(agent.conversationId),
       }),
     ),
   ).length;

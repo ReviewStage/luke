@@ -8,7 +8,7 @@ import { Effect } from "effect";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { installEditorBundle, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
+import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
@@ -33,8 +33,8 @@ const RELEASE: SkillOption = {
 
 const roots: Root[] = [];
 
-// Set before any composer renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 // A sent message is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -142,7 +142,7 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   const { container, opened } = await mounted(
     createElement(SentWords, { text: "Cut it with /release now." }),
   );
-  const chip = container.querySelector<HTMLButtonElement>("button.skill-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-skill-ref]");
   assert.ok(chip, "the skill is a chip");
   // The card hangs as the keyboard reaches the chip, as it does under a resting pointer.
   document.documentElement.dataset.keyboard = "true";
@@ -211,7 +211,7 @@ test("a loaded skill's row in the transcript names the skill as its chip does, h
       createElement("div", { className: "turn" }, agentTurn(loadedTurn("release"))),
     ),
   );
-  const chip = container.querySelector<HTMLButtonElement>("button.skill-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-skill-ref]");
   const row = container.querySelector<HTMLButtonElement>(".turn button[data-opens]");
   assert.ok(chip, "the sent message names the skill as its chip");
   assert.ok(row, "the loaded skill's row is one button");

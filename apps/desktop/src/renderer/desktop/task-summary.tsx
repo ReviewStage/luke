@@ -1,5 +1,5 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { HoverCard, HoverCardHead, HoverCardNote, useMenu } from "@luke/ui";
+import { HoverCard, HoverCardHead, HoverCardNote, IconButton, useMenu } from "@luke/ui";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useClipped } from "@luke/ui/use-clipped";
 import { useDisclosure } from "@luke/ui/use-disclosure";
@@ -88,8 +88,8 @@ const SUMMARY_PINNED_KEY = "luke.summary-pinned";
 /**
  * The least width of the task's column, in CSS pixels, at which the summary
  * can stand pinned rather than as a rail: the document's measure and its page
- * insets either side (desktop.css's `--reading-width`, 720, and
- * `--page-inset`, 40) beside the column's own `--summary-width`, 240, so
+ * insets either side (`@luke/ui`'s `--luke-page-measure`, 720, and
+ * `--luke-page-inset`, 40) beside the column's own `--summary-width`, 240, so
  * making room for it never reads the document under its measure. Note that
  * the column is measured whole, the summary included, and the side panel
  * beside it is not, so an open panel narrows what is measured and the
@@ -291,21 +291,15 @@ export function SummaryButton({
   const pins = layout.wide && layout.card === undefined;
   const label = pins ? "Toggle pinned summary" : "Toggle summary";
   const state = pins
-    ? { "aria-pressed": layout.mode === SUMMARY_MODE.COLUMN }
+    ? { pressed: layout.mode === SUMMARY_MODE.COLUMN }
     : cardControl(layout, cardId);
+  // Note that the box carries the opener's mark, which the shared button takes no attribute for.
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        className="icon-button summary-toggle"
-        aria-label={label}
-        {...state}
-        data-summary-opener={CARD_FROM.TOOLBAR}
-        onClick={layout.onToggle}
-      >
-        <ListIcon />
-      </button>
-    </Tooltip>
+    <span className="summary-toggle" data-summary-opener={CARD_FROM.TOOLBAR}>
+      <Tooltip label={label}>
+        <IconButton icon={<ListIcon />} label={label} {...state} onClick={layout.onToggle} />
+      </Tooltip>
+    </span>
   );
 }
 
@@ -426,10 +420,10 @@ function withCards(
  * settled, or its tab is open, as a panel's kind stands once the plan has
  * used it; then the panel's kinds and what they hold, then the agents.
  */
-function summaryRows(plans: TasksControl, inbox: InboxBoardView) {
-  const { sidePanel, mainTabs, agents, work } = plans;
+function summaryRows(tasks: TasksControl, inbox: InboxBoardView) {
+  const { sidePanel, mainTabs, agents, work } = tasks;
   const workers = taskWorkers(workRowsOf(work.conversation, work.callLive));
-  const files = shownFiles(plans.shownCode ?? []);
+  const files = shownFiles(tasks.shownCode ?? []);
   const changes = changesOffers(agents, sidePanel.changes);
   const inboxHolds = inbox.open.length + inbox.settled.length > 0;
   const inboxRow =
@@ -444,7 +438,7 @@ function summaryRows(plans: TasksControl, inbox: InboxBoardView) {
       workers,
       files,
       changes,
-      pages: plans.pages ?? [],
+      pages: tasks.pages ?? [],
     }),
     ...agentEntries(mainTabs, agents),
   ];
@@ -489,8 +483,8 @@ function summarySections(
 }
 
 /** Whether the plan's summary lists anything, which is whether it and its toolbar button are drawn at all. */
-export function summaryHolds(plans: TasksControl, inbox: InboxBoardView): boolean {
-  return sectionsOf(summaryRows(plans, inbox).rows, plans.agents).length > 0;
+export function summaryHolds(tasks: TasksControl, inbox: InboxBoardView): boolean {
+  return sectionsOf(summaryRows(tasks, inbox).rows, tasks.agents).length > 0;
 }
 
 /**
@@ -578,10 +572,11 @@ function RailRow({ entry }: { entry: AddEntry }) {
   return (
     <li>
       <Tooltip label={entry.row.terms?.[0] ?? entry.row.label}>
-        <button type="button" className="icon-button" onClick={entry.onPick}>
-          <span className="task-summary-glyph">{entry.row.icon}</span>
-          <span className="visually-hidden">{entry.row.label}</span>
-        </button>
+        <IconButton
+          icon={<span className="task-summary-glyph">{entry.row.icon}</span>}
+          label={entry.row.label}
+          onClick={entry.onPick}
+        />
       </Tooltip>
     </li>
   );
@@ -684,7 +679,8 @@ function SummaryCard({
   const collapse = useCallback(() => {
     const opener = document.querySelector<HTMLElement>(`[data-summary-opener="${from}"]`);
     onDismiss();
-    opener?.focus({ preventScroll: true });
+    // The toolbar's opener is a box around its button, which takes the focus back.
+    (opener?.querySelector<HTMLElement>("button") ?? opener)?.focus({ preventScroll: true });
   }, [from, onDismiss]);
   useEffect(() => {
     if (leaving) return;
@@ -724,16 +720,11 @@ function SummaryCard({
       data-leaving={leaving ? "true" : undefined}
       inert={leaving}
     >
-      <Tooltip label="Collapse summary">
-        <button
-          type="button"
-          className="icon-button task-summary-collapse"
-          aria-label="Collapse summary"
-          onClick={collapse}
-        >
-          <ChevronsRightIcon />
-        </button>
-      </Tooltip>
+      <span className="task-summary-collapse">
+        <Tooltip label="Collapse summary">
+          <IconButton icon={<ChevronsRightIcon />} label="Collapse summary" onClick={collapse} />
+        </Tooltip>
+      </span>
       <SummaryList sections={sections} agents={agents} shown onPicked={onDismiss} />
     </div>
   );
@@ -758,19 +749,21 @@ function SummaryChevron({
   const pinned = layout.mode === SUMMARY_MODE.COLUMN;
   const label = pinned ? "Collapse summary" : "Expand summary";
   const hangs = !pinned && !(layout.wide && layout.card === undefined);
+  // Note that the box carries the opener's mark, which the shared button takes no attribute for.
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        className="icon-button task-summary-chevron"
-        aria-label={label}
-        {...(hangs ? cardControl(layout, cardId) : {})}
-        data-summary-opener={pinned ? undefined : CARD_FROM.RAIL}
-        onClick={pinned ? layout.onToggle : layout.onExpand}
-      >
-        {pinned ? <ChevronsRightIcon /> : <ChevronsLeftIcon />}
-      </button>
-    </Tooltip>
+    <span
+      className="task-summary-chevron"
+      data-summary-opener={pinned ? undefined : CARD_FROM.RAIL}
+    >
+      <Tooltip label={label}>
+        <IconButton
+          icon={pinned ? <ChevronsRightIcon /> : <ChevronsLeftIcon />}
+          label={label}
+          {...(hangs ? cardControl(layout, cardId) : {})}
+          onClick={pinned ? layout.onToggle : layout.onExpand}
+        />
+      </Tooltip>
+    </span>
   );
 }
 

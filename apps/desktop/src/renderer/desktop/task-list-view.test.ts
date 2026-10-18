@@ -5,12 +5,13 @@ import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-a
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { tasksControl } from "#testing/tasks-control";
@@ -54,6 +55,7 @@ const roots: Root[] = [];
 beforeEach(() => {
   openedAgents = [];
   copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   pinsAsked = [];
   window.localStorage.clear();
   window.sessionStorage.clear();
@@ -66,13 +68,7 @@ beforeEach(() => {
     }),
   });
   fakeAppBridge({
-    onMenuCommand: () => () => undefined,
-    recordSurfaceEvent: () => undefined,
     act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-        copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      }
       return Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
           ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
@@ -169,7 +165,7 @@ let pinsAsked: string[] = [];
 /** The sidebar listing `plans`, and `archived` archived, in `workspace`, read by Dean, with `agents` among them and the page of `agentShown` standing. */
 function mountSidebar(
   workspace: Workspace,
-  plans: readonly TaskSummary[] = TASKS,
+  tasks: readonly TaskSummary[] = TASKS,
   archived: readonly TaskSummary[] = ARCHIVED,
   agents: readonly TasklessAgent[] = [],
   agentShown?: string,
@@ -179,7 +175,7 @@ function mountSidebar(
   const root = createRoot(container);
   roots.push(root);
   const control = tasksControl({
-    tasks: [...plans],
+    tasks: [...tasks],
     archived: [...archived],
     workspace,
     workspaces: [workspace],
@@ -235,13 +231,21 @@ function choose(sidebar: HTMLElement, submenu: string, choice: string): void {
   act(() => menuItem(choice).click());
 }
 
+/** The first of a button's words a reader hears: a row's or a fold's name, before its count and its chord. */
+function heardName(button: Element): string {
+  const heard = [...button.children].find((part) => part.getAttribute("aria-hidden") !== "true");
+  return heard?.textContent ?? "";
+}
+
 /** The Tasks section's group headers, in order. */
 function groupNames(sidebar: HTMLElement): string[] {
   const tasks = sidebar.querySelector(TASK_LIST);
   assert.ok(tasks, "the Tasks section stands");
-  return [...tasks.querySelectorAll(".sidebar-repository-name")].map(
-    (name) => name.textContent ?? "",
-  );
+  return [
+    ...tasks.querySelectorAll(
+      ".sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+    ),
+  ].map(heardName);
 }
 
 /** The rows of the Tasks section: each name, the repository it says, and whether it wears a face. */
@@ -355,23 +359,23 @@ test("a workspace nobody shares offers no grouping by creator", () => {
 /** The sidebar once the workspace's members have answered. */
 async function mountRead(
   workspace: Workspace,
-  plans?: readonly TaskSummary[],
+  tasks?: readonly TaskSummary[],
   archived?: readonly TaskSummary[],
   agents?: readonly TasklessAgent[],
 ): Promise<HTMLElement> {
-  const sidebar = mountSidebar(workspace, plans, archived, agents);
+  const sidebar = mountSidebar(workspace, tasks, archived, agents);
   await act(async () => undefined);
   return sidebar;
 }
 
 /** The chip under the Tasks head, if one stands. */
 function chip(sidebar: HTMLElement): HTMLElement | null {
-  return sidebar.querySelector(".sidebar-view-chip");
+  return sidebar.querySelector<HTMLElement>(".sidebar-view-chips > *");
 }
 
 /** What the chip under the Tasks head says, its face left out. */
 function chipWords(sidebar: HTMLElement): string | undefined {
-  return chip(sidebar)?.querySelector(".sidebar-view-chip-words")?.textContent ?? undefined;
+  return chip(sidebar)?.querySelector(".luke-chip-name")?.textContent ?? undefined;
 }
 
 test("Created by › Me lists only your tasks, wearing no faces, says so in a chip and a dot, and the chip's × lists everyone's again", async () => {
@@ -473,7 +477,9 @@ test("an empty workspace under a filter says only that it holds no tasks", async
 
 /** The Tasks section's head, as it names the section. */
 function headName(sidebar: HTMLElement): string | undefined {
-  return sidebar.querySelector(`${TASK_LIST} .sidebar-section-head-name`)?.textContent ?? undefined;
+  const head = sidebar.querySelector(`${TASK_LIST} .sidebar-section-head > :first-child`);
+  if (head?.matches("button") !== true) return head?.textContent ?? undefined;
+  return heardName(head);
 }
 
 /** Turns the Tasks section to the archived tasks, or back, from View options. */

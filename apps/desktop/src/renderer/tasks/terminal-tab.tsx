@@ -1,13 +1,13 @@
 import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/features/terminal-model";
+import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import { useMemo } from "react";
-import { SHORTCUT_KEY } from "#shared/shortcuts";
+import { TERMINAL_LOAD_FAILED } from "../bundle-loader";
 import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab";
 import { Shortcut } from "../shortcut";
 import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { TreeToggle, usePaneRoom } from "./file-view";
 import { AgentGlyph } from "./tab-look";
-import { TERMINAL_LOAD_FAILED } from "./terminal-bundle";
 import { TerminalShells } from "./terminal-shells";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { useTerminalSession } from "./use-terminal-session";
@@ -135,10 +135,13 @@ export function TerminalTab({
     >
       <header className="file-view-bar">
         <span className="terminal-tab-title">
-          <AgentRef subject={subject} models={agents.models} onOpen={onOpenAgent}>
-            <AgentGlyph agent={subject.agent} />
-            <span className="agent-ref-name terminal-tab-agent">{subject.name}</span>
-          </AgentRef>
+          <AgentRef
+            subject={subject}
+            models={agents.models}
+            onOpen={onOpenAgent}
+            glyph={<AgentGlyph agent={subject.agent} />}
+            label={subject.name}
+          />
           <span className="terminal-tab-standing">
             <span className="terminal-tab-sandbox">· sandbox </span>· {look.words}
           </span>

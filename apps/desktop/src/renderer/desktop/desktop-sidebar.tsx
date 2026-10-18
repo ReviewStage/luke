@@ -10,19 +10,26 @@ import {
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
+  BUTTON_SIZE,
+  Button,
   ComposeIcon,
   EllipsisIcon,
   ErrorState,
   FolderIcon,
   IconButton,
+  NAV_CURRENT,
+  NavItem,
   PinIcon,
   PlusIcon,
   ProviderMark,
   SearchIcon,
+  Skeleton,
+  SkeletonRegion,
   UnpinIcon,
   useMenu,
 } from "@luke/ui";
@@ -64,7 +71,6 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { useRef } from "react";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand, useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
@@ -74,7 +80,6 @@ import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { RepositoryPicture } from "../repository-picture";
 import { Shortcut } from "../shortcut";
-import { Skeleton, SkeletonRegion } from "../skeleton";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { useChatOn } from "../tasks/chat-gate";
 import { NEEDS_YOU } from "../tasks/inbox-model";
@@ -192,14 +197,14 @@ interface RowContext {
   /** Whether a task is the one open, which a fold still leaves standing. */
   readonly current: (taskId: string) => boolean;
   /** Whether a row is the one the sidebar marks: the pin the open task was opened from, else the open task's own row. */
-  readonly marked: (planId: string, pin: PinnedTab | undefined) => boolean;
-  readonly onOpen: (planId: string) => void;
+  readonly marked: (taskId: string, pin: PinnedTab | undefined) => boolean;
+  readonly onOpen: (taskId: string) => void;
   /** Whether a row is the one standing: the open plan's, or the agent's whose page stands. */
   readonly currentRow: (row: TaskRow) => boolean;
   /** Opens an agent with no plan on its own page. */
   readonly onOpenAgent: (agentId: string) => void;
   /** Whether a task was saved since the developer last looked at it on this Mac. */
-  readonly unread: (plan: TaskSummary) => boolean;
+  readonly unread: (task: TaskSummary) => boolean;
   /** Whether an agent's turn ended while the developer was not looking at it. */
   readonly unseenAgent: (agentId: string) => boolean;
   /** The time each row's last update is counted back from. */
@@ -318,11 +323,11 @@ function pinnedRows(
   tasks: TasksControl,
 ): PinnedRow[] {
   const taskRows = pinned.map(
-    (plan): PinnedRow => ({
+    (task): PinnedRow => ({
       kind: TASK_ROW.TASK,
-      plan,
+      plan: task,
       pin: undefined,
-      place: { position: plan.pinPosition, at: plan.pinnedAt ?? 0 },
+      place: { position: task.pinPosition, at: task.pinnedAt ?? 0 },
     }),
   );
   const agentRows = agents.map(
@@ -333,10 +338,10 @@ function pinnedRows(
     }),
   );
   const tabRows = tasks.sidePanel.pins.flatMap((pin): PinnedRow[] => {
-    const plan = tasks.listed.tasks.find((each) => each.id === pin.task);
-    return plan === undefined
+    const task = tasks.listed.tasks.find((each) => each.id === pin.task);
+    return task === undefined
       ? []
-      : [{ kind: TASK_ROW.TASK, plan, pin, place: { position: pin.position, at: pin.at } }];
+      : [{ kind: TASK_ROW.TASK, plan: task, pin, place: { position: pin.position, at: pin.at } }];
   });
   return inPinOrder([...taskRows, ...agentRows, ...tabRows], placeOf);
 }
@@ -466,28 +471,28 @@ function PinnedRows({
             />
           );
         }
-        const { plan, pin } = row;
+        const { plan: task, pin } = row;
         return pin === undefined ? (
           <SidebarTask
-            key={plan.id}
+            key={task.id}
             tasks={context.tasks}
-            task={plan}
-            current={context.marked(plan.id, undefined)}
-            open={context.current(plan.id)}
-            unread={context.unread(plan)}
+            task={task}
+            current={context.marked(task.id, undefined)}
+            open={context.current(task.id)}
+            unread={context.unread(task)}
             now={context.now}
-            onOpen={() => context.onOpen(plan.id)}
+            onOpen={() => context.onOpen(task.id)}
           />
         ) : (
           <SidebarPinnedTab
             key={String(pin.at)}
             tasks={context.tasks}
             pin={pin}
-            task={plan}
-            current={context.marked(plan.id, pin)}
+            task={task}
+            current={context.marked(task.id, pin)}
             inSight={context.inSight}
             onOpen={() => onOpenTab(pin)}
-            onOpenTask={() => context.onOpen(plan.id)}
+            onOpenTask={() => context.onOpen(task.id)}
           />
         );
       })}
@@ -674,27 +679,23 @@ function RepositorySection({
           <>
             {actionGroups.length === 0 ? null : (
               <Tooltip label="Repository actions">
-                <button
+                <IconButton
                   ref={ellipsis}
-                  type="button"
-                  className="sidebar-repository-action"
-                  aria-label={`Actions for ${named}`}
+                  icon={<EllipsisIcon />}
+                  label={`Actions for ${named}`}
+                  size={BUTTON_SIZE.COMPACT}
                   {...menu.trigger()}
-                >
-                  <EllipsisIcon />
-                </button>
+                />
               </Tooltip>
             )}
             {repository === null ? null : (
               <Tooltip label={`New task in ${label}`}>
-                <button
-                  type="button"
-                  className="sidebar-repository-action sidebar-repository-new"
-                  aria-label={`New task in ${label}`}
+                <IconButton
+                  icon={<PlusIcon />}
+                  label={`New task in ${label}`}
+                  size={BUTTON_SIZE.COMPACT}
                   onClick={() => onNewTaskIn(repository)}
-                >
-                  <PlusIcon />
-                </button>
+                />
               </Tooltip>
             )}
           </>
@@ -878,12 +879,14 @@ function TaskGroups({
  */
 function ListSkeleton(): React.JSX.Element {
   return (
-    <SkeletonRegion label="Reading your tasks…" className="sidebar-skeleton">
-      {LIST_SKELETON.map((width) => (
-        <div key={width} className="sidebar-skeleton-row">
-          <Skeleton width={width} />
-        </div>
-      ))}
+    <SkeletonRegion label="Reading your tasks…">
+      <div className="sidebar-skeleton">
+        {LIST_SKELETON.map((width) => (
+          <div key={width} className="sidebar-skeleton-row">
+            <Skeleton width={width} />
+          </div>
+        ))}
+      </div>
     </SkeletonRegion>
   );
 }
@@ -916,18 +919,16 @@ function SidebarHomeRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-home"
-      aria-current={current ? "page" : undefined}
+    <NavItem
+      icon={<HouseIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.HOME)}
+      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.HOME].chord} />}
       disabled={disabled}
       onClick={onOpen}
     >
-      <HouseIcon />
       Home
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.HOME].chord} className="row-shortcut" />
-    </button>
+    </NavItem>
   );
 }
 
@@ -952,27 +953,20 @@ function SidebarInboxRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-inbox"
-      aria-current={current ? "page" : undefined}
+    <NavItem
+      icon={<InboxIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
+      count={{
+        value: waiting,
+        noun: waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many,
+      }}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
+      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
       disabled={disabled}
       onClick={onOpen}
     >
-      <InboxIcon />
       Inbox
-      {waiting === 0 ? null : (
-        <span className="sidebar-inbox-waiting">
-          {waiting}
-          <span className="luke-visually-hidden">
-            {" "}
-            {waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}
-          </span>
-        </span>
-      )}
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} className="row-shortcut" />
-    </button>
+    </NavItem>
   );
 }
 
@@ -998,21 +992,14 @@ function SidebarChatRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-inbox"
-      aria-current={current ? "page" : undefined}
+    <NavItem
+      icon={<MessagesSquareIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
+      count={{ value: waiting, noun: "waiting on you" }}
       onClick={onOpen}
     >
-      <MessagesSquareIcon />
       Chat
-      {waiting === 0 ? null : (
-        <span className="sidebar-inbox-waiting">
-          {waiting}
-          <span className="luke-visually-hidden"> waiting on you</span>
-        </span>
-      )}
-    </button>
+    </NavItem>
   );
 }
 
@@ -1022,11 +1009,11 @@ interface FloatingSidebar extends HoverPane {
   readonly inSight: boolean;
 }
 
-/** Where a sidebar opened from away takes the keyboard: the row it marks, else New plan. */
+/** Where a sidebar opened from away takes the keyboard: the row it marks, else New task, the first of its places. */
 function sidebarFocus(sidebar: HTMLElement): HTMLElement | null {
   return (
     sidebar.querySelector<HTMLElement>('[aria-current="page"]') ??
-    sidebar.querySelector<HTMLElement>(".sidebar-new-task")
+    sidebar.querySelector<HTMLElement>(".sidebar-places > button")
   );
 }
 
@@ -1060,16 +1047,14 @@ function SidebarFactoryRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-factory"
-      aria-current={current ? "page" : undefined}
+    <NavItem
+      icon={<FactoryIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
       disabled={disabled}
       onClick={onOpen}
     >
-      <FactoryIcon />
       Factory
-    </button>
+    </NavItem>
   );
 }
 
@@ -1088,18 +1073,16 @@ function SidebarIssuesRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-issues"
-      aria-current={current ? "page" : undefined}
+    <NavItem
+      icon={<ListTodoIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.ISSUES)}
+      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.ISSUES].chord} />}
       disabled={disabled}
       onClick={onOpen}
     >
-      <ListTodoIcon />
       Issues
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.ISSUES].chord} className="row-shortcut" />
-    </button>
+    </NavItem>
   );
 }
 
@@ -1123,23 +1106,17 @@ function SidebarAutomationsRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-automations"
-      aria-current={current ? "page" : undefined}
+    <NavItem
+      icon={<ZapIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
+      mark={failed ? stateEndMark(GLYPH_STATE.FAILED, false) : undefined}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.AUTOMATIONS)}
+      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.AUTOMATIONS].chord} />}
       disabled={disabled}
       onClick={onOpen}
     >
-      <ZapIcon />
       Automations
-      {failed ? (
-        <span className="sidebar-automations-failed">
-          {stateEndMark(GLYPH_STATE.FAILED, false)}
-        </span>
-      ) : null}
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.AUTOMATIONS].chord} className="row-shortcut" />
-    </button>
+    </NavItem>
   );
 }
 
@@ -1163,7 +1140,7 @@ function sectionedTasks(
 ): SectionedTasks {
   if (workspaceId === undefined) return { sections: [], taskIds: new Set() };
   const state = tasks.taskSections;
-  const byId = new Map(free.map((plan) => [plan.id, plan]));
+  const byId = new Map(free.map((task) => [task.id, task]));
   const sections = workspaceSections(state, workspaceId).map((section): DrawnSection => {
     const entries = sectionOrder(state, section.id).filter((entry) => byId.has(entry.taskId));
     const held = entries.flatMap((entry) => byId.get(entry.taskId) ?? []);
@@ -1218,17 +1195,15 @@ function NewTaskButton({
   onNewTask: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-new-task"
+    <NavItem
+      icon={<ComposeIcon />}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_TASK)}
+      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} />}
       disabled={!tasks.signedIn}
       onClick={onNewTask}
     >
-      <ComposeIcon />
       New task
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} className="row-shortcut" />
-    </button>
+    </NavItem>
   );
 }
 
@@ -1320,11 +1295,11 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.onSelect(taskId);
   };
-  const showPlans = () => {
+  const showTasks = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
   };
   const newTask = () => {
-    showPlans();
+    showTasks();
     tasks.onNewTask();
   };
   const openPinnedTab = (pin: PinnedTab) => {
@@ -1383,7 +1358,7 @@ function SidebarColumn({
   });
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
-  const current = (planId: string) => onTasks && !standingIn && planId === tasks.activeTaskId;
+  const current = (taskId: string) => onTasks && !standingIn && taskId === tasks.activeTaskId;
   // An agent with no plan stands on its own page, which is the place shown while it stands.
   const agentShown = onTasks ? tasks.agentView.agentId : undefined;
   const currentRow = (row: TaskRow) =>
@@ -1399,7 +1374,7 @@ function SidebarColumn({
     listedRows.archived.length === 0 &&
     listedAgents.standing.length === 0 &&
     listedAgents.archived.length === 0;
-  const pinned = tasks.listed.tasks.filter((plan) => plan.pinnedAt !== undefined);
+  const pinned = tasks.listed.tasks.filter((task) => task.pinnedAt !== undefined);
   const pinnedAgents = listedAgents.standing.filter((agent) => agent.pinnedAt !== undefined);
   const pinnedSection = pinnedRows(pinned, pinnedAgents, tasks);
   // The pin the open task was opened from is marked in its task's place,
@@ -1421,7 +1396,7 @@ function SidebarColumn({
   const sectioned = sectionedTasks(
     tasks,
     sectionsShown ? tasks.workspace?.id : undefined,
-    tasks.listed.tasks.filter((plan) => plan.pinnedAt === undefined),
+    tasks.listed.tasks.filter((task) => task.pinnedAt === undefined),
   );
   const sectionDialogs = useSectionDialogs(tasks, tasks.shown && overlay.inSight);
   // Note that the sidebar draws a task in one place, so a row dragged into
@@ -1445,31 +1420,31 @@ function SidebarColumn({
     tasks.onWriteSections(placeWrites(target.entries, taskId, zone, at, Date.now()));
   };
   const dropTask = (taskId: string, zone: string, at: number) => {
-    const plan = tasks.listed.tasks.find((each) => each.id === taskId);
-    if (plan !== undefined) dropRow(taskRow(plan), zone, at);
+    const task = tasks.listed.tasks.find((each) => each.id === taskId);
+    if (task !== undefined) dropRow(taskRow(task), zone, at);
   };
   // A tab pinned to the sidebar is no task, so it goes into no section, though Tasks unpins it as any pin.
   const dropPinned = (row: PinnedRow, zone: string, at: number) => {
-    const plan = row.kind === TASK_ROW.TASK && row.pin === undefined ? row.plan : undefined;
+    const task = row.kind === TASK_ROW.TASK && row.pin === undefined ? row.plan : undefined;
     if (zone === TASKS_DROP_ZONE) {
       unpin(row, tasks);
-      if (plan !== undefined) tasks.onWriteSections(leaveSection(tasks, plan.id));
+      if (task !== undefined) tasks.onWriteSections(leaveSection(tasks, task.id));
       return;
     }
     const target = sectioned.sections.find((drawn) => drawn.section.id === zone);
-    if (target === undefined || plan === undefined) return;
+    if (target === undefined || task === undefined) return;
     unpin(row, tasks);
     tasks.onWriteSections([
-      ...leaveSection(tasks, plan.id),
-      ...placeWrites(target.entries, plan.id, zone, at, Date.now()),
+      ...leaveSection(tasks, task.id),
+      ...placeWrites(target.entries, task.id, zone, at, Date.now()),
     ]);
   };
   const { chosen } = overlay;
   const context: RowContext = {
     tasks,
     current,
-    marked: (planId, pin) =>
-      markedPin === undefined ? pin === undefined && current(planId) : pin === markedPin,
+    marked: (taskId, pin) =>
+      markedPin === undefined ? pin === undefined && current(taskId) : pin === markedPin,
     onOpen: chosen(openTask),
     currentRow,
     onOpenAgent: chosen(openAgent),
@@ -1489,10 +1464,10 @@ function SidebarColumn({
   // does a pinned agent while its page stands.
   const pinnedShown = (row: PinnedRow) => {
     if (row.kind === TASK_ROW.AGENT) return row.agent.id === agentShown;
-    const { plan, pin } = row;
+    const { plan: task, pin } = row;
     return (
       (pin !== undefined && pin === markedPin) ||
-      (current(plan.id) &&
+      (current(task.id) &&
         (pin === undefined ||
           (inColumn(pin.tab)
             ? sameTab(tasks.mainTabs.tab, pin.tab)
@@ -1504,15 +1479,15 @@ function SidebarColumn({
   // Note that the pins are never filtered, because a pin is already the
   // reader's own choice, and stand aside while the archived tasks are shown.
   // The agents with no plan stand among the plans, the archived ones among the archived.
-  const unpinnedPlans = archive.shown
+  const unpinnedTasks = archive.shown
     ? listedRows.archived
     : listedRows.tasks.filter(
-        (plan) => plan.pinnedAt === undefined && !sectioned.taskIds.has(plan.id),
+        (task) => task.pinnedAt === undefined && !sectioned.taskIds.has(task.id),
       );
   const unpinnedAgents = archive.shown
     ? listedAgents.archived
     : listedAgents.standing.filter((agent) => agent.pinnedAt === undefined);
-  const unpinned = [...unpinnedPlans.map(taskRow), ...unpinnedAgents.map(agentRow)];
+  const unpinned = [...unpinnedTasks.map(taskRow), ...unpinnedAgents.map(agentRow)];
   const rows = taskRowsCreatedBy(unpinned, createdBy);
   const { grouping, order } = taskView.view;
   const sections = taskSections(
@@ -1534,7 +1509,7 @@ function SidebarColumn({
   // the list still moves from it.
   const pinnedDrawn = pinnedTaskRows(pinnedSection);
   const sectionsDrawn = sectioned.sections.flatMap(({ section, tasks: held }) =>
-    (folds.sectionFolded(section.id) ? held.filter((plan) => current(plan.id)) : held).map(taskRow),
+    (folds.sectionFolded(section.id) ? held.filter((task) => current(task.id)) : held).map(taskRow),
   );
   const drawn = [
     ...(archive.shown ? [] : folds.pinnedFolded ? pinnedDrawn.filter(currentRow) : pinnedDrawn),
@@ -1577,59 +1552,56 @@ function SidebarColumn({
         <LukeIdentity />
       )}
 
-      <NewTaskButton tasks={tasks} onNewTask={chosen(newTask)} />
-      {/* Search is a second door to the command palette, drawn as New task
+      <div className="sidebar-places">
+        <NewTaskButton tasks={tasks} onNewTask={chosen(newTask)} />
+        {/* Search is a second door to the command palette, drawn as New task
           is, since it heads the list the same way. */}
-      <button
-        type="button"
-        className="sidebar-search"
-        aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
-        onClick={chosen(() => runAppCommand(APP_COMMAND.COMMAND_PALETTE))}
-      >
-        <SearchIcon />
-        Search
-        <Shortcut
-          chord={APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord}
-          className="row-shortcut"
-        />
-      </button>
-      <SidebarHomeRow current={atHome} disabled={!tasks.signedIn} onOpen={chosen(goHome)} />
-      <SidebarInboxRow
-        waiting={tasks.signedIn ? waitingItems(tasks) : 0}
-        current={inInbox}
-        disabled={!tasks.signedIn}
-        onOpen={chosen(openInbox)}
-      />
-      {/* Chat's row stands only while the account has it on and a chat is read, which only a fixture run stages yet. */}
-      {chatOn && tasks.signedIn && tasks.chatView.chat !== undefined ? (
-        <SidebarChatRow
-          waiting={waitingMessages(tasks)}
-          current={inChat}
-          onOpen={chosen(openChat)}
-        />
-      ) : null}
-      {factoryOn ? (
-        <SidebarFactoryRow
-          current={inFactory}
+        <NavItem
+          icon={<SearchIcon />}
+          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
+          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord} />}
+          onClick={chosen(() => runAppCommand(APP_COMMAND.COMMAND_PALETTE))}
+        >
+          Search
+        </NavItem>
+        <SidebarHomeRow current={atHome} disabled={!tasks.signedIn} onOpen={chosen(goHome)} />
+        <SidebarInboxRow
+          waiting={tasks.signedIn ? waitingItems(tasks) : 0}
+          current={inInbox}
           disabled={!tasks.signedIn}
-          onOpen={chosen(openFactory)}
+          onOpen={chosen(openInbox)}
         />
-      ) : null}
-      {automationsOn ? (
-        <SidebarAutomationsRow
-          current={inAutomations}
-          failed={automationFailed}
-          disabled={!tasks.signedIn}
-          onOpen={chosen(openAutomations)}
-        />
-      ) : null}
-      {issuesOn ? (
-        <SidebarIssuesRow
-          current={inIssues}
-          disabled={!tasks.signedIn}
-          onOpen={chosen(openIssues)}
-        />
-      ) : null}
+        {/* Chat's row stands while the account has it on wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
+        {chatOn && tasks.signedIn && tasks.chatView.available ? (
+          <SidebarChatRow
+            waiting={waitingMessages(tasks)}
+            current={inChat}
+            onOpen={chosen(openChat)}
+          />
+        ) : null}
+        {factoryOn ? (
+          <SidebarFactoryRow
+            current={inFactory}
+            disabled={!tasks.signedIn}
+            onOpen={chosen(openFactory)}
+          />
+        ) : null}
+        {automationsOn ? (
+          <SidebarAutomationsRow
+            current={inAutomations}
+            failed={automationFailed}
+            disabled={!tasks.signedIn}
+            onOpen={chosen(openAutomations)}
+          />
+        ) : null}
+        {issuesOn ? (
+          <SidebarIssuesRow
+            current={inIssues}
+            disabled={!tasks.signedIn}
+            onOpen={chosen(openIssues)}
+          />
+        ) : null}
+      </div>
       <hr className="sidebar-rule" />
 
       {/* One scroller for both sections, so the pinned tasks scroll away
@@ -1656,17 +1628,17 @@ function SidebarColumn({
               inSight: overlay.inSight,
               folded: folds.sectionFolded,
               onToggle: folds.toggleSection,
-              row: (plan) => (
+              row: (task) => (
                 <SidebarTask
-                  key={plan.id}
+                  key={task.id}
                   tasks={tasks}
-                  task={plan}
-                  current={context.marked(plan.id, undefined)}
-                  open={current(plan.id)}
-                  unread={unread(plan)}
+                  task={task}
+                  current={context.marked(task.id, undefined)}
+                  open={current(task.id)}
+                  unread={unread(task)}
                   now={now}
                   face={context.faces}
-                  onOpen={() => context.onOpen(plan.id)}
+                  onOpen={() => context.onOpen(task.id)}
                 />
               ),
               onDropTask: dropTask,
@@ -1700,7 +1672,7 @@ function SidebarColumn({
           {tasks.signedIn ? (
             <ViewChips
               createdBy={createdBy}
-              tasks={unpinnedPlans}
+              tasks={unpinnedTasks}
               onClearCreatedBy={() => taskView.onCreatedBy(undefined)}
               archive={archive}
             />
@@ -1716,17 +1688,11 @@ function SidebarColumn({
           !tasks.listFailed ? (
             <p className="sidebar-note">
               {createdBy === tasks.me ? "None of your tasks here." : "None of their tasks here."}{" "}
-              <button
-                type="button"
-                className="toolbar-button quiet-button"
-                onClick={() => taskView.onCreatedBy(undefined)}
-              >
-                Show all
-              </button>
+              <Button onClick={() => taskView.onCreatedBy(undefined)}>Show all</Button>
             </p>
           ) : null}
           {tasks.listFailed ? (
-            <div className="sidebar-note">
+            <div className="sidebar-note sidebar-failure">
               <ErrorState onRetry={tasks.onRetryList}>Your tasks could not be read.</ErrorState>
             </div>
           ) : null}
@@ -1748,13 +1714,7 @@ function SidebarColumn({
           (tasks.listed.archived.length > 0 || listedAgents.archived.length > 0) ? (
             <p className="sidebar-note">
               Every task is archived.{" "}
-              <button
-                type="button"
-                className="toolbar-button quiet-button"
-                onClick={() => archive.onShown(true)}
-              >
-                Show archived
-              </button>
+              <Button onClick={() => archive.onShown(true)}>Show archived</Button>
             </p>
           ) : null}
           {tasks.signedIn ? null : <p className="sidebar-note">Sign in to start a task.</p>}

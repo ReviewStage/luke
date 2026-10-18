@@ -22,7 +22,15 @@ import {
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
-import { inboxAnsweredSchema, inboxAnswerRequestSchema, inboxAnswerSchema } from "./inbox-wire.js";
+import {
+  inboxAnsweredSchema,
+  inboxAnswerRequestSchema,
+  inboxAnswerSchema,
+  inboxMessagedSchema,
+  inboxMessageRequestSchema,
+  inboxReadAllSchema,
+  inboxReadStateSchema,
+} from "./inbox-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
@@ -431,6 +439,32 @@ export type CodingAgentInboxAnswerParams = typeof codingAgentInboxAnswerParamsSc
 export const codingAgentInboxAnsweredViewSchema = EffectSchema.Union([inboxAnsweredSchema, failed]);
 
 export type CodingAgentInboxAnsweredView = typeof codingAgentInboxAnsweredViewSchema.Type;
+
+/** A message on one item's thread, as the window asks it: the item, and the message request the service takes, its key the window's own. */
+export const codingAgentInboxMessageParamsSchema = EffectSchema.Struct({
+  itemId: EffectSchema.NonEmptyString,
+  ...inboxMessageRequestSchema.fields,
+});
+
+export type CodingAgentInboxMessageParams = typeof codingAgentInboxMessageParamsSchema.Type;
+
+/** A message on an item's thread, as the window hears it: the item as it then stands, its thread with the message on it, or why there is no answer. */
+export const codingAgentInboxMessagedViewSchema = EffectSchema.Union([inboxMessagedSchema, failed]);
+
+export type CodingAgentInboxMessagedView = typeof codingAgentInboxMessagedViewSchema.Type;
+
+/** One item marked read or unread, as the window hears it: the item's id and its read state for the account, or why there is no answer. */
+export const codingAgentInboxReadStateViewSchema = EffectSchema.Union([
+  inboxReadStateSchema,
+  failed,
+]);
+
+export type CodingAgentInboxReadStateView = typeof codingAgentInboxReadStateViewSchema.Type;
+
+/** Every item of the Inbox marked read, as the window hears it: how many were unread, or why there is no answer. */
+export const codingAgentInboxReadAllViewSchema = EffectSchema.Union([inboxReadAllSchema, failed]);
+
+export type CodingAgentInboxReadAllView = typeof codingAgentInboxReadAllViewSchema.Type;
 
 /** What waits across the account past a cursor, as main asks it: where it stands. */
 export const codingAgentAccountInboxParamsSchema = EffectSchema.Struct({

@@ -12,6 +12,7 @@ import type { WebStoreRun } from "../../run.js";
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { accountMeter } from "../agent-runtime/meter.js";
 import { titleModel } from "../coder-host/model.js";
+import { productionSummaryModel, type SummaryModelOf } from "../coder-host/replay-summary.js";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_MODEL_FIXTURE } from "./bounds.js";
 import { conversationReachableBy, runtimeSessionReachableBy } from "./conversation.js";
 import type { SessionOwnership } from "./door.js";
@@ -54,6 +55,8 @@ export interface BrainHostSeams {
   readonly scriptedModel: () => boolean;
   /** Counts one hosted use against the account's day. */
   readonly spend: (userId: string) => Promise<void>;
+  /** How an agent Luke starts from another summarizes the steps its replay cannot keep, as the Start route's does; none leaves them out. */
+  readonly summaryModel?: SummaryModelOf;
   readonly now: () => number;
 }
 
@@ -105,6 +108,10 @@ export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("web/productio
       scriptedModel: () =>
         process.env[BRAIN_HOST_ENVIRONMENT.MODEL_FIXTURE] === BRAIN_HOST_MODEL_FIXTURE.SCRIPTED,
       spend,
+      summaryModel: (owner, chosen, effort) =>
+        productionSummaryModel(owner, chosen, effort).pipe(
+          Effect.provideService(HostedEnvironment, environment),
+        ),
       now: () => Date.now(),
     };
   },

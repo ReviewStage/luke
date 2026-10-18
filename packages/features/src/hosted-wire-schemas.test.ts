@@ -13,6 +13,7 @@ import * as chatWire from "./chat-wire.js";
 import * as codingAgentView from "./coding-agent-view.js";
 import * as codingAgentWire from "./coding-agent-wire.js";
 import * as dictationWire from "./dictation-wire.js";
+import * as factoryWorldWire from "./factory-world-wire.js";
 import * as githubConnectionWire from "./github-connection-wire.js";
 import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as inboxWire from "./inbox-wire.js";
@@ -30,6 +31,7 @@ import * as planCommentWire from "./plan-comment-wire.js";
 import * as planDocumentTemplate from "./plan-document-template.js";
 import * as planEdit from "./plan-edit.js";
 import * as providerKeyWire from "./provider-key-wire.js";
+import * as pullRequestArea from "./pull-request-area.js";
 import * as pullRequestWriteWire from "./pull-request-write-wire.js";
 import * as repositoryReachWire from "./repository-reach-wire.js";
 import * as serviceWire from "./service-wire.js";
@@ -57,6 +59,7 @@ const EFFECT_MODULE_SCHEMAS = {
     accountTasklessEntrySchema: accountInboxWire.accountTasklessEntrySchema,
     accountInboxAutomationSchema: accountInboxWire.accountInboxAutomationSchema,
     accountFailedRunSchema: accountInboxWire.accountFailedRunSchema,
+    accountChatEntrySchema: accountInboxWire.accountChatEntrySchema,
     accountInboxAnswerSchema: accountInboxWire.accountInboxAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof accountInboxWire>,
   "board-wire": {
@@ -96,6 +99,7 @@ const EFFECT_MODULE_SCHEMAS = {
     chatMessageAskSchema: chatWire.chatMessageAskSchema,
     chatMessageSchema: chatWire.chatMessageSchema,
     chatCursorSchema: chatWire.chatCursorSchema,
+    chatChannelReadSchema: chatWire.chatChannelReadSchema,
     chatAnswerSchema: chatWire.chatAnswerSchema,
     chatPostRequestSchema: chatWire.chatPostRequestSchema,
     chatAnswerRequestSchema: chatWire.chatAnswerRequestSchema,
@@ -155,6 +159,7 @@ const EFFECT_MODULE_SCHEMAS = {
     inboxPostInputSchema: inboxWire.inboxPostInputSchema,
     inboxCloseInputSchema: inboxWire.inboxCloseInputSchema,
     inboxReadInputSchema: inboxWire.inboxReadInputSchema,
+    inboxReplyInputSchema: inboxWire.inboxReplyInputSchema,
     inboxFieldValueSchema: inboxWire.inboxFieldValueSchema,
     inboxFormValueSchema: inboxWire.inboxFormValueSchema,
     inboxFormValuesSchema: inboxWire.inboxFormValuesSchema,
@@ -162,11 +167,17 @@ const EFFECT_MODULE_SCHEMAS = {
     inboxReadBlockSchema: inboxWire.inboxReadBlockSchema,
     inboxReadResponseSchema: inboxWire.inboxReadResponseSchema,
     inboxAnswerFileSchema: inboxWire.inboxAnswerFileSchema,
+    inboxMessageSchema: inboxWire.inboxMessageSchema,
     inboxItemSchema: inboxWire.inboxItemSchema,
     inboxCursorSchema: inboxWire.inboxCursorSchema,
     inboxAnswerSchema: inboxWire.inboxAnswerSchema,
     inboxAnswerRequestSchema: inboxWire.inboxAnswerRequestSchema,
     inboxAnsweredSchema: inboxWire.inboxAnsweredSchema,
+    inboxMessageRequestSchema: inboxWire.inboxMessageRequestSchema,
+    inboxMessagedSchema: inboxWire.inboxMessagedSchema,
+    inboxReadStateSchema: inboxWire.inboxReadStateSchema,
+    inboxReadAllRequestSchema: inboxWire.inboxReadAllRequestSchema,
+    inboxReadAllSchema: inboxWire.inboxReadAllSchema,
   } satisfies RecordedEffectJsonSchemas<typeof inboxWire>,
   "coding-agent-view": {
     codingAgentModelsAnswerSchema: codingAgentView.codingAgentModelsAnswerSchema,
@@ -220,6 +231,10 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentInboxAnswerViewSchema: codingAgentView.codingAgentInboxAnswerViewSchema,
     codingAgentInboxAnswerParamsSchema: codingAgentView.codingAgentInboxAnswerParamsSchema,
     codingAgentInboxAnsweredViewSchema: codingAgentView.codingAgentInboxAnsweredViewSchema,
+    codingAgentInboxMessageParamsSchema: codingAgentView.codingAgentInboxMessageParamsSchema,
+    codingAgentInboxMessagedViewSchema: codingAgentView.codingAgentInboxMessagedViewSchema,
+    codingAgentInboxReadStateViewSchema: codingAgentView.codingAgentInboxReadStateViewSchema,
+    codingAgentInboxReadAllViewSchema: codingAgentView.codingAgentInboxReadAllViewSchema,
     codingAgentAccountInboxParamsSchema: codingAgentView.codingAgentAccountInboxParamsSchema,
     codingAgentAccountInboxAnswerViewSchema:
       codingAgentView.codingAgentAccountInboxAnswerViewSchema,
@@ -446,6 +461,22 @@ const EFFECT_MODULE_SCHEMAS = {
     taskTranscriptSchema: transcriptWire.taskTranscriptSchema,
     taskTranscriptAnswerSchema: transcriptWire.taskTranscriptAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof transcriptWire>,
+  "factory-world-wire": {
+    factoryRepositorySchema: factoryWorldWire.factoryRepositorySchema,
+    factoryZoneSchema: factoryWorldWire.factoryZoneSchema,
+    factoryPullRequestSchema: factoryWorldWire.factoryPullRequestSchema,
+    factoryAgentSchema: factoryWorldWire.factoryAgentSchema,
+    factoryShippedSchema: factoryWorldWire.factoryShippedSchema,
+    factoryPlannedSchema: factoryWorldWire.factoryPlannedSchema,
+    factoryDefectSchema: factoryWorldWire.factoryDefectSchema,
+    factoryWorldSchema: factoryWorldWire.factoryWorldSchema,
+    factoryWorldRequestSchema: factoryWorldWire.factoryWorldRequestSchema,
+    factoryWorldAnswerSchema: factoryWorldWire.factoryWorldAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof factoryWorldWire>,
+  "pull-request-area": {
+    pullRequestAreaSchema: pullRequestArea.pullRequestAreaSchema,
+    pullRequestAreasSchema: pullRequestArea.pullRequestAreasSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof pullRequestArea>,
   "workspace-wire": {
     workspacePhotoTypeSchema: workspaceWire.workspacePhotoTypeSchema,
     workspaceGithubSchema: workspaceWire.workspaceGithubSchema,

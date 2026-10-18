@@ -3,12 +3,19 @@ import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { sandboxRead } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type TerminalSummary } from "@luke/features/terminal-wire";
-import { CloseIcon, ConfirmDialog, PlusIcon, useConfirmDialog, useMenu } from "@luke/ui";
+import {
+  CloseIcon,
+  ConfirmDialog,
+  IconButton,
+  InlineEdit,
+  PlusIcon,
+  useConfirmDialog,
+  useMenu,
+} from "@luke/ui";
 import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { ActionMenu } from "../desktop/action-menu";
 import type { FloatingBox } from "../desktop/hover-pane";
-import { TaskNameField } from "../desktop/task-name-field";
 import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject } from "./agent-ref";
 import { agentStillWriting } from "./coding-agent-model";
@@ -75,18 +82,16 @@ function ShellRow({
   return (
     <li className="terminal-shell" aria-current={shown ? "true" : undefined}>
       <TerminalIcon className="terminal-shell-glyph" aria-hidden="true" />
-      {renaming ? (
-        <TaskNameField
-          name={shell.title}
-          className="terminal-shell-field"
-          label="Shell name"
-          maxLength={TITLE_MAX}
-          onEnd={({ name }) => {
-            setRenaming(false);
-            if (name !== undefined) session.onRename(shell.id, name);
-          }}
-        />
-      ) : (
+      <InlineEdit
+        value={shell.title}
+        label="Shell name"
+        editing={renaming}
+        maxLength={TITLE_MAX}
+        onEnd={({ value }) => {
+          setRenaming(false);
+          if (value !== undefined) session.onRename(shell.id, value);
+        }}
+      >
         <button
           ref={row}
           type="button"
@@ -97,22 +102,19 @@ function ShellRow({
           <span className="terminal-shell-name">{shell.title}</span>
           <span className="terminal-shell-detail">{shellDetail(shell)}</span>
         </button>
-      )}
+      </InlineEdit>
       <span className="terminal-shell-mark">
         {shell.running ? (
           <span className="terminal-shell-running" role="img" aria-label="Running" />
         ) : null}
       </span>
-      <Tooltip label={kill}>
-        <button
-          type="button"
-          className="icon-button terminal-shell-kill"
-          aria-label={kill}
-          onClick={ending.ask}
-        >
-          <CloseIcon />
-        </button>
-      </Tooltip>
+      {/* Note that the × stands in a box of its own, because the box is what
+          the stylesheet lays over the mark and a barrel button wears no mark. */}
+      <span className="terminal-shell-kill">
+        <Tooltip label={kill}>
+          <IconButton icon={<CloseIcon />} label={kill} onClick={ending.ask} />
+        </Tooltip>
+      </span>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={shell.title}
@@ -186,17 +188,14 @@ export function TerminalShells({
       onKeyDown={float.onKeyDown}
     >
       <div className="terminal-shells-head">
-        Shells
+        <span className="terminal-shells-title">Shells</span>
         <Tooltip label="New shell">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="New shell"
+          <IconButton
+            icon={<PlusIcon />}
+            label="New shell"
             disabled={listed?.sandbox !== SANDBOX_STATE.RUNNING}
             onClick={session.onCreate}
-          >
-            <PlusIcon />
-          </button>
+          />
         </Tooltip>
       </div>
       {listed === undefined ? null : shells.length === 0 ? (
@@ -215,10 +214,13 @@ export function TerminalShells({
         </ul>
       )}
       <div className="terminal-shells-foot">
-        <AgentRef subject={subject} models={models} onOpen={onOpenAgent}>
-          <AgentGlyph agent={subject.agent} />
-          <span className="agent-ref-name">{standingWords(subject, listed?.sandbox)}</span>
-        </AgentRef>
+        <AgentRef
+          subject={subject}
+          models={models}
+          onOpen={onOpenAgent}
+          glyph={<AgentGlyph agent={subject.agent} />}
+          label={standingWords(subject, listed?.sandbox)}
+        />
       </div>
     </aside>
   );

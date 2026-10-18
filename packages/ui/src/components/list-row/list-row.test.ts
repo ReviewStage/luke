@@ -1,18 +1,23 @@
 // @vitest-environment jsdom
 
-import { act, createElement, useState } from "react";
+import { act, cloneElement, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { IconButton } from "../button/button.js";
-import { List, ListRow } from "./list-row.js";
+import { LIST_ROW_CURRENT, LIST_ROW_META, List, ListRow, type ListRowHint } from "./list-row.js";
 
 /**
  * list-row.test.ts -- a row's press and its acts are separate buttons, never
  * one inside the other, and an act is pressed without pressing its row. A
  * row reads as its words, title first, and Tab meets it before its acts; the
  * open one is announced as current, whether it opens something or not; and a
- * row that opens nothing is no control, though its acts still are. Synthetic
- * members.
+ * row that opens nothing is no control, though its acts still are. A
+ * keyboard-driven list can hand focus back to a row through its ref, hear
+ * the keys pressed on it, and hear a right-click anywhere on it. A row
+ * current as the page beside the list is announced so, and the app's hint
+ * hung from a row's press raises its words for the press. A row whose
+ * metadata stands on its title's line reads it after the title and before
+ * the line under it. Synthetic members.
  */
 
 declare global {
@@ -64,7 +69,7 @@ function Members(): React.JSX.Element {
           title: member.name,
           description: `${member.id}@example.com`,
           meta: member.role,
-          current: open === member.id,
+          current: open === member.id ? LIST_ROW_CURRENT.ITEM : undefined,
           onPress: () => {
             setOpen(member.id);
             setHeard((all) => [...all, `open ${member.id}`]);
@@ -134,6 +139,22 @@ test("a row reads as its words, title first, its leading mark hidden from a read
   ]);
 });
 
+test("a row whose metadata ends its title's line reads it after the title and before the line under it, as a mail app's row is read", () => {
+  const container = draw(
+    createElement(List, {
+      label: "Members",
+      children: createElement(ListRow, {
+        title: "Ada Lovelace",
+        description: "ada@example.com",
+        meta: "Owner",
+        metaAt: LIST_ROW_META.TITLE,
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  expect(button(container, "Ada LovelaceOwnerada@example.com")).toBeTruthy();
+});
+
 test("Tab meets a row, then its acts, then the next row, none taken out of the order", () => {
   const container = draw(createElement(Members));
   const order = [
@@ -169,9 +190,137 @@ test("a row that opens nothing is still announced as current", () => {
   const container = draw(
     createElement(List, {
       label: "Runs",
-      children: createElement(ListRow, { title: "Running review", current: true }),
+      children: createElement(ListRow, {
+        title: "Running review",
+        current: LIST_ROW_CURRENT.ITEM,
+      }),
     }),
   );
   const current = container.querySelector('[aria-current="true"]');
   expect(current?.textContent).toBe("Running review");
+});
+
+test("focus is handed back to a row's press through its ref", () => {
+  let row: HTMLElement | null = null;
+  const container = draw(
+    createElement(List, {
+      label: "Members",
+      children: createElement(ListRow, {
+        ref: (element: HTMLElement | null) => {
+          row = element;
+        },
+        title: "Ada Lovelace",
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  act(() => row?.focus());
+  expect(document.activeElement).toBe(button(container, "Ada Lovelace"));
+});
+
+test("a row that opens nothing hands its item to its ref", () => {
+  let row: HTMLElement | null = null;
+  const container = draw(
+    createElement(List, {
+      label: "Members",
+      children: createElement(ListRow, {
+        ref: (element: HTMLElement | null) => {
+          row = element;
+        },
+        title: "Ada Lovelace",
+      }),
+    }),
+  );
+  expect(row).toBe(container.querySelector("li"));
+});
+
+test("a key pressed on a row reaches its handler, and a right-click anywhere on it reaches its own", () => {
+  const heard: string[] = [];
+  const container = draw(
+    createElement(List, {
+      label: "Members",
+      children: createElement(ListRow, {
+        title: "Ada Lovelace",
+        onPress: () => undefined,
+        onKeyDown: (event) => heard.push(`key ${event.key}`),
+        onContextMenu: () => heard.push("menu"),
+        actions: createElement(IconButton, { icon: glyph(), label: "More for ada" }),
+      }),
+    }),
+  );
+  const row = button(container, "Ada Lovelace");
+  act(() => {
+    row.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }));
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+    button(container, "More for ada").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true }),
+    );
+  });
+  expect(heard).toEqual(["key j", "menu", "menu"]);
+});
+
+test("a row that opens nothing hears no keys, not even its acts'", () => {
+  const heard: string[] = [];
+  const container = draw(
+    createElement(List, {
+      label: "Members",
+      children: createElement(ListRow, {
+        title: "Ada Lovelace",
+        onKeyDown: (event) => heard.push(`key ${event.key}`),
+        actions: createElement(IconButton, { icon: glyph(), label: "More for ada" }),
+      }),
+    }),
+  );
+  act(() => {
+    button(container, "More for ada").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "j", bubbles: true }),
+    );
+  });
+  expect(heard).toEqual([]);
+});
+
+test("a row current as the page shown beside the list is announced as the page", () => {
+  const container = draw(
+    createElement(List, {
+      label: "Inbox items",
+      children: createElement(ListRow, {
+        title: "Review the release",
+        current: LIST_ROW_CURRENT.PAGE,
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  expect(button(container, "Review the release").getAttribute("aria-current")).toBe("page");
+});
+
+/** A hint that says its words beside the press while the press holds the keyboard. */
+const SayingHint: ListRowHint = ({ label, children }) => {
+  const [shown, setShown] = useState(false);
+  return createElement(
+    "div",
+    null,
+    cloneElement(children, { onFocus: () => setShown(true), onBlur: () => setShown(false) }),
+    shown ? createElement("output", null, label) : null,
+  );
+};
+
+test("the app's hint hung from a row's press raises its words while the press holds the keyboard, and the press still opens the row", () => {
+  const heard: string[] = [];
+  const container = draw(
+    createElement(List, {
+      label: "Inbox items",
+      children: createElement(ListRow, {
+        title: "Review the release",
+        meta: "2h",
+        hint: { Hint: SayingHint, label: "Review the release" },
+        onPress: () => heard.push("open"),
+      }),
+    }),
+  );
+  const row = button(container, "Review the release2h");
+  expect(container.querySelector("output")).toBeNull();
+  act(() => row.focus());
+  expect(container.querySelector("output")?.textContent).toBe("Review the release");
+  press(row);
+  expect(heard).toEqual(["open"]);
 });

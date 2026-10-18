@@ -112,11 +112,7 @@ role its own way. A palette (`palettes.css`) names each colour by its role,
 for each profile in each theme. A component reads roles and the palette, never
 a base value at its call site, so it moves with its profile. Both profiles set
 the same roles and every palette the same names; `tokens.test.ts` holds them
-to it.
-Each app's older names (`--space-8`, `--control-height`, `--text-primary`,
-`--hairline`, …) are aliases of the roles under that app's profile
-(`legacy.css`), kept until nothing reads them; the desktop's and the site's
-old names disagree, so an alias is never read across profiles.
+to it. Both apps read the roles alone; neither keeps a name of its own for one.
 
 A shared component takes its data and callbacks as props and no class or
 style: it owns its insides, and the room around it is its container's. Its
@@ -150,6 +146,10 @@ Text that communicates a label, status, count, or instruction must meet WCAG
 AA contrast at its rendered size. Decorative marks and disabled controls may
 sit below that threshold only when their meaning is available elsewhere.
 
+Words the window draws are selectable, so any of them can be copied; a
+control's words are not, since a control is pressed rather than read
+(`base.css`). A rule that takes selection away from words says why.
+
 Every pointer action has a keyboard path and an accessible name. Tab lists use
 one tab stop and Left/Right/Home/End navigation. A control that floats over a
 thumbnail keeps at least a 24px target even when its glyph is smaller, and
@@ -162,28 +162,28 @@ to semantic or generated tokens; a repeated literal is evidence that the
 vocabulary is missing a name.
 
 Spacing in the desktop window comes from one scale, `@luke/ui`'s, read in the
-window's stylesheets by its desktop names `--space-2` through `--space-48`,
-and the names built from it in `desktop.css`'s `:root`. Every column holds its
+window's stylesheets as `--luke-space-2` through `--luke-space-48`, and the
+names built from it in `desktop.css`'s `:root`. Every column holds its
 rows `--column-inset` from its edges, every row holds its glyph or words
 `--row-inset` from its own, so a column's words start at `--content-inset`
 whether a row carries them or not: the sidebar's text, the task's tab, the
 side panel's first tab, the transcript, and Settings' page list all read down
-that one edge. Controls in a row stand `--control-gap` apart, a glyph
-`--glyph-gap` from its words, a column's groups `--section-gap`, and a page's
-content `--page-inset` from its column, each the desktop profile's role under
-its old name. No pixel of padding, margin, or gap in `desktop.css`,
+that one edge. Controls in a row stand `--luke-control-gap` apart, a glyph
+`--luke-icon-gap` from its words, a column's groups `--luke-section-gap`, and a page's
+content `--luke-page-inset` from its column, each the desktop profile's role.
+No pixel of padding, margin, or gap in `desktop.css`,
 `sign-in.css`, and `tooltip.css` is anything but one of these; the optical
 exception above is marked `/* off-scale */` on its declaration, so a reader
 sees it is deliberate.
 
 The window draws two buttons of its own, both in `desktop.css`, and no screen
 of it mounts `@luke/ui`'s Button and IconButton yet. A glyph alone is an
-`.icon-button`: a `--control-height` square with a `--control-glyph` glyph in
-`--text-secondary`, nothing behind it at rest, the `--selected` fill and
-`--text-primary` under the pointer, `--pressed` held down, and the
-`--focus-ring` for the keyboard. A glyph and words, or words alone, is a
+`.icon-button`: a `--luke-control-height` square with a `--luke-control-icon` glyph in
+`--luke-color-text-muted`, nothing behind it at rest, the `--luke-color-fill-selected` fill and
+`--luke-color-text` under the pointer, `--luke-color-fill-pressed` held down, and the
+`--luke-color-focus-ring` for the keyboard. A glyph and words, or words alone, is a
 `.toolbar-button` of the same height, corner, glyph, and states, its glyph
-`--glyph-gap` from its words; `.primary-button` and `.danger-button` are that
+`--luke-icon-gap` from its words; `.primary-button` and `.danger-button` are that
 button filled with the accent or with red. Every glyph is drawn in a 24 box at
 the one stroke `glyphs.tsx` draws with, so the button sizes the glyph and
 never the glyph its button. A button floating over something that moves
@@ -197,7 +197,7 @@ without a fill. A chip, which names a value or a thing rather than an act, is
 
 The keyboard's ring is one rule in `base.css`. Every button, link, tab,
 switch, option, and menu item, and anything else in the tab order, draws
-`--focus-ring` at `--focus-ring-width`, `--focus-ring-offset` off its edge, and
+`--luke-color-focus-ring` at `--focus-ring-width`, `--focus-ring-offset` off its edge, and
 only once the keyboard has moved focus (`keyboard-modality.ts`), so a press
 never rings a control. A control whose drawn shape is a part of it, a picture
 tile's picture over its caption, marks that part `data-focus-ring`, which
@@ -226,10 +226,10 @@ with its fill. An unmarked one is a bug, and so is a ring drawn off the tokens.
 
 Every menu and popover is one surface, from the menu tokens: the desktop
 profile's menu roles, and `--menu-glyph` and `--menu-shadow` in
-`desktop.css`'s `:root`. It is the `--surface-popover` ground in a
-`--hairline-strong` edge, the `--menu-radius` corner and `--menu-shadow` under
-it, its items `--menu-inset` from its edge, each row `--menu-row-height` tall
-with a `--menu-row-radius` highlight and a `--menu-glyph` glyph. The corner is
+`desktop.css`'s `:root`. It is the `--luke-color-overlay` ground in a
+`--luke-color-border-strong` edge, the `--luke-menu-radius` corner and `--menu-shadow` under
+it, its items `--luke-menu-inset` from its edge, each row `--luke-menu-row-height` tall
+with a `--luke-menu-row-radius` highlight and a `--menu-glyph` glyph. The corner is
 the row's corner plus the inset, so a highlighted row follows the menu's
 curve; the profile works the corner out from the other two. A task's menu, a
 picker, a submenu, a crumb's tree, the find bar, and a tooltip card all draw
@@ -237,7 +237,7 @@ it, and none of them may spend its own corner, shadow, ground, or row. The
 command palette is a dialog rather than a menu, so it keeps a dialog's corner
 (`--luke-dialog-radius`) and deeper shadow, as the confirm dialog does; its
 rows are a menu's. The summary card is a panel of the summary's own rows
-rather than a menu, so it keeps the 12px corner those rows' `--control-radius`
+rather than a menu, so it keeps the 12px corner those rows' `--luke-control-radius`
 sits concentric in. The agent's context popover is a panel too, a bar and its
 legend rather than rows: it draws the menu's ground, edge, corner, and shadow,
 and pads what it holds with steps of the scale rather than a menu's inset.

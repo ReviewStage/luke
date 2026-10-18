@@ -25,12 +25,14 @@
     font-size: var(--luke-type-label-size);
     line-height: var(--luke-type-label-leading);
     font-weight: var(--luke-weight-medium);
+    text-decoration: none;
     white-space: nowrap;
     cursor: pointer;
     transition:
       background-color var(--duration-hover) ease,
       color var(--duration-hover) ease,
-      filter var(--duration-hover) ease;
+      filter var(--duration-hover) ease,
+      opacity var(--duration-hover) ease;
   }
 
   /* A desktop control answers a press the way a Mac's does, without the
@@ -63,6 +65,14 @@
     padding: 0;
   }
 
+  /* Compact, a row's mark: a smaller square on a smaller corner, its glyph
+     the control's own. */
+  .luke-button[data-icon-only="true"][data-size="compact"] {
+    width: var(--luke-space-24);
+    height: var(--luke-space-24);
+    border-radius: var(--luke-radius-6);
+  }
+
   .luke-button[data-variant="outline"] {
     --luke-button-edge: var(--luke-color-border-strong);
   }
@@ -79,6 +89,32 @@
 
   .luke-button[data-variant="danger-outline"] {
     --luke-button-edge: var(--luke-color-border-strong);
+    --luke-button-ink: var(--luke-color-danger-text);
+  }
+
+  .luke-button[data-variant="ink"] {
+    --luke-button-fill: var(--luke-color-text);
+    --luke-button-ink: var(--luke-color-ground);
+  }
+
+  /* Round, a glyph alone is a disc and words a pill, held off its round
+     ends by half its height. */
+  .luke-button[data-shape="round"] {
+    border-radius: var(--luke-radius-full);
+  }
+
+  .luke-button[data-shape="round"]:not([data-icon-only="true"]) {
+    padding-inline: calc(var(--luke-control-height) / 2);
+  }
+
+  /* A danger toggle is quiet while off, and on the danger tint while on. */
+  .luke-button[data-variant="danger"][aria-pressed="false"] {
+    --luke-button-fill: transparent;
+    --luke-button-ink: var(--luke-color-text-muted);
+  }
+
+  .luke-button[data-variant="danger"][aria-pressed="true"] {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 16%, transparent);
     --luke-button-ink: var(--luke-color-danger-text);
   }
 
@@ -100,11 +136,49 @@
       var(--luke-button-ground, transparent);
   }
 
+  /* A compact quiet mark lights its glyph alone, under the pointer, while
+     its menu is open, and while a toggle stands on, because the row it
+     stands in is already lit. */
+  .luke-button[data-size="compact"][data-variant="quiet"]:where(
+    :hover:not(:disabled, [aria-disabled="true"]),
+    [aria-expanded="true"],
+    [aria-pressed="true"]
+  ),
+  .luke-button[data-size="compact"][data-variant="quiet"]:active:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    --luke-button-fill: transparent;
+    background: transparent;
+  }
+
   /* A button that goes to the page on show reads in the full ink, as one
      under the pointer does, without a fill: the page is where it stands,
      not a state it holds. */
   .luke-button:is([data-variant="quiet"], [data-variant="outline"])[aria-current="page"] {
     --luke-button-ink: var(--luke-color-text);
+  }
+
+  .luke-button[data-variant="danger"][aria-pressed="false"]:hover:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    --luke-button-fill: var(--luke-color-fill-selected);
+    --luke-button-ink: var(--luke-color-text);
+  }
+
+  .luke-button[data-variant="danger"][aria-pressed="false"]:active:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    --luke-button-fill: var(--luke-color-fill-pressed);
+  }
+
+  .luke-button[data-variant="danger"][aria-pressed="true"]:hover:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 24%, transparent);
   }
 
   .luke-button[data-variant="danger-outline"]:hover:not(:disabled, [aria-disabled="true"]) {
@@ -120,18 +194,28 @@
       var(--luke-button-ground, transparent);
   }
 
-  .luke-button:is([data-variant="primary"], [data-variant="danger"]):hover:not(
+  .luke-button:is([data-variant="primary"], [data-variant="danger"]:not([aria-pressed])):hover:not(
     :disabled,
     [aria-disabled="true"]
   ) {
     filter: brightness(1.1);
   }
 
-  .luke-button:is([data-variant="primary"], [data-variant="danger"]):active:not(
+  .luke-button:is([data-variant="primary"], [data-variant="danger"]:not([aria-pressed])):active:not(
     :disabled,
     [aria-disabled="true"]
   ) {
     filter: brightness(0.92);
+  }
+
+  /* An ink fill is black or white, which a brightness does not move, so it
+     fades a little under the pointer and more under the press. */
+  .luke-button[data-variant="ink"]:hover:not(:disabled, [aria-disabled="true"]) {
+    opacity: 0.85;
+  }
+
+  .luke-button[data-variant="ink"]:active:not(:disabled, [aria-disabled="true"]) {
+    opacity: 0.7;
   }
 
   /* Unavailable, a button fades to 45%: a disabled one whole, one that
@@ -147,6 +231,23 @@
     background: var(--luke-button-fill-faded);
     color: color-mix(in srgb, var(--luke-button-ink) 45%, transparent);
     cursor: default;
+  }
+
+  /* A submit unavailable stands on the strong fill with a muted glyph rather
+     than fading, so the glyph stays a colour apart from its disc. */
+  .luke-button[data-submit]:is(:disabled, [aria-disabled="true"]):not([aria-busy="true"]) {
+    --luke-button-fill: var(--luke-color-fill-strong);
+    --luke-button-ink: var(--luke-color-text-muted);
+    background: var(--luke-button-fill);
+    color: var(--luke-button-ink);
+    opacity: 1;
+    filter: none;
+  }
+
+  .luke-button-ring {
+    display: block;
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
   }
 
   /* Busy, its words keep their room under the ring, so the button neither

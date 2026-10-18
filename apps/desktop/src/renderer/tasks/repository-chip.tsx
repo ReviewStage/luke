@@ -2,12 +2,19 @@ import type { GitHubRepository } from "@luke/features";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { GearIcon, ProviderMark } from "@luke/ui";
+import {
+  CHIP_LOOK,
+  Chip,
+  type ChipLook,
+  ChipName,
+  type ChipWidth,
+  ErrorState,
+  GearIcon,
+  ProviderMark,
+} from "@luke/ui";
 import { repositoryFailureNote } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
-import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { CHIP_LOOK, Chip, type ChipLook } from "../chip";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
 import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
@@ -182,6 +189,12 @@ export function RepositoryChip(props: {
   place: ChipPlace;
   /** A form row's chip: the edge its menu hangs from, the trailing one where none is named, as a Settings picker's does. */
   align?: PickerAlign | undefined;
+  /** A form row's chip: how wide it stands, its words' own width where none is named. */
+  width?: ChipWidth | undefined;
+  /** A form row's chip: the ids of the row's words that describe it, its error among them while it has one. */
+  describedBy?: string | undefined;
+  /** A form row's chip: whether the row says its value is refused. */
+  invalid?: true | undefined;
 }): React.JSX.Element {
   const { chooser, openRequest, onUnreached, value } = props;
   const openSettings = useOpenSettings();
@@ -258,15 +271,9 @@ export function RepositoryChip(props: {
     props.value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
   const note =
     failure !== undefined ? (
-      <>
-        <p className="task-compose-menu-note" role="alert">
-          {repositoryFailureNote(failure)}
-        </p>
-        <button type="button" className="menu-item" onClick={read}>
-          <RotateCwIcon aria-hidden="true" />
-          <span className="task-compose-menu-name">Retry</span>
-        </button>
-      </>
+      <div className="task-compose-menu-note">
+        <ErrorState onRetry={read}>{repositoryFailureNote(failure)}</ErrorState>
+      </div>
     ) : listed !== undefined && !listed.installed ? (
       // Only an owner or an admin can connect the workspace's GitHub, so a member is told to ask.
       <>
@@ -306,8 +313,10 @@ export function RepositoryChip(props: {
         <Chip
           ref={trigger}
           look={PLACE_LOOK[props.place]}
+          width={props.width}
           chevron={props.place === CHIP_PLACE.FIELD}
-          className={props.place === CHIP_PLACE.FIELD ? "settings-picker-chip" : undefined}
+          aria-describedby={props.describedBy}
+          aria-invalid={props.invalid}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
@@ -322,7 +331,7 @@ export function RepositoryChip(props: {
               fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
             />
           )}
-          <span className="chip-name">{label}</span>
+          <ChipName>{label}</ChipName>
         </Chip>
       ) : null}
       {drawn.mounted ? (

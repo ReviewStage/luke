@@ -59,7 +59,6 @@ beforeEach(() => {
       }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
-    recordSurfaceEvent: () => undefined,
   });
 });
 
@@ -73,7 +72,7 @@ afterEach(() => {
 /** The plan's version history over the window, its versions by Lee read, and the sections of version 3 open. */
 function drawn(): HTMLElement {
   const base = tasksControl();
-  const plans = tasksControl({
+  const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, workspaceId: ACME.id } },
@@ -104,7 +103,7 @@ function drawn(): HTMLElement {
           staged: false,
         },
         history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
-        subject: taskVersionSubject(plans),
+        subject: taskVersionSubject(tasks),
         account: { status: ACCOUNT_STATUS.SIGNED_IN, email: "dev@example.com", provider: "github" },
         call: undefined,
         onExit: ignore,

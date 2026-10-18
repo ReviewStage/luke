@@ -1,4 +1,14 @@
-import { CloseIcon, MicrophoneIcon } from "@luke/ui";
+import {
+  BUTTON_SHAPE,
+  BUTTON_VARIANT,
+  CloseIcon,
+  IconButton,
+  MicrophoneIcon,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Spinner } from "../spinner";
@@ -58,19 +68,19 @@ export function DictateButton({
   disabled: boolean;
 }): React.JSX.Element {
   return (
-    <Tooltip label={LABEL.DICTATE}>
-      <button
-        type="button"
-        className="icon-button dictate-button"
-        aria-label={LABEL.DICTATE}
-        disabled={disabled}
-        // The caret stays where it was in the box, which is where the words go.
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={dictation.start}
-      >
-        <MicrophoneIcon />
-      </button>
-    </Tooltip>
+    // Note that the box is what a narrow card's stylesheet hides and its ⋯ reads, and
+    // the press keeps the caret where it was in the box, which is where the words go.
+    <span className="dictate-button">
+      <Tooltip label={LABEL.DICTATE}>
+        <IconButton
+          icon={<MicrophoneIcon />}
+          label={LABEL.DICTATE}
+          disabled={disabled}
+          keepFocus
+          onClick={dictation.start}
+        />
+      </Tooltip>
+    </span>
   );
 }
 
@@ -153,7 +163,11 @@ export function DictationStrip({ dictation }: { dictation: DictationControl }): 
       {transcribing ? (
         <span className="dictation-transcribing">
           <Spinner label={LABEL.TRANSCRIBING} />
-          <span aria-hidden="true">Transcribing…</span>
+          <span aria-hidden="true">
+            <Text variant={TEXT_VARIANT.CAPTION} as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+              Transcribing…
+            </Text>
+          </span>
         </span>
       ) : (
         <>
@@ -162,28 +176,24 @@ export function DictationStrip({ dictation }: { dictation: DictationControl }): 
         </>
       )}
       <Tooltip label={LABEL.CANCEL}>
-        <button
-          type="button"
-          className="icon-button dictation-cancel"
-          aria-label={LABEL.CANCEL}
-          onMouseDown={(event) => event.preventDefault()}
+        <IconButton
+          icon={<CloseIcon />}
+          label={LABEL.CANCEL}
+          keepFocus
           onClick={dictation.cancel}
-        >
-          <CloseIcon />
-        </button>
+        />
       </Tooltip>
       {transcribing ? null : (
         <Tooltip label={LABEL.FINISH}>
-          <button
-            type="button"
-            className="dictation-finish flex size-[30px] shrink-0 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground disabled:bg-secondary disabled:text-muted-foreground"
-            aria-label={LABEL.FINISH}
+          <IconButton
+            icon={<CheckIcon />}
+            label={LABEL.FINISH}
+            variant={BUTTON_VARIANT.INK}
+            shape={BUTTON_SHAPE.ROUND}
             disabled={dictation.startedAt === undefined}
-            onMouseDown={(event) => event.preventDefault()}
+            keepFocus
             onClick={dictation.finish}
-          >
-            <CheckIcon className="size-[15px]" />
-          </button>
+          />
         </Tooltip>
       )}
     </div>

@@ -53,7 +53,7 @@ export const SCRIPTED_READ_REPLY = "The repository says:";
 /** The reply to a command that did not run: the tool's own reason follows, so nothing unread is described as read. */
 export const SCRIPTED_NOT_READ_REPLY = "I could not read the repository.";
 
-/** What a developer's words start with when they ask the scripted planner to post the rest in the plan's chat. */
+/** What a developer's words start with when they ask the scripted brain to post the rest in the task's chat. */
 export const SCRIPTED_POST = "Post: ";
 /** The reply to a post that landed: its place follows. */
 export const SCRIPTED_POSTED_REPLY = "Posted in the chat as m";

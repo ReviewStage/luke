@@ -1,14 +1,18 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PLAN_ACTOR, type TaskSummary } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
+  BUTTON_SIZE,
   ConfirmDialog,
   CopyIcon,
   type DialogQuestion,
   EllipsisIcon,
   ExternalIcon,
+  IconButton,
+  InlineEdit,
   PinIcon,
   ProviderMark,
   TrashIcon,
@@ -19,10 +23,15 @@ import {
 } from "@luke/ui";
 import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
-import { DOCUMENT_REGION, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
+import {
+  DOCUMENT_REGION,
+  RENAME_FAILED_NOTE,
+  TASK_MARK,
+  type TaskMark,
+} from "@luke/ui/tasks-model";
+import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { FolderInputIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { usePlanDrafted } from "../composer-drafts";
@@ -49,7 +58,6 @@ import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections";
 import { TaskStatusMark, taskCardOf } from "./task-card";
-import { TaskNameField, useTaskRename } from "./task-name-field";
 
 /**
  * task-actions.tsx -- one task's actions, offered alike from the toolbar's ⋯ button and from a right-click on the task in the sidebar.
@@ -59,7 +67,7 @@ import { TaskNameField, useTaskRename } from "./task-name-field";
  * so both doors draw it the same way and Permanently delete can be drawn red.
  *
  * Copy link copies the plan's address on tryluke.dev, as the ⋯
- * beside the plan's title does (`plan-menu-items.tsx`). Mark as unread
+ * beside the plan's title does (`task-menu-items.tsx`). Mark as unread
  * draws the task's row in the unread weight until it next opens, and turns
  * to Mark as read on a task already unread. Rename edits the
  * name where the door draws it: the sidebar's row turns into a field, and
@@ -80,11 +88,11 @@ import { TaskNameField, useTaskRename } from "./task-name-field";
  */
 
 /** A task as the list or the open document holds it, archived or not; nothing for a task neither holds. */
-export function taskOf(tasks: TasksControl, planId: string): TaskSummary | undefined {
-  const listed = [...tasks.tasks, ...tasks.archived].find((plan) => plan.id === planId);
+export function taskOf(tasks: TasksControl, taskId: string): TaskSummary | undefined {
+  const listed = [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId);
   if (listed !== undefined) return listed;
   const { region } = tasks;
-  return region.kind === DOCUMENT_REGION.READY && region.task.id === planId
+  return region.kind === DOCUMENT_REGION.READY && region.task.id === taskId
     ? region.task
     : undefined;
 }
@@ -156,16 +164,14 @@ function SidebarTaskMarks({
           label={label}
           {...(current && mark === TASK_MARK.ARCHIVE ? { command: APP_COMMAND.ARCHIVE_TASK } : {})}
         >
-          <button
-            type="button"
-            className="sidebar-task-mark"
-            aria-label={label}
+          <IconButton
+            icon={icon}
+            label={label}
+            size={BUTTON_SIZE.COMPACT}
             disabled={disabled}
             onClick={() => tasks.onMarkTask(task.id, mark)}
             onContextMenu={onContextMenu}
-          >
-            {icon}
-          </button>
+          />
         </Tooltip>
       ))}
     </span>
@@ -326,27 +332,27 @@ function useTaskMenu(
   name: string,
   doors: { rename: () => void; drawn: boolean; unread: boolean },
 ) {
-  const plan = taskOf(tasks, taskId);
+  const task = taskOf(tasks, taskId);
   const reads = useReadMarks();
-  const deletion = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: tasks.shown }, () =>
+  const deletion = useConfirmDialog({ subject: task !== undefined, surfaceOpen: tasks.shown }, () =>
     tasks.onDeleteTask(taskId),
   );
-  const moving = useMoveTaskDialog(tasks, plan);
+  const moving = useMoveTaskDialog(tasks, task);
   const copy = useCopyToast();
   const { open, drawn, close, trigger, contextMenu } = useMenu(tasks.shown && doors.drawn);
   // Note that an archived task stands in no section, so it is offered none until it is brought back.
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
   const section =
-    sectionsOn && plan !== undefined && plan.archivedAt === undefined
-      ? moveToSectionEntry(tasks, plan, sections.askNew)
+    sectionsOn && task !== undefined && task.archivedAt === undefined
+      ? moveToSectionEntry(tasks, task, sections.askNew)
       : undefined;
   const menu =
     drawn === undefined ? null : (
       <ActionMenu
         label="Task actions"
         menu={drawn}
-        footer={plan === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={plan} />}
+        footer={task === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={task} />}
         groups={taskActionGroups(tasks, taskId, {
           rename: doors.rename,
           askDelete: deletion.ask,
@@ -356,7 +362,7 @@ function useTaskMenu(
           read: {
             unread: doors.unread,
             onMark: (unread) => {
-              if (plan !== undefined) reads.mark(plan, unread);
+              if (task !== undefined) reads.mark(task, unread);
             },
           },
         })}
@@ -367,7 +373,7 @@ function useTaskMenu(
     <>
       <ConfirmDialog
         confirm={deletion}
-        question={deleteQuestion(name, plan?.archivedAt !== undefined)}
+        question={deleteQuestion(name, task?.archivedAt !== undefined)}
       />
       {moving.dialog}
       {sections.dialog}
@@ -414,15 +420,12 @@ export function TaskActions({
     <>
       {button ? (
         <Tooltip label="Task actions">
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Task actions"
+          <IconButton
+            icon={<EllipsisIcon />}
+            label="Task actions"
             disabled={deletion.busy}
             {...actions.trigger()}
-          >
-            <EllipsisIcon />
-          </button>
+          />
         </Tooltip>
       ) : null}
       {actions.menu}
@@ -481,7 +484,7 @@ export function SidebarTask({
   face?: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
-  const rename = useTaskRename(task.id, tasks.onRenameTask);
+  const rename = useInlineRename(task.id, tasks.onRenameTask);
   const actions = useTaskMenu(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
@@ -505,12 +508,14 @@ export function SidebarTask({
     <li ref={item} className="sidebar-task-item">
       {rename.editing ? (
         <div className="sidebar-task" aria-current={current ? "page" : undefined}>
-          <TaskNameField
-            name={task.name}
-            className="sidebar-task-field"
+          <InlineEdit
+            value={task.name}
+            label="Task name"
+            maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
+            editing
             onEnd={(edit) => {
               refocus.current = edit.byKey;
-              rename.end(edit);
+              rename.end(edit.value);
             }}
           />
         </div>
@@ -558,9 +563,9 @@ export function SidebarTask({
           onContextMenu={showMenu}
         />
       )}
-      {rename.note !== undefined ? (
+      {rename.refused ? (
         <p className="sidebar-note" role="alert">
-          {rename.note}
+          {RENAME_FAILED_NOTE}
         </p>
       ) : null}
       {actions.menu}

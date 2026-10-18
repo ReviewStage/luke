@@ -9,6 +9,7 @@ import { organization, user } from "@luke/database/schemas/auth";
 import { automation as automationTable } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
+import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
@@ -24,6 +25,7 @@ import {
   INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -31,21 +33,29 @@ import {
   type InboxPost,
 } from "@luke/features/inbox-wire";
 import { eq } from "drizzle-orm";
-import { Effect, Option, Result } from "effect";
+import { DateTime, Duration, Effect, Option, Result } from "effect";
+import { TestClock } from "effect/testing";
 import {
   accountInboxTasks,
   accountWaitingItems,
   answerInboxItem,
   closeInboxItem,
+  INBOX_MESSAGE_OUTCOME,
   type InboxAgent,
   type InboxFile,
+  markInboxItemRead,
+  markInboxItemUnread,
+  markInboxRead,
   postInboxItem,
+  postInboxMessage,
   readInboxAttachment,
   readInboxItem,
+  replyInboxItem,
   taskInboxItems,
   withdrawInboxAnswer,
+  withdrawInboxMessage,
 } from "../../inbox/inbox-store.js";
-import { accountInboxPast } from "./inbox-page.js";
+import { accountInboxPast, taskInboxPast } from "./inbox-page.js";
 
 /**
  * The developer's inbox as the store keeps it, through its public functions
@@ -55,8 +65,10 @@ import { accountInboxPast } from "./inbox-page.js";
  * withdrawn under its key, a read keeps every open item however many others
  * changed, every member of the task's workspace reads and answers the items
  * of an agent any of them started, an agent with no task posts to its
- * workspace's members as one on a task does to its task's, and nothing of
- * a workspace the account is not in is read or written.
+ * workspace's members as one on a task does to its task's, a member writes
+ * on an item's thread whatever its status, which moves the item's last
+ * change and nothing else of it, and nothing of a workspace the account is
+ * not in is read or written.
  *
  * Synthetic accounts, tasks, and words throughout.
  */
@@ -526,6 +538,484 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(yield* taskInboxItems(stranger, agent.taskId), []);
         assert.ok(Option.isNone(yield* readInboxItem(stranger, id)));
         assert.ok(Option.isNone(yield* answerInboxItem(stranger, id, 1, done, randomUUID())));
+      }),
+  );
+  it.effect(
+    "a member's message, a teammate's as much as the starter's, stands on the thread of an open item and of an answered one, oldest first and naming its writer, leaves the status, the answer, and the revision as they stood, moves the item's last change and the plan read's cursor, and an outsider writes none",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        const outsider = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const open = yield* postInboxItem(agent, SETTINGS);
+        const settled = yield* postInboxItem(agent, { ...SETTINGS, key: "settled" });
+        assert.ok(Result.isSuccess(open) && Result.isSuccess(settled));
+        const answered = Option.getOrThrow(
+          yield* answerInboxItem(agent.userId, settled.success.id, 1, DONE, randomUUID()),
+        );
+        const before = yield* taskInboxPast(agent.userId, agent.taskId, INBOX_CURSOR_START);
+        const write = (userId: string, itemId: string, text: string) =>
+          Effect.gen(function* () {
+            yield* TestClock.adjust(Duration.seconds(1));
+            return yield* postInboxMessage(userId, itemId, { text, clientKey: randomUUID() });
+          });
+
+        assert.ok(Option.isNone(yield* write(outsider, open.success.id, "Not my workspace.")));
+        yield* write(
+          agent.userId,
+          open.success.id,
+          "Is [@main](https://github.com/acme/relay) it?",
+        );
+        const onOpen = Option.getOrThrow(yield* write(teammate, open.success.id, "Main, yes."));
+        const onSettled = Option.getOrThrow(
+          yield* write(teammate, settled.success.id, "One more thing on this."),
+        );
+
+        assert.deepEqual(
+          [onOpen.outcome, onSettled.outcome],
+          [INBOX_MESSAGE_OUTCOME.WRITTEN, INBOX_MESSAGE_OUTCOME.WRITTEN],
+        );
+        assert.deepEqual(
+          onOpen.item.messages?.map((message) => [
+            message.author,
+            message.member?.userId,
+            message.text,
+          ]),
+          [
+            [
+              INBOX_MESSAGE_AUTHOR.MEMBER,
+              agent.userId,
+              "Is [@main](https://github.com/acme/relay) it?",
+            ],
+            [INBOX_MESSAGE_AUTHOR.MEMBER, teammate, "Main, yes."],
+          ],
+        );
+        assert.deepEqual(
+          [onOpen.item.status, onOpen.item.revision],
+          [INBOX_STATUS.OPEN, open.success.revision],
+        );
+        assert.deepEqual(
+          [
+            onSettled.item.status,
+            onSettled.item.revision,
+            onSettled.item.answer,
+            onSettled.item.answeredBy,
+          ],
+          [answered.status, answered.revision, answered.answer, answered.answeredBy],
+        );
+        assert.ok(onSettled.item.updatedAt > answered.updatedAt, "the message moves the item");
+        assert.equal(onSettled.item.updatedAt, onSettled.item.messages?.[0]?.createdAt);
+        const byStarter = yield* readInboxItem(agent.userId, settled.success.id);
+        const byTeammate = yield* readInboxItem(teammate, settled.success.id);
+        assert.deepEqual(
+          [byStarter, byTeammate].map((read) => Option.getOrThrow(read).item.messages),
+          [onSettled.item.messages, onSettled.item.messages],
+        );
+        const after = yield* taskInboxPast(agent.userId, agent.taskId, INBOX_CURSOR_START);
+        assert.notEqual(after.cursor, before.cursor, "a holder of the cursor before hears it");
+        assert.deepEqual(yield* taskInboxItems(outsider, agent.taskId), []);
+      }),
+  );
+
+  it.effect(
+    "a message's files are kept in the order attached and served to every member, and stay with the thread when the agent posts the item again; a message sent again under its key is written once and moves nothing, other words under its key are refused as the key reused, and one withdrawn goes with its files",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+        const { id } = posted.success;
+        const files = [
+          attached("trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT, TRACE),
+          attached("after.png", CODING_AGENT_ATTACHMENT_TYPE.PNG, SHOT),
+        ];
+        const key = randomUUID();
+        yield* TestClock.adjust(Duration.seconds(1));
+
+        const first = Option.getOrThrow(
+          yield* postInboxMessage(agent.userId, id, { text: "", clientKey: key, files }),
+        );
+        yield* TestClock.adjust(Duration.seconds(1));
+        const again = Option.getOrThrow(
+          yield* postInboxMessage(agent.userId, id, { text: "", clientKey: key, files }),
+        );
+
+        const reused = Option.getOrThrow(
+          yield* postInboxMessage(agent.userId, id, {
+            text: "Other words.",
+            clientKey: key,
+            files,
+          }),
+        );
+        assert.deepEqual(
+          [first.outcome, again.outcome, reused.outcome],
+          [
+            INBOX_MESSAGE_OUTCOME.WRITTEN,
+            INBOX_MESSAGE_OUTCOME.REPEATED,
+            INBOX_MESSAGE_OUTCOME.KEY_REUSED,
+          ],
+        );
+        assert.deepEqual(again.item, first.item, "a repeat writes nothing and moves nothing");
+        assert.deepEqual(reused.item, first.item, "a key reused writes nothing either");
+        const [message] = first.item.messages ?? [];
+        assert.deepEqual(
+          message?.files?.map((file) => [file.name, file.mediaType]),
+          [
+            ["trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT],
+            ["after.png", CODING_AGENT_ATTACHMENT_TYPE.PNG],
+          ],
+        );
+        const [trace] = message?.files ?? [];
+        assert.ok(trace);
+        const served = yield* readInboxAttachment(agent.userId, id, trace.attachmentId);
+        assert.deepEqual(new Uint8Array(Option.getOrThrow(served).bytes), TRACE);
+
+        const askedAgain = yield* postInboxItem(agent, {
+          ...SETTINGS,
+          title: "Require two reviews",
+        });
+        assert.ok(Result.isSuccess(askedAgain));
+        assert.deepEqual(askedAgain.success.messages, first.item.messages);
+        assert.ok(Option.isSome(yield* readInboxAttachment(agent.userId, id, trace.attachmentId)));
+
+        yield* withdrawInboxMessage(agent.userId, id, key);
+        assert.equal(
+          Option.getOrThrow(yield* readInboxItem(agent.userId, id)).item.messages,
+          undefined,
+        );
+        assert.ok(Option.isNone(yield* readInboxAttachment(agent.userId, id, trace.attachmentId)));
+      }),
+  );
+  it.effect(
+    "an item answered or closed is stamped settled at that instant, which a message on its thread leaves while moving the last change; one settled before the stamp was kept reads its last change as settled and keeps it through the first message; a post that opens it again clears it",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        const closing = yield* postInboxItem(agent, { ...SETTINGS, key: "closing" });
+        assert.ok(Result.isSuccess(posted) && Result.isSuccess(closing));
+        const { id } = posted.success;
+        assert.equal(posted.success.settledAt, undefined, "an open item is not settled");
+        const say = (itemId: string) =>
+          Effect.gen(function* () {
+            yield* TestClock.adjust(Duration.seconds(1));
+            const said = yield* postInboxMessage(agent.userId, itemId, {
+              text: "Following up.",
+              clientKey: randomUUID(),
+            });
+            return Option.getOrThrow(said).item;
+          });
+
+        yield* TestClock.adjust(Duration.seconds(1));
+        const answered = Option.getOrThrow(
+          yield* answerInboxItem(agent.userId, id, 1, DONE, randomUUID()),
+        );
+        const messaged = yield* say(id);
+        assert.equal(answered.settledAt, answered.updatedAt);
+        assert.equal(messaged.settledAt, answered.settledAt, "a message leaves when it settled");
+        assert.ok(messaged.updatedAt > answered.updatedAt, "and moves when it last changed");
+
+        const closed = Option.getOrThrow(yield* closeInboxItem(agent, "closing", "Not needed."));
+        assert.equal(closed.settledAt, closed.updatedAt);
+        // As an item settled before the stamp was kept stands.
+        yield* Database.use((db) =>
+          db.update(inboxItem).set({ settledAt: null }).where(eq(inboxItem.id, closed.id)),
+        );
+        const legacy = Option.getOrThrow(yield* readInboxItem(agent.userId, closed.id)).item;
+        assert.equal(legacy.settledAt, closed.updatedAt);
+        const first = yield* say(closed.id);
+        const second = yield* say(closed.id);
+        assert.deepEqual([first.settledAt, second.settledAt], [closed.updatedAt, closed.updatedAt]);
+
+        const reopened = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(reopened));
+        assert.equal(reopened.success.settledAt, undefined);
+        assert.equal(
+          (yield* say(id)).settledAt,
+          undefined,
+          "a message on an open item settles nothing",
+        );
+      }),
+  );
+});
+
+/** Whether the item is unread for the reader, as their read of it says. */
+const unreadFor = (reader: string, itemId: string) =>
+  Effect.map(readInboxItem(reader, itemId), (found) => Option.getOrThrow(found).item.unread);
+
+/** An agent's item posted under the key given, its id. */
+const postedId = (agent: InboxAgent, key: string) =>
+  Effect.map(postInboxItem(agent, { ...SETTINGS, key }), (posted) => {
+    assert.ok(Result.isSuccess(posted));
+    return posted.success.id;
+  });
+
+it.layer(getTestDB())("an inbox item's read state", (it) => {
+  it.effect(
+    "a new item is unread for every member until each reads it, and unread again for a reader once anything happens on it after their read",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const id = yield* postedId(agent, SETTINGS.key);
+
+        assert.deepEqual(
+          [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
+          [true, true],
+        );
+        const listed = yield* taskInboxItems(teammate, agent.taskId ?? "");
+        assert.deepEqual(
+          listed.map((item) => [item.id, item.unread]),
+          [[id, true]],
+        );
+        const waiting = yield* accountWaitingItems(teammate);
+        assert.deepEqual(
+          waiting.map((entry) => [entry.id, entry.unread]),
+          [[id, true]],
+        );
+
+        assert.equal(yield* markInboxItemRead(agent.userId, id), true);
+        assert.equal(yield* markInboxItemRead(agent.userId, id), true, "reading it again is fine");
+        assert.deepEqual(
+          [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
+          [false, true],
+          "one member's read leaves another's unread",
+        );
+
+        // Each change after the read makes it unread again: the agent's reply, a teammate's answer, a close, a post under its key.
+        const changes = [
+          replyInboxItem(agent, SETTINGS.key, "Still needed."),
+          answerInboxItem(teammate, id, 1, DONE, randomUUID()),
+          postInboxItem(agent, SETTINGS),
+          closeInboxItem(agent, SETTINGS.key, "Done another way."),
+        ];
+        for (const change of changes) {
+          yield* markInboxItemRead(agent.userId, id);
+          assert.equal(yield* unreadFor(agent.userId, id), false);
+          yield* TestClock.adjust(Duration.seconds(1));
+          yield* change;
+          assert.equal(yield* unreadFor(agent.userId, id), true);
+        }
+      }),
+  );
+
+  it.effect(
+    "a member's own answer or message leaves the item read for them and unread for a teammate, as the write answers it and as later reads say",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const id = yield* postedId(agent, SETTINGS.key);
+        yield* markInboxItemRead(agent.userId, id);
+        yield* TestClock.adjust(Duration.seconds(1));
+
+        const answered = Option.getOrThrow(
+          yield* answerInboxItem(teammate, id, 1, DONE, randomUUID()),
+        );
+        assert.equal(answered.unread, false, "the answer comes back read for its answerer");
+        assert.deepEqual(
+          [yield* unreadFor(teammate, id), yield* unreadFor(agent.userId, id)],
+          [false, true],
+        );
+
+        yield* TestClock.adjust(Duration.seconds(1));
+        const messaged = Option.getOrThrow(
+          yield* postInboxMessage(agent.userId, id, { text: "Thanks.", clientKey: randomUUID() }),
+        );
+        assert.equal(messaged.item.unread, false, "the message comes back read for its writer");
+        assert.deepEqual(
+          [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
+          [false, true],
+        );
+      }),
+  );
+
+  it.effect(
+    "an item marked unread stays unread whatever changes until its member reads it again, and a teammate's marker never moves another's",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        const id = yield* postedId(agent, SETTINGS.key);
+        yield* markInboxItemRead(agent.userId, id);
+        yield* markInboxItemRead(teammate, id);
+
+        assert.equal(yield* markInboxItemUnread(agent.userId, id), true);
+        assert.equal(
+          yield* markInboxItemUnread(agent.userId, id),
+          true,
+          "marking it again is fine",
+        );
+        assert.deepEqual(
+          [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
+          [true, false],
+        );
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* postInboxMessage(agent.userId, id, { text: "Later.", clientKey: randomUUID() });
+        assert.equal(yield* unreadFor(teammate, id), true, "the message is news to the teammate");
+        yield* markInboxItemRead(teammate, id);
+        assert.equal(yield* unreadFor(teammate, id), false);
+        assert.equal(
+          yield* unreadFor(agent.userId, id),
+          false,
+          "the member's own message is a read of the item they marked unread",
+        );
+
+        yield* markInboxItemUnread(agent.userId, id);
+        yield* markInboxItemUnread(teammate, id);
+        yield* markInboxItemRead(teammate, id);
+        assert.deepEqual(
+          [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
+          [true, false],
+          "the teammate's read leaves the item marked unread for the member who marked it",
+        );
+        yield* markInboxItemRead(agent.userId, id);
+        assert.equal(yield* unreadFor(agent.userId, id), false);
+
+        assert.equal(yield* markInboxItemRead(outsider, id), false, "an outsider reaches no item");
+        assert.equal(yield* markInboxItemUnread(outsider, id), false);
+        assert.equal(yield* markInboxItemRead(agent.userId, randomUUID()), false);
+      }),
+  );
+
+  it.effect(
+    "marking every item read marks what the member's Inbox lists in the workspace named, settled items included, or in every workspace where none is, counts only what was unread, and leaves teammates' markers alone",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const elsewhere = yield* openTasklessAgent;
+        yield* joinWorkspace(elsewhere.workspaceId, agent.userId);
+        const open = yield* postedId(agent, "open");
+        const settled = yield* postedId(agent, "settled");
+        yield* answerInboxItem(teammate, settled, 1, DONE, randomUUID());
+        const marked = yield* postedId(agent, "marked");
+        yield* markInboxItemRead(agent.userId, marked);
+        yield* markInboxItemUnread(agent.userId, marked);
+        const read = yield* postedId(agent, "read");
+        yield* markInboxItemRead(agent.userId, read);
+        const other = yield* postedId(elsewhere.agent, SETTINGS.key);
+
+        assert.equal(yield* markInboxRead(agent.userId, workspaceId), 3);
+        for (const id of [open, settled, marked, read]) {
+          assert.equal(yield* unreadFor(agent.userId, id), false);
+        }
+        assert.equal(yield* unreadFor(agent.userId, other), true, "another workspace's is left");
+        assert.deepEqual(
+          [yield* unreadFor(teammate, open), yield* unreadFor(teammate, settled)],
+          [true, false],
+          "the teammate's markers stand as they were",
+        );
+        assert.equal(yield* markInboxRead(agent.userId, workspaceId), 0, "nothing is left unread");
+
+        assert.equal(yield* markInboxRead(agent.userId, undefined), 1);
+        assert.equal(yield* unreadFor(agent.userId, other), false);
+      }),
+  );
+
+  it.effect(
+    "a read never moves a member's marker back past a later change they read through, as their own write landing while a read waits leaves it",
+    () =>
+      Effect.gen(function* () {
+        const { agent } = yield* openAgentIn;
+        const id = yield* postedId(agent, SETTINGS.key);
+        // As the member's own answer leaves the marker when it lands while a read that selected the older change waits on its lock.
+        yield* markInboxItemRead(agent.userId, id);
+        const ahead = new Date(
+          (yield* DateTime.nowAsDate).getTime() + Duration.toMillis("5 seconds"),
+        );
+        yield* Database.use((db) =>
+          db.update(inboxItemRead).set({ readThrough: ahead }).where(eq(inboxItemRead.itemId, id)),
+        );
+
+        yield* markInboxItemRead(agent.userId, id);
+        assert.equal(
+          yield* markInboxRead(agent.userId, undefined),
+          0,
+          "nothing moved, so nothing counts",
+        );
+        yield* markInboxItemUnread(agent.userId, id);
+        assert.equal(yield* markInboxRead(agent.userId, undefined), 1);
+
+        yield* TestClock.adjust(Duration.seconds(2));
+        yield* replyInboxItem(agent, SETTINGS.key, "Before the later change.");
+        assert.equal(
+          yield* unreadFor(agent.userId, id),
+          false,
+          "the marker still reads through the later change, so one before it is read",
+        );
+      }),
+  );
+
+  it.effect(
+    "an item that stood before unread was kept reads as read for every member until something happens on it",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const id = yield* postedId(agent, SETTINGS.key);
+        // As the migration that added the column stamped every item standing at the instant it ran.
+        yield* TestClock.adjust(Duration.seconds(1));
+        const released = yield* DateTime.nowAsDate;
+        yield* Database.use((db) =>
+          db.update(inboxItem).set({ readThrough: released }).where(eq(inboxItem.id, id)),
+        );
+
+        assert.deepEqual(
+          [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
+          [false, false],
+        );
+        assert.equal(yield* markInboxRead(agent.userId, undefined), 0);
+
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* replyInboxItem(agent, SETTINGS.key, "One more thing.");
+        assert.deepEqual(
+          [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
+          [true, true],
+        );
+        yield* markInboxItemRead(teammate, id);
+        assert.equal(yield* unreadFor(teammate, id), false);
+      }),
+  );
+
+  it.effect(
+    "a member's held reads move when their own marker moves, and a teammate's marker leaves them where they stand",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const taskId = agent.taskId ?? "";
+        const id = yield* postedId(agent, SETTINGS.key);
+        const task = yield* taskInboxPast(agent.userId, taskId, INBOX_CURSOR_START);
+        const account = yield* accountInboxPast(agent.userId, INBOX_CURSOR_START);
+        const theirs = yield* taskInboxPast(teammate, taskId, INBOX_CURSOR_START);
+
+        yield* markInboxItemRead(agent.userId, id);
+
+        // A held read past the old cursor answers at once, since the reader's own items moved.
+        const woken = yield* taskInboxPast(agent.userId, taskId, task.cursor);
+        assert.notEqual(woken.cursor, task.cursor);
+        assert.deepEqual(
+          woken.items.map((item) => item.unread),
+          [false],
+        );
+        const accountWoken = yield* accountInboxPast(agent.userId, account.cursor);
+        assert.notEqual(accountWoken.cursor, account.cursor);
+        assert.deepEqual(
+          accountWoken.items.map((entry) => entry.unread),
+          [false],
+        );
+        const unmoved = yield* taskInboxPast(teammate, taskId, INBOX_CURSOR_START);
+        assert.equal(unmoved.cursor, theirs.cursor, "the teammate's inbox stands where it stood");
       }),
   );
 });

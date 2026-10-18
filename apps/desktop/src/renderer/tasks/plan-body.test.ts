@@ -97,7 +97,6 @@ interface Drawn {
 /** The plan drawn in a workspace whose members read answers `MEMBERS`, as `drawn` says. */
 async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (request: Act): Promise<ActOutcome> =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
@@ -145,12 +144,17 @@ function editedLines(view: HTMLElement): (string | undefined)[] {
 function shownWords(line: Element | null): string | undefined {
   const copy = line?.cloneNode(true);
   if (!(copy instanceof Element)) return undefined;
-  for (const hidden of copy.querySelectorAll(".visually-hidden")) hidden.remove();
+  for (const hidden of copy.querySelectorAll(".visually-hidden, .luke-visually-hidden"))
+    hidden.remove();
   return lineWords(copy);
 }
 
 /** The card hung once the first of `selector` in the line over the document, or in `line`, is hovered. */
-function cardOf(view: HTMLElement, selector = ".actor-ref", line = ".plan-edit-note"): HTMLElement {
+function cardOf(
+  view: HTMLElement,
+  selector = "[data-actor-ref]",
+  line = ".plan-edit-note",
+): HTMLElement {
   const anchor = view.querySelector(`${line} ${selector}`) ?? assert.fail("the ref stands");
   act(() => {
     anchor.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
@@ -239,7 +243,7 @@ test("the time opens the version history, on the plan as it stands or on the sec
       ["2h", "Goal: edited 2h ago. Show version history"],
     ],
   );
-  assert.equal(view.querySelector(".plan-edit-note .actor-ref")?.tagName, "SPAN");
+  assert.equal(view.querySelector(".plan-edit-note [data-actor-ref]")?.tagName, "SPAN");
   for (const time of times) act(() => time.click());
   assert.deepEqual(shown, [undefined, at]);
 });
@@ -260,7 +264,7 @@ test("a section's byline shows only the writer's face and a few letters of time,
   assert.equal(shownWords(byline), " now");
   assert.equal(byline?.querySelectorAll(".actor-mark").length, 1, "the call's owner is not faced");
   assert.match(
-    cardOf(view, ".actor-ref", ".plan-unit-byline").textContent ?? "",
+    cardOf(view, "[data-actor-ref]", ".plan-unit-byline").textContent ?? "",
     /^LukeDuring Charles Pan’s call · now/u,
   );
 });
@@ -316,7 +320,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
     onOpen: (agentId) => opened.push(agentId),
   };
   const view = await draw(byAgent, { readerId: DEAN.userId, agents });
-  const ref = view.querySelector<HTMLElement>(".plan-edit-note .actor-ref");
+  const ref = view.querySelector<HTMLElement>(".plan-edit-note [data-actor-ref]");
 
   assert.equal(editedLines(view)[0], "Edited by Fix auth flow · now");
   assert.equal(ref?.tagName, "BUTTON");
@@ -329,7 +333,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
     readerId: DEAN.userId,
     agents: { ...agents, control: codingAgentsControl() },
   });
-  assert.equal(unlisted.querySelector(".plan-edit-note .actor-ref")?.tagName, "SPAN");
+  assert.equal(unlisted.querySelector(".plan-edit-note [data-actor-ref]")?.tagName, "SPAN");
 });
 
 test("the sections changed since the last look are counted beside a face for each who changed them", async () => {

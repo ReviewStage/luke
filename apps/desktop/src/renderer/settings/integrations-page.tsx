@@ -26,12 +26,24 @@ import {
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
+  BUTTON_VARIANT,
+  Button,
   ChevronRightIcon,
-  CloseIcon,
   ConfirmDialog,
+  ErrorState,
+  INLINE_EDIT_LOOK,
+  InlineEdit,
+  type InlineEditEnd,
   ProviderMark,
-  SearchIcon,
+  SETTINGS_LINE_KIND,
+  SearchField,
+  SettingsLine,
+  SettingsSection,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   TrashIcon,
   useConfirmDialog,
 } from "@luke/ui";
@@ -46,10 +58,8 @@ import { searchTokens } from "@luke/ui/search-tokens";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { type ActHandle, useAct } from "../act";
 import { useAppCommand } from "../app-commands";
-import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
 import { type GitHubConnectControl, useGitHubConnection } from "../github-connect";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
@@ -60,7 +70,6 @@ import { Shortcut } from "../shortcut";
 import { SPINNER_SIZE, SpinnerRing } from "../spinner";
 import { commandKeyshortcuts } from "../tooltip";
 import { MenuRow } from "./menu-row";
-import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
  * integrations-page.tsx -- Settings › Integrations: the services the account connects so Luke's agents can use them.
@@ -120,6 +129,12 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * count of them on its line; a query that finds nothing says so. Settings'
  * own search hands its query down when one of its results opens a row here
  * (`../desktop/desktop-settings.tsx`).
+ *
+ * The search is `@luke/ui`'s `SearchField`, each section its
+ * `SettingsSection`, and each row `MenuRow`'s `SettingsRow`, led by the
+ * provider's mark, its line the row's description. A row's Connect,
+ * Reconnect, Try again, and Cancel are the outline `Button`, and Reopen the
+ * quiet one beside Cancel.
  */
 
 /** The page's search: the query standing in its field, held by Settings so its own search can hand one down. */
@@ -237,14 +252,14 @@ function grantLabel(status: IntegrationStatus | undefined, signIn: SignIn | unde
 /** A row's line, with the ring before a wait's words. */
 function RowLineText({ line }: { line: RowLine }): React.JSX.Element {
   return (
-    <small className="settings-state" data-state={line.state}>
+    <span className="settings-state" data-state={line.state}>
       {line.state === LINE_STATE.WAITING ? (
         <span className="luke-spinner" data-size={SPINNER_SIZE.INLINE}>
           <SpinnerRing />
         </span>
       ) : null}
       {line.text}
-    </small>
+    </span>
   );
 }
 
@@ -277,7 +292,7 @@ function ToolsLine({
   tools: RowTools;
 }): React.JSX.Element {
   return (
-    <small className="settings-state integration-tools-line" data-state={LINE_STATE.CONNECTED}>
+    <span className="settings-state integration-tools-line" data-state={LINE_STATE.CONNECTED}>
       {`${PAGE_LINE.CONNECTED} · `}
       <button
         type="button"
@@ -292,7 +307,7 @@ function ToolsLine({
           : toolsCount(tools.all.length)}
         <ChevronRightIcon />
       </button>
-    </small>
+    </span>
   );
 }
 
@@ -388,57 +403,30 @@ function RowToolsPanel({
 /**
  * The page's search field: a magnifier, the field, and a clear button while
  * a query stands, else Command-F's chord, which lands the caret here while
- * the page shows. Escape clears a query, then lets go of the caret, stopped
- * here either way so it never leaves Settings behind the field.
+ * the page shows. Escape clears a query, then lets go of the caret, kept in
+ * the field either way so it never leaves Settings behind it.
  */
 function FilterField({ filter }: { filter: IntegrationsFilter }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
   const { query, onQueryChange } = filter;
   useAppCommand(APP_COMMAND.FIND, () => focusSearchField(FILTER_INPUT_ID));
   return (
-    <search className="integrations-filter">
-      <label className="settings-search-well field-well">
-        <SearchIcon />
-        <input
-          ref={field}
-          id={FILTER_INPUT_ID}
-          className="settings-search-input"
-          aria-label={FILTER_PLACEHOLDER}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.FIND)}
-          placeholder={FILTER_PLACEHOLDER}
-          autoComplete="off"
-          spellCheck={false}
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            // Note that an Escape is stopped even mid-composition, because the
-            // window's own Escape would leave Settings behind the field.
-            event.stopPropagation();
-            if (event.nativeEvent.isComposing) return;
-            if (query.length > 0) onQueryChange("");
-            else field.current?.blur();
-          }}
-        />
-        {query.length > 0 ? (
-          <button
-            type="button"
-            className="icon-button settings-search-clear"
-            aria-label="Clear search"
-            onClick={() => {
-              onQueryChange("");
-              field.current?.focus();
-            }}
-          >
-            <CloseIcon />
-          </button>
-        ) : (
-          <Shortcut
-            chord={APP_SHORTCUTS[APP_COMMAND.FIND].chord}
-            className="settings-search-shortcut"
-          />
-        )}
-      </label>
+    <search>
+      <SearchField
+        ref={field}
+        id={FILTER_INPUT_ID}
+        label={FILTER_PLACEHOLDER}
+        placeholder={FILTER_PLACEHOLDER}
+        keyShortcuts={commandKeyshortcuts(APP_COMMAND.FIND)}
+        value={query}
+        onChange={onQueryChange}
+        shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.FIND].chord} />}
+        onClear={() => onQueryChange("")}
+        onEscape={() => {
+          if (query.length > 0) onQueryChange("");
+          else field.current?.blur();
+        }}
+      />
     </search>
   );
 }
@@ -542,7 +530,7 @@ function IntegrationRow({
   }, [cancelSignIn, connection, name]);
 
   /** A rename ended: a new label asked of the service, and the integrations read again so every surface draws it. */
-  const renamed = ({ name: label }: NameEdit) => {
+  const renamed = ({ value: label }: InlineEditEnd) => {
     setEditing(false);
     if (label === undefined || label === account?.label) return;
     setRejection(undefined);
@@ -599,76 +587,58 @@ function IntegrationRow({
       ].filter((group) => group.length > 0)
     : [];
   return (
-    <>
+    <div className="integration-row">
       <MenuRow
         label={`${name} actions`}
         actions={actions}
         anchor={connection}
         {...(bySignIn ? { heading: PAGE_LINE.GITHUB_SIGN_IN } : undefined)}
-      >
-        <span className="settings-row-mark">
-          <ProviderMark provider={provider} />
-        </span>
-        <span className="settings-copy">
-          {editing && account !== undefined ? (
-            <TaskNameField
-              name={integrationAccountLabel(account)}
-              className="settings-input integration-account-input"
+        row={{
+          leading: (
+            <span className="settings-row-mark">
+              <ProviderMark provider={provider} />
+            </span>
+          ),
+          label: (
+            <InlineEdit
+              value={account === undefined ? name : integrationAccountLabel(account)}
               label={`${name} account name`}
+              editing={editing && account !== undefined}
               maxLength={INTEGRATION_LABEL_MAX}
+              look={INLINE_EDIT_LOOK.INPUT}
               onEnd={renamed}
-            />
-          ) : (
-            <strong>
+            >
               <Highlighted text={name} tokens={tools.tokens} />
-            </strong>
-          )}
-          {connected && tools.all.length > 0 ? (
-            <ToolsLine name={name} panelId={panelId} tools={tools} />
-          ) : line === undefined ? null : (
-            <RowLineText line={line} />
-          )}
-        </span>
-        {waiting ? (
-          <>
-            <button
-              type="button"
-              className="toolbar-button quiet-button"
-              disabled={connecting}
-              onClick={connect}
-            >
-              {SIGN_IN_ACTION.REOPEN}
-            </button>
-            <button
-              type="button"
-              className="toolbar-button bordered-button"
-              disabled={connecting}
-              onClick={cancel}
-            >
-              {SIGN_IN_ACTION.CANCEL}
-            </button>
-          </>
-        ) : status === undefined ||
-          status === INTEGRATION_STATUS.UNAVAILABLE ||
-          (connected && !broken) ? null : (
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            disabled={connecting}
-            onClick={connect}
-          >
-            {grantLabel(status, signIn)}
-          </button>
-        )}
-      </MenuRow>
+            </InlineEdit>
+          ),
+          description:
+            connected && tools.all.length > 0 ? (
+              <ToolsLine name={name} panelId={panelId} tools={tools} />
+            ) : line === undefined ? null : (
+              <RowLineText line={line} />
+            ),
+          error: rejection,
+          control: waiting ? (
+            <>
+              <Button variant={BUTTON_VARIANT.QUIET} disabled={connecting} onClick={connect}>
+                {SIGN_IN_ACTION.REOPEN}
+              </Button>
+              <Button variant={BUTTON_VARIANT.OUTLINE} disabled={connecting} onClick={cancel}>
+                {SIGN_IN_ACTION.CANCEL}
+              </Button>
+            </>
+          ) : status === undefined ||
+            status === INTEGRATION_STATUS.UNAVAILABLE ||
+            (connected && !broken) ? null : (
+            <Button variant={BUTTON_VARIANT.OUTLINE} disabled={connecting} onClick={connect}>
+              {grantLabel(status, signIn)}
+            </Button>
+          ),
+        }}
+      />
       {connected && tools.expanded && tools.shown.length > 0 ? (
         <RowToolsPanel id={panelId} name={name} tools={tools} />
       ) : null}
-      {rejection === undefined ? null : (
-        <p className="error-message" role="alert">
-          {rejection}
-        </p>
-      )}
       <ConfirmDialog
         confirm={disconnect}
         question={{
@@ -684,7 +654,7 @@ function IntegrationRow({
           running: "Disconnecting…",
         }}
       />
-    </>
+    </div>
   );
 }
 
@@ -764,7 +734,9 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
   }, [query]);
 
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
-  if (!read && !statuses.readFailed) return <div className="settings-reading" aria-busy="true" />;
+  if (!read && !statuses.readFailed) {
+    return <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>Loading the integrations</SettingsLine>;
+  }
   const healthOf = (server: string) =>
     connectionHealth(integrationConnectionOf(server)?.provider ?? GITHUB, reads[server]);
   // Note that the rows stand in the order of their names within each
@@ -804,18 +776,20 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
   return (
     <>
       {statuses.readFailed ? (
-        <SettingsGroup>
-          <ReadFailed line={PAGE_LINE.READ_FAILED} onRetry={() => void statuses.read()} />
-        </SettingsGroup>
+        <SettingsSection>
+          <SettingsLine>
+            <ErrorState onRetry={() => void statuses.read()}>{PAGE_LINE.READ_FAILED}</ErrorState>
+          </SettingsLine>
+        </SettingsSection>
       ) : null}
-      {groups.length === 0 ? <p className="settings-note">{PAGE_LINE.NONE_OFFERED}</p> : null}
+      {groups.length === 0 ? <PageNote>{PAGE_LINE.NONE_OFFERED}</PageNote> : null}
       {groups.length > 0 && found.length === 0 ? (
-        <p className="settings-note" role="status">
-          {`No integrations or tools match “${query.trim()}”`}
-        </p>
+        <div role="status">
+          <PageNote>{`No integrations or tools match “${query.trim()}”`}</PageNote>
+        </div>
       ) : null}
       {found.map((group) => (
-        <SettingsGroup key={group.heading ?? "unread"} title={group.heading}>
+        <SettingsSection key={group.heading ?? "unread"} title={group.heading}>
           {group.rows.map((found) => (
             <IntegrationRow
               key={found.row.connection}
@@ -833,9 +807,18 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
               }}
             />
           ))}
-        </SettingsGroup>
+        </SettingsSection>
       ))}
     </>
+  );
+}
+
+/** A line the page says in its sections' place, in a description's muted words. */
+function PageNote({ children }: { children: string }): React.JSX.Element {
+  return (
+    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      {children}
+    </Text>
   );
 }
 
@@ -859,9 +842,5 @@ export function IntegrationsSection({
   /** The page's search, where Settings holds its query. */
   filter?: IntegrationsFilter | undefined;
 }): React.JSX.Element {
-  return signedIn ? (
-    <SearchedRows filter={filter} />
-  ) : (
-    <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>
-  );
+  return signedIn ? <SearchedRows filter={filter} /> : <PageNote>{PAGE_LINE.SIGNED_OUT}</PageNote>;
 }

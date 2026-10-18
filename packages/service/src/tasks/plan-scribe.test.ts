@@ -158,8 +158,8 @@ it.layer(getTestDB())("the plan's notetaker", (it) => {
     () =>
       Effect.scoped(
         Effect.gen(function* () {
-          const { userId, taskId: planId } = yield* openTask;
-          const { scribe, asked, reports } = yield* scribeFor(userId, planId, [
+          const { userId, taskId } = yield* openTask;
+          const { scribe, asked, reports } = yield* scribeFor(userId, taskId, [
             {
               notes: [
                 added(PLAN_HEADING.CONTEXT, PROBLEM),
@@ -175,12 +175,12 @@ it.layer(getTestDB())("the plan's notetaker", (it) => {
             Effect.sync(() => reports.length),
             (count) => count > 0,
           );
-          assert.equal((yield* savedBody(userId, planId)).includes(PROBLEM), false);
+          assert.equal((yield* savedBody(userId, taskId)).includes(PROBLEM), false);
 
           scribe.observe(heard("Members should invite.", 5_000, 6_000));
           yield* quiet;
 
-          const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(OUTCOME));
+          const body = yield* savedBodyOnce(userId, taskId, (saved) => saved.includes(OUTCOME));
           assert.equal(body.includes(PROBLEM), false);
           assert.ok(asked[1]?.includes("Only admins can add people."));
         }),

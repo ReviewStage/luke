@@ -36,6 +36,9 @@ import {
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxMessagedView,
+  type CodingAgentInboxReadAllView,
+  type CodingAgentInboxReadStateView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -89,10 +92,17 @@ import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.
 import { imageBodyOf } from "./image-body.js";
 import {
   type InboxAnswerRequest,
+  type InboxMessageRequest,
+  type InboxReadAllRequest,
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
   inboxImageTypeSchema,
+  inboxMessagedSchema,
+  inboxMessageRequestSchema,
+  inboxReadAllRequestSchema,
+  inboxReadAllSchema,
+  inboxReadStateSchema,
 } from "./inbox-wire.js";
 import {
   codingAgentDefaultAnswerSchema,
@@ -135,6 +145,8 @@ import {
   HOSTED_SERVICE_PATH,
   inboxAttachmentPath,
   inboxItemPath,
+  inboxItemReadPath,
+  inboxMessagesPath,
   planTemplateRestorePath,
   planTemplateRevisionPath,
   taskAgentsPath,
@@ -160,14 +172,23 @@ import {
  * workspace's chat read are the calls the service holds open, for as long
  * as it waits on the agent's next message or the next change, so they
  * travel under a deadline of
- * their own that outlasts that hold; every other call keeps the account
- * call's usual one. The account's task
+ * their own that outlasts that hold; a Start travels under a longer one
+ * still, since one from another agent copies its work first; every other
+ * call keeps the account call's usual one. The account's task
  * template is read and written here too, as Settings asks for it beside
  * the default and the keys.
  */
 
 /** How long a held read or a dictated clip may stand: the service's hold or the model's hearing, and room for the answer to travel after it. */
 const HELD_READ_TIMEOUT_MS = 35_000;
+
+/**
+ * How long a Start may stand: a Start from another agent copies its work,
+ * summarizing what does not fit, before the new agent's session opens,
+ * which can run well past the usual deadline; a Start that outlasts it is
+ * asked again under the same key and answered with the agent it made.
+ */
+const START_TIMEOUT_MS = 120_000;
 
 export interface HostedCodingAgentClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
@@ -294,6 +315,7 @@ function readAnswer<Answer, Encoded>(
 export class HostedCodingAgentClient {
   readonly #call: AccountCallEffects;
   readonly #held: AccountCallEffects;
+  readonly #start: AccountCallEffects;
 
   constructor(options: HostedCodingAgentClientOptions) {
     const credential = accountBearer(options);
@@ -306,6 +328,11 @@ export class HostedCodingAgentClient {
       baseUrl: options.serviceBaseUrl,
       credential,
       requestTimeoutMs: HELD_READ_TIMEOUT_MS,
+    });
+    this.#start = accountCall({
+      baseUrl: options.serviceBaseUrl,
+      credential,
+      requestTimeoutMs: START_TIMEOUT_MS,
     });
   }
 
@@ -523,7 +550,7 @@ export class HostedCodingAgentClient {
     const admitted = Result.getOrUndefined(codingAgentStartRequestOnWire(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return Effect.flatMap(
-      this.#call.send({
+      this.#start.send({
         method: HTTP_METHOD.POST,
         path: taskAgentsPath(taskId),
         body: JSON.stringify(admitted),
@@ -939,6 +966,74 @@ export class HostedCodingAgentClient {
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, inboxAnsweredSchema, INBOX_ANSWER_REFUSALS),
+    );
+  }
+
+  /**
+   * A message of the account's on one item's thread, open or settled: the
+   * item as it then stands, its thread with the message on it, where the
+   * service wrote it and handed it to the agent; the refusals a message to
+   * the agent answers with otherwise, since it reaches the agent as one.
+   */
+  messageInbox(
+    itemId: string,
+    request: InboxMessageRequest,
+  ): Effect.Effect<CodingAgentInboxMessagedView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(inboxMessageRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: inboxMessagesPath(itemId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, inboxMessagedSchema, INBOX_ANSWER_REFUSALS),
+    );
+  }
+
+  /**
+   * One item marked read for the account, as opening it does: its id and
+   * its read state; not found where the item is not one the account
+   * reaches. Marking an item read that is read already changes nothing, so
+   * the window may ask on every open.
+   */
+  markInboxItemRead(
+    itemId: string,
+  ): Effect.Effect<CodingAgentInboxReadStateView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.PUT, path: inboxItemReadPath(itemId) }),
+      (answer) => readAnswer(answer, inboxReadStateSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** One item marked unread for the account until it reads the item again: its id and its read state; not found where the item is not one the account reaches. */
+  markInboxItemUnread(
+    itemId: string,
+  ): Effect.Effect<CodingAgentInboxReadStateView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.DELETE, path: inboxItemReadPath(itemId) }),
+      (answer) => readAnswer(answer, inboxReadStateSchema, ROW_REFUSALS),
+    );
+  }
+
+  /**
+   * Every item the account's Inbox lists marked read for it, open or
+   * settled, in the one workspace the request names or in all of its
+   * workspaces: how many were unread. It clears the unread dots alone; an
+   * item still waiting on an answer still waits.
+   */
+  markInboxRead(
+    request: InboxReadAllRequest = {},
+  ): Effect.Effect<CodingAgentInboxReadAllView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(inboxReadAllRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.PUT,
+        path: HOSTED_SERVICE_PATH.INBOX_READ,
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, inboxReadAllSchema, {}),
     );
   }
 }

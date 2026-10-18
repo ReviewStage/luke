@@ -25,7 +25,7 @@ const AGENT = "00000000-0000-4000-8000-0000000000a2";
 const LUKE = "00000000-0000-4000-8000-0000000000a3";
 const MARIA = "00000000-0000-4000-8000-0000000000a4";
 const AGENT_ID = "00000000-0000-4000-8000-0000000000b1";
-const PLAN_ID = "00000000-0000-4000-8000-0000000000c1";
+const TASK_ID = "00000000-0000-4000-8000-0000000000c1";
 
 const GENERAL: ChatChannel = {
   id: "general",
@@ -33,11 +33,11 @@ const GENERAL: ChatChannel = {
   name: "general",
   archived: false,
 };
-const PLAN: ChatChannel = {
+const TASK_CHANNEL: ChatChannel = {
   id: "plan",
   kind: CHANNEL_KIND.PLAN,
   name: "invites",
-  planId: PLAN_ID,
+  planId: TASK_ID,
   archived: false,
 };
 const TOPIC: ChatChannel = {
@@ -73,7 +73,7 @@ const NAMES: ChatNames = {
       },
     ],
   ]),
-  plans: new Map([[PLAN_ID, "Teammate invitations"]]),
+  plans: new Map([[TASK_ID, "Teammate invitations"]]),
   selfName: "Dean Stratakos",
 };
 
@@ -118,10 +118,10 @@ function chatOf(readSeq: number, messages: readonly ChatMessage[]): ChatAnswer {
     members: [
       { id: ME, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false },
       { id: AGENT, kind: MEMBER_KIND.AGENT, handle: "agent-2", agentId: AGENT_ID, left: false },
-      { id: LUKE, kind: MEMBER_KIND.PLANNER, handle: "luke", planId: PLAN_ID, left: false },
+      { id: LUKE, kind: MEMBER_KIND.LUKE, handle: "luke", planId: TASK_ID, left: false },
       { id: MARIA, kind: MEMBER_KIND.HUMAN, handle: "maria", left: false },
     ],
-    channels: [WITH_AGENT, TOPIC, OLD, PLAN, WITH_MARIA, GENERAL],
+    channels: [WITH_AGENT, TOPIC, OLD, TASK_CHANNEL, WITH_MARIA, GENERAL],
     messages,
     cursor: String(readSeq),
   };
@@ -129,17 +129,17 @@ function chatOf(readSeq: number, messages: readonly ChatMessage[]): ChatAnswer {
 
 test("For you lists every open ask someone else posted, the oldest first, then each unread direct message and mention of the reader, the oldest first", () => {
   const chat = chatOf(5, [
-    message(9, AGENT, PLAN.id, asking(ASK_STATUS.OPEN)),
-    message(8, LUKE, PLAN.id, { mentions: [ME] }),
+    message(9, AGENT, TASK_CHANNEL.id, asking(ASK_STATUS.OPEN)),
+    message(8, LUKE, TASK_CHANNEL.id, { mentions: [ME] }),
     message(7, AGENT, WITH_AGENT.id),
-    message(6, AGENT, PLAN.id),
+    message(6, AGENT, TASK_CHANNEL.id),
     // Read already, so neither the direct message nor the mention waits.
     message(4, AGENT, WITH_AGENT.id),
-    message(3, LUKE, PLAN.id, { mentions: [ME] }),
+    message(3, LUKE, TASK_CHANNEL.id, { mentions: [ME] }),
     // An ask waits until it is answered, read or not, and the reader's own never does.
-    message(2, AGENT, PLAN.id, asking(ASK_STATUS.OPEN)),
-    message(10, ME, PLAN.id, asking(ASK_STATUS.OPEN)),
-    message(11, AGENT, PLAN.id, asking(ASK_STATUS.ANSWERED)),
+    message(2, AGENT, TASK_CHANNEL.id, asking(ASK_STATUS.OPEN)),
+    message(10, ME, TASK_CHANNEL.id, asking(ASK_STATUS.OPEN)),
+    message(11, AGENT, TASK_CHANNEL.id, asking(ASK_STATUS.ANSWERED)),
     // A message in an archived channel waits nowhere.
     message(12, AGENT, OLD.id, { mentions: [ME] }),
   ]);
@@ -158,9 +158,9 @@ test("the rail counts For you, lists #general, then the plans' channels, then th
   const chat = chatOf(3, [
     message(2, MARIA, WITH_MARIA.id),
     message(4, AGENT, WITH_AGENT.id),
-    message(5, AGENT, PLAN.id),
-    message(6, ME, PLAN.id),
-    message(7, MARIA, PLAN.id, { parentId: "m5" }),
+    message(5, AGENT, TASK_CHANNEL.id),
+    message(6, ME, TASK_CHANNEL.id),
+    message(7, MARIA, TASK_CHANNEL.id, { parentId: "m5" }),
     message(1, MARIA, GENERAL.id),
   ]);
   const rail = chatRail(chat, NAMES);
@@ -182,17 +182,57 @@ test("the rail counts For you, lists #general, then the plans' channels, then th
   );
 });
 
+test("a channel read further on its own cursor counts only what came past that, and leaves every other channel counted from the cursor everywhere", () => {
+  const chat = {
+    ...chatOf(3, [
+      message(4, AGENT, WITH_AGENT.id),
+      message(5, AGENT, TASK_CHANNEL.id),
+      message(6, MARIA, TASK_CHANNEL.id),
+      message(7, MARIA, TASK_CHANNEL.id),
+    ]),
+    reads: [{ channelId: TASK_CHANNEL.id, readSeq: 6 }],
+  };
+  const rail = chatRail(chat, NAMES);
+  assert.deepEqual(
+    rail.channels.map((row) => [row.label, row.unread]),
+    [
+      ["general", 0],
+      ["invites", 1],
+      ["alpha", 0],
+    ],
+  );
+  assert.deepEqual(
+    rail.direct.map((row) => [row.label, row.unread]),
+    [
+      ["agent-2", 1],
+      ["maria", 0],
+    ],
+  );
+});
+
+test("a message changed past the reader's cursor counts unread again, as the service counts it, though it was posted before", () => {
+  const chat = {
+    ...chatOf(3, [
+      message(2, AGENT, TASK_CHANNEL.id, { touchedSeq: 7 }),
+      message(3, MARIA, TASK_CHANNEL.id),
+    ]),
+    reads: [{ channelId: TASK_CHANNEL.id, readSeq: 5 }],
+  };
+  const rail = chatRail(chat, NAMES);
+  assert.equal(rail.channels.find((row) => row.label === "invites")?.unread, 1);
+});
+
 test("a channel reads as its roots in the order posted, each with its thread's replies under it, and a reply whose root was not read stands as a root", () => {
   const chat = chatOf(0, [
-    message(3, MARIA, PLAN.id, { parentId: "m1" }),
-    message(1, AGENT, PLAN.id),
-    message(4, AGENT, PLAN.id, { parentId: "m-unread" }),
-    message(2, LUKE, PLAN.id),
-    message(5, AGENT, PLAN.id, { parentId: "m1" }),
+    message(3, MARIA, TASK_CHANNEL.id, { parentId: "m1" }),
+    message(1, AGENT, TASK_CHANNEL.id),
+    message(4, AGENT, TASK_CHANNEL.id, { parentId: "m-unread" }),
+    message(2, LUKE, TASK_CHANNEL.id),
+    message(5, AGENT, TASK_CHANNEL.id, { parentId: "m1" }),
     message(6, AGENT, GENERAL.id),
   ]);
   assert.deepEqual(
-    channelThreads(chat, PLAN.id).map((thread) => [
+    channelThreads(chat, TASK_CHANNEL.id).map((thread) => [
       thread.message.seq,
       thread.replies.map((reply) => reply.seq),
     ]),
@@ -204,7 +244,7 @@ test("a channel reads as its roots in the order posted, each with its thread's r
   );
 });
 
-test("a line names an agent by its title, a plan's planner as Luke, the reader by their own name, and anyone else by their handle", () => {
+test("a line names an agent by its title, a task's Luke as Luke, the reader by their own name, and anyone else by their handle", () => {
   const chat = chatOf(0, []);
   assert.deepEqual(
     [AGENT, LUKE, ME, MARIA].map((id) => {

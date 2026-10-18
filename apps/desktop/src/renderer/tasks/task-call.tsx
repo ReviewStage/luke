@@ -3,7 +3,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
-import { CallIcon, EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { CallIcon, EmptyState, ERROR_STATE_PLACEMENT, ErrorState, RetryRowLabel } from "@luke/ui";
 import { LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
   type CallTurn,
@@ -28,10 +28,10 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { usePerson } from "../member-directory";
-import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
 import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
 import { CallCheckpoint, CallEnded } from "./call-card";
+import { useChatOn } from "./chat-gate";
 import { REVEAL_MARK, useRevealInLog } from "./reveal-in-log";
 import { TranscriptNote } from "./transcript-blocks";
 import {
@@ -412,6 +412,8 @@ export function TaskCall({
   const earlier = conversation?.earlier;
   const now = Date.now();
   const root = useRef<HTMLElement>(null);
+  // A chat call's row opens Chat while the window offers it, as an agent's tab's does.
+  const chatOn = useChatOn();
   const at = reveal !== undefined && "at" in reveal ? reveal.at : undefined;
   const seeking = useEarlierUntil(at, rows, earlier, onLoadEarlier);
   // Note that an ask is answered once the transcript has been read, whether or not it holds what was asked for.
@@ -433,6 +435,7 @@ export function TaskCall({
       onOpen: (callId) => onOpenSubagent(callId),
       onOpenTarget,
       cards,
+      chatOn,
       // A stop names the subagent it stopped by its job, wherever among the turns its start stands.
       jobs: workerJobs(conversation),
     },
@@ -446,10 +449,10 @@ export function TaskCall({
       {drawn ? (
         <Conversation>
           {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band; lines fade beneath it. */}
-          <ConversationContent className="checkpoint-log scroll-fade pt-0">
+          <ConversationContent className="checkpoint-log scroll-fade">
             {/* A transcript that could not be read leaves the work standing, and says so above it. */}
             {region.kind === TRANSCRIPT_REGION.FAILED ? (
-              <div className="pt-(--section-gap)">
+              <div className="pt-(--luke-section-gap)">
                 <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState>
               </div>
             ) : null}

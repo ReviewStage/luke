@@ -3,8 +3,10 @@ import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
   codeLinesReadable,
   fieldValueWords,
+  INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -13,10 +15,13 @@ import {
   type InboxForm,
   type InboxFormValue,
   type InboxItem,
+  type InboxMessage,
   type InboxReadResponse,
   type InboxReply,
   type InboxReplyKind,
+  type InboxResponse,
   inboxReplyRefusal,
+  knownBlock,
   knownResponse,
 } from "@luke/features/inbox-wire";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
@@ -25,6 +30,7 @@ import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header";
 import { refusalLine, refusalPasses } from "./file-tab-model";
+import { plainWords } from "./tool-call-model";
 
 /**
  * inbox-model.ts -- the Inbox as pure decisions: which items it lists and how, what an item's answer is, and how a settled one reads.
@@ -62,17 +68,21 @@ export interface InboxDraft {
 
 export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: "", attachments: [] };
 
+/** One file an answer or a message on the thread carried, as an item read names it. */
+type InboxFile = NonNullable<InboxItem["answerFiles"]>[number];
+
 /**
- * The files an item's answer carried as chips, in the order they were
- * attached: each by its name and type, its bytes as the `data:` URL its
- * read came back as where it did, and none while it is read or where the
- * read did not answer, which draws the chip by its name alone.
+ * The files an answer or a message on the thread carried as chips, in the
+ * order they were attached: each by its name and type, its bytes as the
+ * `data:` URL its read came back as where it did, and none while it is
+ * read or where the read did not answer, which draws the chip by its name
+ * alone.
  */
-export function answerFileChips(
-  item: Pick<InboxItem, "answerFiles">,
+export function inboxFileChips(
+  files: readonly InboxFile[],
   urls: ReadonlyMap<string, { readonly url: string } | { readonly failed: true }>,
 ): FileChip[] {
-  return (item.answerFiles ?? []).map((file) => {
+  return files.map((file) => {
     const read = urls.get(file.attachmentId);
     return {
       name: file.name,
@@ -179,6 +189,73 @@ export function inboxReply(
     ...(note === "" ? undefined : { note }),
   };
   return inboxReplyRefusal(item, answer, draft.attachments) === undefined ? answer : undefined;
+}
+
+/** What follows an item's question on its thread: a message on it, or where it was settled. */
+export const THREAD_ENTRY = {
+  MESSAGE: "message",
+  SETTLED: "settled",
+} as const;
+
+export type ThreadEntry =
+  | { readonly kind: typeof THREAD_ENTRY.MESSAGE; readonly message: InboxMessage }
+  | { readonly kind: typeof THREAD_ENTRY.SETTLED; readonly at: number };
+
+/**
+ * When the item was answered or taken back; none while it waits. Note that
+ * a service before the stamp says only when the item last changed, which
+ * stands in for it.
+ */
+export function settledAt(item: InboxItem): number | undefined {
+  if (item.status === INBOX_STATUS.OPEN) return undefined;
+  return item.settledAt ?? item.updatedAt;
+}
+
+/**
+ * What follows an item's question on its thread, in the order it was
+ * written: its messages and, on a settled item, its answer or its agent
+ * taking it back, each at its own moment, so a message written while the
+ * item waited stands before the answer that came after it. A message
+ * written in the same instant as the settlement follows it.
+ */
+export function threadEntries(item: InboxItem): readonly ThreadEntry[] {
+  const messages: ThreadEntry[] = (item.messages ?? []).map((message) => ({
+    kind: THREAD_ENTRY.MESSAGE,
+    message,
+  }));
+  const at = settledAt(item);
+  if (at === undefined) return messages;
+  const after = messages.findIndex(
+    (entry) => entry.kind === THREAD_ENTRY.MESSAGE && entry.message.createdAt > at,
+  );
+  const settled: ThreadEntry = { kind: THREAD_ENTRY.SETTLED, at };
+  return after === -1
+    ? [...messages, settled]
+    : [...messages.slice(0, after), settled, ...messages.slice(after)];
+}
+
+/** Whether the thread an item read carries is cut to its latest messages, so earlier ones stand only in the agent's tab. */
+export function threadCut(item: InboxItem): boolean {
+  return (item.messages ?? []).length >= INBOX_BOUNDS.MAX_MESSAGES_READ;
+}
+
+/** A message on an item's thread as the box holds it: its words trimmed and the files attached. */
+export interface InboxMessageDraft {
+  readonly text: string;
+  readonly attachments: readonly CodingAgentAttachment[];
+}
+
+/**
+ * The message the box holds on an item's thread, or nothing where it holds
+ * none the service would take: words or files or both, never neither, and
+ * words within the thread's bound. The options picked and the fields
+ * filled while the item waited are no part of a message.
+ */
+export function inboxMessageOf(draft: InboxDraft): InboxMessageDraft | undefined {
+  const text = draft.note.trim();
+  if (text.length > INBOX_BOUNDS.MAX_MESSAGE_CHARS) return undefined;
+  if (text === "" && draft.attachments.length === 0) return undefined;
+  return { text, attachments: draft.attachments };
 }
 
 /** The presses each response answered by a press offers: the one that holds back where there is one, then the one that goes ahead. */
@@ -316,6 +393,126 @@ export function settlementOf(item: InboxItem): Settlement | undefined {
   };
 }
 
+/** A member named on an item, as an answer's or a message's writer. */
+type InboxMember = NonNullable<InboxItem["answeredBy"]>;
+
+/** What parts a preview's words, as a menu's detail parts them. */
+const PREVIEW_PART = " · ";
+
+/** What each response an open item asks is called at the head of its row's preview. */
+const ASKS_WORDS = {
+  [INBOX_RESPONSE.CHOICE]: "Choice",
+  [INBOX_RESPONSE.APPROVAL]: "Approval",
+  [INBOX_RESPONSE.TEXT]: "Question",
+  [INBOX_RESPONSE.TODO]: "To-do",
+  [INBOX_RESPONSE.FORM]: "Form",
+  [INBOX_RESPONSE.NONE]: "Note",
+} as const satisfies Record<InboxResponse["type"], string>;
+
+/** What a row's preview says of an item asking a response this build does not know. */
+const ASKS_NEWER = "Open this in a newer Luke";
+
+/** A count with its noun, "1 option", "3 options". */
+function counted(count: number, one: string): string {
+  return count === 1 ? `1 ${one}` : `${count} ${one}s`;
+}
+
+/** The words of an item's first Markdown block on one line; nothing where it has none. */
+function contextWords(item: InboxItem): string | undefined {
+  for (const block of item.blocks) {
+    if (!knownBlock(block) || block.type !== INBOX_BLOCK.MARKDOWN) continue;
+    const words = plainWords(block.text);
+    if (words !== "") return words;
+  }
+  return undefined;
+}
+
+/**
+ * What an open item asks, as its row says it before anyone has written on
+ * it: a choice by how many options it offers and whether one is
+ * recommended, a form by its fields, and anything else by its kind and the
+ * first words of its context.
+ */
+function asksWords(item: InboxItem): string {
+  const response = item.response;
+  if (!knownResponse(response)) return ASKS_NEWER;
+  const kind = ASKS_WORDS[response.type];
+  if (response.type === INBOX_RESPONSE.CHOICE) {
+    const recommended = response.options.some((option) => option.label === response.recommended);
+    const options = counted(response.options.length, "option");
+    return `${kind}${PREVIEW_PART}${options}${recommended ? ", one recommended" : ""}`;
+  }
+  if (response.type === INBOX_RESPONSE.FORM) {
+    return `${kind}${PREVIEW_PART}${counted(response.fields.length, "field")}`;
+  }
+  const context = contextWords(item);
+  return context === undefined ? kind : `${kind}${PREVIEW_PART}${context}`;
+}
+
+/** What files alone say where a message or an answer carried no words. */
+function filesWords(files: readonly unknown[] | undefined): string | undefined {
+  const count = files?.length ?? 0;
+  if (count === 0) return undefined;
+  return count === 1 ? "Sent a file" : `Sent ${count} files`;
+}
+
+/** Words, then a note after them where there is one. */
+function withNote(words: string, note: string | undefined): string {
+  const said = note === undefined ? "" : plainWords(note);
+  return said === "" ? words : `${words}${PREVIEW_PART}${said}`;
+}
+
+/**
+ * What an answer says in a few words: the options picked, the developer's
+ * own words, or what they did, "Approved", each with the note they wrote
+ * beside it; files alone where they wrote nothing.
+ */
+function answerWords(item: InboxItem): string {
+  const answer = item.answer;
+  if (answer === undefined) return sentenceCased(REPLY_WORDS[INBOX_REPLY.ANSWERED]);
+  if (answer.reply === INBOX_REPLY.CHOSE) {
+    return withNote((answer.choices ?? []).join(", "), answer.note);
+  }
+  if (answer.reply === INBOX_REPLY.ANSWERED) {
+    const words = answer.note === undefined ? "" : plainWords(answer.note);
+    if (words !== "") return words;
+    return filesWords(item.answerFiles) ?? sentenceCased(REPLY_WORDS[INBOX_REPLY.ANSWERED]);
+  }
+  return withNote(sentenceCased(REPLY_WORDS[answer.reply]), answer.note);
+}
+
+/** A word set as the start of a sentence. */
+export function sentenceCased(words: string): string {
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+}
+
+/**
+ * The last word in an item's thread, as its row's second line says it,
+ * led by who said it: a message on the thread by its writer, "Agent" for
+ * the item's own and a member by `nameOf`, which says "You" for the
+ * reader; the answer by its answerer, in a few words; the agent taking the
+ * item back as "Withdrawn" and why; and, on an open item nobody has
+ * written on, what it asks, "Choice · 3 options, one recommended".
+ */
+export function inboxPreview(
+  item: InboxItem,
+  nameOf: (member: InboxMember | undefined) => string,
+): string {
+  const last = threadEntries(item).at(-1);
+  if (last === undefined) return asksWords(item);
+  if (last.kind === THREAD_ENTRY.MESSAGE) {
+    const { message } = last;
+    const who = message.author === INBOX_MESSAGE_AUTHOR.AGENT ? "Agent" : nameOf(message.member);
+    const words = plainWords(message.text);
+    return `${who}: ${words === "" ? (filesWords(message.files) ?? "") : words}`;
+  }
+  if (item.status === INBOX_STATUS.CLOSED) {
+    const why = item.closedReason === undefined ? "" : plainWords(item.closedReason);
+    return why === "" ? "Withdrawn" : `Withdrawn: ${why}`;
+  }
+  return `${nameOf(item.answeredBy)}: ${answerWords(item)}`;
+}
+
 /**
  * The Inbox's one name for an item waiting on the developer's answer, in
  * each form its surfaces say it: the list's filter, a count's words after
@@ -360,7 +557,7 @@ export type InboxHolder =
     };
 
 /** An agent with no plan as the Inbox groups it: what its group and row name it by, and the workspace whose list holds it; one with an item waiting, or one a link names whose items are all settled. */
-export type PlanlessAgent = Pick<
+export type TasklessInboxAgent = Pick<
   AppInboxTasklessItem,
   | "agentId"
   | "agentTitle"
@@ -430,7 +627,7 @@ export function listedIn(
  * them.
  */
 export function tasklessGroups(
-  waiting: readonly PlanlessAgent[],
+  waiting: readonly TasklessInboxAgent[],
   read: ReadonlyMap<string, readonly InboxItem[]>,
   workspaceId: string | undefined,
 ): readonly InboxGroup[] {

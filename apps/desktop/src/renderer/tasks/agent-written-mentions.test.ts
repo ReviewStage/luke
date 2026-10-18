@@ -10,10 +10,11 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { fakeAppPlatform } from "#testing/app-platform";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 import { OpenLinkProvider } from "./use-open-link";
 
@@ -46,7 +47,7 @@ const REPLY = [
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 /** The task's page an agent's tab stands on, whose repository a file's link is read against. */
-const TASK_PAGE: PlanMentionsValue = {
+const TASK_PAGE: TaskMentionsValue = {
   taskId: TASK,
   taskName: "Teammate invitations",
   workspace: "acme",
@@ -81,7 +82,7 @@ function drawn(text: string, opened: ReadLink[]): HTMLElement {
         createElement(
           OpenLinkProvider,
           { value: (link: ReadLink) => opened.push(link) },
-          createElement(PlanMentions, {
+          createElement(TaskMentions, {
             value: TASK_PAGE,
             children: createElement(TranscriptWords, { text }),
           }),
@@ -96,7 +97,7 @@ test("an agent's written mentions of a page, an agent, a section, and a file are
   const opened: ReadLink[] = [];
   const container = drawn(REPLY, opened);
 
-  const chips = [...container.querySelectorAll<HTMLElement>(".mention-chip")];
+  const chips = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")];
   const page = chips.find((chip) => chip.dataset.kind === "page");
   assert.ok(page instanceof HTMLButtonElement, "the page is a chip that opens");
   act(() => page.click());
@@ -130,11 +131,12 @@ test("a page's chip on the open plan hangs the page's tab's card, previewing its
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
   });
+  fakeAppPlatform({ pageFrameUrl });
   const container = drawn(REPLY, []);
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  const page = container.querySelector<HTMLElement>('.mention-chip[data-kind="page"]');
+  const page = container.querySelector<HTMLElement>('[data-mention-ref][data-kind="page"]');
   assert.ok(page, "the page's chip");
   act(() => {
     page.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));

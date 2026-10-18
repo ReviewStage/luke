@@ -99,7 +99,7 @@ beforeEach(() => {
   refuseRead = false;
   holdRead = false;
   holdSaves = undefined;
-  fakeAppBridge({ act: answer, recordSurfaceEvent: () => undefined });
+  fakeAppBridge({ act: answer });
 });
 
 afterEach(() => {
@@ -138,7 +138,8 @@ const button = (page: HTMLElement, words: string, within?: Element) =>
 async function paste(page: HTMLElement, name: string, key: string): Promise<void> {
   const input = field(page, name);
   act(() => {
-    input.value = key;
+    // Note that the value goes through the element's own setter, as typing does, so React hears it.
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, key);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
   act(() => input.form?.requestSubmit());
@@ -146,8 +147,8 @@ async function paste(page: HTMLElement, name: string, key: string): Promise<void
 }
 
 const rowOf = (page: HTMLElement, name: string) =>
-  [...page.querySelectorAll<HTMLElement>(".menu-row")].find(
-    (row) => row.querySelector("strong")?.textContent === name,
+  [...page.querySelectorAll<HTMLElement>(".menu-row")].find((row) =>
+    row.textContent?.startsWith(name),
   ) ?? assert.fail(`no ${name} row`);
 
 function addKey(page: HTMLElement, name: string): void {
@@ -182,5 +183,5 @@ test("the page and its fields are kept out of the screen recording", async () =>
     page.querySelector(".ph-no-capture section"),
     "the group is under the unrecorded class",
   );
-  assert.ok(field(page, "OpenAI").classList.contains("ph-no-capture"));
+  assert.ok(field(page, "OpenAI").closest(".ph-no-capture"), "the field is under it too");
 });

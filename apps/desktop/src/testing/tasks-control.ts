@@ -89,6 +89,7 @@ export function codingAgentsControl(
     draft: undefined,
     onNewDraft: () => "draft",
     onForkDraft: () => "draft",
+    onContinueDraft: () => "draft",
     onDropFork: ignore,
     onDraftChange: ignore,
     onDraftAttachments: ignore,
@@ -134,6 +135,7 @@ export function codingAgentsControl(
     changesPeople: new Map(),
     readInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     answerInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    messageInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     readInboxImage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     ...overrides,
   };
@@ -263,6 +265,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     sectionReveal: undefined,
     onSectionRevealed: ignore,
     onShowInbox: ignore,
+    onShowChat: ignore,
     secondCall: {
       confirm: {
         stage: CONFIRM_STAGE.RESTING,
@@ -278,6 +281,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     },
     inbox: [],
     inboxShown: null,
+    chatShown: null,
     inboxTasks: [],
     inboxView: {
       open: false,
@@ -314,7 +318,10 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     callTaskId: undefined,
     chatView: {
       open: false,
+      available: false,
       chat: undefined,
+      failed: false,
+      onRetry: ignore,
       place: FOR_YOU,
       onOpen: ignore,
       onClose: ignore,

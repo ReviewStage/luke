@@ -2,12 +2,27 @@ import { PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/coding-ag
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  ArrowUpRightIcon,
+  COLLECTION_STATE,
+  CollectionPage,
+  type CollectionState,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  PAGE_FRAME,
+  PAGE_WIDTH,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useMenu,
+} from "@luke/ui";
 import { type Actor, personActor, teammateCreator } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
   ArrowRightIcon,
-  ArrowUpRightIcon,
   AudioLinesIcon,
   BlocksIcon,
   FactoryIcon,
@@ -16,12 +31,13 @@ import {
   MessageCircleQuestionIcon,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
+import { FactoryWorldPage } from "../factory-world/world-page";
+import { useFactoryWorlds, WorldPicker } from "../factory-world/world-picker";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { agentTabLabel } from "../tasks/coding-agent-model";
@@ -80,10 +96,14 @@ import { useRowKeys } from "./use-row-keys";
  * fades in; nothing else moves, and the times count on with the window's
  * minute. ↑ and ↓ move through the rows from the window itself, as on Home,
  * and Return opens the one reached. Escape leaves it for the task it stood
- * over, and so does any row of the sidebar. Until the plan list is read
- * nothing stands, a list that could not be read says so with Retry, above the
- * line where an earlier read still stands, and with nothing on a call, built,
- * or shipped the page is the app's empty state. It is an experiment
+ * over, and so does any row of the sidebar. The toolbar's picker, where the
+ * build offers a world, shows one of the Factory's worlds in the board's
+ * place (`../factory-world/`); the board is its first entry and what the
+ * page opens on, and Escape in a world steps back to its overview before it
+ * leaves. Until the plan list is read nothing stands, a list that could not
+ * be read says so with Retry, above the line where an earlier read still
+ * stands, and with nothing on a call, built, or shipped the page is the
+ * app's empty state. It is an experiment
  * (`EXPERIMENT.FACTORY`): every door to it is gated on the account's switch,
  * and its toolbar says so with the Experimental tag and Send feedback.
  */
@@ -108,8 +128,8 @@ function count(n: number, one: string, many: string): string {
 }
 
 /** A pull request opens on GitHub, where it is worked on and merged; one the service sent no page for opens its plan. */
-function openPullRequest(tasks: TasksControl, plan: TaskSummary, pullRequest: TaskPullRequestLine) {
-  if (pullRequest.url === undefined) tasks.onSelect(plan.id);
+function openPullRequest(tasks: TasksControl, task: TaskSummary, pullRequest: TaskPullRequestLine) {
+  if (pullRequest.url === undefined) tasks.onSelect(task.id);
   else tasks.repositories.openGitHub(pullRequest.url);
 }
 
@@ -117,9 +137,9 @@ function openPullRequest(tasks: TasksControl, plan: TaskSummary, pullRequest: Ta
 type RowLink = { readonly place: LinkPlace } | { readonly url: string };
 
 /** What a pull request's row copies: its page on GitHub, which it opens, or its task where the service sent no page. */
-function pullRequestLink(plan: TaskSummary, pullRequest: TaskPullRequestLine): RowLink {
+function pullRequestLink(task: TaskSummary, pullRequest: TaskPullRequestLine): RowLink {
   return pullRequest.url === undefined
-    ? { place: { kind: LINK_PLACE.TASK, planId: plan.id } }
+    ? { place: { kind: LINK_PLACE.TASK, planId: task.id } }
     : { url: pullRequest.url };
 }
 
@@ -145,14 +165,14 @@ function useFactoryBoard(tasks: TasksControl, now: number): FactoryRead {
   const listed = tasks.listed.tasks;
   const questions = useWaitingItems(tasks);
   // Note that main's own count stands in only for a plan the Inbox has not read as it stands now, because such a read is newer than main's, and an item it shows answered must not come back; a plan changed since its last read, its reread out or failed, keeps main's count.
-  const { items, readPlans } = questions;
+  const { items, readTasks } = questions;
   const waiting = useMemo(
     () =>
       factoryWaiting(
         items,
-        tasks.inbox.filter((each) => !readPlans.has(each.taskId)),
+        tasks.inbox.filter((each) => !readTasks.has(each.taskId)),
       ),
-    [items, readPlans, tasks.inbox],
+    [items, readTasks, tasks.inbox],
   );
   const oneOff = tasks.listedAgents.standing;
   // Note that an agent with no task keeps main's count on the same terms as a task does, until its own read is current.
@@ -311,7 +331,7 @@ function FactoryRow({
             <span className="sidebar-task-name">{words}</span>
             {external ? (
               <span className="factory-external">
-                <ArrowUpRightIcon className="text-link-out" aria-hidden="true" />
+                <ArrowUpRightIcon />
                 <span className="visually-hidden">(opens on GitHub)</span>
               </span>
             ) : null}
@@ -363,10 +383,20 @@ function Station({
     >
       <h2 className="factory-head">
         <Icon className="factory-glyph" aria-hidden="true" />
-        <span className="factory-name">{name}</span>
-        {held > 0 ? <span className="factory-count">{held}</span> : null}
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
+          {name}
+        </Text>
+        {held > 0 ? (
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            {held}
+          </Text>
+        ) : null}
       </h2>
-      {held === 0 ? <p className="factory-idle">{idle}</p> : null}
+      {held === 0 ? (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {idle}
+        </Text>
+      ) : null}
       {needs.length === 0 ? null : (
         <ul className="sidebar-tasks factory-rows" data-needs="">
           {needs}
@@ -387,11 +417,11 @@ function Arrow(): React.JSX.Element {
 }
 
 /** Who a row names: whoever started its agent where that is a teammate, else whoever created its task where that is. */
-function useWho(): (plan: TaskSummary, agent?: TaskAgentLine) => Actor | undefined {
+function useWho(): (task: TaskSummary, agent?: TaskAgentLine) => Actor | undefined {
   const reader = useMemberDirectory();
   const started = useStarter();
-  return (plan, agent) =>
-    agent?.startedBy === undefined ? teammateCreator(plan, reader) : started(agent);
+  return (task, agent) =>
+    agent?.startedBy === undefined ? teammateCreator(task, reader) : started(agent);
 }
 
 /** Who started an agent, where that is a teammate; an agent with no task names no creator besides. */
@@ -413,26 +443,26 @@ function Line({
   board: FactoryBoard;
   now: number;
 }): React.JSX.Element {
-  const card = (plan: TaskSummary) => taskCardOf(tasks, plan, now);
+  const card = (task: TaskSummary) => taskCardOf(tasks, task, now);
   const who = useWho();
   const started = useStarter();
   const models = tasks.agents.models;
-  const ask = (plan: TaskSummary, itemId: string) => {
+  const ask = (task: TaskSummary, itemId: string) => {
     tasks.inboxView.onOpen();
-    tasks.inboxView.onChoose({ taskId: plan.id, itemId });
+    tasks.inboxView.onChoose({ taskId: task.id, itemId });
   };
-  const talkRow = (plan: TaskSummary) => (
+  const talkRow = (task: TaskSummary) => (
     <FactoryRow
-      key={plan.id}
-      slide={plan.id}
+      key={task.id}
+      slide={task.id}
       glyph={<CallGlyph />}
-      words={plan.name}
+      words={task.name}
       context="On a call with Luke"
-      actor={who(plan)}
-      at={taskTime(plan, TASK_ORDER.UPDATED)}
-      card={card(plan)}
-      link={{ place: { kind: LINK_PLACE.TASK, planId: plan.id } }}
-      onOpen={() => tasks.onSelect(plan.id)}
+      actor={who(task)}
+      at={taskTime(task, TASK_ORDER.UPDATED)}
+      card={card(task)}
+      link={{ place: { kind: LINK_PLACE.TASK, planId: task.id } }}
+      onOpen={() => tasks.onSelect(task.id)}
     />
   );
   // An agent with no task names its automation where the rows of a task name the task, and opens its own page.
@@ -483,22 +513,22 @@ function Line({
     if (stop.kind === FACTORY_STOP.ONE_OFF_QUESTION || stop.kind === FACTORY_STOP.ONE_OFF_FAILED) {
       return oneOffStopRow(stop);
     }
-    const { plan } = stop;
+    const { plan: task } = stop;
     if (stop.kind === FACTORY_STOP.QUESTION) {
-      const agent = plan.agents?.agents.find((each) => each.id === stop.item.agentId);
+      const agent = task.agents?.agents.find((each) => each.id === stop.item.agentId);
       return (
         <FactoryRow
           key={stop.item.id}
           slide={stop.item.id}
           glyph={agent === undefined ? <MessageCircleQuestionIcon /> : <AgentGlyph agent={agent} />}
           words={stop.item.title}
-          context={plan.name}
-          actor={who(plan, agent)}
+          context={task.name}
+          actor={who(task, agent)}
           at={stop.item.postedAt}
           waiting
           // Note that a question hangs no card, because its hover says the question whole, which its one line cuts short.
-          link={{ place: { kind: LINK_PLACE.INBOX_ITEM, planId: plan.id, itemId: stop.item.id } }}
-          onOpen={() => ask(plan, stop.item.id)}
+          link={{ place: { kind: LINK_PLACE.INBOX_ITEM, planId: task.id, itemId: stop.item.id } }}
+          onOpen={() => ask(task, stop.item.id)}
         />
       );
     }
@@ -509,14 +539,14 @@ function Line({
         slide={agent.id}
         glyph={<AgentGlyph agent={agent} />}
         words={`${agentTabLabel(agent, models)} failed`}
-        context={plan.name}
-        actor={who(plan, agent)}
-        at={agentMovedAt(plan, agent)}
+        context={task.name}
+        actor={who(task, agent)}
+        at={agentMovedAt(task, agent)}
         end={agentEndMark(agent, true)}
         waiting
-        card={card(plan)}
-        link={{ place: agentPlace({ id: agent.id, planId: plan.id }) }}
-        onOpen={() => tasks.onShowAgent(plan.id, agent.id)}
+        card={card(task)}
+        link={{ place: agentPlace({ id: agent.id, planId: task.id }) }}
+        onOpen={() => tasks.onShowAgent(task.id, agent.id)}
       />
     );
   };
@@ -537,7 +567,7 @@ function Line({
         />
       );
     }
-    const { plan } = work;
+    const { plan: task } = work;
     if (work.kind === FACTORY_WORK.AGENT) {
       const { agent } = work;
       return (
@@ -546,12 +576,12 @@ function Line({
           slide={agent.id}
           glyph={<AgentGlyph agent={agent} />}
           words={agentTabLabel(agent, models)}
-          context={plan.name}
-          actor={who(plan, agent)}
-          at={agentMovedAt(plan, agent)}
-          card={card(plan)}
-          link={{ place: agentPlace({ id: agent.id, planId: plan.id }) }}
-          onOpen={() => tasks.onShowAgent(plan.id, agent.id)}
+          context={task.name}
+          actor={who(task, agent)}
+          at={agentMovedAt(task, agent)}
+          card={card(task)}
+          link={{ place: agentPlace({ id: agent.id, planId: task.id }) }}
+          onOpen={() => tasks.onShowAgent(task.id, agent.id)}
         />
       );
     }
@@ -559,34 +589,34 @@ function Line({
     return (
       <FactoryRow
         key={pullRequest.url ?? pullRequest.number}
-        slide={pullRequest.url ?? plan.id}
+        slide={pullRequest.url ?? task.id}
         glyph={<PullRequestMark pullRequest={pullRequest} />}
         words={buildingWords(pullRequest)}
-        context={plan.name}
-        actor={who(plan)}
-        at={factoryMovedAt(plan)}
+        context={task.name}
+        actor={who(task)}
+        at={factoryMovedAt(task)}
         external={pullRequest.url !== undefined}
-        card={card(plan)}
-        link={pullRequestLink(plan, pullRequest)}
-        onOpen={() => openPullRequest(tasks, plan, pullRequest)}
+        card={card(task)}
+        link={pullRequestLink(task, pullRequest)}
+        onOpen={() => openPullRequest(tasks, task, pullRequest)}
       />
     );
   };
-  const blockRow = ({ kind, plan, pullRequest }: FactoryBlock) => (
+  const blockRow = ({ kind, plan: task, pullRequest }: FactoryBlock) => (
     <FactoryRow
       key={pullRequest.url ?? pullRequest.number}
-      slide={pullRequest.url ?? plan.id}
+      slide={pullRequest.url ?? task.id}
       glyph={<PullRequestMark pullRequest={pullRequest} />}
       words={`#${pullRequest.number} ${BLOCK_WORDS[kind]}`}
-      context={plan.name}
-      actor={who(plan)}
-      at={factoryMovedAt(plan)}
+      context={task.name}
+      actor={who(task)}
+      at={factoryMovedAt(task)}
       end={kind === FACTORY_BLOCK.CHECKS ? stateEndMark(GLYPH_STATE.FAILED, true) : undefined}
       external={pullRequest.url !== undefined}
       waiting
-      card={card(plan)}
-      link={pullRequestLink(plan, pullRequest)}
-      onOpen={() => openPullRequest(tasks, plan, pullRequest)}
+      card={card(task)}
+      link={pullRequestLink(task, pullRequest)}
+      onOpen={() => openPullRequest(tasks, task, pullRequest)}
     />
   );
   const shippedRow = ({ task, pullRequest, at }: FactoryShipped) => (
@@ -623,30 +653,48 @@ function Line({
   );
 }
 
+/** The dot between the summary's parts, kept from a reader. */
+function Separator(): React.JSX.Element {
+  return (
+    <span aria-hidden="true">
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.SUBTLE}>
+        ·
+      </Text>
+    </span>
+  );
+}
+
 /** The line over the stations: how many things wait on the developer, how many agents work, and how much shipped today. */
 function Summary({ board }: { board: FactoryBoard }): React.JSX.Element {
   const waiting = board.stopped.length + board.blocked.length;
   return (
     <p className="factory-summary">
       {waiting === 0 ? (
-        <span>{NEEDS_YOU.NONE}</span>
+        <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+          {NEEDS_YOU.NONE}
+        </Text>
       ) : (
         <span className="factory-needs">
           <span className="inbox-row-dot factory-head-dot" aria-hidden="true" />
-          {`${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+            {`${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
+          </Text>
         </span>
       )}
-      <span className="factory-sep" aria-hidden="true">
-        ·
-      </span>
-      <span>{count(board.agentsWorking, "agent working", "agents working")}</span>
-      <span className="factory-sep" aria-hidden="true">
-        ·
-      </span>
-      <span>{`${board.shipped.length} shipped today`}</span>
+      <Separator />
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+        {count(board.agentsWorking, "agent working", "agents working")}
+      </Text>
+      <Separator />
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+        {`${board.shipped.length} shipped today`}
+      </Text>
     </p>
   );
 }
+
+/** What the line's page is read as while the list is. */
+const READING_LINE = "Reading tasks";
 
 /** What the list says where it could not be read, as the sidebar says it. */
 const UNREAD_LINE = "Your tasks could not be read.";
@@ -654,14 +702,32 @@ const UNREAD_LINE = "Your tasks could not be read.";
 /** What Factory says where a task's questions could not be read, as Home says it of its items. */
 const QUESTIONS_UNREAD_LINE = "Some questions could not be read.";
 
-/** The window's Factory, in the task's place: the line as it stands now. */
-export function DesktopFactory({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_FACTORY, plans.factoryView.onClose);
+/**
+ * What the line's page stands. Note that until the list is read it stands
+ * nothing, since what the line says hangs on it and the page's loading rows
+ * are a list's shape, not the line's; a read that failed with nothing
+ * listed says so in the line's place, and one that failed over a list read
+ * before says so above the line.
+ */
+function lineState(tasks: TasksControl, empty: boolean): CollectionState {
+  if (tasks.listFailed && empty) return COLLECTION_STATE.ERROR;
+  if (!tasks.listRead && !tasks.listFailed) return COLLECTION_STATE.READY;
+  return empty ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
+}
+
+/** The window's Factory, in the task's place: the line as it stands now, or the world chosen in its place. */
+export function DesktopFactory({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+  const worlds = useFactoryWorlds();
+  // Note that a world takes Escape first, for as long as it has a step back toward its overview to take.
+  const backOut = useRef<(() => boolean) | undefined>(undefined);
+  useAppCommand(APP_COMMAND.EXIT_FACTORY, () => {
+    if (backOut.current?.() !== true) tasks.factoryView.onClose();
+  });
   const now = useMinute();
-  const { board, questions } = useFactoryBoard(plans, now);
+  const { board, questions } = useFactoryBoard(tasks, now);
   const [root, setRoot] = useState<HTMLElement | null>(null);
   useRowSlide(root, board);
-  useRowKeys(root, plans.shown);
+  useRowKeys(root, tasks.shown);
   useFocusFollows(root, board);
   const empty =
     board.talking.length +
@@ -670,45 +736,79 @@ export function DesktopFactory({ tasks: plans }: { tasks: TasksControl }): React
       board.blocked.length +
       board.shipped.length ===
     0;
-  return (
-    <section className="factory-view" aria-label="Factory" ref={setRoot}>
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">Factory</h1>
-          <ExperimentTag />
-        </div>
-        <div className="desktop-toolbar-actions">
-          <SendFeedbackButton experiment={EXPERIMENT.FACTORY} />
-        </div>
-      </header>
-      <div className="factory-scroll scroll-fade-top">
-        {/* A question that could not be read is not shown as though none waits. */}
-        {questions.failed ? (
-          <ErrorState onRetry={questions.onRetry}>{QUESTIONS_UNREAD_LINE}</ErrorState>
-        ) : null}
-        {/* Until the list is read nothing stands, since what the line says hangs on it. A read that failed with nothing listed says so in the line's place; one that failed over a list read before says so above it. */}
-        {plans.listFailed && empty ? (
-          <ErrorState onRetry={plans.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-            {UNREAD_LINE}
-          </ErrorState>
-        ) : !plans.listRead && !plans.listFailed ? null : empty ? (
-          <EmptyState icon={<FactoryIcon />}>No agents at work</EmptyState>
-        ) : (
-          <>
-            {plans.listFailed ? (
-              <ErrorState onRetry={plans.onRetryList}>{UNREAD_LINE}</ErrorState>
-            ) : null}
-            <Summary board={board} />
-            {/* A teammate's task names its creator against the listed workspace's members. */}
-            {/* Copy link writes a row's link under the listed workspace, by its slug where it has one. */}
-            <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
-              <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-                <Line tasks={plans} board={board} now={now} />
-              </MemberDirectory>
-            </LinkWorkspaceProvider>
-          </>
-        )}
+  const toolbar = (
+    <header className="desktop-toolbar">
+      <div className="desktop-toolbar-heading">
+        <h1 className="desktop-toolbar-title">Factory</h1>
+        <ExperimentTag />
       </div>
-    </section>
+      <div className="desktop-toolbar-actions">
+        {worlds.offered.length === 0 ? null : <WorldPicker worlds={worlds} />}
+        <SendFeedbackButton experiment={EXPERIMENT.FACTORY} />
+      </div>
+    </header>
+  );
+  // A question that could not be read is not shown as though none waits, whatever the line stands.
+  const questionsUnread = questions.failed ? (
+    <ErrorState onRetry={questions.onRetry}>{QUESTIONS_UNREAD_LINE}</ErrorState>
+  ) : null;
+  const state = lineState(tasks, empty);
+  return (
+    <div ref={setRoot} className="factory-pages">
+      {worlds.chosen !== undefined ? (
+        <section className="factory-view" aria-label="Factory">
+          {toolbar}
+          <FactoryWorldPage
+            key={worlds.chosen.key}
+            tasks={tasks}
+            entry={worlds.chosen}
+            backOut={backOut}
+          />
+        </section>
+      ) : (
+        // The line stands across the room, its stations side by side wherever they fit.
+        <CollectionPage
+          frame={PAGE_FRAME.TOOLBAR}
+          width={PAGE_WIDTH.FULL}
+          label="Factory"
+          toolbar={toolbar}
+          state={state}
+          loadingLabel={READING_LINE}
+          empty={
+            <>
+              {questionsUnread}
+              <EmptyState icon={<FactoryIcon />}>No agents at work</EmptyState>
+            </>
+          }
+          error={
+            <>
+              {questionsUnread}
+              <ErrorState onRetry={tasks.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+                {UNREAD_LINE}
+              </ErrorState>
+            </>
+          }
+        >
+          <div className="factory-board">
+            {questionsUnread}
+            {!tasks.listRead && !tasks.listFailed ? null : (
+              <>
+                {tasks.listFailed ? (
+                  <ErrorState onRetry={tasks.onRetryList}>{UNREAD_LINE}</ErrorState>
+                ) : null}
+                <Summary board={board} />
+                {/* A teammate's task names its creator against the listed workspace's members. */}
+                {/* Copy link writes a row's link under the listed workspace, by its slug where it has one. */}
+                <LinkWorkspaceProvider value={tasks.workspace?.slug ?? tasks.workspace?.id}>
+                  <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+                    <Line tasks={tasks} board={board} now={now} />
+                  </MemberDirectory>
+                </LinkWorkspaceProvider>
+              </>
+            )}
+          </div>
+        </CollectionPage>
+      )}
+    </div>
   );
 }

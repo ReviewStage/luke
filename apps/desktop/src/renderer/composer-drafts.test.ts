@@ -12,14 +12,15 @@ import {
 import type { Task } from "@luke/features/task-wire";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   typeInComposer,
@@ -54,7 +55,7 @@ import { NO_LOOKS } from "./tasks/use-task-looks";
 
 /** A task with one agent of its own, open on its agent's tab. */
 function task(id: string, name: string, agentId: string) {
-  const plan: Task = {
+  const summary: Task = {
     id,
     workspaceId: "workspace-personal",
     name,
@@ -73,7 +74,7 @@ function task(id: string, name: string, agentId: string) {
     status: CODING_AGENT_STATUS.COMPLETED,
     turnId: null,
   };
-  return { plan, agent };
+  return { plan: summary, agent };
 }
 
 const INVITES = task(
@@ -89,8 +90,8 @@ const BILLING = task(
 
 const roots: Root[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();
@@ -146,7 +147,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
     }: { onTask?: boolean; send?: MessageSender; account?: Identity } = {},
   ) => {
     const agentTab = { agent: open.agent.id };
-    const plans = tasksControl({
+    const tasks = tasksControl({
       page: TASKS_PAGE.DOCUMENT,
       tasks: [INVITES.plan, BILLING.plan],
       activeTaskId: open.plan.id,
@@ -164,12 +165,12 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
           send(agentId, text, clientKey, attachments),
       }),
     });
-    const rows = [INVITES.plan, BILLING.plan].map((plan) =>
+    const rows = [INVITES.plan, BILLING.plan].map((summary) =>
       createElement(SidebarTask, {
-        key: plan.id,
-        tasks: plans,
-        task: plan,
-        current: plan.id === open.plan.id,
+        key: summary.id,
+        tasks: tasks,
+        task: summary,
+        current: summary.id === open.plan.id,
         unread: false,
         now: 3,
         onOpen: () => undefined,
@@ -187,7 +188,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
             createElement(DesktopTasks, {
               summary: UNPINNED_SUMMARY,
               looks: NO_LOOKS,
-              tasks: plans,
+              tasks: tasks,
             }),
           ),
         ),
@@ -350,8 +351,8 @@ test("the drafts an account kept under its address are its own still once its id
 });
 
 /** A draft as storage keeps it: an agent's words on a plan, by the account that wrote them. */
-function keptEntry(accountId: string, planId: string, agentId: string, text: string) {
-  return { accountId, place: { kind: "agent", planId, agentId }, text };
+function keptEntry(accountId: string, taskId: string, agentId: string, text: string) {
+  return { accountId, place: { kind: "agent", planId: taskId, agentId }, text };
 }
 
 test("past the most drafts kept, the oldest written goes, whosever it is, and the window lets go of it as storage does", async () => {
@@ -412,9 +413,9 @@ function answerMotion(): void {
  */
 async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   answerMotion();
-  fakeAppBridge({ onMenuCommand: () => () => undefined, recordSurfaceEvent: () => undefined });
+  fakeAppBridge({});
   const pin = { task: open.plan.id, tab: { agent: open.agent.id }, label: "Agent", at: 5 };
-  const plans = tasksControl({
+  const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     tasks: [INVITES.plan, BILLING.plan],
     activeTaskId: open.plan.id,
@@ -433,7 +434,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   roots.push(root);
   await act(async () =>
     root.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(plans))),
+      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(tasks))),
     ),
   );
   await settle();
@@ -470,7 +471,7 @@ const DRAFT_KEY = "draft-invites";
  * drafts are what storage holds.
  */
 async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVITES.agent) {
-  const plans = tasksControl({
+  const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     tasks: [INVITES.plan],
     activeTaskId: INVITES.plan.id,
@@ -512,7 +513,7 @@ async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVIT
             "ul",
             null,
             createElement(SidebarTask, {
-              tasks: plans,
+              tasks: tasks,
               task: INVITES.plan,
               current: true,
               unread: false,
@@ -520,7 +521,7 @@ async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVIT
               onOpen: () => undefined,
             }),
           ),
-          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: plans }),
+          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: tasks }),
         ),
       ),
     ),
@@ -618,7 +619,7 @@ async function inboxOn(item: InboxItem) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const plans = tasksControl({
+  const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     tasks: [INVITES.plan],
     activeTaskId: INVITES.plan.id,
@@ -648,7 +649,7 @@ async function inboxOn(item: InboxItem) {
             "ul",
             null,
             createElement(SidebarTask, {
-              tasks: plans,
+              tasks: tasks,
               task: INVITES.plan,
               current: false,
               unread: false,
@@ -656,7 +657,7 @@ async function inboxOn(item: InboxItem) {
               onOpen: () => undefined,
             }),
           ),
-          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: plans }),
+          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: tasks }),
         ),
       ),
     ),
@@ -697,12 +698,12 @@ test("an inbox card's note outlasts a reload, its task's row marked meanwhile, a
 });
 
 /** One item of an agent's with no plan, open and asking for an approval, at `revision`. */
-function planlessItem(agentId: string, id: string, revision: number): InboxItem {
+function tasklessItem(agentId: string, id: string, revision: number): InboxItem {
   return { ...approval(revision), id, agentId };
 }
 
 /** An agent's own inbox with no plan, read through its reader as the Inbox page reads it, answering `items`. */
-async function planlessInbox(agentId: string, items: readonly InboxItem[]) {
+async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
   let control: TaskInboxControl | undefined;
   function Probe(): null {
     control = useTaskInbox({
@@ -717,6 +718,7 @@ async function planlessInbox(agentId: string, items: readonly InboxItem[]) {
         heldIds: [agentId],
         readInbox: () => new Promise(() => undefined),
         answerInbox: () => new Promise(() => undefined),
+        messageInbox: () => new Promise(() => undefined),
         readInboxImage: () => new Promise(() => undefined),
         onRetryList: () => undefined,
       },
@@ -731,19 +733,19 @@ async function planlessInbox(agentId: string, items: readonly InboxItem[]) {
 }
 
 test("an agent with no plan lets go of its own outdated answers as its inbox is read, and never another agent's", async () => {
-  const mine = planlessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
-  const theirs = planlessItem(BILLING.agent.id, "b1b2c3d4-0000-4000-8000-000000000002", 1);
-  const first = await planlessInbox(INVITES.agent.id, [mine]);
+  const mine = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
+  const theirs = tasklessItem(BILLING.agent.id, "b1b2c3d4-0000-4000-8000-000000000002", 1);
+  const first = await tasklessInbox(INVITES.agent.id, [mine]);
   act(() =>
     first.onDraft(mine, { choices: [], values: [], note: "Only teammates", attachments: [] }),
   );
-  const other = await planlessInbox(BILLING.agent.id, [theirs]);
+  const other = await tasklessInbox(BILLING.agent.id, [theirs]);
   act(() => other.onDraft(theirs, { choices: [], values: [], note: "Weekly", attachments: [] }));
 
-  await planlessInbox(INVITES.agent.id, [{ ...mine, revision: 2 }]);
-  const reread = await planlessInbox(INVITES.agent.id, [mine]);
+  await tasklessInbox(INVITES.agent.id, [{ ...mine, revision: 2 }]);
+  const reread = await tasklessInbox(INVITES.agent.id, [mine]);
   assert.equal(reread.draftOf(mine).note, "", "the answer its agent outdated is let go");
-  const kept = await planlessInbox(BILLING.agent.id, [theirs]);
+  const kept = await tasklessInbox(BILLING.agent.id, [theirs]);
   assert.equal(kept.draftOf(theirs).note, "Weekly");
 });
 

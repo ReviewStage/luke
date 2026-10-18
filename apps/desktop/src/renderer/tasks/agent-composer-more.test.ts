@@ -10,11 +10,12 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
-import { installEditorBundle, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
 import { layContainersAt, shown } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
@@ -37,6 +38,8 @@ const CARD = {
   NARROWEST: 178,
   /** A 320px column. */
   NARROW: 278,
+  /** The main column of a wide window. */
+  WIDE: 720,
 } as const;
 
 const MODELS: readonly CatalogModel[] = [
@@ -78,7 +81,8 @@ const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();
@@ -92,7 +96,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** An agent's box with everything its foot can carry: a pull request, its changes, a model, and a step's context. */
+/** An agent's box with everything its foot can carry: a pull request, a model, and a step's context. */
 function Box({ status }: { status: CodingAgentStatus }): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
@@ -110,7 +114,7 @@ function Box({ status }: { status: CodingAgentStatus }): ReactNode {
     models: MODELS,
     context: CONTEXT,
     published: PUBLISHED,
-    doors: { openGitHub: ignore, copy: ignore, openChanges: ignore },
+    doors: { openGitHub: ignore, copy: ignore },
   });
 }
 
@@ -140,13 +144,7 @@ test("at 220px wide, while a turn runs, the ⋯ offers every press it hid", asyn
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
   );
-  assert.deepEqual(offered, [
-    "Attach files",
-    "Show changes",
-    "MCP servers",
-    "62% of context used",
-    "Dictate",
-  ]);
+  assert.deepEqual(offered, ["Attach files", "MCP servers", "62% of context used", "Dictate"]);
 });
 
 test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so the ⋯ offers no Attach files", async () => {
@@ -155,7 +153,7 @@ test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
   );
-  assert.deepEqual(offered, ["Show changes", "MCP servers", "62% of context used", "Dictate"]);
+  assert.deepEqual(offered, ["MCP servers", "62% of context used", "Dictate"]);
 });
 
 test("MCP servers chosen from the ⋯ opens the servers popover its hidden press would have, and Escape hands the keyboard back to the ⋯", async () => {
@@ -189,13 +187,29 @@ test("the ⋯'s menu closes once the card changes width, as a panel dragged narr
       .filter((item) => item.closest("[inert]") === null)
       .map((item) => item.textContent);
   act(() => box.press("More").click());
-  assert.deepEqual(offered(), ["Show changes", "MCP servers", "62% of context used", "Dictate"]);
+  assert.deepEqual(offered(), ["MCP servers", "62% of context used", "Dictate"]);
 
   // Laid out again at the same width, as a scroll would, it stays.
   act(() => relayout());
-  assert.equal(offered().length, 4);
+  assert.equal(offered().length, 3);
 
   width.mockReturnValue(DOMRect.fromRect({ width: CARD.NARROWEST }));
   act(() => relayout());
   assert.deepEqual(offered(), []);
+});
+
+test("a card too narrow for the model's words has its chip draw the harness's mark in their place, and one widened draws the words alone again", async () => {
+  // Note that the card's form is given a width as the window would lay it, since jsdom lays out nothing.
+  const laid = vi.spyOn(HTMLFormElement.prototype, "clientWidth", "get");
+  laid.mockReturnValue(CARD.NARROW);
+  const box = await drawnAt(CARD.NARROW);
+  const model = () =>
+    box.container.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
+    assert.fail("the model chip stands");
+  assert.equal(model().getAttribute("aria-label"), "Opus 5.5 High");
+  assert.notEqual(model().querySelector(".harness-mark"), null);
+
+  laid.mockReturnValue(CARD.WIDE);
+  act(() => relayout());
+  assert.equal(model().querySelector(".harness-mark"), null);
 });

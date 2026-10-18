@@ -12,19 +12,24 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxMessagedView,
+  type CodingAgentInboxMessageParams,
   type CodingAgentListAnswer,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INBOX_BLOCK,
+  INBOX_BOUNDS,
   INBOX_CURSOR_START,
   INBOX_FIELD,
   INBOX_IMAGE_TYPE,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
+  type InboxMessage,
 } from "@luke/features/inbox-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
@@ -32,6 +37,7 @@ import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { DocumentIcon } from "@luke/ui";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -41,12 +47,12 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { handState } from "#testing/app-state";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   typeInComposer,
@@ -140,6 +146,7 @@ const READER = { userId: "user-reader", name: "Dana Reyes" };
 const RETRY: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-000000000002", "How is a failed email retried?", 5_000),
   status: INBOX_STATUS.ANSWERED,
+  settledAt: 5_000,
   answeredBy: READER,
   answer: {
     reply: INBOX_REPLY.CHOSE,
@@ -197,8 +204,8 @@ let pageAgents = new Map<string, CodingAgentSummary>();
 /** The reads of an item's images, each held until the test lands it with a PNG's first bytes. */
 let imageReads: (() => void)[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 // The parser an answer's note is drawn through, landed as the panel lands it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -222,11 +229,10 @@ beforeEach(() => {
   listedWorkspace = undefined;
   automations = [];
   copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS });
   pageAgents = new Map();
   imageReads = [];
   fakeAppBridge({
-    onMenuCommand: () => () => undefined,
-    recordSurfaceEvent: () => undefined,
     act: (request: Act) => {
       const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
         Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
@@ -256,10 +262,6 @@ beforeEach(() => {
                   },
                 },
         });
-      }
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-        copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
       }
       if (request.kind === ACT_KIND.TASKS_TREE) {
         return Promise.resolve({
@@ -364,8 +366,8 @@ function mount(firstTaskless: readonly AppInboxTasklessItem[] = []) {
           pages: undefined,
           onRereadPages: () => undefined,
         },
-        onShowTask: (planId) => asked.shownTasks.push(planId),
-        onShowAgent: (planId, agentId) => asked.shownAgents.push([planId, agentId]),
+        onShowTask: (taskId) => asked.shownTasks.push(taskId),
+        onShowAgent: (taskId, agentId) => asked.shownAgents.push([taskId, agentId]),
         automationsView: {
           open: false,
           place: { kind: AUTOMATIONS_PAGE.LIST },
@@ -392,27 +394,38 @@ async function settle(): Promise<void> {
   });
 }
 
+/** A row's title, as its ListRow draws it. */
+const ROW_TITLE = ".luke-list-row-title";
+
 /**
- * What marks a row as needing the developer: `*` where it is drawn bold and
- * wears the dot read as "Needs you", nothing where it wears neither, and
- * `?` where it wears only one, so a half-drawn mark fails every listing.
+ * What marks a row as needing the developer: `*` where it wears the
+ * attention mark and says "Needs you" beside it, nothing where it does
+ * neither, and `?` where it does one alone or wears the blue dot that
+ * meant it before, so a half-drawn or stale mark fails every listing.
  */
 function needsYouMark(row: HTMLElement): string {
-  const bold = row.dataset.unread === "true";
-  const dot = row.querySelector(".inbox-row-dot")?.textContent === "Needs you";
-  if (bold && dot) return "*";
-  return bold || dot ? "?" : "";
+  const mark = row.querySelector(".luke-list-row-meta .attention-mark") !== null;
+  const said =
+    row.querySelector(".luke-list-row-meta .visually-hidden")?.textContent === "Needs you";
+  if (row.querySelector(".inbox-row-dot") !== null) return "?";
+  if (mark && said) return "*";
+  return mark || said ? "?" : "";
+}
+
+/** The first of a button's words a reader hears: a row's or a fold's name, before its count and its chord. */
+function heardName(button: Element): string {
+  const heard = [...button.children].find((part) => part.getAttribute("aria-hidden") !== "true");
+  return heard?.textContent ?? "";
 }
 
 /** The list as a reader hears it: each group's name, then its rows, `▸ ` where chosen and `*` where marked as needing the developer. */
 function listed(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
-  return [...list.querySelectorAll(".sidebar-repository-name, .sidebar-task")].map((node) => {
-    if (!(node instanceof HTMLElement) || !node.classList.contains("sidebar-task")) {
-      return `# ${node.textContent}`;
-    }
-    const name = node.querySelector(".sidebar-task-name")?.textContent ?? "";
+  const fold = ".sidebar-repository-header button[aria-expanded]:not([aria-haspopup])";
+  return [...list.querySelectorAll(`${fold}, li > button`)].map((node) => {
+    if (node.matches(fold) || !(node instanceof HTMLButtonElement)) return `# ${heardName(node)}`;
+    const name = node.querySelector(ROW_TITLE)?.textContent ?? "";
     return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${name}`;
   });
 }
@@ -427,14 +440,14 @@ function wordsOf(element: Element | null | undefined): string | null {
 }
 
 function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
-  const row = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-task")].find(
-    (each) => each.querySelector(".sidebar-task-name")?.textContent === title,
+  const row = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li > button")].find(
+    (each) => each.querySelector(ROW_TITLE)?.textContent === title,
   );
   assert.ok(row, `no row for ${title}`);
   return row;
 }
 
-test("the list holds every plan's items under the sidebar's group header for each, the latest changed first and marked bold with a dot while it needs you, the first such item chosen; Newest first from the view's menu lists them in one run, and the choice outlives a relaunch", async () => {
+test("the list holds every plan's items under the sidebar's group header for each, the latest changed first and wearing the attention mark while it needs you, the first such item chosen; Newest first from the view's menu lists them in one run, and the choice outlives a relaunch", async () => {
   let { page } = mount();
   await settle();
   assert.deepEqual(listed(page), [
@@ -480,6 +493,14 @@ function answerHead(page: HTMLElement): string | null {
   );
 }
 
+/** Opens the fold holding what a settled item offered, by pressing its line. */
+function openOffered(within: ParentNode): void {
+  const line =
+    within.querySelector<HTMLElement>("[data-inbox-offered] > summary") ??
+    assert.fail("what was offered is folded");
+  act(() => line.click());
+}
+
 test("a settled choice folds what its agent offered to one line saying who picked which, which still holds every option with the pick marked, then the developer's answer as their comment: their pick as a chip over their note, under a line saying when and that it reached the agent", async () => {
   const { page } = mount();
   await settle();
@@ -496,10 +517,11 @@ test("a settled choice folds what its agent offered to one line saying who picke
     offered.querySelector("summary")?.textContent,
     "2 options · you picked Retry 3 times over an hour",
   );
+  act(() => offered.querySelector("summary")?.click());
   assert.deepEqual(
     [...offered.querySelectorAll<HTMLElement>("li.inbox-option")].map((option) => [
       option.dataset.picked,
-      option.querySelector(".font-medium")?.textContent,
+      option.querySelector(".inbox-option-label > :first-child")?.textContent,
       wordsOf(option.querySelector(".inbox-picked")),
     ]),
     [
@@ -507,7 +529,11 @@ test("a settled choice folds what its agent offered to one line saying who picke
       ["false", "Retry once", null],
     ],
   );
-  assert.equal(pane.querySelector(".composer-editor"), null, "a settled item takes no answer");
+  assert.equal(
+    pane.querySelector(".composer-editor")?.getAttribute("aria-label"),
+    "Message Alerts…",
+    "a settled item takes no answer, only a message on its thread",
+  );
   const reply = pane.querySelector<HTMLElement>('[data-inbox-comment="answered"]');
   assert.ok(reply, "the developer's answer is their own comment");
   assert.equal(reply.querySelector("[data-inbox-pick]")?.textContent, "Retry 3 times over an hour");
@@ -518,19 +544,21 @@ test("a settled choice folds what its agent offered to one line saying who picke
     "person",
     "the answerer's face leads their comment",
   );
-  assert.ok(reply.querySelector(".actor-ref[data-kind='person']"), "the answerer by their name");
+  assert.ok(
+    reply.querySelector("[data-actor-ref][data-kind='person']"),
+    "the answerer by their name",
+  );
 });
 
-/** An item's options as a reader meets them: each label, then its Recommended badge's words, and whether the badge has gone quiet, where it wears one. */
+/** An item's options as a reader meets them: each label, then its Recommended badge's words where it wears one. */
 function optionHeads(page: HTMLElement, option: string): (string | null | undefined)[][] {
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
   return [...pane.querySelectorAll<HTMLElement>(option)].map((each) => {
-    const badge = each.querySelector<HTMLElement>(".inbox-option-head > .inbox-recommended");
+    const head = each.querySelector(".inbox-option-head")?.textContent ?? "";
     return [
-      each.querySelector(".font-medium")?.textContent,
-      badge?.textContent ?? null,
-      badge?.dataset.settled ?? null,
+      each.querySelector(".inbox-option-label > :first-child")?.textContent,
+      head.endsWith("Recommended") ? "Recommended" : null,
     ];
   });
 }
@@ -609,8 +637,8 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   const { page } = mount();
   await settle();
   assert.deepEqual(optionHeads(page, "button.inbox-option"), [
-    ["Retry 3 times over an hour", "Recommended", "false"],
-    ["Retry once", null, null],
+    ["Retry 3 times over an hour", "Recommended"],
+    ["Retry once", null],
   ]);
 
   act(() => root?.unmount());
@@ -623,8 +651,8 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   const again = mount();
   await settle();
   assert.deepEqual(optionHeads(again.page, "button.inbox-option"), [
-    ["Retry 3 times over an hour", null, null],
-    ["Retry once", null, null],
+    ["Retry 3 times over an hour", null],
+    ["Retry once", null],
   ]);
 });
 
@@ -637,13 +665,17 @@ test("a settled choice whose pick is not the one recommended marks each apart: t
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
+  openOffered(page);
 
   assert.deepEqual(optionHeads(page, "li.inbox-option"), [
-    ["Retry 3 times over an hour", "Recommended", "true"],
-    ["Retry once", null, null],
+    ["Retry 3 times over an hour", "Recommended"],
+    ["Retry once", null],
   ]);
   const picked = page.querySelector<HTMLElement>('li.inbox-option[data-picked="true"]');
-  assert.equal(picked?.querySelector(".font-medium")?.textContent, "Retry once");
+  assert.equal(
+    picked?.querySelector(".inbox-option-label > :first-child")?.textContent,
+    "Retry once",
+  );
   assert.equal(wordsOf(picked?.querySelector(".inbox-picked")), "Your pick");
 });
 
@@ -657,6 +689,7 @@ test("a teammate's answer names them by their disc and name, beside their pick a
 
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
+  openOffered(pane);
   const picked = pane.querySelector(".inbox-picked") ?? assert.fail("the pick is marked");
   assert.equal(wordsOf(picked), "Charles Pan’s pick");
   assert.equal(picked.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
@@ -670,7 +703,7 @@ test("a teammate's answer names them by their disc and name, beside their pick a
   assert.match(answerHead(page) ?? "", /^Charles Pan.+ · /u);
   assert.equal(reply.querySelector("[data-inbox-pick]")?.textContent, "Retry 3 times over an hour");
 
-  const answerer = reply.querySelector(".actor-ref") ?? assert.fail("the answerer is named");
+  const answerer = reply.querySelector("[data-actor-ref]") ?? assert.fail("the answerer is named");
   act(() => {
     answerer.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
@@ -818,7 +851,9 @@ function reach(control: HTMLElement): void {
 /** The agent's references in the pane's thread, each its tile and its name as one button. */
 function threadRefs(page: HTMLElement): HTMLButtonElement[] {
   return [
-    ...page.querySelectorAll<HTMLButtonElement>('.inbox-board button.actor-ref[data-kind="agent"]'),
+    ...page.querySelectorAll<HTMLButtonElement>(
+      '.inbox-board button[data-actor-ref][data-kind="agent"]',
+    ),
   ];
 }
 
@@ -850,7 +885,7 @@ test("the thread names its agent as one button wherever it does, its subject's l
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
   const sent = page.querySelector<HTMLButtonElement>(
-    '[data-inbox-comment="answered"] button.actor-ref[data-kind="agent"]',
+    '[data-inbox-comment="answered"] button[data-actor-ref][data-kind="agent"]',
   );
   assert.ok(sent, "the line saying the answer was sent names the agent");
   assert.equal(sent.textContent, "Alerts");
@@ -1051,7 +1086,9 @@ test("a folded plan counts what in it needs you, and one where nothing does coun
   );
   await settle();
   const headers = () => [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-repository-toggle"),
+    ...page.querySelectorAll<HTMLButtonElement>(
+      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+    ),
   ];
   for (const header of headers()) act(() => header.click());
   assert.deepEqual(
@@ -1123,9 +1160,16 @@ function columnsShown(page: HTMLElement): string[] {
   ];
 }
 
+/** The item's bar's press named Inbox, the way back to the list, where there is one. */
+function wayBack(page: HTMLElement): HTMLButtonElement | undefined {
+  return [
+    ...page.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
+  ].find((button) => button.textContent === "Inbox");
+}
+
 /** The way back from the item standing alone to the list. */
 function backToList(page: HTMLElement): HTMLButtonElement {
-  const back = page.querySelector<HTMLButtonElement>(".inbox-view-items button.inbox-back");
+  const back = wayBack(page);
   assert.ok(back, "the item standing alone has a way back");
   return back;
 }
@@ -1152,6 +1196,38 @@ test("an Inbox with nothing in it stands its empty state in the pane beside the 
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.equal(emptyStateIn(page, ".inbox-tasks"), "Nothing needs you");
+});
+
+test("while its plans are first read, the list stands placeholder rows in its items' place, saying to a reader that the inbox is being read, with no row to press and no ring; once the reads land, the items stand where they stood", async () => {
+  const reads = new Map([
+    [BILLING.id, pending()],
+    [INVITES.id, pending()],
+  ]);
+  startRead = (taskId) => reads.get(taskId)?.promise;
+  const { page } = mount();
+  await settle();
+  const list = page.querySelector<HTMLElement>(".inbox-tasks");
+  assert.ok(list, "the list is drawn");
+  const wait = list.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
+  assert.equal(wait?.textContent, "Reading your inbox…");
+  assert.ok(
+    (wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0,
+    "placeholder rows stand in the items' place",
+  );
+  assert.deepEqual(listed(page), []);
+  assert.equal(list.querySelector(".luke-spinner"), null, "no ring stands in the list's corner");
+
+  reads.get(BILLING.id)?.settle({ items: [THRESHOLD, RETRY], cursor: "1" });
+  reads.get(INVITES.id)?.settle({ items: [EXPIRY], cursor: "1" });
+  await settle();
+  assert.equal(list.querySelector('[aria-busy="true"]'), null);
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "▸ *Alert at 80%?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
 });
 
 test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape does not leave the Inbox", async () => {
@@ -1211,7 +1287,7 @@ test("the Inbox joins only once narrowed past the band, keeping the item it show
   assert.deepEqual(columnsShown(page), ["list"], "within the band it stays one column");
   layOut(page, 900);
   assert.deepEqual(columnsShown(page), ["list", "item"]);
-  assert.equal(page.querySelector(".inbox-view-items button.inbox-back"), null);
+  assert.equal(wayBack(page), undefined);
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["item"]);
 });
@@ -1435,7 +1511,7 @@ test("the chosen item keeps its place when its own plan folds, so J still reache
   act(() => keys.unmount());
 });
 
-test("a settled item offers, where its box stood, the next item that needs you, by its agent's tile and title and J where J reaches it, a press opening it; an item that waits offers none", async () => {
+test("a settled item offers, over its box, the next item that needs you, by its agent's tile and title and J where J reaches it, a press opening it; an item that waits offers none", async () => {
   const { page } = mount();
   await settle();
   const offered = () =>
@@ -1513,6 +1589,13 @@ function itemPane(page: HTMLElement): HTMLElement {
   return page.querySelector<HTMLElement>(".inbox-view-items") ?? assert.fail("the pane is drawn");
 }
 
+/** The names of the files attached in `within`, as each chip names its file. */
+function attachedNames(within: Element): (string | null)[] {
+  return [...within.querySelectorAll('[aria-label="Attached files"] > li')].map((chip) =>
+    chip.getAttribute("title"),
+  );
+}
+
 test("an item's box is the agent's message box: it takes no caret as the item opens, so K and J stay the list's; Enter sends its note, Shift+Enter is a new line, and Escape leaves the box but not the item", async () => {
   const { page } = mount();
   await settle();
@@ -1562,10 +1645,7 @@ test("files picked or dropped in an item's box are drawn as chips and go with it
 
   await handFiles(page, [new File(["threshold: 0.9\n"], "alerts.yml", { type: "" })], "pick");
   await handFiles(page, [new File(["%PDF-1.7"], "spec.pdf", { type: "application/pdf" })], "drop");
-  assert.deepEqual(
-    [...pane.querySelectorAll(".attached-file-name")].map((name) => name.textContent),
-    ["alerts.yml", "spec.pdf"],
-  );
+  assert.deepEqual(attachedNames(pane), ["alerts.yml", "spec.pdf"]);
 
   composerEditor(pane).focus();
   pressInComposer(pane, "Enter");
@@ -1609,10 +1689,7 @@ test("files whose reads land together both stand in the box", async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   await settle();
-  assert.deepEqual(
-    [...itemPane(page).querySelectorAll(".attached-file-name")].map((name) => name.textContent),
-    ["a.txt", "b.txt"],
-  );
+  assert.deepEqual(attachedNames(itemPane(page)), ["a.txt", "b.txt"]);
 });
 
 test("files read for an item its agent changed meanwhile land nowhere, and the box says to attach them again", async () => {
@@ -1640,7 +1717,7 @@ test("files read for an item its agent changed meanwhile land nowhere, and the b
   });
   await settle();
   const pane = itemPane(page);
-  assert.equal(pane.querySelector(".attached-file"), null, "the file lands on no revision");
+  assert.deepEqual(attachedNames(pane), [], "the file lands on no revision");
   assert.match(pane.querySelector('[role="alert"]')?.textContent ?? "", /Attach them again/u);
 });
 
@@ -1729,10 +1806,7 @@ test("an answered item draws the files its answer carried as a sent message's ar
   const comment = () =>
     itemPane(page).querySelector('[data-inbox-comment="answered"]') ??
     assert.fail("the answer is drawn");
-  assert.deepEqual(
-    [...comment().querySelectorAll(".attached-file")].map((chip) => chip.getAttribute("title")),
-    ["alerts.png", "spec.pdf"],
-  );
+  assert.deepEqual(attachedNames(comment()), ["alerts.png", "spec.pdf"]);
   assert.equal(comment().querySelector("[data-inbox-pick]"), null, "no chip says it was answered");
   assert.equal(comment().querySelector("[data-inbox-note]"), null, "no empty note stands");
 
@@ -1741,7 +1815,7 @@ test("an answered item draws the files its answer carried as a sent message's ar
   });
   await settle();
   assert.equal(
-    comment().querySelector(".attached-file img")?.getAttribute("src"),
+    comment().querySelector('[aria-label="Attached files"] img')?.getAttribute("src"),
     "data:image/png;base64,iVBORw0KGgo=",
   );
 });
@@ -1754,12 +1828,12 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
 
   typeInComposer(pane, "See @roll");
   await settle();
-  const offered = [...pane.querySelectorAll(".mention-menu .task-compose-menu-name")].map(
+  const offered = [...pane.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
     (name) => name.textContent,
   );
   pressInComposer(pane, "Enter");
   await settle();
-  const chips = [...composerEditor(pane).querySelectorAll(".mention-chip")].map(
+  const chips = [...composerEditor(pane).querySelectorAll("[data-mention-ref]")].map(
     (chip) => chip.textContent,
   );
   pressInComposer(pane, "Enter");
@@ -1801,7 +1875,7 @@ test("an answered item's note draws a mention it holds as the chip a sent messag
   act(() => rowNamed(page, "How is a failed email retried?").click());
   const note = itemPane(page).querySelector('[data-inbox-comment="answered"] [data-inbox-note]');
 
-  assert.equal(note?.querySelector(".mention-chip")?.textContent, "rollout-store.ts");
+  assert.equal(note?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
   assert.equal(note?.textContent, "See rollout-store.ts");
 });
 
@@ -2233,8 +2307,10 @@ const BUMP: InboxItem = {
 /** The header of a group in the list, by its name. */
 function headerNamed(page: HTMLElement, name: string): HTMLButtonElement {
   const header = [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-repository-toggle"),
-  ].find((each) => each.querySelector(".sidebar-repository-name")?.textContent === name);
+    ...page.querySelectorAll<HTMLButtonElement>(
+      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+    ),
+  ].find((each) => heardName(each) === name);
   assert.ok(header, `no header for ${name}`);
   return header;
 }
@@ -2268,7 +2344,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
 
   const sweep = headerNamed(page, "Nightly flake sweep");
   assert.ok(
-    sweep.querySelector('.sidebar-repository-glyph .actor-mark[data-kind="automation"]'),
+    sweep.querySelector(':scope > [aria-hidden="true"] .actor-mark[data-kind="automation"]'),
     "the automation's group wears its clock tile",
   );
   assert.match(hoveredCard(sweep, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
@@ -2284,7 +2360,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   const others = headerNamed(page, "Other agents");
   assert.ok(others.querySelector(".actor-mark") === null, "a group of agents names no actor");
   assert.ok(
-    others.querySelector(".sidebar-repository-glyph .lucide-factory"),
+    others.querySelector(':scope > [aria-hidden="true"] .lucide-factory'),
     "a group of agents wears the Factory's glyph, as the sidebar's row of every agent does",
   );
 
@@ -2503,14 +2579,14 @@ test("a link to a settled item of an agent with no plan, none of whose items wai
 
   assert.doesNotMatch(page.textContent ?? "", /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .sidebar-task-name')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
     "Bump the Node image?",
   );
 });
 
 test("an item a link names is not found though another task's read failed, and in a narrow Inbox the notice stands alone, not the list, with a way back to it", async () => {
-  startRead = (planId) =>
-    planId === BILLING.id
+  startRead = (taskId) =>
+    taskId === BILLING.id
       ? Promise.resolve({
           status: ACT_OUTCOME_STATUS.DONE,
           value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
@@ -2601,8 +2677,8 @@ test("a link to an item newer than its task's last read waits for the read of it
   await settle();
   const posted = item("a1b2c3d4-0000-4000-8000-000000000005", "Page on-call too?", 7_000);
   let land: () => void = () => undefined;
-  startRead = (planId) =>
-    planId === INVITES.id
+  startRead = (taskId) =>
+    taskId === INVITES.id
       ? new Promise((resolve) => {
           land = () =>
             resolve({
@@ -2625,15 +2701,15 @@ test("a link to an item newer than its task's last read waits for the read of it
 
   assert.doesNotMatch(waiting, /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .sidebar-task-name')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
     "Page on-call too?",
   );
 });
 
 test("an item a link names under a task whose own read fails is kept asked for, and no other task's item is chosen in its place", async () => {
   const quiet = { ...INVITES, id: "0f0e0d0c-0000-4000-8000-00000000a11f", name: "Quiet task" };
-  startRead = (planId) =>
-    planId === quiet.id
+  startRead = (taskId) =>
+    taskId === quiet.id
       ? Promise.resolve({
           status: ACT_OUTCOME_STATUS.DONE,
           value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
@@ -2674,7 +2750,7 @@ test("a link to an agent's item newer than the agent's last read waits for the r
 
   assert.doesNotMatch(waiting, /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .sidebar-task-name')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
     "Retry the flaky job?",
   );
 });
@@ -2696,4 +2772,416 @@ test("an item a link names under an agent nothing waits on any more, read before
   await settle();
 
   assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+});
+
+/** A teammate of the reader's, who writes on a thread. */
+const TEAMMATE = { userId: "user-teammate", name: "Charles Pan" };
+
+/** One message on a thread, by `author`, its words and when. */
+function threadMessage(
+  id: string,
+  author: { readonly member: typeof READER } | "agent",
+  text: string,
+  createdAt: number,
+): InboxMessage {
+  return author === "agent"
+    ? { id, author: INBOX_MESSAGE_AUTHOR.AGENT, text, createdAt }
+    : { id, author: INBOX_MESSAGE_AUTHOR.MEMBER, member: author.member, text, createdAt };
+}
+
+/** The shown item's thread as a reader meets it: each comment's kind, its writer's face, its writer by name, and a message's words. */
+function threadOf(page: HTMLElement): (string | null | undefined)[][] {
+  return [...itemPane(page).querySelectorAll<HTMLElement>(".inbox-thread > li")].map((entry) => [
+    entry.dataset.inboxComment ?? (entry.dataset.inboxEarlier === undefined ? "?" : "earlier"),
+    entry.querySelector<HTMLElement>(".inbox-comment-face .actor-mark")?.dataset.kind,
+    wordsOf(entry.querySelector(".inbox-comment-name")),
+    wordsOf(entry.querySelector("[data-inbox-message-text]")),
+  ]);
+}
+
+/** Every message the pane sends, written down and answered by `answer`, the item as the service would hand it back by default. */
+function heldMessages(
+  answer: (params: CodingAgentInboxMessageParams) => CodingAgentInboxMessagedView,
+): CodingAgentInboxMessageParams[] {
+  const sent: CodingAgentInboxMessageParams[] = [];
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return bridge.act(request);
+      sent.push(request.payload);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer(request.payload) });
+    },
+  });
+  return sent;
+}
+
+/** The message as the service answers it: written on the thread by the reader, the item otherwise as it stood. */
+function writtenOn(item: InboxItem, id: string) {
+  return (params: CodingAgentInboxMessageParams): CodingAgentInboxMessagedView => ({
+    item: {
+      ...item,
+      updatedAt: 9_000,
+      messages: [
+        ...(item.messages ?? []),
+        {
+          ...threadMessage(id, { member: READER }, params.text, 9_000),
+          ...(params.attachments === undefined
+            ? undefined
+            : {
+                files: params.attachments.map((file, at) => ({
+                  attachmentId: `a1b2c3d4-0000-4000-8000-0000000000${String(70 + at)}`,
+                  name: file.name,
+                  mediaType: file.mediaType,
+                })),
+              }),
+        },
+      ],
+    },
+  });
+}
+
+test("a thread draws its messages after the question in the order they were written, the answer among them: a teammate's by their face and name, the reader's own as You, and the agent's by its tile and name, their mentions as chips", async () => {
+  const file = mentionMarkdown(
+    { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" },
+    "rollout-store.ts",
+    { workspace: BILLING.workspaceId, repository: "acme/relay" },
+  );
+  const threaded: InboxItem = {
+    ...RETRY,
+    updatedAt: 5_300,
+    messages: [
+      threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000001",
+        { member: TEAMMATE },
+        "Should it page at night too?",
+        4_500,
+      ),
+      threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000002",
+        "agent",
+        "Only in business hours.",
+        5_100,
+      ),
+      threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000003",
+        { member: READER },
+        `See ${file}`,
+        5_200,
+      ),
+    ],
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, threaded]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+
+  assert.deepEqual(threadOf(page), [
+    ["asked", "agent", "Alerts", null],
+    ["message", "person", "Charles Pan", "Should it page at night too?"],
+    ["answered", "person", "You", null],
+    ["message", "agent", "Alerts", "Only in business hours."],
+    ["message", "person", "You", "See rollout-store.ts"],
+  ]);
+  const mine = itemPane(page).querySelectorAll('[data-inbox-comment="message"]')[2];
+  assert.equal(mine?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
+});
+
+test("a message written on a settled item's thread from its box goes as a message, never an answer, and lands on the thread in place, scrolled into view, the item still answered and the box emptied", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  const answers = heldAnswers();
+  const sent = heldMessages(writtenOn(RETRY, "c1b2c3d4-0000-4000-8000-000000000010"));
+  const pane = itemPane(page);
+  const board = pane.querySelector<HTMLElement>(".inbox-board") ?? assert.fail("the thread");
+  // The thread is taller than its board, so the new comment lands under its foot.
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this === board) return DOMRect.fromRect({ y: 0, height: 400 });
+    if (this.matches("[data-message-id]")) return DOMRect.fromRect({ y: 900, height: 60 });
+    return DOMRect.fromRect();
+  });
+
+  typeInComposer(pane, "Page on-call at night too.");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ itemId, text, attachments }) => ({ itemId, text, attachments })),
+    [{ itemId: RETRY.id, text: "Page on-call at night too.", attachments: undefined }],
+  );
+  assert.deepEqual(answers, [], "the item is not answered again");
+  assert.deepEqual(threadOf(page).at(-1), [
+    "message",
+    "person",
+    "You",
+    "Page on-call at night too.",
+  ]);
+  assert.deepEqual(subjectOf(page), ["How is a failed email retried?", "Answered", false]);
+  assert.equal(composerEditor(pane).textContent, "", "the box lets its words go");
+  assert.equal(board.scrollTop, 560, "the board scrolls its own new comment's foot into view");
+});
+
+test("a message refused says why under the box, which keeps its words, and leaves nothing on the thread", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  heldMessages(() => ({ failure: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED }));
+  const pane = itemPane(page);
+
+  typeInComposer(pane, "Page on-call at night too.");
+  act(() => pane.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.click());
+  await settle();
+
+  assert.equal(
+    pane.querySelector('.agent-composer [role="alert"]')?.textContent,
+    "This task is archived. Unarchive it first.",
+  );
+  assert.equal(pane.querySelector('[data-inbox-comment="message"]'), null);
+  assert.equal(composerEditor(pane).textContent, "Page on-call at night too.");
+  assert.deepEqual(subjectOf(page), ["How is a failed email retried?", "Answered", false]);
+});
+
+test("files alone make a message: sent from a settled item's box with no words, and drawn on the thread as the files alone", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  const sent = heldMessages(writtenOn(RETRY, "c1b2c3d4-0000-4000-8000-000000000020"));
+  const pane = itemPane(page);
+  const send = () =>
+    pane.querySelector<HTMLButtonElement>('button[aria-label="Send"]') ?? assert.fail("no Send");
+  assert.equal(send().disabled, true, "an empty box sends nothing");
+
+  await handFiles(page, [new File(["boom\n"], "trace.txt", { type: "text/plain" })], "pick");
+  act(() => send().click());
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ text, attachments }) => ({ text, attachments })),
+    [
+      {
+        text: "",
+        attachments: [{ name: "trace.txt", mediaType: "text/plain", data: btoa("boom\n") }],
+      },
+    ],
+  );
+  const message =
+    pane.querySelector('[data-inbox-comment="message"]') ?? assert.fail("the message is drawn");
+  assert.deepEqual(attachedNames(message), ["trace.txt"]);
+  assert.equal(message.querySelector("[data-inbox-message-text]"), null, "no empty words");
+});
+
+test("an open item's box still answers it: its note goes as the answer and never as a message, and its thread's messages stand over it", async () => {
+  const waiting: InboxItem = {
+    ...THRESHOLD,
+    messages: [
+      threadMessage(
+        "c1b2c3d4-0000-4000-8000-000000000030",
+        { member: TEAMMATE },
+        "Is 80% too eager?",
+        2_500,
+      ),
+    ],
+  };
+  inboxes = new Map([
+    [BILLING.id, [waiting, RETRY]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  const answers = heldAnswers();
+  const messages = heldMessages(writtenOn(waiting, "c1b2c3d4-0000-4000-8000-000000000031"));
+  const pane = itemPane(page);
+  assert.deepEqual(threadOf(page), [
+    ["asked", "agent", "Alerts", null],
+    ["message", "person", "Charles Pan", "Is 80% too eager?"],
+  ]);
+  assert.equal(
+    composerEditor(pane).getAttribute("aria-label"),
+    "Add a note, or answer in your own words",
+  );
+
+  typeInComposer(pane, "Use 90%");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    answers.map(({ itemId, reply, note }) => ({ itemId, reply, note })),
+    [{ itemId: THRESHOLD.id, reply: INBOX_REPLY.ANSWERED, note: "Use 90%" }],
+  );
+  assert.deepEqual(messages, []);
+});
+
+test("a thread read cut to its latest messages says the earlier ones are in the agent's tab, the agent's name opening it", async () => {
+  const long: InboxItem = {
+    ...RETRY,
+    messages: Array.from({ length: INBOX_BOUNDS.MAX_MESSAGES_READ }, (_, at) =>
+      threadMessage(
+        `d1b2c3d4-0000-4000-8000-${String(at).padStart(12, "0")}`,
+        { member: TEAMMATE },
+        `Note ${String(at)}`,
+        5_000 + at,
+      ),
+    ),
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, long]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page, asked } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+
+  const earlier =
+    itemPane(page).querySelector<HTMLElement>("[data-inbox-earlier]") ??
+    assert.fail("the cut is said");
+  assert.equal(wordsOf(earlier), "Earlier messages are in Alerts’s tab");
+  assert.equal(threadOf(page)[1]?.[0], "earlier", "the line stands before the messages");
+  act(() => earlier.querySelector<HTMLButtonElement>("button")?.click());
+  assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+});
+
+test("an answer left unsent on an item a teammate answers meanwhile is let go rather than becoming a message, and a message being written on a settled item outlasts the reads after it", async () => {
+  let deliver: (outcome: ReadOutcome) => void = () => undefined;
+  heldRead = () =>
+    new Promise((resolve) => {
+      deliver = resolve;
+    });
+  const { page } = mount();
+  await settle();
+  const pane = itemPane(page);
+  assert.equal(readTitle(page), "Alert at 80%?");
+  typeInComposer(pane, "Use 90%");
+  await settle();
+
+  const answered: InboxItem = {
+    ...THRESHOLD,
+    status: INBOX_STATUS.ANSWERED,
+    answeredBy: TEAMMATE,
+    answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] },
+    settledAt: 3_500,
+    updatedAt: 3_500,
+  };
+  act(() =>
+    deliver({ status: ACT_OUTCOME_STATUS.DONE, value: { items: [answered, RETRY], cursor: "2" } }),
+  );
+  await settle();
+  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Message Alerts…");
+  assert.equal(composerEditor(pane).textContent, "", "the unsent answer is not a message");
+
+  typeInComposer(pane, "Thanks, Charles.");
+  await settle();
+  act(() =>
+    deliver({ status: ACT_OUTCOME_STATUS.DONE, value: { items: [answered, RETRY], cursor: "3" } }),
+  );
+  await settle();
+  assert.equal(composerEditor(pane).textContent, "Thanks, Charles.");
+});
+
+/** A row's two lines as a reader meets them: whether its first holds its title and its time, and the muted words of its second. */
+function rowLines(page: HTMLElement, title: string): [boolean, string | null | undefined] {
+  const row = rowNamed(page, title);
+  const head = row.querySelector(".luke-list-row-head");
+  const first =
+    head?.querySelector(ROW_TITLE)?.textContent === title && head.querySelector("time") !== null;
+  return [first, row.querySelector(".luke-list-row-description")?.textContent];
+}
+
+test("an item's row reads as two lines, its title and time over the last word in its thread: what an open item asks, an answer by who gave it, You for the reader, a teammate's latest message by their name, and why its agent took one back", async () => {
+  const NIGHT: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000004", "Page on-call at night?", 2_000),
+    response: { type: INBOX_RESPONSE.TODO },
+    blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "Add the **rota** to PagerDuty." }],
+  };
+  const SEV: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000005", "Which incidents page?", 1_500),
+    startedBy: TEAMMATE,
+    messages: [
+      threadMessage("a1b2c3d4-0000-4000-8000-000000000051", "agent", "Asked on #oncall.", 1_200),
+      threadMessage(
+        "a1b2c3d4-0000-4000-8000-000000000052",
+        { member: TEAMMATE },
+        "Only **sev1**,\nnever sev2.",
+        1_500,
+      ),
+    ],
+  };
+  inboxes.set(BILLING.id, [THRESHOLD, RETRY, NIGHT, SEV]);
+  inboxes.set(INVITES.id, [
+    { ...EXPIRY, status: INBOX_STATUS.CLOSED, closedReason: "The plan now says 7 days." },
+  ]);
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(rowLines(page, "Alert at 80%?"), [true, "Choice · 2 options, one recommended"]);
+  assert.deepEqual(rowLines(page, "How is a failed email retried?"), [
+    true,
+    "You: Retry 3 times over an hour · And page on-call if all three fail.",
+  ]);
+  assert.deepEqual(rowLines(page, "Page on-call at night?"), [
+    true,
+    "To-do · Add the rota to PagerDuty.",
+  ]);
+  assert.deepEqual(rowLines(page, "Which incidents page?"), [
+    true,
+    "Charles Pan: Only sev1, never sev2.",
+  ]);
+  assert.deepEqual(rowLines(page, "Expire after 7 days?"), [
+    true,
+    "Withdrawn: The plan now says 7 days.",
+  ]);
+});
+
+test("the attention mark stands before the time on the reader's own open item alone: a teammate's open item wears their face there with no mark and no ring, saying to a reader that it waits on them, a settled one wears neither, and none is drawn in the unread weight", async () => {
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
+  const { page } = mount();
+  await settle();
+  const ends = (title: string) => {
+    const row = rowNamed(page, title);
+    const meta = row.querySelector(".luke-list-row-meta");
+    return {
+      mark: meta?.querySelector(".attention-mark") !== null,
+      face: meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
+      said: meta?.querySelector(".visually-hidden")?.textContent,
+      dot: row.querySelector(".inbox-row-dot") !== null,
+      unread: row.closest("li")?.dataset.unread === "true",
+    };
+  };
+  assert.deepEqual(ends("Expire after 7 days?"), {
+    mark: true,
+    face: undefined,
+    said: "Needs you",
+    dot: false,
+    unread: false,
+  });
+  assert.deepEqual(ends("Alert at 80%?"), {
+    mark: false,
+    face: "person",
+    said: "Waiting on Charles Pan",
+    dot: false,
+    unread: false,
+  });
+  assert.deepEqual(ends("How is a failed email retried?"), {
+    mark: false,
+    face: undefined,
+    said: undefined,
+    dot: false,
+    unread: false,
+  });
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "Alert at 80%?",
+    "# Invites",
+    "▸ *Expire after 7 days?",
+  ]);
 });

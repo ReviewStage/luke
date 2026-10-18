@@ -164,7 +164,6 @@ function answer(request: Act): ActOutcome {
 /** The words drawn as the Inbox draws them, off any task's page, in the workspace given. */
 async function drawn(text: string): Promise<HTMLElement> {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(STATE),
     act: (request: Act): Promise<ActOutcome> => {
@@ -254,7 +253,7 @@ test("chips of agents off their task's page read nothing as they are drawn", asy
 test("an agent on another task hangs its tab's card, its task's agents read once as it is hung, naming the task it works on", async () => {
   const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
 
-  const card = await cardOf(container.querySelector(".mention-chip") ?? undefined);
+  const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
 
   assert.equal(card.tab, true, "the card is the agent's tab's own");
   assert.equal(card.name, "Prorate seat changes");
@@ -279,7 +278,7 @@ test("an agent on no task is found by the name its chip was written with, else a
       mentionOf(agentOf("0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c", { planId: null }), "Gone"),
     ].join(" "),
   );
-  const [searched, newest, byId, gone] = container.querySelectorAll(".mention-chip");
+  const [searched, newest, byId, gone] = container.querySelectorAll("[data-mention-ref]");
 
   const sweeper = await cardOf(searched);
   const auditor = await cardOf(newest);
@@ -318,7 +317,7 @@ test("where the read answers nothing, the chip's own card says where the agent w
   answering = false;
   const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
 
-  const card = await cardOf(container.querySelector(".mention-chip") ?? undefined);
+  const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
 
   assert.equal(card.tab, false);
   assert.match(card.words ?? "", /A coding agent on another task/u);
@@ -328,7 +327,7 @@ test("two chips of one task's agents hung one after the other share the task's r
   const container = await drawn(
     `${mentionOf(PRORATE, "Prorate")} then ${mentionOf(PRORATE, "the prorater")}.`,
   );
-  const [first, second] = container.querySelectorAll(".mention-chip");
+  const [first, second] = container.querySelectorAll("[data-mention-ref]");
 
   act(() => {
     first?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));

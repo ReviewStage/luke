@@ -9,16 +9,21 @@ import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { TRANSCRIPT_SPEAKER, type TranscriptSpeaker } from "@luke/live";
+import { EXPERIMENT } from "@luke/settings";
+import { experimentsOn } from "@luke/settings/testing";
 import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "@luke/voice/transcript-model";
 import { TURN_ORIGIN } from "@luke/wire";
 import type { UIMessage } from "ai";
 import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { handState } from "#testing/app-state";
+import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { conversationOf, toolCall, words, worker, workerCall, workTurn } from "#testing/task-work";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -357,7 +362,7 @@ test("on the Call tab, a show_code row says its lines as the Code tab's card say
   head.innerHTML = renderToStaticMarkup(
     createElement(CodeCardHeader, { codeRef: ref, note, copied: undefined, onOpen: undefined }),
   );
-  const lines = head.querySelector(".file-ref-lines")?.textContent;
+  const lines = head.querySelector(".luke-inline-ref-state")?.textContent;
   assert.equal(lines, "Lines 3–5");
   const row = page.querySelector<HTMLElement>('button[data-call-id="c"]');
   assert.ok(row, "the row opens the file");
@@ -405,13 +410,15 @@ function spoken(id: string, role: TranscriptSpeaker, text: string): UIMessage {
 function seen(ref: Element | null): readonly (string | undefined)[] | undefined {
   if (!(ref instanceof HTMLElement)) return undefined;
   const picture = ref.querySelector("img")?.getAttribute("src") ?? undefined;
-  const named = [ref.dataset.kind, ref.querySelector(".actor-ref-name")?.textContent ?? undefined];
+  const named = [
+    ref.dataset.kind,
+    ref.querySelector(".luke-inline-ref-label")?.textContent ?? undefined,
+  ];
   return picture === undefined ? named : [...named, picture];
 }
 
 test("a teammate's call is headed with their face and name, their lines carry it and Luke's carry his, and the reader's own call names nobody", async () => {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (request: Act): Promise<ActOutcome> =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
@@ -451,10 +458,10 @@ test("a teammate's call is headed with their face and name, their lines carry it
     });
     const divider = page.querySelector("[data-checkpoint]");
     return {
-      heading: seen(divider?.querySelector(".actor-ref") ?? null),
+      heading: seen(divider?.querySelector("[data-actor-ref]") ?? null),
       line: divider?.textContent ?? "",
       senders: [...page.querySelectorAll(".message-sender")].map((each) =>
-        seen(each.querySelector(".actor-ref")),
+        seen(each.querySelector("[data-actor-ref]")),
       ),
     };
   };
@@ -475,4 +482,42 @@ test("a teammate's call is headed with their face and name, their lines carry it
   assert.doesNotMatch(own.line, /call/u);
   assert.deepEqual(own.senders, []);
   fakeAppBridge({});
+});
+
+test("on the Call tab, a chat call's row opens the task's Chat while the account has Chat on, and folds open while it is off", async () => {
+  const turn = workTurn(TASK_WORK_STATE.DONE, [
+    toolCall(
+      "post_chat",
+      "p",
+      { text: "Taking the invite table." },
+      { output: { status: "accepted" } },
+    ),
+  ]);
+  const conversation = conversationOf([turn]);
+  const drawn = async (on: boolean) => {
+    handState(on ? experimentsOn(EXPERIMENT.CHAT) : {});
+    const opened: ToolTarget[] = [];
+    const page = mounted(
+      onRegistry(
+        AtomRegistry.make(),
+        callTab({ region: said(0), conversation, onOpenTarget: (target) => opened.push(target) }),
+      ),
+    );
+    await act(async () => {
+      for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+    });
+    for (const fold of page.querySelectorAll<HTMLElement>("details > summary")) {
+      act(() => fold.click());
+    }
+    return { page, opened };
+  };
+  const on = await drawn(true);
+  const row = on.page.querySelector<HTMLButtonElement>('button[data-call-id="p"]');
+  assert.ok(row, "the row opens Chat");
+  act(() => row.click());
+  assert.deepEqual(on.opened, [{ kind: TOOL_TARGET.CHAT }]);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const off = await drawn(false);
+  assert.equal(off.page.querySelector('button[data-call-id="p"]'), null);
 });

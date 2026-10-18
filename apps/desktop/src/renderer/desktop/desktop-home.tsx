@@ -1,10 +1,22 @@
 import type { TaskSummary } from "@luke/features/task-wire";
-import { ErrorState, FolderIcon, WingFace } from "@luke/ui";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import {
+  BUTTON_VARIANT,
+  Button,
+  ErrorState,
+  FolderIcon,
+  List,
+  ListRow,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  WingFace,
+} from "@luke/ui";
 import { teammateCreator } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { useState } from "react";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { RepositoryPicture } from "../repository-picture";
@@ -33,9 +45,8 @@ import { useRowKeys } from "./use-row-keys";
  * greeting with New task beside it, then Inbox, every open Inbox item of the
  * workspace listed, a teammate's agent's among them, as the Inbox's own row draws it, the
  * task it is about after its title, a press opening the Inbox on it; then
- * Recent, the tasks of the workspace listed saved latest, each as the
- * sidebar draws a task, with its repository after its name, a press opening
- * it. Nothing waiting says so in the Inbox's own words. An account with no plan
+ * Recent, the tasks of the workspace listed saved latest, each a `ListRow`
+ * with its repository at its end before its time, a press opening it. Nothing waiting says so in the Inbox's own words. An account with no plan
  * yet in any workspace is welcomed instead: Luke's face, one line of what he does, and New
  * task. Nothing here names the sidebar, which may be folded away.
  *
@@ -60,29 +71,28 @@ function greeting(name: string | undefined): string {
 }
 
 /** The workspace's plans with the latest activity, their own saves and their agents' alike, the archived left out. */
-function recentTasks(plans: readonly TaskSummary[]): TaskSummary[] {
-  return orderTasks(plans, TASK_ORDER.UPDATED).slice(0, RECENT_COUNT);
+function recentTasks(tasks: readonly TaskSummary[]): TaskSummary[] {
+  return orderTasks(tasks, TASK_ORDER.UPDATED).slice(0, RECENT_COUNT);
 }
 
 /** New task, with its chord: the home page's, and the empty Factory's (`desktop-factory.tsx`). */
-function NewTaskButton({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
+function NewTaskButton({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="primary-button"
+    <Button
+      variant={BUTTON_VARIANT.PRIMARY}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_TASK)}
-      disabled={!plans.signedIn}
-      onClick={plans.onNewTask}
+      disabled={!tasks.signedIn}
+      onClick={tasks.onNewTask}
     >
       New task
       <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} />
-    </button>
+    </Button>
   );
 }
 
-/** A plan as the sidebar draws it, its repository after its name: the owner's picture, the name, the repository, and its mark and time, led by its creator's face where a teammate created it. */
+/** A plan as a `ListRow`: the owner's picture, the name, and at its end the repository, its creator's face where a teammate created it, and its mark and time. */
 export function RecentRow({
-  task: plan,
+  task,
   pictures,
   now,
   face = true,
@@ -95,34 +105,35 @@ export function RecentRow({
   face?: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
-  const teammate = teammateCreator(plan, useMemberDirectory());
+  const teammate = teammateCreator(task, useMemberDirectory());
   const creator = face ? teammate : undefined;
   return (
-    <li className="sidebar-task-item home-row">
-      <button type="button" className="sidebar-task" onClick={onOpen}>
-        <span className="sidebar-task-line">
-          <span className="home-row-picture">
-            {plan.repository === null ? (
-              <FolderIcon />
-            ) : (
-              <RepositoryPicture
-                repository={plan.repository}
-                pictures={pictures}
-                fallback={<FolderIcon />}
-              />
-            )}
-          </span>
-          <span className="sidebar-task-name">{plan.name}</span>
-          <span className="home-row-context">{plan.repository ?? "No repository"}</span>
-          {creator === undefined ? null : <CreatorHeard actor={creator} />}
-          <span className="sidebar-task-time">
-            {creator === undefined ? null : <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />}
-            <TaskStatusMark task={plan} />
-            <RelativeTime at={taskTime(plan, TASK_ORDER.UPDATED)} now={now} />
-          </span>
+    <ListRow
+      leading={
+        <span className="home-row-picture">
+          {task.repository === null ? (
+            <FolderIcon />
+          ) : (
+            <RepositoryPicture
+              repository={task.repository}
+              pictures={pictures}
+              fallback={<FolderIcon />}
+            />
+          )}
         </span>
-      </button>
-    </li>
+      }
+      title={task.name}
+      meta={
+        <span className="home-row-meta">
+          <span className="home-row-context">{task.repository ?? "No repository"}</span>
+          {creator === undefined ? null : <CreatorHeard actor={creator} />}
+          {creator === undefined ? null : <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />}
+          <TaskStatusMark task={task} />
+          <RelativeTime at={taskTime(task, TASK_ORDER.UPDATED)} now={now} />
+        </span>
+      }
+      onPress={onOpen}
+    />
   );
 }
 
@@ -133,16 +144,10 @@ export function RecentRow({
  * the place a press on a row opens, and says it holds nothing waiting in the
  * Inbox's own words.
  */
-function HomeInbox({
-  tasks: plans,
-  now,
-}: {
-  tasks: TasksControl;
-  now: number;
-}): React.JSX.Element | null {
-  const read = useWaitingItems(plans);
-  const waiting = { ...read, items: read.items.filter(({ item }) => needsReader(item, plans.me)) };
-  const { inboxView } = plans;
+function HomeInbox({ tasks, now }: { tasks: TasksControl; now: number }): React.JSX.Element | null {
+  const read = useWaitingItems(tasks);
+  const waiting = { ...read, items: read.items.filter(({ item }) => needsReader(item, tasks.me)) };
+  const { inboxView } = tasks;
   const open = ({ holder, item }: InboxListed) => {
     inboxView.onOpen();
     inboxView.onChoose(
@@ -153,7 +158,7 @@ function HomeInbox({
   };
   const empty = waiting.items.length === 0;
   // Note that a refused list read says nothing here, because what waits hangs on the list, which Recent says could not be read.
-  if (empty && plans.listFailed) return null;
+  if (empty && tasks.listFailed) return null;
   return (
     <section className="home-section" aria-labelledby="home-inbox">
       <h2 className="home-section-title" id="home-inbox">
@@ -168,8 +173,8 @@ function HomeInbox({
               listed={listed}
               chosen={false}
               now={now}
-              models={plans.agents.models}
-              readerId={plans.me}
+              models={tasks.agents.models}
+              readerId={tasks.me}
               context={holderName(listed.holder)}
               onChoose={open}
             />
@@ -177,13 +182,15 @@ function HomeInbox({
         </ul>
       )}
       {waiting.failed ? (
-        <div className="sidebar-note">
+        <div className="home-note">
           <ErrorState onRetry={waiting.onRetry}>Some items could not be read.</ErrorState>
         </div>
       ) : empty && waiting.reading ? (
         <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
       ) : empty ? (
-        <p className="sidebar-note">{NEEDS_YOU.NONE}</p>
+        <div className="home-note">
+          <Text tone={TEXT_TONE.MUTED}>{NEEDS_YOU.NONE}</Text>
+        </div>
       ) : null}
     </section>
   );
@@ -191,36 +198,36 @@ function HomeInbox({
 
 /** Recent: the plans saved latest, under a refused read's Retry where the list could not be read, and nothing where neither stands. */
 function HomeRecent({
-  tasks: plans,
+  tasks,
   now,
 }: {
   tasks: TasksControl;
   now: number;
 }): React.JSX.Element | null {
-  const recent = recentTasks(plans.listed.tasks);
-  if (recent.length === 0 && !plans.listFailed) return null;
+  const recent = recentTasks(tasks.listed.tasks);
+  if (recent.length === 0 && !tasks.listFailed) return null;
   return (
     <section className="home-section" aria-labelledby="home-recent">
       <h2 className="home-section-title" id="home-recent">
         Recent
       </h2>
-      {plans.listFailed ? (
-        <div className="sidebar-note">
-          <ErrorState onRetry={plans.onRetryList}>{UNREAD_LINE}</ErrorState>
+      {tasks.listFailed ? (
+        <div className="home-note">
+          <ErrorState onRetry={tasks.onRetryList}>{UNREAD_LINE}</ErrorState>
         </div>
       ) : null}
       {recent.length === 0 ? null : (
-        <ul className="sidebar-tasks">
-          {recent.map((plan) => (
+        <List label="Recent">
+          {recent.map((task) => (
             <RecentRow
-              key={plan.id}
-              task={plan}
-              pictures={plans.repositories.pictures}
+              key={task.id}
+              task={task}
+              pictures={tasks.repositories.pictures}
               now={now}
-              onOpen={() => plans.onSelect(plan.id)}
+              onOpen={() => tasks.onSelect(task.id)}
             />
           ))}
-        </ul>
+        </List>
       )}
     </section>
   );
@@ -233,7 +240,9 @@ function Welcome({ tasks }: { tasks: TasksControl }): React.JSX.Element {
       <span className="home-welcome-face" aria-hidden="true">
         <WingFace />
       </span>
-      <h1 className="home-title">Start your first task</h1>
+      <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
+        Start your first task
+      </Text>
       <NewTaskButton tasks={tasks} />
     </section>
   );
@@ -265,7 +274,9 @@ export function DesktopHome({
       <div className="home-scroll scroll-fade-top">
         <div className="home-column" ref={setColumn}>
           <header className="home-head">
-            <h1 className="home-title">{greeting(accountName)}</h1>
+            <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
+              {greeting(accountName)}
+            </Text>
             <NewTaskButton tasks={tasks} />
           </header>
           <HomeInbox tasks={tasks} now={now} />

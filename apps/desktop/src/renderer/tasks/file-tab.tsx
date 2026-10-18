@@ -1,13 +1,17 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
-import { ERROR_STATE_PLACEMENT, ErrorState, type ErrorStatePlacement } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  type ErrorStatePlacement,
+  RetryRowLabel,
+} from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { useFindOpen } from "../find-in-tab";
-import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SpinnerRegion } from "../spinner";
 import { CodeLineRows, centreWithin } from "./code-pane";
 import { type FileNotes, notesBefore } from "./file-note";
@@ -25,7 +29,7 @@ import {
   withWindow,
 } from "./file-tab-model";
 import { useFileViewSettings } from "./file-view-settings";
-import { useMentionDrop, usePlanMentions } from "./plan-mentions";
+import { useMentionDrop, useTaskMentions } from "./task-mentions";
 import type { OpenFile } from "./use-side-panel";
 
 /**
@@ -303,7 +307,7 @@ export function FileTab({
 }): React.JSX.Element {
   const [read, setRead] = useState<FileRead>({ kind: FILE_READ.READING });
   const tab = useRef<HTMLElement>(null);
-  const page = usePlanMentions();
+  const page = useTaskMentions();
   const drop = useMentionDrop();
   const held = useRef<FileRead>(read);
   held.current = read;

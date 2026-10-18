@@ -14,7 +14,6 @@
  * swipe hands the window the same way) leaves the page behind it alone.
  */
 
-import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -24,8 +23,9 @@ import {
   type KeyedCommand,
   shortcutEditsText,
   shortcutLayered,
-} from "#shared/shortcuts";
-import { appBridge } from "./app-bridge";
+} from "@luke/settings/shortcuts";
+import { useEffect, useLayoutEffect, useRef } from "react";
+import { appPlatform } from "./app-platform";
 
 type CommandRun = { current: () => void };
 
@@ -138,7 +138,7 @@ export function useAppKeymap(enabled: boolean): void {
 export function useMenuCommands(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
-    return appBridge().onMenuCommand((command) => {
+    return appPlatform().onMenuCommand((command) => {
       if (HELD_UNDER_OVERLAY.has(command) && overlayStands()) return;
       runAppCommand(command);
     });

@@ -181,6 +181,10 @@ export const CODING_AGENT_FAILURE = {
   FAST_ON_OWN_KEY: "fast_own_key",
   /** The provider refused fast mode for the organization of the key the step ran on. */
   FAST_NOT_ENABLED: "fast_not_enabled",
+  /** The provider refused the step's prompt as longer than the model's context window. */
+  CONTEXT_OVERFLOW: "context_overflow",
+  /** The agent's session ended for good while its turn ran, and eve no longer runs it: nothing reaches it again, and only a new agent, a continue of it among them, goes on. */
+  SESSION_ENDED: "session_ended",
   OTHER: "other",
 } as const;
 
@@ -327,12 +331,29 @@ export const disabledServersSchema = EffectSchema.Array(
  * The agent a Start takes over from, on the same plan: everything it did
  * where no message is named, which is a continue, or its transcript up to
  * and including one of its own assistant messages, by that message's id as
- * its transcript carries it, which is a fork.
+ * its transcript carries it, which is a fork. A fork of a reply still being
+ * written names where the developer saw it end as they pressed Fork: how
+ * many of that message's steps had begun, and how many words and calls the
+ * last of them held, so the cut keeps those and nothing the agent wrote
+ * after; a fork naming none keeps the message whole, as a desktop before
+ * the count asked.
  */
 const codingAgentStartFromSchema = EffectSchema.Struct({
   agentId: wireUuidSchema,
   messageId: EffectSchema.optionalKey(wireUuidSchema),
-});
+  messageSteps: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  ),
+  messageStepParts: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
+  ),
+}).check(
+  EffectSchema.makeFilter(
+    ({ messageId, messageSteps, messageStepParts }) =>
+      (messageSteps === undefined || messageId !== undefined) &&
+      (messageStepParts === undefined || messageSteps !== undefined),
+  ),
+);
 
 export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
 
@@ -602,7 +623,10 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   automationName: EffectSchema.optionalKey(EffectSchema.String),
   /**
    * The agent this one was started from, on the same plan, and the message
-   * of its it was forked at where it was forked rather than continued, with
+   * of its it was forked at where it was forked rather than continued, and
+   * how many of that message's steps it kept, and of the last of them how
+   * many words and calls, where it was forked while that message was still
+   * written, with
    * how many of that agent's steps its replay kept of how many there were,
    * and the branch that agent's work was copied to for this one where it
    * could be; absent for an agent started afresh, and from a service before it.
@@ -611,10 +635,29 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
     EffectSchema.Struct({
       agentId: wireUuidSchema,
       messageId: EffectSchema.optionalKey(wireUuidSchema),
+      messageSteps: EffectSchema.optionalKey(countedNumber),
+      messageStepParts: EffectSchema.optionalKey(countedNumber),
       steps: countedNumber,
       totalSteps: countedNumber,
       branch: EffectSchema.optionalKey(EffectSchema.String),
     }),
+  ),
+  /**
+   * The agents started from this one, oldest first, archived ones among
+   * them: each by its id and its title, null where it has none yet, whether
+   * it forked this one at a message rather than continuing it, and that
+   * message where it did; absent where none was, and from a service before
+   * it.
+   */
+  continuedBy: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.Struct({
+        agentId: wireUuidSchema,
+        title: EffectSchema.NullOr(EffectSchema.String),
+        forked: EffectSchema.Boolean,
+        messageId: EffectSchema.optionalKey(wireUuidSchema),
+      }),
+    ),
   ),
 });
 
@@ -949,6 +992,10 @@ export const OVERVIEW_BOUNDS = {
   MAX_THREADS: 100,
   /** The most comments of one review thread a read carries, its first kept, the rest counted. */
   MAX_THREAD_COMMENTS: 50,
+  /** The most labels one read carries; GitHub allows a hundred on a pull request. */
+  MAX_LABELS: 100,
+  /** The most pull requests of a stack one read names, the pull request itself among them. */
+  MAX_STACK: 30,
 } as const;
 
 /** The side of a diff a review thread's line counts on: the old file's, or the new file's. */
@@ -1073,6 +1120,35 @@ const conversationEntrySchema = EffectSchema.Struct({
 
 export type ConversationEntry = typeof conversationEntrySchema.Type;
 
+/** A label on a pull request: its name, and its colour as GitHub spells it, six hex digits with no `#`. */
+const pullRequestLabelSchema = EffectSchema.Struct({
+  name: overviewName,
+  color: EffectSchema.String,
+});
+
+export type PullRequestLabel = typeof pullRequestLabelSchema.Type;
+
+/** The agent whose pull request one of a stack is: its id, and its plan's, null for an agent on none. */
+const stackAgentSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  taskId: EffectSchema.NullOr(wireUuidSchema),
+});
+
+/**
+ * One open pull request of the stack a pull request stands in: its number,
+ * title, and page; whether it is a draft; and the agent of the workspace
+ * whose branch is its head, where one is.
+ */
+const stackEntrySchema = EffectSchema.Struct({
+  number: countedNumber,
+  title: EffectSchema.String,
+  url: EffectSchema.String,
+  draft: EffectSchema.Boolean,
+  agent: EffectSchema.optionalKey(stackAgentSchema),
+});
+
+export type PullRequestStackEntry = typeof stackEntrySchema.Type;
+
 /**
  * The pull request itself as its Pull request tab's overview draws it (GET),
  * the first of the overview's three reads, each of which lands on its own:
@@ -1080,8 +1156,11 @@ export type ConversationEntry = typeof conversationEntrySchema.Type;
  * renders it (`body_html`), empty where it has none; the branch it merges
  * into and the one it merges from; when it was opened, and merged where it
  * was; whether it would merge as it stands; who opened it, who the agent
- * writes as on GitHub, and who it still asks for a review. Null where the
- * agent has opened none yet, or the repository no longer holds it.
+ * writes as on GitHub, and who it still asks for a review; its labels; and,
+ * while it is open, the stack it stands in, base first and itself among it,
+ * empty where it stands in none. Its labels and its stack are absent from a
+ * service before them. Null where the agent has opened none yet, or the
+ * repository no longer holds it.
  */
 export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
@@ -1102,6 +1181,16 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
       ),
       requested: EffectSchema.Array(githubPersonSchema).check(
         EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
+      ),
+      labels: EffectSchema.optionalKey(
+        EffectSchema.Array(pullRequestLabelSchema).check(
+          EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_LABELS),
+        ),
+      ),
+      stack: EffectSchema.optionalKey(
+        EffectSchema.Array(stackEntrySchema).check(
+          EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_STACK),
+        ),
       ),
     }),
   ),
@@ -1331,6 +1420,21 @@ const codingAgentSenderSchema = EffectSchema.Struct({
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_SENDER))),
   /** That another coding agent of the workspace sent it, by its name; absent for any other sender and from a service older than it. */
   agent: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /**
+   * The catalog id of the model that agent ran on when it sent the line,
+   * which the window reads its harness's mark off; absent for any other
+   * sender, for an agent's line sent before it was kept, and from a service
+   * older than it.
+   */
+  model: EffectSchema.optionalKey(recordedChoice),
+  /**
+   * That agent's id, which the window opens its tab and reads its card by;
+   * absent for any other sender, for an agent's line sent before it was
+   * kept, once that agent is gone, and from a service older than it.
+   */
+  agentId: EffectSchema.optionalKey(wireUuidSchema),
+  /** The task that agent works on, where `agentId` is given and it works on one. */
+  taskId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type CodingAgentSender = typeof codingAgentSenderSchema.Type;

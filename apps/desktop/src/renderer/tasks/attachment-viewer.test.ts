@@ -39,7 +39,7 @@ const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
 
 beforeEach(() => {
-  fakeAppBridge({ recordSurfaceEvent: () => undefined });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

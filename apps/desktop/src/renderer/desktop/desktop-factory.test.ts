@@ -22,6 +22,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl } from "#testing/tasks-control";
 import { OpenFeedbackProvider } from "../open-feedback";
@@ -105,7 +106,7 @@ const QUESTION = "Which Mercury account should payouts draw from: Operating or P
 let root: Root | undefined;
 
 beforeEach(() => {
-  fakeAppBridge({ onMenuCommand: () => () => undefined, recordSurfaceEvent: () => undefined });
+  fakeAppBridge({});
 });
 
 afterEach(() => {
@@ -128,11 +129,11 @@ interface Opened {
 function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> = {}) {
   const opened: Opened = { tasks: [], inbox: [], github: [], agents: [], feedback: [] };
   const base = tasksControl();
-  const plans = tasksControl({
+  const tasks = tasksControl({
     tasks: listed,
     listed: { tasks: listed, archived: [], inbox: [], inboxTasks: [] },
-    onSelect: (planId) => opened.tasks.push(planId),
-    onShowAgent: (_planId, agentId) => opened.agents.push(agentId),
+    onSelect: (taskId) => opened.tasks.push(taskId),
+    onShowAgent: (_taskId, agentId) => opened.agents.push(agentId),
     repositories: { ...base.repositories, openGitHub: (url) => opened.github.push(url) },
     inboxView: {
       open: false,
@@ -163,12 +164,12 @@ function mount(listed: readonly TaskSummary[], overrides: Partial<TasksControl> 
         ),
       ),
     );
-  draw(plans);
+  draw(tasks);
   /** The same page drawn again with some of its control changed, as a newer read hands it. */
-  const redraw = (patch: Partial<TasksControl>) => draw({ ...plans, ...patch });
+  const redraw = (patch: Partial<TasksControl>) => draw({ ...tasks, ...patch });
   /** The same page drawn again over another read of the task list. */
   const rerender = (next: readonly TaskSummary[]) =>
-    draw({ ...plans, tasks: next, listed: { ...plans.listed, tasks: next } });
+    draw({ ...tasks, tasks: next, listed: { ...tasks.listed, tasks: next } });
   return { page: container, opened, redraw, rerender };
 }
 
@@ -215,7 +216,7 @@ test("each plan stands in its station, and what waits on the developer leads the
   // A draft with no agents stands nowhere; Talk holds only the task on a call.
   assert.deepEqual(rows(page, "talk"), []);
   assert.equal(
-    page.querySelector('section[data-step="talk"] .factory-idle')?.textContent,
+    page.querySelector('section[data-step="talk"] > p')?.textContent,
     "No task on a call",
   );
   assert.deepEqual(rows(page, "build"), [
@@ -269,12 +270,17 @@ test("the task on the call stands in Talk however old, and with nothing standing
   const { page } = mount([old]);
   assert.equal(page.querySelector(".luke-empty-state p")?.textContent, "No agents at work");
   assert.equal(page.querySelector("section[data-step]"), null);
-  assert.equal(page.querySelector(".factory-scroll button"), null);
+  assert.deepEqual(
+    [...page.querySelectorAll("button")].filter(
+      (each) => each.closest(".desktop-toolbar") === null,
+    ),
+    [],
+  );
 });
 
 test("until the plan list is read nothing stands, not even the empty state", () => {
   const { page } = mount([], { listRead: false });
-  assert.equal(page.querySelector(".factory-scroll")?.childElementCount, 0);
+  assert.equal(page.querySelector(".factory-board")?.childElementCount, 0);
 });
 
 test("a plan list that could not be read says so, and Retry reads it again", () => {
@@ -517,7 +523,7 @@ test("a question a teammate's agent asks, which main does not count as the reade
 });
 
 /** The bridge answering a plan's Inbox read as `answer` says, counting the reads. */
-function answerInbox(answer: (planId: string) => readonly InboxItem[] | undefined) {
+function answerInbox(answer: (taskId: string) => readonly InboxItem[] | undefined) {
   const counted = { reads: 0 };
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
@@ -588,7 +594,7 @@ test("questions that could not be read say so with Retry, and the reader's own s
 });
 
 test("one plan's failed Inbox read keeps main's count for that plan alone: a question another plan's read shows answered stays gone", async () => {
-  const counted = answerInbox((planId) => (planId === BILLING.id ? [] : undefined));
+  const counted = answerInbox((taskId) => (taskId === BILLING.id ? [] : undefined));
   const other = task(7, "Invites", HOUR);
   const { page } = mount([SEARCH, BILLING, other], {
     inbox: [
@@ -703,13 +709,7 @@ test("an agent that fails while its row holds the keyboard keeps it, its row now
 
 test("a row's right-click offers Copy link, copying what a press on it opens: its task's link, its question's, its agent's, or its pull request's page", async () => {
   const copied: string[] = [];
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount([DRAFT, SEARCH, BILLING, INVITES], {
     callTaskId: DRAFT.id,
     workspace: {
@@ -777,13 +777,7 @@ test("an agent with no task stands in Build by its automation, opens its own pag
   };
   const pages: string[] = [];
   const copied: string[] = [];
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount([SEARCH], {
     workspace: {
       id: "workspace-personal",

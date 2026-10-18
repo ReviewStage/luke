@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { cn } from "@luke/ui";
+import { BUTTON_SIZE, cn, IconButton } from "@luke/ui";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import type { UIMessage } from "ai";
 import { AsyncResult } from "effect/reactivity";
@@ -41,11 +41,7 @@ export type MessageProps = HTMLAttributes<HTMLDivElement> & {
 export function Message({ className, from, ...props }: MessageProps): ReactNode {
   return (
     <div
-      className={cn(
-        "group relative flex w-full flex-col gap-1",
-        from === "user" ? "is-user ml-auto max-w-[95%] items-end justify-end" : "is-assistant",
-        className,
-      )}
+      className={cn("transcript-message", from === "user" ? "is-user" : "is-assistant", className)}
       {...props}
     />
   );
@@ -53,22 +49,27 @@ export function Message({ className, from, ...props }: MessageProps): ReactNode 
 
 export type MessageContentProps = HTMLAttributes<HTMLDivElement>;
 
+/** The words of a turn, in `.message-content` (tasks.css): plain across the column, or the developer's raised bubble. */
 export function MessageContent({ children, className, ...props }: MessageContentProps): ReactNode {
   return (
-    <div
-      className={cn(
-        "min-w-0 max-w-full space-y-2 overflow-clip [overflow-clip-margin:var(--focus-ring-room)] text-[13px] leading-relaxed text-foreground",
-        "group-[.is-user]:w-fit group-[.is-user]:rounded-xl group-[.is-user]:bg-secondary group-[.is-user]:px-[11px] group-[.is-user]:py-[7px]",
-        className,
-      )}
-      {...props}
-    >
+    <div className={cn("message-content", className)} {...props}>
       {children}
     </div>
   );
 }
 
-export type MessageActionsProps = ComponentProps<"div">;
+/** Where a message's actions stand: floated on a card over its corner, or set in the line under it. */
+export const MESSAGE_ACTIONS_PLACEMENT = {
+  FLOATING: "floating",
+  INLINE: "inline",
+} as const;
+
+export type MessageActionsPlacement =
+  (typeof MESSAGE_ACTIONS_PLACEMENT)[keyof typeof MESSAGE_ACTIONS_PLACEMENT];
+
+export type MessageActionsProps = Omit<ComponentProps<"div">, "className"> & {
+  placement?: MessageActionsPlacement;
+};
 
 /**
  * The actions on a message, shown while the pointer rests on the message
@@ -79,50 +80,41 @@ export type MessageActionsProps = ComponentProps<"div">;
  * a turn takes no room for a bar nobody is looking at and the column keeps
  * one rhythm whether a turn offers actions or not. Hidden, the bar takes no
  * pointer either, so the words under it stay selectable. A sent message
- * sets them back in a line under its bubble, beside who sent it
- * (`agent-tab.tsx`'s `AgentMessage`).
+ * sets them inline, in a line under its bubble beside who sent it
+ * (`agent-tab.tsx`'s `AgentMessage`). Each placement is drawn by
+ * `.message-actions` (tasks.css).
  */
-export function MessageActions({ className, children, ...props }: MessageActionsProps): ReactNode {
+export function MessageActions({
+  placement = MESSAGE_ACTIONS_PLACEMENT.FLOATING,
+  children,
+  ...props
+}: MessageActionsProps): ReactNode {
   return (
-    <div
-      className={cn(
-        "pointer-events-none absolute -top-2 right-0 z-10 flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5 opacity-0 shadow-md transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100",
-        className,
-      )}
-      {...props}
-    >
+    <div className="message-actions" data-placement={placement} {...props}>
       {children}
     </div>
   );
 }
 
-export type MessageActionProps = Omit<ComponentProps<"button">, "aria-label"> & {
+export type MessageActionProps = {
   /** What the action does, which is its accessible name and, when `tooltip` is set, the hint it shows. */
   label: string;
   /** Whether it hangs a hint: its label, or the words given here in its place. */
   tooltip?: boolean | string;
+  onClick: () => void;
+  /** Its glyph. */
+  children: ReactNode;
 };
 
-/** One action: a 24px ghost button around a 16px icon. */
+/** One action: the shared compact glyph button, as a row's marks are. */
 export function MessageAction({
   label,
   tooltip = false,
-  className,
+  onClick,
   children,
-  ...props
 }: MessageActionProps): ReactNode {
   const button = (
-    <button
-      type="button"
-      aria-label={label}
-      className={cn(
-        "flex size-6 cursor-default items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground [&>svg]:size-4",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </button>
+    <IconButton icon={children} label={label} size={BUTTON_SIZE.COMPACT} onClick={onClick} />
   );
   if (tooltip === false) return button;
   return <Tooltip label={tooltip === true ? label : tooltip}>{button}</Tooltip>;
@@ -134,42 +126,60 @@ export function MessageAction({
  * are a note's, a step above the words around them and no more, a
  * list keeps to the column's own indent, and a quote is the one every
  * Markdown in the window draws (`@luke/ui/quote-face`) rather than
- * Streamdown's, which stood the browser's 40px in from the column.
+ * Streamdown's, which stood the browser's 40px in from the column. Each is
+ * drawn by its class in tasks.css, a heading by its level.
  */
 export const PANEL_MARKDOWN_COMPONENTS: Components = {
-  h1: ({ children }) => <h1 className="mt-3 mb-1 text-[15px] font-semibold">{children}</h1>,
-  h2: ({ children }) => <h2 className="mt-3 mb-1 text-[14px] font-semibold">{children}</h2>,
-  h3: ({ children }) => <h3 className="mt-2 mb-1 text-[13px] font-semibold">{children}</h3>,
-  h4: ({ children }) => <h4 className="mt-2 mb-1 text-[13px] font-medium">{children}</h4>,
-  h5: ({ children }) => <h5 className="mt-2 mb-1 text-[13px] font-medium">{children}</h5>,
-  h6: ({ children }) => <h6 className="mt-2 mb-1 text-[13px] font-medium">{children}</h6>,
-  ul: ({ children }) => <ul className="my-1 list-disc pl-5">{children}</ul>,
-  ol: ({ children }) => <ol className="my-1 list-decimal pl-5">{children}</ol>,
-  li: ({ children }) => <li className="my-0.5">{children}</li>,
+  h1: ({ children }) => (
+    <h1 className="transcript-heading" data-level={1}>
+      {children}
+    </h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="transcript-heading" data-level={2}>
+      {children}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="transcript-heading" data-level={3}>
+      {children}
+    </h3>
+  ),
+  h4: ({ children }) => (
+    <h4 className="transcript-heading" data-level={4}>
+      {children}
+    </h4>
+  ),
+  h5: ({ children }) => (
+    <h5 className="transcript-heading" data-level={5}>
+      {children}
+    </h5>
+  ),
+  h6: ({ children }) => (
+    <h6 className="transcript-heading" data-level={6}>
+      {children}
+    </h6>
+  ),
+  ul: ({ children }) => <ul className="transcript-list">{children}</ul>,
+  ol: ({ children }) => <ol className="transcript-list">{children}</ol>,
+  li: ({ children }) => <li className="transcript-list-item">{children}</li>,
   blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };
 
-export type MessageResponseProps = ComponentProps<typeof Streamdown>;
+export type MessageResponseProps = Omit<ComponentProps<typeof Streamdown>, "className">;
 
 /**
- * A reply's markdown, drawn as it streams. Note that it is memoised on every
- * prop rather than on the words alone, as the registry has it, because a
- * mode or a class changed under the same words has to be drawn too. Nothing
- * is drawn until the HTML parser has landed (`markdown-html-parser.ts`),
- * because a reply drawn without it is not the reply drawn with it.
+ * A reply's markdown, drawn as it streams, in `.transcript-markdown`
+ * (tasks.css). Note that it is memoised on every prop rather than on the
+ * words alone, as the registry has it, because a mode changed under the same
+ * words has to be drawn too. Nothing is drawn until the HTML parser has
+ * landed (`markdown-html-parser.ts`), because a reply drawn without it is not
+ * the reply drawn with it.
  */
-export const MessageResponse = memo(({ className, ...props }: MessageResponseProps): ReactNode => {
+export const MessageResponse = memo((props: MessageResponseProps): ReactNode => {
   const parser = useAtomValue(markdownHtmlParserAtom);
   if (AsyncResult.isInitial(parser)) return null;
-  return (
-    <Streamdown
-      className={cn(
-        "select-text [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <Streamdown className="transcript-markdown" {...props} />;
 });
 
 MessageResponse.displayName = "MessageResponse";

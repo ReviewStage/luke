@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
 import type { AppStateSnapshot } from "@luke/host/app-state";
-import { type Experiment, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
+import { type Experiment, experimentOn, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
 import { type AppSettingsView, appSettingsView } from "@luke/settings/wire";
 import { type Cause, Data, Effect, Option, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -114,8 +114,8 @@ const appStateAtom: Atom.Atom<AsyncResult.AsyncResult<AppStateSnapshot, AppState
 /**
  * The document as main holds it, read before anything is drawn over it: the
  * first reading the atom answers with, which is the read the subscription was
- * installed for. Every later reading arrives on that subscription. Run at a
- * renderer root and nowhere else.
+ * installed for. Every later reading arrives on that subscription. Run at
+ * the window root (`window-root.tsx`) and nowhere else.
  */
 export const appStateFirstRead: Effect.Effect<AppStateSnapshot, AppStateUnavailable> =
   AtomRegistry.getResult(rendererRegistry, appStateAtom);
@@ -163,4 +163,19 @@ export function useExperiment(experiment: Experiment): boolean {
  */
 export function experimentOnNow(experiment: Experiment): boolean {
   return experimentOn(appStateNow()?.settings?.experiments ?? NO_EXPERIMENTS, experiment);
+}
+
+/**
+ * Whether the platform this window runs on offers a capability, redrawn as
+ * the document arrives: the one way a platform feature's tab, command, or
+ * button asks whether to stand at all. Before the first read nothing is
+ * offered, as no experiment is on.
+ */
+export function useCapability(capability: HostCapability): boolean {
+  return useAppState()?.run.capabilities.includes(capability) === true;
+}
+
+/** The same answer for a callback that cannot wait a render. */
+export function capabilityNow(capability: HostCapability): boolean {
+  return appStateNow()?.run.capabilities.includes(capability) === true;
 }

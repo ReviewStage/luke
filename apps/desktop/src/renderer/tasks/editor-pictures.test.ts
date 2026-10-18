@@ -4,18 +4,19 @@ import assert from "node:assert/strict";
 import type { Task } from "@luke/features/task-wire";
 import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
+import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
-import { installEditorBundle, installEditorLayout } from "#testing/composer";
+import { editorBundleLanded, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { relayout } from "#testing/resize-observer";
 import { appCommandOffered, runAppCommand } from "../app-commands";
 import { PlanBody } from "./plan-body";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 
 /**
  * editor-pictures.test.ts -- a picture laid into the plan's editor is drawn
@@ -23,26 +24,25 @@ import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
  * caption will stand, and as the kept picture once the service kept it; a
  * keep that failed says why with Retry and Remove, and Remove takes it out;
  * and Insert image is offered while the text is edited, and only then; and
- * a selected picture's tools are only their glyphs, each named, in a narrow
- * column.
+ * a selected picture's tools are each still named in a narrow column.
  * Synthetic plan and pictures.
  */
 
 const TASK_ID = "4b1c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
 const KEPT_ID = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
 
-const PLAN: Task = {
+const TASK: Task = {
   ...DOCUMENT_TASK,
   id: TASK_ID,
   document: { body: "## Approach\n\nThe invite email follows the mock.\n", assumptions: [] },
 };
 
-const PAGE: PlanMentionsValue = {
+const PAGE: TaskMentionsValue = {
   taskId: TASK_ID,
   taskName: "Invitations",
   workspace: "acme",
   repository: null,
-  text: () => PLAN.document.body,
+  text: () => TASK.document.body,
   doors: {
     taskId: TASK_ID,
     place: { workspace: "acme", repository: null },
@@ -67,8 +67,10 @@ const saved: string[] = [];
 /** The keep the host answers next: held until the test lets it go, with what it answers. */
 let keeping: { resolve: (outcome: ActOutcome) => void } | undefined;
 
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
-  installEditorBundle();
   installEditorLayout();
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> => {
@@ -79,7 +81,6 @@ beforeEach(() => {
       }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
-    recordSurfaceEvent: () => undefined,
   });
 });
 
@@ -102,7 +103,7 @@ function drawn(node: ReactNode): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(PlanMentions, { value: PAGE, children: node })));
+  act(() => root.render(createElement(TaskMentions, { value: PAGE, children: node })));
   return container;
 }
 
@@ -110,7 +111,7 @@ function drawn(node: ReactNode): HTMLElement {
 async function editing(): Promise<HTMLElement> {
   const container = drawn(
     createElement(PlanBody, {
-      task: PLAN,
+      task: TASK,
       live: false,
       onEdit: (request) => {
         saved.push(request.document.value);
@@ -204,7 +205,7 @@ test("a keep that failed says why with Retry and Remove, and Remove takes the pi
 
 test("Insert image is offered while the plan's text is edited, and lays in the files chosen", async () => {
   const reading = drawn(
-    createElement(PlanBody, { task: PLAN, live: false, sectionLinks: SECTION_LINKS }),
+    createElement(PlanBody, { task: TASK, live: false, sectionLinks: SECTION_LINKS }),
   );
   assert.equal(appCommandOffered(APP_COMMAND.INSERT_PICTURE), false);
   act(() => roots.pop()?.unmount());
@@ -295,7 +296,7 @@ function layOutColumn(container: HTMLElement, width: number): void {
   act(() => relayout());
 }
 
-test("in a column too narrow for their names, a selected picture's tools are their glyphs, each still named", async () => {
+test("in a column too narrow for their names, a selected picture's tools are each still named", async () => {
   const container = await editing();
   await pasteScreenshot(container);
   await keepAsked();
@@ -303,19 +304,6 @@ test("in a column too narrow for their names, a selected picture's tools are the
 
   const tools = selectPicture(container);
   layOutColumn(container, 280);
-
-  const buttons = [...tools.querySelectorAll("button")];
-  assert.deepEqual(
-    buttons.map((button) => button.textContent),
-    ["", "", "", ""],
-  );
-  assert.deepEqual(
-    buttons.map((button) => button.getAttribute("aria-label")),
-    ["Alt text", "Caption", "Enlarge", "Delete"],
-  );
-
-  // Given the room again, they say their names.
-  layOutColumn(container, 720);
   assert.deepEqual(
     [...tools.querySelectorAll("button")].map((button) => button.textContent),
     ["Alt text", "Caption", "Enlarge", "Delete"],

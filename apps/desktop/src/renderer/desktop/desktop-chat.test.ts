@@ -33,8 +33,6 @@ beforeEach(() => {
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
       act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
     },
   });
@@ -64,7 +62,10 @@ function mount(change: (chat: FixtureChat) => FixtureChat = (chat) => chat): HTM
       tasks: tasksControl({
         chatView: {
           open: true,
+          available: true,
           chat,
+          failed: false,
+          onRetry: () => undefined,
           place,
           onOpen: () => undefined,
           onClose: () => undefined,
@@ -87,12 +88,11 @@ function mount(change: (chat: FixtureChat) => FixtureChat = (chat) => chat): HTM
 function rail(page: HTMLElement): string[] {
   const nav = page.querySelector(".chat-rail");
   assert.ok(nav, "the rail is drawn");
-  return [...nav.querySelectorAll(".chat-rail-heading, .sidebar-task")].map((node) => {
-    if (node.classList.contains("chat-rail-heading")) return `# ${node.textContent}`;
-    const name = node.querySelector(".sidebar-task-name")?.textContent ?? "";
-    const count = node.querySelector(".chat-rail-count")?.firstChild?.textContent;
+  return [...nav.querySelectorAll("h2, button")].map((node) => {
+    if (node.matches("h2")) return `# ${node.textContent}`;
+    const count = /(\d+) unread$/u.exec(node.textContent ?? "")?.[1];
     const shown = node.getAttribute("aria-current") === "page" ? "▸ " : "";
-    return `${shown}${name}${count === undefined ? "" : ` (${count})`}`;
+    return `${shown}${railName(node)}${count === undefined ? "" : ` (${count})`}`;
   });
 }
 
@@ -106,9 +106,15 @@ function stream(page: HTMLElement): string[] {
   });
 }
 
+/** A row's name: the first of its words a reader hears, before what it says after and its count. */
+function railName(row: Element): string {
+  const heard = [...row.children].filter((part) => part.getAttribute("aria-hidden") !== "true");
+  return heard[0]?.textContent ?? "";
+}
+
 function railRow(page: HTMLElement, name: string): HTMLButtonElement {
-  const row = [...page.querySelectorAll<HTMLButtonElement>(".chat-rail .sidebar-task")].find(
-    (each) => each.querySelector(".sidebar-task-name")?.textContent === name,
+  const row = [...page.querySelectorAll<HTMLButtonElement>(".chat-rail button")].find(
+    (each) => railName(each) === name,
   );
   assert.ok(row, `no row for ${name}`);
   return row;

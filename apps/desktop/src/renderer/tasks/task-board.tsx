@@ -3,19 +3,16 @@ import { admittedElements } from "@luke/features/board-scene";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { ACT_KIND, type ActPayload } from "@luke/host/acts";
+import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { Fragment, useEffect, useRef } from "react";
 import { askAct } from "../act";
-import { bundleAtom } from "../bundle-loader";
+import { BOARD_LOAD_FAILED, useSideBundles } from "../bundle-loader";
 import { rendererRuntime } from "../renderer-runtime";
 import { SpinnerRegion } from "../spinner";
 import { useAppState } from "../use-app-state";
-import {
-  WHITEBOARD_ASSET,
-  type WhiteboardHandle,
-  type WhiteboardModule,
-} from "../whiteboard/contract";
+import type { WhiteboardHandle, WhiteboardModule } from "../whiteboard/contract";
 
 /**
  * task-board.tsx -- the open task's whiteboard in the Tasks tab: Excalidraw's bundle loaded once, mounted over the board main holds, and its scene saved.
@@ -47,16 +44,6 @@ import {
 
 /** How long the developer's drawing rests before it is saved. */
 const SAVE_PAUSE = Duration.millis(800);
-
-/** Where the board stands while its bundle loads or fails to. */
-const BOARD_LOAD_FAILED = "The board could not be opened.";
-
-/** The whiteboard bundle, loaded once per window (`../bundle-loader.ts`). */
-const whiteboardModuleAtom = bundleAtom(
-  { script: WHITEBOARD_ASSET.SCRIPT, stylesheet: WHITEBOARD_ASSET.STYLESHEET },
-  () => window.lukeWhiteboard,
-  BOARD_LOAD_FAILED,
-);
 
 /** One save the canvas asked for: the task, its scene, the number of Luke's drawing the scene holds, and whether to send the scene's image. */
 interface BoardSave {
@@ -161,11 +148,13 @@ export function TaskBoard({
   /** Whether the board only shows, as an archived task's does. */
   viewOnly?: boolean;
 }): React.JSX.Element {
-  const loaded = useAtomValue(whiteboardModuleAtom);
+  const loaded = useAtomValue(useSideBundles().whiteboard);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   return (
     <section className="task-board ph-no-capture" aria-label="Whiteboard">
-      {AsyncResult.isFailure(loaded) ? <p role="alert">{BOARD_LOAD_FAILED}</p> : null}
+      {AsyncResult.isFailure(loaded) ? (
+        <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED}>{BOARD_LOAD_FAILED}</ErrorState>
+      ) : null}
       {module !== undefined && board !== undefined ? (
         // Keyed by whether it only shows as well, so an Unarchive mounts an editable canvas.
         <Fragment key={String(viewOnly)}>

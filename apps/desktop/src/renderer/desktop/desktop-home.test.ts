@@ -20,12 +20,12 @@ import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
@@ -162,8 +162,6 @@ let automationReads: string[] = [];
 beforeEach(() => {
   automationReads = [];
   fakeAppBridge({
-    onMenuCommand: () => () => undefined,
-    recordSurfaceEvent: () => undefined,
     act: (request: Act) => {
       if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
         const value: CodingAgentInboxAnswerView = {
@@ -248,13 +246,16 @@ async function settle(): Promise<void> {
   });
 }
 
+/** A row's name: its `ListRow`'s title. */
+const NAME = ".luke-list-row-title";
+
 /** A section's rows as a reader scans them: each row's name, then its context. */
 function rows(page: HTMLElement, section: string): string[] {
   const region = page.querySelector(`section[aria-labelledby="${section}"]`);
   assert.ok(region, `${section} stands`);
-  return [...region.querySelectorAll(".sidebar-task")].map(
+  return [...region.querySelectorAll("li")].map(
     (row) =>
-      `${row.querySelector(".sidebar-task-name")?.textContent} · ${row.querySelector(".home-row-context")?.textContent}`,
+      `${row.querySelector(NAME)?.textContent} · ${row.querySelector(".home-row-context")?.textContent}`,
   );
 }
 
@@ -309,6 +310,23 @@ test("a waiting item's row opens the Inbox on its item, a recent plan opens the 
   assert.equal(opened.newTasks, 1);
 });
 
+test("a waiting item's row on Home reads as the Inbox's own: what it asks under its title, its plan and the attention mark before its time, and no blue dot", async () => {
+  const { page } = mount();
+  await settle();
+
+  const region = page.querySelector('section[aria-labelledby="home-inbox"]');
+  assert.ok(region, "Home's Inbox stands");
+  const row = [...region.querySelectorAll("li")].find(
+    (each) => each.querySelector(NAME)?.textContent === EMAIL.title,
+  );
+  assert.ok(row, "the waiting item has a row");
+  assert.equal(row.querySelector(".luke-list-row-description")?.textContent, "Choice · 2 options");
+  const head = row.querySelector(".luke-list-row-head");
+  assert.equal(head?.querySelector(".home-row-context")?.textContent, "Teammate invitations");
+  assert.ok(head?.querySelector(".attention-mark"), "it needs the reader");
+  assert.equal(row.querySelector(".inbox-row-dot"), null);
+});
+
 test("the waiting items stand under the Inbox's name, the place a press on one opens", async () => {
   const { page } = mount();
   await settle();
@@ -324,7 +342,7 @@ test("with nothing waiting, the home's Inbox says so in the Inbox's own words, a
   await settle();
 
   const section = page.querySelector('section[aria-labelledby="home-inbox"]');
-  const note = section?.querySelector(".sidebar-note");
+  const note = section?.querySelector("p");
   assert.equal(note?.textContent, "Nothing needs you");
   assert.equal(section?.querySelector("svg"), null);
 });
@@ -663,9 +681,9 @@ test("a recent task a teammate created wears their face before its time, and the
   await settle();
 
   const region = page.querySelector('section[aria-labelledby="home-recent"]');
-  const faces = [...(region?.querySelectorAll(".sidebar-task") ?? [])].flatMap((row) => {
-    const face = row.querySelector<HTMLImageElement>(".sidebar-task-time .actor-mark img");
-    return face === null ? [] : [[row.querySelector(".sidebar-task-name")?.textContent, face.src]];
+  const faces = [...(region?.querySelectorAll("li") ?? [])].flatMap((row) => {
+    const face = row.querySelector<HTMLImageElement>(".actor-mark img");
+    return face === null ? [] : [[row.querySelector(NAME)?.textContent, face.src]];
   });
   assert.deepEqual(faces, [[INVITES.name, CHARLES_PICTURE]]);
 });

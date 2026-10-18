@@ -1,52 +1,54 @@
 import { ADMIN_METRICS_WINDOW, type AdminMetricsWindow } from "@luke/service/admin/http";
+import { Checkbox, ErrorState, Segmented, Stack } from "@luke/ui";
 
-/** The page's one button treatment: sign out and try again both wear it. */
-export const PLAIN_BUTTON =
-  "inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors duration-150 hover:bg-muted disabled:cursor-default disabled:opacity-60 disabled:hover:bg-card";
+/** A window by the constant's own name for it, which is how the segmented control keys its options. */
+type WindowName = keyof typeof ADMIN_METRICS_WINDOW;
+
+const WINDOW_OPTIONS = Object.entries(ADMIN_METRICS_WINDOW).map(([name, windowDays]) => ({
+  // SAFETY: `Object.entries` widens the constant's own keys to string.
+  value: name as WindowName,
+  label: `${windowDays}d`,
+}));
 
 /**
- * The failure a refresh landed on an answer that stays shown: the numbers on
- * screen are still the last ones actually read, and this band says the newer
- * read did not arrive. The
- * status region stands in the page whether or not it has anything to say,
- * because a live region inserted together with its news is announced by
- * nothing; it holds the announcement alone, with the button beside it, so a
- * press flipping the button's label cannot re-announce the failure and the
- * button keeps its own role.
+ * What a refresh in flight dims, said busy to a reader until the answer
+ * lands, under the failure a refresh landed on an answer that stays shown:
+ * the numbers on screen are still the last ones actually read, and the
+ * failure says the newer read did not arrive, with Retry beside it, which
+ * refuses a press while a read is out rather than abort it and start over.
  */
-export function RefreshFailureNotice({
+export function Refreshing({
   failure,
   refreshing,
   onRetry,
+  children,
 }: {
   failure: string | undefined;
   refreshing: boolean;
   onRetry: () => void;
+  children: React.ReactNode;
 }): React.JSX.Element {
-  return (
+  const dimmed = (
     <div
-      className={
-        failure !== undefined
-          ? "mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-lg border border-border bg-card px-5 py-3 text-sm"
-          : undefined
-      }
+      className="transition-opacity duration-150 data-[busy=true]:opacity-50"
+      data-busy={refreshing}
+      aria-busy={refreshing}
     >
-      <span role="status">
-        {failure !== undefined ? (
-          <>
-            <span className="font-medium text-attention">Refresh failed.</span>{" "}
-            <span className="text-muted-foreground">
-              Still showing the earlier answer. {failure}
-            </span>
-          </>
-        ) : null}
-      </span>
-      {failure !== undefined ? (
-        <button type="button" className={PLAIN_BUTTON} onClick={onRetry} disabled={refreshing}>
-          {refreshing ? "Trying…" : "Try again"}
-        </button>
-      ) : null}
+      {children}
     </div>
+  );
+  if (failure === undefined) return dimmed;
+  return (
+    <Stack>
+      <ErrorState
+        onRetry={() => {
+          if (!refreshing) onRetry();
+        }}
+      >
+        Refresh failed. Still showing the earlier answer. {failure}
+      </ErrorState>
+      {dimmed}
+    </Stack>
   );
 }
 
@@ -63,22 +65,14 @@ export function WindowSwitcher({
   value: AdminMetricsWindow;
   onChange: (windowDays: AdminMetricsWindow) => void;
 }): React.JSX.Element {
+  const chosen = WINDOW_OPTIONS.find((option) => ADMIN_METRICS_WINDOW[option.value] === value);
   return (
-    <div className="inline-flex h-8 rounded-md border border-border bg-card p-0.5">
-      {Object.values(ADMIN_METRICS_WINDOW).map((windowDays) => (
-        <button
-          key={windowDays}
-          type="button"
-          aria-label={`${windowDays}-day window`}
-          aria-pressed={value === windowDays}
-          data-active={value === windowDays}
-          className="cursor-pointer rounded px-2.5 text-xs font-medium text-muted-foreground transition-colors duration-150 outline-offset-2 hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground"
-          onClick={() => onChange(windowDays)}
-        >
-          {windowDays}d
-        </button>
-      ))}
-    </div>
+    <Segmented
+      legend="Window in days"
+      options={WINDOW_OPTIONS}
+      value={chosen?.value}
+      onChange={(name) => onChange(ADMIN_METRICS_WINDOW[name])}
+    />
   );
 }
 
@@ -90,14 +84,8 @@ export function HideAdminsToggle({
   onChange: (hide: boolean) => void;
 }): React.JSX.Element {
   return (
-    <label className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
-      <input
-        type="checkbox"
-        className="size-4 cursor-pointer accent-primary"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-      />
+    <Checkbox checked={checked} onChange={onChange}>
       Hide admins
-    </label>
+    </Checkbox>
   );
 }

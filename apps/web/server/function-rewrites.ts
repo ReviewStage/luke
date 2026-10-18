@@ -23,11 +23,16 @@ export interface Rewrite {
   readonly dest: string;
 }
 
-/** Rewrites that read a path segment into the route's query, so a route sees `?id=` as it was written to. */
+/**
+ * Rewrites that read a path segment into the route's query, so a route sees
+ * `?id=` as it was written to, and the few exact paths that must stand ahead
+ * of a segment rewrite whose pattern would otherwise take them, which carry
+ * no query of their own.
+ */
 interface SegmentRewrite {
   readonly src: string;
   readonly route: string;
-  readonly query: string;
+  readonly query?: string;
 }
 
 const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
@@ -159,6 +164,10 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "inbox/attachment",
     query: "id=$1&attachment=$2",
   },
+  { src: "/api/inbox/([^/]+)/messages", route: "inbox/messages", query: "id=$1" },
+  { src: "/api/inbox/([^/]+)/read", route: "inbox/read", query: "id=$1" },
+  // Every item of the Inbox marked read, ahead of the one item's rewrite that would read `read` as an id.
+  { src: "/api/inbox/read", route: "inbox/read" },
   { src: "/api/inbox/([^/]+)", route: "inbox/item", query: "id=$1" },
   { src: "/api/workspaces/([^/]+)/photo", route: "workspaces/photo", query: "id=$1" },
   { src: "/api/automations/([^/]+)/webhook", route: "automations/webhook", query: "id=$1" },
@@ -236,7 +245,10 @@ export function apiRewritesSource(rewrites: readonly Rewrite[]): string {
  * entered it and ignores a `routes` key left at the top level; the eve
  * service owns its own build; and the top-level `rewrites` are the public
  * routing that sends `/eve/v1/*` to eve and everything else to the web
- * service.
+ * service. The `git` key turns off deployment of GitHub's merge-queue
+ * branches (`gh-readonly-queue/<base>/pr-<n>-<sha>`): CI gates the queue, and
+ * the squash it lands on `main` deploys on its own. The glob is `**` because
+ * a `*` does not cross the branch name's `/`.
  */
 const WebService = Schema.Struct({
   root: Schema.String,
@@ -273,15 +285,22 @@ const ServiceRewriteSchema = Schema.Struct({
   destination: Schema.Struct({ service: Schema.String }),
 });
 
+const GitConfig = Schema.Struct({
+  deploymentEnabled: Schema.Record(Schema.String, Schema.Boolean),
+});
+
 const VercelConfig = Schema.Struct({
   $schema: Schema.String,
+  git: GitConfig,
   services: Schema.Struct({ web: WebService, luke: EveService, dev: CoderService }),
   crons: Schema.Array(Schema.Struct({ path: Schema.String, schedule: Schema.String })),
   rewrites: Schema.Array(ServiceRewriteSchema),
 });
 type VercelConfig = typeof VercelConfig.Type;
 
-const decodeVercelConfig = Schema.decodeUnknownSync(Schema.fromJsonString(VercelConfig));
+const decodeVercelConfig = Schema.decodeUnknownSync(Schema.fromJsonString(VercelConfig), {
+  onExcessProperty: "error",
+});
 
 /** Whether the file carries both keys, by their presence: a `routes` key that is merely undefined-valued is still the wrong shape. */
 function hasTopLevelRoutesBesideServices(source: string): boolean {

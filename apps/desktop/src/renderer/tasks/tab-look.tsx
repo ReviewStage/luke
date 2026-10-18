@@ -9,6 +9,7 @@ import {
   GlobeIcon,
   InboxIcon,
   LaptopIcon,
+  MessagesSquareIcon,
 } from "lucide-react";
 import { HarnessMark } from "../harness-marks";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
@@ -36,6 +37,8 @@ export const TAB_KIND = {
   PANEL: "panel",
   PLAN: "plan",
   INBOX: "inbox",
+  /** The plan's own channel of the workspace's chat. */
+  CHAT: "chat",
   /** A coding agent not yet started, and the "+" row that opens one. */
   DRAFT: "draft",
   AGENT: "agent",
@@ -62,6 +65,7 @@ export type TabSubject =
   | { readonly kind: typeof TAB_KIND.PANEL; readonly tab: FixedSidePanelTab }
   | { readonly kind: typeof TAB_KIND.PLAN; readonly name: string }
   | { readonly kind: typeof TAB_KIND.INBOX }
+  | { readonly kind: typeof TAB_KIND.CHAT }
   | { readonly kind: typeof TAB_KIND.DRAFT }
   | {
       readonly kind: typeof TAB_KIND.AGENT;
@@ -164,6 +168,8 @@ export function tabLook(subject: TabSubject): KindLook {
       return { icon: <DocumentIcon />, label: subject.name };
     case TAB_KIND.INBOX:
       return { icon: <InboxIcon />, label: TAB_WORDS.INBOX };
+    case TAB_KIND.CHAT:
+      return { icon: <MessagesSquareIcon />, label: TAB_WORDS.CHAT };
     case TAB_KIND.DRAFT:
       return { icon: <PlusIcon />, label: TAB_WORDS.NEW_AGENT };
     case TAB_KIND.AGENT:

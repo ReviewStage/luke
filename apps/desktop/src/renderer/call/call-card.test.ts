@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { WINDOW_ROLE } from "@luke/gateway/window-session";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
@@ -15,8 +14,9 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
-import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput, CallWindowCard } from "./call-card";
+import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "./call-card";
 import { CALL_VIDEO_LABEL } from "./call-video-tile";
+import { CallWindowCard } from "./call-window-card";
 import { CallTabVideo, useCallCardVideo } from "./panel-avatar";
 
 /**
@@ -76,15 +76,10 @@ afterEach(() => {
 });
 
 /** Main's document on a call in progress with the avatar as given and Video calls on, as the panel or the call window is handed it. */
-function onCall(
-  avatar: AvatarState,
-  version = 1,
-  role: AppStateSnapshot["window"]["role"] = WINDOW_ROLE.PANEL,
-): AppStateSnapshot {
+function onCall(avatar: AvatarState, version = 1): AppStateSnapshot {
   return {
     ...stateWith(experimentsOn(EXPERIMENT.VIDEO_CALLS), {
       voice: { view: LISTENING, avatar },
-      window: { role, fullScreen: false },
     }),
     version,
   };
@@ -103,8 +98,6 @@ function handBridge(first: AppStateSnapshot): void {
     onAvatarViewSignal: () => () => undefined,
     signalAvatarView: () => undefined,
     onCallWindowMoved: () => () => undefined,
-    onMenuCommand: () => () => undefined,
-    recordSurfaceEvent: () => undefined,
     act: (request: { kind: string; payload?: unknown }) => {
       sent.push(request);
       return Promise.resolve({ status: "done", value: undefined });
@@ -215,7 +208,7 @@ test("the card's Video off and Video on are the Call tab's own toggle, and both 
 });
 
 test("the floating call window draws Luke's video while the avatar is live, its Video off is the same act, and once video is down it is the card alone", async () => {
-  handBridge(onCall({ status: AVATAR_STATUS.LIVE }, 1, WINDOW_ROLE.CALL));
+  handBridge(onCall({ status: AVATAR_STATUS.LIVE }));
   const page = mount(createElement(CallWindowCard));
   await settle();
   const windowCard = card(page);
@@ -240,7 +233,6 @@ test("the floating call window draws Luke's video while the avatar is live, its 
             view: LISTENING,
             avatar: { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.USER },
           },
-          window: { role: WINDOW_ROLE.CALL, fullScreen: false },
         },
       ),
       version: 2,

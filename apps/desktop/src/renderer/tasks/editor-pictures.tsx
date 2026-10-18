@@ -2,14 +2,16 @@ import { PICTURE_BOUNDS } from "@luke/features/picture-wire";
 import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-attachment-link";
 import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { BUTTON_VARIANT, Button } from "@luke/ui";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { encodeImage } from "../feedback-images";
+import { FoldingButton } from "../folding-button";
 import { PictureBlock } from "../picture-block";
 import type {
   PictureNode,
@@ -20,7 +22,6 @@ import type {
 } from "../plan-editor/contract";
 import { RetryButton } from "../retry-button";
 import { Spinner } from "../spinner";
-import { Tooltip } from "../tooltip";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures";
 
 /**
@@ -152,9 +153,7 @@ function UploadingPicture({
             {upload?.kind === UPLOAD.FAILED ? upload.reason : UPLOAD_WORDS.FAILED}
           </span>
           {upload?.kind === UPLOAD.FAILED ? <RetryButton onRetry={onRetry} /> : null}
-          <button type="button" className="toolbar-button quiet-button" onClick={onRemove}>
-            {UPLOAD_WORDS.REMOVE}
-          </button>
+          <Button onClick={onRemove}>{UPLOAD_WORDS.REMOVE}</Button>
         </span>
       )}
     </span>
@@ -257,21 +256,16 @@ function PictureTools({
       data-above={String(above)}
     >
       {tools.map(({ label, icon, run, danger = false }) => (
-        <Tooltip key={label} label={worded ? undefined : label}>
-          <button
-            type="button"
-            className="picture-tool"
-            aria-label={label}
-            data-tone={danger ? "danger" : undefined}
-            onClick={(event) => {
-              event.stopPropagation();
-              run();
-            }}
-          >
-            {icon}
-            {worded ? label : null}
-          </button>
-        </Tooltip>
+        <FoldingButton
+          key={label}
+          label={label}
+          icon={icon}
+          variant={danger ? BUTTON_VARIANT.DANGER : BUTTON_VARIANT.QUIET}
+          onClick={(event) => {
+            event.stopPropagation();
+            run();
+          }}
+        />
       ))}
     </span>
   );
@@ -353,7 +347,7 @@ export interface EditorPictures {
  * the place names no workspace to address them under, as the template does.
  */
 export function useEditorPictures(
-  planId: string,
+  taskId: string,
   workspace: string | undefined,
   handle: React.RefObject<PlanEditorHandle | undefined>,
 ): EditorPictures {
@@ -379,7 +373,7 @@ export function useEditorPictures(
       settled(taken.upload, { kind: UPLOAD.SENDING, url });
       const failed = (reason: string) =>
         settled(taken.upload, { kind: UPLOAD.FAILED, url, reason, taken });
-      const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId, picture: url }).catch(
+      const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId: taskId, picture: url }).catch(
         () => undefined,
       );
       if (kept === undefined || "failure" in kept) {
@@ -389,14 +383,14 @@ export function useEditorPictures(
             : UPLOAD_WORDS.FAILED,
         );
       }
-      keepPictureRead(planId, kept.id, url);
+      keepPictureRead(taskId, kept.id, url);
       handle.current?.settlePicture(
         taken.upload,
-        planAttachmentAddress({ taskId: planId, attachmentId: kept.id }, workspace),
+        planAttachmentAddress({ taskId: taskId, attachmentId: kept.id }, workspace),
       );
       settled(taken.upload, undefined);
     },
-    [act, handle, planId, settled, workspace],
+    [act, handle, taskId, settled, workspace],
   );
   // Note that a picture of another plan is read as that plan's before it is kept again.
   const begin = useCallback(
@@ -452,7 +446,7 @@ export function useEditorPictures(
       },
       copies: (src) => {
         const named = planAttachmentOf(src);
-        return named !== undefined && named.taskId !== planId;
+        return named !== undefined && named.taskId !== taskId;
       },
     };
   }

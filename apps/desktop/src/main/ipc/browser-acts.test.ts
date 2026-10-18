@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { BROWSER_STEP, type BrowserBounds, type BrowserPage } from "@luke/features/browser-acts";
+import { type ActRows, type ActSender, createActRouter } from "@luke/host/act-router";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
-import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import type { BrowserViews } from "../window/browser-views";
 import { browserActRows } from "./browser-acts";
 
@@ -22,7 +22,7 @@ const ADDRESS = "http://localhost:3000/";
 const BOUNDS: BrowserBounds = { x: 640, y: 48, width: 480, height: 720 };
 
 // SAFETY: the rows read a sender by identity alone; one inert object is one window.
-const windowOf = (standing: Partial<ActSender> = {}): ActSender => ({
+const windowOf = (standing: Partial<ActSender<WebContents>> = {}): ActSender<WebContents> => ({
   sender: {} as WebContents,
   panel: true,
   voice: false,
@@ -73,7 +73,7 @@ function fixture(options: { experiment?: boolean } = {}) {
   };
   const rows = browserActRows({ views, experimentOn: () => experiment });
   // SAFETY: the router dispatches only the browser kinds these tests send.
-  const router = createActRouter(rows as ActRows);
+  const router = createActRouter(rows as ActRows<WebContents>);
   return {
     router,
     heard,

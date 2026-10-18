@@ -21,7 +21,17 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
-import { cn, ProviderMark } from "@luke/ui";
+import {
+  Disclosure,
+  DisclosureBody,
+  DisclosureSummary,
+  INLINE_REF_LOOK,
+  InlineRef,
+  ProviderMark,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
@@ -37,6 +47,7 @@ import {
   CircleIcon,
   CircleStopIcon,
   CodeXmlIcon,
+  CpuIcon,
   EyeIcon,
   FilePenIcon,
   FileTextIcon,
@@ -81,7 +92,6 @@ import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/re
 import { Shimmer } from "../ai-elements/shimmer";
 import {
   TOOL_BLOCK,
-  TOOL_LINE_CLASS,
   TOOL_STATE,
   Tool,
   type ToolBlock,
@@ -99,9 +109,9 @@ import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
 import { linkChip } from "./mention-chip";
 import { ModelLabel } from "./model-label";
-import { useMentionDoors } from "./plan-mentions";
 import { usePlanPictureDrawer } from "./plan-pictures";
 import { SubagentMark } from "./tab-look";
+import { useMentionDoors } from "./task-mentions";
 import { cardTitle } from "./tool-call-model";
 import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
@@ -151,9 +161,9 @@ function TranscriptLink({
   const openLink = useOpenLink();
   if (href === undefined || !opensAsLink(href)) {
     return (
-      <span className="text-link-inert" title={href}>
-        {children}
-      </span>
+      <Tooltip label={href}>
+        <span className="text-link-inert">{children}</span>
+      </Tooltip>
     );
   }
   return (
@@ -533,16 +543,12 @@ export function TranscriptReasoning({ text }: { text: string }): ReactNode {
   return (
     <Reasoning>
       <ReasoningTrigger preview={cardTitle(text).slice(0, REASONING_PREVIEW_LENGTH)} />
-      <ReasoningContent>
-        <p className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
-          {text.replace(LEADING_BLANK_LINES, "").trimEnd()}
-        </p>
-      </ReasoningContent>
+      <ReasoningContent text={text.replace(LEADING_BLANK_LINES, "").trimEnd()} />
     </Reasoning>
   );
 }
 
-/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one. */
+/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one; a list of the models wears a chip, what an agent runs on. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.MAC_COMMAND]: LaptopIcon,
@@ -564,6 +570,7 @@ const CALL_ICON = {
   [CALL_KIND.INBOX_POST]: InboxIcon,
   [CALL_KIND.INBOX_CLOSE]: InboxIcon,
   [CALL_KIND.INBOX_READ]: InboxIcon,
+  [CALL_KIND.INBOX_REPLY]: InboxIcon,
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
@@ -573,6 +580,8 @@ const CALL_ICON = {
   [CALL_KIND.START_AGENT]: PlayIcon,
   [CALL_KIND.ARCHIVE_AGENT]: ArchiveIcon,
   [CALL_KIND.UNARCHIVE_AGENT]: ArchiveRestoreIcon,
+  [CALL_KIND.LIST_MODELS]: CpuIcon,
+  [CALL_KIND.STOP_AGENT]: CircleStopIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.READ_PAGE]: AppWindowIcon,
@@ -588,16 +597,16 @@ const CALL_ICON = {
  * the row it stands on is already the one that opens the agent and hangs
  * its card, and a second press or card inside it would be two targets for
  * one thing; so it takes the row's pointer and lifts with the row's hover
- * as a chip lifts with its own (tasks.css).
+ * as a chip lifts with its own.
  */
 function AgentCallChip({ agent }: { agent: Actor }): ReactNode {
   return (
-    <span className="mention-chip tool-agent-chip" data-kind="agent">
-      <span className="mention-chip-glyph">
-        <ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />
-      </span>
-      <span className="mention-chip-label">{actorName(agent)}</span>
-    </span>
+    <InlineRef
+      look={INLINE_REF_LOOK.PILL}
+      glyph={<ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />}
+      label={actorName(agent)}
+      data-tool-agent-ref=""
+    />
   );
 }
 
@@ -738,7 +747,7 @@ export function TranscriptOpeningCall({
     <Tooltip label={hint} card={card ?? undefined}>
       <button
         type="button"
-        className={cn(TOOL_LINE_CLASS, "w-full bg-transparent text-left text-[12.5px]")}
+        className="tool-line tool-opening"
         data-call-id={callId}
         data-opens=""
         onClick={onOpen}
@@ -757,8 +766,9 @@ export function TranscriptOpeningCall({
 }
 
 /**
- * How a to-do of each status is drawn: its glyph and the glyph's ink, how
- * its words are set, and what the glyph says aloud. Pending is an empty
+ * How a to-do of each status is drawn: its glyph and what the glyph says
+ * aloud; its ink and its words' are the item's status's (tasks.css's
+ * `.todo-item`). Pending is an empty
  * circle, done a check in the muted ink with its words muted beside it, as
  * Linear and Things mark a finished item, and in progress a dotted circle
  * in the full ink, so the one item the list is at is the one that stands
@@ -768,28 +778,10 @@ export function TranscriptOpeningCall({
  * wrapped lines reads as noise over words the muted ink already quiets.
  */
 const TODO_LOOK = {
-  [CODING_AGENT_TODO_STATUS.PENDING]: {
-    Icon: CircleIcon,
-    mark: "text-muted-foreground",
-    words: "",
-    label: "Pending",
-  },
-  [CODING_AGENT_TODO_STATUS.IN_PROGRESS]: {
-    Icon: CircleDotIcon,
-    mark: "text-foreground",
-    words: "",
-    label: "In progress",
-  },
-  [CODING_AGENT_TODO_STATUS.DONE]: {
-    Icon: CircleCheckIcon,
-    mark: "text-muted-foreground",
-    words: "text-muted-foreground",
-    label: "Done",
-  },
-} as const satisfies Record<
-  CodingAgentTodoStatus,
-  { Icon: LucideIcon; mark: string; words: string; label: string }
->;
+  [CODING_AGENT_TODO_STATUS.PENDING]: { Icon: CircleIcon, label: "Pending" },
+  [CODING_AGENT_TODO_STATUS.IN_PROGRESS]: { Icon: CircleDotIcon, label: "In progress" },
+  [CODING_AGENT_TODO_STATUS.DONE]: { Icon: CircleCheckIcon, label: "Done" },
+} as const satisfies Record<CodingAgentTodoStatus, { Icon: LucideIcon; label: string }>;
 
 export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children"> &
   Pick<ToolHeaderProps, "state" | "subject"> & {
@@ -813,38 +805,25 @@ export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children">
 function TodoItems({
   todos,
   live,
-  className,
 }: {
   todos: CodingAgentTodos["todos"];
   live: boolean;
-  className?: string;
 }): ReactNode {
   return (
-    <ul
-      className={cn(
-        "m-0 flex list-none flex-col gap-1 p-0 leading-5 [--state-glyph-size:14px]",
-        className,
-      )}
-    >
+    <ul className="todo-items">
       {todos.map((todo, index) => {
         const look = TODO_LOOK[todo.status];
         const working = live && todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS;
         return (
-          <li key={index} className="flex items-start gap-2" data-todo-status={todo.status}>
-            <span
-              className={cn("flex h-[1lh] w-4 shrink-0 items-center justify-center", look.mark)}
-              role="img"
-              aria-label={look.label}
-            >
+          <li key={index} className="todo-item" data-todo-status={todo.status}>
+            <span className="todo-mark" role="img" aria-label={look.label}>
               {working ? (
                 <StateGlyph state={GLYPH_STATE.WORKING} />
               ) : (
                 <StateGlyph state={GLYPH_STATE.REST} glyph={<look.Icon aria-hidden="true" />} />
               )}
             </span>
-            <span className={cn("min-w-0 [overflow-wrap:anywhere]", look.words)}>
-              {todo.content}
-            </span>
+            <span className="todo-words">{todo.content}</span>
           </li>
         );
       })}
@@ -879,13 +858,10 @@ export function TranscriptTodos({
         subject={subject}
         subjectIsCode={words.code}
       />
-      <FoldBody className="mt-0.5 mb-1 ml-7 select-text">
+      <FoldBody className="todos-body">
         <TodoItems todos={todos} live={live} />
         {errorText === undefined ? null : (
-          <p
-            className="m-0 mt-1 text-danger whitespace-pre-wrap [overflow-wrap:anywhere]"
-            role="alert"
-          >
+          <p className="todos-error" role="alert">
             {errorText}
           </p>
         )}
@@ -916,19 +892,15 @@ export function TranscriptTodosDock({
   focus: string | undefined;
 }): ReactNode {
   return (
-    <Fold
-      className="overflow-clip rounded-lg border border-border bg-muted text-[12.5px] [--focus-ring-offset:var(--focus-ring-inset)]"
-      data-todos-dock=""
-      aria-label="To-dos"
-    >
-      <FoldSummary className="flex h-8 cursor-pointer items-center gap-2 rounded-[inherit] px-3 transition-colors hover:bg-secondary [[open]>&]:rounded-b-none">
-        <ListTodoIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="shrink-0 text-muted-foreground">{summary}</span>
-        {focus === undefined ? null : <span className="min-w-0 flex-1 truncate">{focus}</span>}
-        <FoldChevron className="ml-auto" />
+    <Fold className="todos-dock" data-todos-dock="" aria-label="To-dos">
+      <FoldSummary className="todos-dock-head">
+        <ListTodoIcon className="todos-dock-icon" aria-hidden="true" />
+        <span className="todos-dock-summary">{summary}</span>
+        {focus === undefined ? null : <span className="todos-dock-focus">{focus}</span>}
+        <FoldChevron className="todos-dock-chevron" />
       </FoldSummary>
-      <FoldBody className="border-t border-border">
-        <TodoItems todos={todos} live className="px-3 py-2" />
+      <FoldBody className="todos-dock-body">
+        <TodoItems todos={todos} live />
       </FoldBody>
     </Fold>
   );
@@ -991,38 +963,33 @@ export function TranscriptSubagent({
   const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
   const line = (
     <>
-      <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4">
+      <span className="subagent-icon">
         <SubagentMark model={pair?.choice.model} />
       </span>
-      <span
-        ref={words}
-        className="subagent-job min-w-0 flex-1 text-foreground"
-        data-overflow={String(clipped)}
-      >
+      <span ref={words} className="subagent-job" data-overflow={String(clipped)}>
         {job}
       </span>
       {pair === undefined ? null : (
-        <span className="shrink-0" data-subagent-pair="">
+        <span className="subagent-pair" data-subagent-pair="">
           <ModelLabel choice={pair.choice} models={pair.models} />
         </span>
       )}
       {running && startedAt !== undefined ? (
-        <WorkingTime startedAt={startedAt} className="shrink-0" />
+        <WorkingTime startedAt={startedAt} className="subagent-time" />
       ) : null}
       <ToolStateMark state={state} />
     </>
   );
-  const className = "subagent-line flex w-full min-w-0 items-center gap-2";
   const row =
     onOpen === undefined ? (
-      <div className={className} data-subagent-row="" data-call-id={callId}>
+      <div className="subagent-line" data-subagent-row="" data-call-id={callId}>
         {line}
       </div>
     ) : (
       <Tooltip label={SUBAGENT_HINT} card={card ?? undefined}>
         <button
           type="button"
-          className={className}
+          className="subagent-line"
           data-subagent-row=""
           data-call-id={callId}
           onClick={onOpen}
@@ -1035,11 +1002,7 @@ export function TranscriptSubagent({
   return (
     <div>
       {row}
-      {/* Note that the reason sits under the job, past the line's 4px padding, glyph, and gap. */}
-      <p
-        className="m-0 mt-1 ml-7 text-[12.5px] text-danger whitespace-pre-wrap [overflow-wrap:anywhere]"
-        role="alert"
-      >
+      <p className="subagent-error" role="alert">
         {errorText}
       </p>
     </div>
@@ -1076,17 +1039,13 @@ function TurnFold({
   children: ReactNode;
 }): ReactNode {
   return (
-    <Fold className="text-[12.5px]" defaultOpen={open} data-turn-fold="">
-      <FoldSummary
-        className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-        aria-label={failed ? `${summary}, ${CALL_FAILED_WORDS}` : undefined}
-      >
-        <FoldChevron />
+    <Disclosure defaultOpen={open} data-turn-fold="">
+      <DisclosureSummary aria-label={failed ? `${summary}, ${CALL_FAILED_WORDS}` : undefined}>
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
         {failed ? <ToolStateMark state={TOOL_STATE.OUTPUT_ERROR} /> : null}
-      </FoldSummary>
-      <FoldBody className="ml-6 flex flex-col gap-1 pt-1">{children}</FoldBody>
-    </Fold>
+      </DisclosureSummary>
+      <DisclosureBody>{children}</DisclosureBody>
+    </Disclosure>
   );
 }
 
@@ -1159,6 +1118,10 @@ export function TranscriptRows<B>({
 }
 
 /** A quiet note between a transcript's rows: what was left out, or what stands in a row's place. */
-export function TranscriptNote({ className, ...props }: ComponentProps<"p">): ReactNode {
-  return <p className={cn("m-0 text-[11.5px] text-muted-foreground", className)} {...props} />;
+export function TranscriptNote({ children }: { children: ReactNode }): ReactNode {
+  return (
+    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+      {children}
+    </Text>
+  );
 }

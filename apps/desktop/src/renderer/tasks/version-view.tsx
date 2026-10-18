@@ -1,20 +1,24 @@
 import {
+  BUTTON_VARIANT,
+  Button,
   ConfirmDialog,
   DIALOG_TONE,
   type DialogConfirm,
   type DialogQuestion,
+  ErrorState,
+  Skeleton,
+  SkeletonRegion,
   useConfirmDialog,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { MarkdownMessage } from "../markdown-message";
-import { Skeleton, SkeletonRegion } from "../skeleton";
 import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast";
 import { Tooltip } from "../tooltip";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model";
-import { type MentionedTask, useMentionLink } from "./plan-mentions";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
+import { type MentionedTask, useMentionLink } from "./task-mentions";
 import { dayAndTimeText, momentText } from "./task-time";
-import { PlanTitle } from "./task-title";
+import { TaskTitle } from "./task-title";
 import { useOpenLink } from "./use-open-link";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 
@@ -25,7 +29,7 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * the way Google Docs shows a version in the page rather than in its narrow
  * list. Its bar names when the version was saved and offers Restore this
  * version, which the newest version, the plan as it stands, holds unavailable
- * with a hint saying why: `aria-disabled` rather than `disabled`, since a
+ * with a hint saying why: unavailable but still focusable, since a
  * disabled button takes no pointer and no focus, so its hint could never
  * show. The version is drawn whole against the version before it, which
  * shows what that revision changed: words written in wear the accent and
@@ -102,7 +106,7 @@ function VersionBody({
   const picture = usePlanPictureDrawer();
   return (
     <div className="plan-body">
-      {title === undefined || section !== undefined ? null : <PlanTitle name={title} />}
+      {title === undefined || section !== undefined ? null : <TaskTitle name={title} />}
       {units.map((unit, at) => (
         <MarkdownMessage
           // A unit's heading may stand twice, struck and written again, so its place keys it.
@@ -124,17 +128,21 @@ function VersionBody({
 /** The version's page as quiet blocks while it is read: headings over their lines, in the body's own type. */
 export function VersionSkeleton(): React.JSX.Element {
   return (
-    <SkeletonRegion label="Reading the version…" className="plan-body">
-      {PAGE_SKELETON.map((section) => (
-        <div key={section.heading} className="version-skeleton-section">
-          <Skeleton width={section.heading} className="version-skeleton-heading" />
-          {section.lines.map((width, at) => (
-            // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
-            <Skeleton key={at} width={width} />
-          ))}
-        </div>
-      ))}
-    </SkeletonRegion>
+    <div className="plan-body">
+      <SkeletonRegion label="Reading the version…">
+        {PAGE_SKELETON.map((section) => (
+          <div key={section.heading} className="version-skeleton-section">
+            <div className="version-skeleton-heading">
+              <Skeleton width={section.heading} />
+            </div>
+            {section.lines.map((width, at) => (
+              // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
+              <Skeleton key={at} width={width} />
+            ))}
+          </div>
+        ))}
+      </SkeletonRegion>
+    </div>
   );
 }
 
@@ -154,9 +162,9 @@ function VersionContent({
   if (read.kind === HISTORY_READ.READING) return <VersionSkeleton />;
   if (read.kind === HISTORY_READ.FAILED) {
     return (
-      <p className="version-note" role="alert">
-        The version could not be read.
-      </p>
+      <div className="version-note">
+        <ErrorState>The version could not be read.</ErrorState>
+      </div>
     );
   }
   const diff = versionDiff(read.previous, read.document);
@@ -280,14 +288,14 @@ export function VersionView({
         {restorable ? (
           <div className="desktop-toolbar-actions">
             <Tooltip label={viewing.current ? CURRENT_HINT : undefined}>
-              <button
-                type="button"
-                className="primary-button"
-                aria-disabled={viewing.current ? "true" : undefined}
-                onClick={viewing.current ? undefined : restore.ask}
+              <Button
+                variant={BUTTON_VARIANT.PRIMARY}
+                disabled={viewing.current}
+                focusableWhenDisabled
+                onClick={restore.ask}
               >
                 Restore this version
-              </button>
+              </Button>
             </Tooltip>
           </div>
         ) : null}

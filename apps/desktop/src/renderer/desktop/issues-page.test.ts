@@ -9,17 +9,22 @@ import {
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { lineWords } from "#testing/actor-line";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { landedBundles, onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand, useAppKeymap } from "../app-commands";
+import type { SideBundles } from "../bundle-loader";
+import type { PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
 import { ISSUES_PAGE, type IssuesPlace } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
 import { IssuesPage } from "./issues-page";
@@ -28,6 +33,9 @@ import { IssuesPage } from "./issues-page";
  * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return opening a row, an issue's page saying who filed it and when it was filed and last changed, and a read that did not land said with a retry.
  *
  * The service is a script at the act boundary; synthetic issues and words throughout.
+ * The description's editor is the plan's TipTap bundle, tested beside it
+ * (`../plan-editor/`); here a stand-in at the bundle's importer is typed
+ * into, finished, and left as the editor would be.
  */
 
 const WORKSPACE: Workspace = {
@@ -77,6 +85,57 @@ function issue(number: number, patch: Partial<Issue> = {}): Issue {
 }
 
 let root: Root | undefined;
+
+/** An editor the description mounted: what it was handed, the words it holds now, and its element. */
+interface StandInEditor {
+  readonly props: PlanEditorProps;
+  readonly element: HTMLElement;
+  text: string;
+  destroyed: boolean;
+}
+
+/** Every editor the description mounted, newest last. */
+const editors: StandInEditor[] = [];
+
+/** The plan editor's stand-in: an editable element holding the words it was handed, focused where it is asked to be. */
+const EDITOR_STAND_IN: PlanEditorModule = {
+  mount: (host, props) => {
+    const element = document.createElement("div");
+    element.setAttribute("contenteditable", "true");
+    element.setAttribute("role", "textbox");
+    element.setAttribute("aria-label", props.label);
+    element.tabIndex = 0;
+    host.append(element);
+    const editor: StandInEditor = { props, element, text: props.markdown, destroyed: false };
+    editors.push(editor);
+    if (props.focus) element.focus();
+    return {
+      take: (_sent, merged) => ({ base: merged, text: merged }),
+      chooseMention: () => undefined,
+      markdown: () => editor.text,
+      insertPictures: () => undefined,
+      settlePicture: () => undefined,
+      removePicture: () => undefined,
+      destroy: () => {
+        editor.destroyed = true;
+        element.remove();
+      },
+    };
+  },
+  mountComposer: () => assert.fail("the issue's page mounts no message box"),
+};
+
+/** The bundles the page is drawn over: the editor's stand-in landed, unless a test draws it over others. */
+let landed: SideBundles;
+let bundles: SideBundles;
+
+// Landed before any page renders, as it is once a plan or an issue has been shown in this window.
+beforeAll(async () => {
+  landed = await Effect.runPromise(
+    landedBundles({ planEditor: () => Promise.resolve(EDITOR_STAND_IN) }),
+  );
+});
+
 /** The service's issues, as a read of the list answers them and a filing adds to them. */
 let standing: Issue[] = [];
 /** How the next reads of the list answer before the service's own, in order. */
@@ -120,9 +179,10 @@ beforeEach(() => {
   heldCreates = undefined;
   changeRefused = false;
   copied = [];
+  editors.length = 0;
+  bundles = landed;
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   fakeAppBridge({
-    onMenuCommand: () => () => undefined,
-    recordSurfaceEvent: () => undefined,
     act: (request: Act) => {
       if (request.kind === ACT_KIND.ISSUES_LIST) {
         listed.push(request.payload.workspaceId);
@@ -193,10 +253,6 @@ beforeEach(() => {
         if (held === undefined) return Promise.resolve(done);
         return new Promise((resolve) => held.push(() => resolve(done)));
       }
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-        copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
@@ -229,7 +285,7 @@ function Pages({
 }): React.JSX.Element {
   const [place, setPlace] = useState<IssuesPlace>(start);
   const control = tasksControl({ workspace });
-  const plans = tasksControl({
+  const tasks = tasksControl({
     workspace,
     me: READER,
     issuesView: {
@@ -246,7 +302,7 @@ function Pages({
   return createElement(
     Fragment,
     null,
-    createElement(IssuesPage, { tasks: plans }),
+    createElement(IssuesPage, { tasks: tasks }),
     createElement(ToastHost),
     createElement(Keymap),
   );
@@ -264,7 +320,11 @@ function mount(start?: IssuesPlace): HTMLElement {
 
 /** The pages drawn again in place, listing the workspace given. */
 function list(workspace: Workspace, start?: IssuesPlace): void {
-  act(() => root?.render(onRegistry(registry, createElement(Pages, { workspace, start }))));
+  act(() =>
+    root?.render(
+      onRegistry(registry, onSideBundles(bundles, createElement(Pages, { workspace, start }))),
+    ),
+  );
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -278,8 +338,8 @@ async function settle(): Promise<void> {
 function groups(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll(".home-section, [data-issue-column]")]
     .map((group): [string, string[]] => [
-      group.querySelector(".home-section-title, .factory-head")?.textContent ?? "",
-      [...group.querySelectorAll(".sidebar-task-item")].map(
+      group.querySelector("h2")?.textContent ?? "",
+      [...group.querySelectorAll("li")].map(
         (row) =>
           `${row.querySelector(".issue-row-identifier")?.textContent} ${row.querySelector(".issue-row-title")?.textContent}`,
       ),
@@ -290,7 +350,7 @@ function groups(page: HTMLElement): [string, string[]][] {
 /** The board's columns, each its heading and its cards' identifiers, left to right. */
 function columns(page: HTMLElement): [string, string[]][] {
   return [...page.querySelectorAll("[data-issue-column]")].map((column) => [
-    column.querySelector(".factory-head")?.textContent ?? "",
+    column.querySelector("h2")?.textContent ?? "",
     [...column.querySelectorAll(".issue-row-identifier")].map((id) => id.textContent ?? ""),
   ]);
 }
@@ -377,23 +437,41 @@ function pick(page: HTMLElement, label: string, option: string): void {
   act(() => row.click());
 }
 
-/** The description's field, opened by a press on the description. */
-function openDescription(page: HTMLElement): HTMLTextAreaElement {
-  const description = page.querySelector<HTMLElement>("[aria-label='Edit description']");
+/** The description as its page draws it at rest. */
+function descriptionOf(page: HTMLElement): HTMLElement {
+  const description = page.querySelector<HTMLElement>("[role=group][aria-label='Description']");
   assert.ok(description, "the description stands");
-  act(() => description.click());
-  const field = page.querySelector<HTMLTextAreaElement>("textarea[aria-label='Description']");
-  assert.ok(field, "the description's field opens");
-  return field;
+  return description;
 }
 
-/** Types into a field as the developer would. */
-function type(field: HTMLTextAreaElement, words: string): void {
+/** The description's editor open now. */
+function openEditor(): StandInEditor {
+  const editor = editors.filter((each) => !each.destroyed).at(-1);
+  assert.ok(editor, "the description's editor is open");
+  return editor;
+}
+
+/** The description's editor, opened by a click into its words at the point given. */
+function openDescription(page: HTMLElement, at = { x: 40, y: 12 }): StandInEditor {
   act(() => {
-    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    set?.call(field, words);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
+    descriptionOf(page).dispatchEvent(
+      new MouseEvent("click", { bubbles: true, clientX: at.x, clientY: at.y }),
+    );
   });
+  return openEditor();
+}
+
+/** Words typed into the editor, as it hands each change over. */
+function type(editor: StandInEditor, words: string): void {
+  act(() => {
+    editor.text = words;
+    editor.props.onDraft(words);
+  });
+}
+
+/** Esc or ⌘↩ in the editor, which finishes it. */
+function finish(editor: StandInEditor): void {
+  act(() => editor.props.onFinish(0));
 }
 
 /** The new issue's title field, on the card standing over the window. */
@@ -531,7 +609,7 @@ test("C pressed on the page opens the card, and a c typed into the card's title,
   act(() => title.focus());
   press("c", title);
   const description = openDescription(page);
-  press("c", description);
+  press("c", description.element);
 
   assert.equal(document.querySelectorAll("[role=dialog]").length, 0, "no card opened while typing");
 });
@@ -652,7 +730,7 @@ test("under the title an issue's page says who filed it, by their face as the me
   const page = await openIssue(filed.id);
 
   assert.deepEqual(bylineOf(page), ["Created by Ada Lovelace · 3d ago", "Last edited · 2h ago"]);
-  const picture = page.querySelector<HTMLImageElement>(".issue-byline img.actor-picture");
+  const picture = page.querySelector<HTMLImageElement>(".issue-byline .actor-mark img");
   assert.ok(picture?.src.startsWith("https://avatars.githubusercontent.com/u/1"), "her picture");
 });
 
@@ -681,17 +759,6 @@ test("an issue whose creator is gone and unchanged since it was filed says only 
   await settle();
 
   assert.deepEqual(bylineOf(page), ["Created · 5h ago", "Last edited · 5h ago"]);
-});
-
-test("the list stands in the window's own frame: the Automations page's view and scroll, Home's sections and rows", async () => {
-  standing = [issue(1)];
-  const page = mount();
-  await settle();
-  showList();
-
-  assert.ok(page.querySelector("section.automations-view > .automations-scroll .home-column"));
-  assert.ok(page.querySelector(".home-section > h2.home-section-title > .home-section-count"));
-  assert.ok(page.querySelector(".home-section > ul.sidebar-tasks > li.sidebar-task-item.home-row"));
 });
 
 test("Archive asks first, then sends the archive and goes back to a list without the issue", async () => {
@@ -789,91 +856,279 @@ test("two changes at once draw the newest's answer, though the older one is answ
   assert.equal(picked(page, "Priority"), "Urgent");
 });
 
-test("the description pressed opens its field, and leaving it sends what was typed and draws it as Markdown", async () => {
+test("a click into the description opens the plan's editor in its place, the caret where the click landed, and leaving it sends what was typed and draws it as Markdown", async () => {
   standing = [issue(1)];
   const page = await openIssue(issue(1).id);
 
-  const field = openDescription(page);
-  type(field, "## Plan\n\n- reproduce\n- fix");
-  act(() => field.blur());
+  const editor = openDescription(page, { x: 120, y: 48 });
+  const opened = {
+    markdown: editor.props.markdown,
+    placement: editor.props.placement,
+    placeholder: editor.props.placeholder,
+    focused: document.activeElement === editor.element,
+    masked: editor.element.closest(".ph-no-capture") !== null,
+    resting: page.querySelector("[role=group][aria-label='Description']"),
+  };
+  type(editor, "## Plan\n\n- reproduce\n- fix");
+  act(() => editor.element.blur());
   await settle();
 
+  assert.deepEqual(opened, {
+    markdown: "",
+    placement: { x: 120, y: 48 },
+    placeholder: "Add a description…",
+    focused: true,
+    masked: true,
+    resting: null,
+  });
   assert.deepEqual(changes, [
     { issueId: issue(1).id, change: { description: "## Plan\n\n- reproduce\n- fix" } },
   ]);
-  assert.equal(page.querySelector("textarea[aria-label='Description']"), null);
-  const drawn = page.querySelector(".issue-description");
-  assert.equal(drawn?.querySelector(".markdown-heading[data-level='2']")?.textContent, "Plan");
+  assert.ok(editor.destroyed, "the editor closes once the save is kept");
+  const drawn = descriptionOf(page);
+  assert.equal(drawn.querySelector(".markdown-heading[data-level='2']")?.textContent, "Plan");
   assert.deepEqual(
-    [...(drawn?.querySelectorAll("li") ?? [])].map((item) => item.textContent),
+    [...drawn.querySelectorAll("li")].map((item) => item.textContent),
     ["reproduce", "fix"],
   );
 });
 
-test("Escape puts back the description the field opened on and sends nothing, leaving the issue's page standing", async () => {
+test("Return on the description opens the editor with the caret at the end of its last section", async () => {
+  standing = [issue(1, { description: "Fails on CI.\n\n## Steps\n\nRun it twice." })];
+  const page = await openIssue(issue(1).id);
+
+  const description = descriptionOf(page);
+  act(() => description.focus());
+  press("Enter", description);
+
+  assert.deepEqual(openEditor().props.placement, { section: 1 });
+  assert.equal(openEditor().props.markdown, "Fails on CI.\n\n## Steps\n\nRun it twice.");
+});
+
+test("Esc sends what was typed, leaving the issue's page standing, and gives the keyboard back to the description", async () => {
   standing = [issue(1, { description: "Fails on CI." })];
   const page = await openIssue(issue(1).id);
 
-  const field = openDescription(page);
-  type(field, "Something else entirely");
-  act(() => {
-    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  });
+  const editor = openDescription(page);
+  type(editor, "Fails on CI, twice.");
+  finish(editor);
   await settle();
 
-  assert.deepEqual(changes, []);
-  assert.equal(page.querySelector(".issue-description")?.textContent, "Fails on CI.");
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "Fails on CI, twice." } },
+  ]);
+  assert.equal(descriptionOf(page).textContent, "Fails on CI, twice.");
+  assert.equal(document.activeElement, descriptionOf(page));
   assert.equal(closed, 0);
   assert.deepEqual(opened, [{ kind: ISSUES_PAGE.ISSUE, issueId: issue(1).id }]);
 });
 
-test("a save the service refused keeps every word typed in the field and says so", async () => {
+test("a description left as it opened sends nothing and closes", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  const page = await openIssue(issue(1).id);
+
+  const editor = openDescription(page);
+  type(editor, "Fails on CI!");
+  type(editor, "Fails on CI.");
+  finish(editor);
+  await settle();
+
+  assert.deepEqual(changes, []);
+  assert.ok(editor.destroyed);
+  assert.equal(descriptionOf(page).textContent, "Fails on CI.");
+});
+
+test("a save the service refused keeps every word typed in the open editor and says so", async () => {
   standing = [issue(1)];
   changeRefused = true;
   const page = await openIssue(issue(1).id);
 
-  const field = openDescription(page);
-  type(field, "Steps to reproduce");
-  act(() => {
-    field.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
-    );
-  });
+  const editor = openDescription(page);
+  type(editor, "Steps to reproduce");
+  finish(editor);
   await settle();
 
-  const kept = page.querySelector<HTMLTextAreaElement>("textarea[aria-label='Description']");
-  assert.equal(kept?.value, "Steps to reproduce");
+  assert.ok(!editor.destroyed, "the editor stays open");
+  assert.equal(editor.text, "Steps to reproduce");
   assert.match(page.textContent ?? "", /Couldn't save the description/u);
 });
 
-test("while a description's save is out the field takes no typing and no Escape, and closes once the save is kept", async () => {
+test("a description past its bound is not sent, and the open editor says why", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+
+  const editor = openDescription(page);
+  type(editor, "a".repeat(20_001));
+  finish(editor);
+  await settle();
+
+  assert.deepEqual(changes, []);
+  assert.ok(!editor.destroyed, "the editor stays open");
+  assert.match(page.textContent ?? "", /The description is too long/u);
+});
+
+test("a finish while a save is out waits for it, then sends the words typed meanwhile, and the editor closes once those are kept", async () => {
   standing = [issue(1)];
   const page = await openIssue(issue(1).id);
   heldChanges = [];
   const held = heldChanges;
 
-  const field = openDescription(page);
-  type(field, "First draft");
+  const editor = openDescription(page);
+  type(editor, "First draft");
+  finish(editor);
+  await settle();
+  type(editor, "First draft, and more");
+  finish(editor);
+  await settle();
+  const sentWhileOut = changes.length;
+  act(() => held[0]?.());
+  await settle();
+  const openBetween = !editor.destroyed;
+  act(() => held[1]?.());
+  await settle();
+
+  assert.equal(sentWhileOut, 1, "nothing more is sent while the first save is out");
+  assert.ok(openBetween, "the newer words keep the editor open");
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "First draft" } },
+    { issueId: issue(1).id, change: { description: "First draft, and more" } },
+  ]);
+  assert.ok(editor.destroyed);
+  assert.equal(descriptionOf(page).textContent, "First draft, and more");
+});
+
+test("words typed while a save is out are sent once it is kept, though the page left the issue meanwhile", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const editor = openDescription(page);
+  type(editor, "First draft");
+  finish(editor);
+  await settle();
+  type(editor, "First draft, plus details");
   act(() => {
-    field.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
-    );
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
   });
   await settle();
-  const lockedWhileOut = field.readOnly;
+  act(() => held[0]?.());
+  await settle();
+  act(() => held[1]?.());
+  await settle();
+
+  assert.equal(page.querySelector("[role=group][aria-label='Description']"), null);
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "First draft" } },
+    { issueId: issue(1).id, change: { description: "First draft, plus details" } },
+  ]);
+});
+
+test("words typed back to the description it opened on while a save is out are sent once it is kept, though the page left the issue", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const editor = openDescription(page);
+  type(editor, "Fails on CI, twice.");
+  finish(editor);
+  await settle();
+  type(editor, "Fails on CI.");
   act(() => {
-    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
   });
   await settle();
-  const standsWhileOut = page.querySelector("textarea[aria-label='Description']") !== null;
+  act(() => held[0]?.());
+  await settle();
+  act(() => held[1]?.());
+  await settle();
+
+  assert.equal(page.querySelector("[role=group][aria-label='Description']"), null);
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "Fails on CI, twice." } },
+    { issueId: issue(1).id, change: { description: "Fails on CI." } },
+  ]);
+});
+
+test("a description reopened on words a later change's answer drew, and left as it opened, sends nothing", async () => {
+  standing = [issue(1, { description: "Original" })];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const editor = openDescription(page);
+  type(editor, "Revised");
+  finish(editor);
+  await settle();
+  // The service answers a status change made meanwhile from the issue as it stood before the description landed.
+  standing = [issue(1, { description: "Original" })];
+  pick(page, "Status", "Todo");
+  await settle();
+  act(() => held[0]?.());
+  await settle();
+  act(() => held[1]?.());
+  await settle();
+  const shown = descriptionOf(page).textContent;
+  finish(openDescription(page));
+  await settle();
+
+  assert.equal(shown, "Original");
+  assert.equal(changes.length, 2, "reopening and leaving the words as they opened sends nothing");
+});
+
+test("a control pressed while a finished save is out keeps the keyboard once the save closes the editor", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const editor = openDescription(page);
+  type(editor, "Steps");
+  finish(editor);
+  await settle();
+  const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
+  assert.ok(title);
+  act(() => title.focus());
   act(() => held[0]?.());
   await settle();
 
-  assert.ok(lockedWhileOut, "the field takes no typing while its save is out");
-  assert.ok(standsWhileOut, "Escape does not take back a save under way");
-  assert.equal(page.querySelector("textarea[aria-label='Description']"), null);
-  assert.equal(page.querySelector(".issue-description")?.textContent, "First draft");
-  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { description: "First draft" } }]);
+  assert.ok(editor.destroyed);
+  assert.equal(document.activeElement, title);
+});
+
+test("focus leaving the description before its editor has loaded opens nothing", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  bundles = unlandedBundles();
+  const page = await openIssue(issue(1).id);
+
+  const description = descriptionOf(page);
+  act(() => description.focus());
+  act(() => description.click());
+  const busy = description.closest("[aria-busy='true']") !== null;
+  const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
+  assert.ok(title);
+  act(() => title.focus());
+
+  assert.ok(busy, "the description waits on its editor, keeping its words");
+  assert.equal(descriptionOf(page), description, "the words pressed are the ones drawn");
+  assert.equal(page.querySelector("[aria-busy='true']"), null);
+  assert.equal(document.activeElement, title);
+});
+
+test("words typed in the description are sent as the page leaves the issue with its editor open", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+
+  const editor = openDescription(page);
+  type(editor, "Half a thought");
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+  await settle();
+
+  assert.equal(page.querySelector("[role=group][aria-label='Description']"), null);
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { description: "Half a thought" } }]);
 });
 
 test("a Return that chooses a word the input method composes is the method's, and sends no title", async () => {
@@ -928,7 +1183,7 @@ test("while a new issue is being filed its card's chips take no pick", async () 
   file("Flaky checkout test");
   await settle();
   const chips = [
-    ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] .settings-picker-chip"),
+    ...document.querySelectorAll<HTMLButtonElement>("[role=dialog] button[aria-haspopup=dialog]"),
   ];
   const lockedWhileOut = chips.length === 2 && chips.every((chip) => chip.disabled);
   act(() => held[0]?.());
@@ -973,10 +1228,7 @@ test("the page opens as a board: a column for every status in the order work mov
     ["Done1", ["ACME-1"]],
     ["Canceled", []],
   ]);
-  assert.equal(
-    page.querySelector("[data-issue-column='in-progress'] .factory-idle")?.textContent,
-    "No issues",
-  );
+  assert.equal(page.querySelector("[data-issue-column='in-progress'] p")?.textContent, "No issues");
   assert.equal(page.querySelector(".home-section"), null, "no list stands beside the board");
 });
 
@@ -1016,14 +1268,22 @@ test("on the board ↓ and ↑ move down a column, ← and → to the nearest ca
 
 /**
  * The board laid out as a narrow window lays it: each column 300px wide,
- * side by side from the scroller's start, in a scroller 700px wide that
- * scrolls sideways. jsdom lays nothing out, so this answers the geometry the
- * browser would. Answers each scroller's sideways scroll as it stands.
+ * side by side from the page's scroll's start, in that scroll 700px wide,
+ * which scrolls sideways. jsdom lays nothing out and reads no stylesheet,
+ * so this answers the geometry and the overflow the browser would. Answers
+ * the page's sideways scroll as it stands.
  */
 function layBoardOut(): () => number {
   const COLUMN = 300;
   const scrolled = new WeakMap<Element, number>();
-  const scroller = () => document.querySelector(".issue-board-scroll");
+  const SCROLL = ".luke-collection-page-scroll";
+  const scroller = () => document.querySelector<HTMLElement>(SCROLL);
+  const computed = globalThis.getComputedStyle;
+  vi.spyOn(globalThis, "getComputedStyle").mockImplementation((element, pseudo) => {
+    const style = computed(element, pseudo);
+    if (element.matches(SCROLL)) style.overflowX = "auto";
+    return style;
+  });
   vi.spyOn(Element.prototype, "scrollLeft", "get").mockImplementation(function (this: Element) {
     return scrolled.get(this) ?? 0;
   });
@@ -1034,7 +1294,7 @@ function layBoardOut(): () => number {
     scrolled.set(this, left);
   });
   vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
-    return this.matches(".issue-board-scroll") ? 700 : 0;
+    return this.matches(SCROLL) ? 700 : 0;
   });
   vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
     this: HTMLElement,
@@ -1044,7 +1304,9 @@ function layBoardOut(): () => number {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const columns = [...document.querySelectorAll("[data-issue-column]")];
     const at = columns.indexOf(this);
-    const left = at < 0 ? 0 : at * COLUMN - (scrolled.get(scroller() ?? this) ?? 0);
+    const shift = scrolled.get(scroller() ?? this) ?? 0;
+    if (this.matches(".issue-board")) return new DOMRect(-shift, 0, columns.length * COLUMN, 0);
+    const left = at < 0 ? 0 : at * COLUMN - shift;
     return new DOMRect(left, 0, at < 0 ? 0 : COLUMN, 0);
   });
   return () => {
@@ -1088,8 +1350,7 @@ test("View options lays the page out as the list and back as the board, and an i
 
   showList();
   const listed = page.querySelector(".home-section") !== null;
-  const row = page.querySelector<HTMLButtonElement>(`[data-issue-id="${issue(1).id}"] button`);
-  assert.ok(row);
+  const row = listRowOf(page, issue(1));
   act(() => row.click());
   await settle();
   act(() => button("Issues").click());
@@ -1102,6 +1363,28 @@ test("View options lays the page out as the list and back as the board, and an i
   assert.ok(stillListed, "the list is what the page goes back to");
   assert.ok(page.querySelector("[data-issue-column]"), "Board lays it out as the board again");
   assert.equal(page.querySelector(".home-section"), null);
+});
+
+test("while the issues are read the list stands rows of blocks, said as reading, and the board stands nothing until its columns can", async () => {
+  standing = [issue(1)];
+  window.localStorage.setItem("luke.issuesLayout", JSON.stringify("list"));
+  const list = mount();
+  const reading = list.querySelector('[role="status"]')?.textContent;
+  await settle();
+  const read = list.querySelector('[role="status"]');
+  const listedGroups = groups(list);
+  act(() => root?.unmount());
+
+  window.localStorage.setItem("luke.issuesLayout", JSON.stringify("board"));
+  const board = mount();
+  const boardReading = board.querySelector('[role="status"]');
+  await settle();
+
+  assert.equal(reading, "Reading issues");
+  assert.equal(read, null);
+  assert.deepEqual(listedGroups, [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.equal(boardReading, null);
+  assert.deepEqual(columns(board)[0], ["Backlog1", ["ACME-1"]]);
 });
 
 test("the page opens again in the layout last chosen, the list after List and the board after Board", async () => {
@@ -1138,7 +1421,12 @@ test("a workspace with no issue yet still stands the board's columns, each sayin
     ["Done", []],
     ["Canceled", []],
   ]);
-  assert.equal(page.querySelectorAll(".factory-idle").length, 5);
+  assert.equal(
+    [...page.querySelectorAll("[data-issue-column] p")].filter(
+      (idle) => idle.textContent === "No issues",
+    ).length,
+    5,
+  );
 });
 
 test("once the page has come back from an issue, a layout chosen keeps the keyboard on View options rather than that issue's row", async () => {
@@ -1151,7 +1439,7 @@ test("once the page has come back from an issue, a layout chosen keeps the keybo
   await settle();
 
   assert.ok(page.querySelector(".home-section"), "the list stands");
-  assert.equal(document.activeElement?.closest("[data-issue-id]") ?? null, null);
+  assert.doesNotMatch(document.activeElement?.textContent ?? "", /ACME-1/u);
 });
 
 test("a column's + opens the new issue's card with that column's status chosen, the priority at its default, and the title holding the keyboard", async () => {
@@ -1215,6 +1503,15 @@ function cardOf(page: HTMLElement, issueId: string): HTMLButtonElement {
   return found;
 }
 
+/** The press of the list's row for the issue given, found by the identifier it reads. */
+function listRowOf(page: HTMLElement, listed: Issue): HTMLButtonElement {
+  const found = [...page.querySelectorAll<HTMLButtonElement>(".home-section button")].find((each) =>
+    each.textContent?.startsWith(`ACME-${listed.number}`),
+  );
+  assert.ok(found, `no row for ACME-${listed.number}`);
+  return found;
+}
+
 /** A right-click on an element, at a point in the window, as the pointer makes one. */
 function rightClick(target: HTMLElement): void {
   act(() => {
@@ -1258,7 +1555,7 @@ test("a list row's menu opens from the keyboard with ⇧F10, and a priority pick
   await settle();
   showList();
 
-  const row = cardOf(page, issue(1).id);
+  const row = listRowOf(page, issue(1));
   act(() => row.focus());
   act(() => {
     row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
@@ -1270,6 +1567,26 @@ test("a list row's menu opens from the keyboard with ⇧F10, and a priority pick
     { issueId: issue(1).id, change: { priority: ISSUE_PRIORITY.URGENT } },
   ]);
   assert.deepEqual(groups(page), [["Backlog2", ["ACME-1 Issue 1", "ACME-2 Issue 2"]]]);
+});
+
+test("a list row's right-click opens its menu, and Escape hands the keyboard back to the row", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+  showList();
+
+  const row = listRowOf(page, issue(2));
+  rightClick(row);
+  assert.ok(menuItem("Status"));
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  await settle();
+
+  assert.equal(document.querySelector("[role=menu]"), null);
+  assert.ok(document.activeElement === row, "the row holds the keyboard");
 });
 
 test("Archive from a card's menu asks first in the issue page's words, then sends the archive and takes the card off the board", async () => {
@@ -1337,6 +1654,26 @@ test("a card moved by a status picked from its menu keeps the keyboard in its ne
   assert.equal(holding?.closest<HTMLElement>("[data-issue-column]")?.dataset.issueColumn, "done");
 });
 
+test("a list row moved by a status picked from its menu keeps the keyboard under its new heading", async () => {
+  standing = [issue(1), issue(2)];
+  const page = mount();
+  await settle();
+  showList();
+
+  const row = listRowOf(page, issue(1));
+  act(() => row.focus());
+  act(() => {
+    row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
+  });
+  pickFrom("Status", "Done");
+  await settle();
+
+  const holding = document.activeElement;
+  assert.ok(holding instanceof HTMLButtonElement, "a row holds the keyboard");
+  assert.match(holding.textContent ?? "", /^ACME-1/u);
+  assert.equal(holding.closest("section")?.getAttribute("aria-label"), "Done");
+});
+
 test("a card moved once the developer has gone on to New issue takes no keyboard from its card", async () => {
   standing = [issue(1), issue(2)];
   heldChanges = [];
@@ -1355,4 +1692,143 @@ test("a card moved once the developer has gone on to New issue takes no keyboard
 
   assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
   assert.equal(document.activeElement, composerField());
+});
+
+/**
+ * The board laid out for a drag: each column 300px wide and 600px tall, side
+ * by side from the window's left, each card 40px tall, 50px apart, from
+ * 40px down its column. jsdom lays nothing out and captures no pointer, so
+ * this answers the geometry and the capture the browser would.
+ */
+function layCardsOut(page: HTMLElement): void {
+  const COLUMN = 300;
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const columns = [...document.querySelectorAll("[data-issue-column]")];
+    if (this.matches(".issue-board")) return new DOMRect(0, 0, columns.length * COLUMN, 600);
+    const at = columns.indexOf(this);
+    if (at >= 0) return new DOMRect(at * COLUMN, 0, COLUMN, 600);
+    const column = columns.indexOf(this.closest("[data-issue-column]") ?? this);
+    if (!this.matches("li[data-issue-id]") || column < 0) return new DOMRect();
+    const row = [...(this.parentElement?.children ?? [])].indexOf(this);
+    return new DOMRect(column * COLUMN + 8, 40 + row * 50, COLUMN - 16, 40);
+  });
+  for (const list of page.querySelectorAll(".issue-column-cards")) {
+    Object.assign(list, { setPointerCapture: () => undefined });
+  }
+}
+
+/** A pointer event at a point in the window, as the primary button makes one. */
+function pointer(type: string, x: number, y: number): PointerEvent {
+  return new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, pointerId: 1 });
+}
+
+/** What the board showed with a dragged card held over a point: the column marked as where it lands, and whether a copy of it was carried. */
+interface HeldDrag {
+  marked: string | undefined;
+  carried: boolean;
+}
+
+/**
+ * Presses a card, drags it to a point, and lets it go there, answering
+ * what the board showed with the pointer held there: the column marked as
+ * the one it would land in, and whether a copy of the card was carried.
+ */
+function dragCard(page: HTMLElement, issueId: string, to: { x: number; y: number }): HeldDrag {
+  const card = cardOf(page, issueId);
+  const box = card.closest("li")?.getBoundingClientRect() ?? assert.fail("the card stands");
+  const from = { x: box.x + 20, y: box.y + 20 };
+  let held: HeldDrag = { marked: undefined, carried: false };
+  act(() => {
+    card.dispatchEvent(pointer("pointerdown", from.x, from.y));
+    window.dispatchEvent(pointer("pointermove", from.x + 10, from.y));
+    window.dispatchEvent(pointer("pointermove", to.x, to.y));
+    held = {
+      marked:
+        page.querySelector<HTMLElement>("[data-drop-target='true']")?.dataset.issueColumn ??
+        undefined,
+      carried: page.querySelector(".issue-board > [data-carried]") !== null,
+    };
+    window.dispatchEvent(pointer("pointerup", to.x, to.y));
+  });
+  return held;
+}
+
+test("a Todo card dragged onto Done is carried there, Done marked as where it lands, and it is sent done and lands in Done", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO }), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  const held = dragCard(page, issue(1).id, { x: 1000, y: 120 });
+  await settle();
+
+  assert.deepEqual(held, { marked: ISSUE_STATUS.DONE, carried: true });
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page), [
+    ["Backlog", []],
+    ["Todo1", ["ACME-2"]],
+    ["In progress", []],
+    ["Done1", ["ACME-1"]],
+    ["Canceled", []],
+  ]);
+  assert.equal(
+    page.querySelectorAll("[data-carried], [data-dragging], [data-drop-target]").length,
+    0,
+  );
+  assert.deepEqual(opened, [], "the drop opens nothing");
+});
+
+test("a card let go over its own column sends nothing, and a press that does not move still opens it", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO }), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  const held = dragCard(page, issue(1).id, { x: 450, y: 400 });
+  await settle();
+  const card = cardOf(page, issue(1).id);
+  act(() => {
+    card.dispatchEvent(pointer("pointerdown", 350, 60));
+    window.dispatchEvent(pointer("pointerup", 350, 60));
+    card.click();
+  });
+  await settle();
+
+  assert.deepEqual(held, { marked: undefined, carried: true });
+  assert.deepEqual(changes, []);
+  assert.deepEqual(opened, [{ kind: ISSUES_PAGE.ISSUE, issueId: issue(1).id }]);
+});
+
+test("a card dragged onto Done whose change the service refused stays in Todo and says so", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO })];
+  changeRefused = true;
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  dragCard(page, issue(1).id, { x: 1000, y: 120 });
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page)[1], ["Todo1", ["ACME-1"]]);
+  assert.deepEqual(columns(page)[3], ["Done", []]);
+  assert.match(document.body.textContent ?? "", /Couldn't change the issue\. Try again\./u);
+});
+
+test("a card is sent the status of the column it is let go over, though the last move reported another", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+  layCardsOut(page);
+
+  const card = cardOf(page, issue(1).id);
+  act(() => {
+    card.dispatchEvent(pointer("pointerdown", 350, 60));
+    window.dispatchEvent(pointer("pointermove", 750, 120));
+    window.dispatchEvent(pointer("pointerup", 1000, 120));
+  });
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
 });

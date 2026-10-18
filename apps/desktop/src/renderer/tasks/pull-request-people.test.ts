@@ -88,7 +88,6 @@ let root: Root | undefined;
 
 beforeEach(() => {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (request: Act) =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
@@ -177,9 +176,9 @@ test("the Changes tab says who opened the pull request, its reviewers by where e
   const strip =
     tab.querySelector(".changes-people") ?? assert.fail("the people stand under the bar");
 
-  const opener = strip.querySelector(".actor-ref") ?? assert.fail("who opened it is named");
+  const opener = strip.querySelector("[data-actor-ref]") ?? assert.fail("who opened it is named");
   assert.deepEqual(
-    [opener.querySelector(".actor-ref-name")?.textContent, opener.getAttribute("data-kind")],
+    [opener.querySelector(".luke-inline-ref-label")?.textContent, opener.getAttribute("data-kind")],
     ["luke-agent", "github"],
     "Luke's own App's bot is an App's bot on GitHub, as any other is",
   );
@@ -231,7 +230,7 @@ test("who opened the pull request is named alone, whoever the agent wrote as", a
     );
     const line = tab.querySelector(".changes-people .actor-words");
     const named = [
-      line?.querySelector(".actor-ref-name")?.textContent,
+      line?.querySelector(".luke-inline-ref-label")?.textContent,
       /as the GitHub App/u.test(line?.textContent ?? ""),
     ];
     act(() => root?.unmount());

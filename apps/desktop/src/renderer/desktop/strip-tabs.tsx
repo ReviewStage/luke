@@ -1,4 +1,5 @@
 import type { CodingAgentStatus, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
   CopyIcon,
@@ -14,7 +15,6 @@ import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ListXIcon, PlayIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useCopyToast } from "../copy-feedback";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import type { HeldTranscript } from "../tasks/agent-tab-card";
@@ -227,9 +227,7 @@ function ToolbarTabActions({
   return createPortal(
     <>
       <Tooltip label={named}>
-        <button type="button" className="icon-button" aria-label={named} {...menu.trigger()}>
-          <EllipsisIcon />
-        </button>
+        <IconButton icon={<EllipsisIcon />} label={named} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={named} menu={menu.drawn} groups={groups} onClose={menu.close} />

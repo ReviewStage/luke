@@ -14,8 +14,17 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
  * a worker it delegates to may spend.
  */
 export const CODER = {
-  /** The most a Vercel Sandbox session may live: the platform's own maximum, so a long run is never cut off mid-turn. */
-  SANDBOX_TIMEOUT_MS: 24 * 60 * 60 * 1_000,
+  /**
+   * The most one Vercel Sandbox session may live before the platform stops
+   * it. Three hours, above the longest coding session seen (114 minutes on
+   * 2026-10-16), so it bites only on a stranded or runaway sandbox. Note
+   * that a timeout ends a session, not the sandbox: a persistent sandbox
+   * is stopped with a snapshot and eve resumes it on its next command, as
+   * a planning sandbox resumes after its own thirty minutes. What a
+   * mid-turn stop loses is a background process, such as a watch of the
+   * checks or a dev server, which the agent runs again.
+   */
+  SANDBOX_TIMEOUT_MS: 3 * 60 * 60 * 1_000,
   /**
    * The sandbox's vCPUs, each with 2 GB of memory. Four, because oxlint with
    * JS plugins reserves its arena as one mapping of about 6 GiB, which the
@@ -77,6 +86,17 @@ export const CODER = {
    * starting forever and no transcript read is held for it.
    */
   STARTING_GRACE: Duration.minutes(5),
+  /**
+   * How long a line of the developer's may stand with no turn to take it
+   * while none runs, and still read the agent as running. eve opens the
+   * turn on a line it took in seconds, as it lands the first turn of a
+   * Start (`STARTING_GRACE`, whose length this shares); a line still
+   * waiting past this is one whose turn is not coming, as when the session
+   * failed with the store's hooks failing beside it, so no failed turn was
+   * written. It is read as failed rather than running forever, so the
+   * developer is offered Continue on it.
+   */
+  LINE_GRACE: Duration.minutes(5),
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */

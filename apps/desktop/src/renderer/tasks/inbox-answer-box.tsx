@@ -3,40 +3,47 @@ import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/cod
 import {
   INBOX_BOUNDS,
   INBOX_RESPONSE,
+  INBOX_STATUS,
   type InboxItem,
   type InboxReadResponse,
   type InboxReplyKind,
   knownResponse,
 } from "@luke/features/inbox-wire";
-import { PlusIcon } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  IconButton,
+  PlusIcon,
+  SUBMIT_STATE,
+  TEXT_TONE,
+  Text,
+} from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useRef, useState } from "react";
 import {
-  PROMPT_INPUT_STATUS,
   PromptInput,
   PromptInputFooter,
   PromptInputSubmit,
   PromptInputTools,
   submitPromptInput,
 } from "../ai-elements/prompt-input";
-import { editorBundleAtom } from "../editor-bundle";
+import { useSideBundles } from "../bundle-loader";
 import { imageFiles } from "../feedback-images";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract";
-import { BusyLabel } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";
 import { useComposerPickers } from "./composer-pickers";
 import { DictateButton, DictationStrip } from "./dictation-strip";
-import { type InboxDraft, inboxReply, pressesOf } from "./inbox-model";
+import { type InboxDraft, inboxMessageOf, inboxReply, pressesOf } from "./inbox-model";
 import type { SkillSource } from "./skill-picker";
 import type { TaskInboxControl } from "./use-task-inbox";
 
 /**
- * inbox-answer-box.tsx -- the box an open Inbox item is answered in, docked under its thread: the agent's message box's card and field, with the item's own presses at its foot.
+ * inbox-answer-box.tsx -- the box docked under every Inbox item's thread: the agent's message box's card and field, answering an open item with its own presses at its foot, and writing a message on a settled one's thread.
  *
  * The box is the agent composer's card (`ai-elements/prompt-input.tsx`)
  * around the agent composer's field (`composer-field.tsx`), and takes what
@@ -66,6 +73,12 @@ import type { TaskInboxControl } from "./use-task-inbox";
  * message the agent: a bare press does not, and a typed note or an attached
  * file does. Why an answer did not go, a file did not come, or a dictation
  * left nothing, is said under the card.
+ *
+ * Once the item is settled, answered or taken back, the same box writes a
+ * message on its thread instead, "Message <agent>…": words, files, or
+ * both, sent by Send or Enter, which reach the agent and leave the item
+ * where it stands. While the item waits, its words are its answer, never a
+ * message beside it, so an open item is answered as it always was.
  */
 
 /** What a card's box asks for, by what the item asks; a text's own placeholder stands where the agent wrote one. */
@@ -97,6 +110,14 @@ const QUIET_LINE = {
 
 /** What the box's Send is called. */
 const SEND = "Send to agent";
+
+/** What the box's Send is called on a settled item, where it writes a message on the thread. */
+const SEND_MESSAGE = "Send";
+
+/** What a settled item's box asks for: a message to its agent, by name. */
+function messagePlaceholder(agentName: string): string {
+  return `Message ${agentName}…`;
+}
 
 /** What the box says of files read for an item its agent changed before they landed. */
 const ITEM_CHANGED = "The agent changed this item while your files were read. Attach them again.";
@@ -135,35 +156,29 @@ function SendPresses({
   if (presses !== undefined) {
     const { back, ahead } = presses;
     return (
-      <div className="inbox-presses flex gap-(--control-gap)">
+      <div className="inbox-presses">
         {back === undefined ? null : (
-          <button
-            type="button"
-            className="toolbar-button"
-            disabled={held}
-            onClick={() => onAnswer(back.reply)}
-          >
+          <Button disabled={held} onClick={() => onAnswer(back.reply)}>
             {back.label}
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
-          className="primary-button"
+        <Button
+          variant={BUTTON_VARIANT.PRIMARY}
+          busy={sending}
+          busyLabel="Sending"
           disabled={held}
           onClick={() => onAnswer(ahead.reply)}
         >
-          <BusyLabel busy={sending} label="Sending">
-            {ahead.label}
-          </BusyLabel>
-        </button>
+          {ahead.label}
+        </Button>
       </div>
     );
   }
   return (
     <Tooltip label={SEND}>
       <PromptInputSubmit
-        aria-label={SEND}
-        status={sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY}
+        label={SEND}
+        status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
         disabled={held || inboxReply(item, draft) === undefined}
       />
     </Tooltip>
@@ -185,6 +200,8 @@ interface AnswerBoxProps {
   control: TaskInboxControl;
   /** The item's agent as its holder's read lists it, whose servers' switches a server's chip reads; none before the read lands. */
   agent: CodingAgentSummary | undefined;
+  /** The agent's name as the thread names it, which a settled item's box asks to message. */
+  agentName: string;
   /** Where the item's repository's skills are read from; nothing where none can be. */
   skills: SkillSource | undefined;
   /** The words a dictation into the box is likely to say (`dictation-keywords.ts`). */
@@ -196,6 +213,7 @@ function AnswerCard({
   item,
   control,
   agent,
+  agentName,
   skills,
   keywords,
   statuses,
@@ -213,9 +231,11 @@ function AnswerCard({
   // while and the item they land on is whichever revision is current by then.
   const latest = useRef(item);
   latest.current = item;
-  const byPress = pressesOf(item.response) !== undefined;
-  const placeholder = placeholderOf(item.response);
-  const bundle = useAtomValue(editorBundleAtom);
+  // Note that a settled item's box writes a message on its thread, which no response shapes.
+  const answering = item.status === INBOX_STATUS.OPEN;
+  const byPress = answering && pressesOf(item.response) !== undefined;
+  const placeholder = answering ? placeholderOf(item.response) : messagePlaceholder(agentName);
+  const bundle = useAtomValue(useSideBundles().planEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
   const pickers = useComposerPickers({
     editor,
@@ -247,6 +267,10 @@ function AnswerCard({
     setRefusal(undefined);
     control.onAnswer(item, draft, press);
   };
+  const message = () => {
+    setRefusal(undefined);
+    control.onMessage(item, draft);
+  };
   const attach = (files: readonly File[]) => {
     if (files.length === 0 || sending) return;
     const { revision } = item;
@@ -271,7 +295,8 @@ function AnswerCard({
       })
       .finally(() => setReading((count) => count - 1));
   };
-  const takesFiles = knownResponse(item.response) && !sending;
+  const takes = !answering || knownResponse(item.response);
+  const takesFiles = takes && !sending;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
     <div
@@ -294,12 +319,17 @@ function AnswerCard({
         attach(Array.from(event.dataTransfer.files));
       }}
     >
-      {knownResponse(item.response) ? (
+      {takes ? (
         <PromptInput
           className="inbox-answer"
           data-presses={byPress ? "" : undefined}
+          data-messages={answering ? undefined : ""}
           // A press answers an approval, a task, and an item asking nothing, so its box's Enter sends nothing.
-          onSubmit={() => (byPress || reading > 0 ? undefined : answer())}
+          onSubmit={() => {
+            if (byPress || reading > 0) return;
+            if (answering) answer();
+            else message();
+          }}
         >
           <AttachedFileChips
             files={attachmentChips(draft.attachments)}
@@ -320,7 +350,6 @@ function AnswerCard({
             setDraft={(text) => control.onDraft(item, { ...draft, note: text })}
             placeholder={placeholder}
             label={placeholder}
-            className="ph-no-capture agent-composer-input"
             input={
               sending
                 ? COMPOSER_INPUT.DISABLED
@@ -328,7 +357,7 @@ function AnswerCard({
                   ? COMPOSER_INPUT.READ_ONLY
                   : COMPOSER_INPUT.EDITABLE
             }
-            maxLength={INBOX_BOUNDS.MAX_NOTE_CHARS}
+            maxLength={answering ? INBOX_BOUNDS.MAX_NOTE_CHARS : INBOX_BOUNDS.MAX_MESSAGE_CHARS}
             takesFocus={false}
             {...pickers.field}
             onEnter={() => {
@@ -349,15 +378,12 @@ function AnswerCard({
               <>
                 <PromptInputTools className="inbox-answer-tools">
                   <Tooltip label={ATTACH}>
-                    <button
-                      type="button"
-                      className="icon-button inbox-answer-attach"
-                      aria-label={ATTACH}
+                    <IconButton
+                      icon={<PlusIcon />}
+                      label={ATTACH}
                       disabled={sending}
                       onClick={() => picker.current?.click()}
-                    >
-                      <PlusIcon />
-                    </button>
+                    />
                   </Tooltip>
                   <input
                     ref={picker}
@@ -371,28 +397,38 @@ function AnswerCard({
                       attach(picked);
                     }}
                   />
-                  <span className="inbox-answer-quiet px-1 text-[12px] text-muted-foreground">
-                    {item.needsReply ? null : <span data-inbox-quiet="">{quietLine(draft)}</span>}
+                  <span className="inbox-answer-quiet">
+                    {item.needsReply || !answering ? null : (
+                      <span data-inbox-quiet="">{quietLine(draft)}</span>
+                    )}
                   </span>
                 </PromptInputTools>
                 <div className="inbox-answer-actions">
                   <DictateButton dictation={dictation} disabled={sending || module === undefined} />
-                  <SendPresses
-                    item={item}
-                    draft={draft}
-                    sending={sending}
-                    reading={reading > 0}
-                    onAnswer={answer}
-                  />
+                  {answering ? (
+                    <SendPresses
+                      item={item}
+                      draft={draft}
+                      sending={sending}
+                      reading={reading > 0}
+                      onAnswer={answer}
+                    />
+                  ) : (
+                    <Tooltip label={SEND_MESSAGE}>
+                      <PromptInputSubmit
+                        label={SEND_MESSAGE}
+                        status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
+                        disabled={sending || reading > 0 || inboxMessageOf(draft) === undefined}
+                      />
+                    </Tooltip>
+                  )}
                 </div>
               </>
             )}
           </PromptInputFooter>
         </PromptInput>
       ) : (
-        <p className="m-0 text-muted-foreground" data-inbox-unknown="">
-          {NEWER_LUKE}
-        </p>
+        <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE}</Text>
       )}
       {note === undefined ? null : (
         <p className="error-message agent-composer-note" role="alert">
@@ -404,8 +440,9 @@ function AnswerCard({
 }
 
 /**
- * The box an open item is answered in, as above, a note that it was not
- * sent under the card as the composer's is. Each item gets a card of its
+ * The box under every item, answering an open one and writing a message on
+ * a settled one's thread, as above, a note that it was not sent under the
+ * card as the composer's is. Each item gets a card of its
  * own, so a dictation, its note, and the editor's undo never follow the
  * developer to another item; where the account's servers stand is read
  * once for every item the pane shows.

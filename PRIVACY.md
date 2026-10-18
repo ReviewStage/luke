@@ -227,7 +227,8 @@ follows you to every Mac you sign in on. Unpinning deletes that record, and
 deleting your account removes them all.
 
 **Sidebar sections.** When you make a section in the sidebar, our service
-stores its title, its icon, its place among your sections, and the workspace
+stores its title, its icon (an emoji, or an icon's name and the color you
+chose for it), its place among your sections, and the workspace
 it is in under your account, and, for each task you put in it, which task and
 when, so your sections follow you to every Mac you sign in on. They are yours
 alone: no teammate sees them. Deleting a section deletes those records and none
@@ -255,7 +256,13 @@ message, on the same terms and bounds (see "Files you attach to a coding
 agent"): an answer carrying one is always handed to the agent, and our
 service also keeps each file, with its name, in our database beside the item,
 where every member of the task's workspace can open it, until the answer is
-taken back or the agent posts the item again. While you are signed in, Luke
+taken back or the agent posts the item again. Any member of the task's
+workspace can also add a message to an item's thread at any point, answered
+or not, with files on the same terms: our service keeps the message's words
+and files with the item under the account of the member who wrote it, which
+every member of the workspace sees by name beside it, and hands it to the
+agent as one of your messages, kept in its transcript. A thread stays until
+the item is deleted with its task. While you are signed in, Luke
 on your Mac keeps a read open to our service for every item waiting in your
 workspaces, each in brief (its task, agent, title, and the account that started
 the agent), and for every task holding an item; it counts in its sidebar and on
@@ -291,7 +298,13 @@ read, up to 20 messages, sent to the model provider with the rest of the
 turn.
 Deleting a plan deletes its channel with its messages, deleting your account
 deletes your messages (others' replies to them stay), and deleting the
-workspace deletes its chat.
+workspace deletes its chat. While you are signed in, the same read that keeps
+your waiting inbox items carries what waits on you in chat: every open ask
+someone else posted, and the last direct message or mention of you that you
+have not read, each named only by who posted it, its plan, and its place,
+never its words. While Luke's window is behind, a Mac notification says no
+more than that, such as "@agent-2 messaged you" under the plan's name,
+unless you turn notifications off in Settings › Coding agents.
 
 **Files you attach to a coding agent.** You can attach files to a coding
 agent's message, to the prompt you start one with, or to an Inbox answer, by picking them with +,
@@ -1154,10 +1167,13 @@ only when you press Send.
   session's history (the messages, files, tool calls, and answers its model
   works from) so the session can pick up where it stopped. Deleting a task or
   your account ends each of its sessions for good, a turn still running
-  included. When a session of Luke's or a coding agent's ends, Vercel deletes that
-  history at once, though the session's ids, status, and times may stay as
-  long as Vercel's own retention. This holds for a session started on or after
-  13 October 2026; a session started before then, and the session of a worker
+  included. When a session of Luke's ends, Vercel deletes that history at
+  once, though the session's ids, status, and times may stay as long as
+  Vercel's own retention. This holds for a session started on or after
+  13 October 2026. For now, a coding agent's session keeps its history after
+  it ends for our hosting plan's Workflow retention period, so that we can
+  find out why a session stopped partway, and Vercel deletes it after that.
+  A session of Luke's started before then, and the session of a worker
   either one hands work to, keeps its history under Vercel's own retention.
 - GitHub, asked by your Mac itself and unauthenticated, which sees your Mac's
   network address: to check for updates, carrying nothing about you, when Luke

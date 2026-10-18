@@ -5,11 +5,10 @@ import {
   type IssuePriority,
   type IssueStatus,
 } from "@luke/features/issue-wire";
-import { useId, useRef, useState } from "react";
-import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
-import { ModalShell } from "../modal-shell";
+import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
+import { BUTTON_VARIANT, Button, DIALOG_SIZE, Dialog, ErrorState } from "@luke/ui";
+import { useRef, useState } from "react";
 import { Shortcut } from "../shortcut";
-import { BusyLabel } from "../spinner";
 import { PriorityMenu, StatusMenu } from "./issue-pickers";
 
 /**
@@ -52,7 +51,6 @@ function NewIssueCard({
   const [creating, setCreating] = useState(false);
   const [refused, setRefused] = useState(false);
   const field = useRef<HTMLInputElement>(null);
-  const titleId = useId();
   const canCreate = !creating && title.trim() !== "";
 
   const create = () => {
@@ -70,64 +68,57 @@ function NewIssueCard({
   };
 
   return (
-    <ModalShell
-      className="confirm-dialog new-task-dialog ph-no-capture"
-      labelledBy={titleId}
+    <Dialog
+      size={DIALOG_SIZE.WIDE}
+      title="New issue"
       busy={creating}
       initialFocus={field}
       onDismiss={close}
-    >
-      <div className="new-plan-head">
-        <h2 id={titleId} className="confirm-dialog-title">
-          New issue
-        </h2>
-      </div>
-      <input
-        ref={field}
-        type="text"
-        className="dialog-name-field"
-        aria-label="New issue title"
-        aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-        placeholder="Issue title"
-        maxLength={ISSUE_BOUNDS.MAX_TITLE_CHARS}
-        spellCheck
-        value={title}
-        disabled={creating}
-        onChange={(event) => setTitle(event.currentTarget.value)}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-          event.preventDefault();
-          create();
-        }}
-      />
-      <div className="issue-properties">
-        <StatusMenu status={status} disabled={creating} onPick={setStatus} />
-        <PriorityMenu priority={priority} disabled={creating} onPick={setPriority} />
-      </div>
-      {refused ? (
-        <p className="error-message" role="alert">
-          {UNFILED_LINE}
-        </p>
-      ) : null}
-      <div className="confirm-dialog-actions">
-        <button type="button" className="toolbar-button" disabled={creating} onClick={close}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="primary-button"
-          aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
-          aria-busy={creating}
-          disabled={!canCreate}
-          onClick={create}
-        >
-          <BusyLabel busy={creating} label="Creating">
+      actions={
+        <>
+          <Button variant={BUTTON_VARIANT.QUIET} disabled={creating} onClick={close}>
+            Cancel
+          </Button>
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
+            disabled={title.trim() === ""}
+            busy={creating}
+            busyLabel="Creating"
+            onClick={create}
+          >
             Create issue
-          </BusyLabel>
-          <Shortcut chord={CREATE_CHORD} />
-        </button>
+            <Shortcut chord={CREATE_CHORD} />
+          </Button>
+        </>
+      }
+    >
+      <div className="new-issue ph-no-capture">
+        <input
+          ref={field}
+          type="text"
+          className="dialog-name-field"
+          aria-label="New issue title"
+          aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
+          placeholder="Issue title"
+          maxLength={ISSUE_BOUNDS.MAX_TITLE_CHARS}
+          spellCheck
+          value={title}
+          disabled={creating}
+          onChange={(event) => setTitle(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            create();
+          }}
+        />
+        <div className="issue-properties">
+          <StatusMenu status={status} disabled={creating} onPick={setStatus} />
+          <PriorityMenu priority={priority} disabled={creating} onPick={setPriority} />
+        </div>
+        {refused ? <ErrorState>{UNFILED_LINE}</ErrorState> : null}
       </div>
-    </ModalShell>
+    </Dialog>
   );
 }
 

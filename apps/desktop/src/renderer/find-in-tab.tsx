@@ -1,4 +1,5 @@
-import { CloseIcon, SearchIcon } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { CloseIcon, DisclosureFind, IconButton, SearchField, useDisclosureFinding } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import {
@@ -11,7 +12,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
 import {
   FIND_SKIP_ATTRIBUTE,
@@ -121,9 +121,6 @@ export interface FindSource {
   readonly selection: () => string | undefined;
 }
 
-/** Whether a find bar stands open over the tab drawing under it. */
-const FindOpenContext = createContext(false);
-
 /** Hands the scope over the tab a source of the tab's own, or takes it back. */
 const FindSourceContext = createContext<(source: FindSource | undefined) => void>(() => undefined);
 
@@ -135,14 +132,6 @@ function sameSubject(a: FindSubject, b: FindSubject): boolean {
   if ("task" in a) return "task" in b && a.task === b.task && sameTab(a.tab, b.tab);
   if ("agent" in a) return "agent" in b && a.agent === b.agent;
   return "page" in b && a.page === b.page && a.at === b.at;
-}
-
-/** The words the bar says of the matches: where the find is among them, or how many there are while it is at none counted. */
-function tallyLine(query: string, tally: FindTally): string {
-  if (query.length === 0) return "";
-  if (tally.count === 0) return "No results";
-  const count = tally.more === true ? `${tally.count}+` : String(tally.count);
-  return tally.at < 0 ? `${count} results` : `${tally.at + 1} of ${count}`;
 }
 
 /**
@@ -219,31 +208,23 @@ function BarButton({
   command,
   disabled,
   onPress,
-  children,
+  icon,
 }: {
   label: string;
   command?: typeof APP_COMMAND.FIND_NEXT | typeof APP_COMMAND.FIND_PREVIOUS;
   disabled?: boolean;
   onPress: () => void;
-  children: React.ReactNode;
+  icon: React.ReactNode;
 }): React.JSX.Element {
   return (
     <Tooltip label={label} {...(command === undefined ? {} : { command })}>
-      <button
-        type="button"
-        className="icon-button find-bar-button"
-        aria-label={label}
-        disabled={disabled}
-        onClick={onPress}
-      >
-        {children}
-      </button>
+      <IconButton icon={icon} label={label} disabled={disabled} onClick={onPress} />
     </Tooltip>
   );
 }
 
 /**
- * The bar: the field in a search well with the tally at its end, then the
+ * The bar: the shared search field with the tally at its end, then the
  * previous and next matches and the close. Each summons puts the caret in
  * the field with its text selected.
  */
@@ -267,57 +248,40 @@ function FindBar({
     field.current?.focus({ preventScroll: true });
     field.current?.select();
   }, [summons]);
-  const line = tallyLine(query, tally);
   return (
     <search className="find-bar" aria-label="Find" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
-      <label className="settings-search-well field-well find-bar-well">
-        <SearchIcon />
-        <input
+      <div className="find-bar-field">
+        <SearchField
           ref={field}
-          className="settings-search-input"
-          aria-label="Find"
+          label="Find"
           placeholder="Find"
-          autoComplete="off"
-          spellCheck={false}
           value={query}
-          onChange={(event) => onQuery(event.target.value)}
-          onKeyDown={(event) => {
-            // Note that an Escape is stopped even mid-composition, because the
-            // input method spends that press dismissing its candidates, and
-            // the window's own Escape would turn the page behind the bar.
-            if (event.key === "Escape") event.stopPropagation();
-            if (event.nativeEvent.isComposing) return;
-            if (event.key === "Escape") onClose();
-            if (event.key !== "Enter") return;
-            event.preventDefault();
-            onStep(event.shiftKey ? FIND_STEP.PREVIOUS : FIND_STEP.NEXT);
-          }}
+          onChange={onQuery}
+          tally={
+            query.length === 0
+              ? undefined
+              : { count: tally.count, at: tally.at < 0 ? undefined : tally.at, more: tally.more }
+          }
+          onEnter={() => onStep(FIND_STEP.NEXT)}
+          onShiftEnter={() => onStep(FIND_STEP.PREVIOUS)}
+          onEscape={onClose}
         />
-        {line.length === 0 ? null : (
-          <span className="find-bar-tally" aria-live="polite">
-            {line}
-          </span>
-        )}
-      </label>
+      </div>
       <BarButton
         label="Previous match"
         command={APP_COMMAND.FIND_PREVIOUS}
         disabled={tally.count === 0}
         onPress={() => onStep(FIND_STEP.PREVIOUS)}
-      >
-        <ChevronUpIcon aria-hidden="true" />
-      </BarButton>
+        icon={<ChevronUpIcon aria-hidden="true" />}
+      />
       <BarButton
         label="Next match"
         command={APP_COMMAND.FIND_NEXT}
         disabled={tally.count === 0}
         onPress={() => onStep(FIND_STEP.NEXT)}
-      >
-        <ChevronDownIcon aria-hidden="true" />
-      </BarButton>
-      <BarButton label="Close find" onPress={onClose}>
-        <CloseIcon />
-      </BarButton>
+        icon={<ChevronDownIcon aria-hidden="true" />}
+      />
+      <BarButton label="Close find" onPress={onClose} icon={<CloseIcon />} />
     </search>
   );
 }
@@ -328,7 +292,7 @@ function FindBar({
  * it while this is so, so the find covers what the tab holds.
  */
 export function useFindOpen(): boolean {
-  return useContext(FindOpenContext);
+  return useDisclosureFinding();
 }
 
 /**
@@ -420,7 +384,7 @@ export function FindScope({
         />
       ) : null}
       <FindSourceContext.Provider value={setSource}>
-        <FindOpenContext.Provider value={open}>{children}</FindOpenContext.Provider>
+        <DisclosureFind finding={open}>{children}</DisclosureFind>
       </FindSourceContext.Provider>
     </div>
   );

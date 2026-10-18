@@ -4,12 +4,11 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
@@ -51,13 +50,7 @@ let copied: string[] = [];
 beforeEach(() => {
   installScrollIntoView();
   copied = [];
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-    recordSurfaceEvent: () => undefined,
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
 });
 
 afterEach(() => {
@@ -70,7 +63,7 @@ afterEach(() => {
 /** The plan's version history over the window, its versions read. */
 function drawn(): HTMLElement {
   const base = tasksControl();
-  const plans = tasksControl({
+  const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, workspaceId: ACME.id } },
@@ -103,7 +96,7 @@ function drawn(): HTMLElement {
             staged: false,
           },
           history: { canGoBack: false, canGoForward: false, onBack: ignore, onForward: ignore },
-          subject: taskVersionSubject(plans),
+          subject: taskVersionSubject(tasks),
           account: {
             status: ACCOUNT_STATUS.SIGNED_IN,
             email: "dev@example.com",

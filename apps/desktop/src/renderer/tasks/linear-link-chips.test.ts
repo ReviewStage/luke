@@ -15,7 +15,7 @@ import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**
@@ -27,7 +27,7 @@ import { TranscriptWords } from "./transcript-blocks";
  * Linear connected. Synthetic workspace, plan, and issue.
  */
 
-const PLAN = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AT = 1_792_000_000_000;
 const ISSUE = "https://linear.app/acme/issue/ENG-1/start-a-plan-from-linear";
 
@@ -48,7 +48,7 @@ const ACME: Workspace = {
 const ACME_WITH_LINEAR: Workspace = { ...ACME, linear: { active: true } };
 
 const TASK: TaskSummary = {
-  id: PLAN,
+  id: TASK_ID,
   workspaceId: "workspace-acme",
   name: "Teammate invitations",
   createdAt: AT,
@@ -66,15 +66,15 @@ function stateWith(workspace: Workspace): AppStateSnapshot {
 }
 
 /** The plan's page, as its words' chips stand on it. */
-const PAGE: PlanMentionsValue = {
-  taskId: PLAN,
+const PAGE: TaskMentionsValue = {
+  taskId: TASK_ID,
   taskName: TASK.name,
   workspace: "acme",
   workspaceId: "workspace-acme",
   repository: "acme/relay",
   text: () => "",
   doors: {
-    taskId: PLAN,
+    taskId: TASK_ID,
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(),
     onOpenTask: () => undefined,
@@ -105,7 +105,6 @@ async function drawn(text: string, workspace: Workspace, onTask = true) {
   const asked: Act[] = [];
   const state = stateWith(workspace);
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
       deliver = listener;
       return () => undefined;
@@ -139,7 +138,7 @@ async function drawn(text: string, workspace: Workspace, onTask = true) {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        onTask ? createElement(PlanMentions, { value: PAGE, children: words }) : words,
+        onTask ? createElement(TaskMentions, { value: PAGE, children: words }) : words,
       ),
     ),
   );
@@ -149,9 +148,9 @@ async function drawn(text: string, workspace: Workspace, onTask = true) {
 
 /** Each chip drawn: the name it says and the state after it. */
 function chips(container: HTMLElement): [string | null, string | null][] {
-  return [...container.querySelectorAll<HTMLElement>(".mention-chip")].map((chip) => [
-    chip.querySelector(".mention-chip-label")?.textContent ?? null,
-    chip.querySelector(".mention-chip-state")?.textContent ?? null,
+  return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
+    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
+    chip.querySelector(".luke-inline-ref-state")?.textContent ?? null,
   ]);
 }
 
@@ -225,7 +224,7 @@ function cardNotes(chip: Element | undefined): (string | null)[] {
 test("a Linear issue's card says who it is assigned to, as the workspace's Linear answers it, in place of its address", async () => {
   const { container } = await drawn(`See ${ISSUE}.`, ACME_WITH_LINEAR);
 
-  assert.deepEqual(cardNotes(container.querySelector(".mention-chip") ?? undefined), [
+  assert.deepEqual(cardNotes(container.querySelector("[data-mention-ref]") ?? undefined), [
     "ENG-1 · In Progress",
     "Assigned to Sam Okafor",
   ]);

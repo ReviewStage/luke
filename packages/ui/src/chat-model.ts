@@ -70,8 +70,8 @@ export interface ChatAskAnswer {
   readonly reply: ChatReply;
 }
 
-/** What Luke is called wherever a plan's planner speaks. */
-const PLANNER_NAME = "Luke";
+/** What Luke is called wherever a task's Luke speaks. */
+const LUKE_NAME = "Luke";
 
 /** The order the rail lists channels in, by kind: `#general`, the plans', then the topics. */
 const CHANNEL_ORDER = {
@@ -90,14 +90,14 @@ export interface ChatNames {
 
 /** The names a window knows: each agent's line from the plans' summaries and the lines a chat read carries, each plan's name, and the reader's own. */
 export function chatNames(
-  plans: readonly TaskSummary[],
+  tasks: readonly TaskSummary[],
   agents: readonly TaskAgentLine[],
   selfName: string | undefined,
 ): ChatNames {
-  const lines = [...plans.flatMap((plan) => plan.agents?.agents ?? []), ...agents];
+  const lines = [...tasks.flatMap((task) => task.agents?.agents ?? []), ...agents];
   return {
     agents: new Map(lines.map((line) => [line.id, line])),
-    plans: new Map(plans.map((plan) => [plan.id, plan.name])),
+    plans: new Map(tasks.map((task) => [task.id, task.name])),
     selfName,
   };
 }
@@ -145,9 +145,15 @@ function bySeq(one: ChatMessage, other: ChatMessage): number {
   return one.seq - other.seq;
 }
 
-/** Whether the reader has yet to read a message: posted past its cursor by someone else. */
+/** How far the reader has read a channel: its own cursor there where it read further, else its cursor everywhere. */
+function readSeqIn(chat: ChatAnswer, channelId: string): number {
+  const own = chat.reads?.find((each) => each.channelId === channelId)?.readSeq ?? 0;
+  return Math.max(chat.readSeq, own);
+}
+
+/** Whether the reader has yet to read a message: posted or changed past its cursor in the message's channel by someone else, as the service counts it. */
 function unreadBy(chat: ChatAnswer, message: ChatMessage): boolean {
-  return message.seq > chat.readSeq && message.authorId !== chat.self;
+  return message.touchedSeq > readSeqIn(chat, message.channelId) && message.authorId !== chat.self;
 }
 
 /** The member of a direct message who is not the reader, by id; none for a channel. */
@@ -156,21 +162,21 @@ function otherOf(chat: ChatAnswer, channel: ChatChannel): string | undefined {
   return channel.members?.find((id) => id !== chat.self) ?? channel.members?.[0];
 }
 
-/** A member by its id, the way every line names it: an agent by its title, a plan's planner as Luke, a person by their handle, the reader by their own name. */
+/** A member by its id, the way every line names it: an agent by its title, a task's Luke as Luke, a person by their handle, the reader by their own name. */
 export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): ChatWho {
   const member = chat.members.find((each) => each.id === memberId);
   const handle = member?.handle ?? "unknown";
   const agent = member?.agentId === undefined ? undefined : names.agents.get(member.agentId);
-  const planName = member?.planId === undefined ? undefined : names.plans.get(member.planId);
+  const taskName = member?.planId === undefined ? undefined : names.plans.get(member.planId);
   const name =
-    member?.kind === MEMBER_KIND.PLANNER
-      ? PLANNER_NAME
+    member?.kind === MEMBER_KIND.LUKE
+      ? LUKE_NAME
       : member?.kind === MEMBER_KIND.AGENT
         ? (agent?.title ?? handle)
         : memberId === chat.self && names.selfName !== undefined
           ? names.selfName
           : handle;
-  return { member, name, handle, agent, planName };
+  return { member, name, handle, agent, planName: taskName };
 }
 
 /** What a channel is called: a channel's own name, a direct message's other member's handle. */

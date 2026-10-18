@@ -12,13 +12,22 @@
  * of the keyboard after it.
  *
  * Only where it stands differs. Among rows, in a card, or under a
- * transcript it is a line at a caption's size: the glyph where a row's
- * glyph stands, then the sentence, Retry beside it or under its first word
- * where the line has no room for both. Alone in a region it would have
+ * transcript it is a row of its own at a caption's size, laid out as a row
+ * is: the glyph where a row's glyph stands, the sentence where a row's words
+ * stand, and Retry at the row's end, where a row's own buttons stand. Where
+ * the row is narrow, a sidebar's or a list pane's, Retry is its glyph alone,
+ * still named Retry, so the sentence keeps the room. Alone in a region it would have
  * filled, a tab or a page, it is that region's empty state (`EmptyState`):
  * the glyph large and faint over the sentence, and Retry under it, standing
  * a little above the room's middle. The container places it and lends it no
  * colour of its own.
+ *
+ * A row that is itself the press, a list's foot such as "Show older
+ * versions" turned failure, cannot hold a Retry button of its own, so it
+ * says its sentence and then Retry's glyph and word (`RetryRowLabel`), and
+ * its own press is the retry. The sentence wraps as words do, and the glyph
+ * and word stay together after it. The sentence is an alert for the same
+ * reason, because it appears in the row's place after a press or a scroll.
  */
 
 import type { ReactNode } from "react";
@@ -73,14 +82,29 @@ export function ErrorState({
       <span className="luke-error-state-glyph">
         <AlertIcon />
       </span>
-      <span className="luke-error-state-body">
-        <span className="luke-error-state-words">{children}</span>
-        {onRetry === undefined ? null : (
-          <Button variant={BUTTON_VARIANT.QUIET} icon={<RetryIcon />} onClick={onRetry}>
-            {RETRY_WORD}
-          </Button>
-        )}
-      </span>
+      <span className="luke-error-state-words">{children}</span>
+      {onRetry === undefined ? null : (
+        <Button variant={BUTTON_VARIANT.QUIET} icon={<RetryIcon />} onClick={onRetry}>
+          {RETRY_WORD}
+        </Button>
+      )}
     </p>
+  );
+}
+
+/**
+ * A failed row's words, `failure`, then Retry's glyph and word, for a row
+ * that is itself the button its press retries with. The row lends it its
+ * type and ink.
+ */
+export function RetryRowLabel({ failure }: { failure: string }): React.JSX.Element {
+  return (
+    <>
+      <span role="alert">{failure}</span>{" "}
+      <span className="luke-retry-row-label">
+        <RetryIcon />
+        {RETRY_WORD}
+      </span>
+    </>
   );
 }

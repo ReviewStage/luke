@@ -1,4 +1,4 @@
-import { TEXT_LINK_CLASS } from "@luke/ui/link-face";
+import { TEXT_LINK_MARK_ATTRIBUTES } from "@luke/ui/link-face";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { type AnyExtension, Editor, Extension } from "@tiptap/core";
 import Heading from "@tiptap/extension-heading";
@@ -62,6 +62,9 @@ const COMPOSING_KEY_CODE = 229;
 /** The class the editor's own element wears beside the read view's, which `tasks.css` styles. */
 const EDITOR_CLASS = "plan-document-text";
 
+/** What an empty plan says until a word is typed. */
+const PLAN_PLACEHOLDER = "Write the plan";
+
 /** The heading levels that open a section, as `planSections` counts them. */
 const SECTION_LEVELS = new Set([1, 2]);
 
@@ -90,6 +93,34 @@ const DocumentParagraph = Paragraph.extend({
   },
 });
 
+/** What an empty task item's words are written as: TipTap's own mark for an empty paragraph. */
+const EMPTY_TASK_WORDS = "&nbsp;";
+
+/** How many characters TipTap's task item mark, `- [ ] ` or `- [x] `, takes before its words. */
+const TASK_MARK_LENGTH = "- [ ] ".length;
+
+/**
+ * A task item that stays one when it holds no words. Note that TipTap's own
+ * writes an empty one as `- [ ] `, which GFM, and so the read view, reads as
+ * a bullet saying "[ ]", and which loses its trailing space the moment a
+ * block's ending is trimmed; so its words are written as `&nbsp;`, which
+ * GFM reads as a task, and read back as no words. They are laid in after
+ * the mark rather than as a text node, which would escape the `&`.
+ */
+const DocumentTaskItem = TaskItem.extend({
+  parseMarkdown(token, helpers) {
+    const empty = token.text === EMPTY_TASK_WORDS;
+    return this.parent?.(empty ? { ...token, text: "", tokens: [] } : token, helpers) ?? [];
+  },
+  renderMarkdown(node, helpers, context) {
+    const written = this.parent?.(node, helpers, context) ?? "";
+    const [words] = node.content ?? [];
+    const empty = words?.type === "paragraph" && (words.content ?? []).length === 0;
+    if (!empty) return written;
+    return written.slice(0, TASK_MARK_LENGTH) + EMPTY_TASK_WORDS + written.slice(TASK_MARK_LENGTH);
+  },
+});
+
 /** The class a link whose target names a mention wears in the editor, which `tasks.css` draws in a chip's light look. */
 const MENTION_LINK_CLASS = "plan-mention-link";
 
@@ -97,10 +128,10 @@ const MENTION_LINK_CLASS = "plan-mention-link";
  * How a link looks in the editor: a link whose target names a mention,
  * which the read view draws as its chip, wears a chip's light look, so
  * opening a section to edit it does not turn its chips into underlined
- * words; any other is the plain link every place draws (`TEXT_LINK_CLASS`).
+ * words; any other is the plain link every place draws (`TEXT_LINK_MARK_ATTRIBUTES`).
  * Note that one attribute decides between the two, so a mention's link
- * never wears the plain link's class beside its own, that only a class is
- * added, never the target in an attribute of its own, and that the
+ * never wears the plain link's class beside its own, that only a class and
+ * the link's look are added, never the target in an attribute of its own, and that the
  * attribute is drawn alone and never read or written as markdown.
  */
 function linkLook(namesMention: ((target: string) => boolean) | undefined) {
@@ -114,12 +145,10 @@ function linkLook(namesMention: ((target: string) => boolean) | undefined) {
             look: {
               default: null,
               parseHTML: () => null,
-              renderHTML: (attributes) => ({
-                class:
-                  namesMention?.(String(attributes.href ?? "")) === true
-                    ? MENTION_LINK_CLASS
-                    : TEXT_LINK_CLASS,
-              }),
+              renderHTML: (attributes) =>
+                namesMention?.(String(attributes.href ?? "")) === true
+                  ? { class: MENTION_LINK_CLASS }
+                  : TEXT_LINK_MARK_ATTRIBUTES,
             },
           },
         },
@@ -153,7 +182,7 @@ export function markdownExtensions(
     DocumentHeading,
     Markdown,
     TaskList,
-    TaskItem,
+    DocumentTaskItem,
     TableKit,
     pictureNode(pictures),
     RawBlock,
@@ -212,6 +241,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     placement,
     focus,
     label,
+    placeholder = PLAN_PLACEHOLDER,
     className,
     onDraft,
     onFinish,
@@ -236,7 +266,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     injectCSS: false,
     extensions: [
       ...extensions,
-      Placeholder.configure({ placeholder: "Write the plan" }),
+      Placeholder.configure({ placeholder }),
       ...(drawDiagram === undefined ? [] : [diagramPreview(drawDiagram)]),
     ],
     content: opened.content,

@@ -480,13 +480,95 @@
     "closedReason": {
       "type": "string"
     },
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "author": {
+            "type": "string",
+            "enum": [
+              "member",
+              "agent"
+            ]
+          },
+          "member": {
+            "type": "object",
+            "properties": {
+              "userId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "userId",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "text": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "attachmentId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 36
+                },
+                "name": {
+                  "type": "string"
+                },
+                "mediaType": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "attachmentId",
+                "name",
+                "mediaType"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "createdAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "author",
+          "text",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      }
+    },
     "postedAt": {
+      "type": "number",
+      "minimum": 0
+    },
+    "settledAt": {
       "type": "number",
       "minimum": 0
     },
     "updatedAt": {
       "type": "number",
       "minimum": 0
+    },
+    "unread": {
+      "type": "boolean"
     }
   },
   "required": [

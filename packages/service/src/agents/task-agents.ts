@@ -31,7 +31,7 @@ import {
 } from "./coder-host/status.js";
 
 /**
- * plan-agents.ts -- what each listed plan's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card, and the agents with no plan the list carries beside the plans.
+ * task-agents.ts -- what each listed task's coding agents are doing and what they published, in brief, for the sidebar's row and its hover card, and the agents with no plan the list carries beside the plans.
  *
  * Four statements answer the whole list however many tasks it holds: the
  * agents of every task named with the pull request each last published,
@@ -63,15 +63,16 @@ interface ReadAgent {
 function agentLine(
   held: PublishedCodingAgent,
   turn: CodingAgentLatestTurn | undefined,
-  lineAwaits: boolean,
+  awaitingLineAt: Date | undefined,
   now: number,
   names: ReadonlyMap<string, string>,
 ): ReadAgent {
   const { agent } = held;
   const starter = names.get(agent.userId);
-  const status = codingAgentStatusOf(turn, { createdAt: agent.createdAt, now, lineAwaits });
+  const standing = { createdAt: agent.createdAt, now, awaitingLineAt };
+  const status = codingAgentStatusOf(turn, standing);
   const at = WORKING_STATUSES.has(status)
-    ? codingAgentRunStartedAt(turn, { createdAt: agent.createdAt, lineAwaits })
+    ? codingAgentRunStartedAt(turn, standing)
     : turn?.settledAt?.getTime();
   return {
     line: {
@@ -149,7 +150,7 @@ export function withTaskAgents(
     // is still the task's activity, though the row names it no more.
     const held = yield* listPublishedCodingAgents(
       userId,
-      tasks.map((plan) => plan.id),
+      tasks.map((task) => task.id),
       { includeArchived: true },
     );
     const conversationIds = held.map(({ agent }) => agent.conversationId);
@@ -166,7 +167,7 @@ export function withTaskAgents(
       const line = agentLine(
         agent,
         turns.get(conversationId),
-        awaiting.has(conversationId),
+        awaiting.get(conversationId),
         now,
         names,
       );
@@ -201,8 +202,13 @@ export function listTasklessAgents(
     const now = yield* Clock.currentTimeMillis;
     return agents.map((agent) => {
       const turn = turns.get(agent.conversationId);
-      const lineAwaits = awaiting.has(agent.conversationId);
-      const { origin: _origin, ...page } = codingAgentPage(agent, { turn, lineAwaits }, now, names);
+      const awaitingLineAt = awaiting.get(agent.conversationId);
+      const { origin: _origin, ...page } = codingAgentPage(
+        agent,
+        { turn, awaitingLineAt },
+        now,
+        names,
+      );
       return {
         ...page,
         activityAt: codingAgentActivityAt(turn, { createdAt: agent.createdAt }),

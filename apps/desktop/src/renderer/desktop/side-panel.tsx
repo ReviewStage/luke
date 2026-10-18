@@ -13,7 +13,8 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CollapseIcon,
   EmptyState,
@@ -54,9 +55,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { appPlatform } from "../app-platform";
 import { CallTabVideo } from "../call/panel-avatar";
 import { useCopyLinkItem } from "../copy-link-item";
 import { FindScope } from "../find-in-tab";
@@ -131,7 +132,7 @@ import {
   workRowsOf,
 } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
-import { useExperiment } from "../use-app-state";
+import { useCapability, useExperiment } from "../use-app-state";
 import { paneTiming } from "./pane-motion";
 import {
   type AddEntry,
@@ -385,7 +386,7 @@ export function changesOffers(
 }
 
 /**
- * The Changes tab an agent's Changes chip opens: the one that stands for its
+ * The Pull request tab an agent's pull request chip opens: the one that stands for its
  * pull request (`changesAgentOf`), as `changesOffers` offers it, so the chip
  * and the "+" never stand two tabs on one pull request's files, whichever
  * agent's read landed first. `open` is the Changes tabs open on the task.
@@ -401,7 +402,7 @@ export function changesTabOf(
 /**
  * Opens an agent's Pull request tab, the one that stands for its pull
  * request (`changesTabOf`), on the view given: the conversation its pull
- * request's chip asks for, or the files its Changes chip does.
+ * request's chip asks for, or the files a link to its changes does.
  */
 export function showPullRequest(
   panel: Pick<SidePanelControl, "changes" | "onChoose" | "onPullRequestView">,
@@ -807,7 +808,7 @@ function stripTabs(input: {
 function PanelTabs({
   panel,
   holder,
-  taskId: planId,
+  taskId,
   keys,
   unread,
   agents,
@@ -882,10 +883,10 @@ function PanelTabs({
     repository,
     held,
     copied,
-    readWorker: (callId) => readWholeTranscript(readWorker, { agentId: planId, callId }),
+    readWorker: (callId) => readWholeTranscript(readWorker, { agentId: taskId, callId }),
     onOpenAgent,
     shownAgent,
-    taskId: planId,
+    taskId: taskId,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   const copyLink = useCopyLinkItem();
@@ -895,16 +896,16 @@ function PanelTabs({
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
   const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
     if (holder !== SIDE_PANEL_HOLDER.PLAN || !isPinnable(tab)) return undefined;
-    const pinned = panel.pins.some((pin) => pin.task === planId && sameTab(pin.tab, tab));
+    const pinned = panel.pins.some((pin) => pin.task === taskId && sameTab(pin.tab, tab));
     return {
       pinned,
-      onToggle: () => (pinned ? panel.onUnpin(planId, tab) : panel.onPin(tab, look.label)),
+      onToggle: () => (pinned ? panel.onUnpin(taskId, tab) : panel.onPin(tab, look.label)),
     };
   };
   const doorsOf = (entry: DrawnTab, at: number): TabDoors => {
     const others = strip.filter((_, place) => place !== at);
     // Note that only a task's panel names its tabs by the task: an agent's page holds its panel under the agent's id.
-    const linked = holder === SIDE_PANEL_HOLDER.PLAN ? panelTabPlace(planId, entry.tab) : undefined;
+    const linked = holder === SIDE_PANEL_HOLDER.PLAN ? panelTabPlace(taskId, entry.tab) : undefined;
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
@@ -1386,7 +1387,7 @@ function TabContent({
   /** Says a Browser tab's page was opened at an address (`SidePanelControl.onBrowserOpened`). */
   onBrowserOpened: (browserId: string, address: string) => void;
 }): React.JSX.Element {
-  const { act, tell } = useAct();
+  const { act } = useAct();
   if (isMacTerminalTab(tab)) {
     return <MacTerminalTab key={tab.macTerminal} tab={tab} />;
   }
@@ -1469,7 +1470,7 @@ function TabContent({
           readFile={(window) => act(ACT_KIND.TASKS_FILE, { taskId: taskId, ...window })}
           readFolder={(path) => act(ACT_KIND.TASKS_TREE, { planId: taskId, path })}
           readWhole={() => act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })}
-          openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
+          openGitHub={(url) => appPlatform().openGitHub(url)}
           treeOpen={fileTree.open}
           onToggleTree={fileTree.onToggle}
           onBrowse={(path, newTab) => onBrowseFile(file.path, path, newTab)}
@@ -1771,7 +1772,7 @@ export function SidePanel({
   edge,
   unread,
   holder,
-  planId,
+  planId: taskId,
   repository,
   board,
   shownCode,
@@ -1854,22 +1855,25 @@ export function SidePanel({
   // The file tabs of files shown on the task or browsed to on it, in the strip's order.
   const offered = shownFiles(shownCode ?? []);
   const files = panel.files.filter(
-    (file) => file.browsedOn === planId || offered.some((ref) => ref.path === file.path),
+    (file) => file.browsedOn === taskId || offered.some((ref) => ref.path === file.path),
   );
   // An agent's Changes tab stands while the agent is the task's.
   const changes = panel.changes.filter((each) =>
     drawsChanges(each, { taskAgents: agents.agentIds }),
   );
-  // An agent's Terminal tab stands while the agent is the task's, as its Changes tab does, and never beside the Inbox.
-  const terminals =
-    holder === SIDE_PANEL_HOLDER.INBOX
-      ? NO_TERMINALS
-      : panel.terminals.filter((each) => drawsTerminal(each, { taskAgents: agents.agentIds }));
-  // A Browser tab stands while the experiment is on, beside the Inbox too, which
-  // borrows its task's panel and may find one chosen there; turned off, it
-  // closes (`app.tsx`). Note that only a task's own "+" opens one, since the
-  // Inbox's offers no kind of tab.
-  const browsing = useExperiment(EXPERIMENT.BROWSER);
+  // An agent's Terminal tab stands while the agent is the task's, as its Changes tab does, and never beside the Inbox or where the platform runs no terminals.
+  const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);
+  const terminalsHere = terminalsOffered && holder !== SIDE_PANEL_HOLDER.INBOX;
+  const terminals = !terminalsHere
+    ? NO_TERMINALS
+    : panel.terminals.filter((each) => drawsTerminal(each, { taskAgents: agents.agentIds }));
+  // A Browser tab stands while the experiment is on and the platform draws one,
+  // beside the Inbox too, which borrows its task's panel and may find one
+  // chosen there; turned off, it closes (`app.tsx`). Note that only a task's
+  // own "+" opens one, since the Inbox's offers no kind of tab.
+  const browserOn = useExperiment(EXPERIMENT.BROWSER);
+  const browserOffered = useCapability(HOST_CAPABILITY.BROWSER);
+  const browsing = browserOn && browserOffered;
   const browsers = browsing ? panel.browsers : NO_BROWSERS;
   const browserPages = useBrowserPages(browsing);
   // A page's tab stands while the plan lists the page.
@@ -1920,8 +1924,8 @@ export function SidePanel({
     files: offered,
     changes: changesOffers(agents, changes),
     pages: taskPages,
-    // Note that the Inbox's panel offers no Terminal, since it draws none.
-    ...(holder === SIDE_PANEL_HOLDER.INBOX
+    // Note that a panel that draws no Terminal, the Inbox's among them, offers none.
+    ...(!terminalsHere
       ? undefined
       : {
           terminals: {
@@ -1962,7 +1966,7 @@ export function SidePanel({
           <PanelTabs
             panel={panel}
             holder={holder}
-            taskId={planId}
+            taskId={taskId}
             keys={keys && focused}
             unread={unread}
             agents={agents}
@@ -2014,11 +2018,11 @@ export function SidePanel({
               !isPageTab(tab) &&
               !isBrowserTab(tab)
             }
-            subject={{ task: planId, tab }}
+            subject={{ task: taskId, tab }}
           >
             <TabContent
               tab={tab}
-              taskId={planId}
+              taskId={taskId}
               repository={repository}
               board={board}
               shownCode={shownCode}

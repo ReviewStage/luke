@@ -1,10 +1,12 @@
-import type {
-  AccountFailedRun,
-  AccountInboxAnswer,
-  AccountInboxAutomation,
-  AccountInboxEntry,
-  AccountInboxTask,
-  AccountTasklessEntry,
+import {
+  ACCOUNT_CHAT_REASON,
+  type AccountChatEntry,
+  type AccountFailedRun,
+  type AccountInboxAnswer,
+  type AccountInboxAutomation,
+  type AccountInboxEntry,
+  type AccountInboxTask,
+  type AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
 import { failedRunText } from "@luke/features/automation-list-model";
 import {
@@ -28,6 +30,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import { scheduleOnce } from "@luke/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
+import type { ChatShown } from "./acts.js";
 import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
 
 /**
@@ -105,7 +108,13 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  * unless the developer turned notifications off. An item the agent posts
  * again while it is still open is the same ask kept current, and announces
  * nothing, and so does one whose task comes back from the archive, which
- * changed before the last answer was read. Another account, or nobody,
+ * changed before the last answer was read. What waits in chat rides on the
+ * same read (`chat`): an ask someone else posted, or a direct message or a
+ * mention of the developer's, each announced once as it first waits, by
+ * the same doors and gates, nowhere while the window is focused on its
+ * Chat, and counted in the Dock's badge beside the items. A chat
+ * announcement says who and why, "@agent-2 messaged you", under the task of
+ * the channel it stands in, and nothing of what was said. Another account, or nobody,
  * ends the read held for the last, and lets go of its items, its counts,
  * and its badge before anything of the next is read. A read that did not
  * answer is asked again on the watch's clock.
@@ -179,6 +188,27 @@ export interface FailedRunToast {
   detail: string;
 }
 
+/** What a chat announcement says of who and why, by the reason the message waits. */
+const CHAT_NOTICE_WORDS = {
+  [ACCOUNT_CHAT_REASON.ASK]: "asked you",
+  [ACCOUNT_CHAT_REASON.DIRECT]: "messaged you",
+  [ACCOUNT_CHAT_REASON.MENTION]: "mentioned you",
+} as const;
+
+/** What a chat announcement is titled where its channel stands in no plan main holds a name for. */
+const CHAT_NOTICE_TITLE = "Chat";
+
+/** A chat message that came to wait as the window's own toast says it: the message, the words, and the plan's name under them. */
+export interface ChatMessageToast {
+  messageId: string;
+  /** The workspace whose chat it waits in, whose Chat on screen withdraws the toast. */
+  workspaceId: string;
+  /** The plan whose channel it waits in, none outside one: that task's Chat tab on screen withdraws it too. */
+  planId: string | null;
+  words: string;
+  detail: string;
+}
+
 /** An inbox item that opened as the window's own toast says it: the task and the item, the words, and the task's name under them. */
 export interface InboxItemToast {
   taskId: string;
@@ -199,7 +229,8 @@ export interface AgentNoticeDoorsSurface {
   toast(end: AgentEndToast): void;
   toastInbox(item: InboxItemToast): void;
   toastFailedRun(run: FailedRunToast): void;
-  /** How many inbox items wait across the account, which the Dock's badge counts; none clears it. */
+  toastChat(message: ChatMessageToast): void;
+  /** How many inbox items and chat messages wait across the account, which the Dock's badge counts; none clears it. */
   badge(count: number): void;
 }
 
@@ -209,7 +240,7 @@ export class AgentNoticeDoors extends Context.Service<AgentNoticeDoors, AgentNot
 
 export interface AgentNoticesDependencies {
   /** The plan's agents with their status, as the host answers them: the watch's read of a plan's agents. */
-  listAgents: (planId: string) => Effect.Effect<CodingAgentListAnswer>;
+  listAgents: (taskId: string) => Effect.Effect<CodingAgentListAnswer>;
   /** One agent as its own page reads it: the watch's read of an agent with no plan. */
   readAgent: (agentId: string) => Effect.Effect<CodingAgentPageAnswerView>;
   /** What the agent published, read once as a completed turn ends for the pull request the notice names. */
@@ -251,6 +282,10 @@ export interface AgentNoticesDependencies {
     /** The workspace whose list holds the item, which the window lists first; absent from a service before it. */
     readonly workspaceId?: string;
   }) => void;
+  /** Brings Luke forward on the Chat of the workspace a message waits in: a chat notification's click. */
+  openChat: (workspaceId: string) => void;
+  /** Whether the window offers Chat, without which nothing waiting in chat is counted or announced. */
+  chatOn: () => boolean;
   watchInterval?: Duration.Duration;
   report: (line: string) => void;
 }
@@ -276,6 +311,8 @@ export interface AgentNotices {
   shown(agentId: string | null): void;
   /** The panel said which task's Inbox tab it shows, or none. */
   shownInbox(taskId: string | null): void;
+  /** The panel said which Chat it has on screen, or none. */
+  shownChat(shown: ChatShown | null): void;
 }
 
 /** What the ledger keeps of one agent: enough to watch it, to name it, and to tell one turn's end from the next's. */
@@ -403,6 +440,23 @@ function startedBy(answer: AccountInboxAnswer, accountId: string | undefined): A
   };
 }
 
+/** What a chat message's announcement says: who and why, under the plan of its channel, and nothing of what was said. */
+function chatNoticeText(
+  entry: AccountChatEntry,
+  taskName: string | undefined,
+): Pick<AgentNotice, "title" | "body"> {
+  return {
+    title: taskName ?? CHAT_NOTICE_TITLE,
+    body: `@${entry.from} ${CHAT_NOTICE_WORDS[entry.reason]}`,
+  };
+}
+
+/** Whether a waiting message is on the Chat shown: anywhere in a workspace's whole Chat, or in its plan's channel on a task's Chat tab. */
+function chatShows(shown: ChatShown | null, entry: AccountChatEntry): boolean {
+  if (shown === null || shown.workspaceId !== entry.workspaceId) return false;
+  return shown.planId === null || shown.planId === entry.planId;
+}
+
 /** The items each task holds waiting, the task whose item changed latest first, as the read answered them latest first. */
 function waitingTasks(items: readonly AccountInboxEntry[]): AppInboxSlice["waiting"] {
   const tasks = new Map<string, AppInboxWaitingItem[]>();
@@ -455,7 +509,7 @@ function tasklessNoticeText(
 /** What an answer of the inbox read carries that the window and the Dock are told of. */
 type InboxAnswered = Pick<
   AccountInboxAnswer,
-  "items" | "plans" | "planless" | "automations" | "failedRuns"
+  "items" | "plans" | "planless" | "automations" | "failedRuns" | "chat"
 >;
 
 /** Whether two answers say alike everything the window draws of each item of an agent with no task: its agent's title and model, the automation and repository standing in a task's place, and the workspace whose list it stands in, which change without the item's stamp moving, a service first naming the workspace among them. */
@@ -529,7 +583,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const doors = yield* AgentNoticeDoors;
     const ledger = new Map<string, HeldAgent>();
     /** What each agent with no plan is announced under, by agent: its automation's name, or its repository where the reader may not read the automation. */
-    const planlessSubjects = new Map<string, string>();
+    const tasklessSubjects = new Map<string, string>();
     /** What each agent was last read to have published, by agent. */
     const published = new Map<string, CodingAgentPullRequest | null>();
     const unseen = new Set<string>();
@@ -540,13 +594,19 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     let focused = false;
     /** Whose agents the ledger holds: read as it takes its first, and moved only by another account. */
     let holder: string | undefined;
-    /** The inbox read's last answer for the account signed in, and its items by id; none before its first. */
+    /** The inbox read's last answer for the account signed in, and its items and chat messages by id; none before its first. */
     let waiting:
-      | { readonly answer: AccountInboxAnswer; readonly items: ReadonlySet<string> }
+      | {
+          readonly answer: AccountInboxAnswer;
+          readonly items: ReadonlySet<string>;
+          readonly chat: ReadonlySet<string>;
+        }
       | undefined;
     /** The highest revision any answer for the account held of each item, so one back unchanged is known. */
     const seenRevision = new Map<string, number>();
     let shownInbox: string | null = null;
+    /** The Chat the panel has on screen, none where no Chat is: a message waiting there is read there. */
+    let shownChat: ChatShown | null = null;
 
     function publishUnseen(): void {
       onUnseenChanged([...unseen]);
@@ -607,7 +667,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       const text = noticeText({
         subject:
           end.agent.taskId === null
-            ? planlessSubjects.get(end.agentId)
+            ? tasklessSubjects.get(end.agentId)
             : taskName(end.agent.taskId),
         model: end.agent.model,
         title: end.agent.title,
@@ -636,17 +696,25 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     function sliceOf(answer: InboxAnswered): AppInboxSlice {
       return {
         waiting: waitingTasks(answer.items),
-        tasks: answer.plans.map(({ planId, ...holding }) => ({ ...holding, taskId: planId })),
+        tasks: answer.plans.map(({ planId: taskId, ...holding }) => ({
+          ...holding,
+          taskId: taskId,
+        })),
         taskless: waitingTaskless(answer.planless ?? []),
         automations: answer.automations ?? [],
         failedRuns: answer.failedRuns ?? [],
       };
     }
 
-    /** Writes what waits for the window, and its number, a task's items and an agent's with no task alike, for the Dock. */
+    /** What waits in chat that the window offers, none while Chat is off. */
+    function chatOf(answer: InboxAnswered): readonly AccountChatEntry[] {
+      return dependencies.chatOn() ? (answer.chat ?? []) : [];
+    }
+
+    /** Writes what waits for the window, and its number, a task's items, an agent's with no task, and chat messages alike, for the Dock. */
     function publishWaiting(answer: InboxAnswered): void {
       dependencies.onInboxChanged(sliceOf(answer));
-      doors.badge(answer.items.length + (answer.planless?.length ?? 0));
+      doors.badge(answer.items.length + (answer.planless?.length ?? 0) + chatOf(answer).length);
     }
 
     /** An item of an agent with no task opened: told nowhere in front, since the window's toast opens a task and the window's Inbox lists it, and as a notification behind, which opens the window's Inbox on the item, where it is answered. */
@@ -681,6 +749,28 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
           body: words,
           onClick: () => dependencies.openFailedRun(place),
         });
+      }
+    }
+
+    /** A chat message came to wait: told nowhere on Chat in front, in the toast elsewhere in front, and as a notification behind. */
+    function announceChat(entry: AccountChatEntry): void {
+      if (focused && chatShows(shownChat, entry)) return;
+      const text = chatNoticeText(
+        entry,
+        entry.planId === null ? undefined : taskName(entry.planId),
+      );
+      if (focused) {
+        doors.toastChat({
+          messageId: entry.messageId,
+          workspaceId: entry.workspaceId,
+          planId: entry.planId,
+          words: text.body,
+          detail: text.title,
+        });
+        return;
+      }
+      if (dependencies.notifying()) {
+        doors.post({ ...text, onClick: () => dependencies.openChat(entry.workspaceId) });
       }
     }
 
@@ -739,10 +829,24 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         return;
       }
       const taskless = answer.planless ?? [];
-      waiting = { answer, items: new Set([...answer.items, ...taskless].map((item) => item.id)) };
+      const chat = chatOf(answer);
+      waiting = {
+        answer,
+        items: new Set([...answer.items, ...taskless].map((item) => item.id)),
+        chat: new Set(chat.map((entry) => entry.messageId)),
+      };
       publishWaiting(answer);
       const since =
         was === undefined ? undefined : was.answer.readAt - Duration.toMillis(READ_SKEW);
+      // A chat message is news once, as it first waits: the first answer is where the account stands.
+      // Note that an ask changed before the last answer was read, as an open one of a workspace just
+      // joined, is no news, where a direct message or a mention is: it waits only once its person was
+      // stamped, which may be well after it was posted, and a stamp is always news.
+      for (const entry of chat) {
+        if (since === undefined || was?.chat.has(entry.messageId) === true) continue;
+        if (entry.reason !== ACCOUNT_CHAT_REASON.ASK || entry.updatedAt > since)
+          announceChat(entry);
+      }
       for (const item of answer.items) {
         const known = seenRevision.get(item.id);
         seenRevision.set(item.id, Math.max(known ?? 0, item.revision));
@@ -842,7 +946,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         if (keep(agent, agentId)) continue;
         ledger.delete(agentId);
         published.delete(agentId);
-        planlessSubjects.delete(agentId);
+        tasklessSubjects.delete(agentId);
         if (unseen.delete(agentId)) dotted = true;
       }
       if (dotted) publishUnseen();
@@ -859,16 +963,16 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     }
 
     /** The plans with an agent watched, each listed again on the watch's clock. */
-    function watchedPlans(): readonly string[] {
-      const plans = new Set<string>();
+    function watchedTasks(): readonly string[] {
+      const tasks = new Set<string>();
       for (const agent of ledger.values()) {
-        if (agent.taskId !== null && watched(agent)) plans.add(agent.taskId);
+        if (agent.taskId !== null && watched(agent)) tasks.add(agent.taskId);
       }
-      return [...plans];
+      return [...tasks];
     }
 
     /** The agents with no plan watched, each read again by itself on the watch's clock. */
-    function watchedPlanless(): readonly string[] {
+    function watchedTaskless(): readonly string[] {
       return [...ledger]
         .filter(([, agent]) => agent.taskId === null && watched(agent))
         .map(([agentId]) => agentId);
@@ -912,7 +1016,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       agent: Pick<CodingAgentSummary, "id" | "planId" | "automationName">,
     ): void {
       if (agent.planId === null && agent.automationName !== undefined) {
-        planlessSubjects.set(agent.id, agent.automationName);
+        tasklessSubjects.set(agent.id, agent.automationName);
       }
     }
 
@@ -927,7 +1031,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       observeTaskless: (agents) => {
         for (const agent of agents) {
           if (!heldHere(agent)) continue;
-          planlessSubjects.set(agent.id, agent.automationName ?? agent.repository);
+          tasklessSubjects.set(agent.id, agent.automationName ?? agent.repository);
           observe(agent.id, heldOf(agent));
         }
       },
@@ -960,6 +1064,9 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         shownAgent = agentId;
         seen(agentId);
       },
+      shownChat: (shown) => {
+        shownChat = shown;
+      },
       shownInbox: (taskId) => {
         shownInbox = taskId;
       },
@@ -969,18 +1076,18 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const tick = Effect.suspend(() =>
       Effect.andThen(
         Effect.forEach(
-          watchedPlans(),
-          (planId) =>
-            Effect.map(listAgents(planId), (answer) => {
+          watchedTasks(),
+          (taskId) =>
+            Effect.map(listAgents(taskId), (answer) => {
               if ("agents" in answer) notices.observeAgents(answer.agents);
               else if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) {
-                notices.observeTaskGone(planId);
+                notices.observeTaskGone(taskId);
               }
             }),
           { discard: true },
         ),
         Effect.forEach(
-          watchedPlanless(),
+          watchedTaskless(),
           (agentId) =>
             Effect.map(dependencies.readAgent(agentId), (answer) => {
               if ("agent" in answer) observe(agentId, heldOf(answer.agent));

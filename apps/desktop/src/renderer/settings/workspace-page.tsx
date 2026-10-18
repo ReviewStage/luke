@@ -15,8 +15,35 @@ import {
   workspacePhotoOfDataUrl,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
-import { ConfirmDialog, ProviderMark, TrashIcon, useConfirmDialog, useMenu } from "@luke/ui";
+import {
+  BUTTON_TYPE,
+  BUTTON_VARIANT,
+  Button,
+  CHIP_LOOK,
+  CHIP_WIDTH,
+  Chip,
+  ChipName,
+  ConfirmDialog,
+  ErrorState,
+  FormField,
+  INLINE_EDIT_LOOK,
+  InlineEdit,
+  type InlineEditEnd,
+  ProviderMark,
+  SETTINGS_LINE_KIND,
+  SETTINGS_ROW_INDENT,
+  SettingsLine,
+  SettingsRow,
+  SettingsSection,
+  TEXT_FIELD_AUTO_COMPLETE,
+  TEXT_FIELD_TYPE,
+  TextField,
+  TrashIcon,
+  useConfirmDialog,
+  useMenu,
+} from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -33,21 +60,18 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
-import { CHIP_LOOK, Chip } from "../chip";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu } from "../desktop/action-menu";
-import { type NameEdit, TaskNameField } from "../desktop/task-name-field";
 import { sharedWords } from "../desktop/workspace-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { encodeImage } from "../feedback-images";
 import { useOpenPerson } from "../person-door";
-import { SpinnerRegion } from "../spinner";
 import { dayAndTimeText } from "../tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
+import { useCapability } from "../use-app-state";
 import { MacRepositoriesGroup } from "./mac-repository-settings";
 import { MenuRow } from "./menu-row";
 import { OneLine } from "./one-line";
-import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
  * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members, its invitations, its integrations, and the way out of it.
@@ -83,8 +107,8 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * its end, and the rest are its ⋯'s (`menu-row.tsx`), each act that cannot
  * be undone asking first in the confirm dialog, whose refusal is said where
  * it was asked. The page draws whole: while the members or the invitations
- * are being read it holds itself back (`.settings-reading`), and a read that
- * failed says so in red with Retry.
+ * are being read their loading lines hold the page back (`SettingsLine`),
+ * and a read that failed says so with Retry.
  */
 
 /** How many pixels a side a workspace's photo is drawn to before it is sent: well past the largest tile's 32, so it stays sharp on a Retina screen. */
@@ -144,7 +168,7 @@ const READ_FAILED = {
  */
 const LEAVE_WORDS = {
   LINE: "You lose its tasks, agents, and Inbox until someone invites you again.",
-  PLANS: (name: string) => `Tasks you wrote stay in ${name}.`,
+  TASKS: (name: string) => `Tasks you wrote stay in ${name}.`,
   AGENTS: "Agents you started that are still working stop.",
   AUTOMATIONS: "Automations you created stop running.",
   INVITATIONS: "Invitations you sent stay valid.",
@@ -199,6 +223,20 @@ const GITHUB_CONNECTED_LINE = {
   MEMBER: "Accounts and repositories are managed on GitHub.",
 } as const;
 
+/** GitHub's own mark, which leads its row as a provider's leads Settings › Integrations'. */
+const GITHUB_MARK = (
+  <span className="settings-row-mark">
+    <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
+  </span>
+);
+
+/** Linear's own mark, which leads its row as GitHub's leads GitHub's. */
+const LINEAR_MARK = (
+  <span className="settings-row-mark">
+    <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
+  </span>
+);
+
 /** One connected GitHub account as the page lists it: its login, whether its installation is active, and its id where the service named it. */
 type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
   Partial<Pick<WorkspaceGithubInstallation, "installationId">>;
@@ -226,20 +264,15 @@ type ListRead<Item> = { readonly items: readonly Item[] } | { readonly failed: s
 
 /** The line a page draws while it reads, which holds the whole page back until every read is in. */
 function Reading({ label }: { label: string }): React.JSX.Element {
-  return (
-    <div className="settings-card-line settings-reading">
-      <SpinnerRegion label={label} />
-    </div>
-  );
+  return <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>{label}</SettingsLine>;
 }
 
-/** A row's words: what it names, and a line under it. */
-function RowCopy({ name, line }: { name: string; line?: React.ReactNode }): React.JSX.Element {
+/** A card's line where the read of its rows did not land: the read failure, then Retry, in the rows' place. */
+function ReadFailed({ line, onRetry }: { line: string; onRetry: () => void }): React.JSX.Element {
   return (
-    <span className="settings-copy">
-      <strong>{name}</strong>
-      {line === undefined ? null : <small>{line}</small>}
-    </span>
+    <SettingsLine>
+      <ErrorState onRetry={onRetry}>{line}</ErrorState>
+    </SettingsLine>
   );
 }
 
@@ -320,7 +353,8 @@ function useMembersRead(workspaceId: string, memberCount: number | undefined) {
  * and Make member take hold at once, since either is undone by the other;
  * Make owner and Remove from workspace ask first. A role change refused is
  * said under the row. A row with no ⋯ in a list where others have one
- * keeps the ⋯'s room, so every role ends in the same place.
+ * keeps the ⋯'s room, so every role ends in the same place. The row is
+ * `@luke/ui`'s `SettingsRow` led by the face, through `MenuRow`.
  */
 function MemberRow({
   workspace,
@@ -405,25 +439,31 @@ function MemberRow({
     : [];
   const acting = profileActs.length + roleActs.length + removeActs.length > 0;
   return (
-    <>
-      <MenuRow label={`${member.name} actions`} actions={[profileActs, roleActs, removeActs]}>
-        <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />
-        <span className="settings-copy">
-          {/* The person card's own wrapper, so You stands off the name as it does on the card. */}
-          <strong className="actor-card-name">
-            {member.name}
-            {userId === readerId ? <YouBadge /> : null}
-          </strong>
-          <OneLine as="small" text={member.email} />
-        </span>
-        <span className="settings-row-value">{ROLE_WORDS[member.role]}</span>
-        {slotted && !acting ? <span className="settings-act-slot" aria-hidden="true" /> : null}
-      </MenuRow>
-      {refusal === undefined ? null : (
-        <p className="error-message" role="alert">
-          {refusal}
-        </p>
-      )}
+    <div className="workspace-member">
+      <MenuRow
+        label={`${member.name} actions`}
+        actions={[profileActs, roleActs, removeActs]}
+        row={{
+          leading: <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />,
+          label: (
+            // The person card's own wrapper, so You stands off the name as it does on the card.
+            <span className="actor-card-name">
+              {member.name}
+              {userId === readerId ? <YouBadge /> : null}
+            </span>
+          ),
+          description: <OneLine as="span" text={member.email} />,
+          error: refusal,
+          control: (
+            <>
+              <span className="settings-row-value">{ROLE_WORDS[member.role]}</span>
+              {slotted && !acting ? (
+                <span className="settings-act-slot" aria-hidden="true" />
+              ) : null}
+            </>
+          ),
+        }}
+      />
       <ConfirmDialog
         confirm={remove}
         question={{
@@ -442,7 +482,7 @@ function MemberRow({
           running: TRANSFER_WORDS.RUNNING,
         }}
       />
-    </>
+    </div>
   );
 }
 
@@ -514,21 +554,20 @@ function MemberLeave({
         : LEAVE_WORDS.AUTOMATIONS_NAMED(automations.names);
   return (
     <>
-      <div className="settings-row">
-        <RowCopy name={`Leave ${workspace.name}`} line={LEAVE_WORDS.LINE} />
-        <button
-          type="button"
-          className="toolbar-button bordered-button"
-          data-danger="true"
-          disabled={leave.busy}
-          onClick={() => {
-            automations.read();
-            leave.ask();
-          }}
-        >
-          Leave
-        </button>
-      </div>
+      <SettingsRow label={`Leave ${workspace.name}`} description={LEAVE_WORDS.LINE}>
+        {() => (
+          <Button
+            variant={BUTTON_VARIANT.DANGER_OUTLINE}
+            disabled={leave.busy}
+            onClick={() => {
+              automations.read();
+              leave.ask();
+            }}
+          >
+            Leave
+          </Button>
+        )}
+      </SettingsRow>
       <ConfirmDialog
         confirm={leave}
         question={{
@@ -539,7 +578,7 @@ function MemberLeave({
         }}
       >
         <ul className="leave-consequences">
-          <li>{LEAVE_WORDS.PLANS(workspace.name)}</li>
+          <li>{LEAVE_WORDS.TASKS(workspace.name)}</li>
           <li>{LEAVE_WORDS.AGENTS}</li>
           {automationsLine === undefined ? null : <li>{automationsLine}</li>}
           {/* An invitation is the workspace's, so one an admin sent outlives their leaving; a member sends none. */}
@@ -556,29 +595,35 @@ function MemberLeave({
  * field chip, each in the shared menu by face, name, and email.
  */
 function HeirChip({
+  id,
   admins,
   chosen,
   onChoose,
 }: {
+  /** The id the dialog's field names the chip by. */
+  id: string;
   admins: readonly WorkspaceMember[];
   chosen: WorkspaceMember;
   onChoose: (heir: WorkspaceMember) => void;
 }): React.JSX.Element {
   const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
+  // Note that a container holds the chip wide enough for a name, because width is its place's.
   return (
     <>
-      <Chip
-        look={CHIP_LOOK.FIELD}
-        chevron
-        ref={door}
-        className="workspace-heir"
-        aria-label={`New owner: ${chosen.name}`}
-        {...menu.trigger()}
-      >
-        <ActorMark actor={memberActor(chosen, undefined)} size={ACTOR_SIZE.INLINE} />
-        <span className="chip-name">{chosen.name}</span>
-      </Chip>
+      <div className="workspace-heir">
+        <Chip
+          look={CHIP_LOOK.FIELD}
+          chevron
+          ref={door}
+          id={id}
+          aria-label={`New owner: ${chosen.name}`}
+          {...menu.trigger()}
+        >
+          <ActorMark actor={memberActor(chosen, undefined)} size={ACTOR_SIZE.INLINE} />
+          <ChipName>{chosen.name}</ChipName>
+        </Chip>
+      </div>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label="New owner"
@@ -640,25 +685,25 @@ function OwnerLeave({
   );
   return (
     <>
-      <div className="settings-row">
-        <RowCopy
-          name={`Leave ${workspace.name}`}
-          line={heir === undefined ? LEAVE_WORDS.OWNER_NO_ADMIN : LEAVE_WORDS.OWNER}
-        />
-        {heir === undefined ? null : (
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            disabled={transfer.busy}
-            onClick={() => {
-              onRefresh();
-              transfer.ask();
-            }}
-          >
-            {TRANSFER_WORDS.VERB}
-          </button>
-        )}
-      </div>
+      <SettingsRow
+        label={`Leave ${workspace.name}`}
+        description={heir === undefined ? LEAVE_WORDS.OWNER_NO_ADMIN : LEAVE_WORDS.OWNER}
+      >
+        {() =>
+          heir === undefined ? null : (
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              disabled={transfer.busy}
+              onClick={() => {
+                onRefresh();
+                transfer.ask();
+              }}
+            >
+              {TRANSFER_WORDS.VERB}
+            </Button>
+          )
+        }
+      </SettingsRow>
       {heir === undefined ? null : (
         <ConfirmDialog
           confirm={transfer}
@@ -669,10 +714,16 @@ function OwnerLeave({
             running: TRANSFER_WORDS.RUNNING,
           }}
         >
-          <div className="dialog-field">
-            <span className="dialog-field-label">New owner</span>
-            <HeirChip admins={admins} chosen={heir} onChoose={(each) => setChosenId(each.userId)} />
-          </div>
+          <FormField label="New owner">
+            {(field) => (
+              <HeirChip
+                id={field.id}
+                admins={admins}
+                chosen={heir}
+                onChoose={(each) => setChosenId(each.userId)}
+              />
+            )}
+          </FormField>
         </ConfirmDialog>
       )}
     </>
@@ -704,7 +755,7 @@ function LeaveGroup({
   const owner = workspace.role === WORKSPACE_ROLE.OWNER;
   if (owner && workspace.personal === true) return null;
   return (
-    <SettingsGroup anchor={SETTINGS_SECTION.LEAVE}>
+    <SettingsSection anchor={SETTINGS_SECTION.LEAVE}>
       {owner ? (
         <OwnerLeave
           workspace={workspace}
@@ -715,7 +766,7 @@ function LeaveGroup({
       ) : (
         <MemberLeave workspace={workspace} ownName={ownName} onLeft={onLeft} />
       )}
-    </SettingsGroup>
+    </SettingsSection>
   );
 }
 
@@ -756,6 +807,7 @@ function TeamMembers({
  * The role an invitation is sent as: the field chip a Settings picker wears,
  * "Member ⌄", whose menu checks the role chosen and says under each what it
  * may do, as the composer's model chip stands beside its field and its send.
+ * It is `@luke/ui`'s field `Chip`, its one width its container's.
  */
 function RoleChip({
   value,
@@ -773,12 +825,12 @@ function RoleChip({
   const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   return (
-    <>
+    <span className="workspace-invite-role">
       <Chip
         look={CHIP_LOOK.FIELD}
+        width={CHIP_WIDTH.FIXED}
         chevron
         ref={door}
-        className="workspace-invite-role"
         aria-label={`Invite as ${ROLE_WORDS[value]}`}
         disabled={disabled}
         {...menu.trigger()}
@@ -804,7 +856,7 @@ function RoleChip({
           onClose={menu.close}
         />
       )}
-    </>
+    </span>
   );
 }
 
@@ -814,7 +866,9 @@ function RoleChip({
  * each under the outline face a person not yet in wears, saying as what and
  * until when, with its link to copy and Cancel invitation in its ⋯, which asks
  * nothing first since inviting the address again undoes it. A refusal is
- * said under the form.
+ * said under the form. The form is `@luke/ui`'s `TextField`, the role's
+ * chip, and Invite its outline `Button`; each pending one is a `SettingsRow`
+ * led by the face, through `MenuRow`, Copy link its outline `Button`.
  */
 function Invitations({
   workspaceId,
@@ -913,35 +967,36 @@ function Invitations({
 
   return (
     <>
-      <form className="settings-row workspace-invite" onSubmit={invite}>
-        <input
-          type="email"
-          required
-          className="settings-input"
-          aria-label="Email address"
-          placeholder="name@example.com"
-          autoComplete="off"
-          spellCheck={false}
-          value={email}
-          disabled={busy}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-        <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
-        <button type="submit" className="toolbar-button bordered-button" disabled={busy}>
-          Invite
-        </button>
-      </form>
-      {note === undefined ? null : (
-        <p className="error-message" role="alert">
-          {note}
-        </p>
-      )}
+      <div className="workspace-invite-row">
+        <form className="workspace-invite" onSubmit={invite}>
+          <TextField
+            type={TEXT_FIELD_TYPE.EMAIL}
+            required
+            label="Email address"
+            placeholder="name@example.com"
+            autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+            spellCheck={false}
+            value={email}
+            disabled={busy}
+            onChange={setEmail}
+          />
+          <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
+          <Button type={BUTTON_TYPE.SUBMIT} variant={BUTTON_VARIANT.OUTLINE} disabled={busy}>
+            Invite
+          </Button>
+        </form>
+        {note === undefined ? null : (
+          <SettingsLine>
+            <ErrorState>{note}</ErrorState>
+          </SettingsLine>
+        )}
+      </div>
       {firstReadFailed !== undefined ? (
         <ReadFailed line={firstReadFailed} onRetry={read} />
       ) : pending === undefined ? (
         <Reading label="Loading the invitations" />
       ) : pending.length === 0 ? (
-        <p className="settings-card-line settings-note">{INVITATIONS_EMPTY}</p>
+        <SettingsLine>{INVITATIONS_EMPTY}</SettingsLine>
       ) : null}
       {(pending ?? []).map((one) => (
         <MenuRow
@@ -955,21 +1010,21 @@ function Invitations({
               onSelect: () => cancel(one.id),
             },
           ]}
-        >
-          <ActorMark actor={INVITED_ACTOR} size={ACTOR_SIZE.CARD} />
-          <span className="settings-copy">
-            <OneLine as="strong" text={one.email} />
-            <small>{`Invited as ${ROLE_WORDS[one.role]} · Expires ${dayAndTimeText(Date.parse(one.expiresAt))}`}</small>
-          </span>
-          {/* Luke sends no mail: the accept link is copied and sent by hand. */}
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            onClick={() => copy(one.acceptUrl, "Link copied")}
-          >
-            Copy link
-          </button>
-        </MenuRow>
+          row={{
+            leading: <ActorMark actor={INVITED_ACTOR} size={ACTOR_SIZE.CARD} />,
+            label: <OneLine as="span" text={one.email} />,
+            description: `Invited as ${ROLE_WORDS[one.role]} · Expires ${dayAndTimeText(Date.parse(one.expiresAt))}`,
+            // Luke sends no mail: the accept link is copied and sent by hand.
+            control: (
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                onClick={() => copy(one.acceptUrl, "Link copied")}
+              >
+                Copy link
+              </Button>
+            ),
+          }}
+        />
       ))}
     </>
   );
@@ -991,35 +1046,39 @@ function connectionsOf(workspace: Workspace): readonly ShownConnection[] {
  * GitHub, an organization's logo or a person's avatar, its login, and under
  * it Connected, or that GitHub suspended or removed its installation. The
  * tile is a workspace's, keyed by the login, so the login's letter stands
- * until the picture loads and wherever it fails to.
+ * until the picture loads and wherever it fails to. It is `@luke/ui`'s
+ * `SettingsRow`, indented to GitHub's words.
  */
 function ConnectionRow({ connection }: { connection: ShownConnection }): React.JSX.Element {
   return (
-    <div className="settings-row settings-row-nested">
-      <span className="settings-row-mark">
-        <WorkspaceTile
-          workspace={{
-            id: `github:${connection.login}`,
-            name: connection.login,
-            pictureUrl: githubAccountPictureUrl(connection.login),
-          }}
-        />
-      </span>
-      <RowCopy
-        name={connection.login}
-        line={
-          connection.active ? (
-            <span className="settings-state" data-state="connected">
-              {GITHUB_CONNECTED}
-            </span>
-          ) : (
-            <span className="settings-state" data-state="attention">
-              {GITHUB_SUSPENDED}
-            </span>
-          )
-        }
-      />
-    </div>
+    <SettingsRow
+      indent={SETTINGS_ROW_INDENT.MARK}
+      leading={
+        <span className="settings-row-mark workspace-github-account-mark">
+          <WorkspaceTile
+            workspace={{
+              id: `github:${connection.login}`,
+              name: connection.login,
+              pictureUrl: githubAccountPictureUrl(connection.login),
+            }}
+          />
+        </span>
+      }
+      label={connection.login}
+      description={
+        connection.active ? (
+          <span className="settings-state" data-state="connected">
+            {GITHUB_CONNECTED}
+          </span>
+        ) : (
+          <span className="settings-state" data-state="attention">
+            {GITHUB_SUSPENDED}
+          </span>
+        )
+      }
+    >
+      {() => null}
+    </SettingsRow>
   );
 }
 
@@ -1031,7 +1090,8 @@ function ConnectionRow({ connection }: { connection: ShownConnection }): React.J
  * configure one it is on, so one door does both. Either press opens the
  * browser through the one connect, whose return to Luke adds the
  * installation to this workspace; a page that could not be opened says why
- * under the row.
+ * under the row. The row is `@luke/ui`'s `SettingsRow` led by GitHub's mark,
+ * its press the outline `Button`.
  */
 function ManagedGitHub({
   workspace,
@@ -1051,32 +1111,30 @@ function ManagedGitHub({
   };
   const connected = connections.length > 0;
   return (
-    <>
-      <div className="settings-row">
-        <span className="settings-row-mark">
-          <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
-        </span>
-        <RowCopy
-          name="GitHub"
-          line={connected ? GITHUB_CONNECTED_LINE.MANAGES : GITHUB_UNCONNECTED.MANAGES}
-        />
-        <button type="button" className="toolbar-button bordered-button" onClick={open}>
-          {connected ? (
-            <>
+    <div className="workspace-github">
+      <SettingsRow
+        leading={GITHUB_MARK}
+        label="GitHub"
+        description={connected ? GITHUB_CONNECTED_LINE.MANAGES : GITHUB_UNCONNECTED.MANAGES}
+        error={refusal}
+      >
+        {() =>
+          connected ? (
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              icon={<ExternalLinkIcon aria-hidden="true" />}
+              onClick={open}
+            >
               Manage on GitHub
-              <ExternalLinkIcon aria-hidden="true" />
-            </>
+            </Button>
           ) : (
-            "Connect"
-          )}
-        </button>
-      </div>
-      {refusal === undefined ? null : (
-        <p className="error-message" role="alert">
-          {refusal}
-        </p>
-      )}
-    </>
+            <Button variant={BUTTON_VARIANT.OUTLINE} onClick={open}>
+              Connect
+            </Button>
+          )
+        }
+      </SettingsRow>
+    </div>
   );
 }
 
@@ -1092,17 +1150,15 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
       {managesWorkspace(workspace) ? (
         <ManagedGitHub workspace={workspace} connections={connections} />
       ) : (
-        <div className="settings-row">
-          <span className="settings-row-mark">
-            <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
-          </span>
-          <RowCopy
-            name="GitHub"
-            line={
-              connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_LINE.MEMBER
-            }
-          />
-        </div>
+        <SettingsRow
+          leading={GITHUB_MARK}
+          label="GitHub"
+          description={
+            connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_LINE.MEMBER
+          }
+        >
+          {() => null}
+        </SettingsRow>
       )}
       {connections.map((connection) => (
         <ConnectionRow
@@ -1114,32 +1170,17 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
   );
 }
 
-/** The workspace's Linear row's words: Linear, and under it whether its one connection stands. */
-function LinearCopy({
-  linear,
-  manages,
-}: {
-  linear: Workspace["linear"];
-  manages: boolean;
-}): React.JSX.Element {
-  if (linear === undefined) {
-    return <RowCopy name="Linear" line={manages ? LINEAR_LINE.MANAGES : LINEAR_LINE.MEMBER} />;
-  }
-  return (
-    <RowCopy
-      name="Linear"
-      line={
-        linear.active ? (
-          <span className="settings-state" data-state="connected">
-            {LINEAR_LINE.CONNECTED}
-          </span>
-        ) : (
-          <span className="settings-state" data-state="attention">
-            {manages ? LINEAR_LINE.EXPIRED : LINEAR_LINE.EXPIRED_MEMBER}
-          </span>
-        )
-      }
-    />
+/** The workspace's Linear row's line: whether its one connection stands. */
+function linearLine(linear: Workspace["linear"], manages: boolean): React.ReactNode {
+  if (linear === undefined) return manages ? LINEAR_LINE.MANAGES : LINEAR_LINE.MEMBER;
+  return linear.active ? (
+    <span className="settings-state" data-state="connected">
+      {LINEAR_LINE.CONNECTED}
+    </span>
+  ) : (
+    <span className="settings-state" data-state="attention">
+      {manages ? LINEAR_LINE.EXPIRED : LINEAR_LINE.EXPIRED_MEMBER}
+    </span>
   );
 }
 
@@ -1149,7 +1190,9 @@ function LinearCopy({
  * sign-in in the browser, a sign-in that could not be begun saying why
  * under the row; and a ⋯ once one stands, as Settings › Integrations keeps
  * a connected row quiet, whose menu holds Disconnect, which asks first. A
- * plan already started from an issue keeps what it read.
+ * plan already started from an issue keeps what it read. The row is
+ * `MenuRow`'s `SettingsRow` led by Linear's mark, its press the outline
+ * `Button`.
  */
 function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const { act } = useAct();
@@ -1180,41 +1223,40 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
       ? []
       : [[{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]];
   return (
-    <>
-      <MenuRow label="Linear actions" actions={actions}>
-        <span className="settings-row-mark">
-          <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
-        </span>
-        <LinearCopy linear={linear} manages />
-        {linear?.active === true ? null : (
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            disabled={connecting}
-            aria-busy={connecting}
-            onClick={connect}
-          >
-            {linear === undefined ? "Connect" : "Connect again"}
-          </button>
-        )}
-      </MenuRow>
-      {refusal === undefined ? null : (
-        <p className="error-message" role="alert">
-          {refusal}
-        </p>
-      )}
+    <div className="workspace-linear">
+      <MenuRow
+        label="Linear actions"
+        actions={actions}
+        row={{
+          leading: LINEAR_MARK,
+          label: "Linear",
+          description: linearLine(linear, true),
+          error: refusal,
+          control:
+            linear?.active === true ? null : (
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                busy={connecting}
+                busyLabel="Connecting"
+                onClick={connect}
+              >
+                {linear === undefined ? "Connect" : "Connect again"}
+              </Button>
+            ),
+        }}
+      />
       {linear === undefined ? null : (
         <ConfirmDialog
           confirm={disconnect}
           question={{
             title: `Disconnect Linear from ${workspace.name}?`,
-            body: "Nobody in the workspace can start a plan from an issue until Linear is connected again.",
+            body: "Nobody in the workspace can start a task from an issue until Linear is connected again.",
             verb: "Disconnect",
             running: "Disconnecting",
           }}
         />
       )}
-    </>
+    </div>
   );
 }
 
@@ -1226,12 +1268,13 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
 function WorkspaceLinear({ workspace }: { workspace: Workspace }): React.JSX.Element {
   if (managesWorkspace(workspace)) return <ManagedLinear workspace={workspace} />;
   return (
-    <div className="settings-row">
-      <span className="settings-row-mark">
-        <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
-      </span>
-      <LinearCopy linear={workspace.linear} manages={false} />
-    </div>
+    <SettingsRow
+      leading={LINEAR_MARK}
+      label="Linear"
+      description={linearLine(workspace.linear, false)}
+    >
+      {() => null}
+    </SettingsRow>
   );
 }
 
@@ -1309,6 +1352,8 @@ function identityLine(workspace: Workspace): string {
  * square; Remove photo, where one is set, asks first. The new name or photo
  * arrives with the workspaces the host reads again after it; a refusal, or a
  * file that cannot be a photo, is said under the row until the next try.
+ * The row is `@luke/ui`'s `SettingsRow` led by the tile, through `MenuRow`,
+ * and Rename its outline `Button`.
  */
 function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const { act } = useAct();
@@ -1336,7 +1381,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
     refocus.current = false;
     button.current?.focus();
   }, [editing, renaming]);
-  const end = ({ name, byKey }: NameEdit) => {
+  const end = ({ value: name, byKey }: InlineEditEnd) => {
     refocus.current = byKey;
     setEditing(false);
     if (name === undefined) return;
@@ -1389,58 +1434,61 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
           : [],
       ]
     : [];
+  const rename =
+    renamable && !editing ? (
+      <Button
+        ref={button}
+        variant={BUTTON_VARIANT.OUTLINE}
+        disabled={renaming}
+        onClick={() => {
+          setRefusal(undefined);
+          setEditing(true);
+        }}
+      >
+        Rename
+      </Button>
+    ) : null;
+  const photoPicker = manages ? (
+    <input
+      ref={picker}
+      type="file"
+      accept={PHOTO_ACCEPT}
+      hidden
+      onChange={(event) => {
+        const [picked] = Array.from(event.currentTarget.files ?? []);
+        // Cleared so the same file can be picked again after it was refused.
+        event.currentTarget.value = "";
+        if (picked !== undefined) upload(picked);
+      }}
+    />
+  ) : null;
   return (
-    <>
-      <MenuRow label="Workspace actions" actions={actions}>
-        <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />
-        <span className="settings-copy">
-          {editing ? (
-            <TaskNameField
-              name={workspace.name}
-              className="settings-input workspace-name-input"
+    <div className="workspace-identity">
+      <MenuRow
+        label="Workspace actions"
+        actions={actions}
+        row={{
+          leading: <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />,
+          label: (
+            <InlineEdit
+              value={workspace.name}
               label="Workspace name"
+              editing={editing}
               maxLength={WORKSPACE_BOUNDS.MAX_NAME_CHARS}
+              look={INLINE_EDIT_LOOK.INPUT}
               onEnd={end}
             />
-          ) : (
-            <strong>{workspace.name}</strong>
-          )}
-          <small>{identityLine(workspace)}</small>
-        </span>
-        {renamable && !editing ? (
-          <button
-            ref={button}
-            type="button"
-            className="toolbar-button bordered-button"
-            disabled={renaming}
-            onClick={() => {
-              setRefusal(undefined);
-              setEditing(true);
-            }}
-          >
-            Rename
-          </button>
-        ) : null}
-        {manages ? (
-          <input
-            ref={picker}
-            type="file"
-            accept={PHOTO_ACCEPT}
-            hidden
-            onChange={(event) => {
-              const [picked] = Array.from(event.currentTarget.files ?? []);
-              // Cleared so the same file can be picked again after it was refused.
-              event.currentTarget.value = "";
-              if (picked !== undefined) upload(picked);
-            }}
-          />
-        ) : null}
-      </MenuRow>
-      {refusal === undefined ? null : (
-        <p className="error-message" role="alert">
-          {refusal}
-        </p>
-      )}
+          ),
+          description: identityLine(workspace),
+          error: refusal,
+          control: (
+            <>
+              {rename}
+              {photoPicker}
+            </>
+          ),
+        }}
+      />
       <ConfirmDialog
         confirm={remove}
         question={{
@@ -1449,7 +1497,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
           running: "Removing",
         }}
       />
-    </>
+    </div>
   );
 }
 
@@ -1472,13 +1520,13 @@ export function WorkspacePage({
   const workspace = shownWorkspace(control);
   if (workspace === undefined) {
     return (
-      <SettingsGroup>
+      <SettingsSection>
         {control.listFailed ? (
           <ReadFailed line="Your workspaces could not be read." onRetry={control.onRetryList} />
         ) : (
           <Reading label="Loading your workspaces" />
         )}
-      </SettingsGroup>
+      </SettingsSection>
     );
   }
   // Keyed to the workspace, so another one listed reads its own members and asks nothing left over.
@@ -1504,12 +1552,13 @@ function ShownWorkspace({
 }): React.JSX.Element {
   const members = useMembersRead(workspace.id, workspace.memberCount);
   const ownName = control.workspaces.find((each) => each.personal === true)?.name;
+  const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   return (
     <>
-      <SettingsGroup>
+      <SettingsSection>
         <WorkspaceIdentity workspace={workspace} />
-      </SettingsGroup>
-      <SettingsGroup title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
+      </SettingsSection>
+      <SettingsSection title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
         <TeamMembers
           workspace={workspace}
           readerId={readerId}
@@ -1517,17 +1566,17 @@ function ShownWorkspace({
           onRetry={members.retry}
           onChanged={members.changed}
         />
-      </SettingsGroup>
+      </SettingsSection>
       {managesWorkspace(workspace) ? (
-        <SettingsGroup title="Invitations" anchor={SETTINGS_SECTION.INVITATIONS}>
+        <SettingsSection title="Invitations" anchor={SETTINGS_SECTION.INVITATIONS}>
           <Invitations workspaceId={workspace.id} owner={workspace.role === WORKSPACE_ROLE.OWNER} />
-        </SettingsGroup>
+        </SettingsSection>
       ) : null}
-      <SettingsGroup title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
+      <SettingsSection title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         <WorkspaceGitHub workspace={workspace} />
         <WorkspaceLinear workspace={workspace} />
-      </SettingsGroup>
-      <MacRepositoriesGroup workspaceId={workspace.id} />
+      </SettingsSection>
+      {macTerminalOffered ? <MacRepositoriesGroup workspaceId={workspace.id} /> : null}
       <LeaveGroup
         workspace={workspace}
         members={members.read}

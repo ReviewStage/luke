@@ -1,5 +1,6 @@
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { RunMode } from "@luke/host";
+import { PanelAvatarRelay } from "@luke/host/panel-avatar";
 import type { AvatarFeed } from "@luke/voice/avatar";
 import type { AvatarViewSignal } from "@luke/voice/avatar-view";
 import type { UnparsedWireValue } from "@luke/wire";
@@ -13,7 +14,6 @@ import {
   type WebContents,
 } from "electron";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
-import { PanelAvatarRelay } from "./panel-avatar";
 import { followSwipes } from "./swipe-navigation";
 import {
   placementOf,
@@ -77,7 +77,7 @@ const DESKTOP_WINDOW = {
   // Small enough that a 13-inch display's work area still fits the full size.
   MARGIN: 24,
   // The window's ground before the renderer paints, one per appearance; each
-  // is desktop.css's `--desktop-ground` for that appearance.
+  // is the desktop palette's `--luke-color-ground` for that appearance.
   BACKGROUND: { DARK: "#0c0c0e", LIGHT: "#fcfcfc" },
 } as const;
 

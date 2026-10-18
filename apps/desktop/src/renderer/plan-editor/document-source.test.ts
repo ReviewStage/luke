@@ -2,8 +2,12 @@
 
 import assert from "node:assert/strict";
 import { Editor } from "@tiptap/core";
+import { Selection } from "@tiptap/pm/state";
 import { diffLines } from "diff";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
+import { MarkdownMessage } from "../markdown-message";
 import {
   documentManager,
   documentMarkdown,
@@ -207,4 +211,109 @@ test("a picture whose alt text, address, and title need escaping reads back as t
   const read = reopened.state.doc.nodeAt(picturePosition(reopened))?.attrs;
 
   assert.deepEqual([read?.alt, read?.src, read?.title], [alt, src, title]);
+});
+
+/** How many checkboxes the read view draws for a plan's text. */
+function drawnCheckboxes(words: string): number {
+  return (
+    renderToStaticMarkup(createElement(MarkdownMessage, { words })).split('type="checkbox"')
+      .length - 1
+  );
+}
+
+/** The words typed at the very end of the editor's text. */
+function typedAtEnd(editor: Editor, words: string): void {
+  editor.commands.setTextSelection(Selection.atEnd(editor.state.doc).from);
+  editor.commands.insertContent(words);
+}
+
+test("an empty task item left at the end of a checklist is saved as a checkbox the read view draws, and opens empty", () => {
+  const { editor, handedOver } = opened("- [x] testing here\n");
+  editor.commands.setTextSelection(Selection.atEnd(editor.state.doc).from);
+
+  editor.commands.enter();
+  const saved = handedOver();
+
+  assert.equal(saved, "- [x] testing here\n- [ ] &nbsp;\n");
+  assert.equal(drawnCheckboxes(saved), 2);
+  const reopened = opened(saved);
+  typedAtEnd(reopened.editor, "then");
+  assert.equal(reopened.handedOver(), "- [x] testing here\n- [ ] then\n");
+});
+
+test("a checked empty task item inside a checklist stays one when a later item is edited", () => {
+  const text = "- [ ] first\n- [x] &nbsp;\n- [ ] last\n";
+  const { host, editor, handedOver } = opened(text);
+
+  typedAtEnd(editor, " one");
+
+  const empty = host.querySelectorAll("li")[1];
+  assert.deepEqual(
+    [empty?.querySelector("input")?.checked, empty?.lastElementChild?.textContent],
+    [true, ""],
+  );
+  assert.equal(handedOver(), text.replace("last", "last one"));
+  assert.equal(drawnCheckboxes(handedOver()), 3);
+});
+
+test("a task item emptied above its nested checklist is saved as a checkbox and opens empty", () => {
+  const { editor, handedOver } = opened("- [ ] parent\n  - [ ] nested\n");
+  const start = Selection.atStart(editor.state.doc).from;
+
+  editor.commands.deleteRange({ from: start, to: start + "parent".length });
+  const saved = handedOver();
+
+  assert.equal(saved, "- [ ] &nbsp;\n  - [ ] nested\n");
+  assert.equal(drawnCheckboxes(saved), 2);
+  const reopened = opened(saved);
+  reopened.editor.commands.setTextSelection(Selection.atStart(reopened.editor.state.doc).from);
+  reopened.editor.commands.insertContent("again");
+  assert.equal(reopened.handedOver(), "- [ ] again\n  - [ ] nested\n");
+});
+
+test("a list mixing bullets and task items opens editable, untouched byte for byte, and an edit to a task item changes its line alone", () => {
+  const text = "## Notes\n\n- one\n- two\n\n- [x] test\n- [ ] &nbsp;\n\nAfter.\n";
+  const { host, editor, handedOver } = opened(text);
+
+  assert.equal(host.querySelector("[data-raw-block]"), null);
+  assert.equal(host.querySelectorAll('input[type="checkbox"]').length, 2);
+  assert.equal(handedOver(), text);
+
+  let end = 0;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.text === "test") end = pos + node.nodeSize;
+  });
+  editor.chain().setTextSelection(end).insertContent(" again").run();
+  assert.deepEqual(changedLines(text, handedOver()), ["-- [x] test", "+- [x] test again"]);
+});
+
+test("a tight list switching between bullets and task items is handed over untouched byte for byte, and stays tight around an edit", () => {
+  const text = "- one\n- [x] two\n- three\n- [ ] four\n";
+  const { editor, handedOver } = opened(text);
+
+  assert.equal(handedOver(), text);
+
+  let end = 0;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.text === "two") end = pos + node.nodeSize;
+  });
+  editor.chain().setTextSelection(end).insertContent(" again").run();
+  assert.equal(handedOver(), text.replace("two", "two again"));
+});
+
+test("a checklist laid in after a list that ends the text without a line break starts on a line of its own", () => {
+  const { editor, handedOver } = opened("- one");
+
+  editor.commands.insertContentAt(editor.state.doc.content.size, {
+    type: "taskList",
+    content: [
+      {
+        type: "taskItem",
+        attrs: { checked: false },
+        content: [{ type: "paragraph", content: [{ type: "text", text: "two" }] }],
+      },
+    ],
+  });
+
+  assert.equal(handedOver(), "- one\n- [ ] two");
 });

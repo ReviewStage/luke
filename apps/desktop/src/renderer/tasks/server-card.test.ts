@@ -31,7 +31,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import {
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   typeInComposer,
@@ -41,7 +41,7 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentTab } from "./agent-tab";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**
@@ -91,8 +91,8 @@ const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 // A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -102,7 +102,6 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({
-    recordSurfaceEvent: ignore,
     act: (request: Act): Promise<ActOutcome> => Promise.resolve(answer(request)),
   });
 });
@@ -189,7 +188,7 @@ const TRANSCRIPT: readonly CodingAgentMessage[] = [
 ];
 
 /** A plan's page, which an agent's box takes mentions on. */
-const PAGE: PlanMentionsValue = {
+const PAGE: TaskMentionsValue = {
   taskId: TASK_ID,
   taskName: "Backlog",
   workspace: PLACE.workspace,
@@ -211,7 +210,7 @@ async function drawn(node: ReactNode): Promise<HTMLElement> {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(AtomRegistry.make(), createElement(PlanMentions, { value: PAGE, children: node })),
+      onRegistry(AtomRegistry.make(), createElement(TaskMentions, { value: PAGE, children: node })),
     ),
   );
   await settle();
@@ -280,7 +279,7 @@ async function cardOf(chip: Element | null | undefined) {
 
 /** The chip of the mention in the message given. */
 function chipIn(container: HTMLElement, messageId: string): Element | null {
-  return container.querySelector(`[data-message-id="${messageId}"] .mention-chip`);
+  return container.querySelector(`[data-message-id="${messageId}"] [data-mention-ref]`);
 }
 
 test("in an agent's tab with Linear off, a line that opened a turn hands it that turn alone, one that reached a turn under way the next, and the agent's own words say it is off", async () => {
@@ -334,10 +333,10 @@ test("a line sent while a turn runs, not yet read back, hands Linear to the next
   await settle();
   pressInComposer(container, "Enter");
   await settle();
-  const drafted = await cardOf(container.querySelector(".agent-composer-input .mention-chip"));
+  const drafted = await cardOf(container.querySelector(".agent-composer-input [data-mention-ref]"));
   pressInComposer(container, "Enter");
   await settle();
-  const sent = [...container.querySelectorAll(".is-user .mention-chip")].at(-1);
+  const sent = [...container.querySelectorAll(".is-user [data-mention-ref]")].at(-1);
 
   assert.equal(drafted.note, SERVER_MENTION_NOTE.OFF_STEERS);
   assert.equal((await cardOf(sent)).note, SERVER_MENTION_NOTE.OFF_STEERS);
@@ -354,7 +353,7 @@ test("in the box of an agent at rest, Linear off, a send hands it the turn the s
   pressInComposer(container, "Enter");
   await settle();
 
-  const drafted = await cardOf(container.querySelector(".agent-composer-input .mention-chip"));
+  const drafted = await cardOf(container.querySelector(".agent-composer-input [data-mention-ref]"));
   assert.equal(drafted.note, SERVER_MENTION_NOTE.OFF_OPENS);
 });
 
@@ -388,7 +387,7 @@ test("off an agent, as in a plan's or Luke's words, the server's row has no swit
   const container = await drawn(
     createElement(TranscriptWords, { text: `Check ${SERVER} and ${TOOL}.` }),
   );
-  const [server, tool] = container.querySelectorAll(".mention-chip");
+  const [server, tool] = container.querySelectorAll("[data-mention-ref]");
 
   const serverCard = await cardOf(server);
   const toolCard = await cardOf(tool);

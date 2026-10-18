@@ -186,7 +186,7 @@ it.layer(getTestDB())("an agent started on a plan from a Linear issue", (it) => 
   const NAME = "Retry the relay's webhook";
 
   /** A Start on the plan, handed the plan, under a fresh key. */
-  const planAsk = (taskId: string): StartAsk => ({
+  const taskAsk = (taskId: string): StartAsk => ({
     taskId,
     prompt: undefined,
     idempotencyKey: randomUUID(),
@@ -212,8 +212,8 @@ it.layer(getTestDB())("an agent started on a plan from a Linear issue", (it) => 
         });
         const { opened, eve } = fakeEve();
 
-        yield* startCodingAgent(eve, owner, planAsk(fromIssue.id)).pipe(Effect.provide(services));
-        yield* startCodingAgent(eve, owner, planAsk(plain.id)).pipe(Effect.provide(services));
+        yield* startCodingAgent(eve, owner, taskAsk(fromIssue.id)).pipe(Effect.provide(services));
+        yield* startCodingAgent(eve, owner, taskAsk(plain.id)).pipe(Effect.provide(services));
 
         const [handed, other] = opened.map((message) => String(message.message));
         assert.ok(handed !== undefined && other !== undefined);

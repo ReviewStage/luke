@@ -2,11 +2,11 @@ import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot
 import type { Task } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ComposeIcon, IconButton, SidebarIcon } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
@@ -33,6 +33,7 @@ import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopTasks } from "./desktop-tasks";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
 import { useFloatDismiss } from "./hover-pane";
+import { OfflineMark, useOffline } from "./offline-mark";
 import { PaneGlide } from "./pane-motion";
 import { PersonPage } from "./person-page";
 import { SidePanelToggle } from "./side-panel";
@@ -363,6 +364,7 @@ export function DesktopShell({
   // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
   const summary = useSummaryPin(sidebar.staged);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
+  const offline = useOffline();
   usePlaceCommands(!gated, tab, onTabChange, tasks, settings, history);
   // Factory switched off while it stands, here or on another Mac, gives the task's place back.
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
@@ -441,6 +443,10 @@ export function DesktopShell({
           onBegin={gates.onBeginSignIn}
           onCancel={gates.onCancelSignIn}
         />
+        {/* Signing in needs the network, so the gate says when there is none. */}
+        <div className="title-bar-controls">
+          <OfflineMark />
+        </div>
       </div>
     );
   }
@@ -517,6 +523,7 @@ export function DesktopShell({
       data-sidebar-collapsed={String(sidebar.collapsed)}
       data-sidebar-overlay={sidebar.overlay}
       data-panel-toggle={String(panelToggle)}
+      data-offline={String(offline)}
     >
       <DesktopSidebar
         sidebar={sidebar}
@@ -605,10 +612,12 @@ export function DesktopShell({
           onPointerEnter={() => sidebar.onOverlay(SIDEBAR_OVERLAY.PEEK)}
         />
       ) : null}
-      {/* Note that they follow the drag strips they cover, because a later drag region wins. */}
+      {/* Note that they follow the drag strips they cover, because a later drag region wins.
+          Folded, the sidebar's offline pill stands here, as its New task does. */}
       <div className="title-bar-controls" onPointerDown={keepOverlay}>
         <SidebarToggle sidebar={sidebar} />
         {sidebar.collapsed ? <TitleBarNewTask tasks={tasks} /> : null}
+        {sidebar.collapsed ? <OfflineMark /> : null}
       </div>
       {panelToggle ? (
         <div className="title-bar-controls" data-edge="end">

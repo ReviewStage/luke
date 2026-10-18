@@ -14,6 +14,7 @@ import {
 } from "@luke/host/app-state";
 import { APP_SETTING_SCHEMA, EXPERIMENT, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { fixtureUpdate } from "@luke/settings/update-row";
 import { appSettingsView } from "@luke/settings/wire";
 import { cssCustomProperties } from "@luke/ui";
@@ -38,10 +39,11 @@ import {
 } from "@luke/voice/volume-hint";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { appBridge } from "./app-bridge";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
+import { appPlatform } from "./app-platform";
+import { usePrefetchEditorBundle } from "./bundle-loader";
 import { type CallCardInput, callControls } from "./call/call-card";
 import { useCallCardVideo } from "./call/panel-avatar";
 import { useWindowFocused } from "./call/use-window-focused";
@@ -51,7 +53,6 @@ import { DesktopShell } from "./desktop/desktop-shell";
 import { type FailedRunPlace, useFailedRunToasts } from "./desktop/failed-runs";
 import { ListedAutomations } from "./desktop/listed-automations";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
-import { prefetchEditorBundle } from "./editor-bundle";
 import { FeedbackDialog } from "./feedback-dialog";
 import { GitHubConnectProvider } from "./github-connect";
 import { useKeyboardModality } from "./keyboard-modality";
@@ -64,9 +65,11 @@ import { OpenSettingsProvider } from "./open-settings";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { OpenPersonProvider } from "./person-door";
 import { applySessionReplay } from "./session-replay";
+import { shownSettingsView } from "./settings/pages";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast";
+import { useChatToasts } from "./tasks/chat-toast";
 import { useInboxToasts } from "./tasks/inbox-toast";
 import { MessageRevealProvider } from "./tasks/message-links";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy";
@@ -149,7 +152,8 @@ export function App(): React.JSX.Element {
     applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
   }, [run, sessionReplay]);
   // The editor bundle loads once the panel has painted, so an agent's message box and a plan's editor find it there.
-  useEffect(prefetchEditorBundle, []);
+  const prefetchEditorBundle = usePrefetchEditorBundle();
+  useEffect(prefetchEditorBundle, [prefetchEditorBundle]);
   // So does the parser a reply's markdown is drawn through, so a transcript opened finds it there.
   useEffect(prefetchMarkdownHtmlParser, []);
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
@@ -166,7 +170,7 @@ export function App(): React.JSX.Element {
         setSettingsView(SETTINGS_VIEW.ACCOUNT);
         // `PanelTab` and the counted tab are the same union: both are
         // `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
-        appBridge().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
+        appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
           panel_tab: tab,
         });
       })(next),
@@ -244,7 +248,7 @@ export function App(): React.JSX.Element {
     shortcutCapture.current = capturing;
     // The talk and stop keys are routed by the main process to a window that
     // is not this one, so the recording is reported there to be honored.
-    appBridge().setShortcutCapturing(capturing);
+    appPlatform().setShortcutCapturing(capturing);
   }, []);
 
   // A capture run stages its conversation from the launch profile, since no
@@ -312,12 +316,14 @@ export function App(): React.JSX.Element {
     settingsShown: tab === PANEL_TAB.SETTINGS,
   });
   linkWorkspace.current = settingsWorkspace.link;
+  // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
+  const shownView = shownSettingsView(settingsView, state?.run.capabilities ?? []);
   // The links the window can copy now: ⌥⌘C copies the first, and ⌘K offers each (`links-at-hand.ts`).
   const copyLink = useCopyLink(
     tasks,
     tab === PANEL_TAB.SETTINGS
       ? {
-          view: settingsView,
+          view: shownView,
           workspace: tasks.workspaces.find((each) => each.id === settingsWorkspace.shownId),
         }
       : undefined,
@@ -334,11 +340,11 @@ export function App(): React.JSX.Element {
   const showAgentPage = useRef(tasks.agentView.onOpen);
   showAgentPage.current = tasks.agentView.onOpen;
   const openAgent = useCallback(
-    ({ taskId: planId, agentId }: AgentPlace) =>
+    ({ taskId, agentId }: AgentPlace) =>
       guardLeave(() => {
         changeTab(PANEL_TAB.TASKS);
-        if (planId === null) showAgentPage.current(agentId);
-        else showAgent.current(planId, agentId);
+        if (taskId === null) showAgentPage.current(agentId);
+        else showAgent.current(taskId, agentId);
       })(),
     [changeTab, guardLeave],
   );
@@ -390,10 +396,10 @@ export function App(): React.JSX.Element {
   showTask.current = tasks.onShowTask;
   useEffect(
     () =>
-      appBridge().onShowTask(({ taskId: planId }) =>
+      appBridge().onShowTask(({ taskId }) =>
         guardLeave(() => {
           changeTab(PANEL_TAB.TASKS);
-          showTask.current(planId);
+          showTask.current(taskId);
         })(),
       ),
     [changeTab, guardLeave],
@@ -431,10 +437,10 @@ export function App(): React.JSX.Element {
   const showInbox = useRef(tasks.onShowInbox);
   showInbox.current = tasks.onShowInbox;
   const openInbox = useCallback(
-    (planId: string) =>
+    (taskId: string) =>
       guardLeave(() => {
         changeTab(PANEL_TAB.TASKS);
-        showInbox.current(planId);
+        showInbox.current(taskId);
       })(),
     [changeTab, guardLeave],
   );
@@ -464,13 +470,27 @@ export function App(): React.JSX.Element {
     state?.version ?? 0,
     tasks.inboxShown,
   );
+  // A chat notification clicked, or a waiting message's toast's View: the Tasks tab, on the Chat of
+  // the workspace the message waits in, listing that workspace first where another is listed.
+  const openChat = useCallback(
+    (workspaceId: string) =>
+      guardLeave(() => {
+        const doors = inboxDoors.current;
+        changeTab(PANEL_TAB.TASKS);
+        if (doors.workspace?.id !== workspaceId) doors.onChooseWorkspace(workspaceId);
+        doors.chatView.onOpen();
+      })(),
+    [changeTab, guardLeave],
+  );
+  useEffect(() => appBridge().onShowChat(({ workspaceId }) => openChat(workspaceId)), [openChat]);
+  useChatToasts(openChat, tasks.chatShown);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({
     known: state !== undefined && !accountGated,
     tab,
     onTabChange: changeTab,
-    settingsView,
+    settingsView: shownView,
     onSettingsViewChange: setSettingsView,
     tasks,
   });
@@ -731,7 +751,7 @@ export function App(): React.JSX.Element {
                                   };
                                 }
                               },
-                              view: settingsView,
+                              view: shownView,
                               onViewChange: setSettingsView,
                               microphone,
                               notifications: {
@@ -744,6 +764,7 @@ export function App(): React.JSX.Element {
                               settings,
                               shortcuts,
                               workspace,
+                              capabilities: state.run.capabilities,
                             }}
                           />
                         </MessageRevealProvider>
@@ -773,12 +794,14 @@ export function App(): React.JSX.Element {
                             settings,
                             microphone,
                             account: state.account,
+                            capabilities: state.run.capabilities,
                             workspace,
                           }),
+                          capabilities: state.run.capabilities,
                           onViewChange: setSettingsView,
                         }}
-                        readFiles={(planId) =>
-                          act(ACT_KIND.TASKS_TREE, { planId, path: "", recursive: true })
+                        readFiles={(taskId) =>
+                          act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })
                         }
                       />
                     </div>

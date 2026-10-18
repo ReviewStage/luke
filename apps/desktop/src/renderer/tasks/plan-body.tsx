@@ -6,15 +6,16 @@ import {
   type PlanMention,
   sectionAnchors,
 } from "@luke/features/mention-link";
+import { planSections } from "@luke/features/plan-document";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
-import { EllipsisIcon, useMenu } from "@luke/ui";
+import { Button, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { type LinkDrawer, MarkdownMessage } from "../markdown-message";
+import { type LinkDrawer, MarkdownMessage, type TaskToggler } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import { prefersReducedMotion } from "../use-reduced-motion";
 import {
@@ -50,7 +51,7 @@ import {
   type UnitView,
 } from "./task-reveal";
 import { agoText, momentText, sinceText, useMinute } from "./task-time";
-import { PlanTitle } from "./task-title";
+import { TaskTitle } from "./task-title";
 import { useOpenLink } from "./use-open-link";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks";
@@ -290,9 +291,7 @@ function ChangedLine({
         )}
       </span>
       <span aria-hidden="true">·</span>
-      <button type="button" className="toolbar-button quiet-button" onClick={looks.dismiss}>
-        Dismiss
-      </button>
+      <Button onClick={looks.dismiss}>Dismiss</Button>
     </p>
   );
 }
@@ -396,12 +395,12 @@ function landsOnEmptyRoom(event: React.MouseEvent<HTMLElement>): boolean {
   return target instanceof Element && target.classList.contains(BODY_CLASS);
 }
 
-function opened(plan: Task): Chase {
-  const { body } = plan.document;
+function opened(task: Task): Chase {
+  const { body } = task.document;
   return {
-    taskId: plan.id,
+    taskId: task.id,
     body,
-    lastEditAt: plan.lastEdit?.at,
+    lastEditAt: task.lastEdit?.at,
     state: chaseOpened(body),
   };
 }
@@ -510,6 +509,22 @@ const NO_EDIT: PlanEditDoor = () => Promise.reject(new Error("This plan cannot b
 /** Where a title's draft goes when nothing else names the task: nowhere. */
 const NO_DRAFT = (_name: string | undefined): void => undefined;
 
+/** A task item's opening as written: its list marker, then its box, unticked or ticked. */
+const TASK_ITEM = /^(?:[-*+]|\d{1,9}[.)])[ \t]+\[([ \txX])\]/u;
+
+/**
+ * The text with the task item whose marker starts at `at` ticked or
+ * cleared, every other character as it was; nothing where no task item
+ * starts there.
+ */
+function toggledTask(text: string, at: number): string | undefined {
+  const item = TASK_ITEM.exec(text.slice(at));
+  if (item === null) return undefined;
+  const box = at + item[0].length - 2;
+  const ticked = item[1] === "x" || item[1] === "X";
+  return `${text.slice(0, box)}${ticked ? " " : "x"}${text.slice(box + 1)}`;
+}
+
 /** A unit drawn with its section's byline, where a save has changed the section, and its ⋯, where it has a link. */
 function attributed(
   drawn: React.JSX.Element,
@@ -548,22 +563,22 @@ function UnitMenu({
   const trigger = menu.trigger();
   return (
     <>
-      <Tooltip label={label}>
-        <button
-          type="button"
-          className="icon-button plan-unit-more"
-          aria-label={label}
-          tabIndex={tabbable ? 0 : -1}
-          {...trigger}
-          onClick={(event) => {
-            // Note that the press stops here, because a click into a section opens its editor.
-            event.stopPropagation();
-            trigger.onClick(event);
-          }}
-        >
-          <EllipsisIcon />
-        </button>
-      </Tooltip>
+      {/* The box shows the ⋯ while the pointer or the keyboard is on its unit. */}
+      <span className="plan-unit-more">
+        <Tooltip label={label}>
+          <IconButton
+            icon={<EllipsisIcon />}
+            label={label}
+            tabbable={tabbable}
+            {...trigger}
+            onClick={(event) => {
+              // Note that the press stops here, because a click into a section opens its editor.
+              event.stopPropagation();
+              trigger.onClick(event);
+            }}
+          />
+        </Tooltip>
+      </span>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
       )}
@@ -638,6 +653,7 @@ function DocumentUnit({
   linked,
   anchor,
   entry,
+  onTask,
 }: {
   view: UnitView;
   marks: SectionMarks;
@@ -649,6 +665,8 @@ function DocumentUnit({
   anchor: string;
   /** Whether its ⋯ is a Tab stop: beside the document's one, its section's block, or on a document that cannot be edited. */
   entry: boolean;
+  /** Ticks or clears a task item pressed, offsets in the unit's words; every checkbox is read-only without it. */
+  onTask?: TaskToggler | undefined;
 }): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
   const openLink = useOpenLink();
@@ -662,6 +680,7 @@ function DocumentUnit({
       openLink={openLink}
       diagrams
       picture={picture}
+      onTask={onTask}
     />
   );
   const menu =
@@ -751,6 +770,8 @@ export function PlanBody({
   const scrolledAway = useRef(false);
   /** The caret's jumps when the view last followed it. */
   const followedJumps = useRef(jumps);
+  /** Whether a task item's tick is out, while which another press does nothing. */
+  const ticking = useRef(false);
 
   useEffect(() => {
     const element = scroller.current;
@@ -831,6 +852,32 @@ export function PlanBody({
   });
 
   const edited = lastEditOf(task);
+  // A task item is ticked from the drawn plan while its words stand whole and
+  // no editor is open, and saved through the editor's own door.
+  const cut = editable && editing.editor === undefined && !behind ? planSections(text ?? "") : [];
+  const taskToggler = (section: number): TaskToggler | undefined => {
+    const unit = cut[section];
+    if (onEdit === undefined || unit === undefined || unit.text !== views[section]?.words) {
+      return undefined;
+    }
+    // Note that one tick is out at a time, from the plan as drawn, so a door
+    // that keeps one text (the plan template's) is never asked from another;
+    // a press while one is out, or before the saved plan comes back, does nothing.
+    return (at) => {
+      const base = task.document.body;
+      const value = ticking.current ? undefined : toggledTask(base, unit.from + at);
+      if (value === undefined) return Promise.resolve(false);
+      ticking.current = true;
+      return onEdit({ document: { base, value } })
+        .then(
+          (answer) => "saved" in answer,
+          () => false,
+        )
+        .finally(() => {
+          ticking.current = false;
+        });
+    };
+  };
   // The document's one Tab stop: the block selected last while it still stands, or its title, or its first section.
   const standing =
     editing.cursor === EDITOR_PLACE.TITLE
@@ -858,6 +905,7 @@ export function PlanBody({
           linked={linked}
           anchor={anchors[section] ?? ""}
           entry={entry === view.id}
+          onTask={taskToggler(section)}
         />
       </DocumentBlock>
     ) : (
@@ -930,11 +978,11 @@ export function PlanBody({
               titleMenu,
             )
           ) : page === undefined ? (
-            attributed(<PlanTitle name={task.name} />, null, titleMenu)
+            attributed(<TaskTitle name={task.name} />, null, titleMenu)
           ) : (
             <header className="task-page-head">
               <div className="task-title-line">
-                <PlanTitle name={task.name} />
+                <TaskTitle name={task.name} />
                 {page.actions}
               </div>
               {editedNote}

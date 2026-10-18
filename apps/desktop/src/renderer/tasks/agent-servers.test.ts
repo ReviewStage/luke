@@ -91,7 +91,6 @@ beforeEach(() => {
             }
           : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
       ),
-    recordSurfaceEvent: () => undefined,
   });
 });
 
@@ -132,7 +131,9 @@ async function opened(standing: IntegrationStatuses = statuses) {
       }),
     ),
   );
-  act(() => container.querySelector<HTMLButtonElement>(".agent-servers-button")?.click());
+  act(() =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="MCP servers"]')?.click(),
+  );
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
@@ -168,7 +169,7 @@ function tools(container: HTMLElement) {
   return [...container.querySelectorAll(".integration-tool")].map((tool) => [
     (tool.querySelector(".integration-tool-id") ?? tool.querySelector(".integration-tool-title"))
       ?.textContent,
-    tool.querySelector(".integration-tool-badge")?.textContent,
+    tool.querySelector(".luke-badge")?.textContent,
   ]);
 }
 
@@ -315,7 +316,7 @@ test("on a server's page the arrows move the highlight, and Enter opens the tool
   assert.equal(page.querySelector(".integration-tool-detail-title")?.textContent, "Read project");
   assert.equal(page.querySelector(".integration-tool-detail-name")?.textContent, "read_project");
   assert.deepEqual(
-    [...page.querySelectorAll(".integration-tool-hint")].map((hint) => hint.textContent),
+    [...page.querySelectorAll(".integration-tool-hints li")].map((hint) => hint.textContent),
     ["Read-only", "Only Vercel's own data"],
   );
   assert.equal(page.querySelector(".markdown-heading")?.textContent, "Returns");
@@ -345,7 +346,9 @@ test("on a server's page the arrows move the highlight, and Enter opens the tool
     ],
   );
   assert.equal(
-    container.querySelector(".agent-servers-menu")?.getAttribute("aria-label"),
+    document.getElementById(
+      container.querySelector('[role="dialog"]')?.getAttribute("aria-labelledby") ?? "",
+    )?.textContent,
     "Read project",
   );
   assert.equal(document.activeElement, page.querySelector(".integration-tool-detail-body"));
@@ -398,7 +401,7 @@ test("a press on a tool opens its page with the popover standing open, and its b
   );
   assert.equal(container.querySelector(".integration-tool-detail-name"), null);
   assert.deepEqual(
-    [...container.querySelectorAll(".integration-tool-hint")].map((hint) => hint.textContent),
+    [...container.querySelectorAll(".integration-tool-hints li")].map((hint) => hint.textContent),
     ["Destructive"],
   );
 

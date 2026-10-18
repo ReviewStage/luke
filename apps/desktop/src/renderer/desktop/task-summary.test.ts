@@ -9,12 +9,11 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
@@ -167,13 +166,14 @@ function cardAgent(page: HTMLElement): HTMLButtonElement {
   assert.ok(row, "the pull request has a row");
   hover(row);
   const named = document.querySelector<HTMLButtonElement>(
-    '.luke-tooltip-card .luke-hover-card-sub button.actor-ref[data-kind="agent"]',
+    '.luke-tooltip-card .luke-hover-card-sub button[data-actor-ref][data-kind="agent"]',
   );
   assert.ok(named, "the Changes card names the agent");
   return named;
 }
 
 test("a page's row hangs the page's tab's card, previewing its newest version", () => {
+  fakeAppPlatform({ pageFrameUrl });
   const funnel = {
     id: "5d1c3f9a-7e2b-4c8d-9f10-2a3b4c5d6e7f",
     title: "Invite funnel",
@@ -245,13 +245,7 @@ test("the agent's card hung from a Changes card previews its running step while 
 
 test("an agent's row in the summary offers Copy link on a right-click, copying the agent's link under its task, before Archive agent", async () => {
   const copied: string[] = [];
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) copied.push(request.payload.words);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-    recordSurfaceEvent: () => undefined,
-  });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount("plan", "acme");
   const row = [...page.querySelectorAll<HTMLElement>(".task-summary-row")].find((each) =>
     each.textContent?.includes(AGENT.title ?? ""),
@@ -274,16 +268,16 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
 const NO_INBOX = { open: [], settled: [] };
 
 /** The plan's column as the shell lays it out: the toolbar's button over the summary, laid out by the column's own width. */
-function PlanColumn({ plans }: { plans: TasksControl }): React.JSX.Element {
+function TaskColumn({ plans: tasks }: { plans: TasksControl }): React.JSX.Element {
   const pin = useSummaryPin(true);
   const [column, setColumn] = useState<HTMLElement | null>(null);
-  const layout = useSummaryLayout(pin, column, false, summaryHolds(plans, NO_INBOX));
+  const layout = useSummaryLayout(pin, column, false, summaryHolds(tasks, NO_INBOX));
   return createElement(
     "div",
     { ref: setColumn },
     createElement(SummaryButton, { layout, cardId: "summary-card" }),
     createElement(TaskSummary, {
-      tasks: plans,
+      tasks: tasks,
       layout,
       cardId: "summary-card",
       inbox: NO_INBOX,
@@ -295,16 +289,16 @@ function PlanColumn({ plans }: { plans: TasksControl }): React.JSX.Element {
 }
 
 /** The column of `plans` drawn `width` pixels wide, and ways to lay it out again at another width or over other plans. */
-function columnAt(width: number, plans: TasksControl = tasksControl()) {
+function columnAt(width: number, tasks: TasksControl = tasksControl()) {
   const measured = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
   measured.mockReturnValue(DOMRect.fromRect({ width }));
   const page = document.body.appendChild(document.createElement("div"));
   root = createRoot(page);
   const draw = (shown: TasksControl) =>
     act(() =>
-      root?.render(onRegistry(AtomRegistry.make(), createElement(PlanColumn, { plans: shown }))),
+      root?.render(onRegistry(AtomRegistry.make(), createElement(TaskColumn, { plans: shown }))),
     );
-  draw(plans);
+  draw(tasks);
   return {
     page,
     rail: () => page.querySelector('aside[aria-label="Summary"]'),
@@ -328,6 +322,31 @@ test("a column too narrow to spare the rail draws none, and the toolbar's button
   const card = document.querySelector('[role="dialog"][aria-label="Summary"]');
   assert.ok(card, "the card hangs");
   assert.ok(card.querySelectorAll(".task-summary-row").length > 0, "the card lists the summary");
+});
+
+test("Escape takes the card the toolbar's button hung back down and hands the focus back to that button", () => {
+  const column = columnAt(280);
+  const toggle =
+    column.page.querySelector<HTMLButtonElement>('button[aria-label="Toggle summary"]') ??
+    assert.fail("the toolbar's button stands");
+  act(() => toggle.click());
+  assert.ok(document.querySelector('[role="dialog"][aria-label="Summary"]'), "the card hangs");
+
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(toggle.getAttribute("aria-expanded"), "false", "the card is taken down");
+  assert.equal(document.activeElement, toggle, "the toolbar's button has the focus back");
+});
+
+test("where the summary pins beside the document, the toolbar's button says whether it stands pinned", () => {
+  const column = columnAt(1200);
+  const toggle =
+    column.page.querySelector<HTMLButtonElement>('button[aria-label="Toggle pinned summary"]') ??
+    assert.fail("the toolbar's button stands");
+  const pinned = toggle.getAttribute("aria-pressed");
+  assert.ok(pinned === "true" || pinned === "false", "the button is a toggle");
+  assert.equal(pinned, String(column.rail()?.getAttribute("data-mode") === "column"));
 });
 
 test("a column with room for the rail draws it, and one widened to that room draws it again", () => {

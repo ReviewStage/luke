@@ -97,7 +97,7 @@ export class ChatPostTally {
 }
 
 /** What one of Luke's chat calls runs under: Luke on the plan, as it posts and is told, the call's key and turn, the turn's count, and the session's sandbox, where a post's pictures are read. */
-export interface PlannerChatCall {
+export interface BrainChatCall {
   readonly luke: ChatAgent;
   readonly clientKey: string;
   readonly turnId: string;
@@ -106,18 +106,18 @@ export interface PlannerChatCall {
 }
 
 /** What a chat call reaches: the store, and GitHub and eve for a notice steered into a coding agent's session. */
-type PlannerChatServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
+type BrainChatServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
 /** The plan's Luke as the account reaches the chat. */
-export function lukeOn(userId: string, planId: string): ChatReader {
-  return { userId, planId, self: { kind: MEMBER_KIND.PLANNER, planId } };
+export function lukeOn(userId: string, taskId: string): ChatReader {
+  return { userId, planId: taskId, self: { kind: MEMBER_KIND.LUKE, planId: taskId } };
 }
 
 /** Runs one post as Luke, counted against the turn's bound, and let go of the count where it was refused. */
-export function runPlannerPost(
-  call: PlannerChatCall,
+export function runBrainPost(
+  call: BrainChatCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, PlannerChatServices> {
+): Effect.Effect<WireRecord, never, BrainChatServices> {
   return Effect.suspend(() => {
     const { turnId, clientKey } = call;
     const others = call.tally.reserve(turnId, clientKey);
@@ -139,16 +139,16 @@ export function runPlannerPost(
 }
 
 /** Runs one read as Luke. */
-export function runPlannerRead(
-  call: PlannerChatCall,
+export function runBrainRead(
+  call: BrainChatCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.map(readAsAgent(call.luke, input), (answer) => ({ ...answer }));
 }
 
 /** Runs one resolve of an ask of Luke's. */
-export function runPlannerResolve(
-  call: PlannerChatCall,
+export function runBrainResolve(
+  call: BrainChatCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.map(resolveAsAgent(call.luke, input), (answer) => ({ ...answer }));
@@ -163,9 +163,9 @@ export function runPlannerResolve(
  */
 export function chatSince(
   userId: string,
-  planId: string,
+  taskId: string,
 ): Effect.Effect<ChatSince, never, DatabaseServices> {
-  return peekAsAgent(lukeOn(userId, planId), CHAT_SINCE_MESSAGES).pipe(
+  return peekAsAgent(lukeOn(userId, taskId), CHAT_SINCE_MESSAGES).pipe(
     Effect.map(
       Option.match({
         onNone: () => NOTHING_SINCE,
@@ -181,10 +181,10 @@ export function chatSince(
 /** Marks what a settled turn was handed as read by Luke, through the place it was handed; a write that fails is logged, and the next turn is handed the lines again. */
 export function chatTakenIn(
   userId: string,
-  planId: string,
+  taskId: string,
   through: number,
 ): Effect.Effect<void, never, DatabaseServices> {
-  return readThroughAsAgent(lukeOn(userId, planId), through).pipe(
+  return readThroughAsAgent(lukeOn(userId, taskId), through).pipe(
     Effect.tapError(logStoreFailure),
     Effect.orElseSucceed(() => undefined),
   );

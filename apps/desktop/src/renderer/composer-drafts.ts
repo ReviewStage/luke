@@ -62,9 +62,15 @@ const draftPlaceSchema = Schema.Union([
     planId: Schema.String,
     /** The key the draft agent starts under, which a relaunch keeps, so a Start asked again is the same one. */
     draftId: Schema.String,
-    /** The agent and message the draft forks, with the message's opening words, which a relaunch keeps beside its words. */
+    /** The agent and message the draft forks, with the message's opening words and, for a reply still being written, where the fork cuts it, which a relaunch keeps beside its words; no message for a continue of the agent's whole transcript. */
     fork: Schema.optionalKey(
-      Schema.Struct({ agentId: Schema.String, messageId: Schema.String, opening: Schema.String }),
+      Schema.Struct({
+        agentId: Schema.String,
+        messageId: Schema.optionalKey(Schema.String),
+        opening: Schema.String,
+        messageSteps: Schema.optionalKey(Schema.Number),
+        messageStepParts: Schema.optionalKey(Schema.Number),
+      }),
     ),
   }),
   Schema.Struct({
@@ -76,6 +82,8 @@ const draftPlaceSchema = Schema.Union([
     itemId: Schema.String,
     /** The item's revision the answer was written against; the agent changing the item starts its card afresh. */
     revision: Schema.Number,
+    /** Set where the draft is a message on a settled item's thread rather than the answer to an open one, so neither is ever taken for the other. */
+    thread: Schema.optionalKey(Schema.Literal(true)),
   }),
 ]);
 
@@ -365,14 +373,14 @@ function isNewAgent(kept: KeptDraft): kept is KeptDraft<NewAgentPlace> {
  * of its own on the same plan.
  */
 export function useNewAgentDraft(
-  planId: string | undefined,
+  taskId: string | undefined,
   draftId: string | undefined,
 ): KeptDraft<NewAgentPlace> | undefined {
   return useAtomValue(draftsAtom, (drafts) => {
-    const plans = drafts.filter(isNewAgent).filter((kept) => kept.place.planId === planId);
+    const onTask = drafts.filter(isNewAgent).filter((kept) => kept.place.planId === taskId);
     return draftId === undefined
-      ? plans.at(-1)
-      : plans.find((kept) => kept.place.draftId === draftId);
+      ? onTask.at(-1)
+      : onTask.find((kept) => kept.place.draftId === draftId);
   });
 }
 
@@ -387,10 +395,10 @@ function isInbox(kept: KeptDraft): kept is KeptDraft<InboxPlace> {
  * drafts changes, so the inbox reading it draws again only then, never on a
  * word typed in another box.
  */
-export function useInboxDrafts(planId: string | null): readonly KeptDraft<InboxPlace>[] {
+export function useInboxDrafts(taskId: string | null): readonly KeptDraft<InboxPlace>[] {
   const last = useRef<readonly KeptDraft<InboxPlace>[]>([]);
   return useAtomValue(draftsAtom, (drafts) => {
-    const found = drafts.filter(isInbox).filter((kept) => kept.place.planId === planId);
+    const found = drafts.filter(isInbox).filter((kept) => kept.place.planId === taskId);
     const same =
       found.length === last.current.length && found.every((kept, at) => kept === last.current[at]);
     if (!same) last.current = found;
@@ -414,6 +422,6 @@ export function useDraftWriter(): DraftWriter {
 }
 
 /** Whether a plan holds a draft: one of its agents', its draft agent's, or an inbox card's. */
-export function usePlanDrafted(planId: string): boolean {
-  return useAtomValue(draftedAtom, (plans) => plans.includes(planId));
+export function usePlanDrafted(taskId: string): boolean {
+  return useAtomValue(draftedAtom, (tasks) => tasks.includes(taskId));
 }

@@ -1,15 +1,29 @@
 {
   "slack": 0.05,
   "gzipBytes": {
-    "renderer/renderer.js": 845177,
-    "renderer/whiteboard.js": 468605,
-    "renderer/file-tree.js": 71587,
-    "renderer/plan-editor.js": 169882,
-    "renderer/session-recorder.js": 61872,
-    "renderer/terminal.js": 146170,
+    "renderer/panel.js": 858173,
+    "renderer/voice.js": 340950,
+    "renderer/call.js": 385392,
+    "renderer/whiteboard.js": 441173,
+    "renderer/file-tree.js": 72151,
+    "renderer/plan-editor.js": 176496,
+    "renderer/session-recorder.js": 61865,
+    "renderer/terminal.js": 146927,
     "renderer/pcm-tee-worklet.js": 413,
-    "renderer/avatar-session.js": 148920,
-    "renderer/diagram.js": 195262,
-    "renderer/diff-view.js": 136614
+    "renderer/avatar-session.js": 149485,
+    "renderer/diagram.js": 195519,
+    "renderer/diff-view.js": 142443,
+    "renderer/factory-world.js": 161750,
+    "renderer/factory-world-dev.js": 1745,
+    "renderer/factory-world-station.js": 31732,
+    "renderer/factory-world-citadel.js": 31274,
+    "renderer/factory-world-railway.js": 41051,
+    "renderer/factory-world-archipelago.js": 35105,
+    "renderer/factory-world-neon.js": 29957,
+    "renderer/factory-world-factory.js": 38318,
+    "renderer/factory-world-colony.js": 31066,
+    "renderer/factory-world-atlantis.js": 37101,
+    "renderer/factory-world-tree.js": 34653,
+    "renderer/factory-world-planet.js": 30555
   }
 }

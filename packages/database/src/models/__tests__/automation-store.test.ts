@@ -539,16 +539,16 @@ it.layer(getTestDB())("the automation store's failed runs", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const other = yield* openAccount;
-        const planId = yield* openTask(owner);
-        const theirPlan = yield* openTask(other);
+        const taskId = yield* openTask(owner);
+        const theirTask = yield* openTask(other);
         const made = (userId: string, onTask: string, name: string) =>
           Effect.map(
             createAutomation(userId, { ...nightly(onTask), name, nextRunAt: null }),
             Option.getOrThrow,
           );
-        const sweep = yield* made(owner, planId, "Nightly flaky-test sweep");
-        const digest = yield* made(owner, planId, "Morning digest");
-        const theirs = yield* made(other, theirPlan, "Their sweep");
+        const sweep = yield* made(owner, taskId, "Nightly flaky-test sweep");
+        const digest = yield* made(owner, taskId, "Morning digest");
+        const theirs = yield* made(other, theirTask, "Their sweep");
         /** A run of the automation, settled as it came out, a second after the one before. */
         const ran = (
           automation: typeof sweep,

@@ -302,9 +302,9 @@ function wordsWorkspace(
   namedId: string | undefined,
 ): Workspace | undefined {
   const workspaces = planning?.workspaces ?? [];
-  const planWorkspaceId = planning?.tasks.find((plan) => plan.id === where.planId)?.workspaceId;
+  const taskWorkspaceId = planning?.tasks.find((task) => task.id === where.planId)?.workspaceId;
   return (
-    workspaces.find((each) => each.id === planWorkspaceId) ??
+    workspaces.find((each) => each.id === taskWorkspaceId) ??
     workspaces.find((each) => each.id === namedId) ??
     workspaces.find((each) => each.slug === where.workspace)
   );

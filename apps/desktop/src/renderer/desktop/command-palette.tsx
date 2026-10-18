@@ -47,7 +47,21 @@
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import type { HostCapability } from "@luke/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
+import {
+  APP_COMMAND,
+  APP_SHORTCUT_GROUPS,
+  APP_SHORTCUTS,
+  type AppCommand,
+  appCommandLabel,
+  commandForKey,
+  isKeyedCommand,
+  type KeyedCommand,
+  PALETTE_COMMANDS,
+  SHORTCUT_KEY,
+  type ShortcutChord,
+} from "@luke/settings/shortcuts";
 import {
   CHIP_LOOK,
   Chip,
@@ -67,25 +81,12 @@ import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  APP_COMMAND,
-  APP_SHORTCUT_GROUPS,
-  APP_SHORTCUTS,
-  type AppCommand,
-  appCommandLabel,
-  commandForKey,
-  isKeyedCommand,
-  type KeyedCommand,
-  PALETTE_COMMANDS,
-  SHORTCUT_KEY,
-  type ShortcutChord,
-} from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { appCommandOffered, runAppCommand, useAppCommand, useOverlayHold } from "../app-commands";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { Highlighted } from "../search-field";
-import { settingsPageOf } from "../settings/pages";
+import { settingsPageOf, settingsPageShown } from "../settings/pages";
 import {
   landOnSettingsRow,
   resultPageWord,
@@ -94,6 +95,7 @@ import {
 } from "../settings-search";
 import { Shortcut } from "../shortcut";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
+import { useChatOn } from "../tasks/chat-gate";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
 import { refusalLine } from "../tasks/file-tab-model";
@@ -105,7 +107,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWorkspaceMembers } from "../tasks/use-workspace-members";
 import { workRowsOf } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
-import { agentEntries, inboxEntries } from "./main-tabs";
+import { agentEntries, chatEntries, inboxEntries } from "./main-tabs";
 import { changesOffers, panelEntries, taskWorkers } from "./side-panel";
 import { taskOf } from "./task-actions";
 import { WorkspaceRef } from "./workspace-ref";
@@ -455,15 +457,15 @@ function taskRows(
   // The pinned stand first, as the sidebar's; the rest by their last
   // activity, as the sidebar, Home's Recent, and the row's time read it.
   const standing = [
-    ...tasks.tasks.filter((plan) => plan.pinnedAt !== undefined),
+    ...tasks.tasks.filter((task) => task.pinnedAt !== undefined),
     ...orderTasks(
-      tasks.tasks.filter((plan) => plan.pinnedAt === undefined),
+      tasks.tasks.filter((task) => task.pinnedAt === undefined),
       TASK_ORDER.UPDATED,
     ),
   ];
   return [
-    ...listedFirst(standing).map((plan) => row(plan, false)),
-    ...listedFirst(tasks.archived).map((plan) => row(plan, true)),
+    ...listedFirst(standing).map((task) => row(task, false)),
+    ...listedFirst(tasks.archived).map((task) => row(task, true)),
   ];
 }
 
@@ -474,7 +476,7 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
 }
 
 /**
- * The open task's Inbox and coding agents, as the column's "+" lists them,
+ * The open task's Inbox, Chat, and coding agents, as the column's "+" lists them,
  * then its subagents and its agents' Changes tabs, as the side panel's "+"
  * lists them, then its archived agents (`archivedAgentRows`), each in its
  * row's look and words, found by its row's words, and beside the task's
@@ -483,18 +485,23 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
  * subagent's or a Changes tab as the "+" opens it, the version history
  * giving way to each, so none opens behind what covers it.
  */
-function agentRows(tasks: TasksControl, show: (pick: () => void) => void): readonly PaletteRow[] {
+function agentRows(
+  tasks: TasksControl,
+  chatOn: boolean,
+  show: (pick: () => void) => void,
+): readonly PaletteRow[] {
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
   const taskName = [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.name;
   const workers = taskWorkers(workRowsOf(tasks.work.conversation, tasks.work.callLive));
   const inbox = inboxEntries(tasks.agents, () => tasks.onShowInbox(taskId));
+  const chat = chatEntries(chatOn && tasks.chatView.available, () => tasks.onShowChat(taskId));
   const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({
     ...entry,
     onPick: () => tasks.onShowAgent(taskId, entry.row.id),
   }));
   // Note that the plan's workers and Changes open in its panel, which an agent's page holds while it stands.
-  const subagents = holdsPlanPanel(tasks)
+  const subagents = holdsTaskPanel(tasks)
     ? panelEntries({
         panel: tasks.sidePanel,
         kinds: [],
@@ -503,7 +510,7 @@ function agentRows(tasks: TasksControl, show: (pick: () => void) => void): reado
         changes: changesOffers(tasks.agents, tasks.sidePanel.changes),
       }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
     : [];
-  const entries = [...inbox, ...agents, ...subagents];
+  const entries = [...inbox, ...chat, ...agents, ...subagents];
   const standing = entries.map(({ row, endMark, onPick, agent }) => ({
     icon: row.icon,
     label: row.label,
@@ -594,7 +601,7 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
 }
 
 /** Whether the side panel is the open plan's, as it is but while an agent's page holds it (`use-plans-tab.ts`). */
-function holdsPlanPanel(tasks: TasksControl): boolean {
+function holdsTaskPanel(tasks: TasksControl): boolean {
   return tasks.agentView.agentId === undefined;
 }
 
@@ -633,7 +640,7 @@ function panelTabRows(
   tasks: TasksControl,
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
-  if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsPlanPanel(tasks)) return [];
+  if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsTaskPanel(tasks)) return [];
   return SIDE_PANEL_TABS.map((tab) => {
     const look = tabLook({ kind: TAB_KIND.PANEL, tab });
     const label = `Show ${look.label.toLowerCase()}`;
@@ -656,11 +663,11 @@ function readMarkRows(
   choose: (run: () => void) => void,
 ): readonly PaletteRow[] {
   if (tasks.region.kind !== DOCUMENT_REGION.READY) return [];
-  const { task: plan } = tasks.region;
-  if (plan.id !== reads.watched) return [];
+  const { task } = tasks.region;
+  if (task.id !== reads.watched) return [];
   const item = markReadItem({
-    unread: reads.markedUnread(plan.id),
-    onMark: (unread) => reads.mark(plan, unread),
+    unread: reads.markedUnread(task.id),
+    onMark: (unread) => reads.mark(task, unread),
   });
   return [
     {
@@ -678,14 +685,14 @@ function readMarkRows(
  * None while no plan is looked at, nor for an archived plan, which offers
  * no pin.
  */
-function planPinRows(
+function taskPinRows(
   tasks: TasksControl,
   reads: ReadMarks,
   choose: (run: () => void) => void,
 ): readonly PaletteRow[] {
-  const plan = reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
-  if (plan === undefined || plan.archivedAt !== undefined) return [];
-  const pinned = plan.pinnedAt !== undefined;
+  const task = reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
+  if (task === undefined || task.archivedAt !== undefined) return [];
+  const pinned = task.pinnedAt !== undefined;
   const label = pinned ? "Unpin task" : "Pin task";
   const mark = pinned ? TASK_MARK.UNPIN : TASK_MARK.PIN;
   return [
@@ -693,7 +700,7 @@ function planPinRows(
       icon: pinned ? <UnpinIcon /> : <PinIcon />,
       label,
       terms: [label],
-      onChoose: () => choose(() => tasks.onMarkTask(plan.id, mark)),
+      onChoose: () => choose(() => tasks.onMarkTask(task.id, mark)),
     },
   ];
 }
@@ -723,9 +730,12 @@ function agentPinRows(
   ];
 }
 
-/** Every Settings page, in the sidebar's order, under its own glyph and name. */
-function settingsPageRows(open: (page: SettingsView) => void): readonly PaletteRow[] {
-  return SETTINGS_PAGE_LIST.map((page) => {
+/** Every Settings page this platform offers, in the sidebar's order, under its own glyph and name. */
+function settingsPageRows(
+  capabilities: readonly HostCapability[],
+  open: (page: SettingsView) => void,
+): readonly PaletteRow[] {
+  return SETTINGS_PAGE_LIST.filter((page) => settingsPageShown(page, capabilities)).map((page) => {
     const { title, icon } = settingsPageOf(page);
     return {
       icon,
@@ -871,7 +881,7 @@ export function CommandPalette({
   available,
   tab,
   onTabChange,
-  tasks: plans,
+  tasks,
   links,
   settings,
   readFiles,
@@ -885,12 +895,15 @@ export function CommandPalette({
   /** What the settings pages draw now, which the Settings rows are; the page a row lands on is shown through `onViewChange`. */
   settings: {
     rows: SettingsSearchInput | undefined;
+    /** What the platform offers, which decides the Settings pages listed, whether or not the rows have been read. */
+    capabilities: readonly HostCapability[];
     onViewChange: (view: SettingsView) => void;
   };
   /** Lists everything in the task's repository in one read, which the Files rows are. */
   readFiles: (taskId: string) => Promise<TasksTreeAnswer>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const chatOn = useChatOn();
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   const [query, setQuery] = useState("");
@@ -1010,19 +1023,19 @@ export function CommandPalette({
 
   const tokens = searchTokens(query);
   // The listed workspace's members, read once for it, name a teammate's task's creator by face.
-  const members = useWorkspaceMembers(plans.workspace);
+  const members = useWorkspaceMembers(tasks.workspace);
   const reads = useReadMarks();
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
-  const taskId = plans.activeTaskId;
+  const taskId = tasks.activeTaskId;
   const repository =
-    [...plans.tasks, ...plans.archived].find((task) => task.id === taskId)?.repository ?? null;
+    [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.repository ?? null;
   // The files held are the open task's repository's, or none of its.
   const held =
     files !== undefined && files.taskId === taskId && files.repository === repository
       ? files
       : undefined;
   // Note that a task's files are searched only while its panel is the one standing, which an agent's page holds otherwise.
-  const filesOpen = holdsPlanPanel(plans) && taskId !== undefined && repository !== null;
+  const filesOpen = holdsTaskPanel(tasks) && taskId !== undefined && repository !== null;
   const filesAsked = open && filesOpen && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
 
   // Note that the repository is read the first time its files are searched
@@ -1061,33 +1074,36 @@ export function CommandPalette({
   const byRow = (row: PaletteRow, words: readonly string[]) => rowScore(row, query, words);
   const tiersOf = {
     [PALETTE_FILTER.TASKS]: () => [
-      plans.signedIn ? taskRows(plans, members, (id) => onTasks(() => plans.onSelect(id))) : [],
+      tasks.signedIn ? taskRows(tasks, members, (id) => onTasks(() => tasks.onSelect(id))) : [],
     ],
-    [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, onTasks)],
+    [PALETTE_FILTER.AGENTS]: () => [agentRows(tasks, chatOn, onTasks)],
     [PALETTE_FILTER.PEOPLE]: () => [
-      peopleRows(members, plans.me, (userId) => onTasks(() => plans.personView.onOpen(userId))),
+      peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
     ],
     [PALETTE_FILTER.FILES]: () => [],
     [PALETTE_FILTER.ACTIONS]: () => [
       [
         ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
         ...actionRows((command) => choose(() => runAppCommand(command))),
-        ...panelTabRows(plans, onTasks),
-        ...readMarkRows(plans, reads, choose),
-        ...planPinRows(plans, reads, choose),
-        ...agentPinRows(plans, choose),
+        ...panelTabRows(tasks, onTasks),
+        ...readMarkRows(tasks, reads, choose),
+        ...taskPinRows(tasks, reads, choose),
+        ...agentPinRows(tasks, choose),
       ],
     ],
-    [PALETTE_FILTER.SETTINGS]: () => [settingsPageRows(openPage), settingRows(settings.rows, land)],
+    [PALETTE_FILTER.SETTINGS]: () => [
+      settingsPageRows(settings.capabilities, openPage),
+      settingRows(settings.rows, land),
+    ],
   } as const satisfies Record<PaletteKind, () => readonly (readonly PaletteRow[])[]>;
   // Note that a file found opens through the panel's one door for a file
   // named in place: the tab it has, as it stands, or a new one at the strip's end.
   const openFile = (path: string) =>
-    onTasks(() => shownOverHistory(plans, () => plans.sidePanel.onOpenFile({ path })));
+    onTasks(() => shownOverHistory(tasks, () => tasks.sidePanel.onOpenFile({ path })));
   const rowsFor = (kind: PaletteKind): readonly PaletteRow[] =>
     kind === PALETTE_FILTER.FILES
       ? (filesOpen ? matchedPaths : []).map((path) =>
-          fileRow(path, { shown: plans.shownCode ?? [], repository }, openFile),
+          fileRow(path, { shown: tasks.shownCode ?? [], repository }, openFile),
         )
       : tiersOf[kind]()
           .flatMap((tier) => ranked(tier, query, limit, byRow))

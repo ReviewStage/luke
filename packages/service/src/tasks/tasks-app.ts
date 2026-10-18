@@ -130,7 +130,7 @@ import { readTaskCode, readTaskWork } from "./task-work-store.js";
  * `DELETE` stops every coding agent of the task first, through the one Stop
  * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes the task. Each
  * row of the list carries what the task's coding agents are doing and what
- * they published, in brief, where it has any (`packages/service/src/agents/plan-agents.ts`). A pin
+ * they published, in brief, where it has any (`packages/service/src/agents/task-agents.ts`). A pin
  * and an archive are changes like a rename, though a pin is the asking
  * member's own and reads pinned for no one else, and the list leaves the archived
  * tasks out unless `archived=include` asks for them, so a build from before
@@ -442,7 +442,7 @@ const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
 const startingLinearIssue = (organizationId: string, issueId: string) =>
   linearOrRefused(
     throughWorkspaceLinear(organizationId, (token) => linearIssue(token, issueId)),
-    "Linear gave no issue to start a plan from",
+    "Linear gave no issue to start a task from",
   );
 
 /** Whether a list read asks for the archived tasks too; a build from before archiving never does. */
@@ -463,7 +463,7 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   const userId = yield* resolvedUserId(seams, request);
   if (incoming.method === HTTP_METHOD.GET) {
     const includeArchived = listsArchived(request);
-    const plans = yield* hostedStoreOrUnavailable(
+    const tasks = yield* hostedStoreOrUnavailable(
       Effect.flatMap(listTasks(userId, { includeArchived }), (listed) =>
         withTaskAgents(userId, listed),
       ),
@@ -471,7 +471,10 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
     const tasklessAgents = yield* hostedStoreOrUnavailable(
       listTasklessAgents(userId, { includeArchived }),
     );
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plans, planlessAgents: tasklessAgents });
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      plans: tasks,
+      planlessAgents: tasklessAgents,
+    });
   }
   const body = yield* readJsonBodyEffect(MAXIMUM_NAME_BODY_BYTES);
   const started = readEither(taskCreateRequestSchema)(body);

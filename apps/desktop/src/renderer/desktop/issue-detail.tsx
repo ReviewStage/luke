@@ -1,15 +1,22 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { ConfirmDialog, useConfirmDialog, useMenu } from "@luke/ui";
-import { ChevronRightIcon, EllipsisIcon, ListTodoIcon } from "lucide-react";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  BREADCRUMBS_VARIANT,
+  Breadcrumbs,
+  ConfirmDialog,
+  EllipsisIcon,
+  IconButton,
+  useConfirmDialog,
+  useMenu,
+} from "@luke/ui";
+import { ListTodoIcon } from "lucide-react";
 import { useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ActorRef } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag } from "../experiment-marks";
-import { FoldingButton } from "../folding-button";
 import { usePerson } from "../member-directory";
 import { RelativeTime } from "../tasks/relative-time";
 import { useMinute } from "../tasks/task-time";
@@ -47,15 +54,15 @@ export function IssueCrumbs({
   onBack: () => void;
 }): React.JSX.Element {
   return (
-    <nav className="automation-crumbs" aria-label="Path">
-      <FoldingButton label="Issues" icon={<ListTodoIcon />} onClick={onBack} />
-      {identifier === undefined ? null : (
-        <>
-          <ChevronRightIcon aria-hidden="true" />
-          <span className="automation-crumb">{identifier}</span>
-        </>
-      )}
-    </nav>
+    <Breadcrumbs
+      label="Path"
+      variant={BREADCRUMBS_VARIANT.TITLE}
+      hint={Tooltip}
+      crumbs={[
+        { label: "Issues", icon: <ListTodoIcon />, onPress: onBack },
+        ...(identifier === undefined ? [] : [{ label: identifier, current: true }]),
+      ]}
+    />
   );
 }
 
@@ -82,14 +89,7 @@ function DetailToolbar({
       </div>
       <div className="desktop-toolbar-actions">
         <Tooltip label={ISSUE_ACTIONS_LABEL}>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={ISSUE_ACTIONS_LABEL}
-            {...menu.trigger()}
-          >
-            <EllipsisIcon className="icon-button-glyph" />
-          </button>
+          <IconButton icon={<EllipsisIcon />} label={ISSUE_ACTIONS_LABEL} {...menu.trigger()} />
         </Tooltip>
         {menu.drawn === undefined ? null : (
           <ActionMenu

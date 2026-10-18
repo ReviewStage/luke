@@ -1,9 +1,15 @@
 import { LinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { MessageAction, MessageActions } from "../ai-elements/message";
+import {
+  MESSAGE_ACTIONS_PLACEMENT,
+  MessageAction,
+  MessageActions,
+  type MessageActionsPlacement,
+} from "../ai-elements/message";
 import { CopyGlyph, copyHint, LINK_COPY, useCopyFeedback } from "../copy-feedback";
 import { useCopyLink } from "../copy-link-item";
 import { ForkMessageAction } from "./fork-action";
+import type { ForkCut } from "./fork-model";
 import { useMessagePlace } from "./message-links";
 
 /**
@@ -20,42 +26,49 @@ const COPY_LABEL = "Copy";
 
 export function CopyMessageAction({
   words,
+  copyable = true,
   messageId,
   forkable = false,
-  className,
+  forkCut,
+  placement = MESSAGE_ACTIONS_PLACEMENT.FLOATING,
 }: {
   words: string;
+  /** Whether its words are whole and there are any, which its Copy needs; a turn still running, or one with no words, is offered no Copy. */
+  copyable?: boolean;
   /** The message's id, by which its transcript names it for its Copy link; none where it has no link. */
   messageId?: string | undefined;
-  /** Whether the message is the agent's own and settled, which its tab may offer to fork. */
+  /** Whether the message is the agent's own, which its tab may offer to fork. */
   forkable?: boolean;
-  className?: string;
+  /** Where its fork cuts it, where it is a reply still being written; none where a fork keeps it whole. */
+  forkCut?: ForkCut | undefined;
+  /** Where the actions stand: floated over the message's corner, or set in the line under it. */
+  placement?: MessageActionsPlacement;
 }): ReactNode {
   const { state, copy } = useCopyFeedback();
   const place = useMessagePlace(messageId ?? "");
   const copyLink = useCopyLink();
   return (
-    <MessageActions className={className}>
-      <MessageAction
-        label={COPY_LABEL}
-        tooltip={copyHint(state, COPY_LABEL)}
-        className="[&_svg]:size-4"
-        onClick={() => copy(words)}
-      >
-        <CopyGlyph state={state} />
-      </MessageAction>
+    <MessageActions placement={placement}>
+      {copyable ? (
+        <MessageAction
+          label={COPY_LABEL}
+          tooltip={copyHint(state, COPY_LABEL)}
+          onClick={() => copy(words)}
+        >
+          <CopyGlyph state={state} />
+        </MessageAction>
+      ) : null}
       {messageId === undefined || place === undefined || copyLink === undefined ? null : (
         <MessageAction
           label={LINK_COPY.LABEL}
           tooltip={LINK_COPY.LABEL}
-          className="[&_svg]:size-4"
           onClick={() => copyLink(place)}
         >
           <LinkIcon />
         </MessageAction>
       )}
       {!forkable || messageId === undefined ? null : (
-        <ForkMessageAction messageId={messageId} words={words} />
+        <ForkMessageAction messageId={messageId} words={words} cut={forkCut} />
       )}
     </MessageActions>
   );

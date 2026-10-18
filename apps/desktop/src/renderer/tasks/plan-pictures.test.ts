@@ -64,7 +64,6 @@ function standHost(
   unanswered: ReadonlySet<string> = new Set(),
 ): void {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (request: Act): Promise<ActOutcome> => {
       if (request.kind !== ACT_KIND.TASKS_PICTURE_READ) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
@@ -95,19 +94,19 @@ function taskOf(id: string, body: string): Task {
   return { ...DOCUMENT_TASK, id, document: { body, assumptions: [] } };
 }
 
-const picture = (planId: string, id: string) =>
-  planAttachmentAddress({ taskId: planId, attachmentId: id }, "acme");
+const picture = (taskId: string, id: string) =>
+  planAttachmentAddress({ taskId: taskId, attachmentId: id }, "acme");
 
 test("a plan's picture is drawn from its bytes under its caption, and one this reader cannot reach as its words", async () => {
-  const planId = "7a1d4e90-0c3f-4b6a-9d2e-5f6a7b8c9d03";
+  const taskId = "7a1d4e90-0c3f-4b6a-9d2e-5f6a7b8c9d03";
   standHost(new Set([MOCK]), []);
   const body = [
     "## Approach",
-    `![Invite email](${picture(planId, MOCK)} "The mock Lee shared")`,
-    `![Members page](${picture(planId, GONE)})`,
+    `![Invite email](${picture(taskId, MOCK)} "The mock Lee shared")`,
+    `![Members page](${picture(taskId, GONE)})`,
   ].join("\n\n");
 
-  const view = await drawn(createElement(PlanBody, { task: taskOf(planId, body), live: false }));
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
 
   const blocks = [...view.querySelectorAll<HTMLElement>(".picture-block")];
   assert.equal(blocks.length, 2);
@@ -121,14 +120,14 @@ test("a plan's picture is drawn from its bytes under its caption, and one this r
 });
 
 test("a press on a picture opens the plan's pictures over the window, named by their alt text", async () => {
-  const planId = "9e2f5c11-6d4a-4c8b-b1e3-2a3b4c5d6e04";
+  const taskId = "9e2f5c11-6d4a-4c8b-b1e3-2a3b4c5d6e04";
   standHost(new Set([MOCK, SECOND]), []);
   const body = [
     "## Approach",
-    `![Invite email](${picture(planId, MOCK)})`,
-    `![Members page](${picture(planId, SECOND)})`,
+    `![Invite email](${picture(taskId, MOCK)})`,
+    `![Members page](${picture(taskId, SECOND)})`,
   ].join("\n\n");
-  const view = await drawn(createElement(PlanBody, { task: taskOf(planId, body), live: false }));
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
 
   act(() => {
     view.querySelectorAll<HTMLButtonElement>(".picture-frame")[1]?.click();
@@ -141,23 +140,23 @@ test("a press on a picture opens the plan's pictures over the window, named by t
 });
 
 test("who last changed a picture's section is said in the viewer over the window, not over the picture in the words before the first heading", async () => {
-  const planId = "5b8e2d40-7f1a-4e3c-9a6b-0c1d2e3f4a07";
+  const taskId = "5b8e2d40-7f1a-4e3c-9a6b-0c1d2e3f4a07";
   standHost(new Set([MOCK, SECOND]), []);
   const now = Date.now();
   const body = [
-    `![Invite email](${picture(planId, MOCK)})`,
-    `The members page's address is \`${picture(planId, SECOND)}\`, drawn under Approach.`,
+    `![Invite email](${picture(taskId, MOCK)})`,
+    `The members page's address is \`${picture(taskId, SECOND)}\`, drawn under Approach.`,
     "## Approach",
-    `![Members page](${picture(planId, SECOND)})`,
+    `![Members page](${picture(taskId, SECOND)})`,
   ].join("\n\n");
-  const plan: Task = {
-    ...taskOf(planId, body),
+  const task: Task = {
+    ...taskOf(taskId, body),
     sectionEdits: [
       { section: "", actor: PLAN_ACTOR.DEVELOPER, by: LEE, at: now, duringCall: false },
       { section: "Approach", actor: PLAN_ACTOR.NOTETAKER, at: now - 2 * HOUR, duringCall: false },
     ],
   };
-  const view = await drawn(createElement(PlanBody, { task: plan, live: false }));
+  const view = await drawn(createElement(PlanBody, { task: task, live: false }));
 
   assert.deepEqual(
     [...view.querySelectorAll(".plan-unit-byline")].map((line) => lineWords(line)),
@@ -182,15 +181,15 @@ test("who last changed a picture's section is said in the viewer over the window
 });
 
 test("a picture from outside Luke is a link to it, and nothing is read for it", async () => {
-  const planId = "c4d5e6f7-1a2b-4c3d-8e9f-0a1b2c3d4e05";
+  const taskId = "c4d5e6f7-1a2b-4c3d-8e9f-0a1b2c3d4e05";
   const asked: string[] = [];
   standHost(new Set(), asked);
   const body = "## Approach\n\nThe vendor's flow is ![SSO flow](https://northwind.io/sso.png).";
 
-  const view = await drawn(createElement(PlanBody, { task: taskOf(planId, body), live: false }));
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
 
   assert.equal(view.querySelector("img"), null);
-  assert.equal(view.querySelector(".text-link")?.textContent, "SSO flow");
+  assert.equal(view.querySelector(".luke-text-link")?.textContent, "SSO flow");
   assert.deepEqual(asked, []);
 });
 
@@ -206,10 +205,10 @@ test("words drawn with no picture drawer, as a reply is, keep a picture as its a
 });
 
 test("a version draws the picture it struck and the one it wrote in, each in its change's mark", async () => {
-  const planId = "e2f3a4b5-6c7d-4e8f-90a1-b2c3d4e5f607";
+  const taskId = "e2f3a4b5-6c7d-4e8f-90a1-b2c3d4e5f607";
   standHost(new Set([MOCK, SECOND]), []);
-  const before = `## Approach\n\n![First mock](${picture(planId, MOCK)})\n`;
-  const after = `## Approach\n\n![Second mock](${picture(planId, SECOND)})\n`;
+  const before = `## Approach\n\n![First mock](${picture(taskId, MOCK)})\n`;
+  const after = `## Approach\n\n![Second mock](${picture(taskId, SECOND)})\n`;
   function Version(): React.JSX.Element {
     const restore = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
       Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
@@ -231,7 +230,7 @@ test("a version draws the picture it struck and the one it wrote in, each in its
       },
       restore,
       task: {
-        taskId: planId,
+        taskId: taskId,
         place: { workspace: "acme", repository: null },
         anchors: new Set<string>(),
       },
@@ -251,22 +250,22 @@ test("a version draws the picture it struck and the one it wrote in, each in its
 });
 
 test("another plan's picture is drawn as itself, with no press that would open nothing", async () => {
-  const planId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
-  const otherPlanId = "6f5e4d3c-2b1a-4c9d-8e7f-a0b1c2d3e4f5";
+  const taskId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+  const otherTaskId = "6f5e4d3c-2b1a-4c9d-8e7f-a0b1c2d3e4f5";
   standHost(new Set([MOCK]), []);
-  const body = `## Approach\n\n![Copied mock](${picture(otherPlanId, MOCK)})`;
+  const body = `## Approach\n\n![Copied mock](${picture(otherTaskId, MOCK)})`;
 
-  const view = await drawn(createElement(PlanBody, { task: taskOf(planId, body), live: false }));
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
 
   assert.ok(view.querySelector(".picture-block img"));
   assert.equal(view.querySelector(".picture-block button"), null);
 });
 
 test("once the window lets go of its pictures, as an account change asks, each is read again as the account now signed in", async () => {
-  const planId = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
+  const taskId = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
   standHost(new Set([MOCK]), []);
-  const body = `## Approach\n\n![Invite email](${picture(planId, MOCK)})`;
-  const view = await drawn(createElement(PlanBody, { task: taskOf(planId, body), live: false }));
+  const body = `## Approach\n\n![Invite email](${picture(taskId, MOCK)})`;
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, body), live: false }));
   assert.ok(view.querySelector(".picture-block img"));
 
   standHost(new Set(), []);
@@ -278,10 +277,10 @@ test("once the window lets go of its pictures, as an account change asks, each i
 });
 
 test("a picture whose read went unanswered says so alone, and the picture drawn in its place next is read", async () => {
-  const planId = "3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e7f";
+  const taskId = "3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e7f";
   standHost(new Set([SECOND]), [], new Set([MOCK]));
-  const first = `## Approach\n\n![First mock](${picture(planId, MOCK)})`;
-  const view = await drawn(createElement(PlanBody, { task: taskOf(planId, first), live: false }));
+  const first = `## Approach\n\n![First mock](${picture(taskId, MOCK)})`;
+  const view = await drawn(createElement(PlanBody, { task: taskOf(taskId, first), live: false }));
   assert.equal(view.querySelector(".picture-block")?.textContent, "First mock · not available");
 
   // A plan drawn again asks the window whether motion is reduced, which a page with no layout cannot say.
@@ -293,12 +292,12 @@ test("a picture whose read went unanswered says so alone, and the picture drawn 
       removeEventListener: () => undefined,
     }),
   });
-  const next = `## Approach\n\n![Second mock](${picture(planId, SECOND)})`;
+  const next = `## Approach\n\n![Second mock](${picture(taskId, SECOND)})`;
   act(() =>
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(PlanBody, { task: taskOf(planId, next), live: false }),
+        createElement(PlanBody, { task: taskOf(taskId, next), live: false }),
       ),
     ),
   );
@@ -308,15 +307,15 @@ test("a picture whose read went unanswered says so alone, and the picture drawn 
 });
 
 test("an agent's plan card draws the plan's pictures once opened, while the agent's own words keep one a link", async () => {
-  const planId = "5b8c2d34-7e1f-4a9b-8c6d-0e1f2a3b4c07";
+  const taskId = "5b8c2d34-7e1f-4a9b-8c6d-0e1f2a3b4c07";
   const asked: string[] = [];
   standHost(new Set([MOCK, SECOND]), asked);
-  const address = picture(planId, MOCK);
+  const address = picture(taskId, MOCK);
   const plan = [
     "# Invites",
     `![Invite email](${address} "The mock Lee shared")`,
     "![Members page][members]",
-    `[members]: ${picture(planId, SECOND)} "The page today"`,
+    `[members]: ${picture(taskId, SECOND)} "The page today"`,
   ].join("\n\n");
   const handed = { id: "plan", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: plan }] };
   const turn = {
@@ -331,7 +330,7 @@ test("an agent's plan card draws the plan's pictures once opened, while the agen
     createElement(
       Fragment,
       null,
-      createElement(AgentMessage, { ...shared, message: handed, plan: true, planId }),
+      createElement(AgentMessage, { ...shared, message: handed, plan: true, planId: taskId }),
       createElement(AgentMessage, { ...shared, message: turn, plan: false }),
     ),
   );

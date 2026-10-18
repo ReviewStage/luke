@@ -72,8 +72,9 @@ import { steerCodingAgent } from "./steer.js";
  * is told again: the notice's key and the one outstanding notice keep that
  * from steering anyone twice, and it finishes a telling the first send did
  * not. A plan's planner and a person are handed to doors of
- * their own, which hold the message until Luke's report turn and the
- * window's announcement fill them. What each member came to is the
+ * their own: a person is told through their window's account-wide read
+ * (`tellPerson`), and the planner's holds the message until Luke's report
+ * turn fills it. What each member came to is the
  * receipt the poster reads: told, held, left, and the handles that named no
  * one. A name marked `@public` is what the coder's tools, Luke's planner,
  * the window's route, and its announcements read as they land.
@@ -116,17 +117,50 @@ export interface ChatNotice {
   readonly from: ChatMemberRow;
 }
 
-/** How a planner and a person are told, each a door its own chain fills. */
+/** How Luke and a person are told, each a door its own chain fills. */
 export interface ChatNoticeDoors {
-  readonly planner: (member: ChatMemberRow, notice: ChatNotice) => Effect.Effect<NoticeOutcome>;
-  readonly human: (member: ChatMemberRow, notice: ChatNotice) => Effect.Effect<NoticeOutcome>;
+  readonly luke: (
+    member: ChatMemberRow,
+    notice: ChatNotice,
+  ) => Effect.Effect<NoticeOutcome, never, DatabaseServices>;
+  readonly human: (
+    member: ChatMemberRow,
+    notice: ChatNotice,
+  ) => Effect.Effect<NoticeOutcome, never, DatabaseServices>;
 }
 
+/** A door that holds the message for the member's next read. */
+const hold = () => Effect.succeed(NOTICE_OUTCOME.HELD);
+
 /** The doors before Luke's report turn and the window's announcement fill them: each holds the message for the member's next read. */
-export const HELD_DOORS: ChatNoticeDoors = {
-  planner: () => Effect.succeed(NOTICE_OUTCOME.HELD),
-  human: () => Effect.succeed(NOTICE_OUTCOME.HELD),
-};
+export const HELD_DOORS: ChatNoticeDoors = { luke: hold, human: hold };
+
+/**
+ * How a person is told: their member stamped with the message's place, one
+ * at a time as an agent's notice is, which the account's held read carries
+ * to every window they are signed in to and each announces once
+ * (`chat-waiting.ts`); held where a notice already stands unread, which
+ * they read with the rest, and where the stamp could not be made.
+ */
+function tellPerson(
+  member: ChatMemberRow,
+  notice: ChatNotice,
+): Effect.Effect<NoticeOutcome, never, DatabaseServices> {
+  if (member.userId === null || member.leftAt !== null) return Effect.succeed(NOTICE_OUTCOME.HELD);
+  return markNoticed(
+    member.userId,
+    member.organizationId,
+    member.id,
+    notice.message.channelId,
+    notice.message.seq,
+  ).pipe(
+    Effect.map((stamped) => (stamped ? NOTICE_OUTCOME.TOLD : NOTICE_OUTCOME.HELD)),
+    Effect.orElseSucceed(() => NOTICE_OUTCOME.HELD),
+  );
+}
+
+/** The doors a post is told through until Luke's report turn fills Luke's: a person told through their window, Luke held for his next read. */
+export const CHAT_DOORS: ChatNoticeDoors = { luke: hold, human: tellPerson };
 
 /**
  * What a door's caller needs to steer a coding agent: eve as the account an
@@ -162,19 +196,37 @@ const GONE_REFUSALS: ReadonlySet<string> = new Set([
   HOSTED_REFUSAL.TASK_ARCHIVED.error,
 ]);
 
-/** What sent a notice, as the row keeps it: a person by their account, Luke for a planner, and an agent by its handle. */
-function senderOf(from: ChatMemberRow): LineSender {
-  if (from.kind === MEMBER_KIND.HUMAN && from.userId !== null) {
-    return { kind: MESSAGE_SENDER.MEMBER, userId: from.userId };
-  }
-  if (from.kind === MEMBER_KIND.PLANNER) return { kind: MESSAGE_SENDER.LUKE };
-  return { kind: MESSAGE_SENDER.AGENT, name: from.handle };
+/**
+ * What sent a notice, as the row keeps it: a person by their account, Luke
+ * for a planner, and an agent by its handle and, where the member still
+ * names one the poster reaches, its agent and the model it runs on as it
+ * posts, which its line's mark is drawn by for good.
+ */
+function senderOf(userId: string, from: ChatMemberRow) {
+  return Effect.gen(function* () {
+    if (from.kind === MEMBER_KIND.HUMAN && from.userId !== null) {
+      return { kind: MESSAGE_SENDER.MEMBER, userId: from.userId } satisfies LineSender;
+    }
+    if (from.kind === MEMBER_KIND.LUKE) {
+      return { kind: MESSAGE_SENDER.LUKE } satisfies LineSender;
+    }
+    const agent =
+      from.agentId === null
+        ? Option.none()
+        : yield* hostedStoreOrUnavailable(readCodingAgent(userId, from.agentId));
+    const sender: LineSender = {
+      kind: MESSAGE_SENDER.AGENT,
+      name: from.handle,
+      ...(Option.isNone(agent) ? undefined : { agentId: agent.value.id, model: agent.value.model }),
+    };
+    return sender;
+  });
 }
 
 /** The message author each kind of member speaks as, on the notice's row. */
 const AUTHOR_OF_KIND = {
   [MEMBER_KIND.AGENT]: MESSAGE_AUTHOR.AGENT,
-  [MEMBER_KIND.PLANNER]: MESSAGE_AUTHOR.PLANNER,
+  [MEMBER_KIND.LUKE]: MESSAGE_AUTHOR.LUKE,
   [MEMBER_KIND.HUMAN]: MESSAGE_AUTHOR.HUMAN,
 } as const;
 
@@ -272,6 +324,8 @@ function tellAgent(
     // A deployment that reaches no eve steers nothing, so the agent reads the message when it next reads.
     const eve = telling.eveFor(agent.value.userId);
     if (eve === undefined) return NOTICE_OUTCOME.HELD;
+    // Note that who sent it is read before the notice is claimed, because a read that fails after the claim would hold the notice with nothing to release it.
+    const sender = yield* senderOf(userId, notice.from);
     const claimed = yield* hostedStoreOrUnavailable(
       markNoticed(userId, organizationId, member.id, notice.message.channelId, place),
     );
@@ -280,7 +334,7 @@ function tellAgent(
     const steered = yield* steerCodingAgent(eve, telling.writer, userId, agent.value, {
       text: notice.text,
       clientKey: chatNoticeKey(notice.message.id, notice.message.askRevision ?? 0, member.id),
-      sender: senderOf(notice.from),
+      sender,
       metadata: {
         author: AUTHOR_OF_KIND[notice.from.kind],
         channel: MESSAGE_CHANNEL.CHAT,
@@ -341,8 +395,8 @@ export function tellMessage(
       switch (member.kind) {
         case MEMBER_KIND.AGENT:
           return Effect.map(tellAgent(telling, member, notice), (outcome) => ({ member, outcome }));
-        case MEMBER_KIND.PLANNER:
-          return Effect.map(telling.doors.planner(member, notice), (outcome) => ({
+        case MEMBER_KIND.LUKE:
+          return Effect.map(telling.doors.luke(member, notice), (outcome) => ({
             member,
             outcome,
           }));

@@ -36,8 +36,6 @@ beforeEach(() => {
     }),
   });
   fakeAppBridge({
-    onMenuCommand: () => () => undefined,
-    recordSurfaceEvent: () => undefined,
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
 });
@@ -166,5 +164,8 @@ test("the Inbox row counts what waits on a plan and what waits from an agent wit
     }),
   );
 
-  assert.equal(page.querySelector(".sidebar-inbox-waiting")?.firstChild?.textContent, "2");
+  const inbox = [...page.querySelectorAll("aside.desktop-sidebar button")].find((button) =>
+    button.textContent?.startsWith("Inbox"),
+  );
+  assert.match(inbox?.textContent ?? "", /^Inbox2 /u);
 });

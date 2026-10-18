@@ -9,15 +9,28 @@ import {
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
-import { ConfirmDialog, PencilIcon, TrashIcon, useConfirmDialog } from "@luke/ui";
+import {
+  BUTTON_TYPE,
+  BUTTON_VARIANT,
+  Button,
+  ConfirmDialog,
+  ErrorState,
+  PencilIcon,
+  SETTINGS_LINE_KIND,
+  SettingsLine,
+  SettingsSection,
+  TEXT_FIELD_AUTO_COMPLETE,
+  TEXT_FIELD_TYPE,
+  TextField,
+  TrashIcon,
+  useConfirmDialog,
+} from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
 import { HarnessMark } from "../harness-marks";
-import { BusyLabel, SpinnerRegion } from "../spinner";
 import { dayText } from "../tasks/task-time";
 import { MenuRow } from "./menu-row";
-import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
  * api-keys-section.tsx -- Settings › Coding agents › API keys: the account's own Anthropic and OpenAI keys a coding agent runs on.
@@ -29,14 +42,18 @@ import { ReadFailed, SettingsGroup } from "./settings-group";
  * was added, with Edit key and Remove key behind the row's ⋯ and a
  * right-click. Adding or editing grows the row a password field, Cancel,
  * and Save. The service never answers a key, so the page never holds one
- * but the one being pasted: it stands in the field alone, is read from it
- * once on Save, and is cleared from it as soon as the service keeps it. A
- * save the service refuses says why under the row and leaves the field as
- * pasted. One change runs at a time across the rows, since every answer is
+ * but the one being pasted: it stands in the open field alone, is sent once
+ * on Save, and is cleared as soon as the service keeps it, or the field is
+ * cancelled. A save the service refuses says why under the field and leaves
+ * it as pasted. One change runs at a time across the rows, since every answer is
  * the account's keys whole and two in flight could land out of order.
  * Remove asks first, in the confirm dialog. The whole group is kept out of
  * the screen recording, which masks a field's characters but not their
  * count.
+ *
+ * The group is `@luke/ui`'s `SettingsSection`, each provider a `SettingsRow`
+ * led by its mark (through `MenuRow`), the field its `TextField`, and the
+ * presses its `Button`s.
  */
 
 /** What the page says while it cannot read or write, and with no account. */
@@ -119,6 +136,7 @@ function ProviderKeyRow({
   const name = PROVIDER_NAME[provider];
   const field = useRef<HTMLInputElement | null>(null);
   const [editing, setEditing] = useState(false);
+  const [pasted, setPasted] = useState("");
   const [saving, setSaving] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   const removal = useConfirmDialog({ subject: stored !== undefined, surfaceOpen: true }, () =>
@@ -131,7 +149,7 @@ function ProviderKeyRow({
   }, [editing]);
 
   const save = () => {
-    const key = field.current?.value.trim() ?? "";
+    const key = pasted.trim();
     if (key === "" || saving || locked) return;
     setSaving(true);
     setRejection(undefined);
@@ -140,12 +158,12 @@ function ProviderKeyRow({
       setRejection(refused);
       if (refused !== undefined) return;
       // Kept: the key leaves the field, and the row draws the service's word for it.
-      if (field.current !== null) field.current.value = "";
+      setPasted("");
       setEditing(false);
     });
   };
   const cancel = () => {
-    if (field.current !== null) field.current.value = "";
+    setPasted("");
     setRejection(undefined);
     setEditing(false);
   };
@@ -170,87 +188,94 @@ function ProviderKeyRow({
         ];
   const verified = stored?.status === PROVIDER_KEY_STATUS.VERIFIED;
 
+  // Note that the row grows its field under its line and says its refusal
+  // under both, so the card's rule runs above the row and not between its parts.
   return (
-    <>
-      <MenuRow label={`${name} key actions`} actions={actions} anchor={PROVIDER_ANCHOR[provider]}>
-        <span className="settings-row-mark">
-          <HarnessMark provider={provider} />
-        </span>
-        <span className="settings-copy">
-          <strong>{name}</strong>
-          {stored === undefined ? null : (
-            <small>
-              <span
-                className="settings-state"
-                data-state={verified ? "connected" : "attention"}
-                role={verified ? undefined : "alert"}
+    <div className="api-key">
+      <MenuRow
+        label={`${name} key actions`}
+        actions={actions}
+        anchor={PROVIDER_ANCHOR[provider]}
+        row={{
+          leading: (
+            <span className="settings-row-mark">
+              <HarnessMark provider={provider} />
+            </span>
+          ),
+          label: name,
+          description:
+            stored === undefined ? undefined : (
+              <>
+                <span
+                  className="settings-state"
+                  data-state={verified ? "connected" : "attention"}
+                  role={verified ? undefined : "alert"}
+                >
+                  {keyStatusWords(provider, stored.status)}
+                </span>
+                {" · "}
+                <code className="api-key-hint">{stored.hint}</code>
+                {` · Added ${dayText(stored.addedAt)}`}
+              </>
+            ),
+          error: rejection,
+          below: editing ? (
+            <form
+              className="api-key-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                save();
+              }}
+              // Escape in the field closes the editor and nothing behind it: the
+              // window's own Escape would leave Settings. A composition's Escape is the IME's.
+              onKeyDown={(event) => {
+                if (event.target !== field.current) return;
+                if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
+                event.preventDefault();
+                event.stopPropagation();
+                cancel();
+              }}
+            >
+              <TextField
+                ref={field}
+                type={TEXT_FIELD_TYPE.PASSWORD}
+                autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+                label={`${name} API key`}
+                placeholder={`Paste your ${name} API key`}
+                spellCheck={false}
+                disabled={saving}
+                value={pasted}
+                onChange={(value) => {
+                  setPasted(value);
+                  setRejection(undefined);
+                }}
+              />
+              <Button variant={BUTTON_VARIANT.OUTLINE} disabled={saving} onClick={cancel}>
+                Cancel
+              </Button>
+              <Button
+                type={BUTTON_TYPE.SUBMIT}
+                variant={BUTTON_VARIANT.PRIMARY}
+                disabled={locked}
+                busy={saving}
+                busyLabel="Checking the key"
               >
-                {keyStatusWords(provider, stored.status)}
-              </span>
-              {" · "}
-              <code className="api-key-hint">{stored.hint}</code>
-              {` · Added ${dayText(stored.addedAt)}`}
-            </small>
-          )}
-        </span>
-        {stored === undefined && !editing ? (
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            disabled={locked}
-            onClick={() => setEditing(true)}
-          >
-            Add key
-          </button>
-        ) : null}
-      </MenuRow>
-      {editing ? (
-        <form
-          className="api-key-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            save();
-          }}
-        >
-          <input
-            ref={field}
-            type="password"
-            className={`settings-input ${NO_CAPTURE}`}
-            aria-label={`${name} API key`}
-            placeholder={`Paste your ${name} API key`}
-            autoComplete="off"
-            spellCheck={false}
-            disabled={saving}
-            onChange={() => setRejection(undefined)}
-            // Escape closes the editor and nothing behind it: the window's own
-            // Escape would leave Settings. A composition's Escape is the IME's.
-            onKeyDown={(event) => {
-              if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
-              event.preventDefault();
-              event.stopPropagation();
-              cancel();
-            }}
-          />
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            disabled={saving}
-            onClick={cancel}
-          >
-            Cancel
-          </button>
-          <button type="submit" className="primary-button" disabled={saving || locked}>
-            <BusyLabel busy={saving} label="Checking the key">
-              Save
-            </BusyLabel>
-          </button>
-        </form>
-      ) : null}
-      {rejection === undefined ? null : (
-        <p className="error-message" role="alert">
-          {rejection}
-        </p>
-      )}
+                Save
+              </Button>
+            </form>
+          ) : null,
+          control:
+            stored === undefined && !editing ? (
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                disabled={locked}
+                onClick={() => setEditing(true)}
+              >
+                Add key
+              </Button>
+            ) : undefined,
+        }}
+      />
       <ConfirmDialog
         confirm={removal}
         question={{
@@ -260,7 +285,7 @@ function ProviderKeyRow({
           running: "Removing…",
         }}
       />
-    </>
+    </div>
   );
 }
 
@@ -342,9 +367,9 @@ export function ApiKeysSection({
 
   return (
     <div className={NO_CAPTURE}>
-      <SettingsGroup title="API keys">
+      <SettingsSection title="API keys">
         {!signedIn ? (
-          <p className="settings-card-line settings-note">{PAGE_LINE.SIGNED_OUT}</p>
+          <SettingsLine>{PAGE_LINE.SIGNED_OUT}</SettingsLine>
         ) : keys !== undefined ? (
           PROVIDERS.map((provider) => (
             <ProviderKeyRow
@@ -357,13 +382,15 @@ export function ApiKeysSection({
             />
           ))
         ) : readFailed ? (
-          <ReadFailed line={PAGE_LINE.FAILED} onRetry={() => setAttempt((count) => count + 1)} />
+          <SettingsLine>
+            <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
+              {PAGE_LINE.FAILED}
+            </ErrorState>
+          </SettingsLine>
         ) : (
-          <div className="settings-card-line settings-reading">
-            <SpinnerRegion label="Loading your keys" />
-          </div>
+          <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>Loading your keys</SettingsLine>
         )}
-      </SettingsGroup>
+      </SettingsSection>
     </div>
   );
 }

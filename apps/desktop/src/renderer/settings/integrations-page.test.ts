@@ -21,6 +21,7 @@ import {
 } from "@luke/features/integration-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { SettingsLink } from "@luke/settings/settings-views";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -28,7 +29,6 @@ import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { runAppCommand } from "../app-commands";
@@ -151,7 +151,6 @@ beforeEach(() => {
       heldReads.push(() => resolve(answer));
       return promise;
     },
-    recordSurfaceEvent: () => undefined,
   });
 });
 
@@ -203,6 +202,16 @@ function answerOf(request: Act): ActOutcome {
       return tools === undefined
         ? { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }
         : { status: DONE, value: { tools } };
+    }
+    // A rename names the account anew, which the next read of the integrations says.
+    case ACT_KIND.INTEGRATIONS_RENAME: {
+      const { connection, label } = request.payload;
+      accounts = accounts.map((account) =>
+        account.connection === connection ? { ...account, label } : account,
+      );
+      const renamed =
+        accounts.find((account) => account.connection === connection) ?? assert.fail("no account");
+      return { status: DONE, value: { account: renamed } };
     }
     default:
       return { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT };
@@ -265,8 +274,8 @@ function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
 /** Granola's row as the page draws it. */
 function granolaRowOf(page: HTMLElement): Element {
   return (
-    [...page.querySelectorAll(".settings-row")].find(
-      (row) => row.querySelector(".settings-copy strong")?.textContent === "Granola",
+    [...page.querySelectorAll(".luke-settings-row")].find(
+      (row) => row.querySelector('[id$="label"]')?.textContent === "Granola",
     ) ?? assert.fail("Granola has a row")
   );
 }
@@ -309,7 +318,7 @@ const WAITING = { line: "Waiting for Granola in your browser…", buttons: ["Reo
 
 /** The providers the page draws a row for, by name. */
 function rowNames(page: HTMLElement): (string | undefined)[] {
-  return [...page.querySelectorAll(".settings-copy strong")].map((name) => name.textContent);
+  return [...page.querySelectorAll('[id$="label"]')].map((name) => name.textContent);
 }
 
 /** The words of the buttons standing on a row, its ⋯ and its tools' toggle aside. */
@@ -678,8 +687,8 @@ it.effect("a sign-in begun later does not put off the deadline of one begun befo
     yield* Effect.promise(() => pressOnGranola(page, "Connect"));
     yield* TestClock.adjust("2 minutes");
     const linear =
-      [...page.querySelectorAll(".settings-row")]
-        .find((row) => row.querySelector("strong")?.textContent === "Linear")
+      [...page.querySelectorAll(".luke-settings-row")]
+        .find((row) => row.querySelector('[id$="label"]')?.textContent === "Linear")
         ?.querySelector("button") ?? assert.fail("Linear offers Connect");
     act(() => linear.click());
     yield* Effect.promise(settle);
@@ -735,8 +744,8 @@ function connectVercelAndLinear(): void {
 /** The row named `name`, as the page draws it. */
 function rowNamed(page: HTMLElement, name: string): Element {
   return (
-    [...page.querySelectorAll(".settings-row")].find(
-      (row) => row.querySelector(".settings-copy strong")?.textContent === name,
+    [...page.querySelectorAll(".luke-settings-row")].find(
+      (row) => row.querySelector('[id$="label"]')?.textContent === name,
     ) ?? assert.fail(`${name} has a row`)
   );
 }
@@ -745,7 +754,7 @@ function rowNamed(page: HTMLElement, name: string): Element {
 function shownTools(page: HTMLElement) {
   return [...page.querySelectorAll(".integration-tools-panel .integration-tool")].map((tool) => [
     toolName(tool),
-    tool.querySelector(".integration-tool-badge")?.textContent ?? undefined,
+    tool.querySelector(".luke-badge")?.textContent ?? undefined,
   ]);
 }
 
@@ -803,9 +812,9 @@ async function searchFor(page: HTMLElement, query: string): Promise<void> {
 
 /** The sections the page draws, each its heading and the names of its rows. */
 function sections(page: HTMLElement) {
-  return [...page.querySelectorAll(".settings-group")].map((group) => [
-    group.querySelector(".settings-group-title")?.textContent,
-    [...group.querySelectorAll(".settings-copy strong")].map((name) => name.textContent),
+  return [...page.querySelectorAll(".luke-settings-section")].map((group) => [
+    group.querySelector("h2")?.textContent,
+    [...group.querySelectorAll('[id$="label"]')].map((name) => name.textContent),
   ]);
 }
 
@@ -976,7 +985,7 @@ test("an opened row holds its first tool, whose page stands beside the list, and
     "every",
   );
   assert.deepEqual(
-    [...detail.querySelectorAll(".integration-tool-hint")].map((hint) => hint.textContent),
+    [...detail.querySelectorAll(".integration-tool-hints li")].map((hint) => hint.textContent),
     ["Read-only", "Only Vercel's own data"],
   );
   assert.equal(detail.querySelector(".integration-tool-parameter-name")?.textContent, "limit");
@@ -1109,7 +1118,7 @@ test("a tool its server says nothing of has a page that says so", async () => {
   openRow(page, "Vercel");
 
   assert.equal(page.querySelector(".integration-tool-description"), null);
-  assert.equal(page.querySelector(".integration-tool-silent")?.textContent, "No description.");
+  assert.equal(page.querySelector(".integration-tool-detail-body")?.textContent, "No description.");
   assert.equal(page.querySelector(".integration-tool-hints"), null);
   assert.equal(page.querySelector(".integration-tool-parameters"), null);
 });
@@ -1136,8 +1145,8 @@ test("two accounts at a provider stand as two rows named by their labels, each o
   ];
   const page = await mount();
   const rowOf = (label: string) =>
-    [...page.querySelectorAll(".settings-row")].find((row) =>
-      row.querySelector(".settings-copy strong")?.textContent?.startsWith(`Notion · ${label}`),
+    [...page.querySelectorAll(".luke-settings-row")].find((row) =>
+      row.querySelector('[id$="label"]')?.textContent?.startsWith(`Notion · ${label}`),
     ) ?? assert.fail(`Notion · ${label} has a row`);
 
   for (const label of ["Acme", "Personal"]) {
@@ -1157,10 +1166,62 @@ test("two accounts at a provider stand as two rows named by their labels, each o
   );
   // The new account stands pending under the name the service gave it, as a row of its own.
   assert.ok(
-    [...page.querySelectorAll(".settings-copy strong")].some(
+    [...page.querySelectorAll('[id$="label"]')].some(
       (name) => name.textContent === "Notion · Account 3",
     ),
   );
+});
+
+test("an account renamed from its row's ⋯ is named in place: Escape keeps its name, and Return asks for the new one", async () => {
+  const notion = INTEGRATION_PROVIDER.NOTION;
+  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
+  accounts = [
+    { provider: notion, connection: "notion", label: "Acme", status: INTEGRATION_STATUS.CONNECTED },
+    {
+      provider: notion,
+      connection: "notion-2",
+      label: "Personal",
+      status: INTEGRATION_STATUS.CONNECTED,
+    },
+  ];
+  const page = await mount();
+  const rowOf = (label: string) =>
+    [...page.querySelectorAll(".luke-settings-row")].find((row) =>
+      row.querySelector('[id$="label"]')?.textContent?.startsWith(`Notion · ${label}`),
+    ) ?? assert.fail(`Notion · ${label} has a row`);
+  const field = () =>
+    page.querySelector<HTMLInputElement>('input[aria-label="Notion · Acme account name"]');
+  const press = (key: string) =>
+    act(() => {
+      (field() ?? assert.fail("the name's field is open")).dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+      );
+    });
+  const renames = () =>
+    sent
+      .filter((request) => request.kind === ACT_KIND.INTEGRATIONS_RENAME)
+      .map((request) => request.payload);
+
+  await choose(rowOf("Acme"), "Rename");
+  const opened = field() ?? assert.fail("Rename opens the name's field");
+  assert.equal(document.activeElement, opened);
+  assert.equal(opened.value, "Acme");
+  press("Escape");
+  await settle();
+  assert.equal(field(), null);
+  assert.deepEqual(renames(), []);
+
+  await choose(rowOf("Acme"), "Rename");
+  const typing = field() ?? assert.fail("Rename opens the name's field again");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(typing, "Work");
+    typing.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  press("Enter");
+  await settle();
+  assert.equal(field(), null);
+  assert.deepEqual(renames(), [{ provider: notion, connection: "notion", label: "Work" }]);
+  assert.ok(rowOf("Work"), "the row says the new name");
 });
 
 test("an added account whose first sign-in Connect refused keeps its row with the reason and Try again, which signs in a new account", async () => {
@@ -1178,8 +1239,8 @@ test("an added account whose first sign-in Connect refused keeps its row with th
   ];
   const page = await mount();
   const acme =
-    [...page.querySelectorAll(".settings-row")].find(
-      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion",
+    [...page.querySelectorAll(".luke-settings-row")].find(
+      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion",
     ) ?? assert.fail("Notion has a row");
   await choose(acme, "Add another account");
 
@@ -1194,8 +1255,8 @@ test("an added account whose first sign-in Connect refused keeps its row with th
   ];
   await focusWindow();
   const added =
-    [...page.querySelectorAll(".settings-row")].find(
-      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion · Account 3",
+    [...page.querySelectorAll(".luke-settings-row")].find(
+      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Account 3",
     ) ?? assert.fail("the refused account keeps its row");
   assert.match(added.querySelector(".settings-state")?.textContent ?? "", /access_denied/u);
 
@@ -1230,14 +1291,14 @@ test("an account added under the provider's own name, beside one that stands, wa
   ];
   const page = await mount();
   const personal =
-    [...page.querySelectorAll(".settings-row")].find(
-      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion",
+    [...page.querySelectorAll(".luke-settings-row")].find(
+      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion",
     ) ?? assert.fail("Notion has a row");
   await choose(personal, "Add another account");
 
   const added =
-    [...page.querySelectorAll(".settings-row")].find(
-      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion · Account 1",
+    [...page.querySelectorAll(".luke-settings-row")].find(
+      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Account 1",
     ) ?? assert.fail("the account added has a row of its own");
   assert.deepEqual(
     [...added.querySelectorAll("button")]
@@ -1267,8 +1328,8 @@ test("an added account whose first sign-in is cancelled leaves its row, so the n
   ];
   const page = await mount();
   const pending =
-    [...page.querySelectorAll(".settings-row")].find(
-      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion · Account 2",
+    [...page.querySelectorAll(".luke-settings-row")].find(
+      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Account 2",
     ) ?? assert.fail("the pending account has a row");
   // The service deletes the cancelled first sign-in's account, so its next read lists Acme alone.
   accounts = accounts.slice(0, 1);
@@ -1281,7 +1342,7 @@ test("an added account whose first sign-in is cancelled leaves its row, so the n
   await settle();
 
   assert.equal(
-    [...page.querySelectorAll(".settings-copy strong")].some(
+    [...page.querySelectorAll('[id$="label"]')].some(
       (name) => name.textContent === "Notion · Account 2",
     ),
     false,
@@ -1300,8 +1361,8 @@ test("a cancelled sign-in that held a provider's last place frees it at once, of
   }));
   const page = await mount();
   const rowOf = (label: string) =>
-    [...page.querySelectorAll(".settings-row")].find((row) =>
-      row.querySelector(".settings-copy strong")?.textContent?.startsWith(`Notion · ${label}`),
+    [...page.querySelectorAll(".luke-settings-row")].find((row) =>
+      row.querySelector('[id$="label"]')?.textContent?.startsWith(`Notion · ${label}`),
     ) ?? assert.fail(`Notion · ${label} has a row`);
   assert.ok(!menuOf(rowOf("Workspace 1")).items.includes("Add another account"));
 
@@ -1352,7 +1413,7 @@ test("a statuses read answered after a newer one changes nothing the newer one d
   await settle();
 
   assert.ok(
-    [...page.querySelectorAll(".settings-copy strong")].some(
+    [...page.querySelectorAll('[id$="label"]')].some(
       (name) => name.textContent === "Notion · Personal",
     ),
   );
@@ -1421,13 +1482,13 @@ test("Reopen on an added account still waiting on its first sign-in reopens that
   ];
   const page = await mount();
   const acme =
-    [...page.querySelectorAll(".settings-row")].find(
-      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion",
+    [...page.querySelectorAll(".luke-settings-row")].find(
+      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion",
     ) ?? assert.fail("Notion has a row");
   await choose(acme, "Add another account");
   const added =
-    [...page.querySelectorAll(".settings-row")].find(
-      (row) => row.querySelector(".settings-copy strong")?.textContent === "Notion · Account 3",
+    [...page.querySelectorAll(".luke-settings-row")].find(
+      (row) => row.querySelector('[id$="label"]')?.textContent === "Notion · Account 3",
     ) ?? assert.fail("the account added has a row");
 
   sent = [];

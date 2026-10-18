@@ -1,5 +1,6 @@
+import { ActRefused, type ActRows, type ActSender } from "@luke/host/act-router";
 import { ACT, ACT_KIND } from "@luke/host/acts";
-import { ActRefused, type ActRows, type ActSender } from "../act-router";
+import type { WebContents } from "electron";
 import type { BrowserViews } from "../window/browser-views";
 
 /**
@@ -28,10 +29,10 @@ export interface BrowserActsDependencies {
 
 export function browserActRows(
   dependencies: BrowserActsDependencies,
-): Pick<ActRows, BrowserActKind> {
+): Pick<ActRows<WebContents>, BrowserActKind> {
   const { views, experimentOn } = dependencies;
   /** The asking panel's contents, or the kind's own refusal where it is no panel or the experiment is off. */
-  const panelOf = (kind: BrowserActKind, sender: ActSender) => {
+  const panelOf = (kind: BrowserActKind, sender: ActSender<WebContents>) => {
     if (!sender.panel || !experimentOn()) throw new ActRefused({ message: ACT[kind].refusal });
     return sender.sender;
   };

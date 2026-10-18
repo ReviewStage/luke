@@ -34,6 +34,7 @@ import {
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxMessagedView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -61,6 +62,8 @@ import {
   codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxAttachmentViewSchema,
+  codingAgentInboxMessagedViewSchema,
+  codingAgentInboxMessageParamsSchema,
   codingAgentInboxParamsSchema,
   codingAgentListAnswerViewSchema,
   codingAgentListParamsSchema,
@@ -102,6 +105,11 @@ import {
   providerKeysAnswerViewSchema,
 } from "@luke/features/coding-agent-view";
 import {
+  type FactoryWorldView,
+  factoryWorldParamsSchema,
+  factoryWorldViewSchema,
+} from "@luke/features/factory-world-view";
+import {
   type FeedbackResult,
   type FeedbackSubmission,
   feedbackSubmission,
@@ -142,9 +150,6 @@ import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
   type CodeLines,
   codeLinesSchema,
-  type PlanningPullRequest,
-  planningPullRequestParamsSchema,
-  planningPullRequestSchema,
   type TasksEditAnswer,
   type TasksFileAnswer,
   type TasksIssue,
@@ -153,6 +158,7 @@ import {
   type TasksPagesAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
+  type TasksPullRequest,
   type TasksRepositoriesAnswer,
   type TasksRevisionAnswer,
   type TasksRevisionsAnswer,
@@ -183,6 +189,8 @@ import {
   tasksPictureParamsSchema,
   tasksPinParamsSchema,
   tasksPinRepositoryParamsSchema,
+  tasksPullRequestParamsSchema,
+  tasksPullRequestSchema,
   tasksRenameParamsSchema,
   tasksRepositoriesAnswerSchema,
   tasksRepositoriesParamsSchema,
@@ -373,9 +381,9 @@ export const ACT_KIND = {
   /** A File tab's tree listing one folder of the open task's repository, read from GitHub through the service; answered to the tree, never on the document. */
   TASKS_TREE: "tasks.tree",
   /** The skills a developer may choose of a task's repository, read from GitHub through the service; answered to the asker, never on the document. */
-  TASKS_SKILLS: "planning.skills",
+  TASKS_SKILLS: "tasks.skills",
   /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
-  TASKS_PULL_REQUEST: "planning.pullRequest",
+  TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
   TASKS_ISSUE: "tasks.issue",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
@@ -387,13 +395,13 @@ export const ACT_KIND = {
   /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
   /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
-  TASKS_PAGE_SOURCE: "planning.pageSource",
+  TASKS_PAGE_SOURCE: "tasks.pageSource",
   /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
-  TASKS_PAGES: "planning.pages",
+  TASKS_PAGES: "tasks.pages",
   /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
-  TASKS_PICTURE_READ: "planning.pictureRead",
+  TASKS_PICTURE_READ: "tasks.pictureRead",
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
-  TASKS_PICTURE_KEEP: "planning.pictureKeep",
+  TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /**
    * The account's workspaces: one made under a name, answered as made, which
    * the account owns; one renamed by its owners and admins, answered under
@@ -490,6 +498,8 @@ export const ACT_KIND = {
   ISSUES_READ: "issues.read",
   ISSUES_CREATE: "issues.create",
   ISSUES_CHANGE: "issues.change",
+  /** A workspace's Factory world, read whole as it stands now, for the Factory page's worlds. */
+  FACTORY_WORLD: "factory.world",
   /**
    * Settings › API keys: the account's own provider keys read as hints and
    * statuses, one saved, one removed. The save's payload is the one place a
@@ -526,6 +536,8 @@ export const ACT_KIND = {
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
+  CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   CODING_AGENTS_PICTURE: "codingAgents.picture",
@@ -579,7 +591,7 @@ export const ACT_KIND = {
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own task. */
-  CALL_SHOW_TASK: "call.showPlan",
+  CALL_SHOW_TASK: "call.showTask",
   /** The panel's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from the panel alone. */
   AVATAR_REPORT: "avatar.report",
   /** The video tile's Video off, Video on, and Restart video: Luke's avatar asked for on the standing call, or taken down. Taken from the panel and the floating call window, which draw the tile, alone. */
@@ -756,6 +768,17 @@ function exactTextAllowingEmpty(max: number): EffectSchema.Codec<string, string>
  * value the host would not hold.
  */
 const exactId = exactText(512);
+
+/**
+ * The Chat the panel has on screen: a workspace's whole Chat, where the
+ * plan is none, or one task's Chat tab, which shows only its plan's channel.
+ */
+const chatShownSchema = EffectSchema.Struct({
+  workspaceId: exactId,
+  planId: EffectSchema.NullOr(exactId),
+});
+
+export type ChatShown = typeof chatShownSchema.Type;
 
 /**
  * The longest fenced block a transcript asks main to colour. Note that a
@@ -1112,8 +1135,8 @@ export const ACT = {
     refusal: "Could not read this repository's skills on this system.",
   },
   [ACT_KIND.TASKS_PULL_REQUEST]: {
-    payload: actSchema(planningPullRequestParamsSchema),
-    result: wireResult<PlanningPullRequest>(isReadable(planningPullRequestSchema)),
+    payload: actSchema(tasksPullRequestParamsSchema),
+    result: wireResult<TasksPullRequest>(isReadable(tasksPullRequestSchema)),
     refusal: "Could not read that pull request on this system.",
   },
   [ACT_KIND.TASKS_ISSUE]: {
@@ -1281,6 +1304,8 @@ export const ACT = {
     payload: record({
       agentId: EffectSchema.NullOr(exactId),
       inboxTaskId: EffectSchema.NullOr(exactId),
+      /** The Chat on screen: a workspace's whole Chat, the plan none, or a task's Chat tab on its plan's channel; none where no Chat is. */
+      chatShown: EffectSchema.optionalKey(EffectSchema.NullOr(chatShownSchema)),
     }),
     result: answersNothing,
     refusal: "Could not note which agent is shown on this system.",
@@ -1392,6 +1417,11 @@ export const ACT = {
     result: wireResult<IssueView>(isReadable(issueViewSchema)),
     refusal: "Could not change the issue on this system.",
   },
+  [ACT_KIND.FACTORY_WORLD]: {
+    payload: actSchema(factoryWorldParamsSchema),
+    result: wireResult<FactoryWorldView>(isReadable(factoryWorldViewSchema)),
+    refusal: "Could not read the workspace's world on this system.",
+  },
   [ACT_KIND.PROVIDER_KEYS_READ]: {
     payload: noPayload,
     result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
@@ -1459,6 +1489,13 @@ export const ACT = {
       isReadable(codingAgentInboxAnsweredViewSchema),
     ),
     refusal: "Could not answer the inbox item on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: {
+    payload: actSchema(codingAgentInboxMessageParamsSchema),
+    result: wireResult<CodingAgentInboxMessagedView>(
+      isReadable(codingAgentInboxMessagedViewSchema),
+    ),
+    refusal: "Could not send the message on this system.",
   },
   [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: {
     payload: actSchema(codingAgentInboxAttachmentParamsSchema),

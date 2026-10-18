@@ -1,16 +1,16 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, IconButton, useMenu } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { appPlatform } from "../app-platform";
 import { AutomationDirectory } from "../automation-directory";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { FindScope } from "../find-in-tab";
@@ -19,13 +19,13 @@ import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { agentTabLabel } from "../tasks/coding-agent-model";
-import {
-  PlanMentions,
-  type PlanMentionsValue,
-  planlessMentions,
-  useMentionAgentsReader,
-} from "../tasks/plan-mentions";
 import { SkillFiles } from "../tasks/skill-chip";
+import {
+  TaskMentions,
+  type TaskMentionsValue,
+  tasklessMentions,
+  useMentionAgentsReader,
+} from "../tasks/task-mentions";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { useCodingAgents } from "../tasks/use-coding-agents";
 import { WordsWorkspace } from "../tasks/use-link-standing";
@@ -61,14 +61,14 @@ import { useTabViews } from "./strip-tabs";
  * its id (`use-coding-agents.ts`'s `agentId`). ⌘F finds in it as in a
  * plan's column. An `@` in its box offers its repository's files, its
  * skills, and the servers, read through its workspace since no plan names
- * them (`planlessMentions`); a skill a message names is its chip, which
+ * them (`tasklessMentions`); a skill a message names is its chip, which
  * opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
  * File tab reads a repository no plan names; and a dictation listens for its repository and
  * its title. A row of its inbox calls opens the window's Inbox, since the
  * agent's items stand there and no plan's Inbox tab does. Beside it stands
  * the window's side panel, held by the agent while its page stands
  * (`use-plans-tab.ts`): a delegation's row opens its worker there, and its
- * Changes chip its pull request's changes, as on a task, and its toggle,
+ * pull request's chip its pull request, as on a task, and its toggle,
  * its width, and its keys are the plan's own; ⌘T opens its "+", the page's
  * one, since the agent's own column opens no tab. Its title names the agent as
  * its tab would, and its ⋯ offers its Copy link. An archived agent takes no message, so its composer gives
@@ -113,14 +113,7 @@ function AgentPageActions({
   return (
     <>
       <Tooltip label={ACTIONS_LABEL}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={ACTIONS_LABEL}
-          {...menu.trigger()}
-        >
-          <EllipsisIcon />
-        </button>
+        <IconButton icon={<EllipsisIcon />} label={ACTIONS_LABEL} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
@@ -139,10 +132,10 @@ function AgentMentions({
   value,
   children,
 }: {
-  value: PlanMentionsValue | undefined;
+  value: TaskMentionsValue | undefined;
   children: React.ReactNode;
 }): React.ReactNode {
-  return value === undefined ? children : <PlanMentions value={value}>{children}</PlanMentions>;
+  return value === undefined ? children : <TaskMentions value={value}>{children}</TaskMentions>;
 }
 
 /**
@@ -158,7 +151,7 @@ function useTaskAgentsFollow(
   agent: { readonly planId: string | null; readonly archivedAt?: number | undefined } | undefined,
 ): void {
   const seen = useRef<{ agentId: string; archivedAt: number | undefined } | undefined>(undefined);
-  const planId = agent?.planId ?? null;
+  const taskId = agent?.planId ?? null;
   const archivedAt = agent?.archivedAt;
   const drawn = agent !== undefined;
   const { activeTaskId } = tasks;
@@ -168,8 +161,8 @@ function useTaskAgentsFollow(
     const was = seen.current;
     seen.current = { agentId, archivedAt };
     if (was === undefined || was.agentId !== agentId || was.archivedAt === archivedAt) return;
-    if (planId !== null && planId === activeTaskId) readTaskAgents();
-  }, [drawn, agentId, archivedAt, planId, activeTaskId, readTaskAgents]);
+    if (taskId !== null && taskId === activeTaskId) readTaskAgents();
+  }, [drawn, agentId, archivedAt, taskId, activeTaskId, readTaskAgents]);
 }
 
 /** One agent's page, in the plan's place: the agent read by its id, drawn as the task column's agent pane. */
@@ -181,7 +174,7 @@ export function DesktopAgentPage({
   agentId: string;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AGENT_PAGE, tasks.agentView.onClose);
-  const { act, tell } = useAct();
+  const { act } = useAct();
   const views = useTabViews();
   const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
@@ -262,7 +255,7 @@ export function DesktopAgentPage({
   const openTarget = (target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.INBOX) tasks.inboxView.onOpen();
   };
-  // A delegation's row opens its worker in the side panel, and the Changes chip the pull request's changes, as on a task.
+  // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
   const openDelegation = (
     agent: string,
     callId: string,
@@ -272,8 +265,6 @@ export function DesktopAgentPage({
     views.onWorkerStatus(callId, status);
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
-  const openChanges = (changed: string) =>
-    showPullRequest(sidePanel, control, changed, PULL_REQUEST_VIEW.FILES);
   const openPullRequest = (published: string) =>
     showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION);
   // A link in the agent's words to the pull request it opened opens that same tab rather than GitHub, as on a task.
@@ -299,13 +290,13 @@ export function DesktopAgentPage({
     if (agentRepository === undefined) return;
     const place = { workspace: listed?.slug ?? workspaceId ?? "", repository: agentRepository };
     const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
-    tell(ACT_KIND.GITHUB_OPEN, { url });
+    appPlatform().openGitHub(url);
   };
   // What an `@` offers once the read named the agent's workspace and repository, which its files are read through.
   const mentions =
     workspaceId === undefined || agentRepository === undefined
       ? undefined
-      : planlessMentions(
+      : tasklessMentions(
           { workspace: listed?.slug ?? workspaceId, workspaceId, repository: agentRepository },
           tasks.onShowMention,
           readMentionAgents,
@@ -379,7 +370,6 @@ export function DesktopAgentPage({
                           shown={shown}
                           views={views}
                           onOpenDelegation={openDelegation}
-                          onOpenChanges={openChanges}
                           onOpenPullRequest={openPullRequest}
                           onOpenTarget={openTarget}
                           cards={cards}

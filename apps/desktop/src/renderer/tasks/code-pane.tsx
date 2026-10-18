@@ -1,6 +1,6 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { CodeToken, TaskCode, TaskCodeShowing } from "@luke/features/tasks-view";
-import { cssCustomProperties } from "@luke/ui";
+import { cssCustomProperties, IconButton } from "@luke/ui";
 import {
   type CodeFeedCall,
   type CodeFeedCallSource,
@@ -22,7 +22,7 @@ import { MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import { CallCheckpoint, CallEnded } from "./call-card";
 import { FileRef } from "./file-ref";
-import { useMentionLink } from "./plan-mentions";
+import { useMentionLink } from "./task-mentions";
 import { useOpenLink } from "./use-open-link";
 
 /**
@@ -178,14 +178,11 @@ function CopyLinesButton({ lines }: { lines: string }): React.JSX.Element {
   const { state, copy } = useCopyFeedback();
   return (
     <Tooltip label={copyHint(state, COPY_LABEL)}>
-      <button
-        type="button"
-        className="icon-button code-card-action"
-        aria-label={COPY_LABEL}
+      <IconButton
+        icon={<CopyGlyph state={state} />}
+        label={COPY_LABEL}
         onClick={() => copy(lines)}
-      >
-        <CopyGlyph state={state} />
-      </button>
+      />
     </Tooltip>
   );
 }
@@ -218,14 +215,11 @@ export function CodeCardHeader({
         {copied === undefined ? null : <CopyLinesButton lines={copied} />}
         {onOpen === undefined ? null : (
           <Tooltip label={OPEN_FILE_LABEL}>
-            <button
-              type="button"
-              className="icon-button code-card-action"
-              aria-label={OPEN_FILE_LABEL}
+            <IconButton
+              icon={<FileInputIcon aria-hidden="true" />}
+              label={OPEN_FILE_LABEL}
               onClick={onOpen}
-            >
-              <FileInputIcon aria-hidden="true" />
-            </button>
+            />
           </Tooltip>
         )}
       </span>
@@ -344,8 +338,7 @@ export function CodePane({
   return (
     <section ref={pane} className="code-pane ph-no-capture" aria-label="Code shown">
       <Conversation>
-        {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band; cards fade beneath it. */}
-        <ConversationContent className="checkpoint-log scroll-fade pt-0">
+        <ConversationContent className="checkpoint-log scroll-fade">
           {codeFeedCalls(shown, calls).map((call) => (
             <CodeFeedRun key={call.key} call={call} now={now} onOpenFile={onOpenFile} />
           ))}

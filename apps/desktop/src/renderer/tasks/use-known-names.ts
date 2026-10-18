@@ -8,8 +8,9 @@ import { useAppState } from "../use-app-state";
  * use-known-names.ts -- the names the window already holds for places in Luke, by id, for a chip to call a Luke link by.
  *
  * Read from main's document, which every window holds: every task's title,
- * the agents each task's row names, the agents with no task the list carries
- * and the automations that started them, the active task's pages, the Inbox
+ * the agents each task's row names and the models they run on, the agents
+ * with no task the list carries, theirs, and the automations that started
+ * them, the active task's pages, the Inbox
  * items waiting, and the agents an automation started with no task; and
  * from the directories standing around the caller, the members and the
  * automation asked for. Nothing is fetched, so a name the window does not
@@ -24,16 +25,19 @@ export function useKnownNames(automationId?: string): KnownNames {
   const planning = state?.tasks;
   const inbox = state?.inbox;
   const held = useMemo(() => {
-    const plans = new Map(planning?.tasks.map((plan) => [plan.id, plan.name]));
+    const tasks = new Map(planning?.tasks.map((task) => [task.id, task.name]));
     const agents = new Map<string, string>();
-    for (const plan of planning?.tasks ?? []) {
-      for (const agent of plan.agents?.agents ?? []) {
+    const agentModels = new Map<string, string>();
+    for (const task of planning?.tasks ?? []) {
+      for (const agent of task.agents?.agents ?? []) {
         if (agent.title !== null) agents.set(agent.id, agent.title);
+        agentModels.set(agent.id, agent.model);
       }
     }
     const automations = new Map<string, string>();
     for (const agent of planning?.tasklessAgents ?? []) {
       if (agent.title !== null) agents.set(agent.id, agent.title);
+      agentModels.set(agent.id, agent.model);
       if (agent.automationId !== null && agent.automationName !== undefined) {
         automations.set(agent.automationId, agent.automationName);
       }
@@ -43,11 +47,11 @@ export function useKnownNames(automationId?: string): KnownNames {
     }
     const pages = new Map(planning?.pages?.map((page) => [page.id, page.title]));
     const inboxItems = new Map(
-      [...(inbox?.waiting ?? []).flatMap((plan) => plan.items), ...(inbox?.taskless ?? [])].map(
+      [...(inbox?.waiting ?? []).flatMap((task) => task.items), ...(inbox?.taskless ?? [])].map(
         (item) => [item.id, item.title],
       ),
     );
-    return { plans, agents, pages, inboxItems, automations };
+    return { plans: tasks, agents, agentModels, pages, inboxItems, automations };
   }, [planning, inbox]);
   const people = useMemo(
     () => new Map([...(former ?? []), ...(members ?? [])].map((each) => [each.userId, each.name])),

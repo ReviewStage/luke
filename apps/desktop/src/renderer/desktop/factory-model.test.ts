@@ -388,7 +388,7 @@ test("what waits is every open item the Inbox read of the listed plans and main'
     ],
   );
   assert.deepEqual(
-    waiting.map(({ taskId: planId, items }) => [planId, items.map((each) => each.title)]),
+    waiting.map(({ taskId, items }) => [taskId, items.map((each) => each.title)]),
     [
       [billing.id, ["Which account pays out?"]],
       [invites.id, ["Expire after a week?", "Send a reminder?"]],

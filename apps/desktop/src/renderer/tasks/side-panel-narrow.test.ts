@@ -27,11 +27,11 @@ import { AgentChangesTab } from "./agent-changes-tab";
  */
 
 /** The plan the tab stands on. */
-const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 const AGENT: CodingAgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
-  planId: PLAN,
+  planId: TASK,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Expiry job",
@@ -134,6 +134,13 @@ function drawn(element: Element): boolean {
   return getComputedStyle(element).display !== "none";
 }
 
+/** The tree's toggles the stylesheet shows, each standing in the box that names its place. */
+function drawnToggles(tab: HTMLElement): HTMLButtonElement[] {
+  return [...tab.querySelectorAll(".file-tree-toggle")]
+    .filter(drawn)
+    .flatMap((place) => [...place.querySelectorAll("button")]);
+}
+
 test("a Changes tab draws no tree beside the diff, its count under the diff, until the tree's toggle opens it over the diff for this tab alone", async () => {
   const tab = await drawChangesTab();
   // The tree, where it is drawn at all.
@@ -141,8 +148,7 @@ test("a Changes tab draws no tree beside the diff, its count under the diff, unt
     const tree = tab.querySelector('[aria-label="Changed files"]');
     return tree !== null && drawn(tree);
   };
-  const toggles = () =>
-    [...tab.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].filter(drawn);
+  const toggles = () => drawnToggles(tab);
   const count = () =>
     [...tab.querySelectorAll(".file-tree-foot")].filter(drawn).map((foot) => foot.textContent);
 
@@ -174,9 +180,7 @@ test("a Changes tab draws no tree beside the diff, its count under the diff, unt
 
 test("Escape pressed on the tree's toggle takes down the tree it opened over the diff, and goes no further", async () => {
   const tab = await drawChangesTab();
-  const toggle = () =>
-    [...tab.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].find(drawn) ??
-    assert.fail("a toggle is drawn");
+  const toggle = () => drawnToggles(tab)[0] ?? assert.fail("a toggle is drawn");
   const treeDrawn = () => {
     const tree = tab.querySelector('[aria-label="Changed files"]');
     return tree !== null && drawn(tree);
@@ -212,9 +216,7 @@ function pointerCross(from: Element, to: Element, clientY = 0): void {
 
 /** A Changes tab's parts as the floating tree's tests read them. */
 function changesParts(tab: HTMLElement) {
-  const toggle =
-    [...tab.querySelectorAll<HTMLButtonElement>(".file-tree-toggle")].find(drawn) ??
-    assert.fail("a toggle is drawn");
+  const toggle = drawnToggles(tab)[0] ?? assert.fail("a toggle is drawn");
   const body = tab.querySelector(".file-view-body") ?? assert.fail("the diff's body is drawn");
   const diff = body.firstElementChild ?? assert.fail("the diff is drawn");
   const tree = () => tab.querySelector('[aria-label="Changed files"]');

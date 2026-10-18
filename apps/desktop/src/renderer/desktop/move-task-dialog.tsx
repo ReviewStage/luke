@@ -1,12 +1,18 @@
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { type DialogConfirm, useConfirmDialog } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  DIALOG_SIZE,
+  Dialog,
+  type DialogConfirm,
+  ErrorState,
+  useConfirmDialog,
+} from "@luke/ui";
 import { CONFIRM_STAGE, confirmAsked } from "@luke/ui/confirm-state";
 import { strandedTaskHome, workspaceReaches } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useId, useRef, useState } from "react";
-import { ModalShell } from "../modal-shell";
-import { BusyLabel } from "../spinner";
+import { useRef, useState } from "react";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { sharedWords, WORKSPACE_REF_SIZE, WorkspaceRef } from "./workspace-ref";
 
@@ -177,66 +183,55 @@ function MoveTaskCard({
   const moving = stage === CONFIRM_STAGE.ACTING;
   const first = useRef<HTMLButtonElement | null>(null);
   const cancel = useRef<HTMLButtonElement | null>(null);
-  const titleId = useId();
   const dismiss = () => {
     if (moving) return;
     confirm.keep();
     confirm.clear();
   };
   return (
-    <ModalShell
-      className="move-dialog"
-      labelledBy={titleId}
+    <Dialog
+      size={DIALOG_SIZE.CONFIRM}
+      title={`Move “${task.name}” to another workspace`}
       busy={moving}
       initialFocus={chosen === undefined ? cancel : first}
       onDismiss={dismiss}
-    >
-      <h2 id={titleId} className="confirm-dialog-title">
-        Move “{task.name}” to another workspace
-      </h2>
-      <WorkspaceChoices
-        workspaces={workspaces}
-        personalId={personalId}
-        repository={task.repository}
-        chosen={chosen}
-        disabled={moving}
-        first={first}
-        onChoose={onChoose}
-      />
-      {chosen === undefined ? null : (
-        <ul className="move-effects">
-          <li>{lossLine(from, chosen)}</li>
-          <li>{gainLine(chosen)}</li>
-          <li>{`Its agents keep running, now in ${chosen.name}.`}</li>
-        </ul>
-      )}
-      {rejection !== undefined && !moving ? (
-        <p className="error-message" role="alert">
-          {rejection}
-        </p>
-      ) : null}
-      <div className="confirm-dialog-actions">
-        <button
-          type="button"
-          ref={cancel}
-          className="toolbar-button"
-          disabled={moving}
-          onClick={dismiss}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="primary-button"
-          disabled={moving || chosen === undefined}
-          onClick={() => confirm.run()}
-        >
-          <BusyLabel busy={moving} label="Moving">
+      actions={
+        <>
+          <Button ref={cancel} variant={BUTTON_VARIANT.QUIET} disabled={moving} onClick={dismiss}>
+            Cancel
+          </Button>
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            disabled={chosen === undefined}
+            busy={moving}
+            busyLabel="Moving"
+            onClick={() => confirm.run()}
+          >
             {chosen === undefined ? "Move" : `Move to ${chosen.name}`}
-          </BusyLabel>
-        </button>
+          </Button>
+        </>
+      }
+    >
+      <div className="move-dialog">
+        <WorkspaceChoices
+          workspaces={workspaces}
+          personalId={personalId}
+          repository={task.repository}
+          chosen={chosen}
+          disabled={moving}
+          first={first}
+          onChoose={onChoose}
+        />
+        {chosen === undefined ? null : (
+          <ul className="move-effects">
+            <li>{lossLine(from, chosen)}</li>
+            <li>{gainLine(chosen)}</li>
+            <li>{`Its agents keep running, now in ${chosen.name}.`}</li>
+          </ul>
+        )}
+        {rejection !== undefined && !moving ? <ErrorState>{rejection}</ErrorState> : null}
       </div>
-    </ModalShell>
+    </Dialog>
   );
 }
 

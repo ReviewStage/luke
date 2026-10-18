@@ -12,13 +12,21 @@ import {
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
+import {
+  ErrorState,
+  SETTINGS_LINE_KIND,
+  SettingsLine,
+  SettingsRow,
+  SettingsSection,
+  TEXT_LINK_LOOK,
+  TextLink,
+} from "@luke/ui";
 import { actionRejection } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act";
 import { HarnessMark } from "../harness-marks";
 import { Segmented } from "../segmented";
-import { SpinnerRegion } from "../spinner";
 import {
   choiceModelId,
   choiceOn,
@@ -40,7 +48,6 @@ import {
 import { useOpenLink } from "../tasks/use-open-link";
 import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
-import { ReadFailed, SettingsGroup } from "./settings-group";
 import { SwitchRow } from "./switch-row";
 
 /**
@@ -69,6 +76,9 @@ import { SwitchRow } from "./switch-row";
  * it answers; Fast is a `SwitchRow` like every other settings switch, so its
  * refusal is worded under its own row, and the other rows' under them all. With no account signed in
  * there is no default to show, and the page says so.
+ *
+ * The group is `@luke/ui`'s `SettingsSection`, and Effort and Context each
+ * its `SettingsRow` holding the shared `Segmented`.
  */
 
 /** What the page says while it cannot read or write, and with no account. */
@@ -180,12 +190,7 @@ function DefaultRows({
     <>
       <PickerRow
         label="Model"
-        copy={
-          <>
-            <strong>Model</strong>
-            {note === undefined ? null : <small>{note}</small>}
-          </>
-        }
+        detail={note}
         value={read.base}
         valueLabel={modelLabel(read.base, models)}
         valueIcon={listed !== undefined ? <HarnessMark provider={listed.provider} /> : null}
@@ -224,7 +229,8 @@ function DefaultRows({
               {fastAskable ? (
                 <>
                   {" "}
-                  <a
+                  <TextLink
+                    look={TEXT_LINK_LOOK.UNDERLINED}
                     href={FAST_ACCESS_URL}
                     onClick={(event) => {
                       event.preventDefault();
@@ -232,7 +238,7 @@ function DefaultRows({
                     }}
                   >
                     {FAST_ACCESS_WORD}
-                  </a>
+                  </TextLink>
                 </>
               ) : null}
             </>
@@ -247,43 +253,35 @@ function DefaultRows({
             : runFast(choiceAt(choiceModelId(base, fast)))
         }
       />
-      {/* The segments wrap under the label where the row is narrow rather than clipping. */}
-      <div className="settings-row settings-row-wrapping">
-        <span className="settings-copy">
-          <strong>Effort</strong>
-        </span>
-        <Segmented
-          legend="Effort"
-          options={efforts.map((effort) => ({ value: effort, label: effortLabel(effort) }))}
-          value={choice.effort}
-          disabled={busy}
-          anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT}
-          onChange={(effort) => run({ ...choice, effort })}
-        />
-      </div>
-      {windows === undefined ? null : (
-        <div className="settings-row settings-row-wrapping">
-          <span className="settings-copy">
-            <strong>Context</strong>
-            <small>{longWindowNote(windows)}</small>
-          </span>
+      {/* A refusal of any of the rows stands under them all, in the last row's error line. */}
+      <SettingsRow label="Effort" error={windows === undefined ? rejection : undefined}>
+        {() => (
           <Segmented
-            legend="Context"
-            options={[
-              { value: CONTEXT_WINDOW.STANDARD, label: windowLabel(windows.standardTokens) },
-              { value: CONTEXT_WINDOW.LONG, label: windowLabel(windows.longTokens) },
-            ]}
-            value={window}
+            legend="Effort"
+            options={efforts.map((effort) => ({ value: effort, label: effortLabel(effort) }))}
+            value={choice.effort}
             disabled={busy}
-            onChange={(each) => run(choiceOn(models ?? [], choice, each))}
+            anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT}
+            onChange={(effort) => run({ ...choice, effort })}
           />
-        </div>
+        )}
+      </SettingsRow>
+      {windows === undefined ? null : (
+        <SettingsRow label="Context" description={longWindowNote(windows)} error={rejection}>
+          {() => (
+            <Segmented
+              legend="Context"
+              options={[
+                { value: CONTEXT_WINDOW.STANDARD, label: windowLabel(windows.standardTokens) },
+                { value: CONTEXT_WINDOW.LONG, label: windowLabel(windows.longTokens) },
+              ]}
+              value={window}
+              disabled={busy}
+              onChange={(each) => run(choiceOn(models ?? [], choice, each))}
+            />
+          )}
+        </SettingsRow>
       )}
-      {rejection !== undefined ? (
-        <p className="error-message" role="alert">
-          {rejection}
-        </p>
-      ) : null}
     </>
   );
 }
@@ -373,9 +371,9 @@ function CodingAgentsSection({
   );
 
   return (
-    <SettingsGroup title="Default model">
+    <SettingsSection title="Default model">
       {!signedIn ? (
-        <p className="settings-card-line settings-note">{PAGE_LINE.SIGNED_OUT}</p>
+        <SettingsLine>{PAGE_LINE.SIGNED_OUT}</SettingsLine>
       ) : choice !== undefined && (models !== undefined || modelsFailed) ? (
         <DefaultRows
           choice={choice}
@@ -385,13 +383,15 @@ function CodingAgentsSection({
           onChange={write}
         />
       ) : readFailed ? (
-        <ReadFailed line={PAGE_LINE.FAILED} onRetry={() => setAttempt((count) => count + 1)} />
+        <SettingsLine>
+          <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
+            {PAGE_LINE.FAILED}
+          </ErrorState>
+        </SettingsLine>
       ) : (
-        <div className="settings-card-line settings-reading">
-          <SpinnerRegion label="Loading your default" />
-        </div>
+        <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>Loading your default</SettingsLine>
       )}
-    </SettingsGroup>
+    </SettingsSection>
   );
 }
 

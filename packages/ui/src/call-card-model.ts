@@ -20,7 +20,7 @@ import { callInProgress, type VoiceView } from "@luke/voice/voice-view";
 import { type CallStatus, standingCallStatus } from "./tasks-model.js";
 
 /** The task's name where the document has none to give, which a task just started can briefly be. */
-const CALL_CARD_UNNAMED = "Planning call";
+const CALL_CARD_UNNAMED = "Call";
 
 export interface CallCardModel {
   readonly taskName: string;
@@ -102,8 +102,8 @@ export function callTabVideoStatus(input: {
   planId: string;
   videoCalls: boolean;
 }): AvatarStatus | undefined {
-  const { view, avatar, planId, videoCalls } = input;
-  if (!callInProgress(view) || view.callTaskId !== planId) return undefined;
+  const { view, avatar, planId: taskId, videoCalls } = input;
+  if (!callInProgress(view) || view.callTaskId !== taskId) return undefined;
   if (!videoCalls) return avatarStanding(avatar) ? avatar.status : undefined;
   return avatarTiled(avatar) ? avatar.status : AVATAR_STATUS.OFF;
 }

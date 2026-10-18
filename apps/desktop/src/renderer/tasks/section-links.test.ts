@@ -8,12 +8,14 @@ import {
   mentionMarkdown,
 } from "@luke/features/mention-link";
 import type { Task } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { DOCUMENT_TASK } from "#testing/document-task";
+import { onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { PlanBody, type SectionLinks } from "./plan-body";
 
 /**
@@ -52,7 +54,7 @@ const TASK: Task = {
 };
 
 /** A section's ⋯, as against the title's beside it. */
-const SECTION_MORE = '.plan-unit-more[aria-label="Section actions"]';
+const SECTION_MORE = '.plan-unit-more button[aria-label="Section actions"]';
 
 const roots: Root[] = [];
 const copied: string[] = [];
@@ -60,15 +62,9 @@ const copied: string[] = [];
 beforeEach(() => {
   copied.length = 0;
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind !== ACT_KIND.WINDOW_COPY_TEXT) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      }
-      copied.push(request.payload.words);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-    recordSurfaceEvent: () => undefined,
+    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
 });
 
 afterEach(() => {
@@ -95,7 +91,7 @@ function drawn(links: Partial<SectionLinks> = {}) {
 }
 
 function chipNamed(container: HTMLElement, name: string): HTMLButtonElement {
-  const chip = [...container.querySelectorAll<HTMLButtonElement>(".mention-chip")].find(
+  const chip = [...container.querySelectorAll<HTMLButtonElement>("[data-mention-ref]")].find(
     (each) => each.textContent === name,
   );
   assert.ok(chip, `a chip named ${name}`);
@@ -128,7 +124,7 @@ test("a section's ⋯ copies the section's link, its bare address, as a teammate
   const rollout = [...container.querySelectorAll<HTMLElement>(".plan-unit-attributed")].find(
     (unit) => unit.textContent?.startsWith("Rollout"),
   );
-  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more");
+  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more button");
   assert.ok(more, "the Rollout section has a ⋯");
   act(() => more.click());
   const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
@@ -198,7 +194,7 @@ test("off a plan's own page a mention stays its words", () => {
 
   act(() => root.render(createElement(PlanBody, { task: TASK, live: false })));
 
-  assert.equal(container.querySelector(".mention-chip"), null);
+  assert.equal(container.querySelector("[data-mention-ref]"), null);
   assert.equal(container.querySelector(".plan-unit-more"), null);
   assert.match(container.textContent ?? "", /Ship as @Rollout says/u);
 });
@@ -240,7 +236,7 @@ test("a section whose heading is formatted is copied as a link that is drawn as 
   ]);
 });
 
-/** The task's page drawn editable, as a task's own page is. */
+/** The task's page drawn editable, as a task's own page is, its editor's bundle not yet landed so that an editor opened is its host alone. */
 function drawnEditable(): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -248,12 +244,15 @@ function drawnEditable(): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(PlanBody, {
-        task: TASK,
-        live: false,
-        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-        sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
-      }),
+      onSideBundles(
+        unlandedBundles(),
+        createElement(PlanBody, {
+          task: TASK,
+          live: false,
+          onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+          sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
+        }),
+      ),
     ),
   );
   return container;
@@ -264,7 +263,7 @@ test("copying a section's link from its ⋯ opens no editor, as a click into its
   const rollout = [...container.querySelectorAll<HTMLElement>(".plan-unit-attributed")].find(
     (unit) => unit.textContent?.startsWith("Rollout"),
   );
-  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more");
+  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more button");
   assert.ok(more);
 
   act(() => more.click());
@@ -287,7 +286,7 @@ test("copying a section's link from its ⋯ opens no editor, as a click into its
 test("only the ⋯ beside the document's one Tab stop is a Tab stop", () => {
   const container = drawnEditable();
 
-  const stops = [...container.querySelectorAll<HTMLElement>(".plan-unit-more")].filter(
+  const stops = [...container.querySelectorAll<HTMLElement>(".plan-unit-more button")].filter(
     (more) => more.tabIndex === 0,
   );
 
@@ -361,17 +360,20 @@ test("a mention of a file as its page on GitHub opens its tab, at the lines it p
     },
   };
   const opened: [string, MentionLines | undefined][] = [];
+  const onGitHub: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, openGitHub: (url) => onGitHub.push(url) });
   const container = drawnFiles((path, lines) => opened.push([path, lines]), task);
 
   act(() => chipNamed(container, "session-store.ts").click());
   act(() => chipNamed(container, "session-store.ts:3").click());
-  // Another repository's file is no file of the task's, but GitHub's own page, which opens no tab.
+  // Another repository's file is no file of the task's, but GitHub's own page, which opens there rather than in a tab.
   act(() => chipNamed(container, "other.ts").click());
 
   assert.deepEqual(opened, [
     ["apps/web/session-store.ts", undefined],
     ["apps/web/session-store.ts", { commit: "0123456", startLine: 3, endLine: 5 }],
   ]);
+  assert.deepEqual(onGitHub, ["https://github.com/acme/other/blob/HEAD/other.ts"]);
 });
 
 test("a heading the plan bears twice: a mention of the second opens the second, and each ⋯ copies its own", async () => {
@@ -421,7 +423,7 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
 test("a folder's chip, and a file's where no file opens from here, hang their cards and open nothing", () => {
   const container = drawnFiles(undefined);
 
-  const chips = [...container.querySelectorAll<HTMLElement>(".mention-chip")];
+  const chips = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")];
 
   assert.deepEqual(
     chips.map((chip) => [chip.textContent, chip.tagName]),
@@ -452,7 +454,7 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
       }),
     ),
   );
-  const folder = [...container.querySelectorAll<HTMLElement>(".mention-chip")].find(
+  const folder = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].find(
     (chip) => chip.textContent === "auth/",
   );
   assert.ok(folder);

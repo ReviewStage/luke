@@ -66,7 +66,7 @@ import { MAIN_TAB } from "./use-main-tabs";
  * agent's tab takes its workers' with it; it closes, and it is kept
  * nowhere, so a launch opens none. An agent's Pull request tab, kept as
  * `changes` for the tab that once showed its files alone, opened from the
- * pull request's chip or the Changes chip at its tab's foot, the "+", the
+ * pull request's chip at its tab's foot, the "+", the
  * task's summary, or ⌘K, shows the pull request's conversation, its checks,
  * or its files (`PULL_REQUEST_VIEW`), the view each agent's tab shows held for the
  * window's life and kept nowhere, and is

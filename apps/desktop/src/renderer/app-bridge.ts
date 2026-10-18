@@ -4,7 +4,7 @@
  * Every call the renderer makes across the sandbox, its acts, its state, the
  * events main sends it, goes through the `AppBridge` installed here rather
  * than through a global, so the root decides what answers: the desktop's
- * `index.tsx` installs the preload's Electron bridge, and a test installs a
+ * `window-root.tsx` installs the preload's Electron bridge, and a test installs a
  * fake of its own. Note that this is a module-level door rather than an
  * Effect service or a React context, because most of its callers are neither
  * fibers nor components: the act door's promises, the state atom's
@@ -12,7 +12,7 @@
  * each reads it at the moment it calls, never at module load.
  */
 
-import type { AppBridge } from "#shared/bridge";
+import type { AppBridge } from "@luke/host/bridge";
 
 let installed: AppBridge | undefined;
 

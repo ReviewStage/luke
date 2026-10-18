@@ -6,6 +6,7 @@ import {
   APP_SETTING_SCHEMA,
   describedSettings,
   EXPERIMENTS,
+  HOST_CAPABILITY,
   type SettingsRowsInput,
   settingFieldForId,
   settingIdVisible,
@@ -21,16 +22,17 @@ import {
   SETTINGS_VIEW,
   type SettingsView,
 } from "@luke/settings/settings-views";
-import { CloseIcon, SearchIcon } from "@luke/ui";
+import { APP_COMMAND, APP_SHORTCUTS, shownShortcutGroups } from "@luke/settings/shortcuts";
+import { NAV_CURRENT, NavItem, SearchField } from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
+import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { useEffect, useRef } from "react";
-import { APP_COMMAND, APP_SHORTCUTS, shownShortcutGroups } from "#shared/shortcuts";
-import { appBridge } from "./app-bridge";
 import { useAppCommand } from "./app-commands";
+import { appPlatform } from "./app-platform";
 import { drawnVisibly, focusSeek } from "./focus-seek";
 import { focusSearchField, Highlighted } from "./search-field";
-import { settingsPageOf } from "./settings/pages";
+import { settingsPageOf, settingsPageShown } from "./settings/pages";
 import { Shortcut } from "./shortcut";
 import { commandKeyshortcuts } from "./tooltip";
 
@@ -118,12 +120,17 @@ const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
  */
 function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
   const entries: (SettingsSearchEntry | undefined)[] = [
-    {
-      id: SETTINGS_SEARCH_ROW.UPDATES,
-      label: "Updates",
-      page: SETTINGS_VIEW.ABOUT,
-      haystack: ["Updates", "version release download check for updates build commit development"],
-    },
+    input.capabilities.includes(HOST_CAPABILITY.UPDATES)
+      ? {
+          id: SETTINGS_SEARCH_ROW.UPDATES,
+          label: "Updates",
+          page: SETTINGS_VIEW.ABOUT,
+          haystack: [
+            "Updates",
+            "version release download check for updates build commit development",
+          ],
+        }
+      : undefined,
     {
       id: SETTINGS_SEARCH_ROW.CHANGELOG,
       label: "Changelog",
@@ -168,8 +175,8 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Delete account", "account erase remove"],
         }
       : undefined,
-    // The Voice page's permission row, drawn once there is a voice to reach.
-    input.settings.voiceAvailable
+    // The Voice page's permission row, drawn once there is a voice to reach and a microphone to ask for.
+    input.settings.voiceAvailable && input.capabilities.includes(HOST_CAPABILITY.MICROPHONE)
       ? {
           id: SETTINGS_SEARCH_ROW.MICROPHONE,
           label: "Microphone",
@@ -290,7 +297,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
         }
       : undefined,
     // The window's own chords, fixed rather than chosen, listed below them; a gated feature's only while its experiment is on.
-    ...shownShortcutGroups(input.settings.experiments).flatMap((group) =>
+    ...shownShortcutGroups(input.settings.experiments, input.capabilities).flatMap((group) =>
       group.commands.map((command) => ({
         id: command,
         label: APP_SHORTCUTS[command].label,
@@ -330,13 +337,16 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
     ];
   });
   const fixed = fixedEntries(input);
-  return SETTINGS_PAGE_LIST.flatMap((page) => [
-    ...described.filter((entry) => entry.page === page),
-    ...fixed.filter((entry) => entry.page === page),
-  ]).map((entry) => ({
-    ...entry,
-    haystack: [...entry.haystack, resultPageWord(entry.page)],
-  }));
+  const pages = SETTINGS_PAGE_LIST.filter((page) => settingsPageShown(page, input.capabilities));
+  return pages
+    .flatMap((page) => [
+      ...described.filter((entry) => entry.page === page),
+      ...fixed.filter((entry) => entry.page === page),
+    ])
+    .map((entry) => ({
+      ...entry,
+      haystack: [...entry.haystack, resultPageWord(entry.page)],
+    }));
 }
 
 /** One page's matches: the page that heads the group, and the rows under it. */
@@ -451,12 +461,12 @@ export function SettingsSearchField({
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
   // Whether the caret stands where Settings put it as it opened, untouched since.
-  const placed = useRef(false);
+  const [placed, setPlaced, placedNow] = useStateWithRef(false);
   useAppCommand(
     APP_COMMAND.FIND,
     find
       ? () => {
-          placed.current = false;
+          setPlaced(false);
           focusSearchField(SETTINGS_SEARCH_INPUT_ID);
         }
       : undefined,
@@ -470,83 +480,57 @@ export function SettingsSearchField({
           // or a palette result that landed on a row put it there on purpose.
           const held = document.activeElement;
           if (held !== null && held !== document.body) return;
-          placed.current = true;
+          setPlaced(true);
           input.focus({ preventScroll: true });
         },
       }),
-    [],
+    [setPlaced],
   );
+  // The caret Settings placed on its own holds no layer, so its Escape is
+  // left to fall through to the window and leave Settings.
+  const untouched = placed && query.length === 0;
   return (
-    <search className="settings-search">
-      {/* The label is the whole well, so a press on the magnifier or the
-          padding lands the caret the way a press on the text would. */}
-      <label className="settings-search-well field-well">
-        <SearchIcon />
-        <input
-          ref={field}
-          id={SETTINGS_SEARCH_INPUT_ID}
-          className="settings-search-input"
-          aria-label="Search settings"
-          aria-keyshortcuts={find ? commandKeyshortcuts(APP_COMMAND.FIND) : undefined}
-          placeholder="Search"
-          autoComplete="off"
-          spellCheck={false}
-          value={query}
-          onChange={(event) => {
-            placed.current = false;
-            onQueryChange(event.target.value);
-          }}
-          onFocus={() => {
-            if (placed.current) return;
-            appBridge().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
-              search_surface: PRODUCT_SEARCH_SURFACE.SETTINGS,
-            });
-          }}
-          onBlur={() => {
-            placed.current = false;
-          }}
-          onKeyDown={(event) => {
-            // The caret Settings placed on its own holds no layer, so its
-            // Escape falls through to the window and leaves Settings, unless
-            // an input method is spending the press on its candidates.
-            const untouched = placed.current && query.length === 0;
-            if (event.key === "Escape" && untouched && !event.nativeEvent.isComposing) return;
-            // Note that an Escape is stopped even mid-composition, because the
-            // input method spends that press dismissing its candidates, and
-            // the window's own Escape would turn the page behind the field.
-            if (event.key === "Escape") event.stopPropagation();
-            if (event.nativeEvent.isComposing) return;
-            if (event.key === "Enter") {
-              onSubmit();
-              return;
-            }
-            if (event.key !== "Escape") return;
-            if (query.length > 0) onQueryChange("");
-            else field.current?.blur();
-          }}
-        />
-        {/* The chord that lands here is printed in the empty field, the way
-            a Mac search field says it, and gives way to the caret. */}
-        {query.length > 0 ? (
-          <button
-            type="button"
-            className="icon-button settings-search-clear"
-            aria-label="Clear search"
-            onClick={() => {
-              // A cleared field keeps the caret, ready for the next question.
-              onQueryChange("");
-              field.current?.focus();
-            }}
-          >
-            <CloseIcon />
-          </button>
-        ) : find ? (
-          <Shortcut
-            chord={APP_SHORTCUTS[APP_COMMAND.FIND].chord}
-            className="settings-search-shortcut"
-          />
-        ) : null}
-      </label>
+    <search
+      className="settings-search"
+      onFocus={(event) => {
+        if (event.target !== field.current || placedNow()) return;
+        appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
+          search_surface: PRODUCT_SEARCH_SURFACE.SETTINGS,
+        });
+      }}
+      onBlur={(event) => {
+        if (event.target === field.current) setPlaced(false);
+      }}
+      onKeyDown={(event) => {
+        // Note that an Escape is stopped even mid-composition, because the
+        // input method spends that press dismissing its candidates, and the
+        // window's own Escape would turn the page behind the field.
+        if (event.key === "Escape" && event.nativeEvent.isComposing) event.stopPropagation();
+      }}
+    >
+      <SearchField
+        ref={field}
+        id={SETTINGS_SEARCH_INPUT_ID}
+        label="Search settings"
+        placeholder="Search"
+        keyShortcuts={find ? commandKeyshortcuts(APP_COMMAND.FIND) : undefined}
+        shortcut={find ? <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.FIND].chord} /> : undefined}
+        value={query}
+        onChange={(next) => {
+          setPlaced(false);
+          onQueryChange(next);
+        }}
+        onClear={() => onQueryChange("")}
+        onEnter={onSubmit}
+        onEscape={
+          untouched
+            ? undefined
+            : () => {
+                if (query.length > 0) onQueryChange("");
+                else field.current?.blur();
+              }
+        }
+      />
     </search>
   );
 }
@@ -584,16 +568,12 @@ export function SettingsSearchResults({
           <ul>
             {group.items.map((entry) => (
               <li key={entry.id}>
-                <button
-                  type="button"
-                  className="sidebar-item"
-                  aria-current={entry.id === opened ? "location" : undefined}
+                <NavItem
+                  current={entry.id === opened ? NAV_CURRENT.LOCATION : undefined}
                   onClick={() => onOpen(entry)}
                 >
-                  <span className="settings-search-result">
-                    <Highlighted text={entry.label} tokens={search.tokens} />
-                  </span>
-                </button>
+                  <Highlighted text={entry.label} tokens={search.tokens} />
+                </NavItem>
               </li>
             ))}
           </ul>

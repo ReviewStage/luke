@@ -5,24 +5,25 @@ import {
   CHANGED_FILE_STATUS,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
+  DIFF_SIDE,
 } from "@luke/features/coding-agent-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
-import type { AppStateSnapshot } from "@luke/host/app-state";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
-import type { AppSettingsView } from "@luke/settings/wire";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
-import { stateWith } from "#testing/app-state";
+import { handSettings } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { relayout } from "#testing/resize-observer";
+import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { appBridge } from "../app-bridge";
+import type { SideBundles } from "../bundle-loader";
 import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
+import type { ChangesThreads } from "./agent-changes-tab";
 
 /**
  * agent-changes-tab.test.ts -- a Files changed view hands the diff bundle
@@ -33,8 +34,8 @@ import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
  * view; a diff too narrow to split is drawn unified, Split view dimmed, the
  * choice kept for a wider one. The settings are the app's own, read off the
  * document main hands the window and written back through it
- * (`handSettings`). The bundle, a script of its own the panel loads, is
- * stood in for at its global, which records what it was handed. Synthetic
+ * (`handSettings`). The bundle, a chunk of its own the panel imports, is
+ * stood in for at its importer, which records what it was handed. Synthetic
  * files only.
  */
 
@@ -56,6 +57,8 @@ const PATCH = [
   "+const seats = 42;",
   "+const extra = 1;",
 ].join("\n");
+
+const PAGE = "https://github.com/acme/relay/pull/7";
 
 const control = codingAgentsControl({
   agents: [AGENT],
@@ -84,42 +87,6 @@ const control = codingAgentsControl({
     }),
 });
 
-/**
- * Hands the window main's document with its settings as given, and answers
- * each settings write as main does: stored, then the document delivered
- * again to every listener, so a surface draws the setting it wrote and the
- * next surface drawn reads it, the write answered as accepted. Any other act
- * is refused.
- */
-function handSettings(settings: Partial<AppSettingsView> = {}): void {
-  let view: AppSettingsView = Object.assign(settingsView(), settings);
-  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
-  const snapshot = () => stateWith({}, { settings: appSettingsWire(view) });
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    requestAppState: () => Promise.resolve(snapshot()),
-    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.SETTING_UPDATE) {
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
-          reason: "Not in this test.",
-        });
-      }
-      view = Object.assign({ ...view }, { [request.payload.field]: request.payload.value });
-      const next = snapshot();
-      for (const listener of listeners) listener(next);
-      return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: appSettingsWire(view) },
-      });
-    },
-  });
-}
-
 /** What the stand-in bundle was handed, mount first, each draw after it. */
 let drawn: DiffViewProps[] = [];
 /** How wide the box the diff is drawn in lays out, in pixels. */
@@ -133,17 +100,22 @@ const standIn: DiffViewModule = {
   },
 };
 
+let bundles: SideBundles;
+
+beforeAll(async () => {
+  bundles = await Effect.runPromise(landedBundles({ diffView: () => Promise.resolve(standIn) }));
+});
+
 beforeEach(() => {
   drawn = [];
   boxWidth = 900;
-  window.lukeDiffView = standIn;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
     const width = this.classList.contains("diff-view") ? boxWidth : 0;
     return new DOMRect(0, 0, width, 0);
   });
-  fakeAppBridge({ recordSurfaceEvent: () => undefined });
+  fakeAppBridge({});
   handSettings();
 });
 
@@ -151,12 +123,11 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
-  delete window.lukeDiffView;
   vi.restoreAllMocks();
 });
 
 /** Draws the agent's Files changed view, its read landed, and answers what the diff was last drawn with. */
-async function drawTab(): Promise<DiffViewProps> {
+async function drawTab(threads?: ChangesThreads): Promise<DiffViewProps> {
   const { AgentChangesTab } = await import("./agent-changes-tab");
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -166,13 +137,17 @@ async function drawTab(): Promise<DiffViewProps> {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(AgentChangesTab, {
-          agentId: AGENT.id,
-          control,
-          shown: true,
-          repository: "acme/relay",
-          tree: { open: false, onToggle: () => undefined },
-        }),
+        onSideBundles(
+          bundles,
+          createElement(AgentChangesTab, {
+            agentId: AGENT.id,
+            control,
+            shown: true,
+            repository: "acme/relay",
+            tree: { open: false, onToggle: () => undefined },
+            threads,
+          }),
+        ),
       ),
     ),
   );
@@ -230,8 +205,7 @@ function openSettings(): HTMLElement {
   const button = document.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]');
   act(() => button?.click());
   return (
-    document.querySelector<HTMLElement>('[role="dialog"][aria-label="Diff settings"]') ??
-    assert.fail("the diff settings open")
+    document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("the diff settings open")
   );
 }
 
@@ -359,7 +333,78 @@ test("a refused write is said under its row, and the row can be pressed again", 
   held[0]?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not save that setting." });
   await flush();
 
-  assert.ok(popover.querySelector('[role="alert"]'), "the refusal is said");
-  assert.equal(settingControl(popover, '[role="switch"]', "Ligatures").disabled, false);
+  const ligatures = settingControl(popover, '[role="switch"]', "Ligatures");
+  assert.equal(ligatures.getAttribute("aria-invalid"), "true", "the refusal is said");
+  assert.match(
+    (ligatures.getAttribute("aria-describedby") ?? "")
+      .split(" ")
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" "),
+    /Could not save that setting/u,
+    "under its own row",
+  );
+  assert.equal(ligatures.disabled, false);
   assert.equal(lastDrawn().look.ligatures, false);
+});
+
+/** A review thread on the seats file, on its new side's line, or outdated where its line is gone. */
+function seatsThread(line: number | null, words: string) {
+  return {
+    path: "src/seats.ts",
+    line,
+    startLine: null,
+    originalLine: 2,
+    originalStartLine: null,
+    side: DIFF_SIDE.RIGHT,
+    startSide: null,
+    diffHunk: PATCH,
+    resolved: false,
+    outdated: line === null,
+    comments: [
+      {
+        by: { login: "octo", bot: false },
+        html: null,
+        body: words,
+        at: 1,
+        url: `${PAGE}#${words}`,
+      },
+    ],
+    more: 0,
+  };
+}
+
+test("a review thread is drawn under its line in the diff, and one a push outdated stands above the diff", async () => {
+  const threads: ChangesThreads = {
+    list: [seatsThread(2, "why-42"), seatsThread(null, "was-3")],
+    draw: (thread) => createElement("p", { className: "drawn-thread" }, thread.comments[0]?.body),
+  };
+  const props = await drawTab(threads);
+
+  assert.deepEqual(props.annotations, [{ key: `${PAGE}#why-42`, side: "additions", line: 2 }]);
+  const note = props.renderAnnotation?.(`${PAGE}#why-42`) ?? assert.fail("the note has an element");
+  assert.equal(note.textContent, "why-42");
+  const above =
+    document.querySelector('[aria-label="Comments on lines this diff does not show"]') ??
+    assert.fail("the outdated thread stands above the diff");
+  assert.equal(above.textContent, "was-3");
+});
+
+test("Refresh changes reads the review threads again with the files, so the two describe the same push", async () => {
+  let threadReads = 0;
+  await drawTab({
+    list: [],
+    draw: () => null,
+    refresh: () => {
+      threadReads += 1;
+    },
+  });
+
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+
+  assert.equal(threadReads, 1);
 });

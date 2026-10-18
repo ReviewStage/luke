@@ -5,7 +5,21 @@ import {
 } from "@luke/features/issue-view";
 import type { Issue, IssueStatus } from "@luke/features/issue-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, useMenu } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  BUTTON_VARIANT,
+  Button,
+  COLLECTION_STATE,
+  CollectionPage,
+  type CollectionState,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  IconButton,
+  PAGE_FRAME,
+  PAGE_WIDTH,
+  useMenu,
+} from "@luke/ui";
 import { Schema } from "effect";
 import {
   ListIcon,
@@ -15,7 +29,6 @@ import {
   SquareKanbanIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
@@ -28,7 +41,7 @@ import { ActionMenu, type MenuAction } from "./action-menu";
 import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail } from "./issue-detail";
-import { IssueList } from "./issue-list";
+import { IssueList, listRowIssue } from "./issue-list";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
 import { type IssueChange, useIssue, useIssues } from "./use-issues";
 import { useRowKeys } from "./use-row-keys";
@@ -76,6 +89,9 @@ const storedLayout = Schema.fromJsonString(Schema.Literals(Object.values(ISSUES_
 /** What the toolbar's layout menu is called. */
 const VIEW_OPTIONS = "View options";
 
+/** What the list's page is read as while its issues are. */
+const READING_LINE = "Reading issues";
+
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The issues could not be read.";
 
@@ -117,15 +133,28 @@ function useChangeSaid(): (asked: IssueChange, sent: Promise<IssueView>) => Prom
 function keyboardLeftWith(issueId: string): boolean {
   const at = document.activeElement;
   if (at === null || at === document.body) return true;
+  if (!(at instanceof HTMLElement)) return false;
   return (
-    at instanceof HTMLElement &&
-    at.closest<HTMLElement>("[data-issue-id]")?.dataset.issueId === issueId
+    (at.closest<HTMLElement>("[data-issue-id]")?.dataset.issueId ?? listRowIssue(at)) === issueId
   );
+}
+
+/**
+ * What the list's page stands, by its read and its layout. Note that an
+ * empty board still stands its columns, each saying it holds none, so only
+ * the list says there are none yet; and that a board being read stands
+ * nothing, since the page's loading rows are a list's shape, not a board's.
+ */
+function listState(read: ReturnType<typeof useIssues>["read"], onBoard: boolean): CollectionState {
+  if (read === undefined) return onBoard ? COLLECTION_STATE.READY : COLLECTION_STATE.LOADING;
+  if ("failure" in read) return COLLECTION_STATE.ERROR;
+  return !onBoard && read.issues.length === 0 ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
 }
 
 /** The list's page: the listed workspace's issues by status, a new one a press away. */
 function ListPage({
-  plans,
+  root,
+  plans: tasks,
   issues,
   focused,
   layout,
@@ -134,6 +163,8 @@ function ListPage({
   onCompose,
   onComposeIn,
 }: {
+  /** What the arrows move through the rows of: the pages' own root. */
+  root: HTMLElement | null;
   plans: TasksControl;
   issues: ReturnType<typeof useIssues>;
   /** The issue whose card or row takes the keyboard as it is drawn. */
@@ -147,15 +178,14 @@ function ListPage({
   /** Opens the card with a board column's status chosen; none while no workspace is listed. */
   onComposeIn: ((status: IssueStatus) => void) | undefined;
 }): React.JSX.Element {
-  const view = plans.issuesView;
+  const view = tasks.issuesView;
   useAppCommand(APP_COMMAND.EXIT_ISSUES, view.onClose);
   const now = useMinute();
-  const workspace = plans.workspace;
+  const workspace = tasks.workspace;
   const { read, reload } = issues;
-  const [root, setRoot] = useState<HTMLElement | null>(null);
   const onBoard = layout === ISSUES_LAYOUT.BOARD;
-  useRowKeys(root, plans.shown && !onBoard);
-  useBoardKeys(root, plans.shown && onBoard);
+  useRowKeys(root, tasks.shown && !onBoard);
+  useBoardKeys(root, tasks.shown && onBoard);
   const open = (issue: Issue) => view.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId: issue.id });
   const said = useChangeSaid();
   const change = (issue: Issue, asked: IssueChange) => {
@@ -169,69 +199,68 @@ function ListPage({
     });
   };
   const workspaceName = workspace?.name ?? "";
+  const listed = read !== undefined && "issues" in read ? read.issues : undefined;
   return (
-    <section ref={setRoot} className="automations-view" aria-label="Issues">
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">Issues</h1>
-          <ExperimentTag />
-        </div>
-        <div className="desktop-toolbar-actions">
-          <SendFeedbackButton experiment={EXPERIMENT.ISSUES} />
-          <ViewOptions shown={plans.shown} layout={layout} onLayout={onLayout} />
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_ISSUE)}
-            disabled={onCompose === undefined}
-            onClick={onCompose}
-          >
-            <PlusIcon />
-            New issue
-          </button>
-        </div>
-      </header>
-      {/* The board scrolls sideways in its own scroller, each column scrolling its cards; a failure is said in the list's. */}
-      <div
-        className={
-          onBoard && read !== undefined && "issues" in read
-            ? "issue-board-scroll"
-            : "automations-scroll scroll-fade-top"
-        }
-      >
-        {read === undefined ? null : "failure" in read ? (
-          <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-            {UNREAD_LINE}
-          </ErrorState>
-        ) : onBoard ? (
-          <IssueBoard
-            issues={read.issues}
+    <CollectionPage
+      frame={PAGE_FRAME.TOOLBAR}
+      // Note that the board stands its columns across the room and scrolls sideways past it, each column scrolling its own cards.
+      width={onBoard ? PAGE_WIDTH.FULL : PAGE_WIDTH.MEASURE}
+      label="Issues"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">Issues</h1>
+            <ExperimentTag />
+          </div>
+          <div className="desktop-toolbar-actions">
+            <SendFeedbackButton experiment={EXPERIMENT.ISSUES} />
+            <ViewOptions shown={tasks.shown} layout={layout} onLayout={onLayout} />
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              icon={<PlusIcon />}
+              aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_ISSUE)}
+              disabled={onCompose === undefined}
+              onClick={onCompose}
+            >
+              New issue
+            </Button>
+          </div>
+        </header>
+      }
+      state={listState(read, onBoard)}
+      loadingLabel={READING_LINE}
+      empty={<EmptyState icon={<ListTodoIcon />}>No issues yet</EmptyState>}
+      error={
+        <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {UNREAD_LINE}
+        </ErrorState>
+      }
+    >
+      {listed === undefined ? null : onBoard ? (
+        <IssueBoard
+          issues={listed}
+          workspaceName={workspaceName}
+          now={now}
+          focused={focused}
+          shown={tasks.shown}
+          onOpen={open}
+          onCompose={onComposeIn}
+          onChange={change}
+        />
+      ) : (
+        <div className="issue-groups">
+          <IssueList
+            issues={listed}
             workspaceName={workspaceName}
             now={now}
             focused={focused}
-            shown={plans.shown}
+            shown={tasks.shown}
             onOpen={open}
-            onCompose={onComposeIn}
             onChange={change}
           />
-        ) : read.issues.length === 0 ? (
-          // Note that an empty board still stands its columns, each saying it holds none, so only the list says there are none yet.
-          <EmptyState icon={<ListTodoIcon />}>No issues yet</EmptyState>
-        ) : (
-          <div className="home-column issues-column">
-            <IssueList
-              issues={read.issues}
-              workspaceName={workspaceName}
-              now={now}
-              focused={focused}
-              shown={plans.shown}
-              onOpen={open}
-              onChange={change}
-            />
-          </div>
-        )}
-      </div>
-    </section>
+        </div>
+      )}
+    </CollectionPage>
   );
 }
 
@@ -263,9 +292,7 @@ function ViewOptions({
   return (
     <>
       <Tooltip label={VIEW_OPTIONS}>
-        <button type="button" className="icon-button" aria-label={VIEW_OPTIONS} {...menu.trigger()}>
-          <SlidersHorizontalIcon className="icon-button-glyph" />
-        </button>
+        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
@@ -315,7 +342,7 @@ function DetailFrame({
  * it goes back to already holds what was kept.
  */
 function DetailPage({
-  plans,
+  plans: tasks,
   issueId,
   issues,
   onBack,
@@ -336,8 +363,8 @@ function DetailPage({
   // Note that an issue of a workspace other than the one listed is no issue of this page, as a link to one is not.
   const listedElsewhere =
     issue !== undefined &&
-    plans.workspace !== undefined &&
-    issue.workspaceId !== plans.workspace.id;
+    tasks.workspace !== undefined &&
+    issue.workspaceId !== tasks.workspace.id;
   if (issue === undefined || listedElsewhere) {
     const failure = listedElsewhere
       ? ISSUE_CALL_FAILURE.NOT_FOUND
@@ -349,10 +376,10 @@ function DetailPage({
 
   return (
     // The workspace's members, read for the issue's creator: their picture, and You for the reader's own.
-    <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+    <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
       <IssueDetail
         issue={issue}
-        workspaceName={plans.workspace?.name ?? ""}
+        workspaceName={tasks.workspace?.name ?? ""}
         onChange={onChange}
         onBack={onBack}
       />
@@ -366,19 +393,19 @@ function DetailPage({
  * and a change is in the list the moment it lands; going back from an
  * issue hands its row the keyboard.
  */
-export function IssuesPage({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
+export function IssuesPage({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   // Every Copy link on these pages is written under the listed workspace, whose issues they are.
   return (
-    <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
-      <IssuesPages tasks={plans} />
+    <LinkWorkspaceProvider value={tasks.workspace?.slug ?? tasks.workspace?.id}>
+      <IssuesPages tasks={tasks} />
     </LinkWorkspaceProvider>
   );
 }
 
 /** The Issues pages themselves, under the workspace their links are written in. */
-function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
-  const view = plans.issuesView;
-  const workspace = plans.workspace;
+function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+  const view = tasks.issuesView;
+  const workspace = tasks.workspace;
   const issues = useIssues(workspace?.id);
   const [cameFrom, setCameFrom] = useState<string | undefined>(undefined);
   const [composing, setComposing] = useState<Composing | undefined>(undefined);
@@ -386,7 +413,7 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
   const [layout, setLayout] = useState<IssuesLayout>(() =>
     readKept(LAYOUT_KEY, storedLayout, ISSUES_LAYOUT.BOARD),
   );
-  const pages = useRef<HTMLDivElement>(null);
+  const [pages, setPages] = useState<HTMLDivElement | null>(null);
   const listedNow = useRef(workspace?.id);
   listedNow.current = workspace?.id;
   /**
@@ -398,7 +425,7 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
   const compose = (status?: IssueStatus) => {
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && focused !== document.body) {
-      if (!pages.current?.contains(focused) || typedInto(focused)) return;
+      if (!pages?.contains(focused) || typedInto(focused)) return;
     }
     setComposing({ status });
   };
@@ -419,10 +446,11 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
     view.onOpen({ kind: ISSUES_PAGE.LIST });
   };
   return (
-    <div ref={pages} className="issues-pages">
+    <div ref={setPages} className="issues-pages">
       {place.kind === ISSUES_PAGE.LIST ? (
         <ListPage
-          plans={plans}
+          root={pages}
+          plans={tasks}
           issues={issues}
           focused={cameFrom}
           layout={layout}
@@ -440,7 +468,7 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
         // Keyed by the issue, so another issue's page holds nothing of the last's.
         <DetailPage
           key={place.issueId}
-          plans={plans}
+          plans={tasks}
           issueId={place.issueId}
           issues={issues}
           onBack={back}

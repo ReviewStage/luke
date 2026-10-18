@@ -1,10 +1,14 @@
 import {
   BUTTON_VARIANT,
   Button,
+  ErrorState,
+  SETTINGS_SECTION_FRAME,
+  SettingsLine,
   SettingsRow,
   type SettingsRowControl,
   SettingsSection,
   Switch,
+  TextArea,
 } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
@@ -12,9 +16,11 @@ import { CatalogSection } from "../section";
 
 /**
  * settings-section.tsx -- a headed section of rows, one with no heading,
- * one holding a single row, and one with a long heading and long rows in a
+ * one holding a single row, one with a long heading and long rows in a
  * column narrower than the 380px a row's controls drop below its words
- * under.
+ * under, one with no card around a text area that draws its own frame, and
+ * lines in the rows' place: a note before rows, a note alone, and a read
+ * that failed with its Retry.
  */
 
 /** A switch holding its own state, named `label` and described and failed by its row. */
@@ -36,6 +42,20 @@ function SwitchRow({ label, description }: { label: string; description?: string
     <SettingsRow label={label} description={description}>
       {(control) => <HeldSwitch label={label} control={control} />}
     </SettingsRow>
+  );
+}
+
+/** A text area holding its own words. */
+function HeldTextArea() {
+  const [text, setText] = useState("");
+  return (
+    <TextArea
+      label="Prompt"
+      rows={4}
+      placeholder="Find the flakiest test in CI this week and fix it."
+      value={text}
+      onChange={setText}
+    />
   );
 }
 
@@ -76,6 +96,32 @@ function SettingsSections(): React.JSX.Element {
               {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Choose repositories</Button>}
             </SettingsRow>
             <SwitchRow label="Notify me" />
+          </SettingsSection>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-section-frameless" title="No card, one text area">
+        <div className="catalog-settings">
+          <SettingsSection title="Prompt" frame={SETTINGS_SECTION_FRAME.NONE}>
+            <HeldTextArea />
+          </SettingsSection>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-section-lines" title="Lines in the rows' place">
+        <div className="catalog-settings">
+          <SettingsSection title="Repositories">
+            <SettingsLine>
+              Run checks the agent's pushed branch out on this Mac and opens a terminal on it.
+              Commands are kept on this Mac only.
+            </SettingsLine>
+            <SwitchRow label="acme/ledger" />
+          </SettingsSection>
+          <SettingsSection title="Invitations">
+            <SettingsLine>Nobody is invited yet.</SettingsLine>
+          </SettingsSection>
+          <SettingsSection title="Members">
+            <SettingsLine>
+              <ErrorState onRetry={() => undefined}>The members could not be read.</ErrorState>
+            </SettingsLine>
           </SettingsSection>
         </div>
       </CatalogSection>

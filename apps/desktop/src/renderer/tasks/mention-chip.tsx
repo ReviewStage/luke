@@ -23,6 +23,7 @@ import {
   HoverCard,
   HoverCardHead,
   HoverCardNote,
+  INLINE_REF_LOOK,
   ProviderMark,
   UserIcon,
 } from "@luke/ui";
@@ -42,10 +43,10 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
+import { InlineRef } from "../inline-ref";
 import type { LinkDrawer } from "../markdown-message";
 import { usePerson } from "../member-directory";
 import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
-import { Tooltip } from "../tooltip";
 import {
   AutomationChipCard,
   InboxItemChipCard,
@@ -55,6 +56,7 @@ import {
   TaskChipCard,
   VersionChipCard,
 } from "./chip-cards";
+import { providerOf } from "./coding-agent-model";
 import { FileCard } from "./file-ref";
 import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
@@ -95,7 +97,10 @@ import { useOpenLink } from "./use-open-link";
  * and counts (`pull-request-card-notes.tsx`), in its address's place,
  * which it says only while its provider has answered nothing. A page an
  * agent showed on a plan wears its tab's glyph, and one of a plan's coding agents its harness's
- * mark, as the place drawing it knows it (`MentionDoors.agentOf`); either
+ * mark, as the place drawing it knows it (`MentionDoors.agentOf`), and any
+ * other agent, one of another task's or of none, or one named where the
+ * place knows no agents, the mark of the harness the window last read it
+ * running on (`useKnownNames`); either
  * opens its tab through the window's opener for a Luke link, as a link
  * copied to it does, and an agent hangs its tab's own card where the place
  * has one, and otherwise the same card read as it is hung, on any task of
@@ -237,6 +242,12 @@ function pressOf(
   }
 }
 
+/** The harness an agent the window holds runs in, read off its model; none for one it holds not. */
+function knownProvider(known: KnownNames, agentId: string) {
+  const model = known.agentModels.get(agentId);
+  return model === undefined ? undefined : providerOf(model);
+}
+
 /** A person as the workspace's members around the chip draw them: their picture, or grayed where they left. */
 function PersonGlyph({ userId, name }: { userId: string; name: string }): React.JSX.Element {
   const person = usePerson({ userId, name });
@@ -247,12 +258,14 @@ function MentionGlyph({
   mention,
   name,
   doors,
+  known,
   standing,
 }: {
   mention: Mention;
   /** The name the chip calls it by, which a person not among the members read is drawn by. */
   name: string;
   doors: MentionDoors;
+  known: KnownNames;
   standing?: LinkStanding | undefined;
 }): React.JSX.Element {
   // A pull request its provider answered for wears its own mark for where it stands, as everywhere the window draws one.
@@ -281,7 +294,7 @@ function MentionGlyph({
     case MENTION_KIND.AGENT: {
       const look = mention.taskId === doors.taskId ? doors.agentOf?.(mention.agentId) : undefined;
       return look === undefined ? (
-        <AgentMark provider={undefined} />
+        <AgentMark provider={knownProvider(known, mention.agentId)} />
       ) : (
         <ActorMark actor={look.actor} size={ACTOR_SIZE.INLINE} />
       );
@@ -295,7 +308,7 @@ function MentionGlyph({
 function noteOf(
   mention: Mention,
   state: MentionState,
-  planId: string,
+  taskId: string,
   standing: LinkStanding | undefined,
 ): string | undefined {
   if (state === MENTION_STATE.GONE) return GONE_WORDS;
@@ -303,7 +316,7 @@ function noteOf(
   if (mention.kind === MENTION_KIND.PAGE) return PAGE_WORDS;
   if (mention.kind === MENTION_KIND.AGENT) {
     if (mention.taskId === undefined) return AGENT_WORDS.NO_TASK;
-    return mention.taskId === planId ? AGENT_WORDS.THIS_TASK : AGENT_WORDS.OTHER_TASK;
+    return mention.taskId === taskId ? AGENT_WORDS.THIS_TASK : AGENT_WORDS.OTHER_TASK;
   }
   return undefined;
 }
@@ -330,6 +343,7 @@ function MentionCard({
   name,
   state,
   doors,
+  known,
   standing,
 }: {
   mention: Mention;
@@ -338,6 +352,7 @@ function MentionCard({
   name: string;
   state: MentionState;
   doors: MentionDoors;
+  known: KnownNames;
   standing: LinkStanding | undefined;
 }): ReactNode {
   const workspaceId = useWordsWorkspaceId({
@@ -374,7 +389,15 @@ function MentionCard({
   const card = (
     <HoverCard data-mention-card="">
       <HoverCardHead
-        glyph={<MentionGlyph mention={mention} name={name} doors={doors} standing={standing} />}
+        glyph={
+          <MentionGlyph
+            mention={mention}
+            name={name}
+            doors={doors}
+            known={known}
+            standing={standing}
+          />
+        }
         name={standing?.title ?? whole}
         sub={mention.kind === MENTION_KIND.FOLDER ? repository : undefined}
       />
@@ -506,17 +529,6 @@ function MentionChip({
   const name = bareName(mention, written, bare, known, standing);
   const state = mentionState(mention, doors);
   const press = pressOf(mention, target, state, doors, openLink);
-  const face = (
-    <>
-      <span className="mention-chip-glyph">
-        <MentionGlyph mention={mention} name={name} doors={doors} standing={standing} />
-      </span>
-      <span className="mention-chip-label">{name}</span>
-      {standing?.state === undefined ? null : (
-        <span className="mention-chip-state">{standing.state}</span>
-      )}
-    </>
-  );
   const card = (
     <MentionCard
       mention={mention}
@@ -524,37 +536,46 @@ function MentionChip({
       name={name}
       state={state}
       doors={doors}
+      known={known}
       standing={standing}
     />
   );
   return (
-    <Tooltip label={name} card={card}>
-      {press === undefined ? (
-        <span className="mention-chip" data-kind={mention.kind} data-state={state}>
-          {face}
-        </span>
-      ) : (
-        <button
-          type="button"
-          className="mention-chip"
-          data-kind={mention.kind}
-          data-state={state}
-          onClick={(event) => {
-            // Note that the press stops here, because a click into a section opens its editor.
-            event.stopPropagation();
-            press();
-          }}
-        >
-          {face}
-        </button>
-      )}
-    </Tooltip>
+    <InlineRef
+      look={INLINE_REF_LOOK.PILL}
+      glyph={
+        <MentionGlyph
+          mention={mention}
+          name={name}
+          doors={doors}
+          known={known}
+          standing={standing}
+        />
+      }
+      label={name}
+      state={standing?.state}
+      gone={state === MENTION_STATE.GONE}
+      onPress={
+        press === undefined
+          ? undefined
+          : (event) => {
+              // Note that the press stops here, because a click into a section opens its editor.
+              event.stopPropagation();
+              press();
+            }
+      }
+      card={card}
+      data-mention-ref=""
+      data-kind={mention.kind}
+      data-state={state}
+      data-stated={standing?.state === undefined ? undefined : ""}
+    />
   );
 }
 
-/** The glyph a place in Luke wears, the one its tab or its row in the window wears. */
-function PlaceGlyph({ kind }: { kind: LinkPlace["kind"] }): React.JSX.Element {
-  switch (kind) {
+/** The glyph a place in Luke wears, the one its tab or its row in the window wears: an agent's its harness's mark, where the window holds the agent. */
+function PlaceGlyph({ place, known }: { place: LinkPlace; known: KnownNames }): React.JSX.Element {
+  switch (place.kind) {
     case LINK_PLACE.TASK:
     case LINK_PLACE.VERSION:
     case LINK_PLACE.TURN:
@@ -566,7 +587,7 @@ function PlaceGlyph({ kind }: { kind: LinkPlace["kind"] }): React.JSX.Element {
     case LINK_PLACE.CALL:
       return <CallIcon />;
     case LINK_PLACE.AGENT:
-      return <AgentMark provider={undefined} />;
+      return <AgentMark provider={knownProvider(known, place.agentId)} />;
     case LINK_PLACE.WORKER:
       return <BotIcon aria-hidden="true" />;
     case LINK_PLACE.CHANGES:
@@ -613,7 +634,7 @@ function PlaceChip({
   const openLink = useOpenLink();
   const known = useKnownNames("automationId" in place ? place.automationId : undefined);
   const { name, under } = placeChipLook(place, label, known);
-  const glyph = <PlaceGlyph kind={place.kind} />;
+  const glyph = <PlaceGlyph place={place} known={known} />;
   const own = (
     <HoverCard data-mention-card="">
       <HoverCardHead glyph={glyph} name={name} />
@@ -622,21 +643,19 @@ function PlaceChip({
   );
   const card = <PlaceCard place={place} workspace={workspace} name={name} fallback={own} />;
   return (
-    <Tooltip label={name} card={card}>
-      <button
-        type="button"
-        className="mention-chip"
-        data-kind={MENTION_KIND_PLACE}
-        onClick={(event) => {
-          // Note that the press stops here, as a mention's does, because a click into a section opens its editor.
-          event.stopPropagation();
-          openLink(href);
-        }}
-      >
-        <span className="mention-chip-glyph">{glyph}</span>
-        <span className="mention-chip-label">{name}</span>
-      </button>
-    </Tooltip>
+    <InlineRef
+      look={INLINE_REF_LOOK.PILL}
+      glyph={glyph}
+      label={name}
+      onPress={(event) => {
+        // Note that the press stops here, as a mention's does, because a click into a section opens its editor.
+        event.stopPropagation();
+        openLink(href);
+      }}
+      card={card}
+      data-mention-ref=""
+      data-kind={MENTION_KIND_PLACE}
+    />
   );
 }
 
@@ -658,7 +677,7 @@ function PlaceCard({
   fallback: ReactNode;
 }): ReactNode {
   const workspaceId = useWordsWorkspaceId({
-    planId: "planId" in place ? (place.planId ?? NO_PLAN_ID) : NO_PLAN_ID,
+    planId: "planId" in place ? (place.planId ?? NO_TASK_ID) : NO_TASK_ID,
     workspace,
   });
   switch (place.kind) {
@@ -710,7 +729,7 @@ function PlaceCard({
 }
 
 /** The plan of a place that names none, which no plan's id spells. */
-const NO_PLAN_ID = "";
+const NO_TASK_ID = "";
 
 /** The kind a chip of a place in Luke carries beside a mention's kinds, for its styles and a test. */
 const MENTION_KIND_PLACE = "place";

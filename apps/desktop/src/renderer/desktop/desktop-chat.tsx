@@ -1,4 +1,5 @@
-import { EmptyState } from "@luke/ui";
+import { CHANNEL_KIND } from "@luke/features/chat-wire";
+import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, NAV_CURRENT, NavItem } from "@luke/ui";
 import {
   CHAT_PLACE,
   type ChatPlace,
@@ -9,6 +10,7 @@ import {
 } from "@luke/ui/chat-model";
 import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
 import { useMemo } from "react";
+import { SPINNER_SIZE, Spinner } from "../spinner";
 import { ChatPane, MemberMark } from "../tasks/chat-pane";
 import { useMinute } from "../tasks/task-time";
 import { useOpenLink } from "../tasks/use-open-link";
@@ -33,23 +35,18 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
  * press never loses the place being read.
  */
 
+/** What a row's count is read as. */
+const UNREAD = "unread";
+
 /** What the view says where no chat is read. */
 const NO_CHAT = "Chat is not available yet.";
+
+/** What the view says where the workspace's chat could not be read. */
+const CHAT_FAILED = "The workspace's chat could not be read.";
 
 /** Whether a row stands for the place shown. */
 function shows(place: ChatPlace, row: ChatRailRow): boolean {
   return place.kind === CHAT_PLACE.CHANNEL && place.channelId === row.channel.id;
-}
-
-/** A row's unread count at its end, nothing at none. */
-function Count({ count }: { count: number }): React.JSX.Element | null {
-  if (count === 0) return null;
-  return (
-    <span className="chat-rail-count">
-      {count}
-      <span className="visually-hidden"> unread</span>
-    </span>
-  );
 }
 
 /** One channel's or direct message's row: its glyph or the other member's mark, its name, what it says after, and its count. */
@@ -63,24 +60,17 @@ function RailRow({
   onChoose: () => void;
 }): React.JSX.Element {
   return (
-    <li className="sidebar-task-item chat-rail-row">
-      <button
-        type="button"
-        className="sidebar-task"
-        aria-current={current ? "page" : undefined}
-        data-unread={String(row.unread > 0)}
-        data-channel-id={row.channel.id}
+    <li>
+      <NavItem
+        icon={row.other === undefined ? <HashIcon /> : <MemberMark who={row.other} small />}
+        detail={row.sub}
+        current={current ? NAV_CURRENT.PAGE : undefined}
+        unread={row.unread > 0}
+        count={{ value: row.unread, noun: UNREAD }}
         onClick={onChoose}
       >
-        <span className="sidebar-task-line">
-          <span className="sidebar-pinned-tab-glyph">
-            {row.other === undefined ? <HashIcon /> : <MemberMark who={row.other} small />}
-          </span>
-          <span className="sidebar-task-name">{row.label}</span>
-          {row.sub === undefined ? null : <span className="chat-rail-sub">{row.sub}</span>}
-          <Count count={row.unread} />
-        </span>
-      </button>
+        {row.label}
+      </NavItem>
     </li>
   );
 }
@@ -102,12 +92,22 @@ export function DesktopChat({
     () => chatNames(listed, read?.agents ?? [], accountName),
     [listed, read, accountName],
   );
-  if (read === undefined) {
+  if (read === undefined || view.failed) {
+    // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
+    const standIn = view.failed ? (
+      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={view.onRetry}>
+        {CHAT_FAILED}
+      </ErrorState>
+    ) : view.available ? (
+      <Spinner label="Loading chat" size={SPINNER_SIZE.REGION} />
+    ) : (
+      <EmptyState icon={<MessagesSquareIcon />}>{NO_CHAT}</EmptyState>
+    );
     return (
       <div className="chat-view">
         <section className="chat-stream" aria-label="Chat">
           <header className="desktop-toolbar" />
-          <EmptyState icon={<MessagesSquareIcon />}>{NO_CHAT}</EmptyState>
+          {standIn}
         </section>
       </div>
     );
@@ -132,22 +132,16 @@ export function DesktopChat({
         </header>
         <div className="chat-rail-scroll">
           <ul className="sidebar-tasks">
-            <li className="sidebar-task-item chat-rail-row">
-              <button
-                type="button"
-                className="sidebar-task"
-                aria-current={view.place.kind === CHAT_PLACE.FOR_YOU ? "page" : undefined}
-                data-unread={String(rail.forYou > 0)}
+            <li>
+              <NavItem
+                icon={<AtSignIcon />}
+                current={view.place.kind === CHAT_PLACE.FOR_YOU ? NAV_CURRENT.PAGE : undefined}
+                unread={rail.forYou > 0}
+                count={{ value: rail.forYou, noun: UNREAD }}
                 onClick={() => view.onChoose(FOR_YOU)}
               >
-                <span className="sidebar-task-line">
-                  <span className="sidebar-pinned-tab-glyph">
-                    <AtSignIcon />
-                  </span>
-                  <span className="sidebar-task-name">For you</span>
-                  <Count count={rail.forYou} />
-                </span>
-              </button>
+                For you
+              </NavItem>
             </li>
           </ul>
           <h2 className="chat-rail-heading">Channels</h2>
@@ -170,5 +164,58 @@ export function DesktopChat({
         onAnswer={view.onAnswer}
       />
     </div>
+  );
+}
+
+/** What the plan's Chat tab says where its plan has no channel yet. */
+const NO_TASK_CHANNEL = "Nothing is posted in this task's channel yet.";
+
+/**
+ * The plan's own Chat tab, in the plan's column: its channel of the
+ * workspace's chat, at reading size, as the window's Chat shows it, its
+ * composer posting there. A plan whose channel is not opened yet, which
+ * its first post opens, says so; a chat not read yet waits on the read.
+ */
+export function TaskChatTab({
+  tasks,
+  taskId,
+}: {
+  tasks: TasksControl;
+  taskId: string;
+}): React.JSX.Element {
+  const view = tasks.chatView;
+  const now = useMinute();
+  const openLink = useOpenLink();
+  const read = view.chat;
+  const listed = tasks.tasks;
+  const names = useMemo(() => chatNames(listed, read?.agents ?? [], undefined), [listed, read]);
+  const channel = read?.answer.channels.find(
+    (each) => each.kind === CHANNEL_KIND.PLAN && each.planId === taskId,
+  );
+  if (read === undefined || channel === undefined) {
+    return (
+      <section className="chat-stream task-chat" aria-label="Chat">
+        {view.failed ? (
+          <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={view.onRetry}>
+            {CHAT_FAILED}
+          </ErrorState>
+        ) : read === undefined && view.available ? (
+          <Spinner label="Loading chat" size={SPINNER_SIZE.REGION} />
+        ) : (
+          <EmptyState icon={<MessagesSquareIcon />}>{NO_TASK_CHANNEL}</EmptyState>
+        )}
+      </section>
+    );
+  }
+  return (
+    <ChatPane
+      chat={read.answer}
+      names={names}
+      place={{ kind: CHAT_PLACE.CHANNEL, channelId: channel.id }}
+      now={now}
+      openLink={openLink}
+      onPost={view.onPost}
+      onAnswer={view.onAnswer}
+    />
   );
 }

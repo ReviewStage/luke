@@ -28,6 +28,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
@@ -117,7 +118,7 @@ function task(
   ago: number,
   agents: readonly TaskAgentLine[] = [],
 ): TaskSummary {
-  const plan: TaskSummary = {
+  const summary: TaskSummary = {
     id: `11111111-0000-4000-8000-${String(n).padStart(12, "0")}`,
     workspaceId: ACME.id,
     name,
@@ -127,9 +128,9 @@ function task(
     ownerId: createdBy.userId,
     createdBy,
   };
-  if (agents.length === 0) return plan;
+  if (agents.length === 0) return summary;
   return {
-    ...plan,
+    ...summary,
     agents: {
       total: agents.length,
       working: 0,
@@ -154,7 +155,7 @@ const RETRIES = task(1, "Relay retries on 502", CHARLES, 12 * MINUTE, [BACKOFF, 
 const CACHE = task(2, "Edge cache keys", DEAN, 3 * 60 * MINUTE, [CACHE_KEYS]);
 const DASHBOARD = task(3, "Retry budget dashboard", CHARLES, 2 * 24 * 60 * MINUTE);
 const SHIM = task(4, "Old auth shim removal", PRIYA, 9 * 24 * 60 * MINUTE);
-const PLANS = [RETRIES, CACHE, DASHBOARD, SHIM];
+const TASKS = [RETRIES, CACHE, DASHBOARD, SHIM];
 
 function item(n: number, title: string, agentId: string, ago: number): InboxItem {
   return {
@@ -201,19 +202,14 @@ beforeEach(() => {
   automationsRefused = false;
   inboxHeld = false;
   copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   window.localStorage.clear();
   fakeAppBridge({
-    onMenuCommand: () => () => undefined,
-    recordSurfaceEvent: () => undefined,
     act: (request: Act) => {
       const inbox =
         request.kind === ACT_KIND.CODING_AGENTS_INBOX ||
         request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX;
       if (inbox && inboxHeld) return new Promise(() => undefined);
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-        copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      }
       if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
       }
@@ -269,14 +265,14 @@ function mountWith(
   memberCount = MEMBERS.length,
 ) {
   const opened: Opened = { plans: [], agents: [], inbox: [], settings: [] };
-  const plans = tasksControl({
+  const tasks = tasksControl({
     me: DEAN.userId,
     workspace: { ...ACME, memberCount },
-    tasks: PLANS,
-    listed: { tasks: PLANS, archived: [], ...HOLDING },
+    tasks: TASKS,
+    listed: { tasks: TASKS, archived: [], ...HOLDING },
     ...HOLDING,
-    onSelect: (planId) => opened.plans.push(planId),
-    onShowAgent: (planId, agentId) => opened.agents.push([planId, agentId]),
+    onSelect: (taskId) => opened.plans.push(taskId),
+    onShowAgent: (taskId, agentId) => opened.agents.push([taskId, agentId]),
     inboxView: {
       open: false,
       chosen: undefined,
@@ -298,7 +294,7 @@ function mountWith(
         createElement(
           OpenSettingsProvider,
           { value: (link: SettingsLink) => opened.settings.push(link) },
-          createElement(PersonPage, { tasks: plans, userId, name }),
+          createElement(PersonPage, { tasks: tasks, userId, name }),
         ),
       ),
     ),
@@ -317,7 +313,9 @@ function sections(page: HTMLElement): Record<string, string[]> {
   return Object.fromEntries(
     [...page.querySelectorAll("section.home-section")].map((section) => [
       section.getAttribute("aria-label"),
-      [...section.querySelectorAll(".sidebar-task-name")].map((name) => name.textContent),
+      [...section.querySelectorAll(".sidebar-task-name, .luke-list-row-title")].map(
+        (name) => name.textContent,
+      ),
     ]),
   );
 }

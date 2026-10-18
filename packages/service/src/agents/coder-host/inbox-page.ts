@@ -18,6 +18,7 @@ import {
   taskInboxStamps,
 } from "../../inbox/inbox-store.js";
 import { CODER } from "./bounds.js";
+import { chatWaitingEntries, chatWaitingStamps } from "./chat-waiting.js";
 
 /**
  * inbox-page.ts -- a task's inbox as the desktop reads it, and what waits across the account: each held open while nothing changed since the reader's cursor.
@@ -45,15 +46,19 @@ import { CODER } from "./bounds.js";
  * ride beside the tasks' under keys of their own, and move the same cursor.
  * So does the newest run of each of the account's own automations that
  * failed to start in the last `FAILED_RUN_WINDOW`, which is no item, but
- * is what its owner is told of whichever plan is open.
+ * is what its owner is told of whichever plan is open, and so does what
+ * waits on the account in chat (`chat-waiting.ts`): its stamps are digested
+ * with the items', so an ask or a notice landing wakes the held read as an
+ * item does.
  */
 
 /** How far back a run that failed to start is still carried to its automation's owner. */
 const FAILED_RUN_WINDOW = Duration.days(7);
 
-/** What a cursor digests of one thing it covers, an item or a failed run. */
+/** What a cursor digests of one thing it covers, an item, whose stamp says whether it is unread for the reader, or a failed run. */
 type InboxCursorStamp = Pick<InboxStamp, "id" | "revision" | "updatedAt"> & {
   readonly status: string;
+  readonly unread?: boolean;
 };
 
 /** Waits until the inbox moves past the reader's cursor, or a transcript read's hold ends. */
@@ -109,6 +114,16 @@ export function taskInboxPast(
   );
 }
 
+/** Where everything that waits on the account stands: its open items, its planless agents' among them, its automations' failed runs, and what waits in chat. */
+function accountStamps(userId: string): InboxStoreEffect<readonly InboxCursorStamp[]> {
+  return Effect.gen(function* () {
+    const items = yield* accountWaitingStamps(userId);
+    const runs = failedRunStamps(yield* failedRunsOf(userId));
+    const chat = yield* chatWaitingStamps(userId);
+    return [...items, ...runs, ...chat];
+  });
+}
+
 /**
  * What waits on the developer across the account, held while its cursor is
  * still the reader's, and when it was read. Note that the instant is taken
@@ -121,20 +136,28 @@ export function accountInboxPast(
 ): InboxStoreEffect<AccountInboxAnswer> {
   const read = Effect.gen(function* () {
     const readAt = yield* Clock.currentTimeMillis;
+    // Note that the cursor is read before what it stands for, so a change landing between them wakes the reader again rather than being lost.
+    const cursor = cursorOf(yield* accountStamps(userId));
     const rows = yield* accountWaitingItems(userId);
     const tasks = yield* accountInboxTasks(userId);
     const tasklessRows = yield* accountTasklessItems(userId);
     const automations = yield* accountInboxAutomations(userId);
     const failedRuns = yield* failedRunsOf(userId);
+    const chat = yield* chatWaitingEntries(userId);
     const items = rows.map(({ status: _status, ...entry }) => entry);
-    const planless = tasklessRows.map(({ status: _status, ...entry }) => entry);
-    const cursor = cursorOf([...rows, ...tasklessRows, ...failedRunStamps(failedRuns)]);
-    return { items, plans: tasks, planless, automations, failedRuns, cursor, readAt };
+    const taskless = tasklessRows.map(({ status: _status, ...entry }) => entry);
+    return {
+      items,
+      plans: tasks,
+      planless: taskless,
+      automations,
+      failedRuns,
+      chat,
+      cursor,
+      readAt,
+    };
   });
-  const stamps = Effect.zipWith(
-    accountWaitingStamps(userId),
-    Effect.map(failedRunsOf(userId), failedRunStamps),
-    (items, runs) => [...items, ...runs],
+  return heldUntilMoved(accountStamps(userId), after, CODER.ACCOUNT_INBOX_POLL).pipe(
+    Effect.andThen(read),
   );
-  return heldUntilMoved(stamps, after, CODER.ACCOUNT_INBOX_POLL).pipe(Effect.andThen(read));
 }

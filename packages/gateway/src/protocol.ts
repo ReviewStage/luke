@@ -51,9 +51,9 @@ export const GATEWAY_METHOD = {
   /** One folder of one task's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_TREE: "tasks.tree",
   /** The skills a developer may choose of one task's repository, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
-  TASKS_SKILLS: "planning.skills",
+  TASKS_SKILLS: "tasks.skills",
   /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
-  TASKS_PULL_REQUEST: "planning.pullRequest",
+  TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_ISSUE: "tasks.issue",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
@@ -61,13 +61,13 @@ export const GATEWAY_METHOD = {
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISION: "tasks.revision",
   /** One version of one page of one plan with its HTML, read from the service for the frame that draws it; answered to the caller, never held in the view. */
-  TASKS_PAGE: "planning.page",
+  TASKS_PAGE: "tasks.page",
   /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the caller, never held in the view. */
-  TASKS_PAGES: "planning.pages",
+  TASKS_PAGES: "tasks.pages",
   /** One picture of one plan, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
-  TASKS_PICTURE: "planning.picture",
+  TASKS_PICTURE: "tasks.picture",
   /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
-  TASKS_PICTURE_KEEP: "planning.pictureKeep",
+  TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /** One revision of one plan put back as its content on the service; the view takes the task as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
   /** The developer's scene of the open task's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
@@ -155,6 +155,8 @@ export const GATEWAY_METHOD = {
   ISSUES_READ: "issues.read",
   ISSUES_CREATE: "issues.create",
   ISSUES_CHANGE: "issues.change",
+  /** A workspace's Factory world, read whole as it stands now. */
+  FACTORY_WORLD: "factory.world",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
@@ -191,6 +193,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   /** One item of a task's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  /** One message of the account's on an item's thread, open or settled, under the panel's own key; the item as it then stands, its thread with the message on it, or why there is no answer. */
+  CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
   /** A workspace's chat past a cursor: what a person in it sees of it, held open by the service while nothing moved. */
   CODING_AGENTS_CHAT: "codingAgents.chat",
   /** A write to a workspace's chat as the account's own member: a post, an answer to an ask, a resolve, or how far it has read; what the write came to, or why there is no answer. */

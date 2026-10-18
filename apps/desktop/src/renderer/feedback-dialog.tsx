@@ -19,10 +19,10 @@
  * title names one (opened from that experiment's row in Settings ›
  * Experimental), and — only while "Include my name and email" is
  * ticked — the signed-in account's name and address, the line beside the
- * box reads out. Nothing else rides along, a credential least of all. The
- * whole card is left out of the screen recording (`ph-no-capture`), because a
- * screenshot is a picture of the person's screen and could carry another
- * app's words.
+ * box reads out. Nothing else rides along, a credential least of all. All the
+ * card holds between its title and its answers is left out of the screen
+ * recording (`ph-no-capture`), because a screenshot is a picture of the
+ * person's screen and could carry another app's words.
  */
 
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
@@ -35,16 +35,25 @@ import {
 } from "@luke/features/feedback";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENTS, type Experiment } from "@luke/settings";
-import { ImageIcon, RemoveIcon } from "@luke/ui";
+import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
+import {
+  AttachmentChip,
+  BUTTON_VARIANT,
+  Button,
+  Checkbox,
+  DIALOG_SIZE,
+  Dialog,
+  ErrorState,
+  IconButton,
+  ImageIcon,
+  TextArea,
+} from "@luke/ui";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration } from "effect";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { encodeImage, imageFiles } from "./feedback-images";
-import { ModalShell } from "./modal-shell";
 import { Shortcut } from "./shortcut";
-import { BusyLabel } from "./spinner";
 import { TOAST_TONE, type ToastNotice, useToast } from "./toast";
 import { Tooltip } from "./tooltip";
 
@@ -77,6 +86,9 @@ const IMAGE_REFUSAL = {
 } as const;
 
 const SEND_REFUSAL = "Could not send that. Try again.";
+
+/** How many lines the empty note stands tall before it grows with its words. */
+const MESSAGE_ROWS = 5;
 
 /** The chord that sends from anywhere in the dialog, as Send draws and announces it. */
 const SEND_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
@@ -173,32 +185,6 @@ async function takenImages(
   return { images };
 }
 
-/** One screenshot coming along, small enough to recognise, with the way to take it off. */
-function ImageThumbnail({
-  image,
-  busy,
-  onRemove,
-}: {
-  image: FeedbackImage;
-  busy: boolean;
-  onRemove: () => void;
-}): React.JSX.Element {
-  return (
-    <li className="feedback-dialog-image">
-      <img src={feedbackImageUrl(image)} alt={image.name} />
-      <button
-        type="button"
-        className="corner-dismiss"
-        aria-label={`Remove ${image.name}`}
-        disabled={busy}
-        onClick={onRemove}
-      >
-        <RemoveIcon />
-      </button>
-    </li>
-  );
-}
-
 /**
  * The dialog for the kind asked for, while one is, and the thank-you after a
  * send lands. Always mounted by the app, because the drafts it keeps between
@@ -237,7 +223,6 @@ export function FeedbackDialog({
   const open = kind !== undefined;
   const field = useRef<HTMLTextAreaElement | null>(null);
   const picker = useRef<HTMLInputElement | null>(null);
-  const titleId = useId();
   const signatureId = useId();
   const signature = accountSignature(account);
 
@@ -337,18 +322,18 @@ export function FeedbackDialog({
     void send();
   };
 
-  const ready = hasWords(draft) && !busy;
   const full = draft.images.length >= FEEDBACK_LIMITS.MAX_IMAGES;
 
   return kind === undefined ? null : (
     // The whole dimmed window takes a dropped screenshot.
-    <ModalShell
-      className="feedback-dialog ph-no-capture"
-      labelledBy={titleId}
+    <Dialog
+      size={DIALOG_SIZE.WIDE}
+      title={dialogTitle(kind, about)}
       busy={busy}
       initialFocus={field}
       onDismiss={() => close(false)}
       onKeyDown={sendKey}
+      dropping={dropping}
       dropTarget={{
         onDragOver: (event) => {
           if (!carriesFiles(event)) return;
@@ -365,119 +350,106 @@ export function FeedbackDialog({
           void attach(imageFiles(event.dataTransfer.files));
         },
       }}
-      data-dropping={String(dropping)}
-    >
-      <h2 id={titleId} className="confirm-dialog-title">
-        {dialogTitle(kind, about)}
-      </h2>
-      <textarea
-        ref={field}
-        className="feedback-dialog-message"
-        aria-label={FEEDBACK_COPY[kind].field}
-        placeholder={FEEDBACK_COPY[kind].placeholder}
-        maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
-        value={draft.message}
-        disabled={busy}
-        onChange={(event) => changeDraft({ message: event.target.value })}
-        onPaste={(event) => {
-          // A screenshot on the clipboard is an attachment, not text
-          // that failed to paste; text pastes as it always does.
-          const pasted = imageFiles(event.clipboardData.files);
-          if (pasted.length === 0) return;
-          event.preventDefault();
-          void attach(pasted);
-        }}
-      />
-      {draft.images.length > 0 ? (
-        <ul className="feedback-dialog-images" aria-label="Screenshots">
-          {draft.images.map((image, index) => (
-            <ImageThumbnail
-              key={`${image.name}-${String(index)}`}
-              image={image}
-              busy={busy}
-              onRemove={() =>
-                changeDraft({
-                  images: latestDrafts()[kind].images.filter((_, held) => held !== index),
-                })
-              }
+      actionsStart={
+        <>
+          <Tooltip label="Attach screenshot">
+            <IconButton
+              icon={<ImageIcon />}
+              label="Attach screenshot"
+              disabled={busy || full}
+              onClick={() => picker.current?.click()}
             />
-          ))}
-        </ul>
-      ) : null}
-      {signature ? (
-        <div className="feedback-dialog-signature">
-          <label>
-            <input
-              type="checkbox"
+          </Tooltip>
+          <input
+            ref={picker}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={(event) => {
+              const picked = imageFiles(event.currentTarget.files);
+              // Cleared so the same file can be picked again after a removal.
+              event.currentTarget.value = "";
+              void attach(picked);
+            }}
+          />
+        </>
+      }
+      actions={
+        <>
+          <Button variant={BUTTON_VARIANT.QUIET} disabled={busy} onClick={() => close(true)}>
+            Cancel
+          </Button>
+          <Button
+            variant={BUTTON_VARIANT.PRIMARY}
+            aria-keyshortcuts={shortcutAria(SEND_CHORD)}
+            disabled={!hasWords(draft)}
+            busy={busy}
+            busyLabel="Sending"
+            onClick={() => void send()}
+          >
+            Send
+            <Shortcut chord={SEND_CHORD} />
+          </Button>
+        </>
+      }
+    >
+      <div className="feedback-dialog ph-no-capture">
+        <TextArea
+          ref={field}
+          label={FEEDBACK_COPY[kind].field}
+          placeholder={FEEDBACK_COPY[kind].placeholder}
+          maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
+          value={draft.message}
+          disabled={busy}
+          rows={MESSAGE_ROWS}
+          grow
+          onChange={(message) => changeDraft({ message })}
+          onPaste={(event) => {
+            // A screenshot on the clipboard is an attachment, not text
+            // that failed to paste; text pastes as it always does.
+            const pasted = imageFiles(event.clipboardData.files);
+            if (pasted.length === 0) return;
+            event.preventDefault();
+            void attach(pasted);
+          }}
+        />
+        {draft.images.length > 0 ? (
+          <ul className="feedback-dialog-images" aria-label="Screenshots">
+            {draft.images.map((image, index) => (
+              <AttachmentChip
+                key={`${image.name}-${String(index)}`}
+                name={image.name}
+                image={feedbackImageUrl(image)}
+                removeDisabled={busy}
+                onRemove={() =>
+                  changeDraft({
+                    images: latestDrafts()[kind].images.filter((_, held) => held !== index),
+                  })
+                }
+              />
+            ))}
+          </ul>
+        ) : null}
+        {signature ? (
+          <div className="feedback-dialog-signature">
+            <Checkbox
               checked={draft.signed}
               disabled={busy}
               aria-describedby={signatureId}
-              onChange={(event) => changeDraft({ signed: event.target.checked })}
-            />
-            Include my name and email
-          </label>
-          <span
-            id={signatureId}
-            className="feedback-dialog-identity"
-            data-signed={String(draft.signed)}
-          >
-            {draft.signed
-              ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`
-              : null}
-          </span>
-        </div>
-      ) : null}
-      {rejection === undefined ? null : (
-        <p className="error-message" role="alert">
-          {rejection}
-        </p>
-      )}
-      <div className="confirm-dialog-actions">
-        <Tooltip label="Attach screenshot">
-          <button
-            type="button"
-            className="icon-button feedback-dialog-attach"
-            aria-label="Attach screenshot"
-            disabled={busy || full}
-            onClick={() => picker.current?.click()}
-          >
-            <ImageIcon />
-          </button>
-        </Tooltip>
-        <input
-          ref={picker}
-          type="file"
-          accept="image/*"
-          multiple
-          hidden
-          onChange={(event) => {
-            const picked = imageFiles(event.currentTarget.files);
-            // Cleared so the same file can be picked again after a removal.
-            event.currentTarget.value = "";
-            void attach(picked);
-          }}
-        />
-        <button
-          type="button"
-          className="toolbar-button"
-          disabled={busy}
-          onClick={() => close(true)}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="primary-button"
-          aria-keyshortcuts={shortcutAria(SEND_CHORD)}
-          disabled={!ready}
-          onClick={() => void send()}
-        >
-          <BusyLabel busy={busy} label="Sending">
-            Send
-          </BusyLabel>
-          <Shortcut chord={SEND_CHORD} />
-        </button>
+              onChange={(signed) => changeDraft({ signed })}
+            >
+              Include my name and email
+            </Checkbox>
+            <span id={signatureId} className="feedback-dialog-identity">
+              {draft.signed
+                ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`
+                : null}
+            </span>
+          </div>
+        ) : null}
+        {rejection === undefined ? null : <ErrorState>{rejection}</ErrorState>}
       </div>
-    </ModalShell>
+    </Dialog>
   );
 }

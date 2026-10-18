@@ -37,7 +37,6 @@ const roots: Root[] = [];
 beforeEach(() => {
   fakeAppBridge({
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }),
-    recordSurfaceEvent: () => undefined,
   });
 });
 
@@ -88,7 +87,7 @@ test("a link lists its workspace, turns to Settings and its page, and lands on i
   assert.deepEqual(turned, [ACME.id, PANEL_TAB.SETTINGS, SETTINGS_VIEW.WORKSPACE]);
   assert.equal(landed.on?.querySelector("h2")?.textContent, "Integrations");
   assert.ok(
-    [...(landed.on?.querySelectorAll(".settings-row strong") ?? [])].some(
+    [...(landed.on?.querySelectorAll('.luke-settings-row [id$="label"]') ?? [])].some(
       (name) => name.textContent === "GitHub",
     ),
     "the group the old GitHub repositories link names holds GitHub's row",

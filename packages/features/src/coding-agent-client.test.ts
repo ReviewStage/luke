@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "@luke/wire/testing";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { MEMBER_KIND } from "./chat-wire.js";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
@@ -237,6 +238,105 @@ it.effect(
 );
 
 it.effect(
+  "writes a message on an inbox item's thread at the item's own path, its words trimmed, answers the item as it then stands, names a refusal as a message's, and sends nothing that carries neither words nor files",
+  () =>
+    Effect.gen(function* () {
+      const itemId = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
+      const item = {
+        id: itemId,
+        agentId: AGENT_ID,
+        key: "invite-copy",
+        revision: 1,
+        version: 4,
+        title: "What should the invitation email say?",
+        blocks: [],
+        response: { type: "text" },
+        needsReply: true,
+        status: "answered",
+        messages: [
+          {
+            id: "6e3c9a1f-2b4d-4f70-8c8e-3d5f7b9c1e2a",
+            author: "member",
+            member: { userId: "user-dana", name: "Dana" },
+            text: "Drop the emoji.",
+            createdAt: 2,
+          },
+        ],
+        postedAt: 1,
+        updatedAt: 2,
+      };
+      const path = `POST /api/inbox/${itemId}/messages`;
+      const api = fakeCloudApi({ [path]: { answer: () => ({ item }) } });
+      const refusing = fakeCloudApi({
+        [path]: {
+          answer: () => ({ error: HOSTED_API_ERROR.AGENT_NOT_READY }),
+          status: HTTP_STATUS.CONFLICT,
+        },
+      });
+      const message = { text: "  Drop the emoji.  ", clientKey: "key-1" };
+
+      const sent = yield* Effect.provide(client().messageInbox(itemId, message), api.layer);
+      const refused = yield* Effect.provide(client().messageInbox(itemId, message), refusing.layer);
+      const empty = yield* Effect.provide(
+        client().messageInbox(itemId, { text: " ", clientKey: "key-2" }),
+        api.layer,
+      );
+
+      assert.deepEqual(sent, { item });
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "null"), {
+        text: "Drop the emoji.",
+        clientKey: "key-1",
+      });
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
+      assert.deepEqual(empty, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.equal(api.requests().length, 1, "nothing is sent for a message of neither");
+    }),
+);
+
+it.effect(
+  "marks an inbox item read with a PUT and unread with a DELETE at the item's read path, every item read with a PUT naming the workspace, reads an item the account cannot reach as not found, and sends nothing for a workspace that is no id",
+  () =>
+    Effect.gen(function* () {
+      const itemId = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
+      const api = fakeCloudApi({
+        [`PUT /api/inbox/${itemId}/read`]: { answer: () => ({ id: itemId, unread: false }) },
+        [`DELETE /api/inbox/${itemId}/read`]: { answer: () => ({ id: itemId, unread: true }) },
+        "PUT /api/inbox/read": { answer: () => ({ marked: 3 }) },
+      });
+      const refusing = fakeCloudApi({
+        [`PUT /api/inbox/${itemId}/read`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+
+      const read = yield* Effect.provide(client().markInboxItemRead(itemId), api.layer);
+      const unread = yield* Effect.provide(client().markInboxItemUnread(itemId), api.layer);
+      const all = yield* Effect.provide(
+        client().markInboxRead({ workspaceId: WORKSPACE_ID }),
+        api.layer,
+      );
+      const everywhere = yield* Effect.provide(client().markInboxRead(), api.layer);
+      const missing = yield* Effect.provide(client().markInboxItemRead(itemId), refusing.layer);
+      const malformed = yield* Effect.provide(
+        client().markInboxRead({ workspaceId: "" }),
+        api.layer,
+      );
+
+      assert.deepEqual(read, { id: itemId, unread: false });
+      assert.deepEqual(unread, { id: itemId, unread: true });
+      assert.deepEqual([all, everywhere], [{ marked: 3 }, { marked: 3 }]);
+      assert.deepEqual(
+        api.requests().map((sent) => sent.body),
+        [undefined, undefined, JSON.stringify({ workspaceId: WORKSPACE_ID }), "{}"],
+      );
+      assert.deepEqual(missing, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(malformed, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.equal(api.requests().length, 4, "nothing is sent for a workspace that is no id");
+    }),
+);
+
+it.effect(
   "lists a workspace's agents by its id and the repository named, and a workspace the account is not in as not found",
   () =>
     Effect.gen(function* () {
@@ -410,5 +510,42 @@ it.effect(
         );
         assert.deepEqual(refused, { failure }, error);
       }
+    }),
+);
+
+it.effect(
+  "a Start outlasts the usual deadline, since one from another agent copies its work first, and answers unanswered only past its own",
+  () =>
+    Effect.gen(function* () {
+      const request = { idempotencyKey: "press-1", from: { agentId: AGENT_ID } };
+      let answer: (response: Response) => void = () => undefined;
+      const slow = recordingHttpClient(
+        () =>
+          new Promise<Response>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      const asked = yield* Effect.forkChild(
+        Effect.provide(client().start(TASK_ID, request), slow.layer),
+      );
+      yield* TestClock.adjust("30 seconds");
+      answer(
+        new Response(JSON.stringify({ agent: AGENT }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+      assert.deepEqual(yield* Fiber.join(asked), { agent: AGENT });
+
+      const silent = recordingHttpClient(() => new Promise<Response>(() => undefined));
+      const unanswered = yield* Effect.forkChild(
+        Effect.provide(client().start(TASK_ID, request), silent.layer),
+      );
+      yield* TestClock.adjust("119 seconds");
+      assert.equal(unanswered.pollUnsafe(), undefined, "still waiting short of its deadline");
+      yield* TestClock.adjust("1 second");
+      assert.deepEqual(yield* Fiber.join(unanswered), {
+        failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+      });
     }),
 );

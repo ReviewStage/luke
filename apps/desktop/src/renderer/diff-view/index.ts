@@ -1,5 +1,10 @@
 import { DIFF_FONT, DIFF_LAYOUT, DIFF_LINE_HEIGHT } from "@luke/settings/diff-view";
-import { type FileDiffOptions, getSingularPatch, FileDiff as PierreFileDiff } from "@pierre/diffs";
+import {
+  type DiffLineAnnotation,
+  type FileDiffOptions,
+  getSingularPatch,
+  FileDiff as PierreFileDiff,
+} from "@pierre/diffs";
 import { FIND_SHADOW_ATTRIBUTE } from "../find-matches";
 import type { DiffLook, DiffViewHandle, DiffViewModule, DiffViewProps } from "./contract";
 import { adoptShadowStyles } from "./inline-styles";
@@ -7,8 +12,8 @@ import { adoptShadowStyles } from "./inline-styles";
 /**
  * index.ts -- the diff bundle: a patch drawn by Pierre's diffs as every diff setting says, in the panel's colours.
  *
- * Built on its own as `diff-view.js` (`scripts/build.mjs`), an ES module
- * split into chunks, and loaded by the first diff shown, so the bundle every
+ * An entry of the renderer's build (`scripts/build.mjs`), imported by the
+ * first diff shown (`../bundle-loader.ts`), so the bundle every
  * window parses never carries Pierre or Shiki; each language's grammar and
  * each syntax theme is a chunk of its own, fetched the first time it is
  * drawn. Shiki colours the code in the theme chosen for each appearance,
@@ -37,16 +42,19 @@ import { adoptShadowStyles } from "./inline-styles";
  * Between two hunks of a file stands how many unchanged lines they leave
  * out, with no offer to show them, since the service reads the patch alone
  * and those lines are not at hand; an excerpt, a review thread's lines,
- * says nothing of the lines around it.
+ * says nothing of the lines around it. A note under a line, a review
+ * thread's, is the element the view keeps for its key, which Pierre stands
+ * in the host's light DOM, slotted under its line, so the panel's own
+ * stylesheets draw it and the view fills it as it does any of its own.
  */
 
 /** Each font's stack, ending in the window's own code type should the Mac lack it. */
 const FONT_STACK = {
-  [DIFF_FONT.SF_MONO]: "var(--font-mono)",
-  [DIFF_FONT.MENLO]: "Menlo, var(--font-mono)",
-  [DIFF_FONT.MONACO]: "Monaco, var(--font-mono)",
-  [DIFF_FONT.COURIER_NEW]: '"Courier New", var(--font-mono)',
-  [DIFF_FONT.ANDALE_MONO]: '"Andale Mono", var(--font-mono)',
+  [DIFF_FONT.SF_MONO]: "var(--luke-font-mono)",
+  [DIFF_FONT.MENLO]: "Menlo, var(--luke-font-mono)",
+  [DIFF_FONT.MONACO]: "Monaco, var(--luke-font-mono)",
+  [DIFF_FONT.COURIER_NEW]: '"Courier New", var(--luke-font-mono)',
+  [DIFF_FONT.ANDALE_MONO]: '"Andale Mono", var(--luke-font-mono)',
 } as const satisfies Record<DiffLook["font"], string>;
 
 /** Each line height as a ratio of the type's size, so a line grows with its type; the File tab's 1.6 at normal. */
@@ -124,9 +132,24 @@ function look(): CSSStyleSheet {
   return lookSheet;
 }
 
-/** Pierre's options for what is drawn and how: a whole file's patch, or an excerpt with nothing said of the lines around it. */
-function optionsOf(drawn: DiffLook, excerpt: boolean): FileDiffOptions<undefined, undefined> {
-  return {
+/** A note's place as Pierre takes it, its key carried as the note's own. */
+function annotationsOf(props: DiffViewProps): DiffLineAnnotation<string>[] {
+  return (props.annotations ?? []).map((note) => ({
+    side: note.side,
+    lineNumber: note.line,
+    metadata: note.key,
+  }));
+}
+
+/**
+ * Pierre's options for what is drawn and how: a whole file's patch, or an
+ * excerpt with nothing said of the lines around it, and each note drawn in
+ * the element the view keeps for its key.
+ */
+function optionsOf(props: DiffViewProps): FileDiffOptions<string, undefined> {
+  const { look: drawn, renderAnnotation } = props;
+  const excerpt = props.excerpt === true;
+  const options: FileDiffOptions<string, undefined> = {
     theme: drawn.themes,
     themeType: "system",
     preferredHighlighter: "shiki-js",
@@ -140,6 +163,11 @@ function optionsOf(drawn: DiffLook, excerpt: boolean): FileDiffOptions<undefined
     hunkSeparators: excerpt ? "simple" : "line-info-basic",
     disableFileHeader: true,
   };
+  if (renderAnnotation !== undefined) {
+    options.renderAnnotation = (note: DiffLineAnnotation<string>) =>
+      renderAnnotation(note.metadata);
+  }
+  return options;
 }
 
 /** Sets the diff's type on its host, through the CSSOM, whose `--diffs-*` properties the shadow root inherits over its own. */
@@ -159,12 +187,10 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
   const root = container.shadowRoot ?? container.attachShadow({ mode: "open" });
   const release = adoptShadowStyles(root, look());
   typeset(container, props.look);
-  const view = new PierreFileDiff<undefined, undefined>(
-    optionsOf(props.look, props.excerpt === true),
-  );
+  const view = new PierreFileDiff<string, undefined>(optionsOf(props));
   let patch = props.patch;
   let fileDiff = getSingularPatch(patch);
-  view.render({ fileDiff, fileContainer: container });
+  view.render({ fileDiff, fileContainer: container, lineAnnotations: annotationsOf(props) });
   view.setSelectedLines(props.selected ?? null);
   return {
     update: (next) => {
@@ -173,8 +199,13 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
         fileDiff = getSingularPatch(patch);
       }
       typeset(container, next.look);
-      view.setOptions(optionsOf(next.look, next.excerpt === true));
-      view.render({ fileDiff, fileContainer: container, forceRender: true });
+      view.setOptions(optionsOf(next));
+      view.render({
+        fileDiff,
+        fileContainer: container,
+        forceRender: true,
+        lineAnnotations: annotationsOf(next),
+      });
       view.setSelectedLines(next.selected ?? null);
     },
     unmount: () => {
@@ -185,6 +216,4 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
   };
 }
 
-const module: DiffViewModule = { mount };
-
-window.lukeDiffView = module;
+export const diffView: DiffViewModule = { mount };

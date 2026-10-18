@@ -4,20 +4,24 @@ import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { useConfirmDialog } from "@luke/ui";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, type ReactElement, type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
-import { DOCUMENT_TASK } from "#testing/document-task";
 import {
   DIAGRAM_APPEARANCE,
   DIAGRAM_DRAWING,
   type DiagramAppearance,
   type DiagramDrawing,
-} from "./diagram/contract";
+  type DiagramModule,
+} from "@luke/ui/diagram-contract";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement, type ReactElement, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { onRegistry } from "#testing/copy-feedback";
+import { DOCUMENT_TASK } from "#testing/document-task";
+import { landedBundles, onSideBundles } from "#testing/side-bundles";
+import type { SideBundles } from "./bundle-loader";
 import { MarkdownMessage } from "./markdown-message";
 import { PlanBody } from "./tasks/plan-body";
 import { HISTORY_READ } from "./tasks/use-plan-history";
@@ -30,7 +34,7 @@ import { VersionView } from "./tasks/version-view";
  * whose code a version changed is drawn as its code with the changes marked;
  * and every other fence, and every fence where the words are not a plan's,
  * stays code. Mermaid cannot lay out under jsdom, so the bundle stands in at
- * its one boundary, `window.lukeDiagram`, answering a picture named by the
+ * its one boundary, the bundle's importer, answering a picture named by the
  * code and the appearance it was asked in. Synthetic plan.
  */
 
@@ -48,10 +52,17 @@ function pictureOf(code: string, appearance: DiagramAppearance): string {
   return `data:image/svg+xml,${encodeURIComponent(`${appearance}:${code}`)}`;
 }
 
-// The bundle already loaded, as it is once a diagram has been shown in this window.
-window.lukeDiagram = {
+/** The diagram bundle's stand-in. */
+const STAND_IN: DiagramModule = {
   draw: (code, appearance) => Promise.resolve(stoodInDrawing(code, appearance)),
 };
+
+let bundles: SideBundles;
+
+// The bundle already landed, as it is once a diagram has been shown in this window.
+beforeAll(async () => {
+  bundles = await Effect.runPromise(landedBundles({ diagram: () => Promise.resolve(STAND_IN) }));
+});
 
 /** Whether the window is in its dark appearance, and who hears it flip. */
 const appearance = { dark: false, listeners: new Set<() => void>() };
@@ -74,7 +85,6 @@ beforeEach(() => {
   fakeAppBridge({
     act: (): Promise<ActOutcome> =>
       Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-    recordSurfaceEvent: () => undefined,
   });
 });
 
@@ -94,13 +104,13 @@ async function drawn(node: ReactElement): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), node)));
+  act(() => root.render(onRegistry(AtomRegistry.make(), onSideBundles(bundles, node))));
   await settle();
   return container;
 }
 
 /** A plan whose text holds `fence` under a heading. */
-function planWith(fence: string): Task {
+function taskWith(fence: string): Task {
   return { ...DOCUMENT_TASK, document: { body: `## Flow\n\n${fence}\n`, assumptions: [] } };
 }
 
@@ -148,7 +158,7 @@ test("a Mermaid fence on a plan's page draws as the picture the diagram bundle a
   const code = "sequenceDiagram\n  Admin->>Service: Invite";
 
   const page = await drawn(
-    createElement(PlanBody, { task: planWith(mermaidFence(code)), live: false }),
+    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
   );
 
   assert.deepEqual(pictures(page), [pictureOf(code, DIAGRAM_APPEARANCE.LIGHT)]);
@@ -159,7 +169,7 @@ test("a Mermaid fence on a plan's page draws as the picture the diagram bundle a
 test("Show code puts the fence's code in the picture's place, and Show diagram brings the picture back", async () => {
   const code = "flowchart LR\n  Invite --> Join";
   const page = await drawn(
-    createElement(PlanBody, { task: planWith(mermaidFence(code)), live: false }),
+    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
   );
 
   act(() => toggle(page).click());
@@ -176,7 +186,7 @@ test("Show code puts the fence's code in the picture's place, and Show diagram b
 
 test("a fence the diagram bundle refuses says it could not be drawn, over its code", async () => {
   const page = await drawn(
-    createElement(PlanBody, { task: planWith(mermaidFence(UNPARSED)), live: false }),
+    createElement(PlanBody, { task: taskWith(mermaidFence(UNPARSED)), live: false }),
   );
 
   assert.deepEqual(pictures(page), []);
@@ -190,7 +200,7 @@ test("a fence the diagram bundle refuses says it could not be drawn, over its co
 test("the diagram is drawn again in the window's new appearance when it flips", async () => {
   const code = "flowchart TD\n  Accept --> Member";
   const page = await drawn(
-    createElement(PlanBody, { task: planWith(mermaidFence(code)), live: false }),
+    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
   );
 
   appearance.dark = true;
@@ -206,7 +216,7 @@ test("a fence in another language, and a Mermaid fence where the words are not a
   const code = "flowchart LR\n  Caption --> Code";
   const shell = "```sh\npnpm install\n```";
 
-  const page = await drawn(createElement(PlanBody, { task: planWith(shell), live: false }));
+  const page = await drawn(createElement(PlanBody, { task: taskWith(shell), live: false }));
   const caption = await drawn(createElement(MarkdownMessage, { words: mermaidFence(code) }));
 
   assert.equal(page.querySelector(".plan-diagram"), null);

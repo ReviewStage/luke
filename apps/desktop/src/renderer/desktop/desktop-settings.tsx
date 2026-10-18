@@ -6,23 +6,22 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
 import {
   SETTINGS_PAGE_GROUP,
-  SETTINGS_PAGE_GROUPS,
   SETTINGS_VIEW,
   type SettingsPageGroup,
   type SettingsView,
 } from "@luke/settings/settings-views";
-import { BackIcon, SettingsPage, useMenu } from "@luke/ui";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { BackIcon, NAV_CURRENT, NavItem, SettingsPage, useMenu } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
-import { appBridge } from "../app-bridge";
 import { useAppCommand } from "../app-commands";
+import { appPlatform } from "../app-platform";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
-import { drawnInSettingsPage, settingsGroupHeadingOf, settingsPageOf } from "../settings/pages";
+import { settingsGroupHeadingOf, settingsPageOf, shownSettingsPageGroups } from "../settings/pages";
 import { TemplateVersionHistory } from "../settings/plan-template-history";
 import { PlanTemplatePage } from "../settings/plan-template-page";
 import { pageResetControl } from "../settings/reset";
@@ -69,17 +68,15 @@ function SettingsPageRow({
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.SETTINGS, page: view });
   return (
     <li>
-      <button
-        type="button"
-        className="sidebar-item"
-        aria-current={current ? "page" : undefined}
+      <NavItem
+        icon={page.icon}
+        current={current ? NAV_CURRENT.PAGE : undefined}
+        mark={note ? <AttentionMark note={note} /> : undefined}
         onClick={onOpen}
         onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
       >
-        {page.icon}
         {page.title}
-        {note ? <AttentionMark note={note} /> : null}
-      </button>
+      </NavItem>
       {menu.drawn === undefined || copyLink === undefined ? null : (
         <ActionMenu
           label={PAGE_ACTIONS}
@@ -190,7 +187,7 @@ export function DesktopSettings({
   const search =
     rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
   const open = (view: SettingsView) => {
-    appBridge().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
+    appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
       settings_view: SETTINGS_VIEW_COUNTED_AS[view],
     });
     settings.onViewChange(view);
@@ -228,13 +225,6 @@ export function DesktopSettings({
     settings.view === SETTINGS_VIEW.INTEGRATIONS &&
     settings.account.status === ACCOUNT_STATUS.SIGNED_IN;
 
-  const panel = (
-    <SettingsPanel
-      {...settings}
-      integrationsFilter={{ query: integrationsQuery, onQueryChange: setIntegrationsQuery }}
-    />
-  );
-
   // The template's version history takes the whole window as a plan's does, and leaves for the template,
   // the call card at the foot of its versions as it was at the page list's.
   if (templateHistory) {
@@ -253,19 +243,14 @@ export function DesktopSettings({
       <nav className="settings-pages" aria-label="Settings pages">
         <div className="desktop-drag-strip" />
         <HistoryButtons history={history} />
-        <button
-          type="button"
-          className="sidebar-item settings-pages-back"
+        <NavItem
+          icon={<BackIcon />}
           aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_SETTINGS)}
+          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_SETTINGS].chord} />}
           onClick={onExit}
         >
-          <BackIcon />
           Back
-          <Shortcut
-            chord={APP_SHORTCUTS[APP_COMMAND.EXIT_SETTINGS].chord}
-            className="row-shortcut"
-          />
-        </button>
+        </NavItem>
         <h1 className="settings-pages-title">Settings</h1>
         <SettingsSearchField
           find={!pageSearched}
@@ -280,7 +265,7 @@ export function DesktopSettings({
             {search ? (
               <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
             ) : (
-              SETTINGS_PAGE_GROUPS.map(({ group, pages }) => (
+              shownSettingsPageGroups(settings.capabilities).map(({ group, pages }) => (
                 <section key={group} className="settings-nav-group">
                   <GroupHeading group={group} listed={listed} />
                   <ul>
@@ -316,19 +301,12 @@ export function DesktopSettings({
         <section className="settings-page" aria-label={title}>
           <div className="desktop-drag-strip" />
           {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
-          {drawnInSettingsPage(settings.view) ? (
-            <SettingsPage key={settings.view} title={title} actions={reset}>
-              {panel}
-            </SettingsPage>
-          ) : (
-            <div key={settings.view} className="settings-page-scroll scroll-fade-top">
-              <header className="settings-page-head">
-                <h1 className="settings-page-title">{title}</h1>
-                {reset}
-              </header>
-              {panel}
-            </div>
-          )}
+          <SettingsPage key={settings.view} title={title} actions={reset}>
+            <SettingsPanel
+              {...settings}
+              integrationsFilter={{ query: integrationsQuery, onQueryChange: setIntegrationsQuery }}
+            />
+          </SettingsPage>
         </section>
       )}
     </div>

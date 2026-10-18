@@ -89,7 +89,6 @@ let root: Root | undefined;
 
 beforeEach(() => {
   fakeAppBridge({
-    recordSurfaceEvent: () => undefined,
     act: (request: Act): Promise<ActOutcome> =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
@@ -148,7 +147,8 @@ async function agentNamed(
       subject: { name: "Invite flow", tile: agentActor(AGENT, "Invite flow"), read },
       models: [],
       onOpen: () => opened.push(AGENT.id),
-      children: "Invite flow",
+      glyph: undefined,
+      label: "Invite flow",
     }),
     readerId,
   );
@@ -168,10 +168,10 @@ test("a teammate's agent's card says it was started by them, their disc and name
 
   const { card } = await agentNamed(DEAN.userId);
   const line = card.querySelector(".actor-words") ?? assert.fail("the card names its starter");
-  const starter = line.querySelector<HTMLElement>(".actor-ref") ?? assert.fail("as an actor");
+  const starter = line.querySelector<HTMLElement>("[data-actor-ref]") ?? assert.fail("as an actor");
   assert.equal(line.firstChild?.textContent, "Started by ");
   assert.equal(starter.dataset.kind, "person");
-  assert.equal(starter.querySelector(".actor-ref-name")?.textContent, "Charles Pan");
+  assert.equal(starter.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
   assert.equal(starter.querySelector("img")?.getAttribute("src"), CHARLES_PICTURE);
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -187,7 +187,7 @@ test("a teammate's agent's card says it was started by them, their disc and name
 
 test("the starter's name on an agent's card hangs their own card over it, read only, and the agent's card stays standing beneath", async () => {
   const { card } = await agentNamed(DEAN.userId);
-  const starter = card.querySelector(".actor-words .actor-ref") ?? assert.fail("the starter");
+  const starter = card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the starter");
   assert.equal(starter.tagName, "SPAN", "a person has no page to press through to");
 
   hover(starter);
@@ -225,7 +225,7 @@ async function stacked() {
   pass(PAST_ANY_WAIT);
   const control = document.querySelector("[data-agent-ref]") ?? assert.fail("the agent is named");
   move(control, card);
-  const starter = card.querySelector(".actor-words .actor-ref") ?? assert.fail("the starter");
+  const starter = card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the starter");
   move(card, starter);
   pass(PAST_ANY_WAIT);
   const theirs = cards()[1] ?? assert.fail("the starter's card hangs over the agent's");
@@ -364,20 +364,23 @@ async function macPlace(
     }),
     readerId,
   );
-  const pill = view.querySelector<HTMLElement>(".rounded.border");
+  const pill = view.querySelector<HTMLElement>(".tool-place");
   assert.ok(pill, "the row says where the command ran");
   return pill;
 }
 
 test("a command an agent ran on a Mac says whose, by their disc and name: a teammate's, the reader's own, or the reader's where the window cannot tell", async () => {
   const theirs = await macPlace(CHARLES, DEAN.userId);
-  assert.equal(theirs.querySelector(".actor-ref .actor-ref-name")?.textContent, "Charles Pan’s");
+  assert.equal(
+    theirs.querySelector("[data-actor-ref] .luke-inline-ref-label")?.textContent,
+    "Charles Pan’s",
+  );
   assert.equal(theirs.querySelector(".actor-words")?.lastChild?.textContent, " Mac");
   assert.equal(theirs.querySelector(".actor-words")?.firstChild?.textContent, "On ");
   act(() => root?.unmount());
 
   const yours = await macPlace(CHARLES, CHARLES.userId);
-  assert.equal(yours.querySelector(".actor-ref .actor-ref-name")?.textContent, "your");
+  assert.equal(yours.querySelector("[data-actor-ref] .luke-inline-ref-label")?.textContent, "your");
   assert.equal(yours.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
   act(() => root?.unmount());
 

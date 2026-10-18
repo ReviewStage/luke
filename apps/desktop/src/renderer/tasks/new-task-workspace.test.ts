@@ -40,7 +40,6 @@ beforeEach(() => {
   installScrollIntoView();
   fakeAppBridge({
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-    recordSurfaceEvent: () => undefined,
   });
 });
 
@@ -133,7 +132,7 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
     document.querySelector('[role="dialog"][aria-label="Workspace"]') ??
     assert.fail("the chip opens its menu");
   assert.ok(
-    document.querySelector(".new-task-dialog")?.contains(menu),
+    document.querySelector('[role="dialog"][aria-modal="true"]')?.contains(menu),
     "the chip's menu stands inside the dialog, over the window it dims",
   );
   act(() => optionNamed(menu, "Acme").click());
@@ -335,9 +334,11 @@ test("issues put away with Escape come back for the workspace chosen next, its o
   });
   await settle();
   const listed = () =>
-    [...document.querySelectorAll('[role="listbox"] .task-compose-menu-detail')].map(
-      (detail) => detail.textContent,
-    );
+    [
+      ...document.querySelectorAll(
+        '[role="listbox"] [role="group"][aria-label="Linear issues"] [role="option"]',
+      ),
+    ].map((option) => option.textContent);
   const before = listed();
   act(() => {
     name.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -355,7 +356,7 @@ test("issues put away with Escape come back for the workspace chosen next, its o
   act(() => optionNamed(menu, "Acme").click());
   await settle();
 
-  assert.deepEqual(before, ["ME-1"]);
+  assert.deepEqual(before, ["Rotate the deploy keyME-1"]);
   assert.deepEqual(dismissed, []);
-  assert.deepEqual(listed(), ["ACME-1"]);
+  assert.deepEqual(listed(), ["Rotate the deploy keyACME-1"]);
 });

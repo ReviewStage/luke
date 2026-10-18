@@ -4,7 +4,18 @@ import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { ErrorState, useMenu } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  BUTTON_VARIANT,
+  Button,
+  ErrorState,
+  IconButton,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useMenu,
+} from "@luke/ui";
 import {
   ACTOR_KIND,
   type Actor,
@@ -23,7 +34,6 @@ import {
 } from "@luke/ui/person-page-model";
 import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
@@ -94,10 +104,14 @@ function PersonSection({
 }): React.JSX.Element {
   return (
     <section className="home-section" aria-label={title}>
-      <h2 className="home-section-title">
-        {title}
-        <span className="home-section-count">{count}</span>
-      </h2>
+      <header className="person-section-head">
+        <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED}>
+          {title}
+        </Text>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+          {count}
+        </Text>
+      </header>
       <ul className="sidebar-tasks">{children}</ul>
     </section>
   );
@@ -106,28 +120,28 @@ function PersonSection({
 /** One of their agents as a row: its tile, its name, the task it works on, and when it last moved; a press opens its tab. */
 function AgentRow({
   each,
-  tasks: plans,
+  tasks,
   now,
 }: {
   each: PersonAgent;
   tasks: TasksControl;
   now: number;
 }): React.JSX.Element {
-  const { plan, agent } = each;
-  const subject = lineSubject(agent, plans.agents.models, plans.me);
+  const { plan: task, agent } = each;
+  const subject = lineSubject(agent, tasks.agents.models, tasks.me);
   return (
     <li className="sidebar-task-item home-row">
       <button
         type="button"
         className="sidebar-task"
-        onClick={() => plans.onShowAgent(plan.id, agent.id)}
+        onClick={() => tasks.onShowAgent(task.id, agent.id)}
       >
         <span className="sidebar-task-line">
           <span className="home-row-picture">
             <ActorMark actor={subject.tile} />
           </span>
           <span className="sidebar-task-name">{subject.name}</span>
-          <span className="home-row-context">{plan.name}</span>
+          <span className="home-row-context">{task.name}</span>
           {agent.at === undefined ? null : (
             <span className="sidebar-task-time">
               <RelativeTime at={agent.at} now={now} />
@@ -148,7 +162,7 @@ const MORE = "More";
  * member and the workspace's members in Settings for its owners and admins.
  */
 function PersonActions({
-  tasks: plans,
+  tasks,
   userId,
   person,
   shared,
@@ -163,10 +177,10 @@ function PersonActions({
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
   const copy = useCopyToast();
-  const menu = useMenu(plans.shown);
+  const menu = useMenu(tasks.shown);
   const member = person.kind === ACTOR_KIND.PERSON ? person : undefined;
   const you = member?.you === true;
-  const { workspace } = plans;
+  const { workspace } = tasks;
   // Only a member the members read lists has a row there to manage; someone who left has none.
   const manages =
     member?.role !== undefined &&
@@ -174,8 +188,8 @@ function PersonActions({
     (workspace.role === WORKSPACE_ROLE.OWNER || workspace.role === WORKSPACE_ROLE.ADMIN);
   const email = member?.email;
   // Their link names the workspace their page stands in, by its slug where it has one.
-  const homeId = plans.personView.workspaceId ?? workspace?.id;
-  const home = plans.workspaces.find((each) => each.id === homeId);
+  const homeId = tasks.personView.workspaceId ?? workspace?.id;
+  const home = tasks.workspaces.find((each) => each.id === homeId);
   const link = linkOf({ kind: LINK_PLACE.PERSON, userId }, home?.slug ?? homeId ?? "");
   const actions: MenuAction[][] = [
     [{ label: LINK_COPY.LABEL, icon: <LinkIcon />, onSelect: () => copy(link, LINK_COPY.COPIED) }],
@@ -210,17 +224,14 @@ function PersonActions({
   return (
     <div className="desktop-toolbar-actions">
       {shared ? (
-        <button type="button" className="toolbar-button bordered-button" onClick={onShowTasks}>
-          <ListFilterIcon />
+        <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ListFilterIcon />} onClick={onShowTasks}>
           {you ? "My tasks in sidebar" : "Their tasks in sidebar"}
-        </button>
+        </Button>
       ) : null}
       {actions.length === 0 ? null : (
         <>
           <Tooltip label={MORE}>
-            <button type="button" className="icon-button" aria-label={MORE} {...menu.trigger()}>
-              <EllipsisIcon className="icon-button-glyph" />
-            </button>
+            <IconButton icon={<EllipsisIcon />} label={MORE} {...menu.trigger()} />
           </Tooltip>
           {menu.drawn === undefined ? null : (
             <ActionMenu label={MORE} menu={menu.drawn} groups={actions} onClose={menu.close} />
@@ -296,10 +307,16 @@ function PersonHead({ person }: { person: Actor }): React.JSX.Element {
       <ActorMark actor={person} size={ACTOR_SIZE.PAGE} />
       <div className="person-head-copy">
         <p className="person-head-name">
-          {headName(person)}
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.TITLE}>
+            {headName(person)}
+          </Text>
           {person.kind === ACTOR_KIND.PERSON && person.you ? <YouBadge /> : null}
         </p>
-        {line === undefined ? null : <p className="person-head-line">{line}</p>}
+        {line === undefined ? null : (
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            {line}
+          </Text>
+        )}
       </div>
     </header>
   );
@@ -307,7 +324,7 @@ function PersonHead({ person }: { person: Actor }): React.JSX.Element {
 
 /** The page inside the workspace's member directory, which names the person. */
 function PersonColumn({
-  tasks: plans,
+  tasks,
   userId,
   name: opened,
   staged,
@@ -318,7 +335,7 @@ function PersonColumn({
   staged: boolean;
 }): React.JSX.Element {
   const now = useMinute();
-  const listed = plans.listed.tasks;
+  const listed = tasks.listed.tasks;
   // Named as the list names them, else as the members read does, else by the name the page was opened with, else as the former members read does; nobody's name where none does.
   const { members, readerId, former } = useMemberDirectory();
   const member = members?.find((each) => each.userId === userId);
@@ -328,9 +345,9 @@ function PersonColumn({
   const ref = personRef(userId, listed) ?? member ?? known ?? left;
   const person = personActor(ref, members, readerId, former);
   // The sidebar's own view, so their tasks are listed there as its Created by lists them.
-  const taskView = useTaskListView(plans.workspace?.id, staged);
-  const archive = useArchivedView(plans.workspace?.id, staged);
-  const memberCount = plans.workspace?.memberCount;
+  const taskView = useTaskListView(tasks.workspace?.id, staged);
+  const archive = useArchivedView(tasks.workspace?.id, staged);
+  const memberCount = tasks.workspace?.memberCount;
   const shared = memberCount === undefined ? (members?.length ?? 0) > 1 : memberCount > 1;
   // Note that the list is turned back from the archived tasks, because the page lists their open ones.
   const showTasks = () => {
@@ -338,20 +355,20 @@ function PersonColumn({
     taskView.onCreatedBy(userId);
   };
   const page = personPage(userId, listed);
-  const you = userId === plans.me;
+  const you = userId === tasks.me;
   const theirAutomations = usePersonAutomations(
-    plans.workspace?.id,
+    tasks.workspace?.id,
     userId,
     useExperiment(EXPERIMENT.AUTOMATIONS),
   );
   const { automations } = theirAutomations;
-  const read = useWaitingItems(plans);
+  const read = useWaitingItems(tasks);
   // An item is theirs where its task's row says they started its agent; one with no task names no starter, so none is.
   const waiting = read.items.filter(
     ({ holder, item }) =>
       holder.kind === INBOX_HOLDER.TASK && agentStarter(holder.task, item.agentId) === userId,
   );
-  const { inboxView } = plans;
+  const { inboxView } = tasks;
   const openItem = ({ holder, item }: InboxListed) => {
     inboxView.onOpen();
     inboxView.onChoose(
@@ -381,7 +398,7 @@ function PersonColumn({
           <h1 className="desktop-toolbar-title">{name}</h1>
         </div>
         <PersonActions
-          tasks={plans}
+          tasks={tasks}
           userId={userId}
           person={person}
           shared={shared}
@@ -394,7 +411,7 @@ function PersonColumn({
           {page.working.length === 0 ? null : (
             <PersonSection title="Working now" count={page.working.length}>
               {page.working.map((each) => (
-                <AgentRow key={each.agent.id} each={each} tasks={plans} now={now} />
+                <AgentRow key={each.agent.id} each={each} tasks={tasks} now={now} />
               ))}
             </PersonSection>
           )}
@@ -409,8 +426,8 @@ function PersonColumn({
                   listed={listed}
                   chosen={false}
                   now={now}
-                  models={plans.agents.models}
-                  readerId={plans.me}
+                  models={tasks.agents.models}
+                  readerId={tasks.me}
                   context={holderName(listed.holder)}
                   onChoose={openItem}
                 />
@@ -419,29 +436,27 @@ function PersonColumn({
           )}
           {page.created.length === 0 ? null : (
             <PersonSection title={you ? "Created by you" : "Created"} count={page.created.length}>
-              {page.created.slice(0, PERSON_TASKS_SHOWN).map((plan) => (
+              {page.created.slice(0, PERSON_TASKS_SHOWN).map((task) => (
                 <RecentRow
-                  key={plan.id}
-                  task={plan}
-                  pictures={plans.repositories.pictures}
+                  key={task.id}
+                  task={task}
+                  pictures={tasks.repositories.pictures}
                   now={now}
                   face={false}
-                  onOpen={() => plans.onSelect(plan.id)}
+                  onOpen={() => tasks.onSelect(task.id)}
                 />
               ))}
             </PersonSection>
           )}
           {page.created.length > PERSON_TASKS_SHOWN && shared ? (
             <p className="person-section-foot">
-              <button type="button" className="toolbar-button quiet-button" onClick={showTasks}>
-                {`Show all ${page.created.length} in sidebar`}
-              </button>
+              <Button onClick={showTasks}>{`Show all ${page.created.length} in sidebar`}</Button>
             </p>
           ) : null}
           {page.agents.length === 0 ? null : (
             <PersonSection title="Agents" count={page.agents.length}>
               {page.agents.map((each) => (
-                <AgentRow key={each.agent.id} each={each} tasks={plans} now={now} />
+                <AgentRow key={each.agent.id} each={each} tasks={tasks} now={now} />
               ))}
             </PersonSection>
           )}
@@ -452,7 +467,7 @@ function PersonColumn({
                   key={automation.id}
                   automation={automation}
                   onOpen={() =>
-                    plans.automationsView.onOpen({
+                    tasks.automationsView.onOpen({
                       kind: AUTOMATIONS_PAGE.EDIT,
                       automationId: automation.id,
                     })
@@ -462,14 +477,14 @@ function PersonColumn({
             </PersonSection>
           )}
           {read.failed ? (
-            <div className="sidebar-note person-empty">
+            <div className="home-note">
               <ErrorState onRetry={read.onRetry}>Some Inbox items could not be read.</ErrorState>
             </div>
           ) : waiting.length === 0 && read.reading ? (
             <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
           ) : null}
           {theirAutomations.failed ? (
-            <div className="sidebar-note person-empty">
+            <div className="home-note">
               <ErrorState onRetry={theirAutomations.onRetry}>
                 {`${you ? "Your" : "Their"} automations could not be read.`}
               </ErrorState>
@@ -484,9 +499,11 @@ function PersonColumn({
           theirAutomations.reading ? null : personPageEmpty(page) &&
             waiting.length === 0 &&
             automations.length === 0 ? (
-            <p className="sidebar-note person-empty">
-              {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
-            </p>
+            <div className="home-note">
+              <Text tone={TEXT_TONE.MUTED}>
+                {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
+              </Text>
+            </div>
           ) : null}
         </div>
       </div>
@@ -496,7 +513,7 @@ function PersonColumn({
 
 /** A person's page, in the plan's place, read against the listed workspace's members. */
 export function PersonPage({
-  tasks: plans,
+  tasks,
   userId,
   name,
   staged = false,
@@ -508,10 +525,10 @@ export function PersonPage({
   /** Whether the run is a fixture's, whose sidebar view is kept nowhere. */
   staged?: boolean;
 }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_PERSON_PAGE, plans.personView.onClose);
+  useAppCommand(APP_COMMAND.EXIT_PERSON_PAGE, tasks.personView.onClose);
   return (
-    <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-      <PersonColumn tasks={plans} userId={userId} name={name} staged={staged} />
+    <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+      <PersonColumn tasks={tasks} userId={userId} name={name} staged={staged} />
     </MemberDirectory>
   );
 }

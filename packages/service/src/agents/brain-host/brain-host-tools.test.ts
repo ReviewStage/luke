@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   ensureMember,
-  ensurePlanChannel,
+  ensureTaskChannel,
   openAsksOf,
   postAsk,
 } from "@luke/database/models/chat-store";
@@ -17,7 +17,7 @@ import { hostTurnId, sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { writePage } from "@luke/database/models/plan-pages";
-import { openTaskConversation } from "@luke/database/models/task-store";
+import { listTasks, openTaskConversation, readTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
@@ -97,7 +97,7 @@ import {
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
 import { brainToolDeclarations, tasksModelOutput } from "./brain.js";
-import { ChatPostTally, lukeOn, type PlannerChatCall, runPlannerPost } from "./chat.js";
+import { type BrainChatCall, ChatPostTally, lukeOn, runBrainPost } from "./chat.js";
 import {
   claimRuntimeSession,
   conversationReachableBy,
@@ -350,6 +350,7 @@ test("a message to the plan's agent steers its session as the deployment acting 
     agent: {
       id: agent.id,
       title: "anthropic/claude-opus-5.5",
+      model: "anthropic/claude-opus-5.5",
       status: CODING_AGENT_STATUS.RUNNING,
       onYourTask: true,
     },
@@ -422,26 +423,66 @@ test("a member speaking in the plan conversation a teammate opened messages the 
   );
 });
 
-test("Luke's agent tools reach every agent of the task's workspace: a list names each agent's task, narrowed to this task or another by its id, archived ones marked; another task's agent, a teammate's, is read and messaged; an archived agent takes no message, and another workspace's agent is none of these", async () => {
+test("Luke makes the new task a start names for the member speaking, in the call's task's workspace and on its repository, and starts on it; a call on a task naming no repository makes none", async () => {
   const opener = await database.createUser();
-  const teammate = await database.createUser();
-  const plan = await taskConversation(opener, RELAY_FULL_NAME);
-  await database.run(joinWorkspace(plan.workspaceId, teammate));
-  const billing = await taskConversation(opener, RELAY_FULL_NAME);
-  assert.equal(billing.workspaceId, plan.workspaceId);
-  const own = await agentOn(opener, plan.taskId);
-  const teammates = await agentOn(teammate, billing.taskId);
-  const archived = await agentOn(opener, billing.taskId);
-  await database.run(archiveCodingAgent(opener, archived.id, true));
-  const stranger = await taskConversation(undefined, RELAY_FULL_NAME);
-  const strangers = await agentOn(stranger.userId, stranger.taskId);
-  const eve = await fakeCoderEve(plan.workspaceId);
+  const member = await database.createUser();
+  const task = await taskConversation(opener, RELAY_FULL_NAME);
+  await database.run(joinWorkspace(task.workspaceId, member));
+  const eve = await fakeCoderEve(task.workspaceId);
   const acting = brainHost({
     ...seams,
     deploymentSecret: () => Redacted.make(CRON_SECRET),
     eveOrigin: () => EVE_ORIGIN,
   });
-  const call = await callerOn(acting, plan, eve.services, CATALOG);
+  const call = await callerOn(acting, task, eve.services, CATALOG, member);
+
+  const started = await call(
+    START_AGENT_TOOL.name,
+    { newTask: "Expiry", prompt: TASK },
+    "call-new",
+  );
+  const agent = startedAgentOf(started);
+  assert.ok(isRecord(started.newTask) && isWireString(started.newTask.id), JSON.stringify(started));
+  const made = Option.getOrThrow(await database.run(readTask(member, started.newTask.id)));
+  assert.deepEqual(
+    [made.ownerId, made.task.workspaceId, made.task.repository, made.task.name],
+    [member, task.workspaceId, RELAY_FULL_NAME, "Expiry"],
+  );
+  const stored = Option.getOrThrow(await database.run(readCodingAgent(member, agent.id)));
+  assert.equal(stored.taskId, made.task.id);
+  assert.equal(eve.sent.length, 1);
+
+  const bare = await taskConversation(opener);
+  const onBare = await callerOn(acting, bare, eve.services, CATALOG);
+  assert.deepEqual(
+    await onBare(START_AGENT_TOOL.name, { newTask: "Nowhere", prompt: TASK }, "call-bare"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.NO_REPOSITORY },
+  );
+  const listed = await database.run(listTasks(opener));
+  assert.equal(listed.filter((each) => each.name === "Nowhere").length, 0);
+  assert.equal(eve.sent.length, 1);
+});
+
+test("Luke's agent tools reach every agent of the task's workspace: a list names each agent's task, narrowed to this task or another by its id, archived ones marked; another task's agent, a teammate's, is read and messaged; an archived agent takes no message, and another workspace's agent is none of these", async () => {
+  const opener = await database.createUser();
+  const teammate = await database.createUser();
+  const task = await taskConversation(opener, RELAY_FULL_NAME);
+  await database.run(joinWorkspace(task.workspaceId, teammate));
+  const billing = await taskConversation(opener, RELAY_FULL_NAME);
+  assert.equal(billing.workspaceId, task.workspaceId);
+  const own = await agentOn(opener, task.taskId);
+  const teammates = await agentOn(teammate, billing.taskId);
+  const archived = await agentOn(opener, billing.taskId);
+  await database.run(archiveCodingAgent(opener, archived.id, true));
+  const stranger = await taskConversation(undefined, RELAY_FULL_NAME);
+  const strangers = await agentOn(stranger.userId, stranger.taskId);
+  const eve = await fakeCoderEve(task.workspaceId);
+  const acting = brainHost({
+    ...seams,
+    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    eveOrigin: () => EVE_ORIGIN,
+  });
+  const call = await callerOn(acting, task, eve.services, CATALOG);
   const listedIds = async (input: WireRecord) => {
     const listed = await call(LIST_AGENTS_TOOL.name, input);
     assert.ok(Array.isArray(listed.agents), JSON.stringify(listed));
@@ -508,7 +549,7 @@ test("Luke's agent tools reach every agent of the task's workspace: a list names
   assert.ok(Array.isArray(tasks.tasks), JSON.stringify(tasks));
   assert.deepEqual(
     tasks.tasks.map((task) => (isRecord(task) ? task.id : undefined)).sort(),
-    [plan.taskId, billing.taskId].sort(),
+    [task.taskId, billing.taskId].sort(),
   );
   const started = await call(START_AGENT_TOOL.name, { taskId: billing.taskId }, "call-start");
   const startedId = startedAgentOf(started).id;
@@ -616,14 +657,14 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
 
 test("Luke's one start carries what the developer said beyond the plan: the note rides after the plan, or after a prompt, in the agent's one opening message, and the agent is still handed the plan", async () => {
   const userId = await database.createUser();
-  const plan = await taskConversation(userId, RELAY_FULL_NAME);
-  const eve = await fakeCoderEve(plan.workspaceId);
+  const task = await taskConversation(userId, RELAY_FULL_NAME);
+  const eve = await fakeCoderEve(task.workspaceId);
   const acting = brainHost({
     ...seams,
     deploymentSecret: () => Redacted.make(CRON_SECRET),
     eveOrigin: () => EVE_ORIGIN,
   });
-  const call = await callerOn(acting, plan, eve.services, CATALOG);
+  const call = await callerOn(acting, task, eve.services, CATALOG);
 
   const started = await call(START_AGENT_TOOL.name, { note: INSTRUCTION });
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
@@ -673,18 +714,18 @@ test("Luke's one start carries what the developer said beyond the plan: the note
 });
 
 test("Luke looks at a picture of the call's plan as a member speaking in it: the model is shown the picture under its own type, and a picture of another plan is refused", async () => {
-  const plan = await taskConversation();
+  const task = await taskConversation();
   const teammate = await database.createUser();
-  await database.run(joinWorkspace(plan.workspaceId, teammate));
-  const elsewhere = await taskConversation(plan.userId);
+  await database.run(joinWorkspace(task.workspaceId, teammate));
+  const elsewhere = await taskConversation(task.userId);
   const picture = {
     contentType: PICTURE_TYPE.JPEG,
     bytes: Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 1, 2]),
   };
-  const kept = await database.run(keepPlanAttachment(plan.userId, plan.taskId, picture));
+  const kept = await database.run(keepPlanAttachment(task.userId, task.taskId, picture));
   if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("no picture was kept");
-  const address = planAttachmentAddress({ taskId: plan.taskId, attachmentId: kept.id }, "acme");
-  const call = await callerOn(brainHost(seams), plan, NO_GITHUB, [], teammate);
+  const address = planAttachmentAddress({ taskId: task.taskId, attachmentId: kept.id }, "acme");
+  const call = await callerOn(brainHost(seams), task, NO_GITHUB, [], teammate);
   const callElsewhere = await callerOn(brainHost(seams), elsewhere);
 
   const looked = await call(LOOK_AT_PICTURE_TOOL.name, { address });
@@ -714,10 +755,10 @@ test("end_call is the one planning tool eve is told ends its turn, so the model 
 test("Luke archives an idle agent of the task's workspace, a teammate's, for the member on the call, recorded as Luke's with its reason, and refuses one still starting", async () => {
   const opener = await database.createUser();
   const teammate = await database.createUser();
-  const plan = await taskConversation(opener, RELAY_FULL_NAME);
-  await database.run(joinWorkspace(plan.workspaceId, teammate));
-  const idle = await agentOn(teammate, plan.taskId);
-  const starting = await agentOn(teammate, plan.taskId);
+  const task = await taskConversation(opener, RELAY_FULL_NAME);
+  await database.run(joinWorkspace(task.workspaceId, teammate));
+  const idle = await agentOn(teammate, task.taskId);
+  const starting = await agentOn(teammate, task.taskId);
   // The idle agent's one turn ran and ended, as eve runs and ends one.
   const coderWriter = await database.run(storeWriter({ tools: CODER_TOOL_SET }));
   const turn = { conversationId: sessionKey(idle.conversationId), turnId: randomUUID() };
@@ -746,8 +787,8 @@ test("Luke archives an idle agent of the task's workspace, a teammate's, for the
       });
     }),
   );
-  const eve = await fakeCoderEve(plan.workspaceId);
-  const call = await callerOn(brainHost(seams), plan, eve.services, CATALOG);
+  const eve = await fakeCoderEve(task.workspaceId);
+  const call = await callerOn(brainHost(seams), task, eve.services, CATALOG);
   const reason = "The developer asked to clean up the finished agents.";
 
   const archived = await call(ARCHIVE_AGENT_TOOL.name, { agentId: idle.id, reason });
@@ -763,13 +804,13 @@ test("Luke archives an idle agent of the task's workspace, a teammate's, for the
 
 test("Luke reads a page of the call's task by its id, as the member on the call, and nothing of another workspace's", async () => {
   const opener = await database.createUser();
-  const plan = await taskConversation(opener, RELAY_FULL_NAME);
+  const task = await taskConversation(opener, RELAY_FULL_NAME);
   const stranger = await taskConversation(undefined, RELAY_FULL_NAME);
   const shown = Option.getOrThrow(
     await database.run(
       writePage(
         opener,
-        plan.taskId,
+        task.taskId,
         { title: "Funnel", html: "<h1>Funnel</h1>" },
         { kind: PAGE_SHOWER.LUKE },
       ),
@@ -785,8 +826,8 @@ test("Luke reads a page of the call's task by its id, as the member on the call,
       ),
     ),
   );
-  const eve = await fakeCoderEve(plan.workspaceId);
-  const call = await callerOn(brainHost(seams), plan, eve.services, CATALOG);
+  const eve = await fakeCoderEve(task.workspaceId);
+  const call = await callerOn(brainHost(seams), task, eve.services, CATALOG);
 
   const read = await call(READ_PAGE_TOOL.name, { pageId: shown.id });
   assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(read));
@@ -801,15 +842,15 @@ test("Luke reads a page of the call's task by its id, as the member on the call,
 test("Luke's direct message to the plan's agent is told by a notice steered into its session as the deployment acting for the account, and a deployment that reaches no eve holds it for the agent's next read", async () => {
   const userId = await database.createUser();
   await chatOn(userId);
-  const plan = await taskConversation(userId, RELAY_FULL_NAME);
-  const agent = await agentOn(userId, plan.taskId);
-  const eve = await fakeCoderEve(plan.workspaceId);
+  const task = await taskConversation(userId, RELAY_FULL_NAME);
+  const agent = await agentOn(userId, task.taskId);
+  const eve = await fakeCoderEve(task.workspaceId);
   const acting = brainHost({
     ...seams,
     deploymentSecret: () => Redacted.make(CRON_SECRET),
     eveOrigin: () => EVE_ORIGIN,
   });
-  const call = await callerOn(acting, plan, eve.services);
+  const call = await callerOn(acting, task, eve.services);
 
   const told = await call(CHAT_TOOL.POST, { text: INSTRUCTION, to: "@agent-1" });
   assert.equal(told.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(told));
@@ -833,14 +874,14 @@ test("Luke's direct message to the plan's agent is told by a notice steered into
 });
 
 test("with Chat off for the plan's owner Luke's chat tools run nothing, and once the owner turns it on they post", async () => {
-  const plan = await taskConversation();
-  const call = await callerOn(brainHost(seams), plan);
+  const task = await taskConversation();
+  const call = await callerOn(brainHost(seams), task);
 
   const refused = await call(CHAT_TOOL.POST, { text: "Nobody hears this." }, "call-off");
   assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(refused));
   assert.equal((await call(CHAT_TOOL.READ, {}, "read-off")).status, ACTION_RESULT_STATUS.REJECTED);
 
-  await chatOn(plan.userId);
+  await chatOn(task.userId);
   const posted = await call(CHAT_TOOL.POST, { text: "Now the room hears this." }, "call-on");
   assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
   const read = await call(CHAT_TOOL.READ, { channel: "#teammate-invitations" }, "read-on");
@@ -849,20 +890,20 @@ test("with Chat off for the plan's owner Luke's chat tools run nothing, and once
 });
 
 test("Luke speaks in the chat as the plan's own @luke whatever member a call's input names: a post naming an agent's member lands as Luke's, and an ask of the agent's cannot be resolved through Luke", async () => {
-  const plan = await taskConversation(undefined, RELAY_FULL_NAME);
-  await chatOn(plan.userId);
-  const agent = await agentOn(plan.userId, plan.taskId);
+  const task = await taskConversation(undefined, RELAY_FULL_NAME);
+  await chatOn(task.userId);
+  const agent = await agentOn(task.userId, task.taskId);
   const channel = Option.getOrThrow(
-    await database.run(ensurePlanChannel(plan.userId, plan.taskId)),
+    await database.run(ensureTaskChannel(task.userId, task.taskId)),
   );
   const { organizationId } = channel;
   const member = Option.getOrThrow(
     await database.run(
-      ensureMember(plan.userId, organizationId, { kind: MEMBER_KIND.AGENT, agentId: agent.id }),
+      ensureMember(task.userId, organizationId, { kind: MEMBER_KIND.AGENT, agentId: agent.id }),
     ),
   );
   const asked = await database.run(
-    postAsk(plan.userId, organizationId, {
+    postAsk(task.userId, organizationId, {
       authorMemberId: member.id,
       to: { channelId: channel.id },
       blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Which queue sends the emails?" }],
@@ -873,7 +914,7 @@ test("Luke speaks in the chat as the plan's own @luke whatever member a call's i
     }),
   );
   assert.ok(Result.isSuccess(asked));
-  const call = await callerOn(brainHost(seams), plan);
+  const call = await callerOn(brainHost(seams), task);
   const smuggled = { authorMemberId: member.id, as: "@agent-1", author: member.id };
 
   const posted = await call(CHAT_TOOL.POST, { text: "The outbox does.", ...smuggled }, "call-as");
@@ -889,7 +930,7 @@ test("Luke speaks in the chat as the plan's own @luke whatever member a call's i
     { status: ACTION_RESULT_STATUS.REJECTED, reason: ASK_REFUSAL.NO_ASK },
   );
   const asks = await database.run(
-    openAsksOf(plan.userId, organizationId, { authorMemberId: member.id }, 5),
+    openAsksOf(task.userId, organizationId, { authorMemberId: member.id }, 5),
   );
   assert.deepEqual(
     asks.map((ask) => [ask.askKey, ask.askStatus]),
@@ -898,9 +939,9 @@ test("Luke speaks in the chat as the plan's own @luke whatever member a call's i
 });
 
 test("Luke posts at most the chat's bound in one turn, a call eve runs again is its one post however many came after, and a post the bound refused is no post", async () => {
-  const plan = await taskConversation();
-  await chatOn(plan.userId);
-  const call = await callerOn(brainHost(seams), plan);
+  const task = await taskConversation();
+  await chatOn(task.userId);
+  const call = await callerOn(brainHost(seams), task);
 
   const first = await call(CHAT_TOOL.POST, { text: "Step 0 is done." }, "call-0");
   for (let at = 1; at < CHAT_BOUNDS.MAX_POSTS_PER_TURN; at += 1) {
@@ -920,12 +961,12 @@ test("Luke posts at most the chat's bound in one turn, a call eve runs again is 
 });
 
 test("a post interrupted before it lands holds none of the turn's count", async () => {
-  const plan = await taskConversation();
+  const task = await taskConversation();
   const tally = new ChatPostTally();
   let opened = false;
-  const call: PlannerChatCall = {
+  const call: BrainChatCall = {
     luke: {
-      ...lukeOn(plan.userId, plan.taskId),
+      ...lukeOn(task.userId, task.taskId),
       repository: null,
       telling: { eveFor: () => undefined, writer: Effect.succeed(writer), doors: HELD_DOORS },
     },
@@ -945,7 +986,7 @@ test("a post interrupted before it lands holds none of the turn's count", async 
 
   await database.run(
     Effect.gen(function* () {
-      const posting = yield* Effect.forkChild(runPlannerPost(call, picture));
+      const posting = yield* Effect.forkChild(runBrainPost(call, picture));
       while (!opened) yield* Effect.yieldNow;
       yield* Fiber.interrupt(posting);
     }).pipe(Effect.provide(NO_GITHUB)),

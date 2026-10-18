@@ -3,8 +3,10 @@ import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  Button,
   ConfirmDialog,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -14,10 +16,10 @@ import {
 } from "@luke/ui";
 import { chatNames } from "@luke/ui/chat-model";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
-import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { AutomationDirectory } from "../automation-directory";
@@ -28,6 +30,7 @@ import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { AgentCard, agentSubject } from "../tasks/agent-ref";
 import { ArchivedBanner } from "../tasks/archived-task";
+import { useChatOn } from "../tasks/chat-gate";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
 import { InboxList, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
@@ -44,14 +47,14 @@ import {
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager";
 import { type InboxCodeDoors, InboxPane } from "../tasks/inbox-pane";
 import { PlanBody, type SectionLinks } from "../tasks/plan-body";
-import {
-  mentionablePullRequests,
-  PlanMentions,
-  type PlanMentionsValue,
-  useMentionAgentsReader,
-} from "../tasks/plan-mentions";
 import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip";
 import { SkillFiles } from "../tasks/skill-chip";
+import {
+  mentionablePullRequests,
+  TaskMentions,
+  type TaskMentionsValue,
+  useMentionAgentsReader,
+} from "../tasks/task-mentions";
 import { taskLinkPlace } from "../tasks/task-menu-items";
 import { useMinute } from "../tasks/task-time";
 import { CallBar } from "../tasks/tasks-parts";
@@ -64,7 +67,8 @@ import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox";
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
-import { useExperiment } from "../use-app-state";
+import { useCapability, useExperiment } from "../use-app-state";
+import { TaskChatTab } from "./desktop-chat";
 import { DesktopHome } from "./desktop-home";
 import { useTaskInboxWaitingOnly } from "./folded-groups";
 import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
@@ -82,7 +86,6 @@ import { useStrandedTaskBanner } from "./stranded-task-banner";
 import { useTabViews } from "./strip-tabs";
 import { TaskActions } from "./task-actions";
 import { taskCardOf } from "./task-card";
-import { useTaskRename } from "./task-name-field";
 import {
   SummaryButton,
   type SummaryPin,
@@ -270,6 +273,7 @@ function TaskInboxTab({
         view={list}
         chosen={chosen?.item.id}
         columns={columns.shown}
+        rows={columns.rows}
         head={{
           shown,
           needsYou,
@@ -352,6 +356,7 @@ function PlanDocument({
   const { region } = tasks;
   const drawing = useSidePanelDrawing(tasks.sidePanel);
   const views = useTabViews();
+  const chatOn = useChatOn();
   const { act } = useAct();
   const openLink = useOpenLink();
   const inboxTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
@@ -373,13 +378,16 @@ function PlanDocument({
   // The clock the plan's tab's card counts its update back from.
   const now = useMinute();
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
+  const voiceOffered = useCapability(HOST_CAPABILITY.VOICE);
+  const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);
+  const macTerminalOffered = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
   const reads = useReadMarks();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpenAutomations],
   );
-  const planId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
+  const taskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   // What waits in the task's inbox opens its Inbox tab where an item did
   // not wait at the last read (`use-main-tabs.ts`). Note that only a read
   // that answered counts, because a task just opened holds nothing yet, and
@@ -387,9 +395,9 @@ function PlanDocument({
   const waiting = useMemo(() => inbox.board.open.map((item) => item.id), [inbox.board.open]);
   const { onInboxRead } = tasks.mainTabs;
   useEffect(() => {
-    if (planId !== undefined && inbox.read) onInboxRead(planId, waiting);
-  }, [planId, inbox.read, waiting, onInboxRead]);
-  const rename = useTaskRename(planId, tasks.onRenameTask);
+    if (taskId !== undefined && inbox.read) onInboxRead(taskId, waiting);
+  }, [taskId, inbox.read, waiting, onInboxRead]);
+  const rename = useInlineRename(taskId, tasks.onRenameTask);
   // A terminal shown hands the keys to the side panel, where it stands; an
   // agent's tab's Open terminal always opens that agent's own.
   const showSide = () => setFocus(COLUMN.SIDE);
@@ -473,9 +481,7 @@ function PlanDocument({
               <p role="alert">{line}</p>
             )}
             {region.kind === DOCUMENT_REGION.FAILED ? (
-              <button type="button" className="toolbar-button" onClick={close.onClick}>
-                {close.label}
-              </button>
+              <Button onClick={close.onClick}>{close.label}</Button>
             ) : null}
           </section>
         )}
@@ -524,11 +530,8 @@ function PlanDocument({
     views.onWorkerStatus(callId, status);
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
-  // An agent's Changes chip opens its pull request's changes in the side panel, beside its
-  // tab, in the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its files.
-  const openChanges = (agentId: string) =>
-    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.FILES);
-  // Its pull request's chip opens the same tab on the pull request's conversation.
+  // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
+  // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
   const openPullRequest = (agentId: string) =>
     showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION);
   // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
@@ -541,7 +544,7 @@ function PlanDocument({
   // the tab reads the agent's pushed branch itself (`mac-terminal-tab.tsx`).
   const { repository } = task;
   const openOnMac =
-    repository === null
+    repository === null || !macTerminalOffered
       ? undefined
       : (agentId: string) => {
           sidePanel.onChoose({ macTerminal: agentId, repository, asked: Date.now() });
@@ -566,6 +569,8 @@ function PlanDocument({
         return openColumnTab(MAIN_TAB.PLAN);
       case TOOL_TARGET.INBOX:
         return openColumnTab(MAIN_TAB.INBOX);
+      case TOOL_TARGET.CHAT:
+        return chatOn ? openColumnTab(MAIN_TAB.CHAT) : undefined;
       case TOOL_TARGET.BOARD:
         return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
@@ -606,8 +611,8 @@ function PlanDocument({
     const subject = agentSubject(agents, agentId, views.held, false);
     return { actor: subject.tile, card: <AgentCard subject={subject} models={agents.models} /> };
   };
-  // What every place on the page that picks or draws a mention reads (`plan-mentions.tsx`).
-  const mentions: PlanMentionsValue = {
+  // What every place on the page that picks or draws a mention reads (`task-mentions.tsx`).
+  const mentions: TaskMentionsValue = {
     taskId: task.id,
     taskName: task.name,
     workspace,
@@ -642,7 +647,7 @@ function PlanDocument({
           )}
           onOpen={openAutomation}
         >
-          <PlanMentions value={mentions}>
+          <TaskMentions value={mentions}>
             <OpenHereProvider value={openHere}>
               <div ref={setArea} className="desktop-task" data-panel-open={String(sidePanel.open)}>
                 {/* Note that the column is hidden rather than left out while the
@@ -667,15 +672,20 @@ function PlanDocument({
                         keys={tasks.shown && !sideFocused}
                         shown={tasks.shown}
                         inbox={inbox.board.open.length}
+                        chat={chatOn && tasks.chatView.available}
                         actionsSlot={actionsSlot}
-                        onOpenTerminal={(agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)}
+                        onOpenTerminal={
+                          terminalsOffered
+                            ? (agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW)
+                            : undefined
+                        }
                         onOpenOnMac={openOnMac}
                       />
                     }
                   >
-                    {rename.note !== undefined ? (
+                    {rename.refused ? (
                       <p className="error-message" role="alert">
-                        {rename.note}
+                        {RENAME_FAILED_NOTE}
                       </p>
                     ) : null}
                     {repositoryNote !== undefined ? (
@@ -684,12 +694,14 @@ function PlanDocument({
                       </p>
                     ) : null}
                     <CopyChord copy={tasks.copy} />
-                    <TerminalCommands
-                      here={terminalHere}
-                      agents={agents}
-                      sidePanel={sidePanel}
-                      onShown={showSide}
-                    />
+                    {terminalsOffered ? (
+                      <TerminalCommands
+                        here={terminalHere}
+                        agents={agents}
+                        sidePanel={sidePanel}
+                        onShown={showSide}
+                      />
+                    ) : null}
                     {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
                     {tasks.history.viewing === undefined ? (
                       <NewTabChord
@@ -757,7 +769,7 @@ function PlanDocument({
                             : {
                                 onEdit: (request) => tasks.edit(task.id, request),
                                 // The title renames as the chip's field does, so a refusal is said beside it.
-                                onRename: (name) => rename.end({ name, byKey: true }),
+                                onRename: (name) => rename.end(name),
                                 onDraftName: (name) => tasks.onDraftName(task.id, name),
                               })}
                           looks={looks}
@@ -784,7 +796,14 @@ function PlanDocument({
                           }}
                         />
                       ) : null}
-                      {tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX ? null : (
+                      {tab === MAIN_TAB.CHAT && chatOn ? (
+                        <section className="desktop-task-chat" role="tabpanel" aria-label="Chat">
+                          <TaskChatTab tasks={tasks} taskId={task.id} />
+                        </section>
+                      ) : null}
+                      {tab === MAIN_TAB.PLAN ||
+                      tab === MAIN_TAB.INBOX ||
+                      tab === MAIN_TAB.CHAT ? null : (
                         <AgentPane
                           label={mainTabLabel(tab, agents)}
                           tabbed
@@ -793,7 +812,6 @@ function PlanDocument({
                           shown={tasks.shown && !sidePanel.fullScreen}
                           views={views}
                           onOpenDelegation={openDelegation}
-                          onOpenChanges={openChanges}
                           onOpenPullRequest={openPullRequest}
                           onOpenTarget={openTarget}
                           cards={cards}
@@ -802,6 +820,14 @@ function PlanDocument({
                             archived
                               ? undefined
                               : (fork) => openColumnTab({ draft: agents.onForkDraft(fork) })
+                          }
+                          onContinue={
+                            archived
+                              ? undefined
+                              : (agentId, words, attachments) =>
+                                  openColumnTab({
+                                    draft: agents.onContinueDraft(agentId, words, attachments),
+                                  })
                           }
                         />
                       )}
@@ -818,7 +844,7 @@ function PlanDocument({
                   </div>
                   {/* Note that a call of the plan's own still stands, so it can be
             ended, when only a race left one on a plan just archived. */}
-                  {archived && !tasks.stop.shown ? null : (
+                  {!voiceOffered || (archived && !tasks.stop.shown) ? null : (
                     <div className="desktop-call-bar">
                       {captions}
                       <CallBar
@@ -860,7 +886,7 @@ function PlanDocument({
                 {stranded.dialog}
               </div>
             </OpenHereProvider>
-          </PlanMentions>
+          </TaskMentions>
         </AutomationDirectory>
       </MemberDirectory>
     </LinkWorkspaceProvider>

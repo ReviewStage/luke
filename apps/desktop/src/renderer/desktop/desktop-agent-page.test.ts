@@ -30,6 +30,7 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -37,10 +38,10 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
-import { handState, stateWith } from "#testing/app-state";
-import { installEditorBundle, installEditorLayout, typeInComposer } from "#testing/composer";
+import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
+import { DESKTOP_CAPABILITIES, handCapabilities, handState, stateWith } from "#testing/app-state";
+import { editorBundleLanded, installEditorLayout, typeInComposer } from "#testing/composer";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -150,6 +151,9 @@ let workspace: readonly CodingAgentSummary[] = [];
 let gitHub: ReadonlyMap<number, { title: string; url: string; state: PullRequestState }> =
   new Map();
 
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
   pages = [{ agent: PAGE }];
   read = [];
@@ -162,11 +166,10 @@ beforeEach(() => {
   earlier = 0;
   openedOnGitHub = [];
   copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS });
   workspace = [];
   gitHub = new Map();
   fakeAppBridge({
-    onMenuCommand: () => () => undefined,
-    recordSurfaceEvent: () => undefined,
     act: (request: Act) => {
       told.push(request);
       if (request.kind === ACT_KIND.TASKS_SKILLS) {
@@ -229,10 +232,6 @@ beforeEach(() => {
         const value = held === undefined ? null : { number, author: "octo-dev", ...held };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
       }
-      if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-        copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: workspace } });
       }
@@ -244,6 +243,7 @@ beforeEach(() => {
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
+  handCapabilities(DESKTOP_CAPABILITIES);
 });
 
 afterEach(() => {
@@ -581,8 +581,8 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   const container = await mountPanelPage();
   await settle();
   const chip = (name: string) =>
-    [...container.querySelectorAll<HTMLButtonElement>(".agent-page .mention-chip")].find((each) =>
-      each.querySelector(".mention-chip-label")?.textContent?.includes(name),
+    [...container.querySelectorAll<HTMLButtonElement>(".agent-page [data-mention-ref]")].find(
+      (each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name),
     );
 
   const own = chip("relay#2911");
@@ -626,7 +626,7 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md on G
 
   // The skills are read once a sent message first asks for them, a settle after the transcript lands.
   await settle();
-  const chip = page.querySelector<HTMLButtonElement>("button.skill-chip");
+  const chip = page.querySelector<HTMLButtonElement>("button[data-skill-ref]");
   assert.ok(chip, "the skill is its chip");
   act(() => chip.click());
 
@@ -689,9 +689,9 @@ const OPEN_TASK = "3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b";
 
 test("an agent of the open task brought back on its page has the task's agents read again, so its tab and ⌘K stand where it does, and one of another task's has none", async () => {
   /** How many times the open task's agents are read again around an Unarchive on the page of an agent of `planId`. */
-  const readsAround = async (planId: string): Promise<number> => {
+  const readsAround = async (taskId: string): Promise<number> => {
     let reads = 0;
-    pages = [{ agent: { ...PAGE, planId, archivedAt: 2 } }];
+    pages = [{ agent: { ...PAGE, planId: taskId, archivedAt: 2 } }];
     const page = mount(
       tasksControl({
         activeTaskId: OPEN_TASK,
@@ -735,9 +735,12 @@ test("an agent another agent archived says on its page who archived it, for whic
   const page = mount();
   await settle();
 
-  assert.equal(
-    page.querySelector(".archived-composer-by")?.textContent,
-    "Archived by Bill by seat for Dean Stratakos: Its pull request merged.",
+  assert.ok(
+    [...page.querySelectorAll("p")].some(
+      (each) =>
+        each.textContent ===
+        "Archived by Bill by seat for Dean Stratakos: Its pull request merged.",
+    ),
   );
   assert.ok([...page.querySelectorAll("button")].some((each) => each.textContent === "Unarchive"));
 });
@@ -805,8 +808,8 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   );
   await settle();
 
-  const sender = page.querySelector(".is-user:not(.agent-origin) .message-sender .actor-ref");
-  assert.equal(sender?.querySelector(".actor-ref-name")?.textContent, "Charles Pan");
+  const sender = page.querySelector(".is-user:not(.agent-origin) .message-sender [data-actor-ref]");
+  assert.equal(sender?.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
   assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
 });
 
@@ -854,15 +857,15 @@ test("an automation's agent opens on the automation's prompt alone, sent by the 
   pages = [{ agent: RUN_PAGE }];
   transcript = handedTranscript();
   const opened: unknown[] = [];
-  const plans = tasksControl({ workspaces: [ACME] });
+  const tasks = tasksControl({ workspaces: [ACME] });
   const page = mount({
-    ...plans,
-    automationsView: { ...plans.automationsView, onOpen: (place) => opened.push(place) },
+    ...tasks,
+    automationsView: { ...tasks.automationsView, onOpen: (place) => opened.push(place) },
   });
   await settle();
 
   const { card, sender } = origin(page);
-  const automation = sender?.querySelector<HTMLButtonElement>("button.actor-ref");
+  const automation = sender?.querySelector<HTMLButtonElement>("button[data-actor-ref]");
   assert.equal(words(automation), "Flaky-test sweep");
   assert.match(card.textContent ?? "", /Sweep the flaky tests\./u);
   assert.doesNotMatch(card.textContent ?? "", /Luke started this run/u);
@@ -914,7 +917,7 @@ test("a GitHub event's run names its pull request beside the automation, which o
 
   const { sender } = origin(page);
   assert.equal(words(sender), "Flaky-test sweep · #2905 View commands · Run by you");
-  act(() => sender?.querySelector<HTMLElement>(".mention-chip")?.click());
+  act(() => sender?.querySelector<HTMLElement>("[data-mention-ref]")?.click());
   assert.deepEqual(openedOnGitHub, [url]);
 });
 
@@ -940,11 +943,11 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
   const page = mount(tasksControl({ workspaces: [acme] }));
   await settle();
 
-  const chip = origin(page).sender?.querySelector<HTMLElement>(".mention-chip");
+  const chip = origin(page).sender?.querySelector<HTMLElement>("[data-mention-ref]");
   assert.deepEqual(
     [
-      chip?.querySelector(".mention-chip-label")?.textContent,
-      chip?.querySelector(".mention-chip-state")?.textContent,
+      chip?.querySelector(".luke-inline-ref-label")?.textContent,
+      chip?.querySelector(".luke-inline-ref-state")?.textContent,
       chip?.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
     ],
     ["#2905 View commands", "Open", PULL_REQUEST_STATE.OPEN],
@@ -1029,7 +1032,6 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
 });
 
 test("an @ in the agent's box names an archived agent of an archived task by that task's name, read from the window's archived tasks", async () => {
-  installEditorBundle();
   installEditorLayout();
   installScrollIntoView();
   const billing: Task = {
@@ -1063,8 +1065,8 @@ test("an @ in the agent's box names an archived agent of an archived task by tha
   const rows = [...page.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')];
   assert.deepEqual(
     rows.map((row) => [
-      row.querySelector(".task-compose-menu-name")?.textContent,
-      row.querySelector(".mention-row-detail")?.textContent,
+      row.querySelector(".luke-combobox-option-label")?.textContent,
+      row.querySelector(".luke-combobox-option-detail")?.textContent,
     ]),
     [["Bill by seat", "Billing · Archived"]],
   );
