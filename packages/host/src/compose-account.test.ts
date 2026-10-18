@@ -1,3 +1,4 @@
+// compose-account.test.ts -- session replay's answer across an account deletion and a later sign-in.
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
