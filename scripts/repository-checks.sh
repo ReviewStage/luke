@@ -730,10 +730,27 @@ node --input-type=module -e '
   import path from "node:path";
 
   const root = process.argv[1];
-  const SCROLLS = /(?:^|[;\s])overflow(?:-y)?\s*:\s*(?:auto|scroll)\s*(?:;|$)/;
-  const NAMES_X = /(?:^|[;\s])overflow-x\s*:/;
+  const SCROLLING = /^(?:auto|scroll)$/;
   const CLASS_SCROLLS = /(?<![\w-])overflow-(?:y-)?(?:auto|scroll)(?![\w-])/;
   const CLASS_NAMES_X = /(?<![\w-])overflow-x-\w+/;
+  // Whether a block scrolls up and down with its sideways overflow left to
+  // the default, read in order, since a later `overflow` resets both axes.
+  const scrollsUnnamed = (body) => {
+    let scrollsY = false;
+    let namesX = false;
+    for (const declaration of body.split(";")) {
+      const match = declaration.match(/(?:^|\s)(overflow(?:-x|-y)?)\s*:\s*(.+)$/s);
+      if (match === null) continue;
+      const values = match[2].trim().split(/\s+/);
+      if (match[1] === "overflow-x") namesX = true;
+      else if (match[1] === "overflow-y") scrollsY = SCROLLING.test(values[0]);
+      else {
+        scrollsY = SCROLLING.test(values[values.length - 1]);
+        namesX = values.length > 1 || !SCROLLING.test(values[0]);
+      }
+    }
+    return scrollsY && !namesX;
+  };
   const files = execFileSync("git", ["-C", root, "ls-files", "-z", "--", "apps", "packages"], {
     encoding: "utf8",
   })
@@ -759,7 +776,7 @@ node --input-type=module -e '
       if (character === "{") open.push({ line, body: "" });
       else if (character === "}") {
         const block = open.pop();
-        if (block !== undefined && SCROLLS.test(block.body) && !NAMES_X.test(block.body)) {
+        if (block !== undefined && scrollsUnnamed(block.body)) {
           found.push(`  ${file}:${block.line}`);
         }
       } else if (open.length > 0) open[open.length - 1].body += character;
