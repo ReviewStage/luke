@@ -12,10 +12,10 @@ import {
   type TasksEditAnswer,
 } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { keepPictureRead } from "@luke/ui/picture-cache";
 import { ImagePlusIcon } from "lucide-react";
 import { useMemo } from "react";
-import { useAct } from "../act";
 import { encodeImage } from "../feedback-images";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import type { ViewerAction } from "./attachment-viewer";

@@ -21,6 +21,7 @@ import {
   AGENT_KIND,
   AGENT_STATE,
   AGENT_STUCK_AFTER_MS,
+  agentDrawnUnder,
   BUILD_FULL_LINES,
   blastRadiusOf,
   type FactoryWorldView,
@@ -657,4 +658,21 @@ test("a snapshot naming as many merges as it may opens its window at the oldest,
   assert.equal(wound.snapshotAt, oldest);
   assert.equal(factoryWorldViewOf(wound).shippedSince, oldest);
   assert.equal(wound.shipped.length, 1);
+});
+
+test("a layer drawn alone shows only the agents it names: those at work under Building, and a failed one under Building or Defects", () => {
+  const alone = (layer: "planned" | "building" | "shipped" | "defects") => ({
+    building: layer === "building",
+    defects: layer === "defects",
+  });
+  const drawnUnder = (state: (typeof AGENT_STATE)[keyof typeof AGENT_STATE]) =>
+    (["planned", "building", "shipped", "defects"] as const).filter((layer) =>
+      agentDrawnUnder({ state }, alone(layer)),
+    );
+  assert.deepEqual(drawnUnder(AGENT_STATE.WORKING), ["building"]);
+  assert.deepEqual(drawnUnder(AGENT_STATE.FAILED), ["building", "defects"]);
+  assert.equal(
+    agentDrawnUnder({ state: AGENT_STATE.FAILED }, { building: true, defects: true }),
+    true,
+  );
 });

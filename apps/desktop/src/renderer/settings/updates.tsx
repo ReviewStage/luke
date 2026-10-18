@@ -1,4 +1,5 @@
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "@luke/settings/update-row";
 import {
@@ -11,7 +12,6 @@ import {
   SettingsSection,
 } from "@luke/ui";
 import type { UpdateControl } from "@luke/voice/settings-controls";
-import { useAct } from "../act";
 
 /**
  * The row's one act, in the outline face every Settings row's act wears:

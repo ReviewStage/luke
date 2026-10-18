@@ -69,6 +69,11 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   `--luke-loop-motion`, the play state an endless loop holds. Reduced motion
   zeroes the durations but hover's and pauses the loop. A component reads
   only `--luke-*` custom properties (`scripts/repository-checks.sh`).
+- **Placement hooks**: the few properties an app may set on a component's
+  container, each the one way a measurement of the app's reaches inside.
+  `--luke-combobox-list-max` caps a `ComboboxList`'s height (280px where
+  unset), so a picker placed against the window's edge hands its list the
+  room it found; nothing else inside the list is the app's to set.
 
 ## Using a component
 
@@ -110,6 +115,17 @@ What the barrel holds (`src/index.ts`):
 
 Each component's design comment, at the top of its `.tsx`, says what it owns
 and what it leaves to its caller.
+
+### Folding in a narrow container
+
+A container short of room folds the controls in it with one inherited custom
+property, set from its own container query, and owns nothing inside them;
+each control answers it with a style query of its own:
+
+| `--luke-fold` | What answers it |
+| --- | --- |
+| `folded` | A `FoldingButton`'s words, and a `SplitButton` main part's, fold away, leaving the glyph and the name; a `SearchField`'s tally is said rather than drawn |
+| `bare` | A `SplitButton` is its main part's glyph alone, at the control's corner, with no chevron |
 
 ## Adding a component
 

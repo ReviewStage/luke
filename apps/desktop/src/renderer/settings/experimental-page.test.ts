@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { VIDEO_AVATAR, VIDEO_AVATAR_COVER_ORIGIN } from "@luke/features/video-avatar";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import type { SettingsWrites } from "@luke/panel/settings/writes";
 import {
   type AppSettingField,
   EXPERIMENT,
@@ -25,7 +26,6 @@ import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { OpenFeedbackProvider } from "../open-feedback";
 import { ExperimentalPage } from "./experimental-page";
-import type { SettingsWrites } from "./writes";
 
 /**
  * Settings › Experimental as the panel draws it: a switch per experiment

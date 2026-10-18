@@ -1,12 +1,12 @@
 import type { PullRequestStackEntry } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { ACT_KIND } from "@luke/host/acts";
-import { dropBelowStart, useMenu } from "@luke/ui";
+import { useAct } from "@luke/panel/act";
+import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
+import { BUTTON_VARIANT, Button, dropBelowStart, useMenu } from "@luke/ui";
 import { GitPullRequestDraftIcon, GitPullRequestIcon, LayersIcon } from "lucide-react";
-import { useAct } from "../act";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
-import { useOpenPlace } from "./use-open-link";
 
 /**
  * pull-request-stack.tsx -- the stack a pull request stands in, on its header, as stage-cli shows one: "Stack 2/4", whose menu lists the stack from its tip down to its base and opens any of it.
@@ -80,18 +80,17 @@ export function PullRequestStack({
   return (
     <>
       <Tooltip label={label}>
-        <button
-          type="button"
-          className="pull-request-stack"
-          aria-label={label}
+        <Button
+          variant={BUTTON_VARIANT.OUTLINE}
+          icon={<LayersIcon aria-hidden="true" />}
+          label={label}
           {...menu.trigger(dropBelowStart)}
         >
-          <LayersIcon aria-hidden="true" />
-          Stack
+          Stack{" "}
           <span className="pull-request-stack-count">
             {at + 1}/{stack.length}
           </span>
-        </button>
+        </Button>
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu

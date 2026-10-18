@@ -14,10 +14,10 @@
  */
 
 import { useAtom } from "@effect/atom-react";
+import { appPlatform } from "@luke/panel/app-platform";
 import { Duration, Effect } from "effect";
 import { CheckIcon, CircleAlertIcon, CopyIcon } from "lucide-react";
 import { useRef, useState } from "react";
-import { appPlatform } from "./app-platform";
 import { rendererRuntime } from "./renderer-runtime";
 import { TOAST_TONE, useToast } from "./toast";
 

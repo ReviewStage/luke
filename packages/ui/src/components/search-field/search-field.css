@@ -3,7 +3,9 @@
    glyph size, the body's type, and at its end a tally, a chord, or a clear
    nested inside the well's edge. Every part has a fixed size, so typing,
    clearing, and focusing never move what stands beneath it. The well wears
-   the keyboard's ring while the caret is in its field, which wears none. */
+   the keyboard's ring while the caret is in its field, which wears none.
+   Under an element whose `--luke-fold` is `folded`, the tally gives the
+   field its room and is said rather than drawn. */
 
 @layer components {
   .luke-search-field {
@@ -56,6 +58,17 @@
     font-variant-numeric: tabular-nums;
   }
 
+  @container style(--luke-fold: folded) {
+    .luke-search-field-tally {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      clip-path: inset(50%);
+    }
+  }
+
   /* The chord stands in the empty field until the caret arrives. */
   .luke-search-field-shortcut {
     display: inline-flex;
@@ -98,5 +111,23 @@
   .luke-search-field-clear > svg {
     width: var(--luke-control-icon);
     height: var(--luke-control-icon);
+  }
+
+  /* A menu's head row: as tall as a menu row and its inset, its words
+     inset as a row's are, and only a hairline under it; no ring, since the
+     caret is always in it while the menu stands. */
+  .luke-search-field[data-look="menu"] {
+    height: calc(var(--luke-menu-row-height) + 2 * var(--luke-space-2) + 2px);
+    padding: 0 var(--luke-space-12);
+    border: 0;
+    border-bottom: 1px solid var(--luke-color-border);
+    border-radius: 0;
+    background: none;
+    outline: none;
+  }
+
+  .luke-search-field[data-look="menu"] > svg {
+    width: var(--luke-menu-glyph);
+    height: var(--luke-menu-glyph);
   }
 }

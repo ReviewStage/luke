@@ -58,6 +58,7 @@
   flex: 1;
   min-height: 0;
   padding: var(--luke-space-12) var(--luke-space-2) var(--luke-space-12);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-user-select: text;
@@ -181,10 +182,10 @@
   }
 }
 
-/* Who created the task and when, and who last edited its plan and when,
-   under its title, in the words of an issue's own line
-   (`.issue-byline`). Each phrase wraps whole onto the next line rather
-   than leaving a name cut from its time. */
+/* The line under a document's title, a plan's and an issue's alike
+   (`DocumentByline`): who created it and when, then its last edit. Each
+   phrase wraps whole onto the next line rather than leaving a name cut
+   from its time. */
 .plan-byline {
   display: flex;
   flex-wrap: wrap;
@@ -634,6 +635,7 @@
   .conversation-log {
     min-height: 0;
     flex: 1;
+    overflow-x: hidden;
     overflow-y: auto;
     padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
   }
@@ -658,7 +660,7 @@
   }
 
   .conversation-empty-wide {
-    max-width: 440px; /* off-scale: a one-line failure's measure */
+    max-width: 560px; /* off-scale: a one-line failure's measure, Continue beside it */
   }
 
   /* Its own ground under the button, ringed and lifted off the lines, which
@@ -811,6 +813,7 @@
     flex: 1;
     flex-direction: column;
     gap: var(--luke-space-12);
+    overflow-x: hidden;
     overflow-y: auto;
     padding-top: var(--luke-section-gap);
   }
@@ -893,14 +896,10 @@
 }
 
 /* An Inbox item's words and what was filled in, which a reader may select
-   and copy; what was filled in keeps the lines it was typed on. */
+   and copy. */
 .inbox-words {
   margin: 0;
   user-select: text;
-}
-
-.inbox-lines {
-  white-space: pre-line;
 }
 
 /* A link the window does not open: its address beside its label, to copy. */
@@ -1020,6 +1019,7 @@
 .file-tab-lines {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1509,12 +1509,12 @@
   outline-offset: var(--luke-focus-ring-inset);
 }
 
-.diff-list-fold > svg {
+.diff-list-fold {
   transform: rotate(90deg);
   transition: transform var(--duration-quick) ease;
 }
 
-.diff-list-head[data-collapsed] .diff-list-fold > svg {
+.diff-list-head[data-collapsed] .diff-list-fold {
   transform: none;
 }
 
@@ -1923,26 +1923,44 @@
   color: var(--luke-color-text-muted);
 }
 
-.pull-request-review-body {
+/* Words sent to GitHub as Markdown (`markdown-field.tsx`): Write and
+   Preview over the field, the preview drawn in the field's own box. */
+.markdown-field {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-8);
 }
 
-.pull-request-review-preview {
+.markdown-field-preview {
   box-sizing: border-box;
   width: 100%;
   min-height: 96px;
   max-height: 240px;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-10);
 }
 
-.pull-request-review-preview > p:only-child {
+.markdown-field-preview > p:only-child {
   margin: 0;
+}
+
+/* The pending comments the member's review holds, counted on the bar's
+   Review press as stage-cli's badge counts them. */
+.pull-request-review-count {
+  min-width: 16px;
+  margin-inline-start: var(--luke-space-4);
+  padding: 0 var(--luke-space-4);
+  border-radius: 999px;
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
 }
 
 .pull-request-review-foot {
@@ -1976,32 +1994,7 @@
   flex: 0 1 auto;
 }
 
-/* "Stack 2/4", a quiet outlined button whose menu lists the stack. */
-.pull-request-stack {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: var(--luke-space-4);
-  height: 22px;
-  margin-top: var(--luke-space-2);
-  padding: 0 var(--luke-space-6);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-6);
-  background: transparent;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.pull-request-stack:hover {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-}
-
-.pull-request-stack > svg {
-  width: 12px;
-  height: 12px;
-}
-
+/* "Stack 2/4", an outlined button whose menu lists the stack: its count quieter. */
 .pull-request-stack-count {
   color: var(--luke-color-text-subtle);
   font-variant-numeric: tabular-nums;
@@ -2066,18 +2059,6 @@
   gap: var(--luke-space-4);
 }
 
-/* A picker's press, as small as the words beside it. */
-.icon-button.pull-request-picker {
-  width: 22px;
-  height: 22px;
-  color: var(--luke-color-text-subtle);
-}
-
-.icon-button.pull-request-picker > svg {
-  width: 14px;
-  height: 14px;
-}
-
 /* A label's colour, leading its item in the label picker. */
 .pull-request-label-dot {
   display: inline-block;
@@ -2099,6 +2080,7 @@
   min-height: 0;
   flex: 1;
   padding: var(--luke-space-12) var(--column-inset) var(--luke-space-24);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -2133,38 +2115,18 @@
    faint after the number until the title is hovered or the pencil focused,
    and the field takes the title's own type and room. */
 .pull-request-title-edit {
-  width: 22px;
-  height: 22px;
   margin-inline-start: var(--luke-space-2);
   vertical-align: middle;
   opacity: 0;
 }
 
-.pull-request-title-edit svg {
-  width: 13px;
-  height: 13px;
-}
-
 .pull-request-title-editable:hover .pull-request-title-edit,
-.pull-request-title-edit:focus-visible {
+.pull-request-title-edit:has(:focus-visible) {
   opacity: 1;
 }
 
 .pull-request-title-field {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-}
-
-.pull-request-title-input {
-  min-width: 0;
-  flex: 1 1 auto;
-  padding: var(--luke-space-2) var(--luke-space-4);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-surface);
-  color: inherit;
-  font: inherit;
+  display: grid;
 }
 
 .pull-request-number {
@@ -2448,6 +2410,41 @@
   background: var(--luke-color-surface);
 }
 
+/* A comment being written on lines of a file (`line-comment.tsx`), under
+   the last of them as a review thread stands: a card of the thread's own
+   face, its head naming the lines, the words with their preview, GitHub's
+   refusal, and what GitHub's own line comment offers at its foot. */
+.line-comment {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  max-width: 720px;
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+}
+
+.line-comment-head {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  font-weight: 600;
+}
+
+.line-comment-note {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+.line-comment-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--luke-control-gap);
+}
+
 .diff-outdated-threads {
   display: flex;
   flex: none;
@@ -2543,25 +2540,6 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--luke-control-gap);
-}
-
-.pull-request-thread-reply-open {
-  min-width: 0;
-  height: var(--luke-control-height);
-  flex: 1 1 auto;
-  padding: 0 var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-input);
-  color: var(--luke-color-text-subtle);
-  font: inherit;
-  font-size: var(--luke-type-caption-size);
-  text-align: start;
-  cursor: text;
-}
-
-.pull-request-thread-reply-open:hover {
-  border-color: var(--luke-color-border-strong);
 }
 
 .pull-request-thread-reply {
@@ -2664,6 +2642,21 @@ button.pull-request-reaction:disabled {
   color: var(--luke-color-text);
 }
 
+/* The comment box at the foot of the Conversation
+   (`pull-request-comment-box.tsx`): the words with their preview, GitHub's
+   refusal under them, drawn as every refusal is (`ErrorState`), and
+   Comment at the row's end. */
+.pull-request-comment-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
+.pull-request-comment-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* The earlier entries a read left on GitHub, counted where they would stand. */
 .pull-request-earlier {
   margin: 0 0 var(--luke-space-8);
@@ -2687,25 +2680,10 @@ button.pull-request-reaction:disabled {
 }
 
 .file-tab-edge {
-  display: block;
-  width: 100%;
   padding: var(--luke-space-4) 0 var(--luke-space-4) var(--luke-space-48);
-  border: 0;
-  background: none;
   color: var(--luke-color-text-subtle);
-  font: inherit;
-  text-align: left;
   -webkit-user-select: none;
   user-select: none;
-}
-
-.file-tab-edge:hover:not(:disabled) {
-  color: var(--luke-color-text-muted);
-}
-
-/* The edges run the lines' whole width, so their ring is drawn inside them. */
-.file-tab-edge:focus-visible {
-  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
 }
 
 /* Luke's note over the lines it is on, in a File tab (file-note.tsx): a
@@ -2971,7 +2949,8 @@ ol.transcript-list {
   max-height: 256px; /* off-scale: a block's tallest before it scrolls */
   margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   color: var(--luke-color-text);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
@@ -3147,19 +3126,11 @@ ol.transcript-list {
 /* Show more, under an answer cut to its first lines: a quiet strip across
    the card's width. */
 .tool-more {
-  display: block;
-  width: 100%;
+  margin: 0;
   padding: var(--luke-space-6) var(--luke-space-12);
   border-top: 1px solid var(--luke-color-border);
-  background: transparent;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
-  text-align: left;
-  transition: color var(--duration-quick) var(--spring);
-}
-
-.tool-more:hover {
-  color: var(--luke-color-text);
 }
 
 /* A plan's card (../ai-elements/plan.tsx), and what else a transcript opens
@@ -3442,14 +3413,31 @@ ol.transcript-list {
 
 /* The block a transcript ends on once its turn was stopped or failed, or
    once another agent continued it (`agent-tab.tsx`'s AgentEndLine): the
-   end line, then under it the row the end leads on to, Continue in new
-   agent or Continued in. In an empty transcript the two stand as siblings
-   in the empty state's own centred column instead. */
+   end line's row, then under it Continued in, where an archive took the
+   box. In an empty transcript the two stand as siblings in the empty
+   state's own centred column instead. */
 .agent-end {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-8);
+}
+
+/* The end line's row: the line, then Continue in new agent (or Continue
+   again) after its words, centred on the line's text. Note that the line is
+   one flex item, so a failure too long to share the row takes it whole and
+   the press wraps under it, never between its words; in the empty state
+   the row is centred as its column is. */
+.agent-end-row {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+.conversation-empty > .agent-end-row {
+  justify-content: center;
 }
 
 /* Note that it keeps the gap the log's `space-y-3` leaves under every block
@@ -3486,9 +3474,9 @@ ol.transcript-list {
   vertical-align: middle;
 }
 
-/* Where an agent may be continued (`continue-agent.tsx`), under a failed
-   turn's end line or in a closed box's note: Continue in new agent, and
-   why it did not start where it did not. */
+/* Where an agent may be continued (`continue-agent.tsx`), on a failed
+   turn's end line's row, in a closed box's note, or in a continued box's:
+   Continue in new agent, and why it did not start where it did not. */
 .agent-continue {
   display: inline-flex;
   flex-wrap: wrap;
@@ -3828,7 +3816,7 @@ ol.transcript-list {
   animation: todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
 }
 
-[data-todos-dock][data-disclosure="opening"] > .luke-disclosure-body {
+[data-todos-dock][data-disclosure="opening"] > .todos-dock-body {
   animation:
     luke-disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
     todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
@@ -3842,7 +3830,7 @@ ol.transcript-list {
   animation: todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
 }
 
-[data-todos-dock][data-disclosure="closing"] > .luke-disclosure-body {
+[data-todos-dock][data-disclosure="closing"] > .todos-dock-body {
   animation:
     luke-disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
     todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
@@ -3944,6 +3932,7 @@ ol.transcript-list {
   width: 100%;
   min-height: calc(var(--luke-type-body-leading) + var(--agent-composer-field-block));
   max-height: calc(8 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-8);
   background: transparent;
@@ -4023,20 +4012,6 @@ ol.transcript-list {
   max-width: 100%;
 }
 
-.skill-menu .task-compose-menu-name {
-  flex: none;
-}
-
-.skill-menu-description {
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* The foot's right: the model chip, the context ring, the microphone, and
    the round Send or Stop.
    It may narrow, so a long model name is cut short before the presses are. */
@@ -4066,6 +4041,7 @@ ol.transcript-list {
    stands only once the card is too narrow for every press. */
 .agent-composer-attach,
 .agent-servers-button,
+.agent-context-button,
 .dictate-button {
   display: flex;
 }
@@ -4532,7 +4508,8 @@ ol.transcript-list {
 }
 
 .attachment-viewer-lines {
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--code-ground);
   user-select: text;
 }
@@ -4579,6 +4556,21 @@ ol.transcript-list {
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-14);
   background: var(--luke-color-sidebar);
+}
+
+/* Note that the arrow, the words' first line, and the presses share one
+   centre, the presses' own, so chips that wrap to a second line leave the
+   arrow on the first rather than centred between the two. */
+.continued-composer .luke-banner-row {
+  align-items: flex-start;
+}
+
+.continued-composer .luke-banner-glyph {
+  height: var(--luke-control-height);
+}
+
+.continued-composer .luke-banner-words {
+  padding-block: calc((var(--luke-control-height) - var(--luke-type-body-leading)) / 2);
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
@@ -4686,6 +4678,7 @@ ol.transcript-list {
   min-height: 0;
   flex: 1;
   padding: var(--luke-space-4);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -5229,21 +5222,12 @@ ol.transcript-list {
 
 /* The Work tab's own ----------------------------------------------------- */
 
-/* A quiet button-shaped line of the Work tab. Note that it is written here
-   rather than as utilities, because base.css sets every button's font and
-   colour outside the utilities' layer, and that rule wins over any utility. */
-.ai-trigger {
-  padding: 0;
-  background: none;
+/* The Work tab's Show earlier work, a quiet line over its oldest turn. */
+.task-call-earlier {
+  margin: 0;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-  text-align: left;
-  transition: color var(--duration-hover) ease;
-}
-
-.ai-trigger:hover {
-  color: var(--luke-color-text);
 }
 
 /* Lucide's glyphs, which the AI Elements components draw with, at the

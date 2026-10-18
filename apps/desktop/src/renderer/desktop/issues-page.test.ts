@@ -58,6 +58,13 @@ const DAY = 24 * HOUR;
 /** The moment the window's clock stands at in a test that reads how long ago something was. */
 const NOW = Date.UTC(2026, 9, 14, 12);
 
+/**
+ * The moment the window's clock stands at otherwise: a day past the epoch,
+ * so the synthetic issues, stamped in its first seconds, are recent, and a
+ * settled one among them is not left out as gone quiet.
+ */
+const EARLY = DAY;
+
 /** The signed-in reader's account. */
 const READER = "user-grace";
 
@@ -187,8 +194,11 @@ let tasksArchived: TaskSummary[] = [];
 let newTasksFrom: NewTaskIssue[] = [];
 /** Every task opened, in order. */
 let tasksOpened: string[] = [];
+/** The account signed in as the page is drawn. */
+let signedIn = READER;
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"], now: EARLY });
   installScrollIntoView();
   window.localStorage.clear();
   standing = [];
@@ -208,6 +218,7 @@ beforeEach(() => {
   tasksArchived = [];
   newTasksFrom = [];
   tasksOpened = [];
+  signedIn = READER;
   editors.length = 0;
   bundles = landed;
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
@@ -317,7 +328,7 @@ function Pages({
   const control = tasksControl({ workspace });
   const tasks = tasksControl({
     workspace,
-    me: READER,
+    me: signedIn,
     tasks: tasksListed,
     archived: tasksArchived,
     onNewTaskFrom: (from) => newTasksFrom.push(from),
@@ -413,7 +424,7 @@ function titleOf(page: HTMLElement): string | undefined {
 
 /** What the line under the issue's title says, a phrase at a time, each face left out. */
 function bylineOf(page: HTMLElement): (string | undefined)[] {
-  return [...page.querySelectorAll(".issue-byline .actor-line")].map(lineWords);
+  return [...page.querySelectorAll(".plan-byline .actor-line")].map(lineWords);
 }
 
 /** The button whose words or name are `name`, wherever it is drawn. */
@@ -465,7 +476,7 @@ function picked(page: HTMLElement, label: string): string | undefined {
 function pick(page: HTMLElement, label: string, option: string): void {
   act(() => picker(page, label).click());
   const row = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
-    (each) => each.querySelector(".task-compose-menu-name")?.textContent === option,
+    (each) => each.querySelector(".luke-combobox-option-label")?.textContent === option,
   );
   assert.ok(row, `no ${option} in ${label}`);
   act(() => row.click());
@@ -764,7 +775,7 @@ test("under the title an issue's page says who filed it, by their face as the me
   const page = await openIssue(filed.id);
 
   assert.deepEqual(bylineOf(page), ["Created by Ada Lovelace · 3d ago", "Last edited · 2h ago"]);
-  const picture = page.querySelector<HTMLImageElement>(".issue-byline .actor-mark img");
+  const picture = page.querySelector<HTMLImageElement>(".plan-byline .actor-mark img");
   assert.ok(picture?.src.startsWith("https://avatars.githubusercontent.com/u/1"), "her picture");
 });
 
@@ -882,10 +893,39 @@ test("an issue's page opened before its issue is read, as a link opens it, stand
   await settle();
 
   assert.equal(readingWords, "Reading the issue");
-  assert.ok(reading?.closest(".desktop-document"), "the blocks stand in the issue's own document");
+  assert.ok(
+    reading?.closest(".desktop-document .plan-document-scroll"),
+    "the blocks stand in the issue's own document, in a plan's own column",
+  );
   assert.equal(readingTitle, undefined);
   assert.equal(page.querySelector('[role="status"]'), null);
   assert.equal(titleOf(page), "Fix login");
+});
+
+test("an issue's description is drawn a section at a time, as a plan's text is, so its sections stand a plan's gap apart", async () => {
+  standing = [
+    issue(1, { description: "Fails on CI.\n\n## Steps\n\nRun it twice.\n\n## Fix\n\nRetry once." }),
+  ];
+  const page = await openIssue(issue(1).id);
+
+  assert.deepEqual(
+    [...descriptionOf(page).querySelectorAll(":scope > .plan-unit")].map(
+      (unit) => unit.textContent,
+    ),
+    ["Fails on CI.", "Steps\nRun it twice.", "Fix\nRetry once."],
+  );
+  assert.ok(descriptionOf(page).classList.contains("document-sections"));
+});
+
+test("an issue's document stands in a plan's own scrolling column and body, its title, byline, and description together, as a plan's do", async () => {
+  standing = [issue(1, { title: "Fix login", description: "Fails on CI." })];
+  const page = await openIssue(issue(1).id);
+
+  const body = page.querySelector(".desktop-document > .plan-document-scroll > .plan-body");
+  assert.ok(body, "the issue's body stands where a plan's does");
+  assert.equal(body.querySelector("[aria-label='Issue title']")?.textContent, "Fix login");
+  assert.ok(body.querySelector(".plan-byline"), "the line under the title is a plan's");
+  assert.equal(descriptionOf(page).closest(".plan-body"), body);
 });
 
 test("two changes at once draw the newest's answer, though the older one is answered after it", async () => {
@@ -943,7 +983,7 @@ test("a click into the description opens the plan's editor in its place, the car
 });
 
 /**
- * The issue's page laid out as a window draws it: its main column scrolls,
+ * The issue's page laid out as a window draws it: its document's column scrolls,
  * as its stylesheet says, and stands from 0 to 1000 across, and the
  * description's words from 100 to 800 across and 200 to 240 down. Laid out
  * before the page is drawn, as a window's stylesheet is.
@@ -951,21 +991,21 @@ test("a click into the description opens the plan's editor in its place, the car
 function layPageOut(): void {
   const sheet = document.createElement("style");
   sheet.dataset.laidOut = "";
-  sheet.textContent = ".luke-detail-page-main { overflow-y: auto; }";
+  sheet.textContent = ".plan-document-scroll { overflow-y: auto; }";
   document.head.append(sheet);
   const wide = DOMRect.fromRect({ x: 0, y: 0, width: 1000, height: 900 });
   const words = DOMRect.fromRect({ x: 100, y: 200, width: 700, height: 40 });
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    return this.classList.contains("luke-detail-page-main") ? wide : words;
+    return this.classList.contains("plan-document-scroll") ? wide : words;
   });
 }
 
-/** The page's main column, whose room is the description's way in. */
+/** The document's column, whose room is the description's way in. */
 function columnOf(page: HTMLElement): HTMLElement {
   return (
-    page.querySelector<HTMLElement>(".luke-detail-page-main") ?? assert.fail("the page's column")
+    page.querySelector<HTMLElement>(".plan-document-scroll") ?? assert.fail("the document's column")
   );
 }
 
@@ -1097,7 +1137,7 @@ test("a description left as it opened sends nothing and closes", async () => {
   assert.equal(descriptionOf(page).textContent, "Fails on CI.");
 });
 
-test("a save the service refused keeps every word typed in the open editor and says so", async () => {
+test("a save the service refused keeps every word typed in the open editor and says so, with a Retry that sends them again", async () => {
   standing = [issue(1)];
   changeRefused = true;
   const page = await openIssue(issue(1).id);
@@ -1110,6 +1150,16 @@ test("a save the service refused keeps every word typed in the open editor and s
   assert.ok(!editor.destroyed, "the editor stays open");
   assert.equal(editor.text, "Steps to reproduce");
   assert.match(page.textContent ?? "", /Couldn't save the description/u);
+
+  changeRefused = false;
+  act(() => button("Retry").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "Steps to reproduce" } },
+    { issueId: issue(1).id, change: { description: "Steps to reproduce" } },
+  ]);
+  assert.ok(editor.destroyed, "the editor closes once Retry's save is kept");
 });
 
 test("a description past its bound is not sent, and the open editor says why", async () => {
@@ -1123,7 +1173,7 @@ test("a description past its bound is not sent, and the open editor says why", a
 
   assert.deepEqual(changes, []);
   assert.ok(!editor.destroyed, "the editor stays open");
-  assert.match(page.textContent ?? "", /The description is too long/u);
+  assert.match(page.textContent ?? "", /Not saved: the description is too long/u);
 });
 
 test("a finish while a save is out waits for it, then sends the words typed meanwhile, and the editor closes once those are kept", async () => {
@@ -2104,4 +2154,174 @@ test("an issue's page lists its archived tasks too, and its tasks newest started
   const page = await openIssue(issue(1).id);
 
   assert.deepEqual(workOf(page), ["Third try", "Second try", "First try"]);
+});
+
+/** The item of the menu standing open whose label, its glyph and any detail left out, is `name`. */
+function labelledItem(name: string): HTMLButtonElement {
+  const found = [
+    ...document.querySelectorAll<HTMLElement>(
+      '[role="menu"]:not([data-leaving]) .luke-menu-item-label',
+    ),
+  ].find((each) => each.textContent === name);
+  const item = found?.closest<HTMLButtonElement>("button");
+  assert.ok(item, `no menu item labelled ${name}`);
+  return item;
+}
+
+/** One choice of View options taken: the submenu named opened, where one is, and the choice in it. */
+function chooseView(choice: string, submenu?: string): void {
+  act(() => button("View options").click());
+  if (submenu !== undefined) act(() => labelledItem(submenu).click());
+  act(() => labelledItem(choice).click());
+}
+
+/** Whether View options says the page is filtered. */
+function saysFiltered(page: HTMLElement): boolean {
+  const options = page.querySelector(".issues-view-options");
+  return (
+    options?.getAttribute("data-filtered") === "true" &&
+    button("View options").getAttribute("aria-description") === "Filtered"
+  );
+}
+
+test("a priority chosen in View options leaves the others off the board and the list, says the page is filtered, and stands when the page opens again", async () => {
+  standing = [
+    issue(1, { priority: ISSUE_PRIORITY.URGENT }),
+    issue(2, { priority: ISSUE_PRIORITY.LOW }),
+    issue(3, { priority: ISSUE_PRIORITY.NONE, status: ISSUE_STATUS.TODO }),
+  ];
+  const page = mount();
+  await settle();
+  const filteredAtFirst = saysFiltered(page);
+
+  chooseView("Urgent", "Priority");
+  const board = groups(page);
+  const filtered = saysFiltered(page);
+  showList();
+  const list = groups(page);
+  act(() => root?.unmount());
+  const reopened = mount();
+  await settle();
+
+  assert.equal(filteredAtFirst, false);
+  assert.deepEqual(board, [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.ok(filtered, "View options says a filter is on");
+  assert.deepEqual(list, [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.deepEqual(groups(reopened), [["Backlog1", ["ACME-1 Issue 1"]]], "the filter is kept");
+  assert.ok(saysFiltered(reopened));
+});
+
+test("Created by Me in View options shows only the issues the reader filed", async () => {
+  standing = [
+    issue(1, { creator: { userId: "user-ada", name: "Ada Lovelace" } }),
+    issue(2, { creator: { userId: READER, name: "Grace Hopper" } }),
+    issue(3, { creator: null }),
+  ];
+  const page = mount();
+  await settle();
+
+  chooseView("Me", "Created by");
+  const mine = groups(page);
+  chooseView("Ada Lovelace", "Created by");
+  const ada = groups(page);
+  chooseView("Anyone", "Created by");
+
+  assert.deepEqual(mine, [["Backlog1", ["ACME-2 Issue 2"]]]);
+  assert.deepEqual(ada, [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.deepEqual(groups(page), [
+    ["Backlog3", ["ACME-3 Issue 3", "ACME-2 Issue 2", "ACME-1 Issue 1"]],
+  ]);
+  assert.equal(saysFiltered(page), false);
+});
+
+test("a Done or Canceled issue last changed over a week ago is left off the board and the list at first while a recent one stands, and Show completed brings it back", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  standing = [
+    issue(1, { status: ISSUE_STATUS.DONE, updatedAt: NOW - 8 * DAY }),
+    issue(2, { status: ISSUE_STATUS.DONE, updatedAt: NOW - DAY }),
+    issue(3, { status: ISSUE_STATUS.CANCELED, updatedAt: NOW - 30 * DAY }),
+    issue(4, { status: ISSUE_STATUS.BACKLOG, updatedAt: NOW - 30 * DAY }),
+  ];
+  const page = mount();
+  await settle();
+  const atFirst = columns(page);
+  const filteredAtFirst = saysFiltered(page);
+  showList();
+  const listedAtFirst = groups(page);
+
+  chooseView("Show completed");
+  const listed = groups(page);
+  act(() => button("View options").click());
+  act(() => labelledItem("Board").click());
+
+  assert.deepEqual(atFirst.slice(3), [
+    ["Done1", ["ACME-2"]],
+    ["Canceled", []],
+  ]);
+  assert.deepEqual(atFirst[0], ["Backlog1", ["ACME-4"]], "open work stands however old");
+  assert.equal(filteredAtFirst, false, "the first filter is no change to say");
+  assert.deepEqual(listedAtFirst, [
+    ["Backlog1", ["ACME-4 Issue 4"]],
+    ["Done1", ["ACME-2 Issue 2"]],
+  ]);
+  assert.deepEqual(listed, [
+    ["Backlog1", ["ACME-4 Issue 4"]],
+    ["Done2", ["ACME-2 Issue 2", "ACME-1 Issue 1"]],
+    ["Canceled1", ["ACME-3 Issue 3"]],
+  ]);
+  assert.deepEqual(columns(page).slice(3), [
+    ["Done2", ["ACME-2", "ACME-1"]],
+    ["Canceled1", ["ACME-3"]],
+  ]);
+  assert.ok(saysFiltered(page));
+});
+
+test("where every issue is settled and gone quiet, the page says none matches and Clear filters shows them", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  standing = [issue(1, { status: ISSUE_STATUS.DONE, updatedAt: NOW - 30 * DAY })];
+  const page = mount();
+  await settle();
+  const said = page.querySelector(".luke-empty-state")?.textContent;
+
+  act(() => button("Clear filters").click());
+
+  assert.equal(said, "No issues matchClear filters");
+  assert.deepEqual(groups(page), [["Done1", ["ACME-1 Issue 1"]]]);
+});
+
+test("a filter that keeps none of the workspace's issues says no issue matches, and Clear filters shows every issue again", async () => {
+  standing = [issue(1), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+
+  chooseView("Urgent", "Priority");
+  const said = page.querySelector(".luke-empty-state")?.textContent;
+  const columnsWhileNone = page.querySelectorAll("[data-issue-column]").length;
+  act(() => button("Clear filters").click());
+
+  assert.equal(said, "No issues matchClear filters");
+  assert.equal(columnsWhileNone, 0, "the board's columns step aside for the line");
+  assert.deepEqual(groups(page), [
+    ["Backlog1", ["ACME-1 Issue 1"]],
+    ["Todo1", ["ACME-2 Issue 2"]],
+  ]);
+  assert.equal(saysFiltered(page), false);
+});
+
+test("a filter one account chose is not the filter of another account signed in on this Mac", async () => {
+  standing = [
+    issue(1, { creator: { userId: "user-ada", name: "Ada Lovelace" } }),
+    issue(2, { creator: { userId: READER, name: "Grace Hopper" } }),
+  ];
+  mount();
+  await settle();
+  chooseView("Me", "Created by");
+  act(() => root?.unmount());
+
+  signedIn = "user-ada";
+  const other = mount();
+  await settle();
+
+  assert.deepEqual(groups(other), [["Backlog2", ["ACME-2 Issue 2", "ACME-1 Issue 1"]]]);
+  assert.equal(saysFiltered(other), false);
 });

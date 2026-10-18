@@ -22,8 +22,12 @@ import {
   type MergeMethod,
   PULL_REQUEST_WRITE_BOUNDS,
   type PullRequestReviewerRef,
+  REVIEW_COMMENT_MODE,
+  REVIEW_COMMENT_SIDE,
   REVIEW_EVENT,
   REVIEWER_KIND,
+  type ReviewCommentMode,
+  type ReviewCommentSide,
   type ReviewEvent,
 } from "@luke/features/pull-request-write-wire";
 import { Data, Effect, type Redacted, Schema } from "effect";
@@ -208,7 +212,7 @@ const PENDING_REVIEWS_READ = 10;
 const PENDING_REVIEW_QUERY = `query($id: ID!) {
   node(id: $id) {
     ... on PullRequest {
-      reviews(states: PENDING, first: ${PENDING_REVIEWS_READ}) { nodes { id viewerDidAuthor } }
+      reviews(states: PENDING, first: ${PENDING_REVIEWS_READ}) { nodes { id viewerDidAuthor commit { oid } } }
     }
   }
 }`;
@@ -216,7 +220,13 @@ const PENDING_REVIEW_QUERY = `query($id: ID!) {
 const PendingReviewsSchema = Schema.Struct({
   node: Schema.Struct({
     reviews: Schema.Struct({
-      nodes: Schema.Array(Schema.Struct({ id: Schema.String, viewerDidAuthor: Schema.Boolean })),
+      nodes: Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          viewerDidAuthor: Schema.Boolean,
+          commit: Schema.optionalKey(Schema.NullOr(Schema.Struct({ oid: Schema.String }))),
+        }),
+      ),
     }),
   }),
 });
@@ -233,6 +243,13 @@ const ADD_REVIEW_MUTATION = `mutation($id: ID!, $event: PullRequestReviewEvent!,
   }
 }`;
 
+/** The member's own pending review on the pull request, by its GraphQL id; none where they hold none. GitHub shows a member only theirs, and `viewerDidAuthor` says so whatever it shows. */
+const ownPendingReview = (token: Redacted.Redacted, pullRequestId: string) =>
+  Effect.map(
+    githubWrite(token, PENDING_REVIEW_QUERY, { id: pullRequestId }, PendingReviewsSchema),
+    (pending) => pending.node.reviews.nodes.find((node) => node.viewerDidAuthor),
+  );
+
 /**
  * A review submitted on the member's token: their own pending review,
  * where they hold one, so the comments they started it with are what
@@ -247,13 +264,7 @@ export const submitPullRequestReview = /* @__PURE__ */ Effect.fn("web/submitPull
     pullRequestId: string,
     review: { readonly event: ReviewEvent; readonly body: string },
   ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
-    const pending = yield* githubWrite(
-      token,
-      PENDING_REVIEW_QUERY,
-      { id: pullRequestId },
-      PendingReviewsSchema,
-    );
-    const own = pending.node.reviews.nodes.find((node) => node.viewerDidAuthor);
+    const own = yield* ownPendingReview(token, pullRequestId);
     const event = GRAPHQL_REVIEW_EVENT[review.event];
     const body = review.body.trim() === "" ? {} : { body: review.body };
     yield* githubWrite(
@@ -510,6 +521,147 @@ export const takeOutOfMergeQueue = /* @__PURE__ */ Effect.fn("web/takeOutOfMerge
 ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
   yield* githubWrite(token, DEQUEUE_MUTATION, { id: pullRequestId }, Schema.Unknown);
 });
+
+const COMMENT_MUTATION = `mutation($id: ID!, $body: String!) {
+  addComment(input: { subjectId: $id, body: $body }) { commentEdge { node { id } } }
+}`;
+
+/** A comment on the pull request itself, at the foot of its conversation, on the member's token. */
+export const commentOnPullRequest = /* @__PURE__ */ Effect.fn("web/commentOnPullRequest")(
+  function* (
+    token: Redacted.Redacted,
+    pullRequestId: string,
+    body: string,
+  ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+    yield* githubWrite(token, COMMENT_MUTATION, { id: pullRequestId, body }, Schema.Unknown);
+  },
+);
+
+/** GitHub's own word for each side of a diff a line comment counts on, as `DiffSide` spells it. */
+const GRAPHQL_DIFF_SIDE = {
+  [REVIEW_COMMENT_SIDE.LEFT]: "LEFT",
+  [REVIEW_COMMENT_SIDE.RIGHT]: "RIGHT",
+} as const satisfies Record<ReviewCommentSide, string>;
+
+/** A comment on a line or lines of a changed file, as the member wrote it against the head their diff was read at. */
+export interface LineComment {
+  readonly mode: ReviewCommentMode;
+  readonly path: string;
+  readonly line: number;
+  readonly side: ReviewCommentSide;
+  readonly startLine?: number;
+  readonly startSide?: ReviewCommentSide;
+  readonly body: string;
+  readonly headSha: string;
+}
+
+/** The thread's place and words, which every line comment's document names alike. */
+const THREAD_VARIABLES =
+  "$path: String!, $body: String!, $line: Int!, $side: DiffSide!, $startLine: Int, $startSide: DiffSide";
+const THREAD_FIELDS =
+  "path: $path, body: $body, line: $line, side: $side, startLine: $startLine, startSide: $startSide";
+
+const SINGLE_COMMENT_MUTATION = `mutation($id: ID!, $commit: GitObjectID!, ${THREAD_VARIABLES}) {
+  addPullRequestReview(input: { pullRequestId: $id, commitOID: $commit, event: COMMENT, threads: [{ ${THREAD_FIELDS} }] }) {
+    pullRequestReview { id }
+  }
+}`;
+
+const START_REVIEW_MUTATION = `mutation($id: ID!, $commit: GitObjectID!, ${THREAD_VARIABLES}) {
+  addPullRequestReview(input: { pullRequestId: $id, commitOID: $commit, threads: [{ ${THREAD_FIELDS} }] }) {
+    pullRequestReview { id }
+  }
+}`;
+
+const REVIEW_THREAD_MUTATION = `mutation($review: ID!, ${THREAD_VARIABLES}) {
+  addPullRequestReviewThread(input: { pullRequestReviewId: $review, ${THREAD_FIELDS} }) { thread { id } }
+}`;
+
+/** A line comment's place and words as its document's variables: one line where no start is named. */
+function threadVariables(comment: LineComment) {
+  return {
+    path: comment.path,
+    body: comment.body,
+    line: comment.line,
+    side: GRAPHQL_DIFF_SIDE[comment.side],
+    ...(comment.startLine === undefined ? undefined : { startLine: comment.startLine }),
+    ...(comment.startSide === undefined
+      ? undefined
+      : { startSide: GRAPHQL_DIFF_SIDE[comment.startSide] }),
+  };
+}
+
+/** What the member is told where the review they hold pending was started on a commit other than the one their diff was read at, whose lines may not be these. */
+const PENDING_ON_OTHER_COMMIT =
+  "Your pending review was started on another commit. Submit or discard it, then refresh changes to comment on these lines.";
+
+/**
+ * A comment on lines of a changed file, on the member's token, as GitHub's
+ * own line comment offers it: published at once as a review of its own
+ * (`single`), as "Add single comment" does; or added to the member's own
+ * pending review (`review`), or, where they hold none, one started with it
+ * on the head their diff was read at, in the one call, so a refused comment
+ * never leaves an empty review behind; that review is the one the Review
+ * panel submits (`submitPullRequestReview`). A pending review started on
+ * another commit is refused in words saying so rather than given lines
+ * counted on this one. GitHub's rules, a line outside the diff, a range
+ * across hunks, a head no longer the pull request's, are its refusal in
+ * its words.
+ */
+export const addLineComment = /* @__PURE__ */ Effect.fn("web/addLineComment")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  comment: LineComment,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  const thread = threadVariables(comment);
+  if (comment.mode === REVIEW_COMMENT_MODE.SINGLE) {
+    yield* githubWrite(
+      token,
+      SINGLE_COMMENT_MUTATION,
+      { id: pullRequestId, commit: comment.headSha, ...thread },
+      Schema.Unknown,
+    );
+    return;
+  }
+  const own = yield* ownPendingReview(token, pullRequestId);
+  if (own === undefined) {
+    yield* githubWrite(
+      token,
+      START_REVIEW_MUTATION,
+      { id: pullRequestId, commit: comment.headSha, ...thread },
+      Schema.Unknown,
+    );
+    return;
+  }
+  const started = own.commit?.oid;
+  if (started !== undefined && started !== comment.headSha) {
+    return yield* refusalOf([PENDING_ON_OTHER_COMMIT]);
+  }
+  yield* githubWrite(token, REVIEW_THREAD_MUTATION, { review: own.id, ...thread }, Schema.Unknown);
+});
+
+const DISCARD_REVIEW_MUTATION = `mutation($id: ID!) {
+  deletePullRequestReview(input: { pullRequestReviewId: $id }) { pullRequestReview { id } }
+}`;
+
+/** What the member is told where they hold no pending review on the pull request to throw away. */
+const NO_PENDING_REVIEW = "You have no pending review on this pull request.";
+
+/**
+ * The member's own pending review on the pull request thrown away, its
+ * comments with it, on their token: found by the pull request it is on and
+ * whether GitHub says they wrote it, so no other review is ever touched.
+ */
+export const discardPendingReview = /* @__PURE__ */ Effect.fn("web/discardPendingReview")(
+  function* (
+    token: Redacted.Redacted,
+    pullRequestId: string,
+  ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+    const own = yield* ownPendingReview(token, pullRequestId);
+    if (own === undefined) return yield* refusalOf([NO_PENDING_REVIEW]);
+    yield* githubWrite(token, DISCARD_REVIEW_MUTATION, { id: own.id }, Schema.Unknown);
+  },
+);
 
 const CLOSE_MUTATION = `mutation($id: ID!) {
   closePullRequest(input: { pullRequestId: $id }) { pullRequest { state } }

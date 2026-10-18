@@ -1,5 +1,6 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
 import { IconButton, TextButton } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
@@ -13,7 +14,6 @@ import { agentActor, agentTabLabel } from "./coding-agent-model";
 import { type AgentFork, FORK_WORDS, type ForkCut, forksOf, messageOpening } from "./fork-model";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { useOpenPlace } from "./use-open-link";
 
 /**
  * fork-action.tsx -- a coding agent forked at one of its messages: the message's Fork to new agent, the draft's chip naming what it forks, and the line under a message saying which agents it was forked to.

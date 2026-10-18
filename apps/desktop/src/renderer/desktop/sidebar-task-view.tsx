@@ -109,12 +109,12 @@ function filteredActor(
   return creatorActor(named ?? { ownerId: createdBy }, reader, undefined);
 }
 
-/** Created by's choices: Anyone, then Me, then each other member as read, the choice checked. */
-function createdByEntries(
-  control: TaskListViewControl,
+/** Created by's choices: Anyone, then Me, then each other member as read, the choice checked; the Issues page's View options draws the same. */
+export function createdByEntries(
+  createdBy: string | undefined,
+  onCreatedBy: (createdBy: string | undefined) => void,
   reader: ReturnType<typeof useMemberDirectory>,
 ): MenuAction[] {
-  const { createdBy } = control.view;
   const others = (reader.members ?? []).filter((member) => member.userId !== reader.readerId);
   const me =
     reader.readerId === undefined
@@ -129,7 +129,7 @@ function createdByEntries(
               />
             ),
             checked: createdBy === reader.readerId,
-            onSelect: () => control.onCreatedBy(reader.readerId),
+            onSelect: () => onCreatedBy(reader.readerId),
           },
         ];
   return [
@@ -137,14 +137,14 @@ function createdByEntries(
       label: "Anyone",
       icon: <UsersIcon />,
       checked: createdBy === undefined,
-      onSelect: () => control.onCreatedBy(undefined),
+      onSelect: () => onCreatedBy(undefined),
     },
     ...me,
     ...others.map((member) => ({
       label: member.name,
       icon: <ActorMark actor={memberActor(member, reader.readerId)} size={ACTOR_SIZE.INLINE} />,
       checked: createdBy === member.userId,
-      onSelect: () => control.onCreatedBy(member.userId),
+      onSelect: () => onCreatedBy(member.userId),
     })),
   ];
 }
@@ -210,7 +210,7 @@ function viewEntries(
             {
               label: "Created by",
               icon: <UsersIcon />,
-              items: createdByEntries(control, reader),
+              items: createdByEntries(view.createdBy, control.onCreatedBy, reader),
             },
           ],
         ]

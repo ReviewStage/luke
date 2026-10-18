@@ -330,6 +330,14 @@ test("the workspace first resolving keeps a repository picked before the workspa
   assert.deepEqual(dialog.starts, [["Dark mode", "alice/private"]]);
 });
 
+/** The lines the repository menu says in its rows' place. */
+function menuNotes(): (string | null)[] {
+  return [...document.querySelectorAll(".luke-combobox-note")].flatMap((note) => {
+    const lines = [...note.querySelectorAll("p")];
+    return lines.length === 0 ? [note.textContent] : lines.map((line) => line.textContent);
+  });
+}
+
 /** The chip's menu opened, and the buttons then drawn anywhere in the document. */
 async function openChip(): Promise<HTMLButtonElement[]> {
   const chip =
@@ -357,9 +365,7 @@ test("an owner or admin of a workspace with no GitHub connected is told so and o
   });
 
   const buttons = await openChip();
-  const notes = [...document.querySelectorAll(".task-compose-menu-note")].map(
-    (note) => note.textContent,
-  );
+  const notes = menuNotes();
   const open =
     buttons.find((button) => button.textContent === "Open Settings") ??
     assert.fail("the menu offers to open Settings");
@@ -383,9 +389,7 @@ test("a member of a workspace with no GitHub connected is told only to ask an ow
   });
 
   const buttons = await openChip();
-  const notes = [...document.querySelectorAll(".task-compose-menu-note")].map(
-    (note) => note.textContent,
-  );
+  const notes = menuNotes();
 
   assert.deepEqual(notes, ["Ask an owner or admin to connect GitHub."]);
   assert.equal(
@@ -405,9 +409,7 @@ async function lapsedMenu(manages: boolean) {
   });
   const buttons = await openChip();
   return {
-    notes: [...document.querySelectorAll(".task-compose-menu-note")].map(
-      (note) => note.textContent,
-    ),
+    notes: menuNotes(),
     settings: buttons.some((button) => button.textContent === "Open Settings"),
   };
 }
@@ -438,9 +440,7 @@ test("in a workspace with no GitHub connected, a repository its plans still name
   });
 
   const buttons = await openChip();
-  const notes = [...document.querySelectorAll(".task-compose-menu-note")].map(
-    (note) => note.textContent,
-  );
+  const notes = menuNotes();
   const offered = buttons.map((button) => button.textContent);
   const search =
     document.querySelector<HTMLInputElement>('input[aria-label="Search repositories"]') ??
@@ -518,8 +518,8 @@ test("the repository menu names each repository first and its owner after it, so
   await openChip();
   const rows = () =>
     [...document.querySelectorAll('[role="option"]')].map((row) => [
-      row.querySelector(".task-compose-menu-name")?.textContent,
-      row.querySelector(".task-compose-menu-detail")?.textContent,
+      row.querySelector(".luke-combobox-option-label")?.textContent,
+      row.querySelector(".luke-combobox-option-detail")?.textContent,
     ]);
 
   assert.deepEqual(rows(), [

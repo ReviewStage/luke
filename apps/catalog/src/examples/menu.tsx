@@ -8,8 +8,10 @@ import {
   GAP,
   IconButton,
   Inline,
+  MENU_ITEM_MARK,
   Menu,
   type MenuEntry,
+  MenuItem,
   PencilIcon,
   TEXT_TONE,
   Text,
@@ -24,8 +26,9 @@ import { CatalogSection } from "../section";
 /**
  * menu.tsx -- a menu dropped from a ⋯ with glyphs, shortcuts, a dimmed item
  * and a red one ruled apart; one of settings in submenus; one with a heading
- * and a footer, its long words cut short; and one a right-click hangs at the
- * pointer.
+ * and a footer, its long words cut short; one a right-click hangs at the
+ * pointer; and a searchable menu's pinned rows, steered from its field: one
+ * opening a list beside it, a switch, and one that does not apply now.
  */
 
 const ignore = () => undefined;
@@ -139,6 +142,36 @@ function RightClickRow(): React.JSX.Element {
   );
 }
 
+/** Pinned rows as a model picker's foot draws them, the pointer moving their one highlight. */
+function PinnedRows(): React.JSX.Element {
+  const [highlighted, setHighlighted] = useState("effort");
+  const [fast, setFast] = useState(true);
+  const steered = (id: string) => ({
+    id: `catalog-pinned-${id}`,
+    highlighted: highlighted === id,
+    onHover: () => setHighlighted(id),
+  });
+  return (
+    <div className="catalog-popover catalog-column">
+      <MenuItem
+        action={{ label: "Effort", hint: "High", opens: true, onSelect: ignore }}
+        steered={{ ...steered("effort"), expanded: false }}
+        onChoose={ignore}
+      />
+      <MenuItem
+        action={{ label: "Fast", checked: fast, mark: MENU_ITEM_MARK.SWITCH, onSelect: ignore }}
+        steered={steered("fast")}
+        onChoose={() => setFast(!fast)}
+      />
+      <MenuItem
+        action={{ label: "Long context", disabled: true, onSelect: ignore }}
+        steered={steered("long")}
+        onChoose={ignore}
+      />
+    </div>
+  );
+}
+
 function MenuExample(): React.JSX.Element {
   return (
     <>
@@ -151,6 +184,9 @@ function MenuExample(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="menu-pointer" title="At the pointer">
         <RightClickRow />
+      </CatalogSection>
+      <CatalogSection id="menu-pinned" title="Pinned rows steered from a field">
+        <PinnedRows />
       </CatalogSection>
     </>
   );

@@ -3,7 +3,12 @@ import {
   type FactoryDefect,
   type FactoryPlanned,
 } from "@luke/features/factory-world-wire";
-import { AGENT_STATE, type AgentState, type FactoryWorldView } from "@luke/ui/factory-world";
+import {
+  AGENT_STATE,
+  type AgentState,
+  agentDrawnUnder,
+  type FactoryWorldView,
+} from "@luke/ui/factory-world";
 import { Color } from "three";
 import {
   PICK_KIND,
@@ -240,7 +245,7 @@ export const world: WorldModule = {
     const castingsOf = (next: WorldState): Casting[] =>
       next.view.agents.flatMap((agent) => {
         const failed = agent.state === AGENT_STATE.FAILED;
-        if (!next.layers.building && !failed) return [];
+        if (!agentDrawnUnder(agent, next.layers)) return [];
         const resting = agent.state === AGENT_STATE.IDLE;
         return [
           {

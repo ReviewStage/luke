@@ -1879,7 +1879,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
     [
       // A row names the repository, then its owner after it.
       [...menu.querySelectorAll('[role="option"]')].map((row) =>
-        [".task-compose-menu-detail", ".task-compose-menu-name"]
+        [".luke-combobox-option-detail", ".luke-combobox-option-label"]
           .map((part) => row.querySelector(part)?.textContent)
           .join("/"),
       ),

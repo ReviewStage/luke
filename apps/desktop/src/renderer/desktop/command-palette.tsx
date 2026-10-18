@@ -47,6 +47,10 @@
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import {
+  useWorkspaceMembersRead,
+  type WorkspaceMembersRead,
+} from "@luke/panel/tasks/use-workspace-members";
 import type { HostCapability } from "@luke/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import {
@@ -105,7 +109,6 @@ import { markReadItem } from "../tasks/task-menu-items";
 import { SIDE_PANEL_TABS } from "../tasks/use-side-panel";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { useWorkspaceMembersRead, type WorkspaceMembersRead } from "../tasks/use-workspace-members";
 import { workRowsOf } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs";

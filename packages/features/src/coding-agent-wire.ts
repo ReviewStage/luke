@@ -1356,10 +1356,13 @@ export type CodingAgentOverviewChecks = NonNullable<
  * read's reviewers still asked for override; and its comments and reviews,
  * oldest first, its newest entries kept up to the bound, with how many
  * earlier ones were left on GitHub (`earlier`), review threads past their
- * bound among them; and the reactions its description wears, read with the
+ * bound among them; the reactions its description wears, read with the
  * conversation rather than the description itself, since they are read in
- * the same ask as the reactions of its comments. Null where the agent has
- * opened no pull request yet.
+ * the same ask as the reactions of its comments; and, read beside it on the
+ * reader's own token, the review they hold pending on it, by how many
+ * comments it holds, null where they hold none or it could not be read as
+ * theirs, absent from a service before it. Null where the agent has opened
+ * no pull request yet.
  */
 export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
@@ -1373,6 +1376,9 @@ export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
       earlier: countedNumber,
       descriptionReactions: EffectSchema.optionalKey(reactionsSchema),
       descriptionSubject: reactionSubjectSchema,
+      pendingReview: EffectSchema.optionalKey(
+        EffectSchema.NullOr(EffectSchema.Struct({ comments: countedNumber })),
+      ),
     }),
   ),
 });

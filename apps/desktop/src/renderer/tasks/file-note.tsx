@@ -1,3 +1,4 @@
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { ChevronDownIcon, FoldingButton, type FoldingButtonHint, WingFace } from "@luke/ui";
 import { lineRangeText } from "@luke/voice/code-pane-model";
 import { CodeXmlIcon } from "lucide-react";
@@ -8,7 +9,6 @@ import type { FileNote } from "./file-tab-model";
 import { RelativeTime } from "./relative-time";
 import { useMentionLink } from "./task-mentions";
 import { agoText, useMinute } from "./task-time";
-import { useOpenLink } from "./use-open-link";
 
 /**
  * file-note.tsx -- Luke's note on lines of a File tab's file: a card standing over the lines he showed, saying why he showed them, as a review comment stands over the lines it is on.

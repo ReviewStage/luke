@@ -1,4 +1,13 @@
 import {
+  clearedIssueFilter,
+  filteredIssues,
+  ISSUE_PRIORITY_WORDS,
+  issueFilterAnyPriority,
+  issueFilterChanged,
+  issueFilterCreatedBy,
+  issueFilterToggledPriority,
+} from "@luke/features/issue-list-model";
+import {
   ISSUE_CALL_FAILURE,
   type IssueCallFailure,
   type IssueView,
@@ -24,28 +33,35 @@ import {
 } from "@luke/ui";
 import { Schema } from "effect";
 import {
+  CircleCheckIcon,
+  ListFilterIcon,
   ListIcon,
   ListTodoIcon,
   PlusIcon,
+  SignalHighIcon,
   SlidersHorizontalIcon,
   SquareKanbanIcon,
+  UsersIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
-import { MemberDirectory } from "../member-directory";
+import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { useMinute } from "../tasks/task-time";
 import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction } from "./action-menu";
+import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, IssueBoardSkeleton, useBoardKeys } from "./issue-board";
-import { IssueCrumbs, IssueDetail, IssueDetailSkeleton } from "./issue-detail";
+import { IssueCrumbs, IssueDetail, IssueDetailSkeleton, IssueDocumentPage } from "./issue-detail";
+import { type IssueFilterControl, useIssueFilter } from "./issue-filter-view";
 import { IssueList, listRowIssue } from "./issue-list";
+import { PRIORITY_ORDER, PriorityGlyph } from "./issue-pickers";
 import { type IssueWork, IssueWorkProvider } from "./issue-work";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
+import { createdByEntries } from "./sidebar-task-view";
 import { type IssueChange, useIssue, useIssues } from "./use-issues";
 import { useRowKeys } from "./use-row-keys";
 
@@ -65,7 +81,11 @@ import { useRowKeys } from "./use-row-keys";
  * (`issue-detail.tsx`), from which Escape comes back to the list with that
  * row holding the keyboard. Board or List, as View options last chose, is
  * kept in the renderer's own storage as the Inbox's view choices are
- * (`folded-groups.ts`), so the page opens in it again on this Mac.
+ * (`folded-groups.ts`), so the page opens in it again on this Mac. View
+ * options also filters the issues, by priority, by who filed them, and past
+ * settled ones gone quiet (`issue-list-model.ts`), kept per workspace the
+ * same way (`issue-filter-view.ts`); a filter that keeps none of a
+ * workspace's issues says so, with Clear filters.
  */
 
 /** What takes typing, where C is a letter rather than the command: a field, or words edited where they stand. */
@@ -102,6 +122,9 @@ const READING_ONE_LINE = "Reading the issue";
 
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The issues could not be read.";
+
+/** What the page says where its filter keeps none of the workspace's issues. */
+const NO_MATCH_LINE = "No issues match";
 
 /** What one issue's page says where it could not be read, and where it names no issue of the workspace. */
 const UNREAD_ONE_LINE = "The issue could not be read.";
@@ -148,20 +171,25 @@ function keyboardLeftWith(issueId: string): boolean {
 }
 
 /**
- * What the list's page stands, by its read and its layout. Note that a
- * workspace with no issue yet stands the empty state in either layout, as
- * Factory does, rather than a board of empty columns; and that
- * a board being read stands as ready, drawing its own columns of blocks
- * (`IssueBoardSkeleton`), since the page's loading rows are a list's shape,
- * not a board's.
+ * What the list's page stands, by its read, its layout, and what its
+ * filter keeps. Note that a workspace with no issue yet stands the empty
+ * state in either layout, as Factory does, rather than a board of empty
+ * columns, and a filter that keeps none of a workspace's issues says so in
+ * either layout; and that a board being read stands as ready, drawing its
+ * own columns of blocks (`IssueBoardSkeleton`), since the page's loading
+ * rows are a list's shape, not a board's.
  */
-function listState(read: ReturnType<typeof useIssues>["read"], onBoard: boolean): CollectionState {
+function listState(
+  read: ReturnType<typeof useIssues>["read"],
+  onBoard: boolean,
+  kept: number,
+): CollectionState {
   if (read === undefined) return onBoard ? COLLECTION_STATE.READY : COLLECTION_STATE.LOADING;
   if ("failure" in read) return COLLECTION_STATE.ERROR;
-  return read.issues.length === 0 ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
+  return kept === 0 ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
 }
 
-/** The list's page: the listed workspace's issues by status, a new one a press away. */
+/** The list's page: the listed workspace's issues by status, as its filter keeps them, a new one a press away. */
 function ListPage({
   root,
   tasks,
@@ -169,6 +197,7 @@ function ListPage({
   focused,
   layout,
   onLayout,
+  filter,
   onFocus,
   onCompose,
   onComposeIn,
@@ -181,6 +210,8 @@ function ListPage({
   focused: string | undefined;
   layout: IssuesLayout;
   onLayout: (layout: IssuesLayout) => void;
+  /** What the page leaves out of the workspace's issues, and the press that changes it. */
+  filter: IssueFilterControl;
   /** Hands the keyboard to an issue's card or row wherever it is drawn next, or to none. */
   onFocus: (issueId: string | undefined) => void;
   /** Opens the new issue's card; none while no workspace is listed to file one in. */
@@ -209,7 +240,8 @@ function ListPage({
     });
   };
   const workspaceName = workspace?.name ?? "";
-  const listed = read !== undefined && "issues" in read ? read.issues : undefined;
+  const every = read !== undefined && "issues" in read ? read.issues : undefined;
+  const listed = every === undefined ? undefined : filteredIssues(every, filter.filter, now);
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
@@ -224,7 +256,13 @@ function ListPage({
           </div>
           <div className="desktop-toolbar-actions">
             <SendFeedbackButton experiment={EXPERIMENT.ISSUES} />
-            <ViewOptions shown={tasks.shown} layout={layout} onLayout={onLayout} />
+            <ViewOptions
+              shown={tasks.shown}
+              workspace={workspace}
+              layout={layout}
+              onLayout={onLayout}
+              filter={filter}
+            />
             <Button
               variant={BUTTON_VARIANT.OUTLINE}
               icon={<PlusIcon />}
@@ -237,20 +275,32 @@ function ListPage({
           </div>
         </header>
       }
-      state={listState(read, onBoard)}
+      state={listState(read, onBoard, listed?.length ?? 0)}
       loadingLabel={READING_LINE}
       empty={
-        // Note that its New issue is the toolbar's, unavailable while no workspace is listed or the card stands.
-        <EmptyState
-          icon={<ListTodoIcon />}
-          action={{
-            label: NEW_ISSUE,
-            disabled: onCompose === undefined,
-            onClick: () => onCompose?.(),
-          }}
-        >
-          No issues yet
-        </EmptyState>
+        every !== undefined && every.length > 0 ? (
+          <EmptyState
+            icon={<ListFilterIcon />}
+            action={{
+              label: "Clear filters",
+              onClick: () => filter.onFilter(clearedIssueFilter(every, now)),
+            }}
+          >
+            {NO_MATCH_LINE}
+          </EmptyState>
+        ) : (
+          // Note that its New issue is the toolbar's, unavailable while no workspace is listed or the card stands.
+          <EmptyState
+            icon={<ListTodoIcon />}
+            action={{
+              label: NEW_ISSUE,
+              disabled: onCompose === undefined,
+              onClick: () => onCompose?.(),
+            }}
+          >
+            No issues yet
+          </EmptyState>
+        )
       }
       error={
         <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
@@ -289,18 +339,35 @@ function ListPage({
   );
 }
 
-/** The toolbar's button that drops the menu of how the page lays its issues out, the choice checked, as the Inbox's View options does. */
+/**
+ * The toolbar's button that drops the menu of how the page lays its issues
+ * out and what it leaves out, each choice checked, as the sidebar's tasks
+ * View options does: Board or List; Priority, every one or those chosen;
+ * Created by, in a shared workspace or while it filters, Anyone, Me, or a
+ * member by face; and Show completed, whether a Done or Canceled issue
+ * last changed over a week ago stands, off at first. While the filter
+ * differs from that first one, the button wears the sidebar's dot and
+ * says it is filtered.
+ */
 function ViewOptions({
   shown,
+  workspace,
   layout,
   onLayout,
+  filter: { filter, onFilter },
 }: {
   shown: boolean;
+  /** The workspace listed, which alone filters by creator where it is shared. */
+  workspace: TasksControl["workspace"];
   layout: IssuesLayout;
   onLayout: (layout: IssuesLayout) => void;
+  filter: IssueFilterControl;
 }): React.JSX.Element {
   const menu = useMenu(shown);
-  const choices: MenuAction[] = [
+  const reader = useMemberDirectory();
+  const memberCount = workspace?.memberCount;
+  const shared = memberCount === undefined ? (reader.members?.length ?? 0) > 1 : memberCount > 1;
+  const layouts: MenuAction[] = [
     {
       label: "Board",
       icon: <SquareKanbanIcon />,
@@ -314,16 +381,62 @@ function ViewOptions({
       onSelect: () => onLayout(ISSUES_LAYOUT.LIST),
     },
   ];
+  const priorities: MenuEntry = {
+    label: "Priority",
+    icon: <SignalHighIcon />,
+    items: [
+      {
+        label: "Any priority",
+        checked: filter.priorities === undefined,
+        onSelect: () => onFilter(issueFilterAnyPriority(filter)),
+      },
+      ...PRIORITY_ORDER.map((priority) => ({
+        label: ISSUE_PRIORITY_WORDS[priority],
+        icon: <PriorityGlyph priority={priority} />,
+        checked: filter.priorities?.includes(priority) === true,
+        onSelect: () => onFilter(issueFilterToggledPriority(filter, priority)),
+      })),
+    ],
+  };
+  const createdBy: MenuEntry[] =
+    shared || filter.createdBy !== undefined
+      ? [
+          {
+            label: "Created by",
+            icon: <UsersIcon />,
+            items: createdByEntries(
+              filter.createdBy,
+              (chosen) => onFilter(issueFilterCreatedBy(filter, chosen)),
+              reader,
+            ),
+          },
+        ]
+      : [];
+  const completed: MenuAction = {
+    label: "Show completed",
+    icon: <CircleCheckIcon />,
+    detail: "Done or canceled over a week ago",
+    checked: filter.showCompleted,
+    onSelect: () => onFilter({ ...filter, showCompleted: !filter.showCompleted }),
+  };
+  const filtered = issueFilterChanged(filter);
   return (
     <>
-      <Tooltip label={VIEW_OPTIONS}>
-        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
-      </Tooltip>
+      <span className="issues-view-options" data-filtered={filtered ? "true" : undefined}>
+        <Tooltip label={VIEW_OPTIONS}>
+          <IconButton
+            icon={<SlidersHorizontalIcon />}
+            label={VIEW_OPTIONS}
+            aria-description={filtered ? "Filtered" : undefined}
+            {...menu.trigger()}
+          />
+        </Tooltip>
+      </span>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={VIEW_OPTIONS}
           menu={menu.drawn}
-          groups={[choices]}
+          groups={[layouts, [priorities, ...createdBy], [completed]]}
           onClose={menu.close}
         />
       )}
@@ -342,26 +455,27 @@ function DetailFrame({
   onBack: () => void;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ISSUES, onBack);
-  return (
-    <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Issue"
-      toolbar={
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <IssueCrumbs onBack={onBack} />
-            <ExperimentTag />
-          </div>
-        </header>
-      }
-    >
-      {failure === undefined ? (
+  const toolbar = (
+    <header className="desktop-toolbar">
+      <div className="desktop-toolbar-heading">
+        <IssueCrumbs onBack={onBack} />
+        <ExperimentTag />
+      </div>
+    </header>
+  );
+  // Note that the blocks stand in the issue's own document, so the issue lands where they stood.
+  if (failure === undefined) {
+    return (
+      <IssueDocumentPage label="Issue" toolbar={toolbar}>
         <IssueDetailSkeleton label={READING_ONE_LINE} />
-      ) : (
-        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-          {failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
-        </ErrorState>
-      )}
+      </IssueDocumentPage>
+    );
+  }
+  return (
+    <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Issue" toolbar={toolbar}>
+      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        {failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
+      </ErrorState>
     </DetailPage>
   );
 }
@@ -466,6 +580,7 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const [layout, setLayout] = useState<IssuesLayout>(() =>
     readKept(LAYOUT_KEY, storedLayout, ISSUES_LAYOUT.BOARD),
   );
+  const filter = useIssueFilter(tasks.me, workspace?.id);
   const [pages, setPages] = useState<HTMLDivElement | null>(null);
   const listedNow = useRef(workspace?.id);
   listedNow.current = workspace?.id;
@@ -501,22 +616,33 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   return (
     <div ref={setPages} className="issues-pages">
       {place.kind === ISSUES_PAGE.LIST ? (
-        <ListPage
-          root={pages}
-          tasks={tasks}
-          issues={issues}
-          focused={cameFrom}
-          layout={layout}
-          onLayout={(chosen) => {
-            // Note that the row the page came back from is let go, so the new layout's row takes no keyboard from the menu.
-            setCameFrom(undefined);
-            setLayout(chosen);
-            writeKept(LAYOUT_KEY, storedLayout, chosen);
-          }}
-          onFocus={setCameFrom}
-          onCompose={onCompose}
-          onComposeIn={onComposeIn}
-        />
+        // The workspace's members, read for View options' Created by: their faces, and Me for the reader.
+        <MemberDirectory workspace={workspace} readerId={tasks.me}>
+          <ListPage
+            root={pages}
+            tasks={tasks}
+            issues={issues}
+            focused={cameFrom}
+            layout={layout}
+            onLayout={(chosen) => {
+              // Note that the row the page came back from is let go, so the new layout's row takes no keyboard from the menu.
+              setCameFrom(undefined);
+              setLayout(chosen);
+              writeKept(LAYOUT_KEY, storedLayout, chosen);
+            }}
+            filter={{
+              filter: filter.filter,
+              onFilter: (chosen) => {
+                // As with a layout, the row the page came back from takes no keyboard from the menu.
+                setCameFrom(undefined);
+                filter.onFilter(chosen);
+              },
+            }}
+            onFocus={setCameFrom}
+            onCompose={onCompose}
+            onComposeIn={onComposeIn}
+          />
+        </MemberDirectory>
       ) : (
         // Keyed by the issue, so another issue's page holds nothing of the last's.
         <IssuePage

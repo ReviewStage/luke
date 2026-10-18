@@ -52,9 +52,12 @@
   }
 }
 
-/* A chip draws its own chevron (`chip.css`), which this unlayered rule
-   would otherwise win over. */
-.settings-chevron:where(:not(.luke-chip *)) {
+/* A chip, a menu item, and a picker's option draw their own chevron
+   (`chip.css`, `menu.css`, `combobox.css`), which this unlayered rule would
+   otherwise win over. */
+.settings-chevron:where(
+  :not(.luke-chip *, .luke-menu-item-end > *, .luke-combobox-option-end > *)
+) {
   width: 11px;
   height: 11px;
   flex: 0 0 auto;
@@ -162,8 +165,8 @@
   bottom: calc(100% + var(--luke-space-6));
 }
 
-.settings-picker .settings-picker-menu .task-compose-menu-list {
-  max-height: min(288px, var(--settings-picker-list-max, 288px));
+.settings-picker {
+  --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
 }
 
 /* A row holding a segmented control (`@luke/ui`'s `Segmented`) wraps, so a
@@ -178,8 +181,10 @@
 }
 
 /* The one green thing on the line, in the same palette a finished session
-   uses, so connected reads the same way complete does. */
-.credential-check {
+   uses, so connected reads the same way complete does. A menu item and a
+   picker's option draw their own check (`menu.css`, `combobox.css`), which
+   this unlayered rule would otherwise win over. */
+.credential-check:where(:not(.luke-menu-item-end > *, .luke-combobox-option-end > *)) {
   width: 12px;
   height: 12px;
   flex: 0 0 auto;
@@ -309,17 +314,6 @@
 .workspace-invite-role {
   display: flex;
   flex: none;
-}
-
-/* Settings › Workspace's first row (`.workspace-identity`, its refusal
-   standing under it as API keys' does) and an integration account's row
-   (`.integration-row`): the name, renamed in place on the name's own line,
-   the field's words where the name's stood and the field standing in the
-   label's 18px line, so the row keeps its height. */
-:is(.workspace-identity, .integration-row) .luke-inline-edit {
-  display: block;
-  width: 100%;
-  margin: -3px 0 -3px -9px;
 }
 
 /* Settings › Workspace › Members (`.workspace-member`, a role change's
@@ -496,6 +490,7 @@
 .integration-tools-list {
   min-height: 0;
   padding: var(--luke-space-4);
+  overflow-x: hidden;
   overflow-y: auto;
   border-right: 1px solid var(--luke-color-border);
   overscroll-behavior: contain;

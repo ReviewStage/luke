@@ -15,8 +15,8 @@
  * pushing out an earlier one, whose View would go with it.
  */
 
+import { appBridge } from "@luke/panel/app-bridge";
 import { useEffect, useRef } from "react";
-import { appBridge } from "../app-bridge";
 import { TOAST_HOLD, TOAST_TONE, useToast, useWithdrawToast } from "../toast";
 
 /** What an agent's end offers, to open the agent it was. */

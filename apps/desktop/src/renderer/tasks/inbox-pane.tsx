@@ -1,6 +1,7 @@
 import type { FileChip } from "@luke/features/attachment-model";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import {
+  fieldValueWords,
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
@@ -23,6 +24,7 @@ import {
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
+import { opensAsLink } from "@luke/panel/tasks/use-open-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BackIcon,
@@ -30,6 +32,7 @@ import {
   CHOICE_LOOK,
   CHOICE_SELECT,
   CHOICE_TONE,
+  Checkbox,
   ChevronRightIcon,
   ChoiceList,
   type ChoiceOption,
@@ -43,7 +46,6 @@ import {
   FormField,
   GAP,
   Stack,
-  Switch,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
   Text,
@@ -53,6 +55,7 @@ import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
 import { useClipped } from "@luke/ui/use-clipped";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
+import { isWireString } from "@luke/wire";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref";
@@ -61,7 +64,6 @@ import { useAutomation } from "../automation-directory";
 import { TaskRef } from "../desktop/task-card";
 import { useMemberDirectory, usePerson } from "../member-directory";
 import { PictureBlock } from "../picture-block";
-import { Segmented } from "../segmented";
 import { SpinnerRegion } from "../spinner";
 import { TextLink } from "../text-link";
 import { Tooltip } from "../tooltip";
@@ -77,6 +79,7 @@ import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import type { ReadFileWindow } from "./file-tab";
 import { InboxAnswerBox } from "./inbox-answer-box";
+import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text";
 import {
   CODE_READ,
   CODE_READ_FAILED,
@@ -121,7 +124,6 @@ import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { WordsWorkspace } from "./use-link-standing";
-import { opensAsLink } from "./use-open-link";
 import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
 
 /**
@@ -150,8 +152,11 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
  * approval's two cards, Approve and Decline, picked as a choice of two is,
  * a green or a red mark once picked; a to-do's card, its step beside a
  * checkbox and a "Couldn't do it" pill under it, picked the same way; a
- * form's fields, each the control Settings draws for its type; nothing for
- * words or a note. Enter on an option or in a field sends the answer as
+ * form's fields stacked, each its name over its control at one left edge,
+ * "Optional" after the name of one that may be left empty, a select's
+ * options pills that wrap, a yes or no a checkbox, a number a short field,
+ * and a text field the composer's own field with its mentions and skills
+ * (`inbox-form-text.tsx`); nothing for words or a note. Enter on an option or in a field sends the answer as
  * the box's Send does, and never presses the option, Space and the arrow
  * keys being an option's own. While the item
  * waits, the agent composer's box, its card and its field, with its `@`
@@ -716,31 +721,49 @@ function TodoCard({
   );
 }
 
-/** A field's name over or beside its control, saying where it must be filled. */
-function FieldName({ field }: { field: InboxField }): React.JSX.Element {
+/** What marks a field that may be left empty, since most must be filled. */
+const OPTIONAL = "Optional";
+
+/** A field's name, and "Optional" after it where it may be left empty. */
+function FieldLabel({ field }: { field: InboxField }): React.JSX.Element {
   return (
-    <span className="settings-copy">
-      <strong>{field.label}</strong>
-      {field.required === true ? <small>Required</small> : null}
-    </span>
+    <>
+      {field.label}
+      {field.required === true ? null : <span className="inbox-field-optional">{OPTIONAL}</span>}
+    </>
   );
 }
 
-/** What a field says under its control where it must be filled. */
-function requiredWords(field: InboxField): string | undefined {
-  return field.required === true ? "Required" : undefined;
+/** How a form's text fields are drawn where the caller draws its own: the Inbox's composer field. */
+export type FormText = (props: FormTextProps) => React.ReactNode;
+
+/** The parts of a field a frame's attributes name, which Enter's way to an empty field finds it by. */
+function fieldFrame(field: InboxField) {
+  return {
+    className: "inbox-field",
+    "data-inbox-field": field.type,
+    "data-inbox-field-label": field.label,
+  } as const;
 }
 
-/** One field of a form: the control Settings draws for its type, holding what the developer put in it. */
+/**
+ * One field of a form, its name over its control and left-aligned as every
+ * field is, "Optional" after the name of one that may be left empty: a
+ * text field the caller's own or `@luke/ui`'s, a number a short field, a
+ * select its options as pills that wrap, an optional one's pick taken back
+ * by pressing it again, and a yes or no a checkbox beside its name.
+ */
 function InboxFormField({
   field,
   draft,
   disabled,
+  text,
   onDraft,
 }: {
   field: InboxField;
   draft: InboxDraft;
   disabled: boolean;
+  text: FormText | undefined;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
   const value = fieldValueOf(draft, field.label);
@@ -749,90 +772,97 @@ function InboxFormField({
   switch (field.type) {
     case INBOX_FIELD.TEXT:
       return (
-        <div data-inbox-field={field.type} data-inbox-field-label={field.label}>
-          <FormField label={field.label} description={requiredWords(field)}>
-            {(control) => (
-              <TextField
-                field={control}
-                maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
-                value={value === undefined ? "" : String(value)}
-                disabled={disabled}
-                onChange={(typed) => set(typed === "" ? undefined : typed)}
-              />
-            )}
+        <div {...fieldFrame(field)}>
+          <FormField label={<FieldLabel field={field} />}>
+            {(control) => {
+              const words = value === undefined ? "" : String(value);
+              const onChange = (typed: string | undefined) =>
+                set(typed === undefined || typed === "" ? undefined : typed);
+              return text === undefined ? (
+                <TextField
+                  field={control}
+                  maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+                  value={words}
+                  disabled={disabled}
+                  onChange={onChange}
+                />
+              ) : (
+                text({ field, control, value: words, disabled, onChange })
+              );
+            }}
           </FormField>
         </div>
       );
     case INBOX_FIELD.NUMBER:
       return (
-        <div data-inbox-field={field.type} data-inbox-field-label={field.label}>
-          <FormField label={field.label} description={requiredWords(field)}>
+        <div {...fieldFrame(field)}>
+          <FormField label={<FieldLabel field={field} />}>
             {(control) => (
-              <TextField
-                field={control}
-                type={TEXT_FIELD_TYPE.NUMBER}
-                maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
-                value={value === undefined ? undefined : Number(value)}
-                disabled={disabled}
-                onChange={set}
-              />
+              <div className="inbox-field-short">
+                <TextField
+                  field={control}
+                  type={TEXT_FIELD_TYPE.NUMBER}
+                  maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+                  value={value === undefined ? undefined : Number(value)}
+                  disabled={disabled}
+                  onChange={set}
+                />
+              </div>
             )}
           </FormField>
         </div>
       );
     case INBOX_FIELD.SELECT:
       return (
-        <div
-          className="settings-row settings-row-wrapping"
-          data-inbox-field={field.type}
-          data-inbox-field-label={field.label}
-        >
-          <FieldName field={field} />
-          {/* An optional field's choice is taken back by pressing it again, its only way to be left unanswered. */}
-          <Segmented
+        <div {...fieldFrame(field)}>
+          <span className="inbox-field-name" aria-hidden="true">
+            <FieldLabel field={field} />
+          </span>
+          <ChoiceList
             legend={field.label}
             options={(field.options ?? []).map((option) => ({ value: option, label: option }))}
-            value={field.options?.find((option) => option === value)}
-            disabled={disabled}
+            value={(field.options ?? []).filter((option) => option === value)}
+            look={CHOICE_LOOK.PILL}
             clearable={field.required !== true}
-            onChange={set}
+            disabled={disabled}
+            onChange={(picked) => set(picked[0])}
           />
         </div>
       );
     case INBOX_FIELD.BOOLEAN:
       return (
-        <div
-          className="settings-row"
-          data-inbox-field={field.type}
-          data-inbox-field-label={field.label}
-        >
-          <FieldName field={field} />
-          <Switch checked={value === true} label={field.label} disabled={disabled} onChange={set} />
+        <div {...fieldFrame(field)}>
+          <Checkbox checked={value === true} disabled={disabled} onChange={set}>
+            <FieldLabel field={field} />
+          </Checkbox>
         </div>
       );
   }
 }
 
-/** A form's fields, in the agent's order. */
+/** A form's fields, stacked in the agent's order; its text fields drawn by `text` where it is given. */
 export function FormFields({
   form,
   draft,
   disabled,
+  text,
   onDraft,
 }: {
   form: InboxForm;
   draft: InboxDraft;
   disabled: boolean;
+  text?: FormText | undefined;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
   return (
-    <Stack gap={GAP.CONTROL}>
+    <Stack gap={GAP.FIELD}>
       {form.fields.map((field) => (
         <InboxFormField
           key={field.label}
           field={field}
           draft={draft}
           disabled={disabled}
+          text={text}
           onDraft={onDraft}
         />
       ))}
@@ -845,11 +875,14 @@ function ResponseControls({
   item,
   draft,
   disabled,
+  text,
   onDraft,
 }: {
   item: InboxItem;
   draft: InboxDraft;
   disabled: boolean;
+  /** What a form's text fields are written with. */
+  text: FormTextDoors;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element | null {
   const response = item.response;
@@ -880,7 +913,15 @@ function ResponseControls({
         />
       );
     case INBOX_RESPONSE.FORM:
-      return <FormFields form={response} draft={draft} disabled={disabled} onDraft={onDraft} />;
+      return (
+        <FormFields
+          form={response}
+          draft={draft}
+          disabled={disabled}
+          text={(props) => <InboxFormText {...props} doors={text} />}
+          onDraft={onDraft}
+        />
+      );
     default:
       return null;
   }
@@ -1228,6 +1269,42 @@ function CommentFiles({
 /** No files, one array so a comment that has none hands down the same one. */
 const NO_FILES: NonNullable<InboxItem["answerFiles"]> = [];
 
+/**
+ * A form's values as the developer filled them, one a line in the form's
+ * order: each field's name, then what was put in it, a text field's words
+ * drawn as the agent's tab draws a sent message, so a mention they hold is
+ * its chip, and any other field's value in its words, "yes" or "no" for a
+ * yes or no.
+ */
+function FormValues({ item }: { item: InboxItem }): React.JSX.Element | null {
+  const values = item.answer?.values ?? [];
+  if (values.length === 0) return null;
+  const response = item.response;
+  const texts = new Set(
+    knownResponse(response) && response.type === INBOX_RESPONSE.FORM
+      ? response.fields
+          .filter((field) => field.type === INBOX_FIELD.TEXT)
+          .map((field) => field.label)
+      : [],
+  );
+  return (
+    <ul className="inbox-values" data-inbox-values="">
+      {values.map(({ label, value }) => (
+        <li key={label} className="inbox-value">
+          <span className="inbox-value-label">{label}</span>
+          <div className="inbox-words inbox-value-words">
+            {texts.has(label) && isWireString(value) ? (
+              <SentWords text={value} />
+            ) : (
+              fieldValueWords(value)
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** The developer's answer as their comment: who answered, by their face and name, when, and where it went, then what they picked as a chip, the files they attached, and what they wrote. */
 function Answered({
   item,
@@ -1280,9 +1357,7 @@ function Answered({
           <span>{pick}</span>
         </span>
       )}
-      {settled.values === undefined ? null : (
-        <p className="inbox-words inbox-lines">{settled.values}</p>
-      )}
+      {settled.values === undefined ? null : <FormValues item={item} />}
       <CommentFiles
         itemId={item.id}
         files={item.answerFiles ?? NO_FILES}
@@ -1875,12 +1950,22 @@ export function InboxPane({
                 {open ? (
                   // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the answer.
                   <div className="inbox-response" onKeyDown={(event) => onResponseKey(pane, event)}>
-                    <ResponseControls
-                      item={item}
-                      draft={draft}
-                      disabled={control.sending.has(item.id)}
-                      onDraft={(next) => control.onDraft(item, next)}
-                    />
+                    {/* A form's text field takes the box's mentions, so it offers what the box's `@` does. */}
+                    <AnswerMentions value={mentions}>
+                      <ResponseControls
+                        item={item}
+                        draft={draft}
+                        disabled={control.sending.has(item.id)}
+                        text={{
+                          self: item.agentId,
+                          agent: by.subject.agent,
+                          skills: agents.readSkills,
+                          keywords: answerKeywords(holder, item),
+                          onEnter: () => sendFromPane(pane.current),
+                        }}
+                        onDraft={(next) => control.onDraft(item, next)}
+                      />
+                    </AnswerMentions>
                   </div>
                 ) : (
                   // Keyed by its item, so the fold opened on one item stands closed on the next.

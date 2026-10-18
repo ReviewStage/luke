@@ -801,6 +801,51 @@ test("a continue carries the developer's words and files as its note, other word
   );
 });
 
+test("a second continue of an agent once the first landed mints a key of its own and lands a second agent, from a press or from the task's draft, never answered with the first", async () => {
+  const SOURCE = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const from = { agentId: SOURCE, steps: 3, totalSteps: 3 };
+  const first = { ...STARTED, from };
+  const second = { ...STARTED, id: "ae3c8c6b-5f4a-4fad-8d88-8b6e9c4a5d43", from };
+  const third = { ...STARTED, id: "bf4d9d7c-6a5b-40be-9e99-9c7fad5b6e54", from };
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_LIST,
+    { agents: [] },
+    { agents: [first] },
+    { agents: [first, second] },
+    { agents: [first, second, third] },
+  );
+  tab.answer(ACT_KIND.CODING_AGENTS_START, { agent: first }, { agent: second }, { agent: third });
+  await tab.mount();
+  const continueAgent = tab.control().continueAgent ?? assert.fail("a Start could run");
+
+  await act(async () => {
+    await continueAgent(SOURCE);
+  });
+  await settle();
+  await act(async () => {
+    await continueAgent(SOURCE);
+  });
+  await settle();
+  // A third from the task's draft, opened as the end line's press opens it.
+  let draft = "";
+  act(() => {
+    draft = tab.control().onContinueDraft(SOURCE, "", []);
+  });
+  const fork = tab.control().draft?.fork ?? assert.fail("the draft continues the agent");
+  await act(async () => {
+    await tab.control().startFork(draft, fork, "", undefined, [], []);
+  });
+  await settle();
+
+  assert.deepEqual(
+    startPayloads(tab.asked).map((each) => each.idempotencyKey),
+    ["key-1", "key-2", draft],
+  );
+  assert.equal(new Set(["key-1", "key-2", draft]).size, 3, "each continue under a key of its own");
+  assert.deepEqual(tab.started, [first.id, second.id, third.id]);
+});
+
 test("no continue is offered while no Start could run: an archived task, a task naming no repository, or an agent read with no task", async () => {
   const archived = mount({ taskId: TASK, repository: "acme/relay", archived: true });
   archived.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });

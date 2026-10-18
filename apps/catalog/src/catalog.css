@@ -221,7 +221,8 @@ body {
   position: relative;
   max-width: 560px;
   height: 200px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 1px dashed var(--luke-color-border-strong);
   border-radius: var(--luke-radius-8);
 }
@@ -395,6 +396,7 @@ body {
    answers under them stay on the card. */
 .catalog-dialog-scroll {
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -477,6 +479,11 @@ body {
 /* A toolbar folding its buttons, as an app's container query does. */
 .catalog-folded {
   --luke-fold: folded;
+}
+
+/* A toolbar shorter still, leaving a split button its main part's glyph. */
+.catalog-bare {
+  --luke-fold: bare;
 }
 
 /* A toolbar whose corner resizes it, folding its buttons below 360px. */
@@ -640,6 +647,7 @@ body {
    document would, so its banner stands still at the top. */
 .catalog-screen-public {
   height: 480px;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 

@@ -32,7 +32,7 @@ import { CatalogSection } from "../section";
  * unavailable but focusable, and busy; the IconButton's looks and toggle;
  * ButtonLink's looks and an IconButtonLink; the round shape a call's
  * controls take, a danger toggle off and on; the compact marks a row reveals
- * at its end; a message's submit in each of its states, and unavailable; and
+ * at its end, and a compact labelled button among words; a message's submit in each of its states, and unavailable; and
  * a long label in a narrow column.
  */
 
@@ -130,6 +130,24 @@ function Buttons(): React.JSX.Element {
           <IconButton icon={<ArchiveIcon />} label="Archive" size={BUTTON_SIZE.COMPACT} />
           <IconButton icon={<EllipsisIcon />} label="Actions" size={BUTTON_SIZE.COMPACT} />
           <IconButton icon={<PinIcon />} label="Pin" size={BUTTON_SIZE.COMPACT} disabled />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="buttons-compact-words" title="Compact with words, among words">
+        <Inline gap={GAP.TIGHT}>
+          <Button
+            icon={<PlusIcon />}
+            size={BUTTON_SIZE.COMPACT}
+            shape={BUTTON_SHAPE.ROUND}
+            variant={BUTTON_VARIANT.WORKING_TINT}
+          >
+            Restart
+          </Button>
+          <Button size={BUTTON_SIZE.COMPACT} variant={BUTTON_VARIANT.OUTLINE}>
+            Retry
+          </Button>
+          <Button size={BUTTON_SIZE.COMPACT} disabled>
+            Unavailable
+          </Button>
         </Inline>
       </CatalogSection>
       <CatalogSection id="buttons-submit" title="A message's submit">

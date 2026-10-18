@@ -8,8 +8,8 @@ import {
 } from "@luke/features/automation-view";
 import type { AutomationSummary } from "@luke/features/automation-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAct } from "../act";
 import { useMinute } from "../tasks/task-time";
 
 /**

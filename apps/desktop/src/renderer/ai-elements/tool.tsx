@@ -1,4 +1,4 @@
-import { useDisclosureBodyDrawn } from "@luke/ui";
+import { TextButton, useDisclosureBodyDrawn } from "@luke/ui";
 import { type ReactNode, useState } from "react";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph";
 import { CodeBlock } from "./code-block";
@@ -272,9 +272,11 @@ export function ToolOutput({ block, errorText }: ToolOutputProps): ReactNode {
         <BlockWords block={{ kind: block.kind, text: clipped.shown }} />
       </CodeBlock>
       {clipped.hiddenLines > 0 ? (
-        <button type="button" className="tool-more" onClick={() => setWhole(true)}>
-          Show more ({clipped.hiddenLines} more lines)
-        </button>
+        <p className="tool-more">
+          <TextButton onClick={() => setWhole(true)}>
+            Show more ({clipped.hiddenLines} more lines)
+          </TextButton>
+        </p>
       ) : null}
     </div>
   );

@@ -33,6 +33,7 @@
      menu scrolls its own list and keeps its head and foot pinned. */
   .luke-popover-panel[data-look="card"] {
     max-height: var(--luke-popover-room, none);
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     gap: var(--luke-space-12);

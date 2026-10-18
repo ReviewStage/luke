@@ -548,6 +548,7 @@ body,
   flex-direction: column;
   margin: calc(-1 * var(--luke-focus-ring-reach));
   padding: var(--luke-focus-ring-reach);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -580,13 +581,16 @@ body,
 
 /* View options wears a dot while the view leaves tasks out, so a filtered
    list never passes for the whole of it: drawn by the box around the
-   button, over its corner. */
-.sidebar-view-options {
+   button, over its corner. The Issues page's View options wears the same
+   while its filter leaves issues out. */
+.sidebar-view-options,
+.issues-view-options {
   position: relative;
   display: inline-flex;
 }
 
-.sidebar-view-options[data-filtered="true"]::after {
+.sidebar-view-options[data-filtered="true"]::after,
+.issues-view-options[data-filtered="true"]::after {
   position: absolute;
   top: var(--luke-space-4);
   right: var(--luke-space-4);
@@ -877,6 +881,7 @@ ul.actor-stack {
   gap: var(--luke-space-6);
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   list-style: none;
 }
@@ -1001,13 +1006,6 @@ ul.actor-stack {
 
 .desktop-sidebar .sidebar-task[data-unread="true"] .sidebar-task-name {
   font-weight: var(--luke-weight-semibold);
-}
-
-/* A sidebar plan renamed in place keeps its row: the field takes the name's
-   own line and type, ringed. */
-.sidebar-task > .luke-inline-edit {
-  width: calc(100% + 10px);
-  margin: -2px -5px; /* off-scale */
 }
 
 /* A row's first line: the plan's name, cut short where it must, and how long
@@ -1399,6 +1397,7 @@ ul.actor-stack {
 
 .section-icon-scroll {
   height: 220px;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1556,52 +1555,16 @@ ul.actor-stack {
    urgency, so a wash rather than the accent's fill. Once installing it
    failed, the download it offers instead wears the failure's red. */
 .sidebar-update {
-  display: inline-flex;
+  display: flex;
   flex: none;
-  align-items: center;
-  gap: var(--luke-space-4);
-  height: 24px;
-  padding: 0 var(--luke-space-8);
-  border-radius: var(--luke-radius-full);
-  background: color-mix(in srgb, var(--luke-color-working) 14%, transparent);
-  color: var(--luke-color-working);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-  white-space: nowrap;
-  transition: background-color var(--duration-hover) ease;
-  -webkit-app-region: no-drag;
 }
 
-.sidebar-update:hover {
-  background: color-mix(in srgb, var(--luke-color-working) 22%, transparent);
-}
-
-.sidebar-update[data-failed="true"] {
-  background: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
-  color: var(--luke-color-danger-text);
-}
-
-.sidebar-update[data-failed="true"]:hover {
-  background: color-mix(in srgb, var(--luke-color-danger) 22%, transparent);
-}
-
-.sidebar-update svg {
-  width: 13px;
-  height: 13px;
-}
-
-/* A sidebar too narrow for the pill's word beside a name that reads draws
-   the pill as its glyph alone in a round as tall as the pill, so the name
-   keeps the room. The button's label and its hint still say what it does. */
+/* A sidebar too narrow for the pill's word beside a name that reads folds
+   the pill to its glyph alone in a round, so the name keeps the room. The
+   button's name and its hint still say what it does. */
 @container sidebar-foot (width < 220px) {
   .sidebar-update {
-    aspect-ratio: 1;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .sidebar-update-word {
-    display: none;
+    --luke-fold: folded;
   }
 }
 
@@ -1788,18 +1751,14 @@ ul.actor-stack {
 }
 
 @container plan-toolbar (max-width: 320px) {
-  .start-agent .luke-split-button > .luke-button:last-child {
-    display: none;
+  /* Start's glyph alone, its model menu left to the composer (`SplitButton`). */
+  .start-agent {
+    --luke-fold: bare;
   }
 
   /* The agents' Retry folds to its glyph (`FoldingButton`). */
   .main-tabs {
     --luke-fold: folded;
-  }
-
-  .start-agent .luke-split-button > .luke-button:first-child {
-    border-inline-end-width: 1px;
-    border-radius: var(--luke-control-radius);
   }
 }
 
@@ -1812,9 +1771,6 @@ ul.actor-stack {
 }
 
 .toolbar-button,
-.icon-button,
-.primary-button,
-.danger-button,
 .luke-button,
 .luke-chip,
 .luke-segment,
@@ -1827,178 +1783,50 @@ ul.actor-stack {
 
 /* Buttons --------------------------------------------------------------------- */
 
-/* Two buttons, drawn the way a native window's toolbar draws its own: a
-   labelled one (`.toolbar-button`) and a glyph alone in a square
-   (`.icon-button`), the title bar's expand, panel, and ⋯ buttons being the
-   first of those. Both are one control's box, corner, and glyph, with no
-   fill until the pointer is on them, and the labelled one fills with the
-   accent (`.primary-button`) for the act a place exists for, or with red
-   (`.danger-button`) for one that destroys. Every button that is not one of
-   these is a row, a tab, or a round control, and says why where it is drawn.
+/* A glyph of `@luke/ui`'s own drawn outside a button, at the control's
+   glyph size. */
+.icon-button-glyph {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: 0 0 auto;
+}
 
-   A button's hover lays the translucent fill over `--button-ground`, which is
-   nothing unless the button stands over something moving beneath it: the
-   title bar's panes, the transcript's lines. The glyph keeps its box
-   whatever the button's width, since a user-agent padding left on a button
-   is what once squeezed one narrower than the glyphs beside it. */
-.toolbar-button,
-.icon-button,
-.primary-button,
-.danger-button {
-  --button-ground: transparent;
-  /* The fill a button wears at rest, named so an unavailable one can fade it
-     rather than itself. */
-  --button-fill: transparent;
+/* The file tree's Retry, beside the words saying why it is empty
+   (`file-tree/index.ts`): a button the tree's own DOM builds, so it cannot
+   be `@luke/ui`'s, drawn as its quiet one is, in the muted voice of the
+   words it follows and lit on hover. */
+.toolbar-button {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
   gap: var(--luke-icon-gap);
   height: var(--luke-control-height);
-  padding: 0 var(--luke-space-12);
+  padding: 0 var(--luke-space-8);
   border-radius: var(--luke-control-radius);
-  background: var(--button-fill);
+  background: transparent;
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
   transition:
     background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease,
-    filter var(--duration-hover) ease;
+    color var(--duration-hover) ease;
 }
 
-.icon-button-glyph,
-.toolbar-button svg,
-.icon-button svg,
-.primary-button svg,
-.danger-button svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
+.toolbar-button svg {
+  width: 13px;
+  height: 13px;
   flex: 0 0 auto;
 }
 
-/* Square however tight its row, so only the tabs beside it give way, and
-   muted until the pointer is on it, as a toolbar's glyphs are. */
-.icon-button {
-  width: var(--luke-control-height);
-  padding: 0;
-  color: var(--luke-color-text-muted);
-}
-
-/* A state weighs a class and its pseudo-class alone, so a button that says
-   more of itself, Sign out's red hover or a muted call's tint, still wins. A
-   button whose menu is open keeps its hover for as long as the menu stands,
-   and a toggle (`aria-pressed`) is drawn on in the same fill for as long as
-   it is on: the summary's pin, the Inbox's Needs you, the file tree's
-   filter. */
-:is(.toolbar-button, .icon-button):hover:where(:not(:disabled, [aria-disabled="true"])),
-:is(.toolbar-button, .icon-button):where([aria-haspopup][aria-expanded="true"]),
-:is(.toolbar-button, .icon-button):where([aria-pressed="true"]) {
-  background: linear-gradient(var(--luke-color-fill-selected), var(--luke-color-fill-selected))
-    var(--button-ground);
+.toolbar-button:hover {
+  background: var(--luke-color-fill-selected);
   color: var(--luke-color-text);
 }
 
-:is(.toolbar-button, .icon-button):active:where(:not(:disabled, [aria-disabled="true"])) {
-  background: linear-gradient(var(--luke-color-fill-pressed), var(--luke-color-fill-pressed))
-    var(--button-ground);
-}
-
-.primary-button {
-  --button-fill: var(--luke-color-accent);
-  color: var(--luke-color-on-accent);
-}
-
-.danger-button {
-  --button-fill: var(--luke-color-danger-fill);
-  color: var(--luke-color-on-accent);
-}
-
-:is(.primary-button, .danger-button):hover:where(:not(:disabled, [aria-disabled="true"])) {
-  filter: brightness(1.1);
-}
-
-:is(.primary-button, .danger-button):active:where(:not(:disabled, [aria-disabled="true"])) {
-  filter: brightness(0.92);
-}
-
-/* Unavailable, a button fades to 45%. A disabled one is out of the tab order
-   and fades whole. One that says so with `aria-disabled` stays in it, so its
-   hover can say why, and fades its fill, its words, and its glyphs rather
-   than itself, because an opacity on the button would fade the keyboard's
-   ring (base.css) with it, and the ring is where the keyboard is. */
-:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where(:disabled) {
-  opacity: 0.45;
-}
-
-/* Its words and glyphs fade toward the window's ground, as they did when the
-   whole button faded over it, a filled button's included: faded over its
-   faded fill instead, they would fade twice. */
-:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where([aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--button-fill) 45%, transparent);
-  -webkit-text-fill-color: color-mix(in srgb, currentColor 45%, var(--surface-fill));
-}
-
-/* What it holds draws in that faded ink however it draws, words, a glyph's
-   stroke, or a wait's spinning arc, each in `currentColor`. Set on what the
-   button holds directly, so whatever is nested deeper inherits it and fades
-   once. */
-:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where([aria-disabled="true"])
-> * {
-  color: color-mix(in srgb, currentColor 45%, var(--surface-fill));
-  -webkit-text-fill-color: currentColor;
-}
-
-:is(.toolbar-button, .icon-button):where([aria-disabled="true"]) svg {
-  color: color-mix(in srgb, currentColor 45%, transparent);
-}
-
-/* A small act beside a line of words, a failure's retry
-   (`retry-button.tsx`) or a note's dismissal: a labelled toolbar button in
-   the muted voice of the words it follows, lit like any other on hover, and
-   tighter at its sides, since it stands beside words rather than in a
-   toolbar. */
-.quiet-button {
-  padding: 0 var(--luke-space-8);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* A labelled toolbar button inside a hairline, the edge Start's split button
-   draws: the act a settings row offers, which stands on a card rather than in
-   a toolbar and so needs its edge to read as a button at rest. A destructive
-   one keeps the same face and says so in red, as a destructive menu item
-   does; the red fill is the confirm dialog's alone. */
-.bordered-button {
-  border: 1px solid var(--luke-color-border);
-}
-
-.bordered-button[data-danger="true"] {
-  color: var(--luke-color-danger-text);
-}
-
-.bordered-button[data-danger="true"]:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--luke-color-danger) 12%, transparent);
-}
-
-.quiet-button svg {
-  width: 13px;
-  height: 13px;
-}
-
-/* A remedy pressed from a line of its own rather than a failure's (a
-   failure's is `@luke/ui`'s `ErrorState`): inside a hairline, at the words'
-   size, since it is the act the line is there for. */
-.failure-note-remedy {
-  height: 24px;
-  padding: 0 var(--luke-space-8);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-}
-
-.failure-note-remedy svg {
-  width: 13px;
-  height: 13px;
+.toolbar-button:active {
+  background: var(--luke-color-fill-pressed);
 }
 
 /* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
@@ -2094,11 +1922,10 @@ ul.actor-stack {
   background: var(--luke-color-fill-strong);
 }
 
-/* A list whose keys stay in its field (a picker's, the composer's `/`, and
-   ⌘K's) has one highlight, which the arrows and the pointer both move, so
-   the pointer's own hover draws nothing of its own. A pinned row carries
-   it as a data attribute, standing outside the listbox, and ⌘K's rows as
-   cmdk's. */
+/* A list whose keys stay in its field (the MCP popover's and ⌘K's) has
+   one highlight, which the arrows and the pointer both move, so the
+   pointer's own hover draws nothing of its own. The popover's rows carry
+   it as a data attribute, and ⌘K's rows as cmdk's. */
 :is(.searchable-menu, .command-palette) .menu-item:hover {
   background: none;
 }
@@ -2208,10 +2035,9 @@ ul.actor-stack {
    looks drawn by `@luke/ui/styles.css`. What stays here is the window's own:
    the layer it stands on over everything, or over a modal it was opened
    from; its presses claimed back from the toolbar's drag strip it sits
-   over; and the marks it holds, restated at a menu's size, because their
-   own rules here would otherwise win over the shared layer: a check the
-   text's colour rather than the state palette's, a chevron, and a
-   repository's picture in the glyph slot. */
+   over; and a repository's picture in the glyph slot, at a menu glyph's
+   size, because its own rule here would otherwise win over the shared
+   layer. */
 .luke-menu {
   z-index: var(--luke-z-menu);
   -webkit-app-region: no-drag;
@@ -2225,16 +2051,6 @@ ul.actor-stack {
   width: var(--luke-menu-glyph);
   height: var(--luke-menu-glyph);
   flex: 0 0 auto;
-}
-
-.luke-menu-item-end .credential-check {
-  color: var(--luke-color-text);
-}
-
-.luke-menu-item-end .settings-chevron {
-  width: 14px;
-  height: 14px;
-  color: var(--luke-color-text-subtle);
 }
 
 /* Each a line naming an actor (`.actor-line`), whose spaces it keeps,
@@ -2592,7 +2408,9 @@ ul.actor-stack {
   line-height: var(--luke-type-reading-leading);
 }
 
-.desktop-document .plan-body > * + * {
+/* A document's blocks, and the sections of a text drawn inside one block (an
+   issue's description), stand a section's gap apart. */
+.desktop-document :is(.plan-body, .document-sections) > * + * {
   margin-top: 1.5em;
 }
 
@@ -2845,8 +2663,8 @@ ul.actor-stack {
   bottom: calc(100% + var(--luke-space-4));
 }
 
-.repository-chip .task-compose-menu-list {
-  max-height: min(288px, var(--settings-picker-list-max, 288px));
+.repository-chip {
+  --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
 }
 
 /* New task's Linear chip (`linear-issue-chip.tsx`) stands after the
@@ -2854,6 +2672,7 @@ ul.actor-stack {
    edge, placed as a Settings picker's is, wide enough for an issue's title
    with its key and state after it. */
 .linear-issue-chip {
+  --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
   position: relative;
   min-width: 0;
 }
@@ -2866,10 +2685,6 @@ ul.actor-stack {
 .linear-issue-chip[data-side="above"] .searchable-menu {
   top: auto;
   bottom: calc(100% + var(--luke-space-4));
-}
-
-.linear-issue-chip .task-compose-menu-list {
-  max-height: min(288px, var(--settings-picker-list-max, 288px));
 }
 
 /* A harness's mark keeps its box in a row however tight the row is, drawn
@@ -2999,13 +2814,14 @@ ul.actor-stack {
   border-top: 1px solid var(--luke-color-border);
 }
 
-/* One muted line under the pinned rows, inset as a row's words are: what
-   the agent has cost. */
+/* One muted line under the pinned rows or a submenu's, inset as a row's
+   words are: what the agent has cost. */
 .task-compose-menu-foot-note {
-  margin: 0;
   padding: var(--luke-space-4) var(--row-inset) 0;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
+}
+
+.task-compose-submenu > .task-compose-menu-foot-note {
+  padding-bottom: var(--luke-menu-inset);
 }
 
 /* What stands in the list's place: one quiet line, centred, at a row or
@@ -3022,15 +2838,6 @@ ul.actor-stack {
   text-align: center;
 }
 
-/* A switch row: the app's own switch at the row's end, drawn inside the
-   row where the row is the switch for the keyboard, or its own button where
-   the row holds other controls too (the MCP popover's). */
-.task-compose-menu-switch {
-  display: flex;
-  flex: 0 0 auto;
-  margin-left: auto;
-}
-
 /* A submenu stands beside the pinned row that opened it, its top level
    with that row's and its near edge at the menu's own; it turns to the
    menu's other side where the window ends before it does, and stands up
@@ -3045,6 +2852,7 @@ ul.actor-stack {
   top: 0;
   left: calc(100% + 9px);
   width: 200px;
+  padding: 0;
 }
 
 .task-compose-submenu[data-side="left"] {
@@ -3103,47 +2911,16 @@ ul.actor-stack {
   transition: none;
 }
 
-/* A capture run zeroes the motion tokens on its stage, which a menu or the
-   palette drawn at the body's end does not stand under, so they are held
-   still here too. */
-body:has(.app-stage[data-capture="true"])
-:is(.luke-menu, .menu-surface, .command-palette, .command-palette-backdrop) {
-  --duration-quick: 0s;
-  --duration-fast: 0s;
-  --duration-exit: 0s;
-  --luke-duration-quick: 0s;
-  --luke-duration-fast: 0s;
-  --luke-duration-exit: 0s;
-}
-
 .task-compose-menu-name {
   min-width: 0;
   flex: 0 1 auto;
   font-weight: var(--luke-weight-medium);
 }
 
-/* A searchable menu's words fade where they are cut rather than end in an
-   ellipsis, as a tab's label does, and so do the same rows offered in an
-   empty side panel. */
-:is(.searchable-menu, .side-panel-no-tabs) .task-compose-menu-name {
+/* The MCP popover's words fade where they are cut rather than end in an
+   ellipsis, as a tab's label does. */
+.searchable-menu .task-compose-menu-name {
   text-overflow: clip;
-}
-
-/* The detail follows the name in the list, and stands at the row's end in
-   the foot, where the row names a setting and the detail is its value. */
-.task-compose-menu-detail {
-  flex: 0 0 auto;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  white-space: nowrap;
-}
-
-.task-compose-menu-foot .task-compose-menu-detail {
-  margin-left: auto;
-}
-
-.task-compose-menu-foot .task-compose-menu-detail + .menu-item-end {
-  margin-left: 0;
 }
 
 /* The heading over a menu section's rows, a searchable menu's and ⌘K's
@@ -3269,6 +3046,7 @@ body:has(.app-stage[data-capture="true"])
   flex-direction: column;
   gap: var(--luke-space-12);
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   outline: none; /* no ring: out of the tab order, focused by script so its keys scroll it */
@@ -3543,6 +3321,7 @@ body:has(.app-stage[data-capture="true"])
 .inbox-tasks-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
@@ -3800,6 +3579,65 @@ body:has(.app-stage[data-capture="true"])
   flex: none;
 }
 
+/* A comment holding a form's composer field lets what stands over the
+   field, its @ and / lists, run past its top and foot, clipping only what
+   runs long across, as every comment does. */
+.inbox-comment-body:has(.inbox-field-composer) {
+  overflow-y: visible;
+}
+
+/* A form's fields stacked, each its name over its control at one left edge
+   (`inbox-pane.tsx`'s FormFields): "Optional" quiet after the name of one
+   that may be left empty, a number in a short field, and a select's name
+   over its pills in the label's type, as a field's label stands. */
+.inbox-field-optional {
+  margin-left: var(--luke-space-6);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-regular);
+}
+
+.inbox-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+}
+
+.inbox-field-name {
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-label-leading);
+}
+
+.inbox-field-short {
+  max-width: calc(10 * var(--luke-space-16));
+}
+
+/* A form's text field is the composer's own field (`inbox-form-text.tsx`)
+   drawn at a text field's size: a field's ground in a hairline, its line
+   at the field's insets, growing a line at a time to eight, and the
+   focused field's ground once the caret is in it, as a text field's is. */
+.inbox-field-composer {
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-input);
+  transition: background-color var(--duration-hover) ease;
+}
+
+.inbox-field-composer:focus-within {
+  background: var(--luke-color-input-focus);
+}
+
+.inbox-field-composer .agent-composer-field {
+  --agent-composer-field-block: calc(2 * var(--luke-space-6));
+}
+
+.inbox-field-composer .agent-composer-input {
+  padding: var(--luke-space-6) var(--luke-control-inset);
+}
+
 /* A to-do's card (`inbox-pane.tsx`'s TodoCard): its step beside a checkbox,
    ticked in the complete green, and under a hairline a pill saying it could
    not be done, filled in the danger tint once picked. Each pick wears its
@@ -3910,6 +3748,41 @@ body:has(.app-stage[data-capture="true"])
 .inbox-todo-step:disabled,
 .inbox-todo-pill:disabled {
   opacity: 0.4;
+}
+
+/* A settled form's values, a field a line in the form's order: its name in
+   the muted ink, then what was put in it, a text field's words drawn as a
+   sent message's are, their mentions chips. */
+.inbox-values {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inbox-value {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--luke-space-8);
+}
+
+/* A name too long for the line, one unbroken word, wraps anywhere rather
+   than pushing the value past the comment's clip. */
+.inbox-value-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--luke-color-text-muted);
+}
+
+.inbox-value-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
@@ -4340,7 +4213,8 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* The pipeline bar: planned → building → shipped, the defects' arrow
-   turning back, each count a filter chip pressed while its layer stands. */
+   turning back, each count a filter chip pressed while its layer is the one
+   drawn alone, and none pressed while every layer is. */
 .factory-world-pipeline {
   top: var(--luke-space-12);
   left: 50%;
@@ -4386,6 +4260,14 @@ body:has(.app-stage[data-capture="true"])
 .factory-world-stage-count {
   color: var(--luke-color-text);
   font-weight: var(--luke-weight-semibold);
+}
+
+/* While one count is pressed, the others' layers stand undrawn: their glyphs
+   and counts go to the quiet ink, the words staying legible, rather than the
+   chip fading, which would fade the keyboard's ring with it. */
+.factory-world-pipeline .luke-chip[data-faded] .factory-world-signal,
+.factory-world-pipeline .luke-chip[data-faded] .factory-world-stage-count {
+  color: var(--luke-color-text-subtle);
 }
 
 .factory-world-stuck {
@@ -4578,6 +4460,7 @@ body:has(.app-stage[data-capture="true"])
 .automations-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--content-inset) var(--luke-space-32);
 }
@@ -4638,7 +4521,6 @@ body:has(.app-stage[data-capture="true"])
 
 .automations-empty > .luke-empty-state {
   flex: none;
-  overflow: visible;
 }
 
 .automations-empty > .automation-suggestions {
@@ -4946,6 +4828,7 @@ body:has(.app-stage[data-capture="true"])
   flex: 1;
   flex-direction: column;
   gap: var(--luke-space-8);
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16);
   border-left: 1px solid var(--luke-color-border);
@@ -4981,6 +4864,7 @@ body:has(.app-stage[data-capture="true"])
 .chat-rail-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
@@ -5065,6 +4949,7 @@ body:has(.app-stage[data-capture="true"])
 .chat-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--column-inset);
 }
@@ -5298,6 +5183,8 @@ body:has(.app-stage[data-capture="true"])
 /* The list an `@` or `#` opens stands over the box at its left. */
 .chat-mention-menu {
   position: absolute;
+  /* It stands over the box, so the searchable menu's own top is let go. */
+  top: auto;
   bottom: calc(100% + var(--luke-space-4));
   left: 0;
   width: 320px;
@@ -5449,16 +5336,10 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* Narrower still, the tally gives the field its room and is said rather
-   than drawn, as `.visually-hidden` says words; the matches stay marked in
-   the tab. */
+   than drawn (`SearchField`'s fold); the matches stay marked in the tab. */
 @container find-scope (max-width: 300px) {
-  .find-scope > .find-bar .luke-search-field-tally {
-    position: absolute;
-    overflow: hidden;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    clip-path: inset(50%);
+  .find-scope > .find-bar {
+    --luke-fold: folded;
   }
 }
 
@@ -5694,19 +5575,11 @@ body:has(.app-stage[data-capture="true"])
 /* The list's foot, a row in the caption's type whose failure wraps under
    its words rather than being cut short. */
 .version-earlier {
-  margin-top: var(--luke-space-8);
+  margin: var(--luke-space-8) 0 0;
   padding: var(--luke-space-8) var(--row-inset);
-  border-radius: var(--luke-control-radius);
-  background: none;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-  text-align: left;
-}
-
-.version-earlier:hover:not(:disabled) {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
 }
 
 /* The page while a version is read (`version-view.tsx`): each section's
@@ -5756,6 +5629,7 @@ body:has(.app-stage[data-capture="true"])
   display: flex;
   height: 100%;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
   padding-bottom: 8vh;
 }
@@ -5864,6 +5738,7 @@ body:has(.app-stage[data-capture="true"])
   flex-direction: column;
   gap: var(--luke-section-gap);
   padding: var(--column-inset);
+  overflow-x: hidden;
   overflow-y: auto;
   background: var(--luke-color-ground);
 }
@@ -5925,6 +5800,7 @@ body:has(.app-stage[data-capture="true"])
   flex-direction: column;
   gap: var(--luke-section-gap);
   padding: calc(var(--column-inset) - var(--card-edge)) var(--luke-menu-inset) var(--luke-space-12);
+  overflow-x: hidden;
   overflow-y: auto;
   border: var(--card-edge) solid var(--luke-color-border);
   border-radius: var(--luke-radius-14);
@@ -6271,31 +6147,6 @@ body:has(.app-stage[data-capture="true"])
   left: auto;
 }
 
-/* Nothing in the "+" is ever the one chosen, so its rows draw no end slot
-   for a check and stand inset alike at both sides, in its menu and in an
-   empty side panel alike. */
-:is(.tab-add-menu .task-compose-menu-list, .side-panel-no-tabs) .menu-item-end {
-  display: none;
-}
-
-/* A file's row keeps its name whole and cuts its folder short instead, so
-   a deep path never hides which file the row opens, and a repository's row
-   its name rather than its owner (`repository-chip.tsx`), and an issue's its
-   title rather than its key (`linear-issue-chip.tsx`); each fades where
-   it is cut. A row with no folder gives its name the whole width. */
-:is(.tab-add-menu, .side-panel-no-tabs, .repository-chip, .linear-issue-chip)
-.task-compose-menu-name:has(+ .task-compose-menu-detail) {
-  flex: 0 0 auto;
-  max-width: 70%;
-}
-
-:is(.tab-add-menu, .side-panel-no-tabs, .repository-chip, .linear-issue-chip)
-  .task-compose-menu-detail {
-  min-width: 0;
-  flex: 0 1 auto;
-  overflow: hidden;
-}
-
 /* With every tab closed, the panel offers all that the "+" menu offers, as
    the same rows under the same headings, at the top of its well, in a column
    300px wide at most. A plan offering more than the well holds scrolls it,
@@ -6304,6 +6155,7 @@ body:has(.app-stage[data-capture="true"])
   display: flex;
   min-height: 0;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
   /* The 300px is the column's measure rather than a step of the scale. */
   padding: var(--luke-space-48)
@@ -6311,10 +6163,14 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* Its "No tabs open" stands over the rows, in from the column's edge as a
-   row's words are. */
+   row's words are, and so does each section's heading. */
 .side-panel-no-tabs-line {
   margin-bottom: var(--luke-space-8);
   padding: 0 var(--row-inset);
+}
+
+.menu-row-list-heading {
+  padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
 }
 
 .side-panel-content {
@@ -6476,7 +6332,7 @@ body:has(.app-stage[data-capture="true"])
   --tab-start: var(--row-inset);
   --tab-end: var(--luke-space-12);
   --tab-gap: var(--luke-icon-gap);
-  --tab-close: 20px;
+  --tab-close: var(--luke-space-24);
   --tab-close-inset: var(--luke-space-4);
   position: relative;
   display: flex;
@@ -6686,15 +6542,13 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* A label cut short fades out over its last `--label-fade` rather than
-   ending in an ellipsis, as a browser's tab does, and so do a searchable
-   menu's words, and a subagent's job. Only a label measured cut short (use-clipped.ts) fades, so
+   ending in an ellipsis, as a browser's tab does, and so does a subagent's
+   job. Only a label measured cut short (use-clipped.ts) fades, so
    a short one ends on its last letter. The mask fades the words themselves,
    so it reads alike over every fill a tab or a row wears, at rest, hovered,
    chosen, or dragged. */
 .tab-label[data-overflow="true"],
 .task-summary-label[data-overflow="true"],
-:is(.searchable-menu, .side-panel-no-tabs) .task-compose-menu-name[data-overflow="true"],
-:is(.searchable-menu, .side-panel-no-tabs) .task-compose-menu-detail[data-overflow="true"],
 .subagent-job[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
@@ -6710,9 +6564,9 @@ body:has(.app-stage[data-capture="true"])
   --state-glyph-size: 12px;
 }
 
-/* A corner leading with a pull request's mark sets it inline, so the corner
-   keeps the head's baseline. */
-.luke-hover-card-corner .pull-request-mark {
+/* A card's corner leading with a pull request's mark sets it inline, so the
+   corner keeps the head's baseline. */
+.card-corner-mark {
   width: 12px;
   height: 12px;
   margin-right: var(--luke-space-4);
@@ -6721,7 +6575,7 @@ body:has(.app-stage[data-capture="true"])
 
 /* A pull request's branches on its card stand as inline code does in words
    (`.markdown code`): mono on a tint, rounded. */
-.luke-hover-card-note .card-code {
+.card-code {
   padding: 0.08em 0.36em;
   border-radius: 0.36em;
   background: color-mix(in srgb, currentColor 13%, transparent);
@@ -6735,7 +6589,7 @@ body:has(.app-stage[data-capture="true"])
    cut for it, as an agent's origin line wraps. Only the line holding that
    time wraps, so every other card's line naming an actor, a one-line
    starter's among them, keeps to its one row. */
-.luke-hover-card-note .actor-words:has(> .card-when) {
+.actor-words:has(> .card-when) {
   flex-wrap: wrap;
   row-gap: var(--luke-space-2);
 }
@@ -6776,12 +6630,6 @@ body:has(.app-stage[data-capture="true"])
   list-style: none;
 }
 
-/* A server's card lists its tools as the MCP popover's page does
-   (`planning/server-card.tsx`), each row's words on the card's own column. */
-.luke-hover-card .integration-tool-list {
-  margin-inline: calc(-1 * var(--row-inset));
-}
-
 /* Renamed in place, the label gives way to a field in the same type,
    ringed rather than bordered so nothing moves. */
 .tab-button[data-editing="true"] {
@@ -6792,26 +6640,16 @@ body:has(.app-stage[data-capture="true"])
   width: 24ch;
 }
 
-/* The × keeps none of a button's own padding, which would leave its glyph
-   8px of the box's 20 and squeeze it narrower than every glyph beside it. */
+/* The ×, a row's compact mark, stands at the pill's end, out of the
+   label's way. */
 .tab-close {
   position: absolute;
   top: 50%;
   right: var(--tab-close-inset);
   display: flex;
-  width: var(--tab-close);
-  height: var(--tab-close);
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: var(--luke-color-text-subtle);
   opacity: 0;
   transform: translateY(-50%);
-  transition:
-    opacity var(--duration-hover) ease,
-    color var(--duration-hover) ease;
+  transition: opacity var(--duration-hover) ease;
 }
 
 .tab:hover .tab-close,
@@ -6845,18 +6683,6 @@ body:has(.app-stage[data-capture="true"])
 
 .tab[data-marked="true"]:not(:hover) .tab-close {
   opacity: 0;
-}
-
-/* Note that the × draws no ground under the pointer, because it is a glyph
-   on a pill that is already raised: only the glyph itself brightens. */
-.tab-close:hover {
-  color: var(--luke-color-text);
-}
-
-.tab-close svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: 0 0 auto;
 }
 
 /* What follows a tab's label, the Inbox's count, is muted as a model's
@@ -7021,6 +6847,7 @@ body:has(.app-stage[data-capture="true"])
   flex: 1 1 auto;
   min-height: 0;
   padding: var(--luke-space-6);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -7184,16 +7011,10 @@ body:has(.app-stage[data-capture="true"])
   white-space: nowrap;
 }
 
-/* A dialog's answer's chord (Send's, Create issue's) a glyph's gap after
-   its word, muted against its own fill rather than the card's. */
-.luke-dialog-actions .luke-button .shortcut {
-  --shortcut-ink: var(--luke-color-on-accent-muted);
-  margin-inline-start: var(--luke-icon-gap);
-}
-
-/* The home page's New task's chord, a glyph's gap after its word, muted
-   against its own fill rather than the page's. */
-.home .luke-button .shortcut {
+/* A filled button's chord (a dialog's Send and Create issue, the home
+   page's New task) a glyph's gap after its word, muted against the button's
+   own fill rather than the ground around it. */
+.button-chord {
   --shortcut-ink: var(--luke-color-on-accent-muted);
   margin-inline-start: var(--luke-icon-gap);
 }
@@ -7213,6 +7034,7 @@ body:has(.app-stage[data-capture="true"])
 .home-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-32) var(--luke-page-inset) var(--luke-space-48);
 }
@@ -7591,19 +7413,6 @@ body:has(.app-stage[data-capture="true"])
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-/* A capture run zeroes the motion tokens on its stage, which the stack drawn
-   at the body's end does not stand under, so it is held still here too. */
-body:has(.app-stage[data-capture="true"]) .toast-stack {
-  --duration-quick: 0s;
-  --duration-fast: 0s;
-  --duration-exit: 0s;
-  --duration-hover: 0s;
-  --luke-duration-quick: 0s;
-  --luke-duration-fast: 0s;
-  --luke-duration-exit: 0s;
-  --luke-duration-hover: 0s;
 }
 
 /* Its glyph, its words' first line, and its action share a first row as

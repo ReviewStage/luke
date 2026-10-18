@@ -1,12 +1,12 @@
 import { useAtomValue } from "@effect/atom-react";
 import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useRef, useState } from "react";
-import { useAct } from "../act";
 import type { ComposerEditorHandle, ComposerMark } from "../plan-editor/contract";
 import { rendererRuntime } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, capabilityNow } from "../use-app-state";

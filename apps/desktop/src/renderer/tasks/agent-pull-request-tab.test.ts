@@ -39,10 +39,12 @@ import {
   type PullRequestActionRequest,
   type PullRequestWriteAnswer,
   REACTION,
+  REVIEW_COMMENT_MODE,
   REVIEW_EVENT,
 } from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -58,7 +60,13 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
 import type { SideBundles } from "../bundle-loader";
-import type { DiffListProps, DiffViewModule, DiffViewProps } from "../diff-view/contract";
+import {
+  DIFF_SELECTION_SIDE,
+  type DiffListProps,
+  type DiffListSelection,
+  type DiffViewModule,
+  type DiffViewProps,
+} from "../diff-view/contract";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect";
 import { MemberDirectory } from "../member-directory";
 import { rendererRuntime } from "../renderer-runtime";
@@ -66,7 +74,6 @@ import { AgentPullRequestTab } from "./agent-pull-request-tab";
 import { TAB_KIND, tabLook } from "./tab-look";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { OpenLinkProvider } from "./use-open-link";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 
 /**
@@ -2378,9 +2385,10 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
     (link) => links.push(link),
   );
   const button =
-    tab.querySelector<HTMLButtonElement>(".pull-request-branch-row .pull-request-stack") ??
-    assert.fail("the stack stands beside the branches");
-  assert.equal(button.textContent, "Stack3/5");
+    tab.querySelector<HTMLButtonElement>(
+      '.pull-request-branch-row button[aria-label="Stack, 3 of 5"]',
+    ) ?? assert.fail("the stack stands beside the branches");
+  assert.equal(button.textContent, "Stack 3/5");
   const items = () => [
     ...document.querySelectorAll<HTMLButtonElement>(
       ':is([role="menuitem"], [role="menuitemcheckbox"])',
@@ -2837,6 +2845,18 @@ test("the title is edited in place: Enter keeps new words trimmed, and Escape, o
   );
 });
 
+test("the title's edit is kept as the focus leaves its field, as it is on Enter", async () => {
+  const tab = await draw(controlAnswering());
+  const field = editTitle(tab);
+  type(field, "Expire invitations after a day");
+  act(() => field.blur());
+  await settle();
+  assert.deepEqual(changes, [
+    [AGENT.id, { action: PULL_REQUEST_ACTION.EDIT_TITLE, title: "Expire invitations after a day" }],
+  ]);
+  assert.equal(tab.querySelector('[aria-label="Pull request title"]'), null, "the field closes");
+});
+
 test("Files changed draws each review thread under its line, its comments through the overview's own drawing, folded while Minimize inline comments is on", async () => {
   const review = {
     kind: CONVERSATION_ENTRY.REVIEW,
@@ -2954,6 +2974,391 @@ test("a review thread on its line in Files changed is replied on and resolved fr
     ],
     [AGENT.id, { action: PULL_REQUEST_ACTION.RESOLVE_THREAD, threadId: "PRRT_flag" }],
   ]);
+});
+
+/** Writes in the comment box at the Conversation's foot as the member would. */
+function writeComment(tab: HTMLElement, words: string): HTMLTextAreaElement {
+  const field =
+    tab.querySelector<HTMLTextAreaElement>(
+      '.pull-request-comment-box textarea[aria-label="Comment"]',
+    ) ?? assert.fail("the Conversation ends in a comment box");
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  return field;
+}
+
+/** The comment box's Comment press. */
+function commentPress(tab: HTMLElement): HTMLButtonElement {
+  return (
+    tab.querySelector<HTMLButtonElement>(".pull-request-comment-foot button") ??
+    assert.fail("the box offers Comment")
+  );
+}
+
+test("a comment written at the Conversation's foot is asked of the service for the agent, after which the box lets its words go and the comment stands in the conversation", async () => {
+  const tab = await draw(
+    controlAnswering({
+      conversation: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...CONVERSATION,
+            conversation: [
+              ...CONVERSATION.conversation,
+              ...changes.flatMap(([, request]) =>
+                request.action === PULL_REQUEST_ACTION.COMMENT
+                  ? [
+                      {
+                        kind: CONVERSATION_ENTRY.COMMENT,
+                        by: CHARLES_ON_GITHUB,
+                        html: null,
+                        body: request.body,
+                        at: 4_000,
+                        url: `${PAGE}#issuecomment-9`,
+                      },
+                    ]
+                  : [],
+              ),
+            ],
+          },
+        }),
+    }),
+  );
+  assert.equal(commentPress(tab).disabled, true, "a blank comment is not sent");
+
+  const field = writeComment(tab, "Shipping after **lunch**.");
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
+    );
+  });
+  await settle();
+
+  assert.deepEqual(changes, [
+    [AGENT.id, { action: PULL_REQUEST_ACTION.COMMENT, body: "Shipping after **lunch**." }],
+  ]);
+  assert.equal(
+    tab.querySelector<HTMLTextAreaElement>(".pull-request-comment-box textarea")?.value,
+    "",
+    "the box lets its words go",
+  );
+  assert.match(
+    tab.querySelector(".pull-request-conversation")?.textContent ?? "",
+    /Shipping after lunch\./u,
+  );
+});
+
+test("a comment GitHub refuses says so under the box in GitHub's own words, its words kept for another try", async () => {
+  changeAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+    words: "Conversation is locked to collaborators",
+  };
+  const tab = await draw(controlAnswering());
+
+  writeComment(tab, "Ping?");
+  act(() => commentPress(tab).click());
+  await settle();
+
+  assert.equal(
+    tab.querySelector(".pull-request-comment-note [role='alert']")?.textContent,
+    "GitHub said: Conversation is locked to collaborators",
+  );
+  assert.equal(
+    tab.querySelector<HTMLTextAreaElement>(".pull-request-comment-box textarea")?.value,
+    "Ping?",
+  );
+});
+
+test("a comment being written outlives a read of the conversation that failed, standing in the box again once Retry reads it", async () => {
+  let reads = 0;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => {
+        reads += 1;
+        return Promise.resolve(
+          reads === 2
+            ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+            : { pullRequest: CONVERSATION },
+        );
+      },
+    }),
+  );
+  writeComment(tab, "Half a thought");
+
+  const more =
+    tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
+    assert.fail("the bar has a ⋯");
+  act(() => more.click());
+  const refresh =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === "Refresh pull request",
+    ) ?? assert.fail("the ⋯ offers Refresh");
+  await act(async () => refresh.click());
+  await settle();
+  assert.equal(
+    tab.querySelector(".pull-request-comment-box"),
+    null,
+    "the failed read takes it away",
+  );
+
+  const retry =
+    [...tab.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Retry",
+    ) ?? assert.fail("the failed conversation offers Retry");
+  await act(async () => retry.click());
+  await settle();
+
+  assert.equal(
+    tab.querySelector<HTMLTextAreaElement>(".pull-request-comment-box textarea")?.value,
+    "Half a thought",
+  );
+});
+
+/** The head the changes were read at, which a comment on their lines names. */
+const READ_HEAD = "c0ffee1c0ffee1c0ffee1c0ffee1c0ffee1c0ffe";
+
+/** One changed file whose hunk is the review threads' own: old lines 8–12, the last removed, and new lines 8–13, the last two added. */
+const INVITE_FILE = {
+  path: "src/invite.ts",
+  previousPath: null,
+  status: CHANGED_FILE_STATUS.MODIFIED,
+  additions: 2,
+  deletions: 1,
+  omitted: null,
+  patch: thread().diffHunk.replace("@@ -8,6 +8,7 @@", "@@ -8,5 +8,6 @@"),
+};
+
+/** The tab over that one file, read at `READ_HEAD`, its conversation holding the member's pending review as given; a read of the changes after the first answers `reread` in its place where one is given. */
+async function drawCommentable(
+  pendingReview?: { readonly comments: number } | null,
+  reread: typeof INVITE_FILE = INVITE_FILE,
+) {
+  const read = { changes: 0 };
+  const tab = await draw(
+    controlAnswering(
+      {
+        conversation: () =>
+          Promise.resolve({
+            pullRequest: {
+              ...CONVERSATION,
+              ...(pendingReview === undefined ? undefined : { pendingReview }),
+            },
+          }),
+      },
+      PULL_REQUEST_STATE.OPEN,
+      () => {
+        read.changes += 1;
+        return Promise.resolve({
+          pullRequest: {
+            url: PAGE,
+            headSha: READ_HEAD,
+            truncated: false,
+            files: [read.changes === 1 ? INVITE_FILE : reread],
+          },
+        });
+      },
+    ),
+  );
+  await act(async () => option(tab, "Files changed").click());
+  await settle();
+  return { tab };
+}
+
+/** Presses the gutter's + on the lines given of the file, as the diff bundle tells the view, and the comment it opened. */
+async function pickLines(selection: DiffListSelection["selection"]): Promise<HTMLElement> {
+  const drawn = lists.at(-1) ?? assert.fail("the files are drawn");
+  const onComment = drawn.onComment ?? assert.fail("the gutter offers a comment");
+  act(() => onComment({ path: INVITE_FILE.path, selection }));
+  await settle();
+  return (lists.at(-1) ?? drawn).renderAnnotation(INVITE_FILE.path, "line-comment");
+}
+
+/** Writes the comment's words as the member would. */
+function writeLineComment(comment: HTMLElement, words: string): void {
+  const field =
+    comment.querySelector<HTMLTextAreaElement>('textarea[aria-label="Comment"]') ??
+    assert.fail("the comment has a field for its words");
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The comment's press of the words given. */
+function commentOffer(comment: HTMLElement, label: string): HTMLButtonElement {
+  return (
+    [...comment.querySelectorAll<HTMLButtonElement>("button")].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`the comment offers ${label}`)
+  );
+}
+
+/** Whether the files' last draw stands a comment under a line. */
+function commentDrawn(): boolean {
+  return (lists.at(-1)?.files ?? []).some((file) =>
+    file.annotations.some((note) => note.key === "line-comment"),
+  );
+}
+
+test("the gutter's + opens a comment under the last line picked, however the pick was dragged, its lines lit; Add single comment sends it for the agent at the head the files were read at, after which it closes and lets its words go", async () => {
+  await drawCommentable();
+
+  const comment = await pickLines({
+    start: 13,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 12,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  });
+
+  assert.equal(comment.querySelector(".line-comment-head")?.textContent, "Comment on lines 12–13");
+  assert.deepEqual(
+    lists.at(-1)?.files[0]?.annotations.find((note) => note.key === "line-comment"),
+    { key: "line-comment", side: DIFF_SELECTION_SIDE.ADDITIONS, line: 13 },
+  );
+  assert.equal(lists.at(-1)?.selected?.path, INVITE_FILE.path);
+  assert.deepEqual(
+    [...comment.querySelectorAll(".line-comment-foot button")].map((each) => each.textContent),
+    ["Cancel", "Add single comment", "Start a review"],
+  );
+
+  writeLineComment(comment, "Why **twice**?");
+  act(() => commentOffer(comment, "Add single comment").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      {
+        action: PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT,
+        mode: REVIEW_COMMENT_MODE.SINGLE,
+        path: INVITE_FILE.path,
+        line: 13,
+        side: DIFF_SIDE.RIGHT,
+        startLine: 12,
+        startSide: DIFF_SIDE.RIGHT,
+        body: "Why **twice**?",
+        headSha: READ_HEAD,
+      },
+    ],
+  ]);
+  assert.equal(commentDrawn(), false, "the comment closes once GitHub took it");
+  assert.equal(lists.at(-1)?.selected, undefined, "its lines are no longer lit");
+  const again = await pickLines({
+    start: 12,
+    side: DIFF_SELECTION_SIDE.DELETIONS,
+    end: 12,
+    endSide: DIFF_SELECTION_SIDE.DELETIONS,
+  });
+  assert.equal(again.querySelector("textarea")?.value, "", "its words were let go");
+  assert.equal(again.querySelector(".line-comment-head")?.textContent, "Comment on line 12");
+});
+
+test("a member holding a pending review adds a comment to it and nothing else, and Review counts its comments and offers to discard it, asking first", async () => {
+  const { tab } = await drawCommentable({ comments: 2 });
+
+  const comment = await pickLines({
+    start: 12,
+    side: DIFF_SELECTION_SIDE.DELETIONS,
+    end: 12,
+    endSide: DIFF_SELECTION_SIDE.DELETIONS,
+  });
+  assert.deepEqual(
+    [...comment.querySelectorAll(".line-comment-foot button")].map((each) => each.textContent),
+    ["Cancel", "Add review comment"],
+  );
+  writeLineComment(comment, "Gone?");
+  act(() => commentOffer(comment, "Add review comment").click());
+  await settle();
+
+  const review =
+    tab.querySelector<HTMLButtonElement>('[aria-label="Review, 2 pending comments"]') ??
+    assert.fail("Review counts the pending comments");
+  act(() => review.click());
+  const panel =
+    tab.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("Review opens its panel");
+  assert.match(panel.textContent ?? "", /2 pending comments will be published\./u);
+  act(() => commentOffer(panel, "Discard").click());
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ??
+    assert.fail("Discard asks first");
+  act(() => commentOffer(question, "Discard review").click());
+  await settle();
+
+  assert.deepEqual(
+    changes.map(([, request]) => request),
+    [
+      {
+        action: PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT,
+        mode: REVIEW_COMMENT_MODE.REVIEW,
+        path: INVITE_FILE.path,
+        line: 12,
+        side: DIFF_SIDE.LEFT,
+        body: "Gone?",
+        headSha: READ_HEAD,
+      },
+      { action: PULL_REQUEST_ACTION.DISCARD_REVIEW },
+    ],
+  );
+});
+
+test("a comment GitHub refuses says so under it in GitHub's own words, its words kept, beside Refresh changes, which draws the files as read again", async () => {
+  changeAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+    words: "Pull request review thread line must be part of the diff",
+  };
+  await drawCommentable(undefined, { ...INVITE_FILE, additions: 5 });
+  const lines = () =>
+    lists.at(-1)?.renderHeader(INVITE_FILE.path).querySelector(".agent-published-added")
+      ?.textContent;
+  const comment = await pickLines({
+    start: 9,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 9,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  });
+
+  writeLineComment(comment, "Here.");
+  act(() => commentOffer(comment, "Start a review").click());
+  await settle();
+
+  assert.equal(
+    comment.querySelector(".line-comment-note [role='alert']")?.textContent,
+    "GitHub said: Pull request review thread line must be part of the diff",
+  );
+  assert.equal(comment.querySelector("textarea")?.value, "Here.");
+  assert.match(lines() ?? "", /\+2/u);
+  act(() => commentOffer(comment, "Refresh changes").click());
+  await settle();
+  assert.match(lines() ?? "", /\+5/u, "the files are drawn as read again");
+});
+
+test("Discard's question stands busy until GitHub answers, and says GitHub's refusal in its words", async () => {
+  const held = Promise.withResolvers<void>();
+  changeHeld = held.promise;
+  changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Review is not pending" };
+  const { tab } = await drawCommentable({ comments: 1 });
+  act(() =>
+    (
+      tab.querySelector<HTMLButtonElement>('[aria-label="Review, 1 pending comment"]') ??
+      assert.fail("Review counts the pending comment")
+    ).click(),
+  );
+  const panel =
+    tab.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("Review opens its panel");
+  act(() => commentOffer(panel, "Discard").click());
+  const question = () =>
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ??
+    assert.fail("Discard asks first");
+  act(() => commentOffer(question(), "Discard review").click());
+  await settle();
+
+  assert.equal(question().getAttribute("aria-busy"), "true", "the question waits on GitHub");
+  held.resolve();
+  await settle();
+  assert.match(question().textContent ?? "", /GitHub said: Review is not pending/u);
 });
 
 test("a merge asked about goes with its panel: hidden, the question is let go and nothing merges, and shown again it asks nothing", async () => {

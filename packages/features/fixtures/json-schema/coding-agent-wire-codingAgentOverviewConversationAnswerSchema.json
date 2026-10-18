@@ -491,6 +491,26 @@
             "descriptionSubject": {
               "type": "string",
               "maxLength": 255
+            },
+            "pendingReview": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "comments": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "comments"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [

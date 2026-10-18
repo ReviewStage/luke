@@ -20,6 +20,7 @@ import {
   turnStoppedUnderReached,
 } from "@luke/database/models/message-reads";
 import { readPageById } from "@luke/database/models/plan-pages";
+import { listTaskSections } from "@luke/database/models/task-section-store";
 import { createTask, deleteTask, listTasks, readTask } from "@luke/database/models/task-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/coding-agent";
@@ -146,8 +147,9 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * made away again, and a call run again answers the agent and task it made.
  * A start may instead go on from another agent of the workspace, on that
  * agent's own task, as the Start route's continue and fork do: without a
- * message it continues an agent that has ended and that no other agent
- * continued yet, which its start then stops, and with one of its messages
+ * message it continues an agent that has ended, which its start then stops,
+ * one another agent already continued among them, whose earlier
+ * continuations its answer names, and with one of its messages
  * it forks it there, which leaves it going on; either is handed the
  * source's brief, its replay with Luke's summary of what does not fit, a
  * copy of its work, and the note, and takes no prompt and no branch. A read
@@ -335,14 +337,6 @@ export const START_CODING_AGENT_REFUSAL = {
 export const LIST_MODELS_REFUSAL = {
   UNAVAILABLE: "Not listed: the models could not be read just now. The call may be made again.",
 } as const;
-
-/** The refusal of a continue of an agent another agent already continued, naming that one so the caller goes on from it. */
-function alreadyContinued(mention: string, agentId: string): string {
-  return (
-    `Not started: that agent was already continued by ${mention} (agent id ${agentId}); ` +
-    "continue or message that one instead, or fork this one at a messageId."
-  );
-}
 
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
 const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
@@ -649,7 +643,9 @@ export const START_AGENT_TOOL = {
     `${AGENT_TOOL.LIST_MODELS} lists them before you name one. With from, it starts from ` +
     "another agent instead: continue an agent (or worker) " +
     "that failed, ended, or ran out of context, which is handed over and stopped, or fork one " +
-    "at a messageId to try another direction while it goes on. A start from another agent " +
+    "at a messageId to try another direction while it goes on. An agent already continued may " +
+    "be continued again, and the answer then names the earlier continuations by their id and " +
+    "mention (earlierContinuations). A start from another agent " +
     "copies its work and summarizes its transcript, so it may take a minute to answer.",
   inputSchema: START_AGENT_INPUT,
 } as const;
@@ -759,11 +755,14 @@ export const LIST_TASKS_TOOL = {
   description:
     "List the open tasks of your workspace, started by any member: each with its id, its name, " +
     "the repository its agents work in (null for none yet), who started it, whether it is " +
-    "the task you work on, and its mention, the `[@name](link)` to name it by in your words, " +
-    `the newest first and at most ${TASKS_LIST_LIMIT} a page, with ` +
-    "nextOffset where more stand. Narrow it by words of a task's name with nameContains. Call it " +
-    `to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s taskId, or to ` +
-    `narrow ${AGENT_TOOL.LIST_AGENTS} to one.`,
+    "the task you work on, the sectionId of the sidebar section the developer you work for " +
+    "keeps it in (null for none, under Tasks), and its mention, the `[@name](link)` to name it " +
+    `by in your words, the newest first and at most ${TASKS_LIST_LIMIT} a page, with ` +
+    "nextOffset where more stand; and beside them every section that developer keeps in this " +
+    "workspace's sidebar, each with its id and title. Narrow it by words of a task's name with " +
+    `nameContains. Call it to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s ` +
+    `taskId, to narrow ${AGENT_TOOL.LIST_AGENTS} to one, or to find the task and the section ` +
+    `${AGENT_TOOL.MOVE_TASK} and ${AGENT_TOOL.DELETE_SECTION} name.`,
   inputSchema: LIST_TASKS_INPUT,
 } as const;
 
@@ -900,7 +899,7 @@ const publishedOf = (
   );
 
 /** The member a call acts for: the one on Luke's call, or the starter of the coding agent calling. */
-function callerUserId(caller: AgentCaller): string {
+export function callerUserId(caller: AgentCaller): string {
   return caller.kind === AGENT_CALLER.LUKE ? caller.plan.userId : caller.agent.userId;
 }
 
@@ -910,7 +909,7 @@ function callerTask(caller: AgentCaller): string | null {
 }
 
 /** The workspace the caller reaches agents in, read on its member's standing now; nothing where they no longer reach it. */
-const callerWorkspace = (caller: AgentCaller) =>
+export const callerWorkspace = (caller: AgentCaller) =>
   caller.kind === AGENT_CALLER.LUKE
     ? taskWorkspace(caller.plan.userId, caller.plan.taskId)
     : agentWorkspace(caller.agent.userId, caller.agent);
@@ -1024,7 +1023,7 @@ const startedReading = (
   });
 
 /** A store that could not be read is the one refusal, logged for the operator and said to the model. */
-const orStoreRefusal = <R>(
+export const orStoreRefusal = <R>(
   effect: Effect.Effect<WireRecord, StoreFailure, R>,
 ): Effect.Effect<WireRecord, never, R> =>
   Effect.catch(effect, (failure) =>
@@ -1116,10 +1115,21 @@ const startedBefore = (call: CodingAgentCall, newTask: boolean) =>
       taskId === null || name === undefined
         ? undefined
         : yield* newTaskReading(userId, workspace.value, taskId, name);
+    // A continue run again names the agents that continued its source before it, as its first answer did.
+    const from = agent.startedFrom;
+    const continuedBy =
+      from === null || from.messageId !== undefined || agent.taskId === null
+        ? []
+        : yield* earlierContinuationsOf(
+            { userId, workspaceId: workspace.value, taskId: agent.taskId },
+            from.agentId,
+            agent.id,
+          );
     return Option.some<WireRecord>({
       status: ACTION_RESULT_STATUS.ACCEPTED,
       agent: reading,
       ...(task === undefined ? undefined : { newTask: { ...task } }),
+      ...earlierContinuations(continuedBy, agent.id),
     });
   });
 
@@ -1286,12 +1296,53 @@ export function runMessageAgent(
   );
 }
 
-/** The task a start from another agent lands on, the source's own, once the source is read and found fit to start from; or why it is not. */
+/** An agent that already continued the one a start continues, as the start's answer names it: its id and its mention. */
+interface EarlierContinuation {
+  readonly id: string;
+  readonly mention: string;
+}
+
+/** Where a start from another agent lands: the source's own task, and, for a continue, the agents that already continued the source, oldest first. */
+interface SourceLanding {
+  readonly taskId: string;
+  readonly continuedBy: readonly EarlierContinuation[];
+}
+
+/**
+ * The agents that continued a source, oldest first, each by its id and its
+ * mention, up to the one named `upTo`, which is left out with every agent
+ * after it; all of them where none is named. A fork is no continuation.
+ */
+const earlierContinuationsOf = (
+  at: { readonly userId: string; readonly workspaceId: string; readonly taskId: string },
+  sourceId: string,
+  upTo?: string,
+) =>
+  Effect.gen(function* () {
+    const continuations = (yield* continuationsOf(at.userId, [sourceId])).get(sourceId) ?? [];
+    const whole = continuations.filter((each) => each.messageId === undefined);
+    const cut = whole.findIndex((each) => each.agentId === upTo);
+    const earlier = cut < 0 ? whole : whole.slice(0, cut);
+    if (earlier.length === 0) return [];
+    const step = yield* workspaceStepOf(at.userId, at.workspaceId);
+    return earlier.map(
+      (each): EarlierContinuation => ({
+        id: each.agentId,
+        mention: writtenMention(
+          { kind: MENTION_KIND.AGENT, taskId: at.taskId, agentId: each.agentId },
+          each.title ?? CONTINUATION_NAME,
+          step,
+        ),
+      }),
+    );
+  });
+
+/** The task a start from another agent lands on, the source's own, once the source is read and found fit to start from, with the agents that already continued it; or why it is not. */
 const sourceLanding = (
   caller: AgentCaller,
   from: CodingAgentStartFrom,
   named: string | undefined,
-): Effect.Effect<Result.Result<string, string>, StoreFailure, DatabaseServices> =>
+): Effect.Effect<Result.Result<SourceLanding, string>, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
     const found = yield* workspaceAgentOf(caller, from.agentId);
     if (Option.isNone(found)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_SOURCE);
@@ -1307,26 +1358,28 @@ const sourceLanding = (
       const role = MESSAGE_ROLE.ASSISTANT;
       const at = yield* messageSeqOf(userId, conversationId, from.messageId, role);
       if (Option.isNone(at)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_MESSAGE);
-      return Result.succeed(source.taskId);
+      return Result.succeed({ taskId: source.taskId, continuedBy: [] });
     }
-    // A continue takes over work that has ended, and only once: a second would split it in two.
+    // A continue takes over work that has ended; one already continued is
+    // continued again, since a continuation may itself fail or go wrong, and
+    // the answer names the earlier ones so the caller knows they stand.
     const { status } = (yield* standingsOf([source]))(source);
     if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
       return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_RUNNING);
     }
-    const userId = callerUserId(caller);
-    const continuations = (yield* continuationsOf(userId, [source.id])).get(source.id) ?? [];
-    const continuation = continuations.find((each) => each.messageId === undefined);
-    if (continuation !== undefined) {
-      const mention = writtenMention(
-        { kind: MENTION_KIND.AGENT, taskId: source.taskId, agentId: continuation.agentId },
-        continuation.title ?? CONTINUATION_NAME,
-        yield* workspaceStepOf(userId, workspaceId),
-      );
-      return Result.fail(alreadyContinued(mention, continuation.agentId));
-    }
-    return Result.succeed(source.taskId);
+    const taskId = source.taskId;
+    const at = { userId: callerUserId(caller), workspaceId, taskId };
+    return Result.succeed({ taskId, continuedBy: yield* earlierContinuationsOf(at, source.id) });
   });
+
+/** What a continue's answer adds where other agents already continued its source: those agents, oldest first, the one it started left out; nothing otherwise. */
+function earlierContinuations(
+  continuedBy: readonly EarlierContinuation[] | undefined,
+  startedId: string,
+): WireRecord {
+  const earlier = (continuedBy ?? []).filter((each) => each.id !== startedId);
+  return earlier.length === 0 ? {} : { earlierContinuations: earlier.map((each) => ({ ...each })) };
+}
 
 /** A start's refusal in the model's words, said of the source where the start named one: one that is none of the caller's, or a message that is none of the source's. */
 function startFromRefusalWords(
@@ -1426,7 +1479,7 @@ export function runStartAgent(
         return agentToolRejected(making.failure);
       }
       const made = making?.success;
-      const taskId = landing?.success ?? made?.id ?? named ?? ownTask;
+      const taskId = landing?.success.taskId ?? made?.id ?? named ?? ownTask;
       if (taskId === null) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK);
       const started = yield* startCodingAgent(Effect.succeed(eve), userId, {
         taskId: taskId,
@@ -1458,6 +1511,7 @@ export function runStartAgent(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: yield* startedReading(started.success.agent, yield* offeredModels, ownTask),
         ...(made === undefined ? undefined : { newTask: { ...made } }),
+        ...earlierContinuations(landing?.success.continuedBy, started.success.agent.id),
       };
     }),
   );
@@ -1677,7 +1731,7 @@ export function runStopAgent(
   );
 }
 
-/** One call of `list_tasks`: the open tasks of the caller's workspace, newest first. */
+/** One call of `list_tasks`: the open tasks of the caller's workspace, newest first, each with the section its member keeps it in, and those sections. */
 export function runListTasks(
   call: CodingAgentCall,
   input: UnparsedWireValue,
@@ -1696,19 +1750,29 @@ export function runListTasks(
         return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       }
       const ownTask = callerTask(caller);
-      const listed = yield* listTasks(callerUserId(caller));
+      const userId = callerUserId(caller);
+      const listed = yield* listTasks(userId);
       const matching = listed.filter(
         (task) =>
           task.workspaceId === workspace.value &&
           (words === undefined || task.name.toLowerCase().includes(words)),
       );
-      const step = yield* workspaceStepOf(callerUserId(caller), workspace.value);
+      const kept = yield* listTaskSections(userId);
+      const sections = kept.sections.filter((section) => section.workspaceId === workspace.value);
+      const shelved = new Set(sections.map((section) => section.id));
+      const sectionOf = new Map(
+        kept.entries
+          .filter((entry) => shelved.has(entry.sectionId))
+          .map((entry) => [entry.taskId, entry.sectionId]),
+      );
+      const step = yield* workspaceStepOf(userId, workspace.value);
       const tasks = matching.slice(offset, offset + TASKS_LIST_LIMIT).map((task) => ({
         id: task.id,
         name: task.name,
         repository: task.repository ?? null,
         startedBy: task.createdBy?.name ?? null,
         isYourTask: task.id === ownTask,
+        sectionId: sectionOf.get(task.id) ?? null,
         mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
       }));
       const next = offset + TASKS_LIST_LIMIT;
@@ -1716,6 +1780,7 @@ export function runListTasks(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         tasks,
         nextOffset: next < matching.length ? next : null,
+        sections: sections.map((section) => ({ id: section.id, title: section.title })),
       };
     }),
   );

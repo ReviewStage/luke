@@ -3,6 +3,8 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
+  BUTTON_VARIANT,
+  Button,
   CHIP_LOOK,
   Chip,
   type ChipLook,
@@ -11,6 +13,7 @@ import {
   ErrorState,
   GearIcon,
   ProviderMark,
+  TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -274,40 +277,34 @@ export function RepositoryChip(props: {
     props.value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
   const note =
     failure !== undefined ? (
-      <div className="task-compose-menu-note">
-        <ErrorState onRetry={read}>{repositoryFailureNote(failure)}</ErrorState>
-      </div>
+      <ErrorState onRetry={read}>{repositoryFailureNote(failure)}</ErrorState>
     ) : listed !== undefined && !listed.installed ? (
       // Only an owner or an admin can connect the workspace's GitHub, so a member is told to ask.
       <>
         {unconnectedNotes(chooser).map((words) => (
-          <div key={words} className="task-compose-menu-note">
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-              {words}
-            </Text>
-          </div>
+          <Text
+            key={words}
+            as={TEXT_ELEMENT.P}
+            variant={TEXT_VARIANT.CAPTION}
+            tone={TEXT_TONE.SUBTLE}
+          >
+            {words}
+          </Text>
         ))}
         {chooser.manages ? (
-          <button
-            type="button"
-            className="menu-item"
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            icon={<GearIcon />}
             onClick={() => choose(() => openSettings(workspaceGitHub))}
           >
-            <GearIcon />
-            <span className="task-compose-menu-name">{OPEN_SETTINGS_LABEL}</span>
-          </button>
+            {OPEN_SETTINGS_LABEL}
+          </Button>
         ) : null}
       </>
     ) : list === undefined ? (
-      <div className="task-compose-menu-note">
-        <Spinner label="Loading repositories" />
-      </div>
+      <Spinner label="Loading repositories" />
     ) : rows.length === 0 && listed?.installed ? (
-      <div className="task-compose-menu-note">
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-          {MENU_NOTE.NONE_REACHED}
-        </Text>
-      </div>
+      MENU_NOTE.NONE_REACHED
     ) : undefined;
 
   return (

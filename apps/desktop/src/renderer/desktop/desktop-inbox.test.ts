@@ -36,6 +36,7 @@ import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
+import { appBridge } from "@luke/panel/app-bridge";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -63,7 +64,6 @@ import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
-import { appBridge } from "../app-bridge";
 import { runAppCommand, useAppKeymap } from "../app-commands";
 import { DRAFT_WORD } from "../draft-mark";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab";
@@ -832,7 +832,7 @@ test("a waiting choice of several is a checkbox list whose box counts the picks 
   assert.deepEqual(checkedOptions(pane), ["Email", "Pager"], "Enter let no pick go");
 });
 
-test("Enter in a form's field sends the form once its required fields are filled, and before that takes the keyboard to the first one left empty, the box's foot naming it", async () => {
+test("Enter anywhere in a form, in a short number field or its text field's composer, sends it once its required fields are filled, and before that takes the keyboard to the first one left empty, the box's foot naming it; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
   inboxes.set(INVITES.id, [
     {
       ...EXPIRY,
@@ -840,7 +840,9 @@ test("Enter in a form's field sends the form once its required fields are filled
         type: INBOX_RESPONSE.FORM,
         fields: [
           { type: INBOX_FIELD.SELECT, label: "Severity", required: true, options: ["Low", "High"] },
-          { type: INBOX_FIELD.TEXT, label: "Reason" },
+          { type: INBOX_FIELD.TEXT, label: "Reason", required: true },
+          { type: INBOX_FIELD.NUMBER, label: "Retries" },
+          { type: INBOX_FIELD.BOOLEAN, label: "Page on-call" },
         ],
       },
     },
@@ -851,23 +853,54 @@ test("Enter in a form's field sends the form once its required fields are filled
   await settle();
   const sent = heldAnswers();
   const pane = itemPane(page);
-  const reason =
-    pane.querySelector<HTMLInputElement>('[data-inbox-field="text"] input') ??
-    assert.fail("no Reason field");
+  const field = (label: string) =>
+    [...pane.querySelectorAll<HTMLElement>("[data-inbox-field]")].find(
+      (each) => each.dataset.inboxFieldLabel === label,
+    ) ?? assert.fail(`no ${label} field`);
+  const retries = field("Retries").querySelector("input") ?? assert.fail("no Retries input");
 
-  act(() => reason.focus());
-  keyOn(reason, "Enter");
+  act(() => retries.focus());
+  keyOn(retries, "Enter");
   await settle();
   assert.deepEqual(sent, []);
   assert.equal(document.activeElement, segment(segmentedGroup(pane, "Severity"), "Low"));
   assert.equal(quietWords(pane), "Fill in Severity");
 
   act(() => segment(segmentedGroup(pane, "Severity"), "High").click());
-  keyOn(reason, "Enter");
+  keyOn(segment(segmentedGroup(pane, "Severity"), "High"), "Enter");
   await settle();
+  assert.deepEqual(sent, [], "Enter on the pill sends nothing yet");
+  assert.equal(document.activeElement, composerEditor(field("Reason")));
+  assert.equal(quietWords(pane), "Fill in Reason");
+  assert.equal(
+    segment(segmentedGroup(pane, "Severity"), "High").getAttribute("aria-checked"),
+    "true",
+  );
+
+  typeInComposer(field("Reason"), "Spiked twice\nSee @roll");
+  await settle();
+  pressInComposer(field("Reason"), "Enter");
+  await settle();
+  assert.deepEqual(sent, [], "the first Enter picks the mention");
+  pressInComposer(field("Reason"), "Enter");
+  await settle();
+  const file = mentionMarkdown(
+    { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" },
+    "rollout-store.ts",
+    { workspace: BILLING.workspaceId, repository: "acme/relay" },
+  );
   assert.deepEqual(
     sent.map(({ reply, values }) => ({ reply, values })),
-    [{ reply: INBOX_REPLY.SUBMITTED, values: [{ label: "Severity", value: "High" }] }],
+    [
+      {
+        reply: INBOX_REPLY.SUBMITTED,
+        values: [
+          { label: "Severity", value: "High" },
+          { label: "Reason", value: `Spiked twice\nSee ${file}` },
+          { label: "Page on-call", value: false },
+        ],
+      },
+    ],
   );
 });
 
@@ -1090,7 +1123,7 @@ test("a teammate's answer names them by their disc and name, beside their pick a
   assert.match(card?.textContent ?? "", /Charles Pan/u);
 });
 
-test("a form's select fields are radio groups, an optional one's pick taken back by pressing it again and a required one's kept, and its yes-or-no field a switch", async () => {
+test("a form stacks its fields, each its name over its control, \"Optional\" after the name of one that may be left empty and \"Required\" nowhere: a select's options are pills, an optional one's pick taken back by pressing it again and a required one's kept, a yes-or-no a checkbox beside its name, a number a short field, and a text field the composer's own field", async () => {
   inboxes.set(INVITES.id, [
     {
       ...EXPIRY,
@@ -1100,6 +1133,8 @@ test("a form's select fields are radio groups, an optional one's pick taken back
           { type: INBOX_FIELD.SELECT, label: "Channel", options: ["Email", "Slack"] },
           { type: INBOX_FIELD.SELECT, label: "Severity", required: true, options: ["Low", "High"] },
           { type: INBOX_FIELD.BOOLEAN, label: "Page on-call" },
+          { type: INBOX_FIELD.NUMBER, label: "Retries" },
+          { type: INBOX_FIELD.TEXT, label: "Reason", required: true },
         ],
       },
     },
@@ -1108,12 +1143,12 @@ test("a form's select fields are radio groups, an optional one's pick taken back
   await settle();
   act(() => rowNamed(page, "Expire after 7 days?").click());
   await settle();
-  const pane = page.querySelector<HTMLElement>(".inbox-view-items") ?? assert.fail("no pane");
+  const pane = itemPane(page);
   const channel = () => segmentedGroup(pane, "Channel");
   const severity = () => segmentedGroup(pane, "Severity");
   const onCall = () =>
-    pane.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Page on-call"]') ??
-    assert.fail("no Page on-call switch");
+    pane.querySelector<HTMLInputElement>('[data-inbox-field="boolean"] input[type="checkbox"]') ??
+    assert.fail("no Page on-call checkbox");
   const unpicked = readSegmented(channel());
 
   act(() => segment(channel(), "Slack").click());
@@ -1123,11 +1158,41 @@ test("a form's select fields are radio groups, an optional one's pick taken back
   act(() => segment(severity(), "High").click());
   act(() => onCall().click());
 
+  assert.deepEqual(
+    [...pane.querySelectorAll("[data-inbox-field]")].map((each) => [
+      each.getAttribute("data-inbox-field"),
+      each.querySelector(".inbox-field-optional") !== null,
+    ]),
+    [
+      ["select", true],
+      ["select", false],
+      ["boolean", true],
+      ["number", true],
+      ["text", false],
+    ],
+  );
+  assert.equal(pane.textContent?.includes("Required"), false);
+  assert.equal(channel().dataset.look, "pill");
   assert.deepEqual(unpicked, { options: ["Email", "Slack"], checked: [], tabStops: ["Email"] });
   assert.deepEqual(picked, [["Slack"], ["High"]]);
   assert.deepEqual(readSegmented(channel()).checked, [], "the optional pick is taken back");
   assert.deepEqual(readSegmented(severity()).checked, ["High"], "the required pick stands");
-  assert.equal(onCall().getAttribute("aria-checked"), "true");
+  assert.equal(onCall().checked, true);
+  assert.ok(pane.querySelector('[data-inbox-field="number"] .inbox-field-short input'));
+  assert.ok(pane.querySelector('[data-inbox-field="text"] .inbox-field-composer .composer-editor'));
+  const reason =
+    pane.querySelector<HTMLElement>('[data-inbox-field="text"]') ?? assert.fail("no Reason");
+  act(() => reason.querySelector<HTMLElement>(".luke-field-label")?.click());
+  assert.equal(
+    document.activeElement,
+    composerEditor(reason),
+    "a press on its name takes the caret in",
+  );
+  assert.equal(
+    document.getElementById(composerEditor(reason).getAttribute("aria-labelledby") ?? "")
+      ?.textContent,
+    "Reason",
+  );
 });
 
 test("the pane's crumbs lead with their tabs' glyphs, the plan's document and the agent's mark, and open the item's plan and its agent's tab, each leaving the Inbox, with no other way out in its bar", async () => {
@@ -2338,6 +2403,56 @@ test("an answered item's note draws a mention it holds as the chip a sent messag
 
   assert.equal(note?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
   assert.equal(note?.textContent, "See rollout-store.ts");
+});
+
+test("an answered form draws its values a field a line under the answer's head, a text field's words as a sent message's, so a mention it holds is its chip and never its link's words", async () => {
+  const file = mentionMarkdown(
+    { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" },
+    "rollout-store.ts",
+    { workspace: BILLING.workspaceId, repository: "acme/relay" },
+  );
+  const filled: InboxItem = {
+    ...RETRY,
+    response: {
+      type: INBOX_RESPONSE.FORM,
+      fields: [
+        { type: INBOX_FIELD.SELECT, label: "Effort", options: ["high", "xhigh"] },
+        { type: INBOX_FIELD.TEXT, label: "Reason" },
+        { type: INBOX_FIELD.BOOLEAN, label: "Page on-call" },
+      ],
+    },
+    answer: {
+      reply: INBOX_REPLY.SUBMITTED,
+      values: [
+        { label: "Effort", value: "high" },
+        { label: "Reason", value: `See ${file}` },
+        { label: "Page on-call", value: false },
+      ],
+    },
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, filled]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  const values = itemPane(page).querySelector(
+    '[data-inbox-comment="answered"] [data-inbox-values]',
+  );
+
+  assert.deepEqual(
+    [...(values?.querySelectorAll("li") ?? [])].map((line) => [
+      line.querySelector(".inbox-value-label")?.textContent,
+      line.querySelector(".inbox-value-words")?.textContent,
+    ]),
+    [
+      ["Effort", "high"],
+      ["Reason", "See rollout-store.ts"],
+      ["Page on-call", "no"],
+    ],
+  );
+  assert.equal(values?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
 });
 
 test("what an item's box said of a dictation that failed stays with that item, and the next item's box opens without it", async () => {
@@ -4025,8 +4140,13 @@ test("a row swiped right marks its item: a long swipe marks an unread item read 
     DOMRect.fromRect({ width: 300, height: 56 }),
   );
   Object.assign(item, { setPointerCapture: () => undefined });
+  // Note that every event is stamped at one instant, since the swipe reads the hand's speed off the stamps and jsdom's come off the wall clock; never at 0, which React replaces with the wall clock's.
   const at = (type: string, x: number) =>
-    new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: 10, pointerId: 1 });
+    Object.defineProperty(
+      new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: 10, pointerId: 1 }),
+      "timeStamp",
+      { value: 1 },
+    );
   const swipe = (to: number) =>
     act(() => {
       const press = rowNamed(page, retry);
