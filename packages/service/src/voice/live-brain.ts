@@ -488,7 +488,9 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     ),
   );
   yield* Effect.forkIn(
-    Effect.forever(Effect.flatMap(Queue.take(checkpoints), Effect.uninterruptible)),
+    Effect.withErrorReporting(
+      Effect.forever(Effect.flatMap(Queue.take(checkpoints), Effect.uninterruptible)),
+    ),
     socket,
   );
   /** Each eve session being listened to: the follows it wakes, and the fiber reading its stream while any does. */
@@ -571,7 +573,8 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * and it is attached again after eve refuses or ends it: the door refuses a
    * session until its first event has been recorded, and eve ends a response
    * at its own bound. The reading fiber is the socket scope's, and the last
-   * follow to stop listening interrupts it.
+   * follow to stop listening interrupts it. A refusal or an end is expected
+   * and only retried; a defect ends the reading and is reported to Sentry.
    */
   function listen(sessionId: string, wake: () => void): Effect.Effect<() => void> {
     return Effect.gen(function* () {
@@ -588,7 +591,9 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         }),
       ).pipe(Effect.ignore);
       const reading = yield* Effect.forkIn(
-        Effect.forever(Effect.andThen(once, Effect.sleep(bounds.STREAM_RETRY))),
+        Effect.withErrorReporting(
+          Effect.forever(Effect.andThen(once, Effect.sleep(bounds.STREAM_RETRY))),
+        ),
         socket,
       );
       sessionStreams.set(sessionId, { wakes, reading });
@@ -829,7 +834,9 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * unended is told as a failed end, so the exchange settles and the voice
    * says the standing note rather than waiting forever on a turn eve never
    * started. A follow the scope's close interrupted tells nothing: the
-   * session it would have told is gone.
+   * session it would have told is gone. A follow that failed or died is
+   * reported to Sentry besides being told failed, since no request is there
+   * to carry it; its interruption is not.
    */
   function follow(askId: string, revision: number) {
     if (followed.has(askId)) return Effect.void;
@@ -872,6 +879,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       );
     });
     const following = looking.pipe(
+      Effect.withErrorReporting,
       Effect.flatMap((last) =>
         last === FOLLOW_LOOK.ENDED
           ? Effect.void
@@ -888,7 +896,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         });
       }),
     );
-    return Effect.asVoid(Effect.forkIn(following, socket));
+    return Effect.asVoid(Effect.forkIn(Effect.withErrorReporting(following), socket));
   }
 
   /**

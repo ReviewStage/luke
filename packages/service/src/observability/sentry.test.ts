@@ -3,7 +3,7 @@ import { it } from "@effect/vitest";
 import { Effect, Fiber, Layer, Logger } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
-import { sentryCronCheckIns, sentryLogger, sentryReportedFetch } from "./sentry.js";
+import { sentryCronCheckIns, sentryLogger, sentryReportedFetch, standReported } from "./sentry.js";
 
 /**
  * The deployment's Sentry at its own boundary, its transport
@@ -53,6 +53,26 @@ it.effect("an effect under error reporting is captured once, and an interruption
     }).pipe(Effect.provide(sentry.layer));
     assert.deepEqual(exceptionTypes(sentry.sent), ["TypeError"]);
   }),
+);
+
+it.effect(
+  "a stood service is captured once whether it fails or its runner cannot run it, and not when it is interrupted",
+  () =>
+    Effect.gen(function* () {
+      const sentry = recordingSentry();
+      yield* Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
+        const run = (service: Effect.Effect<never, TypeError>) =>
+          Effect.runPromiseWith(context)(service);
+        yield* Effect.promise(() => standReported(run, Effect.fail(new TypeError("refused"))));
+        yield* Effect.promise(() => standReported(run, Effect.interrupt));
+        // Note that this runner rejects as one whose runtime could not be built does, running nothing.
+        const unbuilt = () => Promise.reject(new RangeError("no runtime"));
+        yield* Effect.promise(() => standReported(unbuilt, Effect.never));
+      }).pipe(Effect.provide(sentry.layer));
+      // Note that the two are compared unordered, because the SDK sends each event when its processing settles.
+      assert.deepEqual(exceptionTypes(sentry.sent).sort(), ["RangeError", "TypeError"]);
+    }),
 );
 
 it.effect("a log line becomes a Sentry log, and a span a Sentry span", () =>
