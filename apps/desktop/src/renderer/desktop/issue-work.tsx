@@ -45,22 +45,26 @@ const IssueWorkContext = createContext<IssueWork | undefined>(undefined);
 /** Hands the Issues page's doors to every card, row, and issue page under it. */
 export const IssueWorkProvider = IssueWorkContext.Provider;
 
-/** Start task… and Start agent… for the issue, where the page offers them; none outside the Issues page. */
-export function useStartItems(issue: Issue, identifier: string): MenuAction[] {
-  const work = useContext(IssueWorkContext);
-  if (work === undefined) return [];
-  return [
-    {
-      label: "Start task…",
-      icon: <ComposeIcon />,
-      onSelect: () => work.onStartTask(issue, identifier),
-    },
-    {
-      label: "Start agent…",
-      icon: <BotIcon />,
-      onSelect: () => work.onStartTask(issue, identifier, true),
-    },
-  ];
+/** The pull request states still to be acted on, which a card's mark is drawn for first. */
+const STANDING_STATES: ReadonlySet<TaskPullRequestLine["state"]> = new Set([
+  PULL_REQUEST_STATE.OPEN,
+  PULL_REQUEST_STATE.DRAFT,
+]);
+
+/**
+ * The pull request that matters most of the tasks started from the issue,
+ * as a task's sidebar mark picks one (`task-agents-model.ts`): one still
+ * open or a draft first, else a merged one, else a closed one, the newest
+ * task's first within each. The service lists each task's still-open ones
+ * first, so the one picked is always among those it carries.
+ */
+function leadPullRequest(tasks: readonly TaskSummary[]): TaskPullRequestLine | undefined {
+  const all = tasks.flatMap((task) => task.agents?.pullRequests ?? []);
+  return (
+    all.find((each) => STANDING_STATES.has(each.state)) ??
+    all.find((each) => each.state === PULL_REQUEST_STATE.MERGED) ??
+    all[0]
+  );
 }
 
 /** How many of a task's pull requests the list did not carry, which open with the task; nothing where it carried each. */
@@ -81,6 +85,24 @@ function MorePullRequests({
       onPress={onOpen}
     />
   );
+}
+
+/** Start task… and Start agent… for the issue, where the page offers them; none outside the Issues page. */
+export function useStartItems(issue: Issue, identifier: string): MenuAction[] {
+  const work = useContext(IssueWorkContext);
+  if (work === undefined) return [];
+  return [
+    {
+      label: "Start task…",
+      icon: <ComposeIcon />,
+      onSelect: () => work.onStartTask(issue, identifier),
+    },
+    {
+      label: "Start agent…",
+      icon: <BotIcon />,
+      onSelect: () => work.onStartTask(issue, identifier, true),
+    },
+  ];
 }
 
 /** The tasks started from the issue, each a chip that opens it, under its status and priority; nothing while none was. */
@@ -115,28 +137,6 @@ export function IssueWorkRow({ issue }: { issue: Issue }): React.JSX.Element | n
         </span>
       ))}
     </section>
-  );
-}
-
-/** The pull request states still to be acted on, which a card's mark is drawn for first. */
-const STANDING_STATES: ReadonlySet<TaskPullRequestLine["state"]> = new Set([
-  PULL_REQUEST_STATE.OPEN,
-  PULL_REQUEST_STATE.DRAFT,
-]);
-
-/**
- * The pull request that matters most of the tasks started from the issue,
- * as a task's sidebar mark picks one (`task-agents-model.ts`): one still
- * open or a draft first, else a merged one, else a closed one, the newest
- * task's first within each. The service lists each task's still-open ones
- * first, so the one picked is always among those it carries.
- */
-function leadPullRequest(tasks: readonly TaskSummary[]): TaskPullRequestLine | undefined {
-  const all = tasks.flatMap((task) => task.agents?.pullRequests ?? []);
-  return (
-    all.find((each) => STANDING_STATES.has(each.state)) ??
-    all.find((each) => each.state === PULL_REQUEST_STATE.MERGED) ??
-    all[0]
   );
 }
 
