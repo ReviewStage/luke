@@ -678,19 +678,6 @@
   font-weight: var(--luke-weight-semibold);
 }
 
-.plan-diagram-toggle {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  font-weight: var(--luke-weight-medium);
-}
-
-.plan-diagram-toggle:hover {
-  color: var(--luke-color-text);
-}
-
 .plan-diagram-picture {
   display: block;
   max-width: 100%;

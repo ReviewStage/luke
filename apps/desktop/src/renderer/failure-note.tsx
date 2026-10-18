@@ -1,4 +1,5 @@
 import { type Failure, remedyLabel, retriesBesideRemedy } from "@luke/features/failure-remedy";
+import { BUTTON_VARIANT, Button } from "@luke/ui";
 import type { ReactNode } from "react";
 import { RetryButton } from "./retry-button";
 
@@ -32,13 +33,9 @@ export function FailureNote({
     <p className={`failure-note ${className}`} role="alert">
       <span className="failure-note-words">{failure.text}</span>
       {label === undefined ? null : (
-        <button
-          type="button"
-          className="toolbar-button bordered-button failure-note-remedy"
-          onClick={onRemedy}
-        >
+        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onRemedy}>
           {label}
-        </button>
+        </Button>
       )}
       {onRetry !== undefined && (label === undefined || retriesBesideRemedy(failure)) ? (
         <RetryButton onRetry={onRetry} />
