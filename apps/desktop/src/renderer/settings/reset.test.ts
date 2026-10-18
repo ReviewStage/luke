@@ -15,7 +15,8 @@ import type { SettingsWrites } from "./writes";
 
 /**
  * reset.test.ts -- a page's reset that the store refuses says why in a
- * failure's toast, and the reset stands pressable again.
+ * failure's toast, announced as an alert, and the reset stands pressable
+ * again.
  */
 
 const REFUSED = "The settings could not be reset. Try again.";
@@ -63,5 +64,6 @@ test("a refused reset says why in a toast and can be pressed again", async () =>
   await act(async () => reset.click());
 
   assert.equal(newestToastSays()?.includes(REFUSED), true);
+  assert.equal(document.querySelector('[role="alert"]')?.textContent?.includes(REFUSED), true);
   assert.equal(reset.disabled, false);
 });
