@@ -621,13 +621,13 @@ test("while the Inbox and the automations are read, placeholder rows stand for e
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
 });
 
-test("a page opened by a member's id alone stands a placeholder head while the members are read, never Someone not in this workspace", async () => {
+test("a page opened by a member's id alone stands a placeholder head while the members are read, never Someone not in this workspace nor an empty page", async () => {
   membersHeld = true;
   const { page } = mount("user-sam");
   await settle();
 
   assert.deepEqual(waits(page), ["Reading who they are…"]);
-  assert.doesNotMatch(page.textContent ?? "", /Someone|Not in this workspace/u);
+  assert.doesNotMatch(page.textContent ?? "", /Someone|Not in this workspace|Nothing of theirs/u);
 
   answerMembers();
   await settle();

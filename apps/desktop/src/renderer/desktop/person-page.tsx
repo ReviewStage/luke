@@ -580,8 +580,9 @@ function PersonColumn({
           ) : theirAutomations.reading ? (
             <RowsSkeleton label={`Reading ${theirs} automations…`} />
           ) : null}
-          {/* Note that the page is said to be empty only once the task list, the Inbox, and the automations have answered, since any may yet name something. */}
-          {!tasks.listRead ||
+          {/* Note that the page is said to be empty only once it names someone and the task list, the Inbox, and the automations have answered, since any may yet name something, or nobody may be found. */}
+          {unnamed ||
+          !tasks.listRead ||
           read.failed ||
           read.reading ||
           theirAutomations.failed ||
