@@ -14,6 +14,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
+  RetryRowLabel,
   Skeleton,
   SkeletonRegion,
   useMenu,
@@ -28,7 +29,6 @@ import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory } from "../navigation-history";
-import { RetryRowLabel } from "../retry-button";
 import { Shortcut } from "../shortcut";
 import { BusyLabel } from "../spinner";
 import { centreWithin } from "../tasks/code-pane";

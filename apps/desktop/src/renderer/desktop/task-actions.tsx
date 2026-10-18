@@ -1,6 +1,6 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { PLAN_ACTOR, type TaskSummary } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -12,6 +12,7 @@ import {
   EllipsisIcon,
   ExternalIcon,
   IconButton,
+  InlineEdit,
   PinIcon,
   ProviderMark,
   TrashIcon,
@@ -51,7 +52,7 @@ import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections";
 import { TaskStatusMark, taskCardOf } from "./task-card";
-import { TaskNameField, useTaskRename } from "./task-name-field";
+import { useTaskRename } from "./task-name-field";
 
 /**
  * task-actions.tsx -- one task's actions, offered alike from the toolbar's ⋯ button and from a right-click on the task in the sidebar.
@@ -502,12 +503,14 @@ export function SidebarTask({
     <li ref={item} className="sidebar-task-item">
       {rename.editing ? (
         <div className="sidebar-task" aria-current={current ? "page" : undefined}>
-          <TaskNameField
-            name={task.name}
-            className="sidebar-task-field"
+          <InlineEdit
+            value={task.name}
+            label="Task name"
+            maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
+            editing
             onEnd={(edit) => {
               refocus.current = edit.byKey;
-              rename.end(edit);
+              rename.end(edit.value);
             }}
           />
         </div>
