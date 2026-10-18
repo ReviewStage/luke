@@ -3,10 +3,13 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
+import { type ChatToolResult, chatRejected } from "@luke/service/agents/coder-host/chat";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
 import {
   type AgentToolCall,
+  type ChatCall,
   type CoderHost,
+  type CoderSessionPromptRecord,
   coderHost,
   type InboxCall,
 } from "@luke/service/agents/coder-host/host";
@@ -54,7 +57,7 @@ import { runAgent } from "./runtime.js";
 
 /**
  * The one host every authored file of this eve project shares, over the
- * deployment's seams, on the same terms as the planning brain's
+ * deployment's seams, on the same terms as the brain's
  * (`apps/luke/host.ts`): the seams are composed here, once, over the same
  * `HostedEnvironment` layer the web runtime builds, and run synchronously
  * because eve loads the authored files as modules and the environment read
@@ -179,6 +182,25 @@ export function offeredPlanTools(
   );
 }
 
+/**
+ * Whether the session is offered the chat's tools for the turn it opens,
+ * for those tools' own files: only where the account that started the agent
+ * turned Chat on; never for a session the host does not admit.
+ */
+export function offeredChatTools(
+  auth: SessionAuth,
+  sessionId: string,
+  prompt: CoderSessionPromptRecord,
+): Promise<boolean> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return false;
+      return yield* host.chatOffered(admitted.success, prompt);
+    }),
+  );
+}
+
 /** One `edit_plan` call's notes taken into the agent's plan, its pictures read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
 export function editPlanNotes(
   auth: SessionAuth,
@@ -252,6 +274,21 @@ export function runAgentTool(
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return agentToolRejected(admitted.failure);
       return yield* host.agentTools(admitted.success, call);
+    }),
+  );
+}
+
+/** One call of the agent's chat tools run under its session, for the tool, which runs here rather than at an edge of its own. */
+export function runChatTool(
+  auth: SessionAuth,
+  sessionId: string,
+  call: ChatCall,
+): Promise<ChatToolResult> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return chatRejected(admitted.failure);
+      return yield* host.chat(admitted.success, call);
     }),
   );
 }

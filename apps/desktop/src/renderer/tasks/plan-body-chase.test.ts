@@ -11,7 +11,7 @@ import { DOCUMENT_TASK } from "#testing/document-task";
 import { PlanBody } from "./plan-body";
 
 /**
- * plan-body-chase.test.ts -- a teammate's edit to a shared plan types in as
+ * plan-body-chase.test.ts -- a teammate's edit to a shared task types in as
  * Luke's does, while the reader's own lands at once, since only the reader
  * watched it being typed.
  */

@@ -9,9 +9,17 @@ import {
   type CodingAgentPullRequest,
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { ACT_KIND } from "@luke/host/acts";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
-import { CopyIcon, DownloadIcon } from "@luke/ui";
+import {
+  CopyIcon,
+  DownloadIcon,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+} from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
   ClipboardCopyIcon,
@@ -21,11 +29,8 @@ import {
   RotateCwIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "../act";
+import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
-import { EmptyState } from "../empty-state";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
@@ -252,7 +257,7 @@ function FileDiff({
     <section className="file-tab" aria-label={`Diff of ${file.path}`}>
       {file.previousPath === null ? null : (
         <div className="file-tab-notice">
-          <p className="m-0">
+          <p>
             Renamed from <bdi>{file.previousPath}</bdi>
           </p>
         </div>
@@ -275,7 +280,7 @@ export function peopleOf(
 }
 
 /**
- * The card a Changes tab hangs, and its row in the plan's summary, in a tab
+ * The card a Changes tab hangs, and its row in the task's summary, in a tab
  * card's look: the pull request's title with its mark and number at the
  * right, the coding agent whose pull request it is under the title, by its
  * tile and name as every place naming an agent draws it (`ActorRef`),
@@ -305,7 +310,7 @@ export function ChangesCard({
   const reviewers = people?.reviewers ?? [];
   return (
     <HoverCard data-tab-card="">
-      <CardHead
+      <HoverCardHead
         name={pullRequest.title}
         sub={<AgentActorRef subject={subject} models={models} onOpen={onOpenAgent} />}
         corner={
@@ -315,19 +320,19 @@ export function ChangesCard({
           </>
         }
       />
-      <CardNote>
+      <HoverCardNote>
         {count} {count === 1 ? "file" : "files"} changed{" "}
         <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
-      </CardNote>
+      </HoverCardNote>
       {people?.author === undefined ? null : (
-        <CardNote oneLine>
+        <HoverCardNote oneLine>
           <OpenedBy person={people.author} />
-        </CardNote>
+        </HoverCardNote>
       )}
       {reviewers.length === 0 ? null : (
-        <CardNote>
+        <HoverCardNote>
           <ReviewersLine reviewers={reviewers} />
-        </CardNote>
+        </HoverCardNote>
       )}
     </HoverCard>
   );
@@ -344,12 +349,11 @@ export function AgentChangesTab({
   control: CodingAgentsControl;
   /** Whether the panel is on screen, which is when the tab reads. */
   shown: boolean;
-  /** The plan's repository, which the agent works in and the breadcrumbs name; none names the path plain. */
+  /** The task's repository, which the agent works in and the breadcrumbs name; none names the path plain. */
   repository: string | null;
   /** Whether the tree beside File and Changes tabs is open, and its toggle. */
   tree: { readonly open: boolean; readonly onToggle: () => void };
 }): React.JSX.Element {
-  const { tell } = useAct();
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const { answer, out, ask } = useAgentRead(agentId, shown, ended, control.readChanges, UNANSWERED);
@@ -382,9 +386,9 @@ export function AgentChangesTab({
   }
   if ("failure" in answer) {
     return (
-      <div className="side-panel-empty">
-        <ReadFailure line={CHANGES_WORDS.FAILED} onRetry={ask} place={READ_FAILURE_PLACE.CENTRED} />
-      </div>
+      <ErrorState onRetry={ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        {CHANGES_WORDS.FAILED}
+      </ErrorState>
     );
   }
   if (pullRequest === null) {
@@ -418,7 +422,7 @@ export function AgentChangesTab({
               : { repository, listFolder: changed.folders, onOpen: choose },
         }}
         beside={<ChangeBeside file={shownFile} />}
-        onGitHub={() => tell(ACT_KIND.GITHUB_OPEN, { url: `${pullRequest.url}/files` })}
+        onGitHub={() => appPlatform().openGitHub(`${pullRequest.url}/files`)}
         menu={
           <>
             <DiffSettingsButton roomy={roomy} />
@@ -430,7 +434,7 @@ export function AgentChangesTab({
       <PullRequestPeople people={pullRequest} />
       {pullRequest.truncated ? (
         <div className="file-tab-notice">
-          <p className="m-0">{CHANGES_WORDS.TRUNCATED}</p>
+          <p>{CHANGES_WORDS.TRUNCATED}</p>
         </div>
       ) : null}
       <div className="file-view-body" {...room.body}>

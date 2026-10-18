@@ -1,6 +1,8 @@
 import { Schema as EffectSchema } from "effect";
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
+import { chatAnswerSchema, chatWriteAnswerSchema, chatWriteRequestSchema } from "./chat-wire.js";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
@@ -24,7 +26,8 @@ import {
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
-  inboxImageTypeSchema,
+  inboxMessagedSchema,
+  inboxMessageRequestSchema,
 } from "./inbox-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
@@ -46,16 +49,16 @@ import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
 import { planRevisionSeqSchema } from "./task-wire.js";
 
 /**
- * coding-agent-view.ts -- a plan's coding agents as one Mac's window hears them: each call's answer whole, or why there is none.
+ * coding-agent-view.ts -- a task's coding agents as one Mac's window hears them: each call's answer whole, or why there is none.
  *
  * The host asks the service for these on the window's behalf and answers
  * the window one of the shapes here, so a window draws an answer or draws
  * why, and nothing the service said beyond that reaches it. The failures
- * are the few a window can act on: the service never answered, the plan or
- * the agent is gone, the plan names no repository yet, the App does not
+ * are the few a window can act on: the service never answered, the task or
+ * the agent is gone, the task names no repository yet, the App does not
  * reach it, the choice named is
  * not one the service offers now, or — for a message, and for an answer to
- * the plan's inbox, which may reach the agent as one — the words run past
+ * the task's inbox, which may reach the agent as one — the words run past
  * the bound, the agent's session is still coming up, or it has ended for
  * good.
  *
@@ -77,11 +80,11 @@ import { planRevisionSeqSchema } from "./task-wire.js";
 export const CODING_AGENT_CALL_FAILURE = {
   /** The call never reached an answer: no credential, the network, a refusal, a shape not read. */
   UNANSWERED: "unanswered",
-  /** The plan or the agent is not one the account holds: deleted, or never the caller's. */
+  /** The task or the agent is not one the account holds: deleted, or never the caller's. */
   NOT_FOUND: "not-found",
-  /** The plan names no repository, so there is nothing for an agent to check out. */
+  /** The task names no repository, so there is nothing for an agent to check out. */
   NO_REPOSITORY: "no-repository",
-  /** The plan's workspace's GitHub installation does not reach the plan's repository; why travels beside it where the service said. */
+  /** The task's workspace's GitHub installation does not reach the task's repository; why travels beside it where the service said. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
   /** GitHub did not answer whether the workspace reaches the repository; the same call a moment later may be taken. */
   GITHUB_UNANSWERED: "github-unanswered",
@@ -93,7 +96,7 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_NOT_READY: "agent-not-ready",
   /** The agent's session has ended for good, so no message reaches it; only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
-  /** The plan is archived, so no agent starts on it and none of its agents is sent a message until it is brought back. */
+  /** The task is archived, so no agent starts on it and none of its agents is sent a message until it is brought back. */
   TASK_ARCHIVED: "plan-archived",
 } as const;
 
@@ -185,7 +188,7 @@ export type PlanTemplateRevisionAnswerView = typeof planTemplateRevisionAnswerVi
 /** Writing the default, as the window asks it: the choice to keep. */
 export const codingAgentDefaultWriteParamsSchema = modelChoiceSchema;
 
-/** One plan's agents, as the window asks them: the plan, and whether the archived agents are listed among the rest. */
+/** One task's agents, as the window asks them: the task, and whether the archived agents are listed among the rest. */
 export const codingAgentListParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   includeArchived: EffectSchema.optionalKey(EffectSchema.Boolean),
@@ -209,7 +212,7 @@ export const codingAgentWorkspaceListParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentWorkspaceListParams = typeof codingAgentWorkspaceListParamsSchema.Type;
 
-/** One plan's agents, as the window hears them: each with its status, in the order started, or why there is no list. */
+/** One task's agents, as the window hears them: each with its status, in the order started, or why there is no list. */
 export const codingAgentListAnswerViewSchema = EffectSchema.Union([
   EffectSchema.Struct({ agents: EffectSchema.Array(codingAgentSummarySchema) }),
   failed,
@@ -217,7 +220,7 @@ export const codingAgentListAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentListAnswer = typeof codingAgentListAnswerViewSchema.Type;
 
-/** Starting an agent, as the window asks it: the plan, and the Start request the service takes. */
+/** Starting an agent, as the window asks it: the task, and the Start request the service takes. */
 export const codingAgentStartParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   ...codingAgentStartRequestFields,
@@ -305,7 +308,7 @@ export const codingAgentStopParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentStopParams = typeof codingAgentStopParamsSchema.Type;
 
-/** One agent, as the window asks to read it whole as its own page, on a plan or with none. */
+/** One agent, as the window asks to read it whole as its own page, on a task or with none. */
 export const codingAgentPageParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
 });
@@ -401,7 +404,7 @@ export const dictationTranscribeAnswerViewSchema = EffectSchema.Union([
 
 export type DictationTranscribeAnswerView = typeof dictationTranscribeAnswerViewSchema.Type;
 
-/** One plan's inbox past a cursor, as the window asks it: the plan, and where the window stands. */
+/** One task's inbox past a cursor, as the window asks it: the task, and where the window stands. */
 export const codingAgentInboxParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   after: EffectSchema.NonEmptyString,
@@ -409,7 +412,7 @@ export const codingAgentInboxParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentInboxParams = typeof codingAgentInboxParamsSchema.Type;
 
-/** One agent's inbox past a cursor, as the window asks it: the agent, and where the window stands; it is heard as a plan's inbox is. */
+/** One agent's inbox past a cursor, as the window asks it: the agent, and where the window stands; it is heard as a task's inbox is. */
 export const codingAgentAgentInboxParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
   after: EffectSchema.NonEmptyString,
@@ -417,7 +420,7 @@ export const codingAgentAgentInboxParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentAgentInboxParams = typeof codingAgentAgentInboxParamsSchema.Type;
 
-/** The plan's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
+/** The task's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
 export const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);
 
 export type CodingAgentInboxAnswerView = typeof codingAgentInboxAnswerViewSchema.Type;
@@ -434,6 +437,19 @@ export type CodingAgentInboxAnswerParams = typeof codingAgentInboxAnswerParamsSc
 export const codingAgentInboxAnsweredViewSchema = EffectSchema.Union([inboxAnsweredSchema, failed]);
 
 export type CodingAgentInboxAnsweredView = typeof codingAgentInboxAnsweredViewSchema.Type;
+
+/** A message on one item's thread, as the window asks it: the item, and the message request the service takes, its key the window's own. */
+export const codingAgentInboxMessageParamsSchema = EffectSchema.Struct({
+  itemId: EffectSchema.NonEmptyString,
+  ...inboxMessageRequestSchema.fields,
+});
+
+export type CodingAgentInboxMessageParams = typeof codingAgentInboxMessageParamsSchema.Type;
+
+/** A message on an item's thread, as the window hears it: the item as it then stands, its thread with the message on it, or why there is no answer. */
+export const codingAgentInboxMessagedViewSchema = EffectSchema.Union([inboxMessagedSchema, failed]);
+
+export type CodingAgentInboxMessagedView = typeof codingAgentInboxMessagedViewSchema.Type;
 
 /** What waits across the account past a cursor, as main asks it: where it stands. */
 export const codingAgentAccountInboxParamsSchema = EffectSchema.Struct({
@@ -467,14 +483,15 @@ export const codingAgentPictureParamsSchema = EffectSchema.Struct({
 export type CodingAgentPictureParams = typeof codingAgentPictureParamsSchema.Type;
 
 /**
- * The image, as the window hears it: its bytes in base64 under the media
- * type the service sniffed and kept, which the window draws from a `data:`
- * URL of its own making, or why there is none. The host fetched it under
+ * The image, or the file an inbox answer carried, as the window hears it:
+ * its bytes in base64 under the media type the service sniffed and kept, or
+ * the type the file travelled as, which the window draws or opens from a
+ * `data:` URL of its own making, or why there is none. The host fetched it under
  * the account, so the window holds no bearer and no address.
  */
 export const codingAgentInboxAttachmentViewSchema = EffectSchema.Union([
   EffectSchema.Struct({
-    contentType: inboxImageTypeSchema,
+    contentType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
     base64: EffectSchema.String,
   }),
   failed,
@@ -510,3 +527,32 @@ export const codingAgentGitHubImageViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentGitHubImageView = typeof codingAgentGitHubImageViewSchema.Type;
+
+/** A workspace's chat past a cursor, as the window asks it: the workspace, and the cursor the service last handed back or the start. */
+export const codingAgentChatParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  after: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentChatParams = typeof codingAgentChatParamsSchema.Type;
+
+/** A workspace's chat past a cursor, as the window hears it: the roster, the channels, the messages past it, and the cursor to read on from, or why there is none. */
+export const codingAgentChatAnswerViewSchema = EffectSchema.Union([chatAnswerSchema, failed]);
+
+export type CodingAgentChatAnswerView = typeof codingAgentChatAnswerViewSchema.Type;
+
+/** A write to a workspace's chat, as the window asks it: the workspace, and the write the service takes, its key the window's own where it carries one. */
+export const codingAgentChatPostParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  write: chatWriteRequestSchema,
+});
+
+export type CodingAgentChatPostParams = typeof codingAgentChatPostParamsSchema.Type;
+
+/** A write to a workspace's chat, as the window hears it: what the write came to, or why there is no answer. */
+export const codingAgentChatWriteAnswerViewSchema = EffectSchema.Union([
+  chatWriteAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentChatWriteAnswerView = typeof codingAgentChatWriteAnswerViewSchema.Type;

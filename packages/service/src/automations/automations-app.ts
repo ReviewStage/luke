@@ -72,12 +72,12 @@ import { executeAutomationRun } from "./automation-runs.js";
  *
  * Every request resolves the bearer before it touches a row, and the store
  * gates every row on the account owning the automation and still reaching
- * its plan (`automation-store.ts`), so an automation of another account, or
- * on a plan of a workspace the account left, answers as not found. What is
+ * its task (`automation-store.ts`), so an automation of another account, or
+ * on a task of a workspace the account left, answers as not found. What is
  * written is checked as a Start checks it: a schedule must read (five-field
  * cron in a known zone, no more often than every fifteen minutes, which the
  * desktop checks with the same module before it sends), a model choice must
- * be one the catalog offers the account, and the plan must name a
+ * be one the catalog offers the account, and the task must name a
  * repository. A schedule's next due instant is computed here whenever the
  * automation is made, resumed, or given a new trigger, and cleared while it
  * is paused. A webhook trigger's secret is minted here, kept only as its
@@ -91,7 +91,7 @@ import { executeAutomationRun } from "./automation-runs.js";
  */
 
 const PATH = {
-  /** GET lists the account's automations, one plan's where `planId` names it; POST makes one. */
+  /** GET lists the account's automations, one task's where `planId` names it; POST makes one. */
   AUTOMATIONS: "/api/automations",
   /** GET reads one, PATCH changes it, DELETE deletes it; the rewrite moves the path's id into the `id` query. */
   AUTOMATION: "/api/automations/automation",
@@ -203,7 +203,7 @@ function agentOf(
   const status = codingAgentStatusOf(standing.turn, {
     createdAt,
     now,
-    lineAwaits: standing.lineAwaits,
+    awaitingLineAt: standing.awaitingLineAt,
   });
   const failureReason =
     status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(standing.turn) : undefined;
@@ -331,7 +331,7 @@ const checkedScope = /* @__PURE__ */ Effect.fnUntraced(function* (
   return scope;
 });
 
-/** GET: the account's automations, or one plan's, or one workspace's. */
+/** GET: the account's automations, or one task's, or one workspace's. */
 const listEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   request: Request,
@@ -374,7 +374,7 @@ const reachedRepositories = /* @__PURE__ */ Effect.fnUntraced(function* (
   return reached.map((repository) => repository.fullName);
 });
 
-/** Where a new automation stands: its plan, as the plan names its workspace and repository, or a workspace and the repositories named, each reached through it. */
+/** Where a new automation stands: its task, as the task names its workspace and repository, or a workspace and the repositories named, each reached through it. */
 interface Standing {
   readonly taskId: string | null;
   readonly organizationId: string;
@@ -382,7 +382,7 @@ interface Standing {
 }
 
 /**
- * Where the request puts a new automation, read as the account: on a plan
+ * Where the request puts a new automation, read as the account: on a task
  * that names a repository, or on a workspace the account is a member of with
  * repositories its installation reaches; a request naming both, or neither,
  * or a workspace with no repositories, is refused as no request at all.
@@ -415,7 +415,7 @@ const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { taskId: null, organizationId: made.workspaceId, repositories };
 });
 
-/** POST: an automation made on one of the account's plans with a repository, or on a workspace of the account's with the repositories its runs work in. */
+/** POST: an automation made on one of the account's tasks with a repository, or on a workspace of the account's with the repositories its runs work in. */
 const createEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, RouteServices> {
@@ -531,7 +531,7 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const target =
     asked.target === undefined ? undefined : yield* checkedTarget(userId, asked.target);
   // Note that new repositories are read through the automation's own workspace, as its runs will
-  // reach them, and that one standing on a plan takes its plan's repository and no other.
+  // reach them, and that one standing on a task takes its task's repository and no other.
   if (asked.repositories !== undefined && standing.taskId !== null) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }

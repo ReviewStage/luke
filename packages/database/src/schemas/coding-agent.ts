@@ -6,6 +6,8 @@ import {
   type CodingAgentPullRequest,
   type ContextWindow,
 } from "@luke/features/coding-agent-wire";
+import type { PullRequestArea } from "@luke/features/pull-request-area";
+import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   foreignKey,
@@ -19,11 +21,11 @@ import {
 import { createdAt, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { automation } from "./automation.js";
-import { task } from "./plan.js";
 import { conversations } from "./storage.js";
+import { task } from "./task.js";
 
 /**
- * coding-agent.ts -- one coding agent started on a plan, linking its conversation to the plan it works.
+ * coding-agent.ts -- one coding agent started on a task, linking its conversation to the task it works.
  *
  * A coding agent is a `coding_agent` conversation: its transcript is that
  * conversation's `messages` rows and its status its latest `turns` row, so
@@ -38,7 +40,10 @@ import { conversations } from "./storage.js";
  * exactly one of the two stands; the repository is `owner/name`; the branch
  * is the one checked out in the agent's sandbox as its last turn ended,
  * which is where its pull request is looked up, and null until a turn ends
- * or where the checkout stood detached; the title is the agent's name on
+ * or where the checkout stood detached or on its start branch; the start branch is the one its
+ * starter named for its checkout to be cloned at, such as a stacked pull
+ * request's, and null for the repository's default branch, which every
+ * agent started without one is cloned at; the title is the agent's name on
  * its tab, generated once from what it was handed as its first session
  * starts and renamed by the developer, null until either and after a rename
  * that cleared it. The last step is what the provider counted of the
@@ -48,7 +53,7 @@ import { conversations } from "./storage.js";
  * until it happens, and both are what the tab's context ring reads.
  * `published` is the pull request from the agent's branch as GitHub last
  * answered a read of it (`coder-host/published.ts`), null before a read
- * found one; the plan list reads it so the sidebar asks GitHub nothing.
+ * found one; the task list reads it so the sidebar asks GitHub nothing.
  * `archived_at` is when the developer put the agent away, which leaves it
  * out of every list but the one that asks for archived agents, and null
  * while it stands; its conversation and pull request are kept either way.
@@ -69,6 +74,13 @@ import { conversations } from "./storage.js";
  * kept as it stood when the run started (`StoredAutomationOrigin`), so the
  * agent still names its automation once that automation is deleted and
  * `automation_id` goes null; null for an agent started by hand.
+ * `started_from` is the agent of the same plan this one was started from
+ * (`StoredStartedFrom`): the one it continues, or forks at one of its
+ * messages, with how many of that agent's steps its first message replayed
+ * of how many there were, and the branch that agent's work was copied to
+ * for it where it could be; null for an agent started afresh. The source is
+ * named by id and held to nothing, so an agent outlives a source discarded
+ * after it.
  * `author` is who the agent's commits are by and its pull request is opened
  * as, the developer or the Luke GitHub App with why (`CODING_AGENT_AUTHOR`),
  * settled once as its first session starts and never moved after, so its
@@ -80,7 +92,7 @@ import { conversations } from "./storage.js";
  *
  * `idempotency_key` is the Start request's own key, unique per account, so a
  * network retry of one Start finds the agent it already made rather than
- * starting a second. The row goes with its plan, its account, and its
+ * starting a second. The row goes with its task, its account, and its
  * conversation alike.
  */
 /**
@@ -119,6 +131,27 @@ export interface StoredAutomationOrigin {
 }
 
 /**
+ * The agent an agent was started from: its id, the assistant message it was
+ * forked at where it was forked rather than continued, and how many of that
+ * message's steps, and of the last of them how many words and calls, the
+ * fork kept where it was a reply still being written,
+ * how many of the source's steps the replay kept of how many there were,
+ * and the branch its work was copied to where it could be.
+ */
+export interface StoredStartedFrom {
+  readonly agentId: string;
+  readonly messageId?: string;
+  /** How many of the message's steps the fork kept, as seen when Fork was pressed on a reply still being written; absent where it kept the message whole. */
+  readonly messageSteps?: number;
+  /** How many words and calls of the last of those steps the fork kept, as seen at that press; absent where it kept that step whole. */
+  readonly messageStepParts?: number;
+  readonly steps: number;
+  readonly totalSteps: number;
+  /** The branch the source's work was copied to for this agent, what it had not pushed included; absent where it could not be copied. */
+  readonly branch?: string;
+}
+
+/**
  * Who archived an agent, and why: a member from the window, or Luke or
  * another coding agent acting for one, the member always, the agent by its
  * id and its title as it stood, and the reason where one was given.
@@ -131,13 +164,27 @@ export interface StoredArchive {
   readonly reason?: string;
 }
 
+/**
+ * The pull request from an agent's branch as its row keeps it: what the
+ * wire carries of it, and beside that what the service alone reads. The
+ * head it was read at, so the next read knows whether its files moved;
+ * when it merged, as GitHub reports it, absent until it has; and the lines
+ * it changed in each directory (`pullRequestAreasOf`). A row written
+ * before these were kept holds none of them.
+ */
+export interface StoredPullRequest extends CodingAgentPullRequest {
+  readonly headSha?: string;
+  readonly mergedAt?: number;
+  readonly areas?: readonly PullRequestArea[];
+}
+
 export const codingAgent = pgTable(
   "coding_agent",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** The plan the agent works on; null for an agent an automation started with no plan. */
-    taskId: uuid("plan_id").references(() => task.id, { onDelete: "cascade" }),
-    /** The workspace the agent belongs to, its plan's or its automation's. */
+    /** The task the agent works on; null for an agent an automation started with no task. */
+    taskId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
+    /** The workspace the agent belongs to, its task's or its automation's. */
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -147,6 +194,8 @@ export const codingAgent = pgTable(
     }),
     /** The run of an automation that started the agent, as it stood then; null for one started by hand. */
     automationOrigin: jsonb("automation_origin").$type<StoredAutomationOrigin>(),
+    /** The agent of the same plan this one was started from, with its replay's counts; null for one started afresh. */
+    startedFrom: jsonb("started_from").$type<StoredStartedFrom>(),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -164,13 +213,15 @@ export const codingAgent = pgTable(
     /** The plan's document exactly as the agent was given it; null for an agent handed a prompt instead. */
     planSnapshot: text("plan_snapshot"),
     /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan. */
-    prompt: text("task"),
+    prompt: text("prompt"),
     /** The GitHub repository the agent works in, as `owner/name`: the first of `repositories`. */
     repository: text("repository").notNull(),
     /** Every repository the agent works in, `owner/name` each, the first where it starts; one until full multi-repo. */
     repositories: jsonb("repositories").$type<readonly string[]>().notNull().default([]),
     /** The branch checked out in the sandbox as the last turn ended; null before one ends or on a detached HEAD. */
     branch: text("branch"),
+    /** The branch the agent's checkout is cloned at, as its starter named it; null for the repository's default branch. */
+    startBranch: text("start_branch"),
     /** The agent's title as its tab shows it; null falls back to the model's name. */
     title: text("title"),
     /** The newest model step of the agent's own conversation; null before its first. */
@@ -178,7 +229,7 @@ export const codingAgent = pgTable(
     /** When eve last compacted the agent's own conversation; null where it never has. */
     compactedAt: timestamptz("compacted_at"),
     /** The pull request from the agent's branch as GitHub last answered; null before a read found one. */
-    published: jsonb("published").$type<CodingAgentPullRequest>(),
+    published: jsonb("published").$type<StoredPullRequest>(),
     /** When the developer archived the agent; null while it is not. */
     archivedAt: timestamptz("archived_at"),
     /** Who archived the agent, and why; null while it is not, and for an archive no one was recorded for. */
@@ -195,10 +246,12 @@ export const codingAgent = pgTable(
   (table) => [
     // One agent per Start: a retry carrying the same key finds this row.
     uniqueIndex("coding_agent_user_idempotency").on(table.userId, table.idempotencyKey),
-    // The tabs read one plan's agents in the order they were started.
-    index("coding_agent_plan_created").on(table.taskId, table.createdAt),
-    // A workspace's agents with no plan are read newest first.
+    // The tabs read one task's agents in the order they were started.
+    index("coding_agent_task_created").on(table.taskId, table.createdAt),
+    // A workspace's agents with no task are read newest first.
     index("coding_agent_org_created").on(table.organizationId, table.createdAt),
+    // An agent's summary names the agents started from it, read by the source's id.
+    index("coding_agent_started_from_agent").on(sql`(${table.startedFrom}->>'agentId')`),
   ],
 );
 

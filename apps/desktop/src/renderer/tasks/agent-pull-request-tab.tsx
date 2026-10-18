@@ -30,7 +30,26 @@ import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
-import { CopyIcon, ProviderMark } from "@luke/ui";
+import {
+  Badge,
+  Button,
+  CopyIcon,
+  EmptyState,
+  ErrorState,
+  IconButton,
+  ProviderMark,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
+  Switch,
+  TAB_COUNT_TONE,
+  TABS_INSET,
+  TabCount,
+  type TabCountTone,
+  type TabItem,
+  Tabs,
+  useMenu,
+} from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
   CheckIcon,
@@ -48,12 +67,9 @@ import {
 import { type ReactNode, useCallback, useId, useState } from "react";
 import { useAct } from "../act";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
+import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
-import { EmptyState } from "../empty-state";
-import { ReadFailure } from "../read-failure";
-import { Skeleton, SkeletonRegion } from "../skeleton";
-import { Switch } from "../switch";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
 import { AgentChangesTab, useAgentRead } from "./agent-changes-tab";
 import { threadPreview } from "./changes-model";
@@ -68,6 +84,8 @@ import {
 import { PierreDiff, useDiffLook } from "./file-diff";
 import { blockedWords, MergeActions } from "./merge-box";
 import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
+import { PullRequestReview } from "./pull-request-review";
+import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions";
 import {
   PullRequestStateMenu,
   PullRequestTitle,
@@ -111,7 +129,8 @@ import { useWorkingNow, workingTime } from "./working-time";
  *
  * The header stays put while the tab under it scrolls: a bar like a File
  * tab's, wearing the pull request's mark and the word for where it stands,
- * with its doors (GitHub and the ⋯); its title and number; its branches;
+ * with its doors (Review while it is open, `pull-request-review.tsx`,
+ * then GitHub and the ⋯); its title and number; its branches;
  * who opened it and when, as the Changes tab names them
  * (`pull-request-people.tsx`), with its reviewers' faces wearing where each
  * stands; and, while it is open, whether it would merge as it stands, in
@@ -332,7 +351,7 @@ function PullRequestMenu({
   onRefresh: () => void;
 }): React.JSX.Element {
   const label = "Pull request actions";
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyWithToast = useCopyToast();
   const actions: MenuAction[] = [
     {
@@ -350,9 +369,7 @@ function PullRequestMenu({
   return (
     <>
       <Tooltip label={label}>
-        <button type="button" className="icon-button" aria-label={label} {...menu.trigger()}>
-          <EllipsisIcon />
-        </button>
+        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
@@ -414,37 +431,41 @@ function reviewersOf(
  * The bar across the top of the fixed header: the pill saying where the
  * pull request stands, in its colour, as last read of what the agent
  * published until the header's own read lands, which opens the changes
- * that may be made from there (`pull-request-writes.tsx`), and GitHub's
- * page and the ⋯ at its end.
+ * that may be made from there (`pull-request-writes.tsx`), and at its end,
+ * while the pull request is open, the Review press
+ * (`pull-request-review.tsx`), then GitHub's page and the ⋯.
  */
 function PullRequestBar({
   published,
   writes,
+  review,
   reading,
   onRefresh,
 }: {
   published: BarPullRequest | undefined;
   writes: PullRequestWrites;
+  /** The review's own change, apart from the pill's, so each says its own answer where it was pressed. */
+  review: PullRequestWrites;
   /** Whether a read is out, which a refresh would only repeat. */
   reading: boolean;
   onRefresh: () => void;
 }): React.JSX.Element {
-  const { tell } = useAct();
   return (
     <div className="file-view-bar pull-request-bar">
       {published === undefined ? null : (
         <>
           <PullRequestStateMenu pullRequest={published} writes={writes} />
           <div className="file-view-actions">
+            {published.state === PULL_REQUEST_STATE.OPEN ||
+            published.state === PULL_REQUEST_STATE.DRAFT ? (
+              <PullRequestReview writes={review} />
+            ) : null}
             <Tooltip label="Open on GitHub">
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Open on GitHub"
-                onClick={() => tell(ACT_KIND.GITHUB_OPEN, { url: published.url })}
-              >
-                <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
-              </button>
+              <IconButton
+                icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+                label="Open on GitHub"
+                onClick={() => appPlatform().openGitHub(published.url)}
+              />
             </Tooltip>
             <PullRequestMenu url={published.url} reading={reading} onRefresh={onRefresh} />
           </div>
@@ -600,25 +621,25 @@ function Checks({
       {checks.length === 0 ? (
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_CHECKS}</p>
       ) : (
-        <div className="pull-request-checks">
-          <ul id={listId} className="pull-request-check-list">
-            {shown.map((check, at) => (
-              // Note that two checks may share a name across Apps, so a row is keyed by its place too.
-              <CheckRow key={`${at}`} agentId={agentId} check={check} live={live} />
-            ))}
-          </ul>
+        <>
+          <div className="pull-request-checks">
+            <ul id={listId} className="pull-request-check-list">
+              {shown.map((check, at) => (
+                // Note that two checks may share a name across Apps, so a row is keyed by its place too.
+                <CheckRow key={`${at}`} agentId={agentId} check={check} live={live} />
+              ))}
+            </ul>
+          </div>
           {folds ? (
-            <button
-              type="button"
-              className="pull-request-checks-fold"
+            <Button
               aria-expanded={unfolded}
               aria-controls={listId}
               onClick={() => setUnfolded((was) => !was)}
             >
               {unfolded ? PULL_REQUEST_WORDS.SHOW_LESS : PULL_REQUEST_WORDS.showAll(checks.length)}
-            </button>
+            </Button>
           ) : null}
-        </div>
+        </>
       )}
     </Section>
   );
@@ -658,14 +679,13 @@ function PartSkeleton({
   className?: string;
 }): React.JSX.Element {
   return (
-    <SkeletonRegion
-      label={label}
-      className={className ? `pull-request-skeleton ${className}` : "pull-request-skeleton"}
-    >
-      {widths.map((width, at) => (
-        // oxlint-disable-next-line react/no-array-index-key -- a skeleton's blocks never move.
-        <Skeleton key={at} width={width} />
-      ))}
+    <SkeletonRegion label={label}>
+      <div className={className ? `pull-request-skeleton ${className}` : "pull-request-skeleton"}>
+        {widths.map((width, at) => (
+          // oxlint-disable-next-line react/no-array-index-key -- a skeleton's blocks never move.
+          <Skeleton key={at} width={width} />
+        ))}
+      </div>
     </SkeletonRegion>
   );
 }
@@ -674,7 +694,7 @@ function PartSkeleton({
 function PartFailure({ line, onRetry }: { line: string; onRetry: () => void }): React.JSX.Element {
   return (
     <div className="pull-request-failure">
-      <ReadFailure line={line} onRetry={onRetry} />
+      <ErrorState onRetry={onRetry}>{line}</ErrorState>
     </div>
   );
 }
@@ -699,7 +719,11 @@ function GitHubPicture({
     return <img className="pull-request-picture" src={state.url} alt={alt} />;
   }
   if (state.kind === PICTURE_STATE.READING) {
-    return <span className="pull-request-picture-waiting" role="img" aria-label={alt} />;
+    return (
+      <span className="pull-request-picture-waiting" role="img" aria-label={alt}>
+        <Skeleton shape={SKELETON_SHAPE.BLOCK} />
+      </span>
+    );
   }
   return <GitHubPictureLink src={src} alt={alt} />;
 }
@@ -774,9 +798,7 @@ function ThreadCard({
           </Tooltip>
           {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}
           {labels.map((label) => (
-            <span key={label} className="pull-request-thread-label">
-              {label}
-            </span>
+            <Badge key={label}>{label}</Badge>
           ))}
           <FoldChevron />
         </FoldSummary>
@@ -810,6 +832,7 @@ function ThreadCard({
               {PULL_REQUEST_WORDS.moreReplies(thread.more)}
             </button>
           )}
+          <ThreadActions thread={thread} />
         </FoldBody>
       </Fold>
     </li>
@@ -1143,35 +1166,6 @@ function HeaderTitle({
   );
 }
 
-/** What a tab of the row says beside its name: a quiet count, a count in the checks' colour, or the lines a pull request adds and removes. */
-const TAB_COUNT = {
-  COUNT: "count",
-  CHECKS: "checks",
-  LINES: "lines",
-} as const;
-
-type TabCount =
-  | { readonly kind: typeof TAB_COUNT.COUNT; readonly count: number }
-  | {
-      readonly kind: typeof TAB_COUNT.CHECKS;
-      /** How many stand as its glyph says, once the checks are read; none before. */
-      readonly count: number | undefined;
-      readonly summary: CheckSummary;
-    }
-  | {
-      readonly kind: typeof TAB_COUNT.LINES;
-      readonly additions: number;
-      readonly deletions: number;
-    };
-
-/** One tab of the row: the view it shows, its glyph, its name, and what it counts. */
-interface TabEntry {
-  readonly view: PullRequestView;
-  readonly icon: ReactNode;
-  readonly label: string;
-  readonly count: TabCount | undefined;
-}
-
 /** How many checks the Checks tab's glyph counts: those that failed beside a failure, those still running beside a wait, and every one where all passed. */
 function summaryCountOf(checks: readonly PullRequestCheck[], summary: CheckSummary): number {
   if (summary === CHECK_SUMMARY.FAILING) {
@@ -1199,94 +1193,35 @@ const SUMMARY_WORDS = {
   [CHECK_SUMMARY.NONE]: "none",
 } as const satisfies Record<CheckSummary, string>;
 
-/** What a tab counts, drawn quiet beside its name: on Checks, how they went in its colour from the first frame, and how many once read. */
-function TabCountWords({ count }: { count: TabCount }): React.JSX.Element | null {
-  if (count.kind === TAB_COUNT.CHECKS) {
-    const glyph = SUMMARY_GLYPHS[count.summary];
-    if (glyph === null && count.count === undefined) return null;
-    return (
-      <span className="pull-request-tab-count" data-check-summary={count.summary}>
-        {glyph === null ? null : (
-          <span
-            className="pull-request-tab-glyph"
-            role="img"
-            aria-label={SUMMARY_WORDS[count.summary]}
-          >
-            {glyph}
-          </span>
-        )}
-        {count.count?.toLocaleString()}
-      </span>
-    );
-  }
-  if (count.kind === TAB_COUNT.LINES) {
-    return (
-      <span className="pull-request-tab-count">
-        <span className="pull-request-tab-added">+{count.additions.toLocaleString()}</span>{" "}
-        <span className="pull-request-tab-removed">−{count.deletions.toLocaleString()}</span>
-      </span>
-    );
-  }
-  return <span className="pull-request-tab-count">{count.count.toLocaleString()}</span>;
+/** The tone the Checks tab's count takes for how its checks went, as its glyph does. */
+const SUMMARY_TONES = {
+  [CHECK_SUMMARY.FAILING]: TAB_COUNT_TONE.DANGER,
+  [CHECK_SUMMARY.PENDING]: TAB_COUNT_TONE.ATTENTION,
+  [CHECK_SUMMARY.PASSING]: TAB_COUNT_TONE.COMPLETE,
+  [CHECK_SUMMARY.NONE]: TAB_COUNT_TONE.QUIET,
+} as const satisfies Record<CheckSummary, TabCountTone>;
+
+/** What the Checks tab counts: how they went in its colour from the first frame, and how many once read; nothing where neither stands. */
+function checksCount(summary: CheckSummary, count: number | undefined): ReactNode {
+  const glyph = SUMMARY_GLYPHS[summary];
+  if (glyph === null && count === undefined) return undefined;
+  return (
+    <TabCount
+      tone={SUMMARY_TONES[summary]}
+      {...(glyph === null ? {} : { glyph, glyphLabel: SUMMARY_WORDS[summary] })}
+    >
+      {count?.toLocaleString()}
+    </TabCount>
+  );
 }
 
-/**
- * The row of tabs under the fixed header, as stage-cli's pull request page
- * draws them: each its glyph, its name, and a quiet count, the chosen one
- * underlined. The arrows move between them, as a tab strip's do.
- */
-function PullRequestTabs({
-  tabs,
-  view,
-  onView,
-  ids,
-}: {
-  tabs: readonly TabEntry[];
-  view: PullRequestView;
-  onView: (view: PullRequestView) => void;
-  /** The id of each tab and of the panel it controls, by view. */
-  ids: (view: PullRequestView) => { readonly tab: string; readonly panel: string };
-}): React.JSX.Element {
-  const step = (by: number) => {
-    const at = tabs.findIndex((tab) => tab.view === view);
-    const next = tabs[(at + by + tabs.length) % tabs.length];
-    if (next === undefined) return;
-    onView(next.view);
-    document.getElementById(ids(next.view).tab)?.focus();
-  };
+/** What the Files changed tab counts: the lines a pull request adds and removes, each in its colour. */
+function linesCount(additions: number, deletions: number): ReactNode {
   return (
-    <div
-      className="pull-request-tabs"
-      role="tablist"
-      aria-label="Pull request"
-      onKeyDown={(event) => {
-        if (event.key === "ArrowRight") step(1);
-        if (event.key === "ArrowLeft") step(-1);
-      }}
-    >
-      {tabs.map((tab) => {
-        const selected = tab.view === view;
-        return (
-          <button
-            key={tab.view}
-            id={ids(tab.view).tab}
-            type="button"
-            role="tab"
-            className="pull-request-tab-button"
-            aria-selected={selected}
-            aria-controls={ids(tab.view).panel}
-            tabIndex={selected ? 0 : -1}
-            onClick={() => onView(tab.view)}
-          >
-            <span className="pull-request-tab-icon" aria-hidden="true">
-              {tab.icon}
-            </span>
-            <span className="pull-request-tab-label">{tab.label}</span>
-            {tab.count === undefined ? null : <TabCountWords count={tab.count} />}
-          </button>
-        );
-      })}
-    </div>
+    <>
+      <TabCount tone={TAB_COUNT_TONE.COMPLETE}>{`+${additions.toLocaleString()}`}</TabCount>{" "}
+      <TabCount tone={TAB_COUNT_TONE.DANGER}>{`−${deletions.toLocaleString()}`}</TabCount>
+    </>
   );
 }
 
@@ -1309,44 +1244,35 @@ function tabsOf(
   parts: OverviewParts,
   published: CodingAgentPullRequest | undefined,
   bar: BarPullRequest | undefined,
-): readonly TabEntry[] {
+): readonly TabItem<PullRequestView>[] {
   const conversation = landed(parts.conversation);
   const checks = landed(parts.checks);
   return [
     {
-      view: PULL_REQUEST_VIEW.CONVERSATION,
+      value: PULL_REQUEST_VIEW.CONVERSATION,
       icon: <MessagesSquareIcon />,
       label: "Conversation",
       count:
-        conversation === undefined
-          ? undefined
-          : { kind: TAB_COUNT.COUNT, count: conversationCount(conversation) },
+        conversation === undefined ? undefined : conversationCount(conversation).toLocaleString(),
     },
     {
-      view: PULL_REQUEST_VIEW.CHECKS,
+      value: PULL_REQUEST_VIEW.CHECKS,
       icon: <CircleCheckIcon />,
       label: "Checks",
       count:
         bar === undefined
           ? undefined
-          : {
-              kind: TAB_COUNT.CHECKS,
-              count: checks === undefined ? undefined : summaryCountOf(checks.checks, bar.checks),
-              summary: bar.checks,
-            },
+          : checksCount(
+              bar.checks,
+              checks === undefined ? undefined : summaryCountOf(checks.checks, bar.checks),
+            ),
     },
     {
-      view: PULL_REQUEST_VIEW.FILES,
+      value: PULL_REQUEST_VIEW.FILES,
       icon: <FileDiffIcon />,
       label: "Files changed",
       count:
-        published === undefined
-          ? undefined
-          : {
-              kind: TAB_COUNT.LINES,
-              additions: published.additions,
-              deletions: published.deletions,
-            },
+        published === undefined ? undefined : linesCount(published.additions, published.deletions),
     },
   ];
 }
@@ -1534,11 +1460,13 @@ export function AgentPullRequestTab({
     checks: checksRead.ask,
     conversation: conversationRead.ask,
   };
-  // Refresh reads again the header's reads and the checks where their tab was shown, never before.
+  // Refresh reads again the header's reads and the checks where their tab was shown, never before,
+  // and what the agent published, which names this tab and its pin by the pull request's title.
   const refresh = () => {
     ask.pullRequest();
     ask.conversation();
     if (askedYet(checksRead)) ask.checks();
+    void control.readPullRequest(agentId).catch(() => undefined);
   };
   const parts: OverviewParts = {
     pullRequest: partOf(pullRequestRead),
@@ -1554,70 +1482,82 @@ export function AgentPullRequestTab({
   );
   const title = landed(parts.pullRequest) ?? published;
   const now = useMinute();
-  // A change is read back both ways: the tab, and what the agent published, which the plan's own marks draw.
-  const writes = usePullRequestWrites(agentId, () => {
-    refresh();
-    void control.readPullRequest(agentId).catch(() => undefined);
-  });
+  // A change is read back as Refresh reads: the tab, and what the agent published, which the plan's own marks draw.
+  const written = refresh;
+  const writes = usePullRequestWrites(agentId, written);
+  const review = usePullRequestWrites(agentId, written);
+  // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
-    <div className="file-view pull-request-tab ph-no-capture">
-      <PullRequestBar published={bar} writes={writes} reading={reading} onRefresh={refresh} />
-      <PullRequestWriteNote writes={writes} />
-      {none ? (
-        <EmptyState icon={<GitPullRequestIcon />}>{PULL_REQUEST_WORDS.NO_PULL_REQUEST}</EmptyState>
-      ) : (
-        <>
-          <header className="pull-request-header">
-            <HeaderTitle title={title} writes={writes} />
-            <PullRequestHead parts={parts} now={now} repository={repository} writes={writes} />
-          </header>
-          <PullRequestTabs
-            tabs={tabsOf(parts, published, bar)}
-            view={view}
-            onView={onView}
-            ids={ids}
-          />
-          <div
-            className="pull-request-view"
-            role="tabpanel"
-            id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
-            aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
-            hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
-          >
-            <ConversationView agentId={agentId} parts={parts} url={title?.url} />
-          </div>
-          <div
-            className="pull-request-view"
-            role="tabpanel"
-            id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
-            aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
-            hidden={view !== PULL_REQUEST_VIEW.CHECKS}
-          >
-            <div className="pull-request-page">
-              <ChecksPart
-                agentId={agentId}
-                parts={parts}
-                live={shown && view === PULL_REQUEST_VIEW.CHECKS}
-              />
-            </div>
-          </div>
-        </>
-      )}
-      <div
-        className="pull-request-view"
-        role="tabpanel"
-        id={ids(PULL_REQUEST_VIEW.FILES).panel}
-        aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
-        hidden={none || view !== PULL_REQUEST_VIEW.FILES}
-      >
-        <AgentChangesTab
-          agentId={agentId}
-          control={control}
-          shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
-          repository={repository}
-          tree={tree}
+    <ThreadWritesProvider value={{ agentId, onWritten: written }}>
+      <div className="file-view pull-request-tab ph-no-capture">
+        <PullRequestBar
+          published={bar}
+          writes={writes}
+          review={review}
+          reading={reading}
+          onRefresh={refresh}
         />
+        <PullRequestWriteNote writes={writes} />
+        {none ? (
+          <EmptyState icon={<GitPullRequestIcon />}>
+            {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
+          </EmptyState>
+        ) : (
+          <>
+            <header className="pull-request-header">
+              <HeaderTitle title={title} writes={writes} />
+              <PullRequestHead parts={parts} now={now} repository={repository} writes={writes} />
+            </header>
+            <Tabs<PullRequestView>
+              label="Pull request"
+              tabs={tabsOf(parts, published, bar)}
+              value={view}
+              onChange={onView}
+              ids={ids}
+              inset={TABS_INSET.READING}
+            />
+            <div
+              className="pull-request-view"
+              role="tabpanel"
+              id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
+              aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
+              hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
+            >
+              <ConversationView agentId={agentId} parts={parts} url={title?.url} />
+            </div>
+            <div
+              className="pull-request-view"
+              role="tabpanel"
+              id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
+              aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
+              hidden={view !== PULL_REQUEST_VIEW.CHECKS}
+            >
+              <div className="pull-request-page">
+                <ChecksPart
+                  agentId={agentId}
+                  parts={parts}
+                  live={shown && view === PULL_REQUEST_VIEW.CHECKS}
+                />
+              </div>
+            </div>
+          </>
+        )}
+        <div
+          className="pull-request-view"
+          role="tabpanel"
+          id={ids(PULL_REQUEST_VIEW.FILES).panel}
+          aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
+          hidden={none || view !== PULL_REQUEST_VIEW.FILES}
+        >
+          <AgentChangesTab
+            agentId={agentId}
+            control={control}
+            shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
+            repository={repository}
+            tree={tree}
+          />
+        </div>
       </div>
-    </div>
+    </ThreadWritesProvider>
   );
 }

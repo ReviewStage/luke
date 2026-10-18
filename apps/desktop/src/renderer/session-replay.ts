@@ -1,8 +1,8 @@
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { isRecord, text, type UnparsedWireValue, type WireValue } from "@luke/wire";
 import type { PostHog, Properties } from "posthog-js/dist/module.no-external";
-import { appendBundle } from "./bundle-loader";
-import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorder/contract";
+import type { BundleImporter } from "./bundle-loader";
+import { sessionRecorderLoaded } from "./session-recorder/contract";
 
 /**
  * Recording the shape of what Luke's own panel draws, and none of its words.
@@ -19,7 +19,7 @@ import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorde
  * most of a person's words also block their whole subtree with the library's
  * fixed `ph-no-capture` class as a second line, each named where it is drawn
  * and listed in `PRIVACY.md`: the feedback dialog, whose screenshots are
- * pictures of the person's screen, a plan's title and the editor its document
+ * pictures of the person's screen, a task's title and the editor its document
  * is edited in, whose masked value would still record the rhythm of the
  * typing, and its whiteboard, transcript, Work, Code, File, and page tabs,
  * version history, Inbox, Chat, and coding agents' tabs and their Terminal tabs,
@@ -73,7 +73,7 @@ const ACCOUNTS_DIRECTORY = "/Users/";
 /**
  * The directory this page was loaded from, which is also where its scripts
  * are — so it is where a captured exception's stack frames point, and those
- * name `renderer.js` rather than the document itself.
+ * name `panel.js` and its chunks rather than the document itself.
  *
  * Read off `globalThis` rather than `window` so the parser can be exercised
  * with no document at all, where there is no address to match and every value
@@ -274,16 +274,24 @@ let client: PostHog | undefined;
 /** The run's latest word on recording, which a recorder that finishes loading starts under. */
 let latest: SessionReplayBootstrap | undefined;
 
+/** The recorder's bundle, imported where the bundler put it; it registers itself as it runs. */
+const importSessionRecorder: BundleImporter<unknown> = () => import("./session-recorder/index");
+
 /**
  * Brings recording into line with what the run allows, in either direction.
  * Called at bootstrap and again on every account transition, so a deletion
- * stops the recording where it stands rather than at the next launch.
+ * stops the recording where it stands rather than at the next launch. The
+ * recorder's bundle is reached through `importRecorder`, its own entry
+ * unless a test stands one in.
  */
-export function applySessionReplay(bootstrap: SessionReplayBootstrap): void {
+export function applySessionReplay(
+  bootstrap: SessionReplayBootstrap,
+  importRecorder: BundleImporter<unknown> = importSessionRecorder,
+): void {
   latest = bootstrap;
   const wanted = sessionReplayWanted(bootstrap);
   if (wanted === started) return;
-  if (wanted) startSessionReplay(bootstrap);
+  if (wanted) startSessionReplay(bootstrap, importRecorder);
   else stopSessionReplay();
 }
 
@@ -296,12 +304,15 @@ function sessionReplayWanted(bootstrap: SessionReplayBootstrap): boolean {
   return bootstrap.permitted;
 }
 
-function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
+function startSessionReplay(
+  bootstrap: SessionReplayBootstrap,
+  importRecorder: BundleImporter<unknown>,
+): void {
   const key = projectApiKey();
   if (!key) return;
   started = true;
   if (client !== undefined) record(client, key, bootstrap);
-  else loadRecording(key);
+  else loadRecording(key, importRecorder);
 }
 
 /**
@@ -316,7 +327,7 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
  * nothing and stands recording down, so the run's next word on it tries
  * again.
  */
-function loadRecording(key: string): void {
+function loadRecording(key: string, importRecorder: BundleImporter<unknown>): void {
   if (loading) return;
   loading = true;
   const failed = () => {
@@ -337,8 +348,7 @@ function loadRecording(key: string): void {
       if (started && latest) record(client, key, latest);
     }, failed);
   };
-  if (sessionRecorderLoaded()) loadClient();
-  else appendBundle({ script: SESSION_RECORDER_ASSET.SCRIPT }, loadClient, failed);
+  void importRecorder().then(loadClient, failed);
 }
 
 /** Starts the client over a recorder already loaded: built once per window, resumed after that. */

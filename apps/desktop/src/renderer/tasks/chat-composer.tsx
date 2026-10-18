@@ -1,4 +1,5 @@
 import { CHAT_BOUNDS } from "@luke/features/chat-wire";
+import { BUTTON_SHAPE, BUTTON_VARIANT, IconButton } from "@luke/ui";
 import {
   type ChatMention,
   type ChatTarget,
@@ -8,7 +9,6 @@ import {
 } from "@luke/ui/chat-mention";
 import { ArrowUpIcon } from "lucide-react";
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import { BusyLabel } from "../spinner";
 import { Tooltip } from "../tooltip";
 
 /**
@@ -30,6 +30,7 @@ import { Tooltip } from "../tooltip";
 
 /** What the send press is called. */
 const SEND = "Send";
+const SENDING = "Sending";
 
 /** The list's own name, which its listbox is read by. */
 const MENTION_MENU_LABEL = "Mention";
@@ -218,7 +219,7 @@ export function ChatComposer({
   } as const;
   return (
     <div className="chat-composer" data-compact={String(compact === true)}>
-      <div className="chat-composer-box">
+      <div className="chat-composer-box field-well">
         {listed && mention !== undefined ? (
           <MentionMenu
             id={listId}
@@ -253,17 +254,16 @@ export function ChatComposer({
             <span key={hint}>{hint}</span>
           ))}
           <Tooltip label={SEND}>
-            <button
-              type="button"
-              className="chat-send"
-              aria-label={SEND}
-              disabled={sending || draft.trim() === ""}
+            <IconButton
+              icon={<ArrowUpIcon aria-hidden="true" />}
+              label={SEND}
+              variant={BUTTON_VARIANT.PRIMARY}
+              shape={BUTTON_SHAPE.ROUND}
+              disabled={!sending && draft.trim() === ""}
+              busy={sending}
+              busyLabel={SENDING}
               onClick={send}
-            >
-              <BusyLabel busy={sending} label="Sending">
-                <ArrowUpIcon aria-hidden="true" />
-              </BusyLabel>
-            </button>
+            />
           </Tooltip>
         </div>
       </div>

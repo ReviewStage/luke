@@ -1,6 +1,5 @@
 import type { PlanEditor } from "@luke/features/task-wire";
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
-import { cn } from "@luke/ui";
 import type { CallRecord } from "@luke/voice/transcript-model";
 import { AudioLinesIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -13,7 +12,7 @@ import { RUN_CARD, RunCard } from "./turn-card";
 import { STATUS_LINE_CLASS, WORKED_SEPARATOR, workingTime } from "./working-time";
 
 /**
- * call-card.tsx -- a call's span in a plan's logs, the Call tab's and the Code tab's alike: the divider it begins at, and the quiet line it closes with once it has ended, hanging its card.
+ * call-card.tsx -- a call's span in a task's logs, the Call tab's and the Code tab's alike: the divider it begins at, and the quiet line it closes with once it has ended, hanging its card.
  *
  * A call begins at a Checkpoint saying the day and time it started, marked
  * live at its right while it stands, in the developer's colour beside the
@@ -141,8 +140,8 @@ export function CallCheckpoint({
     <Checkpoint
       trailing={
         live ? (
-          <span className="flex items-center gap-1.5 text-developer">
-            <AudioLinesIcon className="size-3.5" aria-hidden="true" />
+          <span className="checkpoint-live">
+            <AudioLinesIcon aria-hidden="true" />
             {LIVE_LABEL}
           </span>
         ) : null
@@ -186,7 +185,7 @@ export function CallEnded({
       label={`${line}${WORKED_SEPARATOR}${length}${WORKED_SEPARATOR}${ended}`}
       card={<CallCard startedAt={startedAt} endedAt={endedAt} record={record} />}
     >
-      <p className={cn(STATUS_LINE_CLASS, "w-fit tabular-nums")} data-call-ended="">
+      <p className={STATUS_LINE_CLASS} data-call-ended="">
         <span data-call-length="">
           {line}
           {WORKED_SEPARATOR}

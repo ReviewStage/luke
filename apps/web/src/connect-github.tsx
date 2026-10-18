@@ -14,14 +14,13 @@ import {
   githubConnectClaimAnswerSchema,
 } from "@luke/features/github-connection-wire";
 import { SOCIAL_PROVIDER } from "@luke/features/sign-in-provider";
-import { MARK_PROVIDER, ProviderMark } from "@luke/ui";
-import { AUTH_CARD, AUTH_SHELL, AUTH_TITLE } from "@luke/ui/auth-surface";
+import { AuthPage, MARK_PROVIDER, ProviderMark, TEXT_LINK_LOOK, TextLink } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { Option, Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ConnectionGraphic } from "./connection-graphic";
-import { SignInChoices } from "./sign-in-choices";
+import { ProviderChoices, SIGN_IN_FAILURE, useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 
 /**
@@ -136,11 +135,20 @@ function settledView(step: ConnectStep): View | undefined {
   return undefined;
 }
 
+/**
+ * The page is one AuthPage card that opens on GitHub's mark joined to
+ * Luke's: the title says where the connect stands, the description what to
+ * do about it, with a link that offers a refused connect again, and the
+ * body holds the providers when a sign-in comes first. A sign-in that
+ * cannot start is said in the card's alert region rather than under the
+ * choices.
+ */
 function ConnectGitHub(): React.JSX.Element {
   const [step] = useState(() => connectStepFromSearch(window.location.search));
   const [view, setView] = useState<View>(() => settledView(step) ?? WORKING);
   const session = authClient.useSession();
   const started = useRef(false);
+  const signInChoices = useSocialSignIn(authClient);
 
   useEffect(() => {
     if (step.kind !== CONNECT_STEP.CONNECT || session.isPending || started.current) return;
@@ -153,26 +161,36 @@ function ConnectGitHub(): React.JSX.Element {
     void connect(step.intent).then(setView);
   }, [step, session.isPending, session.data]);
 
+  const retry = step.kind === CONNECT_STEP.FAILED ? step.retry : undefined;
   return (
-    <main className={AUTH_SHELL}>
-      <section className={AUTH_CARD} aria-labelledby="connect-title">
+    <AuthPage
+      mark={
         <ConnectionGraphic
           mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} className="size-10 shrink-0" />}
         />
-        <h1 id="connect-title" className={AUTH_TITLE}>
-          {view.kind !== VIEW.WORKING ? view.title : "Connecting GitHub…"}
-        </h1>
-        {view.kind === VIEW.WORKING ? null : (
-          <p className="m-0 text-muted-foreground">{view.body}</p>
-        )}
-        {view.kind === VIEW.SIGN_IN ? <SignInChoices client={authClient} /> : null}
-        {step.kind === CONNECT_STEP.FAILED && step.retry !== undefined ? (
-          <a className="font-semibold text-foreground underline" href={step.retry}>
-            Try again
-          </a>
-        ) : null}
-      </section>
-    </main>
+      }
+      title={view.kind === VIEW.WORKING ? "Connecting GitHub…" : view.title}
+      description={
+        view.kind === VIEW.WORKING ? undefined : (
+          <>
+            {view.body}
+            {retry === undefined ? null : (
+              <>
+                {" "}
+                <TextLink href={retry} look={TEXT_LINK_LOOK.UNDERLINED}>
+                  Try again
+                </TextLink>
+              </>
+            )}
+          </>
+        )
+      }
+      error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_FAILURE : undefined}
+    >
+      {view.kind === VIEW.SIGN_IN ? (
+        <ProviderChoices pending={signInChoices.pending} onPress={signInChoices.begin} />
+      ) : null}
+    </AuthPage>
   );
 }
 

@@ -4,7 +4,7 @@
  * Working, the working mark (`working-mark.tsx`) takes the glyph's place in
  * the glyph's own footprint, so a tab or a row moves nothing as its work
  * starts or ends; reduced motion and a capture run hold it on a frame that
- * still reads as working. A row with no glyph of its own, a sidebar plan's
+ * still reads as working. A row with no glyph of its own, a sidebar task's
  * time or a call's row in a transcript, draws the same mark through the
  * same seat, at the size its slot sets (`--state-glyph-size`). Failed, the
  * glyph stands as it does at rest, so a failed agent still shows the

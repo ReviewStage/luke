@@ -4,9 +4,9 @@
  * TipTap is too large for the bundle every window parses, so the panel's two
  * editors, a plan's text and an agent's message box, ship as one bundle of
  * their own (`plan-editor.js`, built from `./index.ts`) that the panel starts
- * loading after its first paint (`../editor-bundle.ts`), as the whiteboard
- * and a File tab's tree load the first time they are shown. That bundle sets
- * one global, `window.lukePlanEditor`, and this file is the whole of what the
+ * loading after its first paint (`../bundle-loader.ts`), as the whiteboard
+ * and a File tab's tree load the first time they are shown. That bundle exports
+ * one module, `planEditor`, and this file is the whole of what the
  * two share. Nothing here imports a value, so the panel carries none of the
  * editor's libraries, and the voice window, which loads the panel's bundle,
  * parses none of them.
@@ -22,7 +22,7 @@ export interface PlanEditorProps {
   /** The text as the document holds it, which the editor opens on. */
   readonly markdown: string;
   readonly placement: PlanEditorPlacement | undefined;
-  /** Whether the editor takes the keyboard as it mounts, as a plan opened by a click or a key does and a page drawing it does not. */
+  /** Whether the editor takes the keyboard as it mounts, as a task opened by a click or a key does and a page drawing it does not. */
   readonly focus: boolean;
   readonly label: string;
   /** The read view's own classes, so the editor's words stand where the drawn words stood. */
@@ -275,17 +275,8 @@ export const COMPOSER_INPUT = {
 
 export type ComposerInput = (typeof COMPOSER_INPUT)[keyof typeof COMPOSER_INPUT];
 
-/** What the editor bundle sets on `window` once it has loaded. */
+/** What the editor bundle's entry exports, which the panel imports the first time it is needed (`../bundle-loader.ts`). */
 export interface PlanEditorModule {
   readonly mount: (host: HTMLElement, props: PlanEditorProps) => PlanEditorHandle;
   readonly mountComposer: (host: HTMLElement, props: ComposerEditorProps) => ComposerEditorHandle;
 }
-
-declare global {
-  interface Window {
-    lukePlanEditor?: PlanEditorModule;
-  }
-}
-
-/** The file the plan editor's bundle is, beside `index.html`. */
-export const PLAN_EDITOR_ASSET = { SCRIPT: "plan-editor.js" } as const;

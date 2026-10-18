@@ -12,13 +12,13 @@ import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 
 /**
- * repository-shell.ts -- the planning model's one source read: a shell command run in the planning session's sandbox, on a checkout of the plan's GitHub repository.
+ * repository-shell.ts -- the brain's one source read: a shell command run in the brain session's sandbox, on a checkout of the task's GitHub repository.
  *
  * The planning model runs here and so does the sandbox: eve opens one Vercel
  * Sandbox per planning session (`apps/luke/sandbox.ts`) and hands a tool
  * its door. The first call that finds no checkout of the plan's repository
  * makes one, at the repository's current default branch and one commit
- * deep, and later calls reuse it; a plan whose repository changed meanwhile
+ * deep, and later calls reuse it; a task whose repository changed meanwhile
  * is checked out again. The checkout reads the repository through the Luke
  * GitHub App: the owner's reach is confirmed and a token minted for that one
  * repository with contents read (`github-app.ts`), and the token is set as a
@@ -103,7 +103,7 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
   VARIABLE: {
     /** The repository the call is about, `owner/name`, read by the probe and the checkout. */
     REPOSITORY: "LUKE_REPOSITORY",
-    /** The default branch the checkout is of. */
+    /** The branch the checkout is of: the default branch, or the one a coding agent was started on. */
     BRANCH: "LUKE_BRANCH",
     /** The clone's URL, which carries no credential; its presence is what makes a run the checkout. */
     URL: "LUKE_CLONE_URL",
@@ -167,9 +167,9 @@ const CHECKED_OUT_SCRIPT = [
  * says and whole where it says nothing, into a directory of this call's
  * own, moved into place once whole. Note that a checkout
  * another call of the same session finished first is kept and this one's
- * dropped, so two first calls racing (the planning model's and its
+ * dropped, so two first calls racing (the brain's and its
  * worker's) end on one checkout; and that a checkout of another repository,
- * where the plan's changed, is removed first.
+ * where the task's changed, is removed first.
  */
 const CHECKOUT_SCRIPT = [
   "set -e",
@@ -209,10 +209,10 @@ export interface RepositorySandbox {
 /** The door to the session's sandbox, opened on first use: eve's `ctx.getSandbox()`, or a test's double. */
 export type RepositorySandboxDoor = () => Promise<RepositorySandbox>;
 
-/** What one call runs under: the plan, the repository it names now, and the session's sandbox. */
+/** What one call runs under: the task, the repository it names now, and the session's sandbox. */
 export interface RepositoryCall {
   readonly task: PlanDocumentBinding;
-  /** The plan's repository as the row holds it, `owner/name`; null for a plan with none. */
+  /** The task's repository as the row holds it, `owner/name`; null for a task with none. */
   readonly repository: string | null;
   readonly sandbox: RepositorySandboxDoor;
 }
@@ -243,7 +243,7 @@ const RUN_IN_REPOSITORY_INPUT = Schema.Struct({
 
 const readInput = readEither(RUN_IN_REPOSITORY_INPUT);
 
-/** The tool as a planning model is offered it: its name, its words, and its input schema. */
+/** The tool as the brain is offered it: its name, its words, and its input schema. */
 export const RUN_IN_REPOSITORY_TOOL = {
   name: AGENT_TOOL.RUN_IN_REPOSITORY,
   description:
@@ -261,10 +261,10 @@ export class RepositoryRefusal extends Data.TaggedError("RepositoryRefusal")<{
   readonly reason: string;
 }> {}
 
-/** The planning checkout is one commit deep: it is read and never pushed from. */
+/** The brain's checkout is one commit deep: it is read and never pushed from. */
 const BRAIN_CLONE_DEPTH = "1";
 
-/** A repository as the checkout clones it: the full name as GitHub spells it, the branch the clone is of, and the name the checkout's record keeps where a caller spells it otherwise. */
+/** A repository as the checkout clones it: the full name as GitHub spells it, the branch the clone is of (the default branch, or a coding agent's start branch), and the name the checkout's record keeps where a caller spells it otherwise. */
 export interface CheckoutRepository {
   readonly fullName: string;
   readonly defaultBranch: string;
@@ -337,7 +337,7 @@ export function runInSandbox(
 
 /**
  * The clone made in the sandbox with the token at the firewall, or the
- * refusal that stopped it: what the planning checkout and a coding agent's
+ * refusal that stopped it: what the brain's checkout and a coding agent's
  * share. The token stands at the firewall for the clone alone: the policy is
  * set back to open internet as the clone ends, however it ended, so no later
  * command runs under it, and a caller that wants the token standing for its
@@ -417,10 +417,10 @@ export const setCheckoutIdentity = /* @__PURE__ */ Effect.fn("web/setCheckoutIde
 });
 
 /**
- * The planning checkout: the repository confirmed reachable and a read
+ * The brain's checkout: the repository confirmed reachable and a read
  * token minted for it, then the clone, one commit deep. Note that the
- * repository is recorded under the name the plan holds, which is what the
- * checkout probe compares, so a plan whose spelling differs from GitHub's
+ * repository is recorded under the name the task holds, which is what the
+ * checkout probe compares, so a task whose spelling differs from GitHub's
  * is still checked out once.
  */
 const checkOut = /* @__PURE__ */ Effect.fn("web/repositoryCheckOut")(function* (
@@ -451,9 +451,9 @@ export interface CheckedOutSandbox {
 }
 
 /**
- * The session's sandbox with the plan's repository checked out in it: the
+ * The session's sandbox with the task's repository checked out in it: the
  * checkout made first where none of this repository stands, and reused
- * after. A plan with no repository is refused ahead of the sandbox, so it
+ * after. A task with no repository is refused ahead of the sandbox, so it
  * opens none. What stands checked out is the repository's own text, so
  * every reader of it owes the model the same honesty: a refusal here says
  * nothing was read.

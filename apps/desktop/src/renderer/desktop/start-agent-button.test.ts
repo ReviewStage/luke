@@ -1,0 +1,89 @@
+// @vitest-environment jsdom
+
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeAll, expect, test } from "vitest";
+import { codingAgentsControl } from "#testing/tasks-control";
+import type { CodingAgentsControl } from "../tasks/use-coding-agents";
+import { StartAgentButton } from "./start-agent-button";
+
+/**
+ * start-agent-button.test.ts -- the task toolbar's Start: its main part
+ * starts an agent and closes the model menu its chevron opened, and a press
+ * it refuses while an agent is starting still closes the menu and starts
+ * nothing.
+ */
+
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
+const roots: Root[] = [];
+
+beforeAll(() => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+});
+
+afterEach(() => {
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.replaceChildren();
+});
+
+/** Draws Start over `control`, answering a redraw over another control. */
+function mount(control: CodingAgentsControl): (next: CodingAgentsControl) => void {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(StartAgentButton, { control })));
+  return (next) => act(() => root.render(createElement(StartAgentButton, { control: next })));
+}
+
+/** The button named `name`. */
+function button(name: string): HTMLButtonElement {
+  const found = document.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);
+  if (found === null) throw new Error(`no button named ${name}`);
+  return found;
+}
+
+function menuOpen(): boolean {
+  return button("Choose a model to start with").getAttribute("aria-expanded") === "true";
+}
+
+/** A task Start can run on, counting its presses into `started`. */
+function startable(started: string[], busy = false): CodingAgentsControl {
+  return codingAgentsControl({
+    start: {
+      available: true,
+      reason: undefined,
+      busy,
+      note: undefined,
+      onPress: () => started.push("start"),
+    },
+  });
+}
+
+test("the main part starts an agent and closes the model menu", () => {
+  const started: string[] = [];
+  mount(startable(started));
+
+  act(() => button("Choose a model to start with").click());
+  expect(menuOpen()).toBe(true);
+  act(() => button("Start a coding agent").click());
+
+  expect(started).toEqual(["start"]);
+  expect(menuOpen()).toBe(false);
+});
+
+test("a press refused while an agent is starting closes the model menu and starts nothing", () => {
+  const started: string[] = [];
+  const redraw = mount(startable(started));
+
+  act(() => button("Choose a model to start with").click());
+  redraw(startable(started, true));
+  expect(menuOpen()).toBe(true);
+  act(() => button("Starting").click());
+
+  expect(started).toEqual([]);
+  expect(menuOpen()).toBe(false);
+});

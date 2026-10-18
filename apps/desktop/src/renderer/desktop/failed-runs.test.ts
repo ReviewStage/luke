@@ -7,6 +7,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { ToastHost } from "../toast";
 import { type FailedRunPlace, useFailedRunsMark, useFailedRunToasts } from "./failed-runs";
@@ -34,15 +35,12 @@ beforeEach(() => {
   viewed = [];
   marked = [];
   localStorage.clear();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onRunFailed: (listener: (run: RunFailed) => void) => {
-        failedListener = listener;
-        return () => {
-          failedListener = undefined;
-        };
-      },
+  fakeAppBridge({
+    onRunFailed: (listener: (run: RunFailed) => void) => {
+      failedListener = listener;
+      return () => {
+        failedListener = undefined;
+      };
     },
   });
 });
@@ -116,7 +114,10 @@ test("a failed run's toast is under its automation's name, and its View opens th
   const toast = document.querySelector<HTMLElement>(".toast");
   assert.ok(toast);
   assert.equal(toast.querySelector(".toast-detail")?.textContent, "Flaky test sweep");
-  act(() => toast.querySelector<HTMLButtonElement>(".toast-action")?.click());
+  const view = [...toast.querySelectorAll("button")].find(
+    (button) => button.textContent === "View",
+  );
+  act(() => view?.click());
   assert.deepEqual(viewed, [
     { automationId: SWEEP, runId: RUN_ID, workspaceId: "workspace-other" },
   ]);

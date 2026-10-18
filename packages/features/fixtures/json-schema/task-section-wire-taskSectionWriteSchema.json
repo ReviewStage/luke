@@ -1,0 +1,269 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "create"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "workspaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "emoji"
+                  ]
+                },
+                "emoji": {
+                  "type": "string",
+                  "maxLength": 32
+                }
+              },
+              "required": [
+                "kind",
+                "emoji"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "glyph"
+                  ]
+                },
+                "glyph": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "color": {
+                  "type": "string",
+                  "enum": [
+                    "red",
+                    "orange",
+                    "yellow",
+                    "green",
+                    "teal",
+                    "blue",
+                    "purple",
+                    "pink"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "glyph"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "workspaceId",
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "edit"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "emoji"
+                      ]
+                    },
+                    "emoji": {
+                      "type": "string",
+                      "maxLength": 32
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "emoji"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "glyph"
+                      ]
+                    },
+                    "glyph": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "color": {
+                      "type": "string",
+                      "enum": [
+                        "red",
+                        "orange",
+                        "yellow",
+                        "green",
+                        "teal",
+                        "blue",
+                        "purple",
+                        "pink"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "glyph"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "title",
+        "icon"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "move"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "position": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "position"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "delete"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "place"
+          ]
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "sectionId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "taskId",
+        "sectionId"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

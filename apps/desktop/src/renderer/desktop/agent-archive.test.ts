@@ -61,9 +61,9 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
   act(() => {
     row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-tab-card]");
-  assert.equal(card?.querySelector(".card-name")?.textContent, "Retry audit");
-  assert.match(card?.querySelector(".card-corner")?.textContent ?? "", /^Archived · /u);
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Retry audit");
+  assert.match(card?.querySelector(".luke-hover-card-corner")?.textContent ?? "", /^Archived · /u);
 });
 
 /** The notes the card hung over the archived agent's row says, with the reader and who archived it given. */
@@ -103,9 +103,9 @@ function archivedCardNotes(me: string | undefined, archivedBy: CodingAgentArchiv
   act(() => {
     row?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  return [...document.querySelectorAll(".tooltip-card [data-tab-card] .card-note")].map(
-    (note) => note.textContent ?? "",
-  );
+  return [
+    ...document.querySelectorAll(".luke-tooltip-card [data-tab-card] .luke-hover-card-note"),
+  ].map((note) => note.textContent ?? "");
 }
 
 test("an archived agent's card says who archived it, an agent or Luke for a member, the reader as you, and the reason given", () => {

@@ -16,7 +16,7 @@ import {
   transcriptRegion,
 } from "./transcript-model.js";
 
-/** Synthetic plan, calls, and words throughout. */
+/** Synthetic task, calls, and words throughout. */
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const EARLIER_CALL = "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81";
 const LIVE_CALL = "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e";

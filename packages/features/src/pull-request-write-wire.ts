@@ -24,6 +24,10 @@ export const PULL_REQUEST_WRITE_BOUNDS = {
   MAX_COMMIT_CHARS: 64,
   /** GitHub's own bound on a pull request's title. */
   MAX_TITLE_CHARS: 256,
+  /** The longest body a review may carry, GitHub's own bound on a comment's. */
+  MAX_BODY_CHARS: 65_536,
+  /** The longest GitHub id for a review thread the request names; GitHub's run near thirty. */
+  MAX_NODE_ID_CHARS: 256,
 } as const;
 
 /** How a pull request is merged, as GitHub offers each where the repository allows it. */
@@ -67,9 +71,40 @@ export const PULL_REQUEST_ACTION = {
   REOPEN: "reopen",
   /** Its title changed to the one named. */
   EDIT_TITLE: "edit-title",
+  /** A review submitted: the member's own pending review where they hold one, else a new one. */
+  SUBMIT_REVIEW: "submit-review",
+  /** A reply on a review thread of the pull request. */
+  REPLY_TO_THREAD: "reply-to-thread",
+  /** A review thread of the pull request marked resolved. */
+  RESOLVE_THREAD: "resolve-thread",
+  /** A resolved review thread of the pull request opened again. */
+  UNRESOLVE_THREAD: "unresolve-thread",
 } as const;
 
 export type PullRequestAction = (typeof PULL_REQUEST_ACTION)[keyof typeof PULL_REQUEST_ACTION];
+
+/** What a submitted review says of the pull request, as GitHub's own review box offers it. */
+export const REVIEW_EVENT = {
+  /** Feedback that neither approves nor asks for changes. */
+  COMMENT: "comment",
+  APPROVE: "approve",
+  REQUEST_CHANGES: "request-changes",
+} as const;
+
+export type ReviewEvent = (typeof REVIEW_EVENT)[keyof typeof REVIEW_EVENT];
+
+/** A review's words, Markdown, which may be empty where GitHub allows it; GitHub's bound. */
+const reviewBodySchema = EffectSchema.String.check(
+  EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS),
+);
+
+/** GitHub's own id for a review thread of the pull request, as the conversation's read carries it. */
+const threadIdSchema = EffectSchema.NonEmptyString.check(
+  EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_NODE_ID_CHARS),
+);
+
+/** A reply's words, Markdown, never blank; GitHub's bound. */
+const replyBodySchema = reviewBodySchema.check(EffectSchema.isPattern(/\S/u));
 
 /** One change, as the tab asks the service to make it (POST). */
 export const pullRequestActionRequestSchema = EffectSchema.Union([
@@ -95,6 +130,24 @@ export const pullRequestActionRequestSchema = EffectSchema.Union([
       EffectSchema.isNonEmpty(),
       EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_TITLE_CHARS),
     ),
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.SUBMIT_REVIEW),
+    event: EffectSchema.Literals(Object.values(REVIEW_EVENT)),
+    body: reviewBodySchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.REPLY_TO_THREAD),
+    threadId: threadIdSchema,
+    body: replyBodySchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.RESOLVE_THREAD),
+    threadId: threadIdSchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.UNRESOLVE_THREAD),
+    threadId: threadIdSchema,
   }),
 ]);
 

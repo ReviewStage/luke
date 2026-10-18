@@ -73,7 +73,7 @@ afterAll(() => database.close());
 
 const NOW = 1_800_000_000_000;
 
-/** A plan the account starts, as the Plans tab's new-plan form saves one. */
+/** A task the account starts, as the Tasks tab's new-task form saves one. */
 const TASK = {
   name: "Teammate invitations",
 } as const;
@@ -96,7 +96,7 @@ const POLL_MS = 5;
 const QUIET_POLLS = { AFTER_END: 6, AFTER_REFUSAL: 4, AFTER_STOP: 8 } as const;
 const QUICK = { POLL: Duration.millis(POLL_MS), FOLLOW: Duration.minutes(1) };
 
-// The relay's writer holds rows to the hosted set, as production's does, so a planning turn's research call is written.
+// The relay's writer holds rows to the hosted set, as production's does, so a brain turn's research call is written.
 const writer = await database.run(
   storeWriter({
     tools: HOSTED_TOOL_SET,
@@ -575,7 +575,7 @@ it.live(
     }),
 );
 
-/** The one call a planning turn makes, as eve names its input and its result. */
+/** The one call a brain turn makes, as eve names its input and its result. */
 interface BrainCall {
   readonly toolName: string;
   readonly input: unknown;
@@ -592,7 +592,7 @@ const SEARCH_WEB_CALL: BrainCall = {
   },
 };
 
-/** A planning turn as eve streams it: the spoken ask, one call and its result, and the reply. */
+/** A brain turn as eve streams it: the spoken ask, one call and its result, and the reply. */
 function brainTurn(
   turnId: string,
   now: number,

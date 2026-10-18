@@ -5,7 +5,7 @@ import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { tasksApp } from "@luke/service/tasks/tasks-app";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
-/** The developer's edit of the document of a plan the caller owns, by the id its path carries (POST). */
+/** The developer's edit of the document of a task the caller owns, by the id its path carries (POST). */
 export default routeFromHttpRouter(
   tasksApp({
     resolveUserId: resolveHostedUserId,

@@ -1,0 +1,225 @@
+/* breadcrumbs.css -- a path's crumbs in a row, the chevrons between them
+   plain. A bar's path narrows crumb by crumb, cut short at their ends,
+   clipped past the keyboard's ring on a crumb, and gives way at the widths
+   of the `BreadcrumbBar` holding it; a
+   toolbar's heading keeps its way back whole and cuts the page's name
+   short. */
+
+@layer components {
+  /* Note that the row's gap is the bar's own, inherited, because the bar it
+     fills is what spaces its controls, and two bars space theirs apart. */
+  .luke-breadcrumb-bar {
+    container: luke-breadcrumb-bar / inline-size;
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: inherit;
+  }
+
+  .luke-breadcrumbs {
+    position: relative;
+    min-width: 0;
+    flex: 0 1 auto;
+    overflow: clip;
+    overflow-clip-margin: padding-box
+      calc(var(--focus-ring-width, 2px) + var(--focus-ring-offset, 1px));
+  }
+
+  .luke-breadcrumbs ol {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .luke-breadcrumbs li {
+    display: flex;
+    align-items: center;
+  }
+
+  .luke-breadcrumb-separator {
+    display: flex;
+    flex: none;
+    align-items: center;
+  }
+
+  .luke-breadcrumb-words {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--luke-color-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .luke-breadcrumb-button {
+    min-width: 0;
+    padding: var(--luke-space-2) var(--luke-space-4);
+    overflow: hidden;
+    border: 0;
+    border-radius: var(--luke-radius-6);
+    background: none;
+    color: var(--luke-color-text-muted);
+    font: inherit;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition:
+      background-color var(--duration-hover, 0s) ease,
+      color var(--duration-hover, 0s) ease;
+  }
+
+  .luke-breadcrumb-button:hover,
+  .luke-breadcrumb-button[aria-expanded="true"] {
+    background: var(--luke-color-fill-selected);
+    color: var(--luke-color-text);
+  }
+
+  .luke-breadcrumb-button[aria-current="page"] {
+    color: var(--luke-color-text);
+  }
+
+  /* A bar's path, in the caption type. A crumb gives way, by its share, down
+     to its first letters and the ellipsis, its chevron always standing
+     before it, and the current one, last, gives way last of all. */
+  .luke-breadcrumbs[data-variant="caption"] {
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  .luke-breadcrumbs[data-variant="caption"] li {
+    min-width: 2.5em;
+    flex: 0 9 auto;
+  }
+
+  .luke-breadcrumbs[data-variant="caption"] li:has(> .luke-breadcrumb-separator) {
+    min-width: calc(2.5em + 12px);
+  }
+
+  /* Note that a crumb whose chevron a width hides takes no chevron's room
+     in its floor there, as below for the narrower widths. */
+  .luke-breadcrumbs[data-variant="caption"]
+  li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
+    min-width: 2.5em;
+  }
+
+  /* Note that the last crumb's share is a whole one, because shares summing
+     to less than one leave the rest of the overflow standing. */
+  .luke-breadcrumbs[data-variant="caption"] li:last-child {
+    flex-shrink: 1;
+  }
+
+  /* A crumb standing for others a narrow bar leaves out keeps its width. */
+  .luke-breadcrumbs[data-variant="caption"] li:is([data-shown="narrow"], [data-shown="narrowest"]) {
+    flex-shrink: 0;
+  }
+
+  .luke-breadcrumbs[data-variant="caption"] .luke-breadcrumb-separator {
+    color: var(--luke-color-text-subtle);
+  }
+
+  .luke-breadcrumbs[data-variant="caption"] .luke-breadcrumb-separator svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  /* A toolbar's heading: the way back whole, then the page's name in the
+     dialog heading type, cut short where the toolbar is narrow. */
+  .luke-breadcrumbs[data-variant="title"] {
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-breadcrumbs[data-variant="title"] :is(ol, li) {
+    gap: var(--luke-space-4);
+  }
+
+  .luke-breadcrumbs[data-variant="title"] li {
+    flex: none;
+  }
+
+  .luke-breadcrumbs[data-variant="title"] li[data-words="true"] {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+
+  .luke-breadcrumbs[data-variant="title"] .luke-breadcrumb-separator svg {
+    width: 13px; /* off-scale: the crumbs' separator, a size under a control's glyph */
+    height: 13px;
+  }
+
+  .luke-breadcrumbs[data-variant="title"] .luke-breadcrumb-words {
+    font-size: var(--luke-type-dialog-size);
+    font-weight: var(--luke-weight-semibold);
+    line-height: var(--luke-type-dialog-leading);
+  }
+
+  /* The widths a crumb is drawn at (`shownAt`): a wide bar, or none, draws
+     what it says it does; a crumb standing for others is drawn only where
+     the bar is narrow enough to leave them out. */
+  .luke-breadcrumbs li:is([data-shown="narrow"], [data-shown="narrowest"]) {
+    display: none;
+  }
+
+  /* A chevron is drawn at the widths where a crumb before its own is, so
+     the crumb leading the path at a width stands without one there. */
+  .luke-breadcrumb-separator[data-wide="false"] {
+    display: none;
+  }
+
+  @container luke-breadcrumb-bar (max-width: 519px) {
+    .luke-breadcrumbs li[data-shown="wide"] {
+      display: none;
+    }
+
+    .luke-breadcrumbs li[data-shown="narrow"] {
+      display: flex;
+    }
+
+    .luke-breadcrumb-separator[data-wide="false"] {
+      display: flex;
+    }
+
+    .luke-breadcrumb-separator[data-narrow="false"] {
+      display: none;
+    }
+
+    .luke-breadcrumbs[data-variant="caption"]
+      li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
+      min-width: calc(2.5em + 12px);
+    }
+
+    .luke-breadcrumbs[data-variant="caption"]
+      li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
+      min-width: 2.5em;
+    }
+  }
+
+  @container luke-breadcrumb-bar (max-width: 299px) {
+    .luke-breadcrumbs li:is([data-shown="wide-or-narrow"], [data-shown="narrow"]) {
+      display: none;
+    }
+
+    .luke-breadcrumbs li[data-shown="narrowest"] {
+      display: flex;
+    }
+
+    .luke-breadcrumb-separator[data-narrow="false"] {
+      display: flex;
+    }
+
+    .luke-breadcrumb-separator[data-narrowest="false"] {
+      display: none;
+    }
+
+    .luke-breadcrumbs[data-variant="caption"]
+      li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
+      min-width: calc(2.5em + 12px);
+    }
+
+    .luke-breadcrumbs[data-variant="caption"]
+      li:has(> .luke-breadcrumb-separator[data-narrowest="false"]) {
+      min-width: 2.5em;
+    }
+  }
+}

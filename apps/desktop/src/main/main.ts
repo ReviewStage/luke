@@ -1,7 +1,6 @@
 import { appLinkInArguments, appLinkInbox } from "@luke/features/app-links";
-import { closeEveryMacTerminal } from "@luke/host/mac-terminal";
+import { closeEveryMacTerminal, reportToStderr, tolerateClosedStderr } from "@luke/host/node";
 import { desktopQuit, QUIT_STAGE } from "@luke/host/quit";
-import { reportToStderr, tolerateClosedStderr } from "@luke/host/stderr-report";
 import { Duration, Effect, Fiber, ManagedRuntime, Option } from "effect";
 import { app, Menu, protocol, shell } from "electron";
 import { menuBarDrawer } from "./app-menu";
@@ -14,7 +13,7 @@ import { PAGE_SCHEME_PRIVILEGES } from "./window/page-protocol";
  * The desktop client's entry: the process that draws. It owns the windows,
  * the keys, the Dock, the native helpers this machine's devices answer
  * through, and the updater that replaces this binary; it reaches everything
- * else — the settings, the account, the voice session, the plans — through
+ * else — the settings, the account, the voice session, the tasks — through
  * the Gateway as one operator, and offers this machine's native capabilities back to the host as
  * one node. The host it operates is composed here, in this process.
  *

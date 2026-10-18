@@ -12,13 +12,15 @@ import {
 import type { Task } from "@luke/features/task-wire";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   typeInComposer,
@@ -88,8 +90,8 @@ const BILLING = task(
 
 const roots: Root[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installScrollIntoView();
@@ -411,10 +413,7 @@ function answerMotion(): void {
  */
 async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   answerMotion();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { onMenuCommand: () => () => undefined, recordSurfaceEvent: () => undefined },
-  });
+  fakeAppBridge({});
   const pin = { task: open.plan.id, tab: { agent: open.agent.id }, label: "Agent", at: 5 };
   const plans = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
@@ -664,21 +663,13 @@ async function inboxOn(item: InboxItem) {
     ),
   );
   await settle();
-  const note = () =>
-    container.querySelector<HTMLTextAreaElement>(".inbox-view textarea") ??
-    assert.fail("the card's answer box");
+  const box = () => container.querySelector(".inbox-view") ?? assert.fail("the card's answer box");
   return {
-    note,
+    /** The words the card's note shows. */
+    note: () => composerEditor(box()).textContent,
     /** Types the words into the card's note, as the field's own input does. */
     type: async (words: string) => {
-      const field = note();
-      act(() => {
-        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
-          field,
-          words,
-        );
-        field.dispatchEvent(new Event("input", { bubbles: true }));
-      });
+      typeInComposer(box(), words);
       await settle();
     },
     drafted: () =>
@@ -697,22 +688,22 @@ test("an inbox card's note outlasts a reload, its task's row marked meanwhile, a
   before.reload();
 
   const after = await inboxOn(approval(1));
-  assert.equal(after.note().value, "Only for teammates, not guests");
+  assert.equal(after.note(), "Only for teammates, not guests");
   assert.equal(after.drafted(), true);
   after.reload();
 
   const changed = await inboxOn(approval(2));
-  assert.equal(changed.note().value, "", "the agent's change starts the card afresh");
+  assert.equal(changed.note(), "", "the agent's change starts the card afresh");
   assert.equal(changed.drafted(), false, "and the draft it outdated is let go");
 });
 
 /** One item of an agent's with no plan, open and asking for an approval, at `revision`. */
-function planlessItem(agentId: string, id: string, revision: number): InboxItem {
+function tasklessItem(agentId: string, id: string, revision: number): InboxItem {
   return { ...approval(revision), id, agentId };
 }
 
 /** An agent's own inbox with no plan, read through its reader as the Inbox page reads it, answering `items`. */
-async function planlessInbox(agentId: string, items: readonly InboxItem[]) {
+async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
   let control: TaskInboxControl | undefined;
   function Probe(): null {
     control = useTaskInbox({
@@ -727,6 +718,7 @@ async function planlessInbox(agentId: string, items: readonly InboxItem[]) {
         heldIds: [agentId],
         readInbox: () => new Promise(() => undefined),
         answerInbox: () => new Promise(() => undefined),
+        messageInbox: () => new Promise(() => undefined),
         readInboxImage: () => new Promise(() => undefined),
         onRetryList: () => undefined,
       },
@@ -741,17 +733,19 @@ async function planlessInbox(agentId: string, items: readonly InboxItem[]) {
 }
 
 test("an agent with no plan lets go of its own outdated answers as its inbox is read, and never another agent's", async () => {
-  const mine = planlessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
-  const theirs = planlessItem(BILLING.agent.id, "b1b2c3d4-0000-4000-8000-000000000002", 1);
-  const first = await planlessInbox(INVITES.agent.id, [mine]);
-  act(() => first.onDraft(mine, { choices: [], values: [], note: "Only teammates" }));
-  const other = await planlessInbox(BILLING.agent.id, [theirs]);
-  act(() => other.onDraft(theirs, { choices: [], values: [], note: "Weekly" }));
+  const mine = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
+  const theirs = tasklessItem(BILLING.agent.id, "b1b2c3d4-0000-4000-8000-000000000002", 1);
+  const first = await tasklessInbox(INVITES.agent.id, [mine]);
+  act(() =>
+    first.onDraft(mine, { choices: [], values: [], note: "Only teammates", attachments: [] }),
+  );
+  const other = await tasklessInbox(BILLING.agent.id, [theirs]);
+  act(() => other.onDraft(theirs, { choices: [], values: [], note: "Weekly", attachments: [] }));
 
-  await planlessInbox(INVITES.agent.id, [{ ...mine, revision: 2 }]);
-  const reread = await planlessInbox(INVITES.agent.id, [mine]);
+  await tasklessInbox(INVITES.agent.id, [{ ...mine, revision: 2 }]);
+  const reread = await tasklessInbox(INVITES.agent.id, [mine]);
   assert.equal(reread.draftOf(mine).note, "", "the answer its agent outdated is let go");
-  const kept = await planlessInbox(BILLING.agent.id, [theirs]);
+  const kept = await tasklessInbox(BILLING.agent.id, [theirs]);
   assert.equal(kept.draftOf(theirs).note, "Weekly");
 });
 

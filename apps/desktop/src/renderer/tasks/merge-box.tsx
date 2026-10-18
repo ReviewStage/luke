@@ -12,13 +12,13 @@ import {
   type MergeMethod,
   PULL_REQUEST_ACTION,
 } from "@luke/features/pull-request-write-wire";
+import { ConfirmDialog, DIALOG_TONE, useConfirmDialog, useMenu } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Schema } from "effect";
 import { ChevronDownIcon, GitMergeIcon } from "lucide-react";
 import { useState } from "react";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { readKept, writeKept } from "../desktop/folded-groups";
-import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
 import type { PullRequestWrites } from "./pull-request-writes";
 
 /**
@@ -145,7 +145,7 @@ function MethodPicker({
   disabled: boolean;
   onChoose: (method: MergeMethod) => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const items: MenuAction[] = methods.map((each) => ({
     label: METHOD_WORDS[each],
     checked: each === method,

@@ -47,33 +47,79 @@ fi
 # (below) can only see files inside one directory; this walks the door's
 # actual relative-import graph, so a later re-export cannot quietly reintroduce
 # `@effect/platform-node` or `effect/sql` a few files deep.
+#
+# `@luke/host`, `@luke/host/effect`, `@luke/host/act-router`, and
+# `@luke/host/client` are walked the same way, because the host, its act
+# table, and the client core that keeps the app-state document are meant to
+# load in a browser tab: their graphs name no `node:` module, no `ws`, no
+# `electron`, no `@luke/host/node`, and no `Buffer` or `process` global, and
+# what needs one sits behind
+# `@luke/host/node`. The walk crosses into `@luke/credentials` through the
+# doors the host names (its barrel and `/snapshot`), since the account's
+# sign-in lives there: the loopback consent sits behind
+# `@luke/credentials/node`, handed to the host as its `SignInConsent` seam.
+# Every other package a walk reaches is still left unchecked here.
 node --input-type=module -e '
   import { readFile } from "node:fs/promises";
   import path from "node:path";
-  const root = path.join(process.argv[1], "packages/runtime/src");
-  const forbidden = /^(node:|@effect\/platform-node|effect\/sql)/;
-  const seen = new Set();
-  const offenders = [];
-  const walk = async (file) => {
-    if (seen.has(file)) return;
-    seen.add(file);
-    const text = await readFile(file, "utf8");
-    for (const match of text.matchAll(/from\s+"([^"]+)"/g)) {
-      const specifier = match[1];
-      if (forbidden.test(specifier)) {
-        offenders.push(`${path.relative(root, file)}: ${specifier}`);
-      } else if (specifier.startsWith("./") || specifier.startsWith("../")) {
-        await walk(path.join(path.dirname(file), specifier.replace(/\.js$/, ".ts")));
-      }
-    }
+  const doors = [
+    {
+      name: "@luke/runtime/vocabulary",
+      root: "packages/runtime/src",
+      entries: ["vocabulary.ts"],
+      forbidden: /^(node:|@effect\/platform-node|effect\/sql)/,
+    },
+    {
+      name: "@luke/host, @luke/host/effect, @luke/host/act-router, and @luke/host/client",
+      root: "packages/host/src",
+      entries: ["index.ts", "effect/index.ts", "act-router/index.ts", "client/index.ts"],
+      forbidden: /^(node:|ws$|electron$|@effect\/platform-node|@luke\/host\/node)/,
+      globals: /\b(Buffer|process)\.\w+/,
+      follows: ["@luke/credentials"],
+    },
+  ];
+  const repository = process.argv[1];
+  // A followed package is entered where its own `exports` says the
+  // specifier lands, so the walk takes the same door a resolver would.
+  const followed = async (door, specifier) => {
+    const name = door.follows?.find((pkg) => specifier === pkg || specifier.startsWith(`${pkg}/`));
+    if (!name) return undefined;
+    const directory = path.join(repository, "packages", name.slice("@luke/".length));
+    const manifest = JSON.parse(await readFile(path.join(directory, "package.json"), "utf8"));
+    const target = manifest.exports[`.${specifier.slice(name.length)}`];
+    return path.join(directory, target.replace(/\.js$/, ".ts"));
   };
-  await walk(path.join(root, "vocabulary.ts"));
-  if (offenders.length > 0) {
-    process.stderr.write(
-      `error: @luke/runtime/vocabulary resolves a Node-reaching import: ${offenders.join(", ")}\n`,
-    );
-    process.exit(1);
+  let failed = false;
+  for (const door of doors) {
+    const seen = new Set();
+    const offenders = [];
+    const walk = async (file) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      const text = await readFile(file, "utf8");
+      const global = door.globals ? text.match(door.globals) : null;
+      if (global) offenders.push(`${path.relative(repository, file)}: ${global[0]}`);
+      for (const match of text.matchAll(/from\s+"([^"]+)"/g)) {
+        const specifier = match[1];
+        if (door.forbidden.test(specifier)) {
+          offenders.push(`${path.relative(repository, file)}: ${specifier}`);
+        } else if (specifier.startsWith("./") || specifier.startsWith("../")) {
+          await walk(path.join(path.dirname(file), specifier.replace(/\.js$/, ".ts")));
+        } else {
+          const entered = await followed(door, specifier);
+          if (entered) await walk(entered);
+        }
+      }
+    };
+    for (const entry of door.entries) await walk(path.join(repository, door.root, entry));
+    if (offenders.length > 0) {
+      failed = true;
+      process.stderr.write(
+        `error: ${door.name} resolves a Node-reaching import: ${offenders.join(", ")}\n`,
+      );
+    }
   }
+  if (failed) process.exit(1);
 ' "$LUKE_REPO_ROOT"
 
 # The brand artwork has one source and committed outputs cut from it: the
@@ -176,7 +222,7 @@ if [[ -n "$package_app_imports" ]]; then
 fi
 
 # The renderer is a sandboxed browser context: it reaches the main process
-# through the preload bridge alone, so `#shared/bridge`, `#shared/messages/*`,
+# through the preload bridge alone, so `@luke/host/bridge`, `#shared/messages/*`,
 # and the packages' own wire vocabularies are its widest doors. A `#main/` import compiles and bundles happily and then fails in the
 # browser, and a `node:` import does the same — neither is a mistake the type
 # checker or esbuild can report, because both are real modules that simply are
@@ -370,6 +416,8 @@ node --input-type=module -e '
 # `effect-edges.json`, and the deployment and test-support files named here.
 # The agents' eve apps are scanned on the same terms: eve's file conventions
 # import `eve`, a platform, and their build and dependency trees are skipped.
+# `three` is a platform too: it draws on WebGL, so a module that imports it is
+# a Factory world's scene code (`apps/desktop/src/renderer/factory-world/`).
 # The source is parsed with the root's `typescript`, so a comment or a string
 # that says "window" is not a reach into the DOM. `react` is deliberately not
 # a platform, so a DOM-free hook is flagged and belongs in `@luke/ui`; a
@@ -385,7 +433,7 @@ node --input-type=module -e '
   const SCANNED = ["apps/desktop/src", "apps/web/src", "apps/web/server", "apps/luke", "apps/dev"];
   const APP_MODULE = /^(?:\.{1,2}\/|#(?:main|renderer|shared|preload|testing)\/)/;
   const PLATFORM =
-    /^(?:electron|electron-updater|@sentry\/electron|react-dom|better-auth|@better-auth\/[^/]+|eve|@vercel\/[^/]+|vite|@tailwindcss\/[^/]+|posthog-js|@fontsource[^/]*(?:\/[^/]+)?)(?:\/.*)?$/;
+    /^(?:electron|electron-updater|@sentry\/electron|react-dom|better-auth|@better-auth\/[^/]+|eve|@vercel\/[^/]+|vite|@tailwindcss\/[^/]+|posthog-js|@fontsource[^/]*(?:\/[^/]+)?|three)(?:\/.*)?$/;
   const DOM_GLOBALS = new Set([
     "window", "document", "navigator", "location", "history", "screen", "localStorage",
     "sessionStorage", "customElements", "devicePixelRatio", "getComputedStyle", "matchMedia",
@@ -421,8 +469,14 @@ node --input-type=module -e '
     "apps/web/server/build-output.ts",
     "apps/web/server/api-callers.ts",
     "apps/web/server/preview-*.ts",
-    "apps/desktop/src/renderer/global.d.ts",
+    "apps/desktop/src/renderer/stylesheet.d.ts",
     "apps/desktop/src/testing/**",
+    // The doors the window root installs its platform bridge and platform
+    // services into. Step 16 of the web plan moves them into the panel
+    // package, together with renderer/act.ts and the hooks above them, and
+    // removes these rows.
+    "apps/desktop/src/renderer/app-bridge.ts",
+    "apps/desktop/src/renderer/app-platform.ts",
   ];
   const shell = new Set(edges.runtimeEdges);
   for await (const found of glob(shellGlobs, { cwd: root })) shell.add(found.split(path.sep).join("/"));
@@ -512,6 +566,45 @@ node --input-type=module -e '
   }
 ' "$LUKE_REPO_ROOT"
 
+# Turbo's global hash covers the lockfile, `globalDependencies`, `globalEnv`
+# values and its own flags, and no OS, CPU architecture, or Node version, so a
+# check that passed on one platform would replay as a pass on another.
+# `lib/turbo.mjs` names the platform in `LUKE_TURBO_PLATFORM` and `turbo.json`
+# hashes it through `globalEnv`; this holds both halves. The first asks turbo
+# for one task's hash, which its dry run documents as the key it caches under,
+# under two values of the variable; the second asks the wrapper what it sets.
+node --input-type=module -e '
+  import { execFileSync } from "node:child_process";
+  import path from "node:path";
+  const root = process.argv[1];
+  const { turboInvocation } = await import(path.join(root, "scripts/lib/turbo.mjs"));
+  const TASK = "@luke/wire#typecheck";
+  const hashUnder = (platform) => {
+    const { TURBO_TOKEN, ...env } = process.env;
+    const dry = execFileSync("pnpm", ["exec", "turbo", "run", "typecheck", "--filter=@luke/wire", "--dry=json"], {
+      cwd: root,
+      env: { ...env, LUKE_TURBO_PLATFORM: platform, TURBO_TELEMETRY_DISABLED: "1" },
+      encoding: "utf8",
+    });
+    return JSON.parse(dry).tasks.find((task) => task.taskId === TASK)?.hash;
+  };
+  const errors = [];
+  const linux = hashUnder("linux-x64-node24");
+  const darwin = hashUnder("darwin-arm64-node24");
+  if (!linux || linux === darwin) {
+    errors.push(`  turbo hashes ${TASK} the same under two values of LUKE_TURBO_PLATFORM, so turbo.json does not name it in globalEnv`);
+  }
+  const expected = `${process.platform}-${process.arch}-node${process.versions.node.split(".")[0]}`;
+  const set = turboInvocation([]).env.LUKE_TURBO_PLATFORM;
+  if (set !== expected) {
+    errors.push(`  lib/turbo.mjs starts turbo with LUKE_TURBO_PLATFORM=${set}, not ${expected}`);
+  }
+  if (errors.length > 0) {
+    process.stderr.write(`error: turbo cache hits would cross platforms:\n${errors.join("\n")}\n`);
+    process.exit(1);
+  }
+' "$LUKE_REPO_ROOT"
+
 # `@effect/platform-node` and `effect/sql` reach `node:` modules, so an import
 # of either compiles and bundles happily and then fails where there is no Node:
 # the sandboxed renderer. The renderer's `node:` grep above catches the direct
@@ -527,6 +620,12 @@ if [[ -n "$node_reaching_effect" ]]; then
         "$node_reaching_effect" >&2
     exit 1
 fi
+
+# A deployment's migration runs while the deployment before it still serves
+# the old names, so a migration newer than the cutoff renames no table and no
+# column in place (`packages/database/src/core/migration-renames.ts`): the
+# Oct 17 plan-to-task rename broke the 26 turns then running.
+pnpm --silent --filter @luke/database check:renames
 
 # This is the one scan for secrets the repository runs (AGENTS.md's "Never"), and
 # a test fixture shaped like a provider's live credential is what GitHub's

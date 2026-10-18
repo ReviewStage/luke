@@ -39,16 +39,16 @@ import {
 } from "./plan-notes.js";
 
 /**
- * The named plans and their one document, through the store's public
+ * The named tasks and their one document, through the store's public
  * functions and `saveNotes`, the plan's one write, against a real dialect.
  * Every plan is one Markdown text: each note lands in the section under the
  * heading it names and nowhere else, and what is saved is the text the window
- * and the planning model both read (`readTask`). Nothing but the binding the
- * service built names the account and the plan, so no note can move a save
- * onto another account's plan, bring a deleted plan back, or leave an
+ * and the brain both read (`readTask`). Nothing but the binding the
+ * service built names the account and the task, so no note can move a save
+ * onto another account's task, bring a deleted task back, or leave an
  * oversized document saved.
  *
- * Synthetic accounts, repositories, and plans throughout.
+ * Synthetic accounts, repositories, and tasks throughout.
  */
 
 const RELAY_TASK: TestTask = {
@@ -99,7 +99,7 @@ const openConversation = (userId: string) =>
     (rows) => rows[0]?.id ?? assert.fail("the conversation insert returned no row"),
   );
 
-/** The binding the service builds for a plan: its account and its id. */
+/** The binding the service builds for a task: its account and its id. */
 function bound(userId: string, taskId: string): PlanDocumentBinding {
   return { userId, taskId };
 }
@@ -112,7 +112,7 @@ function savedDocument(result: PlanSaveResult): PlanDocument {
   return result.document;
 }
 
-/** The document the window opens and the model resumes from, failing the test where the plan does not read. */
+/** The document the window opens and the model resumes from, failing the test where the task does not read. */
 const resumedDocument = (userId: string, taskId: string) =>
   Effect.map(readTask(userId, taskId), (stored) =>
     Option.match(stored, {

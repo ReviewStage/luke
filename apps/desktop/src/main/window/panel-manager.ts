@@ -1,5 +1,6 @@
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { RunMode } from "@luke/host";
+import { PanelAvatarRelay } from "@luke/host/panel-avatar";
 import type { AvatarFeed } from "@luke/voice/avatar";
 import type { AvatarViewSignal } from "@luke/voice/avatar-view";
 import type { UnparsedWireValue } from "@luke/wire";
@@ -13,7 +14,7 @@ import {
   type WebContents,
 } from "electron";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
-import { PanelAvatarRelay } from "./panel-avatar";
+import { followSwipes } from "./swipe-navigation";
 import {
   placementOf,
   placeWindow,
@@ -76,7 +77,7 @@ const DESKTOP_WINDOW = {
   // Small enough that a 13-inch display's work area still fits the full size.
   MARGIN: 24,
   // The window's ground before the renderer paints, one per appearance; each
-  // is desktop.css's `--desktop-ground` for that appearance.
+  // is the desktop palette's `--luke-color-ground` for that appearance.
   BACKGROUND: { DARK: "#0c0c0e", LIGHT: "#fcfcfc" },
 } as const;
 
@@ -396,6 +397,8 @@ export class PanelManager {
     }
     window.on("enter-full-screen", () => this.#onFullScreenChanged?.());
     window.on("leave-full-screen", () => this.#onFullScreenChanged?.());
+    // A mouse's back and forward buttons arrive as a swipe under Logi Options+.
+    followSwipes(window);
     // Found by the window rather than the id it was born under, because a
     // rebind may have moved it.
     window.on("closed", () => {

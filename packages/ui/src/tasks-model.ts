@@ -1,5 +1,9 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
-import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import {
+  LINEAR_BOUNDS,
+  type LinearIssueSummary,
+  linearIssueIdentifierIn,
+} from "@luke/features/linear-wire";
 import {
   type RepositoryPin,
   TASK_BOUNDS,
@@ -16,7 +20,7 @@ import {
   VOICE_PHASE,
   type VoicePhase,
 } from "@luke/features/tasks-view";
-import type { Workspace } from "@luke/features/workspace-wire";
+import type { LinearIssuesRequest, Workspace } from "@luke/features/workspace-wire";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
 import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
@@ -24,7 +28,7 @@ import type { VoiceView } from "@luke/voice/voice-view";
 import { matchesTokens, searchTokens } from "./search-tokens.js";
 
 /**
- * tasks-model.ts -- what the panel's Plans tab draws, decided from the document and the voice view alone.
+ * tasks-model.ts -- what the panel's Tasks tab draws, decided from the document and the voice view alone.
  *
  * Every decision the tab makes is here and pure, so the components only lay
  * it out: which page shows, which state the document region is in, how the
@@ -35,22 +39,22 @@ import { matchesTokens, searchTokens } from "./search-tokens.js";
 /** How many recent repositories the chip's menu offers. */
 const RECENT_REPOSITORY_LIMIT = 5;
 
-/** Which of the Plans tab's pages shows. */
+/** Which of the Tasks tab's pages shows. */
 export const TASKS_PAGE = {
-  /** The tab's home, whenever no plan is open: a line saying so, and New plan. */
+  /** The tab's home, whenever no task is open: a line saying so, and New task. */
   HOME: "home",
-  /** The open plan's saved document and its microphone. */
+  /** The open task's saved document and its microphone. */
   DOCUMENT: "document",
 } as const;
 
 export type TasksPage = (typeof TASKS_PAGE)[keyof typeof TASKS_PAGE];
 
 /**
- * The page the tab shows. An open plan is the document page, in every panel
- * alike, because the plan open is the host's and not one panel's: it stands
+ * The page the tab shows. An open task is the document page, in every panel
+ * alike, because the task open is the host's and not one panel's: it stands
  * until the developer leaves it, whatever tab or shape the panel is in.
- * With none open, the tab is the home page, which offers New plan; the
- * plan list is the sidebar's.
+ * With none open, the tab is the home page, which offers New task; the
+ * task list is the sidebar's.
  */
 export function tasksPage(view: TasksView): TasksPage {
   return view.activeTaskId === undefined ? TASKS_PAGE.HOME : TASKS_PAGE.DOCUMENT;
@@ -58,14 +62,14 @@ export function tasksPage(view: TasksView): TasksPage {
 
 /** Which state the document region draws. */
 export const DOCUMENT_REGION = {
-  /** No plan is open: the tab shows the list instead. */
+  /** No task is open: the tab shows the list instead. */
   NONE: "none",
   READING: "reading",
   /** The saved document, read. */
   READY: "ready",
   /** The read failed and nothing is held: the failure and Try again. */
   FAILED: "failed",
-  /** The plan is gone. */
+  /** The task is gone. */
   MISSING: "missing",
 } as const;
 
@@ -78,7 +82,7 @@ export type DocumentRegion =
 
 /**
  * The document region's state. The tab never draws a document it did not
- * read: a plan is drawn only when the held document is the active plan's.
+ * read: a task is drawn only when the held document is the active task's.
  */
 export function documentRegion(view: TasksView): DocumentRegion {
   const { activeTaskId, document } = view;
@@ -91,10 +95,10 @@ export function documentRegion(view: TasksView): DocumentRegion {
 }
 
 /**
- * The repositories the account's plans are about, the newest started plan's
+ * The repositories the account's tasks are about, the newest started task's
  * first and each once, so the chip can start on the repository the last
- * plan was about and offer a few before it. The list is already newest
- * started first, and a plan with no repository adds none.
+ * task was about and offer a few before it. The list is already newest
+ * started first, and a task with no repository adds none.
  */
 export function recentRepositories(tasks: TasksView["tasks"]): string[] {
   const recent: string[] = [];
@@ -111,7 +115,7 @@ export function recentRepositories(tasks: TasksView["tasks"]): string[] {
  * tell before the service is asked: its installation is active and on the
  * repository's owner. Since #2524 a workspace reaches only its own installation's
  * repositories, so one with no GitHub connected reaches none, whatever its
- * plans still name. The service's read is the last word, since an
+ * tasks still name. The service's read is the last word, since an
  * installation on the owner may not have been given the repository.
  */
 export function workspaceReaches(
@@ -136,15 +140,40 @@ export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "
 /** How many of a workspace's Linear issues New task offers under its name field at once. */
 export const ISSUE_MATCH_LIMIT = 6;
 
+/** What New task asks a workspace's Linear for beyond the issues it listed: the one issue a key or link names, or a search. */
+export type LinearIssuesAsk = Omit<LinearIssuesRequest, "workspaceId">;
+
+/**
+ * What New task asks Linear for, for the name as typed: the one issue a key
+ * or a link to it names, which a search may not find, or a search over
+ * every issue for any other words; nothing for a blank name, which the
+ * issues listed as the card opened answer.
+ */
+export function linearIssuesAskOf(typed: string): LinearIssuesAsk | undefined {
+  const words = typed.trim();
+  if (words === "") return undefined;
+  const identifier = linearIssueIdentifierIn(words);
+  return identifier === undefined
+    ? { query: words.slice(0, LINEAR_BOUNDS.MAX_QUERY_CHARS) }
+    : { identifier };
+}
+
+/** How near an issue Linear found for the words, though neither its title nor its key holds them all, stands: after every one that does. */
+const FOUND_ELSEWHERE = 3;
+
 /**
  * How closely an issue answers what was typed, nearest first: its key or
- * its number typed whole, then every word typed at the start of a word of
- * its title, then every word anywhere in its title or key.
+ * its number typed whole, or a link to it pasted, then every word typed at
+ * the start of a word of its title, then every word anywhere in its title or
+ * key, then words Linear's search found elsewhere in it.
  */
 function issueNearness(
   issue: Pick<LinearIssueSummary, "identifier" | "title">,
   tokens: readonly string[],
+  named: string | undefined,
 ): number {
+  if (issue.identifier === named) return 0;
+  if (!matchesTokens([issue.title, issue.identifier], tokens)) return FOUND_ELSEWHERE;
   const key = issue.identifier.toLowerCase();
   const number = key.slice(key.lastIndexOf("-") + 1);
   if (tokens.some((token) => token === key || token === number)) return 0;
@@ -154,30 +183,42 @@ function issueNearness(
 }
 
 /**
- * The issues New task offers for the name typed so far: those whose title or
- * key holds every word typed, case aside, nearest first and otherwise in the
- * order Linear listed them, at most `ISSUE_MATCH_LIMIT` of them; none for a
- * blank name, which leaves the field a plain name.
+ * The issues New task offers for the name typed so far, at most
+ * `ISSUE_MATCH_LIMIT` of them: those listed whose title or key holds every
+ * word typed, case aside, and every issue Linear answered for the words
+ * (`found`: what its search matched, or the one issue a key or link names),
+ * each once, nearest first and otherwise listed first; none for a blank
+ * name, which leaves the field a plain name.
  */
-export function matchingIssues<Issue extends Pick<LinearIssueSummary, "identifier" | "title">>(
-  issues: readonly Issue[],
+export function offeredIssues<Issue extends Pick<LinearIssueSummary, "identifier" | "title">>(
+  listed: readonly Issue[],
   typed: string,
+  found: readonly Issue[] = [],
 ): readonly Issue[] {
   const tokens = searchTokens(typed);
   if (tokens.length === 0) return [];
-  return issues
-    .filter((issue) => matchesTokens([issue.title, issue.identifier], tokens))
-    .map((issue, order) => ({ issue, order, nearness: issueNearness(issue, tokens) }))
+  const named = linearIssueIdentifierIn(typed);
+  const foundKeys = new Set(found.map((issue) => issue.identifier));
+  const once = new Map<string, Issue>();
+  for (const issue of [...listed, ...found]) {
+    if (!once.has(issue.identifier)) once.set(issue.identifier, issue);
+  }
+  return [...once.values()]
+    .filter(
+      (issue) =>
+        foundKeys.has(issue.identifier) || matchesTokens([issue.title, issue.identifier], tokens),
+    )
+    .map((issue, order) => ({ issue, order, nearness: issueNearness(issue, tokens, named) }))
     .sort((first, second) => first.nearness - second.nearness || first.order - second.order)
     .slice(0, ISSUE_MATCH_LIMIT)
     .map(({ issue }) => issue);
 }
 
 /**
- * The other workspace a plan's repository belongs to, where its own
+ * The other workspace a task's repository belongs to, where its own
  * workspace's GitHub does not reach it and one of the account's other
- * workspaces' does: the plan stranded there by #2524, which moving it to
- * that workspace mends. None for a plan with no repository, one its own
+ * workspaces' does: the task stranded there by #2524, which moving it to
+ * that workspace mends. None for a task with no repository, one its own
  * workspace reaches, or one no workspace of the account's reaches.
  */
 export function strandedTaskHome(
@@ -214,7 +255,7 @@ export function repositoryOwnerPictureUrl(repository: string): string {
   return githubAccountPictureUrl(repository.slice(0, repository.indexOf("/")));
 }
 
-/** What the New plan dialog says when the service answered no plan. */
+/** What the New task dialog says when the service answered no task. */
 const START_FAILED_NOTE = "Luke's service could not be reached. Try again.";
 
 /** What a call that named a repository says when the service refused it, by its reason. */
@@ -240,13 +281,13 @@ export function startFailureNote(failure: StartCallFailure): string {
     : repositoryFailureNote(failure);
 }
 
-/** What a plan's name says, where it was edited, when the service refused the rename. */
+/** What a task's name says, where it was edited, when the service refused the rename. */
 export const RENAME_FAILED_NOTE = "The task could not be renamed. Try again.";
 
-/** The names given to plans that main's view has yet to carry, by plan id. */
+/** The names given to tasks that main's view has yet to carry, by task id. */
 export type PendingRenames = ReadonlyMap<string, string>;
 
-/** The name the view gives a plan: its row's in the list, else the open document's. */
+/** The name the view gives a task: its row's in the list, else the open document's. */
 function viewedName(view: TasksView, taskId: string): string | undefined {
   const listed = view.tasks.find((task) => task.id === taskId);
   if (listed !== undefined) return listed.name;
@@ -271,7 +312,7 @@ export function renamedView(view: TasksView, renames: PendingRenames): TasksView
 
 /**
  * The pending names the view still contradicts. One the view now carries
- * has landed, and one of a plan the view no longer holds has nothing left
+ * has landed, and one of a task the view no longer holds has nothing left
  * to name, so both are let go.
  */
 export function unsettledRenames(renames: PendingRenames, view: TasksView): PendingRenames {
@@ -282,7 +323,7 @@ export function unsettledRenames(renames: PendingRenames, view: TasksView): Pend
   return unsettled.length === renames.size ? renames : new Map(unsettled);
 }
 
-/** What a press of the plan menu does to a plan's place: pins it or unpins it, archives it or brings it back. */
+/** What a press of the task menu does to a task's place: pins it or unpins it, archives it or brings it back. */
 export const TASK_MARK = {
   PIN: "pin",
   UNPIN: "unpin",
@@ -310,8 +351,8 @@ export const MARK_UNDOS = {
 } as const satisfies Partial<Record<TaskMark, { note: string; undo: TaskMark }>>;
 
 /**
- * What the toast says once a repository's plans were archived together, by
- * how many the service kept and how many it refused; one plan says what an
+ * What the toast says once a repository's tasks were archived together, by
+ * how many the service kept and how many it refused; one task says what an
  * archive of one says.
  */
 export function archivedTasksNote(landed: number, refused: number): string {
@@ -319,23 +360,23 @@ export function archivedTasksNote(landed: number, refused: number): string {
   return refused === 0 ? kept : `${kept}, ${refused} could not be`;
 }
 
-/** What the toast says when the service refused every plan of a repository's Archive plans. */
+/** What the toast says when the service refused every task of a repository's Archive tasks. */
 export function archiveTasksFailedNote(refused: number): string {
   return refused === 1
     ? MARK_FAILED_NOTES[TASK_MARK.ARCHIVE]
     : "The tasks could not be archived. Try again.";
 }
 
-/** A plan's pin and archive as the list carries them, each only where it stands. */
+/** A task's pin and archive as the list carries them, each only where it stands. */
 type MarkStamps = Pick<TaskSummary, "pinnedAt" | "archivedAt">;
 
-/** A pin or an archive given to a plan that main's view has yet to carry: the instant it was asked, or null for one taken away. */
+/** A pin or an archive given to a task that main's view has yet to carry: the instant it was asked, or null for one taken away. */
 export interface PendingMark {
   readonly pinnedAt?: number | null;
   readonly archivedAt?: number | null;
 }
 
-/** The pins and archives given to plans that main's view has yet to carry, by plan id. */
+/** The pins and archives given to tasks that main's view has yet to carry, by task id. */
 export type PendingMarks = ReadonlyMap<string, PendingMark>;
 
 /** The pending stamps a press asks for, made at `at`. */
@@ -355,7 +396,7 @@ export function pendingMark(mark: TaskMark, at: number): PendingMark {
 /**
  * A stamp after a pending change: none asked leaves the one standing, null
  * takes it away, and an instant stands only where none already does, so a
- * plan pinned twice keeps its place among the pinned.
+ * task pinned twice keeps its place among the pinned.
  */
 function stampAfter(standing: number | undefined, asked: number | null | undefined) {
   if (asked === undefined) return standing;
@@ -404,7 +445,7 @@ function markLanded(row: MarkStamps, mark: PendingMark): boolean {
 
 /**
  * The pending marks the view still contradicts. One the view now carries
- * has landed, and one of a plan the view no longer holds has nothing left
+ * has landed, and one of a task the view no longer holds has nothing left
  * to mark, so both are let go.
  */
 export function unsettledMarks(marks: PendingMarks, view: TasksView): PendingMarks {
@@ -574,21 +615,21 @@ export function unsettledPinPositions(
   return unsettled.length === pending.size ? pending : new Map(unsettled);
 }
 
-/** The plans the sidebar lists, each in its place. */
+/** The tasks the sidebar lists, each in its place. */
 export interface SidebarTasks {
-  /** The pinned plans, newest pinned first. */
+  /** The pinned tasks, newest pinned first. */
   readonly pinned: readonly TaskSummary[];
   /** The rest, as the service lists them: newest started first. */
   readonly rest: readonly TaskSummary[];
-  /** The archived plans, newest archived first, whether or not they are pinned. */
+  /** The archived tasks, newest archived first, whether or not they are pinned. */
   readonly archived: readonly TaskSummary[];
 }
 
 /**
- * The account's plans sorted into the sidebar's places, the pinned ones
+ * The account's tasks sorted into the sidebar's places, the pinned ones
  * newest pinned first until the Pinned section orders them with the rest of
  * its pins (`@luke/features/pin-order`). Note that an
- * archived plan is drawn only among the archived, pinned or not, because its
+ * archived task is drawn only among the archived, pinned or not, because its
  * pin is kept for when it is brought back rather than shown while it is away.
  */
 export function sidebarTasks(tasks: readonly TaskSummary[]): SidebarTasks {
@@ -628,8 +669,8 @@ const VOICE_PHASE_SHOWN: ReadonlySet<LiveStatus> = new Set([
 ]);
 
 /**
- * The open plan's call as the microphone row draws it: the voice's word, and
- * the backend's line, which is the planning model while it works, with its
+ * The open task's call as the microphone row draws it: the voice's word, and
+ * the backend's line, which is the brain while it works, with its
  * pending command where it has one, and whether the notetaker is writing.
  */
 export interface CallStatus {
@@ -638,7 +679,7 @@ export interface CallStatus {
 }
 
 /**
- * The microphone row's two lines while a call stands about the open plan,
+ * The microphone row's two lines while a call stands about the open task,
  * and nothing otherwise. A voice error or notice is not repeated here, since
  * the panel's own strip already carries it under the shape, exactly as it
  * does for any call. The voice line is the call's status, except that a
@@ -657,9 +698,9 @@ export function callStatus(
 }
 
 /**
- * The standing call's two lines whichever plan it is about, read off that
+ * The standing call's two lines whichever task it is about, read off that
  * call's own activity: the call bar's words, which the call card draws in
- * the same bar while the call's plan is off screen.
+ * the same bar while the call's task is off screen.
  */
 export function standingCallStatus(
   view: Pick<VoiceView, "voiceStatus">,
@@ -680,13 +721,13 @@ export function standingCallStatus(
 
 /** What the microphone button does when pressed. */
 export const MICROPHONE_PRESS = {
-  /** Nothing: voice cannot run, or no plan is open. */
+  /** Nothing: voice cannot run, or no task is open. */
   NONE: "none",
   /** Raises macOS's own microphone prompt. */
   ASK_ACCESS: "ask-access",
   /** Opens System Settings, the one place a denial can be changed. */
   OPEN_SETTINGS: "open-settings",
-  /** Talks to Luke about the open plan: opens the plan's call and hears it, or toggles its microphone. */
+  /** Talks to Luke about the open task: opens the task's call and hears it, or toggles its microphone. */
   TALK: "talk",
 } as const;
 
@@ -696,11 +737,11 @@ export interface MicrophoneButton {
   readonly press: MicrophonePress;
   /** The button's name for a reader and its hover. */
   readonly label: string;
-  /** Whether the open plan's call stands with the developer not heard, which the button draws struck through. */
+  /** Whether the open task's call stands with the developer not heard, which the button draws struck through. */
   readonly muted: boolean;
 }
 
-/** What the microphone button says on an archived plan, which no call is about. */
+/** What the microphone button says on an archived task, which no call is about. */
 const ARCHIVED_CALL_LABEL = "Unarchive the task to talk about it";
 
 /** The statuses of a call that has a session, the ones whose microphone is either heard or muted. */
@@ -711,15 +752,15 @@ const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
 ]);
 
 /**
- * The microphone button, from what voice can run on and which plan is open.
+ * The microphone button, from what voice can run on and which task is open.
  * The microphone permission comes first, on the panel's own rules, because a
- * press that cannot be heard is no press; then the plan, since a call is
- * always about the open plan. The press toggles: while the developer is
- * heard on this plan's own call it mutes, and otherwise it opens the plan's
- * call or hears it again, hanging up another plan's first,
+ * press that cannot be heard is no press; then the task, since a call is
+ * always about the open task. The press toggles: while the developer is
+ * heard on this task's own call it mutes, and otherwise it opens the task's
+ * call or hears it again, hanging up another task's first,
  * which is also how a call that failed or was lost is tried again. Muted is
- * this plan's own call standing with the developer not heard, so the button
- * says so rather than reading as a call not yet begun. An archived plan
+ * this task's own call standing with the developer not heard, so the button
+ * says so rather than reading as a call not yet begun. An archived task
  * opens no call, so its press is none until it is brought back; a call of
  * its own still standing, which only a race leaves, is still muted and
  * heard again.
@@ -728,10 +769,10 @@ export function microphoneButton(input: {
   voiceAvailable: boolean;
   microphoneStatus: MicrophoneStatus;
   activeTaskId: string | undefined;
-  /** Whether the open plan is archived. */
+  /** Whether the open task is archived. */
   archived: boolean;
   listening: boolean;
-  /** The plan the standing call is about, as the voice window reports it. */
+  /** The task the standing call is about, as the voice window reports it. */
   callTaskId: string | undefined;
   voiceStatus: LiveStatus;
 }): MicrophoneButton {

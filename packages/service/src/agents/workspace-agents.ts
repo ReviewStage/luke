@@ -2,8 +2,8 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
   listWorkspaceCodingAgents,
-  planNamesOf,
   readCodingAgent,
+  taskNamesOf,
 } from "@luke/database/models/coding-agent-store";
 import { describeWire } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
@@ -100,7 +100,7 @@ export const workspaceAgentsOf = (
     const agents = listed
       .filter((agent) => agent.id !== options.except)
       .slice(0, WORKSPACE_AGENTS_LIST_LIMIT);
-    const names = yield* planNamesOf(
+    const names = yield* taskNamesOf(
       userId,
       agents.flatMap((agent) => agent.taskId ?? []),
     );
@@ -126,7 +126,7 @@ export const agentTaskOf = (
   userId: string,
   agent: CodingAgent,
 ): Effect.Effect<AgentTask | null, StoreFailure, DatabaseServices> =>
-  Effect.map(planNamesOf(userId, agent.taskId === null ? [] : [agent.taskId]), (names) => {
+  Effect.map(taskNamesOf(userId, agent.taskId === null ? [] : [agent.taskId]), (names) => {
     const named = agent.taskId === null ? undefined : names.get(agent.taskId);
     return agent.taskId === null || named === undefined ? null : { id: agent.taskId, ...named };
   });

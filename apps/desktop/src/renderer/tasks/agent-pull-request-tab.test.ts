@@ -7,6 +7,7 @@ import {
   type CodingAgentOverviewChecksAnswerView,
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
+  type CodingAgentPullRequestAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
   CHECK_STATE,
@@ -34,6 +35,7 @@ import {
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
   type PullRequestWriteAnswer,
+  REVIEW_EVENT,
 } from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
@@ -43,15 +45,21 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
+import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
-import type { DiffViewProps } from "../diff-view/contract";
+import type { SideBundles } from "../bundle-loader";
+import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect";
 import { MemberDirectory } from "../member-directory";
 import { rendererRuntime } from "../renderer-runtime";
 import { AgentPullRequestTab } from "./agent-pull-request-tab";
+import { TAB_KIND, tabLook } from "./tab-look";
+import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 
@@ -186,10 +194,28 @@ let opened: string[] = [];
 let images: string[] = [];
 /** What each review thread's preview handed the diff bundle, in the order drawn. */
 let previews: DiffViewProps[] = [];
+
+/** The diff bundle, a chunk of its own the panel imports, stood in for at its importer. */
+const DIFF_STAND_IN: DiffViewModule = {
+  mount: (_host, props) => {
+    previews.push(props);
+    return { update: () => undefined, unmount: () => undefined };
+  },
+};
+
+let bundles: SideBundles;
+
+beforeAll(async () => {
+  bundles = await Effect.runPromise(
+    landedBundles({ diffView: () => Promise.resolve(DIFF_STAND_IN) }),
+  );
+});
 /** Every change to the pull request the tab asked for, by agent, in order. */
 let changes: (readonly [string, PullRequestActionRequest])[] = [];
 /** How the service answers the next change asked for. */
 let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+/** What the service waits on before it answers a change, where a test holds it; none answers at once. */
+let changeHeld: Promise<void> | undefined;
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
@@ -200,34 +226,29 @@ beforeEach(() => {
   previews = [];
   changes = [];
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
-  // The diff bundle, a script of its own the panel loads, stood in for at its global.
-  window.lukeDiffView = {
-    mount: (_host, props) => {
-      previews.push(props);
-      return { update: () => undefined, unmount: () => undefined };
-    },
-  };
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) => {
-        if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
-        if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
-        if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
-          changes.push([request.payload.agentId, request.payload.request]);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: changeAnswer });
-        }
-        if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
-          images.push(request.payload.src);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
-        }
-        return Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: [CHARLES] }
-            : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
-        );
-      },
+  changeHeld = undefined;
+  fakeAppPlatform(DESKTOP_LINKS);
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
+      if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
+      if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
+        changes.push([request.payload.agentId, request.payload.request]);
+        const answer = changeAnswer;
+        return (changeHeld ?? Promise.resolve()).then(() => ({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: answer,
+        }));
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
+        images.push(request.payload.src);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
+      }
+      return Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: [CHARLES] }
+          : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
+      );
     },
   });
 });
@@ -236,7 +257,6 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
-  delete window.lukeDiffView;
 });
 
 /** The pull request as what the agent published names it, which the tab's bar wears. */
@@ -308,6 +328,29 @@ function Switching({
   });
 }
 
+/**
+ * The tab beside the name the side panel's strip gives it (`tabLook`), both
+ * drawn from what the task's real reads of the agent's published pull
+ * request keep (`useTaskPullRequests`), as the window draws them.
+ */
+function Named({ control, reader }: { control: CodingAgentsControl; reader: PullRequestReader }) {
+  const kept = useTaskPullRequests(AGENT.planId ?? undefined, control.agents, reader);
+  const pullRequest = kept.pullRequests.get(AGENT.id);
+  return createElement(
+    "div",
+    null,
+    createElement(
+      "span",
+      { "data-tab-name": "" },
+      tabLook({ kind: TAB_KIND.CHANGES, pullRequest }).label,
+    ),
+    createElement(Switching, {
+      control: { ...control, pullRequests: kept.pullRequests, readPullRequest: kept.read },
+      first: PULL_REQUEST_VIEW.CONVERSATION,
+    }),
+  );
+}
+
 /** Lets every promise settled so far run its continuations. */
 async function settle(): Promise<void> {
   await act(async () => {
@@ -336,20 +379,32 @@ async function draw(
   registry = AtomRegistry.make(),
   github: GitHubConnectControl = NO_GITHUB,
 ) {
+  return drawn(createElement(Switching, { control, first }), registry, github);
+}
+
+/** Draws `tab` inside the workspace's member directory and the account's GitHub, its reads landed. */
+async function drawn(
+  tab: React.ReactElement,
+  registry = AtomRegistry.make(),
+  github: GitHubConnectControl = NO_GITHUB,
+) {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() =>
     root?.render(
       onRegistry(
         registry,
-        createElement(GitHubConnectProvider, {
-          value: github,
-          children: createElement(MemberDirectory, {
-            workspace: { id: "workspace-acme", memberCount: 2 },
-            readerId: "user-dana",
-            children: createElement(Switching, { control, first }),
+        onSideBundles(
+          bundles,
+          createElement(GitHubConnectProvider, {
+            value: github,
+            children: createElement(MemberDirectory, {
+              workspace: { id: "workspace-acme", memberCount: 2 },
+              readerId: "user-dana",
+              children: tab,
+            }),
           }),
-        }),
+        ),
       ),
     ),
   );
@@ -361,9 +416,19 @@ async function draw(
 function option(tab: HTMLElement, name: string): HTMLButtonElement {
   return (
     [...tab.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
-      (each) => each.querySelector(".pull-request-tab-label")?.textContent === name,
+      (each) => each.textContent?.startsWith(name) === true,
     ) ?? assert.fail(`the row offers ${name}`)
   );
+}
+
+/** What the tab named as given counts beside its name, its words after the name. */
+function tabCount(tab: HTMLElement, name: string): string {
+  return (option(tab, name).textContent ?? "").slice(name.length);
+}
+
+/** How the Checks tab's glyph says its checks went, in its words. */
+function checksGlyph(tab: HTMLElement): string | null | undefined {
+  return option(tab, "Checks").querySelector('[role="img"]')?.getAttribute("aria-label");
 }
 
 /** The tab named as given chosen, and what it reads landed. */
@@ -376,7 +441,12 @@ async function choose(tab: HTMLElement, name: string): Promise<void> {
 function waiting(tab: HTMLElement): string[] {
   return [...tab.querySelectorAll('[aria-busy="true"]')]
     .filter((each) => each.closest("[hidden]") === null)
-    .map((each) => each.querySelector(".visually-hidden")?.textContent ?? "");
+    .map((each) => each.textContent ?? "");
+}
+
+/** What the bar says of where the pull request stands: its first control's words. */
+function standing(tab: HTMLElement): string | undefined {
+  return tab.querySelector(".pull-request-bar")?.firstElementChild?.textContent ?? undefined;
 }
 
 /** The words of every element the selector names, in order. */
@@ -384,10 +454,23 @@ function words(container: HTMLElement, selector: string): string[] {
   return [...container.querySelectorAll(selector)].map((each) => each.textContent ?? "");
 }
 
+/** The button whose words match, where one stands. */
+function buttonWith(container: HTMLElement, label: RegExp): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll("button")].find((each) =>
+    label.test(each.textContent ?? ""),
+  );
+}
+
+/** The labels a thread's head wears beside its path, in order. */
+function threadLabels(thread: HTMLElement): string[] {
+  const head = thread.querySelector(".pull-request-thread-head")?.textContent ?? "";
+  return ["Resolved", "Outdated"].filter((label) => head.includes(label));
+}
+
 test("the tab draws the pull request as a page: its standing and branches, whether it merges, its checks with failures first, its description, and its conversation in time order", async () => {
   const tab = await draw(controlAnswering());
 
-  assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Open");
+  assert.equal(standing(tab), "Open");
   assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← luke/expiry-job");
   assert.equal(tab.querySelector(".pull-request-title")?.textContent, "Expire invitations #42");
   assert.equal(
@@ -622,9 +705,7 @@ test("past five checks the list folds behind Show all, keeping every one that fa
   };
   const tab = await draw(controlAnswering({ checks: () => Promise.resolve({ pullRequest: few }) }));
   await choose(tab, "Checks");
-  const fold = () =>
-    tab.querySelector<HTMLButtonElement>(".pull-request-checks-fold") ??
-    assert.fail("the list folds");
+  const fold = () => buttonWith(tab, /^Show (all \d+|less)$/u) ?? assert.fail("the list folds");
   assert.deepEqual(words(tab, ".pull-request-check-name"), [
     "lint",
     "build",
@@ -654,12 +735,12 @@ test("a check that failed or still runs never folds away, however many there are
   );
   await choose(tab, "Checks");
   assert.equal(words(tab, ".pull-request-check-name").length, 7);
-  assert.equal(tab.querySelector(".pull-request-checks-fold")?.textContent, "Show all 8");
+  assert.equal(buttonWith(tab, /^Show all/u)?.textContent, "Show all 8");
 
   act(() => root?.unmount());
   const five = await draw(controlAnswering());
   await choose(five, "Checks");
-  assert.equal(five.querySelector(".pull-request-checks-fold"), null);
+  assert.equal(buttonWith(five, /^Show all/u), undefined);
 });
 
 test("the earlier entries a read left on GitHub are counted first, in the heading too, and open the pull request", async () => {
@@ -798,7 +879,7 @@ test("a review that only left line comments draws each thread under it: its file
 
   const head =
     folded.querySelector<HTMLElement>(".pull-request-thread-head") ?? assert.fail("a head");
-  assert.deepEqual(words(folded, ".pull-request-thread-label"), ["Resolved", "Outdated"]);
+  assert.deepEqual(threadLabels(folded), ["Resolved", "Outdated"]);
   assert.match(
     head.textContent ?? "",
     /src\/old\.tsline 9/u,
@@ -1012,19 +1093,18 @@ test("opened on its files, as the Changes chip opens it, the header stands above
 
 test("each tab counts what Luke holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files the lines published", async () => {
   const tab = await draw(controlAnswering());
-  const count = (name: string) => option(tab, name).querySelector(".pull-request-tab-count");
-  assert.equal(count("Conversation")?.textContent, "2");
+  assert.equal(tabCount(tab, "Conversation"), "2");
   assert.equal(
-    count("Checks")?.querySelector('[role="img"]')?.getAttribute("aria-label"),
+    checksGlyph(tab),
     "failing",
     "how the checks went, as published, stands before they are read",
   );
-  assert.equal(count("Checks")?.textContent, "", "how many waits on their read");
-  assert.equal(count("Files changed")?.textContent, "+4 −1");
+  assert.equal(tabCount(tab, "Checks"), "", "how many waits on their read");
+  assert.equal(tabCount(tab, "Files changed"), "+4 −1");
 
   await choose(tab, "Checks");
-  assert.equal(count("Checks")?.textContent, "1", "beside a failure, how many failed");
-  assert.equal(count("Checks")?.getAttribute("data-check-summary"), CHECK_SUMMARY.FAILING);
+  assert.equal(tabCount(tab, "Checks"), "1", "beside a failure, how many failed");
+  assert.equal(checksGlyph(tab), "failing");
 
   act(() => option(tab, "Checks").focus());
   act(() => {
@@ -1052,10 +1132,8 @@ test("the Checks tab counts what its glyph says: beside a wait how many still ru
     controlAnswering({ checks: () => Promise.resolve({ pullRequest: running }) }),
   );
   await choose(waits, "Checks");
-  const countOf = (tab: HTMLElement) =>
-    option(tab, "Checks").querySelector(".pull-request-tab-count");
-  assert.equal(countOf(waits)?.getAttribute("data-check-summary"), CHECK_SUMMARY.PENDING);
-  assert.equal(countOf(waits)?.textContent, "2");
+  assert.equal(checksGlyph(waits), "running");
+  assert.equal(tabCount(waits, "Checks"), "2");
 
   act(() => root?.unmount());
   const passing: CodingAgentOverviewChecks = {
@@ -1069,8 +1147,8 @@ test("the Checks tab counts what its glyph says: beside a wait how many still ru
     controlAnswering({ checks: () => Promise.resolve({ pullRequest: passing }) }),
   );
   await choose(passed, "Checks");
-  assert.equal(countOf(passed)?.getAttribute("data-check-summary"), CHECK_SUMMARY.PASSING);
-  assert.equal(countOf(passed)?.textContent, "3");
+  assert.equal(checksGlyph(passed), "passing");
+  assert.equal(tabCount(passed, "Checks"), "3");
 });
 
 test("a check that ran for no time, skipped or cancelled before it began, says no duration", async () => {
@@ -1107,7 +1185,7 @@ test("a merged pull request says so on the bar, as its overview read it, says no
       PULL_REQUEST_STATE.OPEN,
     ),
   );
-  assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Merged");
+  assert.equal(standing(tab), "Merged");
   assert.equal(tab.querySelector(".pull-request-merge"), null);
   assert.deepEqual(words(tab, ".pull-request-none"), [
     "No description provided.",
@@ -1127,7 +1205,7 @@ test("where what the agent published is not read, the bar still says where the p
     pullRequests: new Map(),
   };
   const tab = await draw(control);
-  assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Open");
+  assert.equal(standing(tab), "Open");
   const github =
     tab.querySelector<HTMLButtonElement>('.pull-request-bar [aria-label="Open on GitHub"]') ??
     assert.fail("the bar opens the pull request on GitHub");
@@ -1163,16 +1241,13 @@ test("the bar, the title, and the files' count stand from what Luke holds before
     tab.querySelector<HTMLElement>(`[aria-label="${title}"]`) ??
     assert.fail(`the ${title} section stands`);
 
-  assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Open");
+  assert.equal(standing(tab), "Open");
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
     "Expire invitations #42",
     "the title is what Luke held of the pull request",
   );
-  assert.equal(
-    option(tab, "Files changed").querySelector(".pull-request-tab-count")?.textContent,
-    "+4 −1",
-  );
+  assert.equal(tabCount(tab, "Files changed"), "+4 −1");
   assert.deepEqual(waiting(tab), [
     "Reading pull request",
     "Reading description",
@@ -1271,6 +1346,47 @@ test("a part whose read failed says so with a Retry that reads it alone, the oth
   assert.equal(tab.querySelectorAll(".pull-request-entry").length, 1);
 });
 
+test("a pull request renamed on GitHub renames its tab once Refresh is pressed, as it does its header", async () => {
+  const renamed = { ...PULL_REQUEST, title: "Expire invitations weekly" };
+  const answer = (title: string) => ({
+    repository: "acme/relay",
+    branch: PULL_REQUEST.head,
+    pullRequest: { ...published(PULL_REQUEST_STATE.OPEN), title },
+  });
+  const tab = await drawn(
+    createElement(Named, {
+      control: controlAnswering({
+        pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
+          { pullRequest: PULL_REQUEST },
+          { pullRequest: renamed },
+        ),
+      }),
+      reader: inTurn<CodingAgentPullRequestAnswerView>(
+        answer(PULL_REQUEST.title),
+        answer(renamed.title),
+      ),
+    }),
+  );
+  const name = () => tab.querySelector("[data-tab-name]")?.textContent;
+  assert.equal(name(), "#42 Expire invitations");
+
+  const more =
+    tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
+    assert.fail("the bar has a ⋯");
+  act(() => more.click());
+  const refresh =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === "Refresh pull request",
+    ) ?? assert.fail("the ⋯ offers Refresh");
+  await act(async () => refresh.click());
+  await settle();
+  assert.equal(
+    tab.querySelector(".pull-request-title")?.textContent,
+    "Expire invitations weekly #42",
+  );
+  assert.equal(name(), "#42 Expire invitations weekly");
+});
+
 test("where nothing of the pull request is held and its reads fail, each part says so with its own Retry, and Files changed still reads on its own", async () => {
   const failure = { failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
   const control = {
@@ -1320,7 +1436,9 @@ test("the bar wears what was published of the checks only for the pull request t
     }),
   };
   const tab = await draw(control);
-  const mark = tab.querySelector(".pull-request-state [aria-label]") ?? assert.fail("a mark");
+  const mark =
+    tab.querySelector(".pull-request-bar")?.firstElementChild?.querySelector("[aria-label]") ??
+    assert.fail("a mark");
   assert.match(mark.getAttribute("aria-label") ?? "", /43/u);
   assert.doesNotMatch(
     mark.getAttribute("aria-label") ?? "",
@@ -1329,12 +1447,15 @@ test("the bar wears what was published of the checks only for the pull request t
   );
 });
 
+/** The bar's pill, its first control, as a press; nothing where it is no press. */
+function pillPress(tab: HTMLElement): HTMLButtonElement | undefined {
+  const first = tab.querySelector(".pull-request-bar")?.firstElementChild;
+  return first instanceof HTMLButtonElement ? first : undefined;
+}
+
 /** The bar's pill, as a press. */
 function pill(tab: HTMLElement): HTMLButtonElement {
-  return (
-    tab.querySelector<HTMLButtonElement>("button.pull-request-state") ??
-    assert.fail("the pill is a press that opens what may be done")
-  );
+  return pillPress(tab) ?? assert.fail("the pill is a press that opens what may be done");
 }
 
 /** Opens the pill's menu and presses its item of the words given. */
@@ -1417,8 +1538,8 @@ test("a member GitHub would not take as signed in is offered to sign in with Git
         Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED } }),
     }),
   );
-  assert.equal(merged.querySelector("button.pull-request-state"), null);
-  assert.equal(merged.querySelector(".pull-request-state")?.textContent, "Merged");
+  assert.ok(pillPress(merged) === undefined, "a merged pull request's pill is no press");
+  assert.equal(standing(merged), "Merged");
 });
 
 test("a change GitHub refused says so in GitHub's own words until dismissed, and the pull request is read again in case it moved", async () => {
@@ -1641,6 +1762,313 @@ test("a merge asked about merges the head it was asked about, though a read land
       { action: PULL_REQUEST_ACTION.MERGE, method: MERGE_METHOD.SQUASH, headSha: "c0ffee1" },
     ],
   ]);
+});
+
+/** The bar's Review press. */
+function reviewPress(tab: HTMLElement): HTMLButtonElement {
+  return (
+    buttonWith(tab.querySelector(".pull-request-bar") ?? tab, /^Review$/u) ??
+    assert.fail("an open pull request's bar offers Review")
+  );
+}
+
+/** Opens the review panel from the bar. */
+function openReview(tab: HTMLElement): HTMLElement {
+  act(() => reviewPress(tab).click());
+  return tab.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("Review opens the panel");
+}
+
+/** Writes the review's words as the member would. */
+function writeReview(panel: HTMLElement, words: string): void {
+  const field =
+    panel.querySelector<HTMLTextAreaElement>('textarea[aria-label="Review comment"]') ??
+    assert.fail("the panel has a field for the review's words");
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** Chooses what the review says by its label, and submits it. */
+async function submitReview(panel: HTMLElement, label: string): Promise<void> {
+  const choice =
+    [...panel.querySelectorAll("label")].find((each) => each.textContent?.startsWith(label)) ??
+    assert.fail(`the panel offers ${label}`);
+  act(() => choice.querySelector("input")?.click());
+  const submit =
+    [...panel.querySelectorAll("button")].find((each) => each.textContent === "Submit review") ??
+    assert.fail("the panel submits");
+  act(() => submit.click());
+  await settle();
+}
+
+test("Review opens a panel whose choice and words are submitted for the agent as one review, after which it closes, lets its words go, and the conversation is read again", async () => {
+  let conversationReads = 0;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => {
+        conversationReads += 1;
+        return Promise.resolve({ pullRequest: CONVERSATION });
+      },
+    }),
+  );
+  const panel = openReview(tab);
+  assert.deepEqual(words(panel, ".pull-request-review-event-label"), [
+    "Comment",
+    "Approve",
+    "Request changes",
+  ]);
+
+  writeReview(panel, "Ship it once **CI** is green.");
+  await submitReview(panel, "Approve");
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      {
+        action: PULL_REQUEST_ACTION.SUBMIT_REVIEW,
+        event: REVIEW_EVENT.APPROVE,
+        body: "Ship it once **CI** is green.",
+      },
+    ],
+  ]);
+  assert.equal(conversationReads, 2, "the conversation is read again once GitHub took the review");
+  assert.equal(tab.querySelector('[role="dialog"]'), null, "the panel closes");
+  const reopened = openReview(tab);
+  assert.equal(reopened.querySelector("textarea")?.value, "", "the submitted words are let go");
+  assert.equal(
+    reopened.querySelector<HTMLInputElement>("input:checked")?.value,
+    REVIEW_EVENT.COMMENT,
+  );
+});
+
+test("a review GitHub refuses says so in GitHub's own words inside the panel, never under the bar, and the words written stand for another try; a merged pull request offers no Review", async () => {
+  changeAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+    words: "Review Can not approve your own pull request",
+  };
+  const tab = await draw(controlAnswering());
+  const panel = openReview(tab);
+
+  writeReview(panel, "LGTM");
+  await submitReview(panel, "Approve");
+
+  assert.equal(
+    panel.querySelector(".pull-request-review-note .failure-note-words")?.textContent,
+    "GitHub said: Review Can not approve your own pull request",
+  );
+  assert.equal(tab.querySelector(".pull-request-write-note"), null);
+  assert.equal(panel.querySelector("textarea")?.value, "LGTM");
+  act(() => root?.unmount());
+  root = undefined;
+
+  const merged = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED } }),
+    }),
+  );
+  assert.equal(buttonWith(merged, /^Review$/u), undefined);
+});
+
+test("a press outside the review panel closes it, its words kept, and one on a short window opens it on the side with more room, bounded to that room", async () => {
+  // Note that jsdom lays out nothing, so the press stands low in a 768px window and the panel is taller than either side.
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this.classList.contains("pull-request-review")) {
+      return DOMRect.fromRect({ x: 600, y: 300, width: 80, height: 28 });
+    }
+    if (this.classList.contains("luke-anchored-popover")) {
+      return DOMRect.fromRect({ x: 0, y: 0, width: 480, height: 600 });
+    }
+    return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
+  });
+  try {
+    const tab = await draw(controlAnswering());
+    const panel = openReview(tab);
+    const layer =
+      tab.querySelector<HTMLElement>(".luke-anchored-popover") ??
+      assert.fail("the panel hangs from Review");
+    assert.equal(layer.dataset.side, "below");
+    assert.equal(layer.style.getPropertyValue("--luke-popover-room"), `${768 - 328 - 4 - 8}px`);
+
+    writeReview(panel, "Half a thought");
+    act(() => {
+      document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    });
+
+    assert.equal(tab.querySelector('[role="dialog"]'), null);
+    assert.equal(openReview(tab).querySelector("textarea")?.value, "Half a thought");
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
+/** A review carrying the threads given, as the conversation's read answers one. */
+function reviewWith(threads: readonly ReviewThread[]): CodingAgentOverviewConversation {
+  return {
+    ...CONVERSATION,
+    conversation: [
+      {
+        kind: CONVERSATION_ENTRY.REVIEW,
+        by: CHARLES_ON_GITHUB,
+        state: REVIEW_STATE.COMMENTED,
+        html: null,
+        body: "",
+        at: 2_500,
+        url: `${PAGE}#pullrequestreview-9`,
+        threads,
+      },
+    ],
+  };
+}
+
+/** The press of the words given under the thread. */
+function threadPress(thread: HTMLElement, label: string): HTMLButtonElement {
+  return (
+    [...thread.querySelectorAll<HTMLButtonElement>(".pull-request-thread-actions button")].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`the thread offers ${label}`)
+  );
+}
+
+/** Writes a reply on the thread as the member would, the field opened first. */
+function writeReply(thread: HTMLElement, words: string): void {
+  act(() => threadPress(thread, "Reply…").click());
+  const field =
+    thread.querySelector<HTMLTextAreaElement>('textarea[aria-label="Reply"]') ??
+    assert.fail("Reply… opens the reply's field");
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The thread as GitHub holds it once the changes asked so far were made: their replies after its comment, and resolved by the last resolve or unresolve. */
+function threadAfterChanges(): ReviewThread {
+  const base = thread({ id: "PRRT_flag" });
+  let resolved = false;
+  const replies: ReviewThread["comments"][number][] = [];
+  for (const [, request] of changes) {
+    if (request.action === PULL_REQUEST_ACTION.REPLY_TO_THREAD) {
+      replies.push({
+        by: CHARLES_ON_GITHUB,
+        html: null,
+        body: request.body,
+        at: 3_000,
+        url: `${PAGE}#discussion_r${10 + replies.length}`,
+      });
+    }
+    if (request.action === PULL_REQUEST_ACTION.RESOLVE_THREAD) resolved = true;
+    if (request.action === PULL_REQUEST_ACTION.UNRESOLVE_THREAD) resolved = false;
+  }
+  return { ...base, resolved, comments: [...base.comments, ...replies] };
+}
+
+test("a thread is replied on, resolved, and opened again from under its comments, each asked of the service for the agent by the thread's id, the thread then drawn as GitHub holds it", async () => {
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => Promise.resolve({ pullRequest: reviewWith([threadAfterChanges()]) }),
+    }),
+  );
+  const card = (): HTMLElement =>
+    tab.querySelector<HTMLElement>(".pull-request-thread") ?? assert.fail("the thread is drawn");
+  const labels = () => threadLabels(card());
+
+  writeReply(card(), "Renamed in the next push.");
+  act(() => threadPress(card(), "Reply").click());
+  await settle();
+  assert.equal(card().querySelector("textarea"), null, "the field closes once GitHub took it");
+  assert.match(
+    card().querySelector(".pull-request-thread-comments")?.textContent ?? "",
+    /Renamed in the next push\./u,
+    "the reply is drawn under the thread once read again",
+  );
+
+  act(() => threadPress(card(), "Resolve conversation").click());
+  await settle();
+  assert.deepEqual(labels(), ["Resolved"]);
+
+  act(() => threadPress(card(), "Unresolve conversation").click());
+  await settle();
+  assert.deepEqual(labels(), []);
+  assert.ok(threadPress(card(), "Resolve conversation"), "the thread stands open again");
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      {
+        action: PULL_REQUEST_ACTION.REPLY_TO_THREAD,
+        threadId: "PRRT_flag",
+        body: "Renamed in the next push.",
+      },
+    ],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.RESOLVE_THREAD, threadId: "PRRT_flag" }],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.UNRESOLVE_THREAD, threadId: "PRRT_flag" }],
+  ]);
+});
+
+test("while a thread's resolve is out, its reply stands still, neither sent nor let go, so nothing is posted twice", async () => {
+  const held = Promise.withResolvers<void>();
+  changeHeld = held.promise;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () => Promise.resolve({ pullRequest: reviewWith([threadAfterChanges()]) }),
+    }),
+  );
+  const card = (): HTMLElement =>
+    tab.querySelector<HTMLElement>(".pull-request-thread") ?? assert.fail("the thread is drawn");
+
+  writeReply(card(), "Done.");
+  act(() => threadPress(card(), "Resolve conversation").click());
+  const field = card().querySelector<HTMLTextAreaElement>("textarea") ?? assert.fail();
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
+    );
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
+  assert.equal(threadPress(card(), "Reply").disabled, true);
+  assert.equal(card().querySelector("textarea")?.value, "Done.", "Escape lets nothing go");
+  held.resolve();
+  await settle();
+  assert.deepEqual(
+    changes.map(([, request]) => request.action),
+    [PULL_REQUEST_ACTION.RESOLVE_THREAD],
+  );
+});
+
+test("a reply GitHub refuses says so under its thread in GitHub's own words, its words kept, and a thread read with no id offers nothing to press", async () => {
+  changeAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+    words: "Pull request review thread is locked",
+  };
+  const tab = await draw(
+    controlAnswering({
+      conversation: () =>
+        Promise.resolve({
+          pullRequest: reviewWith([
+            thread({ id: "PRRT_flag" }),
+            thread({ path: "src/other.ts", comments: [] }),
+          ]),
+        }),
+    }),
+  );
+  const [withId, withoutId] = [...tab.querySelectorAll<HTMLElement>(".pull-request-thread")];
+  assert.ok(withId !== undefined && withoutId !== undefined);
+
+  writeReply(withId, "Done.");
+  act(() => threadPress(withId, "Reply").click());
+  await settle();
+
+  assert.equal(
+    withId.querySelector(".pull-request-thread-note .failure-note-words")?.textContent,
+    "GitHub said: Pull request review thread is locked",
+  );
+  assert.equal(withId.querySelector("textarea")?.value, "Done.");
+  assert.equal(withoutId.querySelector(".pull-request-thread-actions"), null);
 });
 
 test("an open pull request's pill offers Close and a closed one's Reopen, each asked of the service for the agent", async () => {

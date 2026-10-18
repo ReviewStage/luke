@@ -1,13 +1,13 @@
 /**
- * task-skills.ts -- the skills a developer may choose of a plan's repository, read from GitHub as it stands now.
+ * task-skills.ts -- the skills a developer may choose of a task's repository, read from GitHub as it stands now.
  *
- * A coding agent of the plan is offered its repository's agent skills
+ * A coding agent of the task is offered its repository's agent skills
  * (`repository-skills.ts`), and the developer names one to load with a
  * `/name`, so the desktop reads the ones a developer may choose to offer
  * them. They are read exactly where and as the File tab reads a file
- * (`task-file.ts`): the plan is read under the account first, so a plan
- * another account owns reads as no plan, then the Luke GitHub App confirms
- * the account reaches the plan's repository and mints a token for that one
+ * (`task-file.ts`): the task is read under the account first, so a task
+ * another account owns reads as no task, then the Luke GitHub App confirms
+ * the account reaches the task's repository and mints a token for that one
  * repository, used for the one read and going nowhere else; the read is of
  * the head of the repository's default branch, and names it. A skill whose
  * `SKILL.md` says the model alone loads it is left out, and what is
@@ -50,9 +50,9 @@ const readSkills = /* @__PURE__ */ Effect.fn("web/taskSkillsRead")(function* (
 });
 
 /**
- * The skills a developer may choose of the plan's repository as GitHub
+ * The skills a developer may choose of the task's repository as GitHub
  * holds it now, or why they are not read; nothing where the account owns
- * no such plan.
+ * no such task.
  */
 export function readTaskSkills(
   userId: string,

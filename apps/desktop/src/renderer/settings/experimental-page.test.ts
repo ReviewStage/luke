@@ -11,12 +11,16 @@ import {
   type ExperimentChoices,
   NO_EXPERIMENTS,
 } from "@luke/settings";
-import { experimentsOn, settingsView } from "@luke/settings/testing";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
+import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { APP_SETTING_ID } from "@luke/wire/app-settings";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { DESKTOP_CAPABILITIES } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { OpenFeedbackProvider } from "../open-feedback";
@@ -50,17 +54,13 @@ beforeEach(() => {
   sent = [];
   feedbackAbout = [];
   written = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act) => {
-        sent.push(request);
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: {} },
-        });
-      },
-      recordSurfaceEvent: () => undefined,
+  fakeAppBridge({
+    act: (request: Act) => {
+      sent.push(request);
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: appSettingsWire(settingsView()) },
+      });
     },
   });
 });
@@ -76,6 +76,7 @@ function rowsInput(experiments: ExperimentChoices) {
     settings: settingsView({ experiments }),
     voiceControlsDrawn: false,
     accountDrawn: true,
+    capabilities: DESKTOP_CAPABILITIES,
   };
 }
 
@@ -112,7 +113,7 @@ test("each experiment is a switch, on as the account chose, that writes the choi
   assert.ok(factory, "Factory has a switch");
   assert.equal(factory.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
-  assert.ok(page.textContent?.startsWith("Issues"));
+  assert.ok(page.textContent?.startsWith("Sections"));
 
   await act(async () => factory.click());
   assert.deepEqual(sent, [
@@ -130,6 +131,7 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     for (const button of feedback) button.click();
   });
   assert.deepEqual(feedbackAbout, [
+    EXPERIMENT.SECTIONS,
     EXPERIMENT.ISSUES,
     EXPERIMENT.CHAT,
     EXPERIMENT.VIDEO_CALLS,
@@ -151,7 +153,15 @@ test("signed out, the page says to sign in rather than drawing switches no accou
   assert.equal(page.textContent, "Sign in to try experiments.");
 });
 
-test("with Video calls on, its avatar is chosen in its card beneath its switch, each with its face, and the choice is written to this Mac", async () => {
+/** The words the elements an attribute's ids name say, as a reader hears them. */
+function wordsOf(element: Element, attribute: string): string {
+  return (element.getAttribute(attribute) ?? "")
+    .split(" ")
+    .map((id) => document.getElementById(id)?.textContent ?? "")
+    .join(" ");
+}
+
+test("with Video calls on, its avatar is chosen from every face at once in its card beneath its switch, and the choice is written to this Mac", async () => {
   const experiments = experimentsOn(EXPERIMENT.VIDEO_CALLS);
   const page = draw({
     entries: EXPERIMENTS,
@@ -160,13 +170,17 @@ test("with Video calls on, its avatar is chosen in its card beneath its switch, 
     view: rowsInput(experiments),
   });
 
-  const chip = page.querySelector<HTMLButtonElement>('[aria-label="Avatar: Atlas"]');
-  assert.ok(chip, "the avatar is a choice, Atlas at first");
   // Each experiment is a card of its own, and the avatar stands in Video calls' card, under its switch.
-  const cards = [...page.querySelectorAll(".settings-card")].map((card) =>
-    [...card.querySelectorAll(".settings-row strong")].map((label) => label.textContent),
+  const cards = [...page.querySelectorAll("section")].map((card) =>
+    [...card.querySelectorAll('[role="switch"], [aria-haspopup], fieldset')].map((control) =>
+      control instanceof HTMLFieldSetElement
+        ? wordsOf(control, "aria-labelledby")
+        : // A chip's name ends with the value it names, which is not the row's.
+          control.getAttribute("aria-label")?.split(": ")[0],
+    ),
   );
   assert.deepEqual(cards, [
+    ["Sections"],
     ["Issues"],
     ["Chat"],
     ["Video calls", "Avatar"],
@@ -174,32 +188,43 @@ test("with Video calls on, its avatar is chosen in its card beneath its switch, 
     ["Factory"],
   ]);
 
-  await act(async () => chip.click());
-  const options = [...document.querySelectorAll('[role="option"]')];
-  // A row's words, without the letter its face stands in with until the photo loads.
-  const names = options.map((option) =>
-    [...option.children]
-      .filter((part) => !part.classList.contains("menu-item-glyph"))
-      .map((part) => part.textContent)
-      .join(""),
+  // Every face stands open, with no menu to open first: one radio group, Atlas chosen at first.
+  const group = page.querySelector("fieldset");
+  assert.ok(group instanceof HTMLFieldSetElement);
+  assert.equal(
+    wordsOf(group, "aria-describedby"),
+    "Who Luke appears as on video. A new choice shows the next time video starts.",
   );
-  assert.deepEqual(names, [
-    "Atlas",
-    "Caspian",
-    "Cassidy",
-    "Celia",
-    "Cosmo",
-    "Lyra",
-    "Orion",
-    "Selene",
-  ]);
-  // Each avatar shows its face from Keyframe's storage.
-  const pictures = options.map((option) => option.querySelector("img")?.getAttribute("src"));
-  assert.equal(pictures.length, 8);
-  for (const picture of pictures) {
+  const faces = [...group.querySelectorAll("label")];
+  const radios = faces.map((face) => face.querySelector<HTMLInputElement>('input[type="radio"]'));
+  assert.deepEqual(
+    faces.map((face) => face.textContent),
+    ["Atlas", "Caspian", "Cassidy", "Celia", "Cosmo", "Lyra", "Orion", "Selene"],
+  );
+  assert.equal(new Set(radios.map((radio) => radio?.name)).size, 1);
+  assert.deepEqual(
+    radios.map((radio) => radio?.checked),
+    [true, false, false, false, false, false, false, false],
+  );
+  // Each shows its face from Keyframe's storage, and the chosen one stands large beside them all.
+  for (const face of faces) {
+    const picture = face.querySelector("img")?.getAttribute("src");
     assert.ok(picture?.startsWith(`${VIDEO_AVATAR_COVER_ORIGIN}/personas/`), String(picture));
   }
-  const celia = options[names.indexOf("Celia")];
+  const stage = page.querySelector(".picture-choice-stage");
+  assert.equal(stage?.textContent, "Atlas");
+  assert.equal(
+    stage?.querySelector("img")?.getAttribute("src"),
+    faces[0]?.querySelector("img")?.getAttribute("src"),
+  );
+  // A search result for Avatar lands on the row whole, its name and faces, so the ring it draws is seen.
+  const landed = page.querySelector(
+    `[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${APP_SETTING_ID.VIDEO_AVATAR}"]`,
+  );
+  assert.ok(landed?.contains(group));
+  assert.ok(landed?.textContent?.startsWith("Avatar"));
+
+  const celia = faces[3];
   assert.ok(celia instanceof HTMLElement);
   await act(async () => celia.click());
   assert.deepEqual(written, [["videoAvatar", VIDEO_AVATAR.CELIA]]);
@@ -213,6 +238,6 @@ test("with Video calls off, no avatar is offered", () => {
     view: rowsInput(NO_EXPERIMENTS),
   });
 
-  assert.equal(page.querySelector('[aria-label^="Avatar"]'), null);
-  assert.equal(page.querySelectorAll(".settings-card").length, EXPERIMENTS.length);
+  assert.equal(page.querySelector('input[type="radio"]'), null);
+  assert.equal(page.querySelectorAll("section").length, EXPERIMENTS.length);
 });

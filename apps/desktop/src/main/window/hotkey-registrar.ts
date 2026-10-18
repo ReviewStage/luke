@@ -1,7 +1,7 @@
+import { channels } from "@luke/host/bridge";
 import { stopHotkeyCandidates, voiceHotkeyCandidates } from "@luke/settings";
 import type { UnparsedWireValue } from "@luke/wire";
 import { type BrowserWindow, globalShortcut, type WebContents } from "electron";
-import { channels } from "#shared/bridge";
 import { type TalkKeyEdges, talkKeyWatcher } from "../native/talk-key";
 
 /**
@@ -41,8 +41,8 @@ export interface TalkKeyHandle {
 export interface HotkeyHost {
   voiceHost(): BrowserWindow | undefined;
   /**
-   * The plan a talk press names: the plan open in the panel while one is,
-   * and nothing otherwise. It is the plan a press opens a call about where
+   * The task a talk press names: the task open in the panel while one is,
+   * and nothing otherwise. It is the task a press opens a call about where
    * none stands; a standing call takes the press whatever it names.
    */
   talkTaskId(): string | undefined;
@@ -301,7 +301,7 @@ export class HotkeyRegistrar {
     this.#sendTo(this.#voiceHostContents(), channel, payload);
   }
 
-  /** What a talk press carries: the plan it is about, where the panel has one open. */
+  /** What a talk press carries: the task it is about, where the panel has one open. */
   #talkPress(): UnparsedWireValue | undefined {
     const taskId = this.#host.talkTaskId();
     return taskId === undefined ? undefined : { taskId };

@@ -4,18 +4,22 @@ import { pathToFileURL } from "node:url";
 import { APP_LINK_CLAIM, APP_LINK_SCHEME, appLinkClaim } from "@luke/features/app-links";
 import type { ReadLink } from "@luke/features/luke-link";
 import { PAGE_SCHEME } from "@luke/features/page-frame";
-import { WINDOW_ROLE } from "@luke/gateway/window-session";
 import type {
   AgentEndToast,
   AgentPlace,
+  ChatMessageToast,
   FailedRunPlace,
   FailedRunToast,
   InboxItemToast,
 } from "@luke/host/agent-notices";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "@luke/host/appearance";
+import { channels } from "@luke/host/bridge";
+import type { OperatorClient } from "@luke/host/client";
+import { type AppStateStore, voiceWindowGone, voiceWindowState } from "@luke/host/client";
 import type { DesktopService } from "@luke/host/desktop-service";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { UnparsedWireValue } from "@luke/wire";
 import { Effect, Exit, Scope } from "effect";
 import {
@@ -29,9 +33,6 @@ import {
   session,
   type WebContents,
 } from "electron";
-import { channels } from "#shared/bridge";
-import { APP_COMMAND } from "#shared/shortcuts";
-import { type AppStateStore, voiceWindowGone, voiceWindowState } from "../app-state";
 import { CallWindow } from "../window/call-window";
 import { CallWindowPresence } from "../window/call-window-presence";
 import { followDockIcon } from "../window/dock-icon";
@@ -44,7 +45,6 @@ import { VoiceWindow } from "../window/voice-window";
 import { applyZoomPreference, PanelWindows, zoomFactorOf } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
 import type { NativeNode } from "./native-node";
-import type { OperatorClient } from "./operator-client";
 
 /** How long a display change is let settle before the panels are laid out over it. */
 const DISPLAY_SETTLE_MS = 100;
@@ -93,15 +93,15 @@ export interface WindowService extends DesktopService {
   windowFactsFor: (sender: WebContents) => AppWindowFacts;
   /** Hands a payload to the voice window alone, the one peer of the host's live session. */
   sendToVoice: <Payload>(channel: string, payload: Payload) => void;
-  /** Asks the panels to open a plan on one agent's tab: a notification's click. */
+  /** Asks the panels to open a task on one agent's tab: a notification's click. */
   showAgent: (place: AgentPlace) => void;
   /** A panel has painted and hears the links it is handed: every Luke link held opens now, and each later one as it comes. */
   panelReady: () => void;
   /** Asks the panels to say an agent's turn ended in their toast: its end while the window is focused. */
   toastAgentEnd: (end: AgentEndToast) => void;
-  /** Asks the panels to open a plan on its Inbox tab: an inbox notification's click. */
+  /** Asks the panels to open a task on its Inbox tab: an inbox notification's click. */
   showInbox: (taskId: string) => void;
-  /** Asks the panels to open the window's Inbox on an item of an agent with no plan. */
+  /** Asks the panels to open the window's Inbox on an item of an agent with no task. */
   showInboxItem: (item: {
     readonly agentId: string;
     readonly itemId: string;
@@ -115,6 +115,10 @@ export interface WindowService extends DesktopService {
   showFailedRun: (place: FailedRunPlace) => void;
   /** Asks the panels to say a run failed to start in their toast: one that failed while the window is focused. */
   toastFailedRun: (run: FailedRunToast) => void;
+  /** Asks the panels to open the Chat of the workspace a message waits in: a chat notification's click. */
+  showChat: (workspaceId: string) => void;
+  /** Asks the panels to say a chat message waits in their toast: one that came to wait while the window is focused. */
+  toastChatMessage: (message: ChatMessageToast) => void;
   /**
    * The panel window coming forward or going behind, for as long as the
    * subscription stands. The hidden voice window is never the key window, so
@@ -157,13 +161,13 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   const preloadPath = path.join(config.resourceDirectory, "preload.js");
   const rendererHtmlPath = path.join(config.resourceDirectory, "renderer", "index.html");
   const rendererUrl = pathToFileURL(rendererHtmlPath).href;
-  // The hidden voice window loads the panels' bundle from a document of its
-  // own, mounting what `windowFactsFor`'s role says. Both documents are files
+  // The hidden voice window loads its own entry from a document of its own,
+  // which mounts the voice host alone. Both documents are files
   // this build wrote into the resource directory, and the pair is the whole
   // of what any window here may navigate to or speak from.
   const voiceHtmlPath = path.join(config.resourceDirectory, "renderer", "voice.html");
   const voiceUrl = pathToFileURL(voiceHtmlPath).href;
-  // The call window's document, on the same terms: the one bundle, no host.
+  // The call window's document, on the same terms: its own entry, no host.
   const callHtmlPath = path.join(config.resourceDirectory, "renderer", "call.html");
   const callUrl = pathToFileURL(callHtmlPath).href;
 
@@ -249,9 +253,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   function windowFactsFor(sender: WebContents): AppWindowFacts {
-    if (voiceWindow.owns(sender)) return { role: WINDOW_ROLE.VOICE, fullScreen: false };
-    if (callWindow.owns(sender)) return { role: WINDOW_ROLE.CALL, fullScreen: false };
-    return { role: WINDOW_ROLE.PANEL, fullScreen: panels.fullScreen(sender) };
+    if (voiceWindow.owns(sender) || callWindow.owns(sender)) return { fullScreen: false };
+    return { fullScreen: panels.fullScreen(sender) };
   }
 
   function publishAppState(): void {
@@ -315,6 +318,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onRunFailed, { ...place, words, detail });
   }
 
+  function showChat(workspaceId: string): void {
+    panels.broadcast(channels.onShowChat, { workspaceId });
+  }
+
+  function toastChatMessage(message: ChatMessageToast): void {
+    panels.broadcast(channels.onChatMessageWaiting, message);
+  }
+
   function onPanelFocusChanged(listener: (focused: boolean) => void): () => void {
     const focused = (_event: Electron.Event, window: BrowserWindow) => {
       if (panels.owns(window.webContents)) listener(true);
@@ -368,9 +379,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     hasCredentials: () => operator.voiceAvailable(),
     host: {
       voiceHost: () => voiceWindow.current(),
-      // The plan open in the panel is what a press with no call opens one
+      // The task open in the panel is what a press with no call opens one
       // about, whether or not the panel still shows it; a standing call takes
-      // the press whatever plan is open, and with neither the key opens nothing.
+      // the press whatever task is open, and with neither the key opens nothing.
       talkTaskId: () => state.snapshot().tasks.activeTaskId,
       hotkeyChanged: (rank) => {
         const current = state.snapshot().hotkeys;
@@ -463,6 +474,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     toastInboxItem,
     showFailedRun,
     toastFailedRun,
+    showChat,
+    toastChatMessage,
     toastAgentEnd,
     onPanelFocusChanged,
     reporterOf,

@@ -11,12 +11,23 @@ import {
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import {
+  AnchoredPopover,
   ArrowLeftIcon,
+  BUTTON_VARIANT,
+  Button,
+  CHIP_LOOK,
+  CHIP_WIDTH,
   ChevronRightIcon,
+  Chip,
   GearIcon,
+  IconButton,
   McpIcon,
+  POPOVER_ALIGN,
+  POPOVER_PANEL_LOOK,
   ProviderMark,
   SearchIcon,
+  Spinner,
+  Switch,
 } from "@luke/ui";
 import {
   namedServers,
@@ -34,15 +45,12 @@ import {
 import { matchIntegration, shownTools } from "@luke/ui/integration-search";
 import { searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { AnchoredPopover, POPOVER_ALIGN } from "../anchored-popover";
-import { CHIP_LOOK, Chip } from "../chip";
 import { useIntegrationGrant } from "../integration-grant";
 import type { IntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
 import { useIntegrationTools } from "../integration-tools";
+import { PopoverPanel } from "../popover-panel";
 import { Highlighted } from "../search-field";
-import { SPINNER_SIZE, SpinnerRing } from "../spinner";
-import { Switch } from "../switch";
 import { Tooltip } from "../tooltip";
 
 /**
@@ -50,8 +58,8 @@ import { Tooltip } from "../tooltip";
  *
  * Between the model chip and the context ring stands the MCP mark. A press
  * opens a popover from the button's trailing edge, as the model menu and
- * the context popover hang from theirs (`../anchored-popover.tsx`), drawn
- * as the searchable menu is: a search field first, then the servers under
+ * the context popover hang from theirs (`@luke/ui`'s `AnchoredPopover` and
+ * `PopoverPanel`, a menu's), drawn as the searchable menu is: a search field first, then the servers under
  * Connected and Not connected (`agent-servers-model.ts`), and Manage in
  * Settings pinned at the foot. A connected server's row names how many
  * tools it offers and ends with this agent's switch; one whose server
@@ -85,7 +93,9 @@ import { Tooltip } from "../tooltip";
  * message starts it. Escape goes back one level, from a tool's page or a
  * server's, and otherwise closes the popover, and stops there so the panel behind stays open; a
  * second press of the button, and focus leaving it for another part of the
- * window, close it too.
+ * window, close it too. The button, the back, a row's switch and its
+ * Connect, Reopen, Cancel, Try again or Retry are `@luke/ui`'s, each pressed
+ * without taking the focus from the field.
  */
 
 /** The servers an agent is handed, as the button changes them. */
@@ -166,25 +176,23 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
         <span className="agent-servers-count">{toolsCount(row.tools.length)}</span>
       ) : null}
       {row.kind === SERVER_ROW.SIGNING_IN ? (
-        <span
-          className="luke-spinner agent-servers-waiting"
-          data-size={SPINNER_SIZE.INLINE}
-          role="status"
-          title={row.note}
-        >
-          <SpinnerRing />
-          <span className="visually-hidden">{row.note}</span>
-        </span>
+        <Tooltip label={row.note}>
+          <span className="agent-servers-waiting">
+            <Spinner label={row.note ?? ""} />
+          </span>
+        </Tooltip>
       ) : null}
       {row.problem !== undefined ? (
-        <span className="agent-servers-problem" title={row.problem}>
-          {row.problem}
-        </span>
+        <Tooltip label={row.problem}>
+          <span className="agent-servers-problem">{row.problem}</span>
+        </Tooltip>
       ) : null}
       {row.note !== undefined && row.kind !== SERVER_ROW.SIGNING_IN ? (
-        <span className="agent-servers-problem" data-tone="quiet" title={row.note}>
-          {row.note}
-        </span>
+        <Tooltip label={row.note}>
+          <span className="agent-servers-problem" data-tone="quiet">
+            {row.note}
+          </span>
+        </Tooltip>
       ) : null}
     </>
   );
@@ -429,9 +437,8 @@ function ServersPopover({
     closeTool();
   };
 
-  const onKey = (event: React.KeyboardEvent) => {
-    if (event.key !== "Escape") return;
-    event.stopPropagation();
+  // Escape goes back one level, and closes the popover only from its home.
+  const dismiss = () => {
     if (tool !== undefined) closeTool();
     else if (page !== undefined) back();
     else onClose();
@@ -453,10 +460,9 @@ function ServersPopover({
       case SERVER_ROW.CONNECT:
       case SERVER_ROW.RECONNECT:
         return (
-          <button
-            type="button"
-            className="agent-servers-connect"
-            onMouseDown={keepFieldFocus}
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            keepFocus
             disabled={connecting === row.connection}
             onClick={(event) => {
               event.stopPropagation();
@@ -464,15 +470,14 @@ function ServersPopover({
             }}
           >
             {row.kind === SERVER_ROW.CONNECT ? SERVER_ACTION.CONNECT : SERVER_ACTION.RECONNECT}
-          </button>
+          </Button>
         );
       case SERVER_ROW.SIGNING_IN:
         return (
           <>
-            <button
-              type="button"
-              className="agent-servers-connect"
-              onMouseDown={keepFieldFocus}
+            <Button
+              variant={BUTTON_VARIANT.QUIET}
+              keepFocus
               disabled={connecting === row.connection}
               onClick={(event) => {
                 event.stopPropagation();
@@ -480,12 +485,10 @@ function ServersPopover({
               }}
             >
               {SIGN_IN_ACTION.REOPEN}
-            </button>
-            <button
-              type="button"
-              className="agent-servers-connect"
-              onMouseDown={keepFieldFocus}
-              data-tone="quiet"
+            </Button>
+            <Button
+              variant={BUTTON_VARIANT.QUIET}
+              keepFocus
               disabled={connecting === row.connection}
               onClick={(event) => {
                 event.stopPropagation();
@@ -493,15 +496,14 @@ function ServersPopover({
               }}
             >
               {SIGN_IN_ACTION.CANCEL}
-            </button>
+            </Button>
           </>
         );
       case SERVER_ROW.TRY_AGAIN:
         return (
-          <button
-            type="button"
-            className="agent-servers-connect"
-            onMouseDown={keepFieldFocus}
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            keepFocus
             disabled={connecting === row.connection}
             onClick={(event) => {
               event.stopPropagation();
@@ -509,21 +511,20 @@ function ServersPopover({
             }}
           >
             {SIGN_IN_ACTION.TRY_AGAIN}
-          </button>
+          </Button>
         );
       case SERVER_ROW.RETRY:
         return (
-          <button
-            type="button"
-            className="agent-servers-connect"
-            onMouseDown={keepFieldFocus}
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            keepFocus
             onClick={(event) => {
               event.stopPropagation();
               void statuses.read();
             }}
           >
             {SERVER_ACTION.RETRY}
-          </button>
+          </Button>
         );
       case SERVER_ROW.QUIET:
         return null;
@@ -622,15 +623,7 @@ function ServersPopover({
       <>
         <div className="agent-servers-page-head">
           <Tooltip label={PAGE.BACK}>
-            <button
-              type="button"
-              className="icon-button agent-servers-back"
-              aria-label={PAGE.BACK}
-              onMouseDown={keepFieldFocus}
-              onClick={back}
-            >
-              <ArrowLeftIcon />
-            </button>
+            <IconButton icon={<ArrowLeftIcon />} label={PAGE.BACK} keepFocus onClick={back} />
           </Tooltip>
           <ProviderMark provider={row.provider} />
           <span className="agent-servers-page-title">{row.name}</span>
@@ -674,7 +667,7 @@ function ServersPopover({
         tokens={pageTokens}
         backLabel={`Back to ${row.name} tools`}
         onBack={closeTool}
-        onPressStart={keepFieldFocus}
+        keepFocus
         bodyRef={toolBody}
         onBodyKeyDown={onToolKey}
       />
@@ -682,44 +675,43 @@ function ServersPopover({
   );
 
   return (
-    <div
+    <PopoverPanel
       id={id}
-      className="menu-surface searchable-menu agent-servers-menu"
-      role="dialog"
-      aria-label={
+      look={POPOVER_PANEL_LOOK.MENU}
+      title={
         tool !== undefined
           ? toolTitle(tool)
           : page !== undefined
             ? `${page.name} tools`
             : SERVERS_LABEL
       }
-      // Note that the dialog takes the focus a press on its words would
-      // otherwise hand to the page, because focus leaving the popover closes
-      // it: a press that selects a tool's description must not.
-      tabIndex={-1}
-      onKeyDown={onKey}
-      onBlur={(event) => onLeave(event.relatedTarget)}
+      onDismiss={dismiss}
+      onLeave={onLeave}
     >
-      {page !== undefined && tool !== undefined
-        ? toolPage(page, tool)
-        : page !== undefined
-          ? serverPage(page)
-          : home}
-      <div className="task-compose-menu-foot">
-        <button
-          type="button"
-          className="menu-item agent-servers-manage"
-          onMouseDown={keepFieldFocus}
-          onClick={() => {
-            onClose();
-            servers.onOpenSettings();
-          }}
-        >
-          <GearIcon />
-          <span className="task-compose-menu-name">{SERVERS_SETTINGS}</span>
-        </button>
+      {/* Note that the searchable menu's own class rides a box drawn as its
+          contents, because its rows' highlight is that menu's. */}
+      <div className="searchable-menu agent-servers-menu">
+        {page !== undefined && tool !== undefined
+          ? toolPage(page, tool)
+          : page !== undefined
+            ? serverPage(page)
+            : home}
+        <div className="task-compose-menu-foot">
+          <button
+            type="button"
+            className="menu-item agent-servers-manage"
+            onMouseDown={keepFieldFocus}
+            onClick={() => {
+              onClose();
+              servers.onOpenSettings();
+            }}
+          >
+            <GearIcon />
+            <span className="task-compose-menu-name">{SERVERS_SETTINGS}</span>
+          </button>
+        </div>
       </div>
-    </div>
+    </PopoverPanel>
   );
 }
 
@@ -758,7 +750,6 @@ export function AgentServersButton({
   };
   const press = {
     ref: trigger,
-    "aria-label": SERVERS_LABEL,
     "aria-haspopup": "dialog",
     "aria-expanded": open,
     "aria-controls": open ? popoverId : undefined,
@@ -768,13 +759,21 @@ export function AgentServersButton({
   return (
     <div className="agent-servers" ref={root}>
       {face === undefined ? (
-        <Tooltip label={SERVERS_LABEL}>
-          <button type="button" className="icon-button agent-servers-button" {...press}>
-            <McpIcon />
-          </button>
-        </Tooltip>
+        // Note that the box, not the button, wears the class the composer's ⋯ finds the press by (`agent-composer.tsx`).
+        <span className="agent-servers-button">
+          <Tooltip label={SERVERS_LABEL}>
+            <IconButton icon={<McpIcon />} label={SERVERS_LABEL} {...press} />
+          </Tooltip>
+        </span>
       ) : (
-        <Chip look={CHIP_LOOK.FIELD} chevron className="settings-picker-chip" {...press}>
+        // A face is a form's field, at least the column its pickers share.
+        <Chip
+          look={CHIP_LOOK.FIELD}
+          width={CHIP_WIDTH.MIN_FIELD}
+          chevron
+          aria-label={SERVERS_LABEL}
+          {...press}
+        >
           {face}
         </Chip>
       )}

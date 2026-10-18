@@ -18,7 +18,7 @@ import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { automation, automationRun } from "../../schemas/automation.js";
 import { personalWorkspace } from "../../schemas/personal-workspace.js";
-import { task } from "../../schemas/plan.js";
+import { task } from "../../schemas/task.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   automationRunsSince,
@@ -41,12 +41,12 @@ import { createTask, updateTask } from "../task-store.js";
 
 /**
  * An account's automations and their runs, over a real dialect: made only
- * on a plan the account reaches, read and changed by that account alone
- * while it still reaches the plan, one run per firing however often it is
+ * on a task the account reaches, read and changed by that account alone
+ * while it still reaches the task, one run per firing however often it is
  * claimed, a run settled once, and a schedule claimed once when due, its
  * backlog moved on rather than run.
  *
- * Synthetic accounts, workspaces, and plans throughout.
+ * Synthetic accounts, workspaces, and tasks throughout.
  */
 
 const openAccount = Effect.gen(function* () {
@@ -56,7 +56,7 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A plan in a workspace the account owns, as the organization plugin would leave the rows. */
+/** A task in a workspace the account owns, as the organization plugin would leave the rows. */
 const openTask = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -540,7 +540,7 @@ it.layer(getTestDB())("the automation store's failed runs", (it) => {
         const owner = yield* openAccount;
         const other = yield* openAccount;
         const planId = yield* openTask(owner);
-        const theirPlan = yield* openTask(other);
+        const theirTask = yield* openTask(other);
         const made = (userId: string, onTask: string, name: string) =>
           Effect.map(
             createAutomation(userId, { ...nightly(onTask), name, nextRunAt: null }),
@@ -548,7 +548,7 @@ it.layer(getTestDB())("the automation store's failed runs", (it) => {
           );
         const sweep = yield* made(owner, planId, "Nightly flaky-test sweep");
         const digest = yield* made(owner, planId, "Morning digest");
-        const theirs = yield* made(other, theirPlan, "Their sweep");
+        const theirs = yield* made(other, theirTask, "Their sweep");
         /** A run of the automation, settled as it came out, a second after the one before. */
         const ran = (
           automation: typeof sweep,

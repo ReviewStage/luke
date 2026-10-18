@@ -7,9 +7,10 @@ import {
   productEventFromWire,
   type RecordProductEvent,
 } from "@luke/features/analytics";
+import { ActRefused, type ActRows, type ActSender } from "@luke/host/act-router";
 import { ACT, ACT_KIND } from "@luke/host/acts";
 import { MICROPHONE_STATUS, type MicrophoneRoute, type MicrophoneStatus } from "@luke/voice/audio";
-import { ActRefused, type ActRows, type ActSender } from "../act-router";
+import type { WebContents } from "electron";
 import type { ReportHandlers } from "../bridge-host";
 import type { MicrophoneRouteWatch } from "../native/microphone-route";
 import type { PanelManager } from "../window/panel-manager";
@@ -45,7 +46,7 @@ interface WindowSurfaceDependencies {
   /** Posts Settings' test notification now. */
   testNotification: () => void;
   /** Asks where to save a file in the system's save dialog over the asking window and writes it there, answering whether it was saved. */
-  saveFile: (sender: ActSender["sender"], name: string, text: string) => Promise<boolean>;
+  saveFile: (sender: WebContents, name: string, text: string) => Promise<boolean>;
 }
 
 type WindowSurfaceActKind =
@@ -66,13 +67,16 @@ type WindowSurfaceActKind =
  */
 export function windowSurfaceActRows(
   dependencies: WindowSurfaceDependencies,
-): Pick<ActRows, WindowSurfaceActKind> {
+): Pick<ActRows<WebContents>, WindowSurfaceActKind> {
   const { panels } = dependencies;
   /**
    * The display the asking panel stands on: a window that is not a panel, and
    * a panel on no display, are the same refusal.
    */
-  const panelDisplay = (sender: ActSender, kind: typeof ACT_KIND.WINDOW_FOCUS_PANEL): number => {
+  const panelDisplay = (
+    sender: ActSender<WebContents>,
+    kind: typeof ACT_KIND.WINDOW_FOCUS_PANEL,
+  ): number => {
     const displayId = sender.panel ? panels.displayIdFor(sender.sender) : undefined;
     if (displayId === undefined) throw new ActRefused({ message: ACT[kind].refusal });
     return displayId;

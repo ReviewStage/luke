@@ -37,10 +37,12 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { stateWith } from "#testing/app-state";
 import {
   composerEditor,
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   QUIET_COMPOSER,
@@ -51,25 +53,25 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { MemberDirectory } from "../member-directory";
 import { AgentComposer } from "./agent-composer";
+import type { SkillSource } from "./skill-picker";
 import {
   mentionablePullRequests,
-  PlanMentions,
-  type PlanMentionsValue,
-  planlessMentions,
+  TaskMentions,
+  type TaskMentionsValue,
+  tasklessMentions,
   useMentionAgentsReader,
-} from "./plan-mentions";
-import type { SkillSource } from "./skill-picker";
+} from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 import { OpenLinkProvider } from "./use-open-link";
 
 /**
- * `@` in an agent's message box and its transcript, on a plan's page and
+ * `@` in an agent's message box and its transcript, on a task's page and
  * off it, over the real editor bundle: the word typed opens the list of the
  * plan's sections and the repository's files, the row chosen is written
  * into the message as its link and drawn in the box as its chip, the link
  * is what is sent, and a sent message's mention is drawn as the chip that
- * opens it. Off a plan's page an `@` is a letter, and a sent mention is
+ * opens it. Off a task's page an `@` is a letter, and a sent mention is
  * still its chip, opened through the window's own doors.
  * Synthetic plan and repository.
  */
@@ -190,7 +192,7 @@ const MEMBERS: readonly WorkspaceMember[] = [
 /** Every act the panel told the main process, in order. */
 const told: Act[] = [];
 
-/** The repository the plan's tree is read from now. */
+/** The repository the task's tree is read from now. */
 let standing = "acme/relay";
 
 const noSkills: SkillSource = () => Promise.resolve({ skills: [] });
@@ -202,69 +204,66 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   standing = "acme/relay";
   told.length = 0;
   installScrollIntoView();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        told.push(request);
-        return Promise.resolve(
-          request.kind === ACT_KIND.INTEGRATIONS_STATUS
+  fakeAppPlatform(DESKTOP_LINKS);
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      told.push(request);
+      return Promise.resolve(
+        request.kind === ACT_KIND.INTEGRATIONS_STATUS
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: {
+                integrations: LINEAR_CONNECTED,
+              },
+            }
+          : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
             ? {
                 status: ACT_OUTCOME_STATUS.DONE,
                 value: {
-                  integrations: LINEAR_CONNECTED,
+                  tools: [
+                    { name: "list_issues", description: "List the team's issues." },
+                    { name: "get_issue", description: "Read one issue." },
+                    { name: "list/issues", description: "A name no mention can carry." },
+                    {
+                      name: "list\ud800",
+                      description: "A name that is no string of characters.",
+                    },
+                    { name: "..", description: "A name an address resolves away." },
+                  ],
                 },
               }
-            : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
-              ? {
-                  status: ACT_OUTCOME_STATUS.DONE,
-                  value: {
-                    tools: [
-                      { name: "list_issues", description: "List the team's issues." },
-                      { name: "get_issue", description: "Read one issue." },
-                      { name: "list/issues", description: "A name no mention can carry." },
-                      {
-                        name: "list\ud800",
-                        description: "A name that is no string of characters.",
-                      },
-                      { name: "..", description: "A name an address resolves away." },
-                    ],
-                  },
-                }
-              : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-                ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-                : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+            : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+              ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+              : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+                ? {
+                    status: ACT_OUTCOME_STATUS.DONE,
+                    value: {
+                      agents: workspaceAnswer(request.payload),
+                    },
+                  }
+                : request.kind === ACT_KIND.TASKS_TREE
                   ? {
                       status: ACT_OUTCOME_STATUS.DONE,
                       value: {
-                        agents: workspaceAnswer(request.payload),
+                        folder: {
+                          path: "",
+                          repository: standing,
+                          branch: "main",
+                          entries: TREES.get(standing) ?? [],
+                          truncated: false,
+                        },
                       },
                     }
-                  : request.kind === ACT_KIND.TASKS_TREE
-                    ? {
-                        status: ACT_OUTCOME_STATUS.DONE,
-                        value: {
-                          folder: {
-                            path: "",
-                            repository: standing,
-                            branch: "main",
-                            entries: TREES.get(standing) ?? [],
-                            truncated: false,
-                          },
-                        },
-                      }
-                    : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-        );
-      },
-      recordSurfaceEvent: ignore,
+                  : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+      );
     },
   });
 });
@@ -281,8 +280,8 @@ async function settle(): Promise<void> {
   });
 }
 
-/** What a plan's page hands its places, every mention a chip was asked to open kept. */
-function planPage(opened: Mention[], repository = "acme/relay"): PlanMentionsValue {
+/** What a task's page hands its places, every mention a chip was asked to open kept. */
+function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsValue {
   return {
     taskId: TASK_ID,
     taskName: "Invitations",
@@ -317,7 +316,7 @@ const STORE_AGENT = {
 const SELF_AGENT = { ...STORE_AGENT, id: SELF_ID, name: "Invite by email" };
 
 /** The plan's page holding its pages and agents, every link a chip was asked to open kept. */
-function taskPage(opened: Mention[] = []): PlanMentionsValue {
+function taskPage(opened: Mention[] = []): TaskMentionsValue {
   return { ...planPage(opened), pages: [PAGE], agents: [SELF_AGENT, STORE_AGENT] };
 }
 
@@ -333,21 +332,21 @@ function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource })
   return createElement(AgentComposer, { ...QUIET_COMPOSER, agentId: SELF_ID, composer, skills });
 }
 
-/** The node drawn on a plan's page, or off any page where none is given; `redraw` draws it on the page given. */
-function drawing(node: ReactNode, page: PlanMentionsValue | undefined) {
+/** The node drawn on a task's page, or off any page where none is given; `redraw` draws it on the page given. */
+function drawing(node: ReactNode, page: TaskMentionsValue | undefined) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const registry = AtomRegistry.make();
-  const redraw = (on: PlanMentionsValue | undefined) =>
+  const redraw = (on: TaskMentionsValue | undefined) =>
     act(() =>
       root.render(
         onRegistry(
           registry,
           on === undefined
             ? createElement(Fragment, null, node)
-            : createElement(PlanMentions, { value: on, children: node }),
+            : createElement(TaskMentions, { value: on, children: node }),
         ),
       ),
     );
@@ -355,13 +354,13 @@ function drawing(node: ReactNode, page: PlanMentionsValue | undefined) {
   return { container, redraw };
 }
 
-/** The node drawn on a plan's page, or off any page where none is given. */
-function drawn(node: ReactNode, page: PlanMentionsValue | undefined): HTMLElement {
+/** The node drawn on a task's page, or off any page where none is given. */
+function drawn(node: ReactNode, page: TaskMentionsValue | undefined): HTMLElement {
   return drawing(node, page).container;
 }
 
 /** The box drawn, every message it sends written down. */
-async function box(page: PlanMentionsValue | undefined, skills: SkillSource = noSkills) {
+async function box(page: TaskMentionsValue | undefined, skills: SkillSource = noSkills) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
@@ -393,13 +392,15 @@ function carryingTarget(container: HTMLElement): string | undefined {
 function groupsListed(container: HTMLElement): [string | null, string[]][] {
   return [...container.querySelectorAll('.mention-menu [role="group"]')].map((group) => [
     group.getAttribute("aria-label"),
-    [...group.querySelectorAll(".task-compose-menu-name")].map((name) => name.textContent ?? ""),
+    [...group.querySelectorAll(".luke-combobox-option-label")].map(
+      (name) => name.textContent ?? "",
+    ),
   ]);
 }
 
 /** The rows the list draws, by name. */
 function listed(container: HTMLElement): string[] {
-  return [...container.querySelectorAll(".mention-menu .task-compose-menu-name")].map(
+  return [...container.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
     (name) => name.textContent ?? "",
   );
 }
@@ -426,7 +427,7 @@ test("an @ typed in the box on a plan's page offers the plan's sections, and the
 });
 
 test("on the page of an agent no plan holds an @ offers its repository's files, read through its workspace, and no plan's sections", async () => {
-  const page = planlessMentions(
+  const page = tasklessMentions(
     { workspace: "acme", workspaceId: "workspace-1", repository: "acme/relay" },
     ignore,
   );
@@ -776,7 +777,7 @@ test("a sent message's mention of a page or an agent is drawn as the chip that o
 /** The plan's page, its workspace's agents read through the window's own reader, the box drawn on it. */
 function WorkspacePage({ children }: { children: ReactNode }): ReactNode {
   const readAgents = useMentionAgentsReader("workspace-1", [BILLING], undefined);
-  return createElement(PlanMentions, { value: { ...taskPage(), readAgents }, children });
+  return createElement(TaskMentions, { value: { ...taskPage(), readAgents }, children });
 }
 
 /** The box on the plan's page that reads its workspace's agents, every message it sends written down. */
@@ -798,8 +799,8 @@ async function workspaceBox() {
 function agentsListed(container: HTMLElement): [string, string][] {
   return [...container.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]')].map(
     (row) => [
-      row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-      row.querySelector(".mention-row-detail")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
     ],
   );
 }
@@ -908,7 +909,7 @@ test("a sent mention of an agent of another task or none hangs a card naming whe
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
-    const card = document.querySelector(".tooltip-card [data-mention-card]");
+    const card = document.querySelector(".luke-tooltip-card [data-mention-card]");
     const words = card?.textContent ?? "";
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
@@ -943,19 +944,16 @@ test("a section's address pasted whole into the box on a plan's page is drawn as
 });
 
 test("a page's address pasted in the app's own scheme is called by the name the window holds, an agent's it holds none for by its kind, and a file of the plan's repository pastes as words", async () => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      onAppState: () => () => undefined,
-      requestAppState: () =>
-        Promise.resolve(
-          stateWith(
-            {},
-            { tasks: { ...IDLE_TASKS_VIEW, pages: [{ ...PAGE, version: 1, at: 1_000 }] } },
-          ),
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    onAppState: () => () => undefined,
+    requestAppState: () =>
+      Promise.resolve(
+        stateWith(
+          {},
+          { tasks: { ...IDLE_TASKS_VIEW, pages: [{ ...PAGE, version: 1, at: 1_000 }] } },
         ),
-    },
+      ),
   });
   const { container, sent } = await box(planPage([]));
   const page = encodeMention({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE.id }, PLACE);
@@ -994,10 +992,7 @@ async function wideBox() {
 
 /** What the crumb over a narrowed list names: its kind or the folder walked into; none over a wide list. */
 function crumb(container: HTMLElement): string | undefined {
-  return (
-    container.querySelector(".mention-menu-crumb .agent-servers-page-title")?.textContent ??
-    undefined
-  );
+  return container.querySelector(".mention-menu-crumb-title")?.textContent ?? undefined;
 }
 
 /** The keys the list's foot names. */
@@ -1012,8 +1007,8 @@ function kindsListed(container: HTMLElement): [string, string][] {
   return [
     ...container.querySelectorAll('.mention-menu [aria-label="Mention from"] [role="option"]'),
   ].map((row) => [
-    row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-    row.querySelector(".mention-row-detail")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
   ]);
 }
 
@@ -1023,7 +1018,7 @@ function highlightRow(container: HTMLElement, group: string, name: string): void
     const row = container.querySelector('.mention-menu [role="option"][aria-selected="true"]');
     return (
       row?.closest('[role="group"]')?.getAttribute("aria-label") === group &&
-      row.querySelector(".task-compose-menu-name")?.textContent === name
+      row.querySelector(".luke-combobox-option-label")?.textContent === name
     );
   };
   for (let press = 0; press < 40 && !held(); press += 1) pressInComposer(container, "ArrowDown");
@@ -1054,6 +1049,37 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
   assert.deepEqual(footKeys(container), ["↑↓ Move", "↵ Mention", "⌫ All kinds", "esc Close"]);
 });
 
+/** The highlighted row, by its group and its name. */
+function highlighted(container: HTMLElement): [string | null, string] | undefined {
+  const row = container.querySelector('.mention-menu [role="option"][aria-selected="true"]');
+  if (row === null) return undefined;
+  return [
+    row.closest('[role="group"]')?.getAttribute("aria-label") ?? null,
+    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+  ];
+}
+
+test("a bare End and Home take the highlight to the last row and the first, a modified one is left to the editor, and Shift+Enter writes no mention", async () => {
+  const { container } = await box(taskPage());
+
+  typeInComposer(container, "See @");
+  await settle();
+  pressInComposer(container, "End", { shiftKey: true });
+  pressInComposer(container, "Home", { metaKey: true });
+  const held = highlighted(container);
+  pressInComposer(container, "End");
+  const last = highlighted(container);
+  pressInComposer(container, "Home");
+  const first = highlighted(container);
+  pressInComposer(container, "Enter", { shiftKey: true });
+  await settle();
+
+  assert.deepEqual(held, ["Plan", "Goal"], "a modified Home or End is the editor's");
+  assert.deepEqual(last, ["Mention from", "Linear"]);
+  assert.deepEqual(first, ["Plan", "Goal"]);
+  assert.equal(composerEditor(container).querySelector(".mention-chip"), null);
+});
+
 test("Enter on a kind's row narrows the list to it, and ⌫ on its empty words widens it again, deleting nothing", async () => {
   const { container } = await wideBox();
 
@@ -1070,6 +1096,28 @@ test("Enter on a kind's row narrows the list to it, and ⌫ on its empty words w
   assert.equal(narrowedCrumb, "Files and folders");
   assert.deepEqual(narrowed, [["Files and folders", ["apps/", "README.md"]]]);
   assert.equal(backspace.defaultPrevented, true);
+  assert.equal(composerEditor(container).textContent, "See @");
+  assert.equal(crumb(container), undefined);
+  assert.ok(kindsListed(container).length > 0, "the kinds' rows stand again");
+});
+
+test("pressing the crumb's back arrow widens the list again and keeps the caret in the composer", async () => {
+  const { container } = await wideBox();
+
+  typeInComposer(container, "See @");
+  await settle();
+  highlightRow(container, "Mention from", "Files and folders");
+  pressInComposer(container, "ArrowRight");
+  await settle();
+  const back = container.querySelector<HTMLButtonElement>('button[aria-label="All kinds"]');
+  assert.ok(back !== null, "the narrowed list's crumb offers the way back");
+  const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+  back.dispatchEvent(press);
+  act(() => back.click());
+  await settle();
+
+  assert.equal(press.defaultPrevented, true);
+  assert.equal(back.tabIndex, -1);
   assert.equal(composerEditor(container).textContent, "See @");
   assert.equal(crumb(container), undefined);
   assert.ok(kindsListed(container).length > 0, "the kinds' rows stand again");
@@ -1181,7 +1229,7 @@ const SEATS = pullRequest(3059, "feat(billing): bill by seat", PULL_REQUEST_STAT
 const SWEEP = pullRequest(3061, "test: sweep flaky tests", PULL_REQUEST_STATE.MERGED);
 
 /** The task's page whose agents published two pull requests, one of them by an archived agent and one by two agents. */
-function publishedPage(): PlanMentionsValue {
+function publishedPage(): TaskMentionsValue {
   return {
     ...taskPage(),
     pullRequests: mentionablePullRequests({
@@ -1203,8 +1251,8 @@ function pullRequestsListed(container: HTMLElement): [string, string, string | n
   return [
     ...container.querySelectorAll('.mention-menu [aria-label="Pull requests"] [role="option"]'),
   ].map((row) => [
-    row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-    row.querySelector(".mention-row-detail")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+    row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
     row.querySelector("[data-pull-request-state]")?.getAttribute("data-pull-request-state") ?? null,
   ]);
 }
@@ -1297,8 +1345,8 @@ async function memberBox() {
 function peopleListed(container: HTMLElement): [string, string, string | null][] {
   return [...container.querySelectorAll('.mention-menu [aria-label="People"] [role="option"]')].map(
     (row) => [
-      row.querySelector(".task-compose-menu-name")?.textContent ?? "",
-      row.querySelector(".mention-row-detail")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-label")?.textContent ?? "",
+      row.querySelector(".luke-combobox-option-detail")?.textContent ?? "",
       row.querySelector(".actor-mark")?.getAttribute("data-kind") ?? null,
     ],
   );

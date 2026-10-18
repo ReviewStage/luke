@@ -1,5 +1,5 @@
 /**
- * command-palette.tsx -- ⌘K: the plans, the open plan's agents and files, every command the window can run now, and the Settings pages and settings, found by typing, in a dialog over the window.
+ * command-palette.tsx -- ⌘K: the tasks, the open task's agents and files, every command the window can run now, and the Settings pages and settings, found by typing, in a dialog over the window.
  *
  * The palette is cmdk's own dialog, list, and keys, drawn in the window's
  * menu rows, under a row of filters as Cursor's palette has them: All, then
@@ -13,11 +13,11 @@
  *
  * It decides nothing about a command: it lists the commands whose control is
  * on screen and able right now (`app-commands.ts`), so a row runs exactly
- * what its shortcut would, Delete plan's question included, and it opens a
- * plan through the same select the sidebar does, which takes its ask back
- * when the host does not open the plan. Each plan names its repository
- * beside it, so two plans of one name can be told apart, and an archived
- * plan says so. An agent opens its tab as the column's "+" would, hanging
+ * what its shortcut would, Delete task's question included, and it opens a
+ * task through the same select the sidebar does, which takes its ask back
+ * when the host does not open the task. Each task names its repository
+ * beside it, so two tasks of one name can be told apart, and an archived
+ * task says so. An agent opens its tab as the column's "+" would, hanging
  * its tab's card beside its row while the pointer rests on it, as every
  * place naming an agent does (`agent-ref.tsx`), and an archived agent, which
  * says so, its own page, a subagent
@@ -26,7 +26,7 @@
  * sidebar's row for it does, and a setting lands on its row as the settings
  * search does. The pages are the sidebar's own list, and a page found ranks
  * above every setting found, so "voice" offers the page before its rows. The
- * files are the open plan's repository read whole in the one listing the File
+ * files are the open task's repository read whole in the one listing the File
  * tab's search reads, the first time a file is searched, and fuzzy-matched on
  * their paths.
  *
@@ -40,22 +40,15 @@
  *
  * Every row's value is its place in the list, never words: cmdk writes it
  * into an attribute, which the session recording does not mask
- * (`session-replay.ts`), and two plans may share a name. The search reads
+ * (`session-replay.ts`), and two tasks may share a name. The search reads
  * each row's words instead.
  */
 
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import type { HostCapability } from "@luke/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
-import { GearIcon, PinIcon, SearchIcon, UnpinIcon } from "@luke/ui";
-import { memberActor, ROLE_WORDS, teammateCreator } from "@luke/ui/actor-model";
-import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
-import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
-import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
-import { Command, defaultFilter } from "cmdk";
-import { LinkIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
 import {
   APP_COMMAND,
   APP_SHORTCUT_GROUPS,
@@ -68,13 +61,32 @@ import {
   PALETTE_COMMANDS,
   SHORTCUT_KEY,
   type ShortcutChord,
-} from "#shared/shortcuts";
+} from "@luke/settings/shortcuts";
+import {
+  CHIP_LOOK,
+  Chip,
+  GearIcon,
+  PinIcon,
+  SearchIcon,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  UnpinIcon,
+} from "@luke/ui";
+import { memberActor, ROLE_WORDS, teammateCreator } from "@luke/ui/actor-model";
+import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
+import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
+import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
+import { Command, defaultFilter } from "cmdk";
+import { LinkIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
-import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
+import { appCommandOffered, runAppCommand, useAppCommand, useOverlayHold } from "../app-commands";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { Highlighted } from "../search-field";
-import { settingsPageOf } from "../settings/pages";
+import { settingsPageOf, settingsPageShown } from "../settings/pages";
 import {
   landOnSettingsRow,
   resultPageWord,
@@ -83,6 +95,7 @@ import {
 } from "../settings-search";
 import { Shortcut } from "../shortcut";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
+import { useChatOn } from "../tasks/chat-gate";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
 import { refusalLine } from "../tasks/file-tab-model";
@@ -94,7 +107,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWorkspaceMembers } from "../tasks/use-workspace-members";
 import { workRowsOf } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
-import { agentEntries, inboxEntries } from "./main-tabs";
+import { agentEntries, chatEntries, inboxEntries } from "./main-tabs";
 import { changesOffers, panelEntries, taskWorkers } from "./side-panel";
 import { taskOf } from "./task-actions";
 import { WorkspaceRef } from "./workspace-ref";
@@ -148,7 +161,7 @@ const KIND_ROWS = {
 /** The first row's value: rows are valued by their place in the list, from one. */
 const FIRST_ROW = "1";
 
-/** How far the read of the open plan's files has come: asked, listed, or not listed and why. */
+/** How far the read of the open task's files has come: asked, listed, or not listed and why. */
 const FILES_READ = {
   READING: "reading",
   LISTED: "listed",
@@ -156,8 +169,8 @@ const FILES_READ = {
 } as const;
 
 /**
- * The open plan's repository as the palette read it, whole, in one listing:
- * which plan and repository it is of, and its files by path, or why they
+ * The open task's repository as the palette read it, whole, in one listing:
+ * which task and repository it is of, and its files by path, or why they
  * were not listed.
  */
 type FilesHeld = { taskId: string; repository: string } & FilesRead;
@@ -241,9 +254,9 @@ const COPY_LINK_TERMS = ["link", "share", "url"] as const;
 interface PaletteRow {
   icon?: React.ReactNode;
   label: string;
-  /** Muted words after the name: a plan's repository, an agent's plan, a setting's page. */
+  /** Muted words after the name: a task's repository, an agent's task, a setting's page. */
   detail?: string | undefined;
-  /** The workspace a plan is in where that is not the one listed, named by its tile and name before the detail. */
+  /** The workspace a task is in where that is not the one listed, named by its tile and name before the detail. */
   workspace?: Workspace | undefined;
   /** The mark at the row's end: a failed agent's, or a teammate's task's creator's face. */
   endMark?: React.JSX.Element | undefined;
@@ -272,7 +285,7 @@ const KEYWORD_SCORE = Number.MIN_VALUE;
 /**
  * The least of cmdk's scores the palette counts as a match. An abbreviation
  * of a row's words ("tgsb" for Toggle sidebar) scores above it, and letters
- * scattered through unrelated words ("palette" in Permanently delete plan)
+ * scattered through unrelated words ("palette" in Permanently delete task)
  * a tenth of it.
  */
 const LEAST_SCORE = 0.01;
@@ -385,7 +398,7 @@ function steppedFilter(filter: PaletteFilter, step: number): PaletteFilter {
   return PALETTE_FILTERS[(at + step + count) % count] ?? PALETTE_FILTER.ALL;
 }
 
-/** A plan's muted words: its repository, and whether it is archived. */
+/** A task's muted words: its repository, and whether it is archived. */
 function taskDetail(task: TaskSummary, archived: boolean): string | undefined {
   const words = [task.repository, archived ? ARCHIVED_WORD : null].filter((word) => word !== null);
   return words.length === 0 ? undefined : words.join(" · ");
@@ -395,7 +408,7 @@ function taskDetail(task: TaskSummary, archived: boolean): string | undefined {
  * Every plan, the pinned first, then the rest by their last activity
  * (`taskTime`), then the archived ones, each
  * in its tab's look, an archived one saying so in its detail. Within each,
- * the listed workspace's plans come first and every other workspace's after
+ * the listed workspace's tasks come first and every other workspace's after
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it.
  */
@@ -463,27 +476,32 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
 }
 
 /**
- * The open plan's Inbox and coding agents, as the column's "+" lists them,
+ * The open task's Inbox, Chat, and coding agents, as the column's "+" lists them,
  * then its subagents and its agents' Changes tabs, as the side panel's "+"
  * lists them, then its archived agents (`archivedAgentRows`), each in its
- * row's look and words, found by its row's words, and beside the plan's
- * name; none while no plan is open. An agent opens as
+ * row's look and words, found by its row's words, and beside the task's
+ * name; none while no task is open. An agent opens as
  * its notification's click opens it, the Inbox the same way, and a
  * subagent's or a Changes tab as the "+" opens it, the version history
  * giving way to each, so none opens behind what covers it.
  */
-function agentRows(tasks: TasksControl, show: (pick: () => void) => void): readonly PaletteRow[] {
+function agentRows(
+  tasks: TasksControl,
+  chatOn: boolean,
+  show: (pick: () => void) => void,
+): readonly PaletteRow[] {
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
   const taskName = [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.name;
   const workers = taskWorkers(workRowsOf(tasks.work.conversation, tasks.work.callLive));
   const inbox = inboxEntries(tasks.agents, () => tasks.onShowInbox(taskId));
+  const chat = chatEntries(chatOn && tasks.chatView.available, () => tasks.onShowChat(taskId));
   const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({
     ...entry,
     onPick: () => tasks.onShowAgent(taskId, entry.row.id),
   }));
   // Note that the plan's workers and Changes open in its panel, which an agent's page holds while it stands.
-  const subagents = holdsPlanPanel(tasks)
+  const subagents = holdsTaskPanel(tasks)
     ? panelEntries({
         panel: tasks.sidePanel,
         kinds: [],
@@ -492,7 +510,7 @@ function agentRows(tasks: TasksControl, show: (pick: () => void) => void): reado
         changes: changesOffers(tasks.agents, tasks.sidePanel.changes),
       }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
     : [];
-  const entries = [...inbox, ...agents, ...subagents];
+  const entries = [...inbox, ...chat, ...agents, ...subagents];
   const standing = entries.map(({ row, endMark, onPick, agent }) => ({
     icon: row.icon,
     label: row.label,
@@ -583,7 +601,7 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
 }
 
 /** Whether the side panel is the open plan's, as it is but while an agent's page holds it (`use-plans-tab.ts`). */
-function holdsPlanPanel(tasks: TasksControl): boolean {
+function holdsTaskPanel(tasks: TasksControl): boolean {
   return tasks.agentView.agentId === undefined;
 }
 
@@ -622,7 +640,7 @@ function panelTabRows(
   tasks: TasksControl,
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
-  if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsPlanPanel(tasks)) return [];
+  if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsTaskPanel(tasks)) return [];
   return SIDE_PANEL_TABS.map((tab) => {
     const look = tabLook({ kind: TAB_KIND.PANEL, tab });
     const label = `Show ${look.label.toLowerCase()}`;
@@ -667,7 +685,7 @@ function readMarkRows(
  * None while no plan is looked at, nor for an archived plan, which offers
  * no pin.
  */
-function planPinRows(
+function taskPinRows(
   tasks: TasksControl,
   reads: ReadMarks,
   choose: (run: () => void) => void,
@@ -712,9 +730,12 @@ function agentPinRows(
   ];
 }
 
-/** Every Settings page, in the sidebar's order, under its own glyph and name. */
-function settingsPageRows(open: (page: SettingsView) => void): readonly PaletteRow[] {
-  return SETTINGS_PAGE_LIST.map((page) => {
+/** Every Settings page this platform offers, in the sidebar's order, under its own glyph and name. */
+function settingsPageRows(
+  capabilities: readonly HostCapability[],
+  open: (page: SettingsView) => void,
+): readonly PaletteRow[] {
+  return SETTINGS_PAGE_LIST.filter((page) => settingsPageShown(page, capabilities)).map((page) => {
     const { title, icon } = settingsPageOf(page);
     return {
       icon,
@@ -816,10 +837,9 @@ function FilterChips({
   return (
     <fieldset className="command-palette-filters" aria-label="Filter">
       {PALETTE_FILTERS.map((each) => (
-        <button
+        <Chip
           key={each}
-          type="button"
-          className="command-palette-filter"
+          look={CHIP_LOOK.FILTER}
           aria-pressed={each === filter}
           // Note that a chip takes no focus, because the caret belongs in the
           // field and Return there opens the row chosen, not the chip.
@@ -828,7 +848,7 @@ function FilterChips({
           onClick={() => onFilter(each)}
         >
           {FILTER_LABEL[each]}
-        </button>
+        </Chip>
       ))}
     </fieldset>
   );
@@ -875,12 +895,15 @@ export function CommandPalette({
   /** What the settings pages draw now, which the Settings rows are; the page a row lands on is shown through `onViewChange`. */
   settings: {
     rows: SettingsSearchInput | undefined;
+    /** What the platform offers, which decides the Settings pages listed, whether or not the rows have been read. */
+    capabilities: readonly HostCapability[];
     onViewChange: (view: SettingsView) => void;
   };
-  /** Lists everything in the plan's repository in one read, which the Files rows are. */
+  /** Lists everything in the task's repository in one read, which the Files rows are. */
   readFiles: (taskId: string) => Promise<TasksTreeAnswer>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const chatOn = useChatOn();
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   const [query, setQuery] = useState("");
@@ -899,6 +922,8 @@ export function CommandPalette({
   const chosen = useRef<(() => void) | undefined>(undefined);
   const shown = useRef(false);
   const field = useRef<HTMLInputElement>(null);
+  // The menu bar's Back and Forward, a mouse's back button among them, leave the window behind the palette alone.
+  useOverlayHold(open);
 
   useAppCommand(
     APP_COMMAND.COMMAND_PALETTE,
@@ -921,7 +946,7 @@ export function CommandPalette({
 
   // Note that what was chosen runs once the palette is gone and focus is
   // back where it was, because a command that moves focus (Delete's
-  // question, the New plan dialog's field) would otherwise lose it to the palette's
+  // question, the New task dialog's field) would otherwise lose it to the palette's
   // own going. The field takes focus as the palette opens, as the dialog
   // gives it, and also where it opens again while it is still leaving,
   // which the dialog, never having let it go, does not give it again.
@@ -943,7 +968,7 @@ export function CommandPalette({
     chosen.current = run;
     setOpen(false);
   };
-  // A plan, and an agent's tab, are always opened on the Plans tab, as a
+  // A task, and an agent's tab, are always opened on the Tasks tab, as a
   // press in the sidebar is.
   const onTasks = (run: () => void) =>
     choose(() => {
@@ -1004,18 +1029,18 @@ export function CommandPalette({
   const taskId = plans.activeTaskId;
   const repository =
     [...plans.tasks, ...plans.archived].find((task) => task.id === taskId)?.repository ?? null;
-  // The files held are the open plan's repository's, or none of its.
+  // The files held are the open task's repository's, or none of its.
   const held =
     files !== undefined && files.taskId === taskId && files.repository === repository
       ? files
       : undefined;
   // Note that a task's files are searched only while its panel is the one standing, which an agent's page holds otherwise.
-  const filesOpen = holdsPlanPanel(plans) && taskId !== undefined && repository !== null;
+  const filesOpen = holdsTaskPanel(plans) && taskId !== undefined && repository !== null;
   const filesAsked = open && filesOpen && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
 
   // Note that the repository is read the first time its files are searched
   // rather than as the palette opens, because most of its uses never ask
-  // for a file, and kept for the opening while the plan and its repository
+  // for a file, and kept for the opening while the task and its repository
   // stay the same. A read that answers after a later one was asked is not
   // kept, since it may list an older branch than the later one does.
   useEffect(() => {
@@ -1051,7 +1076,7 @@ export function CommandPalette({
     [PALETTE_FILTER.TASKS]: () => [
       plans.signedIn ? taskRows(plans, members, (id) => onTasks(() => plans.onSelect(id))) : [],
     ],
-    [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, onTasks)],
+    [PALETTE_FILTER.AGENTS]: () => [agentRows(plans, chatOn, onTasks)],
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, plans.me, (userId) => onTasks(() => plans.personView.onOpen(userId))),
     ],
@@ -1062,11 +1087,14 @@ export function CommandPalette({
         ...actionRows((command) => choose(() => runAppCommand(command))),
         ...panelTabRows(plans, onTasks),
         ...readMarkRows(plans, reads, choose),
-        ...planPinRows(plans, reads, choose),
+        ...taskPinRows(plans, reads, choose),
         ...agentPinRows(plans, choose),
       ],
     ],
-    [PALETTE_FILTER.SETTINGS]: () => [settingsPageRows(openPage), settingRows(settings.rows, land)],
+    [PALETTE_FILTER.SETTINGS]: () => [
+      settingsPageRows(settings.capabilities, openPage),
+      settingRows(settings.rows, land),
+    ],
   } as const satisfies Record<PaletteKind, () => readonly (readonly PaletteRow[])[]>;
   // Note that a file found opens through the panel's one door for a file
   // named in place: the tab it has, as it stands, or a new one at the strip's end.
@@ -1122,9 +1150,17 @@ export function CommandPalette({
       <FilterChips filter={filter} onFilter={changeFilter} />
       <Command.List className="command-palette-list scroll-fade" label="Results">
         {notice === undefined ? (
-          <Command.Empty className="command-palette-empty">Nothing matches.</Command.Empty>
+          <Command.Empty className="command-palette-empty">
+            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+              Nothing matches.
+            </Text>
+          </Command.Empty>
         ) : (
-          <div className="command-palette-empty">{notice}</div>
+          <div className="command-palette-empty">
+            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+              {notice}
+            </Text>
+          </div>
         )}
         {sections.map((section) => (
           <Command.Group key={section.kind} heading={FILTER_LABEL[section.kind]}>
@@ -1142,7 +1178,13 @@ export function CommandPalette({
             })}
           </Command.Group>
         ))}
-        {cut ? <div className="command-palette-notice">{TRUNCATED_LINE}</div> : null}
+        {cut ? (
+          <div className="command-palette-notice">
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+              {TRUNCATED_LINE}
+            </Text>
+          </div>
+        ) : null}
       </Command.List>
       <PaletteFooter typed={query !== ""} />
     </Command.Dialog>

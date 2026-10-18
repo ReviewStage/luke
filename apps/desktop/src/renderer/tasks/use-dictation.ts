@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -8,7 +9,7 @@ import { type RefObject, useEffect, useRef, useState } from "react";
 import { useAct } from "../act";
 import type { ComposerEditorHandle, ComposerMark } from "../plan-editor/contract";
 import { rendererRuntime } from "../renderer-runtime";
-import { appSettingsNow, appStateNow } from "../use-app-state";
+import { appSettingsNow, appStateNow, capabilityNow } from "../use-app-state";
 import { openPreferredMicrophone } from "../voice/microphone-choice";
 import { base64Of } from "./attached-files";
 
@@ -197,10 +198,13 @@ export function useDictation(input: {
   };
 
   const open = async (asked: number) => {
+    // Note that the platform's own microphone permission and route are asked
+    // only where it offers them: elsewhere the page's own ask is the whole of it.
+    const routed = capabilityNow(HOST_CAPABILITY.MICROPHONE);
     // Note that macOS is asked only where it has not answered, because the ask is counted and a granted microphone needs none.
     const known = appStateNow()?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED;
     const status =
-      known === MICROPHONE_STATUS.NOT_DETERMINED
+      routed && known === MICROPHONE_STATUS.NOT_DETERMINED
         ? await act(ACT_KIND.MICROPHONE_REQUEST).catch(() => MICROPHONE_STATUS.UNKNOWN)
         : known;
     if (status === MICROPHONE_STATUS.DENIED || status === MICROPHONE_STATUS.RESTRICTED) {
@@ -208,7 +212,7 @@ export function useDictation(input: {
     }
     const stream = await openPreferredMicrophone({
       route: () =>
-        (appSettingsNow()?.preferBuiltInMicrophone ?? true)
+        routed && (appSettingsNow()?.preferBuiltInMicrophone ?? true)
           ? act(ACT_KIND.MICROPHONE_ROUTE)
           : Promise.resolve(undefined),
       enumerate: () => navigator.mediaDevices.enumerateDevices(),

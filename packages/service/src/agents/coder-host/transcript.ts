@@ -177,9 +177,9 @@ const statusNow = (target: ConversationTarget, createdAt: Date) =>
     const awaiting = yield* awaitingLinesOf(target.userId, [target.conversationId]);
     const now = yield* Clock.currentTimeMillis;
     const turn = turns.get(target.conversationId);
-    const lineAwaits = awaiting.has(target.conversationId);
-    const status = codingAgentStatusOf(turn, { createdAt, now, lineAwaits });
-    const runStartedAt = codingAgentRunStartedAt(turn, { createdAt, lineAwaits });
+    const awaitingLineAt = awaiting.get(target.conversationId);
+    const status = codingAgentStatusOf(turn, { createdAt, now, awaitingLineAt });
+    const runStartedAt = codingAgentRunStartedAt(turn, { createdAt, now, awaitingLineAt });
     const failureReason =
       status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined;
     return { status, runStartedAt, failureReason, turn };
@@ -257,7 +257,13 @@ function senderOf(sent: LineSent): CodingAgentSender {
     case MESSAGE_SENDER.GITHUB:
       return { name: sent.login, kind: CODING_AGENT_SENDER.GITHUB };
     case MESSAGE_SENDER.AGENT:
-      return { name: sent.name, agent: true };
+      return {
+        name: sent.name,
+        agent: true,
+        ...(sent.model === undefined ? undefined : { model: sent.model }),
+        ...(sent.agent === undefined ? undefined : { agentId: sent.agent.id }),
+        ...(sent.agent?.taskId === undefined ? undefined : { taskId: sent.agent.taskId }),
+      };
   }
 }
 
@@ -539,7 +545,7 @@ export function titleMayLand(
  * ends the hold is read with that page, so a hold that ran out on an agent
  * that ended meanwhile still says so. The agent's own transcript names the
  * agent as `own`, whose context its pages carry; a worker's names none.
- * A planning worker's looks again on the voice's own beat (`poll`).
+ * The brain's worker's looks again on the voice's own beat (`poll`).
  * An ended agent's empty page is held too while `titleAwaited` says a
  * title may still land, because a reader stops at that page and the
  * agent's own title, or a short worker's, lands after its turn ended; the

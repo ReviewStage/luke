@@ -1,18 +1,17 @@
-import { ArchiveIcon } from "@luke/ui";
+import { ArchiveIcon, BUTTON_VARIANT, Button, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { useState } from "react";
 import { BANNER_LOOK, Banner } from "../banner";
-import { BusyLabel } from "../spinner";
 import type { ArchivedByReading } from "./coding-agent-model";
 
 /**
- * archived-plan.tsx -- what an archived plan draws where its actions would stand: the banner over its document, and the note in place of an agent's composer.
+ * archived-task.tsx -- what an archived task draws where its actions would stand: the banner over its document, and the note in place of an agent's composer.
  *
- * An archived plan reads but takes nothing: its document is not edited,
+ * An archived task reads but takes nothing: its document is not edited,
  * no call is about it, no agent starts on it, and no agent of it is sent a
  * message, until it is brought back. So each place that would have taken
- * something says why it does not, with the one press that brings the plan
+ * something says why it does not, with the one press that brings the task
  * back, rather than standing there as a dead control. The banner is the
- * plan's call to action, the way Notion marks a page in the trash: the
+ * task's call to action, the way Notion marks a page in the trash: the
  * archive glyph, what it means, and Unarchive as the primary button.
  */
 
@@ -21,26 +20,27 @@ const ARCHIVED_TASK_COPY = {
   TITLE: "This task is archived",
   COMPOSER: "Unarchive to send messages",
   UNARCHIVE: "Unarchive",
+  STOP: "Stop",
+  STOPPING: "Stopping",
 } as const;
 
-/** The banner across the top of an archived plan's document, with Unarchive as its primary button. */
+/** The banner across the top of an archived task's document, with Unarchive as its primary button. */
 export function ArchivedBanner({ onUnarchive }: { onUnarchive: () => void }): React.JSX.Element {
   return (
     <Banner
       look={BANNER_LOOK.CARD}
-      className="archived-banner"
       glyph={
         <span className="document-banner-glyph" aria-hidden="true">
           <ArchiveIcon />
         </span>
       }
       actions={
-        <button type="button" className="primary-button" onClick={onUnarchive}>
+        <Button variant={BUTTON_VARIANT.PRIMARY} onClick={onUnarchive}>
           {ARCHIVED_TASK_COPY.UNARCHIVE}
-        </button>
+        </Button>
       }
     >
-      <p className="document-banner-title">{ARCHIVED_TASK_COPY.TITLE}</p>
+      <Text variant={TEXT_VARIANT.SECTION}>{ARCHIVED_TASK_COPY.TITLE}</Text>
     </Banner>
   );
 }
@@ -75,32 +75,27 @@ export function ArchivedComposerNote({
       actions={
         <>
           {stop === undefined ? null : (
-            <button
-              type="button"
-              className="toolbar-button"
-              disabled={stopping}
+            <Button
+              busy={stopping}
+              busyLabel={ARCHIVED_TASK_COPY.STOPPING}
               onClick={() => pressStop(stop)}
             >
-              <BusyLabel busy={stopping} label="Stopping">
-                Stop
-              </BusyLabel>
-            </button>
+              {ARCHIVED_TASK_COPY.STOP}
+            </Button>
           )}
-          <button type="button" className="primary-button" onClick={onUnarchive}>
+          <Button variant={BUTTON_VARIANT.PRIMARY} onClick={onUnarchive}>
             {ARCHIVED_TASK_COPY.UNARCHIVE}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="archived-composer-words">
-        {archivedBy === undefined ? null : (
-          <p className="archived-composer-by">
-            {archivedBy.words}
-            {archivedBy.reason === undefined ? null : `: ${archivedBy.reason}`}
-          </p>
-        )}
-        <p className="archived-composer-line">{ARCHIVED_TASK_COPY.COMPOSER}</p>
-      </div>
+      {archivedBy === undefined ? null : (
+        <Text>
+          {archivedBy.words}
+          {archivedBy.reason === undefined ? null : `: ${archivedBy.reason}`}
+        </Text>
+      )}
+      <Text tone={TEXT_TONE.MUTED}>{ARCHIVED_TASK_COPY.COMPOSER}</Text>
     </Banner>
   );
 }

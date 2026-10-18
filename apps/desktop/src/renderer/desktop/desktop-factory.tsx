@@ -2,11 +2,27 @@ import { PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/coding-ag
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  ArrowUpRightIcon,
+  COLLECTION_STATE,
+  CollectionPage,
+  type CollectionState,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  PAGE_FRAME,
+  PAGE_WIDTH,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useMenu,
+} from "@luke/ui";
 import { type Actor, personActor, teammateCreator } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
   ArrowRightIcon,
-  ArrowUpRightIcon,
   AudioLinesIcon,
   BlocksIcon,
   FactoryIcon,
@@ -15,15 +31,14 @@ import {
   MessageCircleQuestionIcon,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
+import { FactoryWorldPage } from "../factory-world/world-page";
+import { useFactoryWorlds, WorldPicker } from "../factory-world/world-picker";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { NEEDS_YOU } from "../tasks/inbox-model";
@@ -35,7 +50,7 @@ import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems, type WaitingItems } from "../tasks/use-waiting-items";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import {
   agentMovedAt,
   FACTORY_BLOCK,
@@ -81,10 +96,14 @@ import { useRowKeys } from "./use-row-keys";
  * fades in; nothing else moves, and the times count on with the window's
  * minute. ↑ and ↓ move through the rows from the window itself, as on Home,
  * and Return opens the one reached. Escape leaves it for the task it stood
- * over, and so does any row of the sidebar. Until the plan list is read
- * nothing stands, a list that could not be read says so with Retry, above the
- * line where an earlier read still stands, and with nothing on a call, built,
- * or shipped the page is the app's empty state. It is an experiment
+ * over, and so does any row of the sidebar. The toolbar's picker, where the
+ * build offers a world, shows one of the Factory's worlds in the board's
+ * place (`../factory-world/`); the board is its first entry and what the
+ * page opens on, and Escape in a world steps back to its overview before it
+ * leaves. Until the plan list is read nothing stands, a list that could not
+ * be read says so with Retry, above the line where an earlier read still
+ * stands, and with nothing on a call, built, or shipped the page is the
+ * app's empty state. It is an experiment
  * (`EXPERIMENT.FACTORY`): every door to it is gated on the account's switch,
  * and its toolbar says so with the Experimental tag and Send feedback.
  */
@@ -146,14 +165,14 @@ function useFactoryBoard(tasks: TasksControl, now: number): FactoryRead {
   const listed = tasks.listed.tasks;
   const questions = useWaitingItems(tasks);
   // Note that main's own count stands in only for a plan the Inbox has not read as it stands now, because such a read is newer than main's, and an item it shows answered must not come back; a plan changed since its last read, its reread out or failed, keeps main's count.
-  const { items, readPlans } = questions;
+  const { items, readTasks } = questions;
   const waiting = useMemo(
     () =>
       factoryWaiting(
         items,
-        tasks.inbox.filter((each) => !readPlans.has(each.taskId)),
+        tasks.inbox.filter((each) => !readTasks.has(each.taskId)),
       ),
-    [items, readPlans, tasks.inbox],
+    [items, readTasks, tasks.inbox],
   );
   const oneOff = tasks.listedAgents.standing;
   // Note that an agent with no task keeps main's count on the same terms as a task does, until its own read is current.
@@ -295,7 +314,7 @@ function FactoryRow({
   onOpen: () => void;
 }): React.JSX.Element {
   const now = useMinute();
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useRowLinkItem()(link);
   return (
     <li className="sidebar-task-item home-row inbox-row factory-row" data-factory-row={slide}>
@@ -312,7 +331,7 @@ function FactoryRow({
             <span className="sidebar-task-name">{words}</span>
             {external ? (
               <span className="factory-external">
-                <ArrowUpRightIcon className="text-link-out" aria-hidden="true" />
+                <ArrowUpRightIcon />
                 <span className="visually-hidden">(opens on GitHub)</span>
               </span>
             ) : null}
@@ -364,10 +383,20 @@ function Station({
     >
       <h2 className="factory-head">
         <Icon className="factory-glyph" aria-hidden="true" />
-        <span className="factory-name">{name}</span>
-        {held > 0 ? <span className="factory-count">{held}</span> : null}
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} truncate>
+          {name}
+        </Text>
+        {held > 0 ? (
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            {held}
+          </Text>
+        ) : null}
       </h2>
-      {held === 0 ? <p className="factory-idle">{idle}</p> : null}
+      {held === 0 ? (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {idle}
+        </Text>
+      ) : null}
       {needs.length === 0 ? null : (
         <ul className="sidebar-tasks factory-rows" data-needs="">
           {needs}
@@ -624,30 +653,48 @@ function Line({
   );
 }
 
+/** The dot between the summary's parts, kept from a reader. */
+function Separator(): React.JSX.Element {
+  return (
+    <span aria-hidden="true">
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.SUBTLE}>
+        ·
+      </Text>
+    </span>
+  );
+}
+
 /** The line over the stations: how many things wait on the developer, how many agents work, and how much shipped today. */
 function Summary({ board }: { board: FactoryBoard }): React.JSX.Element {
   const waiting = board.stopped.length + board.blocked.length;
   return (
     <p className="factory-summary">
       {waiting === 0 ? (
-        <span>{NEEDS_YOU.NONE}</span>
+        <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+          {NEEDS_YOU.NONE}
+        </Text>
       ) : (
         <span className="factory-needs">
           <span className="inbox-row-dot factory-head-dot" aria-hidden="true" />
-          {`${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+            {`${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`}
+          </Text>
         </span>
       )}
-      <span className="factory-sep" aria-hidden="true">
-        ·
-      </span>
-      <span>{count(board.agentsWorking, "agent working", "agents working")}</span>
-      <span className="factory-sep" aria-hidden="true">
-        ·
-      </span>
-      <span>{`${board.shipped.length} shipped today`}</span>
+      <Separator />
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+        {count(board.agentsWorking, "agent working", "agents working")}
+      </Text>
+      <Separator />
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+        {`${board.shipped.length} shipped today`}
+      </Text>
     </p>
   );
 }
+
+/** What the line's page is read as while the list is. */
+const READING_LINE = "Reading tasks";
 
 /** What the list says where it could not be read, as the sidebar says it. */
 const UNREAD_LINE = "Your tasks could not be read.";
@@ -655,9 +702,27 @@ const UNREAD_LINE = "Your tasks could not be read.";
 /** What Factory says where a task's questions could not be read, as Home says it of its items. */
 const QUESTIONS_UNREAD_LINE = "Some questions could not be read.";
 
-/** The window's Factory, in the plan's place: the line as it stands now. */
+/**
+ * What the line's page stands. Note that until the list is read it stands
+ * nothing, since what the line says hangs on it and the page's loading rows
+ * are a list's shape, not the line's; a read that failed with nothing
+ * listed says so in the line's place, and one that failed over a list read
+ * before says so above the line.
+ */
+function lineState(plans: TasksControl, empty: boolean): CollectionState {
+  if (plans.listFailed && empty) return COLLECTION_STATE.ERROR;
+  if (!plans.listRead && !plans.listFailed) return COLLECTION_STATE.READY;
+  return empty ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
+}
+
+/** The window's Factory, in the task's place: the line as it stands now, or the world chosen in its place. */
 export function DesktopFactory({ tasks: plans }: { tasks: TasksControl }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_FACTORY, plans.factoryView.onClose);
+  const worlds = useFactoryWorlds();
+  // Note that a world takes Escape first, for as long as it has a step back toward its overview to take.
+  const backOut = useRef<(() => boolean) | undefined>(undefined);
+  useAppCommand(APP_COMMAND.EXIT_FACTORY, () => {
+    if (backOut.current?.() !== true) plans.factoryView.onClose();
+  });
   const now = useMinute();
   const { board, questions } = useFactoryBoard(plans, now);
   const [root, setRoot] = useState<HTMLElement | null>(null);
@@ -671,47 +736,79 @@ export function DesktopFactory({ tasks: plans }: { tasks: TasksControl }): React
       board.blocked.length +
       board.shipped.length ===
     0;
-  return (
-    <section className="factory-view" aria-label="Factory" ref={setRoot}>
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">Factory</h1>
-          <ExperimentTag />
-        </div>
-        <div className="desktop-toolbar-actions">
-          <SendFeedbackButton experiment={EXPERIMENT.FACTORY} />
-        </div>
-      </header>
-      <div className="factory-scroll scroll-fade-top">
-        {/* A question that could not be read is not shown as though none waits. */}
-        {questions.failed ? (
-          <ReadFailure line={QUESTIONS_UNREAD_LINE} onRetry={questions.onRetry} />
-        ) : null}
-        {/* Until the list is read nothing stands, since what the line says hangs on it. A read that failed with nothing listed says so in the line's place; one that failed over a list read before says so above it. */}
-        {plans.listFailed && empty ? (
-          <ReadFailure
-            line={UNREAD_LINE}
-            onRetry={plans.onRetryList}
-            place={READ_FAILURE_PLACE.CENTRED}
-          />
-        ) : !plans.listRead && !plans.listFailed ? null : empty ? (
-          <EmptyState icon={<FactoryIcon />}>No agents at work</EmptyState>
-        ) : (
-          <>
-            {plans.listFailed ? (
-              <ReadFailure line={UNREAD_LINE} onRetry={plans.onRetryList} />
-            ) : null}
-            <Summary board={board} />
-            {/* A teammate's task names its creator against the listed workspace's members. */}
-            {/* Copy link writes a row's link under the listed workspace, by its slug where it has one. */}
-            <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
-              <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
-                <Line tasks={plans} board={board} now={now} />
-              </MemberDirectory>
-            </LinkWorkspaceProvider>
-          </>
-        )}
+  const toolbar = (
+    <header className="desktop-toolbar">
+      <div className="desktop-toolbar-heading">
+        <h1 className="desktop-toolbar-title">Factory</h1>
+        <ExperimentTag />
       </div>
-    </section>
+      <div className="desktop-toolbar-actions">
+        {worlds.offered.length === 0 ? null : <WorldPicker worlds={worlds} />}
+        <SendFeedbackButton experiment={EXPERIMENT.FACTORY} />
+      </div>
+    </header>
+  );
+  // A question that could not be read is not shown as though none waits, whatever the line stands.
+  const questionsUnread = questions.failed ? (
+    <ErrorState onRetry={questions.onRetry}>{QUESTIONS_UNREAD_LINE}</ErrorState>
+  ) : null;
+  const state = lineState(plans, empty);
+  return (
+    <div ref={setRoot} className="factory-pages">
+      {worlds.chosen !== undefined ? (
+        <section className="factory-view" aria-label="Factory">
+          {toolbar}
+          <FactoryWorldPage
+            key={worlds.chosen.key}
+            tasks={plans}
+            entry={worlds.chosen}
+            backOut={backOut}
+          />
+        </section>
+      ) : (
+        // The line stands across the room, its stations side by side wherever they fit.
+        <CollectionPage
+          frame={PAGE_FRAME.TOOLBAR}
+          width={PAGE_WIDTH.FULL}
+          label="Factory"
+          toolbar={toolbar}
+          state={state}
+          loadingLabel={READING_LINE}
+          empty={
+            <>
+              {questionsUnread}
+              <EmptyState icon={<FactoryIcon />}>No agents at work</EmptyState>
+            </>
+          }
+          error={
+            <>
+              {questionsUnread}
+              <ErrorState onRetry={plans.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+                {UNREAD_LINE}
+              </ErrorState>
+            </>
+          }
+        >
+          <div className="factory-board">
+            {questionsUnread}
+            {!plans.listRead && !plans.listFailed ? null : (
+              <>
+                {plans.listFailed ? (
+                  <ErrorState onRetry={plans.onRetryList}>{UNREAD_LINE}</ErrorState>
+                ) : null}
+                <Summary board={board} />
+                {/* A teammate's task names its creator against the listed workspace's members. */}
+                {/* Copy link writes a row's link under the listed workspace, by its slug where it has one. */}
+                <LinkWorkspaceProvider value={plans.workspace?.slug ?? plans.workspace?.id}>
+                  <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+                    <Line tasks={plans} board={board} now={now} />
+                  </MemberDirectory>
+                </LinkWorkspaceProvider>
+              </>
+            )}
+          </div>
+        </CollectionPage>
+      )}
+    </div>
   );
 }

@@ -8,11 +8,12 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { newestToastAction, newestToastSays } from "#testing/toast";
 import { ToastHost } from "../toast";
 import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 
 /**
  * add-to-plan.test.ts -- a picture an agent showed, added to its plan from
@@ -41,28 +42,24 @@ const roots: Root[] = [];
 beforeEach(() => {
   held = PAGE_TEXT;
   sent = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        sent.push(request);
-        if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { id: KEPT_ID } });
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      sent.push(request);
+      if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { id: KEPT_ID } });
+      }
+      if (request.kind === ACT_KIND.TASKS_EDIT) {
+        const { base, value } = request.payload.edit.document;
+        if (base !== held) {
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { conflict: { current: held } },
+          });
         }
-        if (request.kind === ACT_KIND.TASKS_EDIT) {
-          const { base, value } = request.payload.edit.document;
-          if (base !== held) {
-            return Promise.resolve({
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: { conflict: { current: held } },
-            });
-          }
-          held = value;
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { saved: true } });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      },
-      recordSurfaceEvent: () => undefined,
+        held = value;
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { saved: true } });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     },
   });
 });
@@ -72,7 +69,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-const PAGE: PlanMentionsValue = {
+const PAGE: TaskMentionsValue = {
   taskId: TASK_ID,
   taskName: "Invitations",
   workspace: "acme",
@@ -118,7 +115,7 @@ const SHOWN: CodingAgentMessage = {
 };
 
 /** The agent's turn drawn with its pictures' door, on the plan's page where `page` is given. */
-async function drawn(page: PlanMentionsValue | undefined) {
+async function drawn(page: TaskMentionsValue | undefined) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -139,7 +136,7 @@ async function drawn(page: PlanMentionsValue | undefined) {
       createElement(
         "div",
         null,
-        page === undefined ? turn : createElement(PlanMentions, { value: page, children: turn }),
+        page === undefined ? turn : createElement(TaskMentions, { value: page, children: turn }),
         createElement(ToastHost),
       ),
     ),

@@ -14,6 +14,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
@@ -162,16 +163,12 @@ function answer(request: Act): ActOutcome {
 
 /** The words drawn as the Inbox draws them, off any task's page, in the workspace given. */
 async function drawn(text: string): Promise<HTMLElement> {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(STATE),
-      act: (request: Act): Promise<ActOutcome> => {
-        told.push(request);
-        return Promise.resolve(answer(request));
-      },
+  fakeAppBridge({
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(STATE),
+    act: (request: Act): Promise<ActOutcome> => {
+      told.push(request);
+      return Promise.resolve(answer(request));
     },
   });
   const container = document.body.appendChild(document.createElement("div"));
@@ -229,14 +226,14 @@ async function cardOf(chip: Element | undefined) {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   await settle();
-  const card = [...document.querySelectorAll(".tooltip-card > *")].at(-1);
+  const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {
     tab: card.matches("[data-tab-card]"),
-    name: card.querySelector(".card-name")?.textContent,
+    name: card.querySelector(".luke-hover-card-name")?.textContent,
     model: card.querySelector("[data-model-label]")?.textContent,
-    corner: card.querySelector(".card-corner")?.textContent,
-    foot: card.querySelector(".card-rule + .card-note")?.textContent,
+    corner: card.querySelector(".luke-hover-card-corner")?.textContent,
+    foot: card.querySelector(".luke-hover-card-rule + .luke-hover-card-note")?.textContent,
     words: card.textContent,
   };
   act(() => {

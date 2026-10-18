@@ -6,7 +6,7 @@
  * handed is its role's connection policy (`role.ts`), among the
  * integrations this deployment offers the account
  * (`accountIntegrationConnect`): one not set up here, or withheld from the
- * account, is handed to none of its agents. The planning agents are handed
+ * account, is handed to none of its agents. The brain agents are handed
  * every one offered. A coding agent is handed every one but those the
  * developer switched off for it from its composer, which writes
  * the agent's `disabled_servers` (`coding-agent-store.ts`); its worker's

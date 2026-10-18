@@ -78,7 +78,7 @@ import { SOCKET_CLOSE_CODE } from "./socket.js";
  * own append is refused with the close; a deployment missing a secret, or an
  * exchange that cannot stand, refuses the session; and when the relay settles
  * the exchange's record writes are drained before the session is reported
- * ended; and every call lands in the conversation of the plan it is about.
+ * ended; and every call lands in the conversation of the task it is about.
  * The inert case stays as the statement of what the service does without a
  * seam, a configuration nothing ships. Every row is an account's this test
  * created.
@@ -178,12 +178,12 @@ function fakeEve(): FakeEve {
   return eve;
 }
 
-/** A plan the account starts, as the Plans tab's new-plan form saves one. */
+/** A task the account starts, as the Tasks tab's new-task form saves one. */
 const TASK = {
   name: "Teammate invitations",
 } as const;
 
-/** An account holding one plan, and the plan's conversation every call about it lands in. */
+/** An account holding one task, and the task's conversation every call about it lands in. */
 async function account(): Promise<{ target: ConversationTarget; taskId: string }> {
   const userId = await database.createUser();
   const task = await database.run(startTask(userId, TASK));
@@ -218,14 +218,14 @@ async function framesWithin(reader: SocketReader, ms: number): Promise<LiveClien
   return frames;
 }
 
-/** The service's own word about the plan, sent beside the relayed frames as the call goes. */
+/** The service's own word about the task, sent beside the relayed frames as the call goes. */
 const TASK_FRAMES: readonly unknown[] = [
   VOICE_SERVICE_FRAME.TASK_ACTIVITY,
   VOICE_SERVICE_FRAME.PLAN_DRAFT,
   VOICE_SERVICE_FRAME.TASK_WORK,
 ];
 
-/** The next frame relayed to the desktop, past the service's own word about the plan. */
+/** The next frame relayed to the desktop, past the service's own word about the task. */
 async function relayedFrame(reader: SocketReader, timeoutMs?: number): Promise<WireRecord> {
   for (;;) {
     const frame = record(await reader.next(timeoutMs));
@@ -242,7 +242,7 @@ async function until(predicate: () => boolean, what: () => string): Promise<void
 }
 
 interface Stand {
-  /** The account and the conversation of the plan its calls are about by default. */
+  /** The account and the conversation of the task its calls are about by default. */
   readonly target: ConversationTarget;
   readonly taskId: string;
   readonly eve: FakeEve;
@@ -352,7 +352,7 @@ async function stand(offer: Offer): Promise<Stand> {
   };
 }
 
-/** The desktop's opening frame for a call about the plan named. */
+/** The desktop's opening frame for a call about the task named. */
 function createFrame(taskId: string, input: readonly WireRecord[] = []): WireRecord {
   return {
     type: VOICE_SERVICE_FRAME.SESSION_CREATE,
@@ -510,7 +510,7 @@ it.effect(
     }),
 );
 
-/** The conversation the plan resumes in, as the plan's row names it now. */
+/** The conversation the task resumes in, as the task's row names it now. */
 async function taskConversationOf(userId: string, taskId: string): Promise<string | undefined> {
   const stored = await database.run(readTask(userId, taskId));
   return Option.getOrUndefined(stored)?.conversationId;
@@ -573,7 +573,7 @@ it.effect(
         [[planned, BRAIN_HOST_TURN.SPOKEN]],
       );
 
-      // A fresh connection names no plan; the session's row binds it, and its words land in the same plan.
+      // A fresh connection names no task; the session's row binds it, and its words land in the same task.
       const again = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
         authorization: BEARER,
       });

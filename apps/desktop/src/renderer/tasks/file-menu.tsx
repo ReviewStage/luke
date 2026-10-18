@@ -1,10 +1,9 @@
-import { ACT_KIND } from "@luke/host/acts";
-import { CopyIcon, DownloadIcon, EllipsisIcon } from "@luke/ui";
+import { CopyIcon, DownloadIcon, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, ListOrderedIcon, WrapTextIcon } from "lucide-react";
-import { useAct } from "../act";
+import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { WHOLE_TEXT, type WholeText } from "./file-tab-model";
@@ -13,10 +12,10 @@ import { useFileViewSettings } from "./file-view-settings";
 /**
  * file-menu.tsx -- the File view bar's ⋯: what is done with the file shown, then how every File tab draws its lines.
  *
- * The window's own menu (`../desktop/action-menu.tsx`), as the plan's ⋯
+ * The window's own menu (`../desktop/action-menu.tsx`), as the task's ⋯
  * draws it: the file's name or its whole text copied, said in the copy
  * toast as every copy from a menu is; the file saved where the system's
- * save dialog chooses (`ACT_KIND.WINDOW_SAVE_FILE`); and, under a rule, the
+ * save dialog chooses (`appPlatform().saveFile`); and, under a rule, the
  * File tabs' two settings as checks (`file-view-settings.ts`). The text is
  * read only when it is asked for, raw and in one read, so what is copied
  * or saved is the file as it holds it, its long lines uncut, rather than
@@ -49,7 +48,7 @@ export function LinesMenu({
   /** Settings only this bar's lines follow, as checks under the File tabs' own. */
   looks?: readonly MenuAction[];
 }): React.JSX.Element {
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const { settings, change } = useFileViewSettings();
   const groups: readonly (readonly MenuAction[])[] = [
     actions,
@@ -73,9 +72,7 @@ export function LinesMenu({
   return (
     <>
       <Tooltip label={label}>
-        <button type="button" className="icon-button" aria-label={label} {...menu.trigger()}>
-          <EllipsisIcon />
-        </button>
+        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={label} menu={menu.drawn} groups={groups} onClose={menu.close} />
@@ -86,20 +83,21 @@ export function LinesMenu({
 
 /** Saves text where the system's save dialog chooses, as a file of the name given, the save or its failure said in a toast. */
 export function useSaveText(): (name: string, text: string) => Promise<void> {
-  const { act } = useAct();
   const show = useToast();
   return (name, text) =>
-    act(ACT_KIND.WINDOW_SAVE_FILE, { name, text }).then(
-      (saved) => {
-        if (saved) show({ words: "File saved", tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
-      },
-      () =>
-        show({
-          words: "Could not save the file.",
-          tone: TOAST_TONE.FAILED,
-          hold: TOAST_HOLD.FAILED,
-        }),
-    );
+    appPlatform()
+      .saveFile({ name, text })
+      .then(
+        (saved) => {
+          if (saved) show({ words: "File saved", tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+        },
+        () =>
+          show({
+            words: "Could not save the file.",
+            tone: TOAST_TONE.FAILED,
+            hold: TOAST_HOLD.FAILED,
+          }),
+      );
 }
 
 export function FileMenu({

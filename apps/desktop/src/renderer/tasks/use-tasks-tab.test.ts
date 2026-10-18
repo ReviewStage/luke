@@ -3,10 +3,12 @@
 import assert from "node:assert/strict";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
+import { CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
+import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
@@ -22,8 +24,11 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
+import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { FOR_YOU } from "@luke/ui/chat-model";
+import { experimentsOn } from "@luke/settings/testing";
+import { CHAT_PLACE, FOR_YOU } from "@luke/ui/chat-model";
+import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
@@ -39,10 +44,12 @@ import {
 } from "@luke/voice/voice-view";
 import { Duration, Effect, Option, Schema } from "effect";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
+import * as AtomRegistryModule from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { newestToastAction, newestToastSays } from "#testing/toast";
@@ -82,6 +89,11 @@ const readShown = Schema.decodeUnknownOption(
   Schema.Struct({
     agentId: Schema.NullOr(Schema.String),
     inboxTaskId: Schema.NullOr(Schema.String),
+    chatShown: Schema.optionalKey(
+      Schema.NullOr(
+        Schema.Struct({ workspaceId: Schema.String, planId: Schema.NullOr(Schema.String) }),
+      ),
+    ),
   }),
 );
 
@@ -117,12 +129,14 @@ function mount(
   registry?: AtomRegistry,
 ) {
   const told: ActKind[] = [];
-  /** The coding-agent acts, kept apart: they are the agents' own and no planning press tells them. */
+  /** The coding-agent acts, kept apart: they are the agents' own and no task press tells them. */
   const agentActs: ActKind[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
-  /** Which plan's Inbox main was told is shown, each time it was told. */
+  /** Which task's Inbox main was told is shown, each time it was told. */
   const shownInboxes: (string | null)[] = [];
+  /** Which Chat main was told is on screen, each time it was told. */
+  const shownChats: ({ workspaceId: string; planId: string | null } | null)[] = [];
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
@@ -169,6 +183,7 @@ function mount(
           if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {
             shownAgents.push(shown.agentId);
             shownInboxes.push(shown.inboxTaskId);
+            shownChats.push(shown.chatShown ?? null);
           }
           const voiceCommand = Option.getOrUndefined(readVoiceCommand(args[0]));
           if (kind === ACT_KIND.VOICE_COMMAND && voiceCommand !== undefined) {
@@ -208,6 +223,7 @@ function mount(
     agentActs,
     shownAgents,
     shownInboxes,
+    shownChats,
     voiceCommands,
     payloads,
     /** Every Settings link the tab followed, in order. */
@@ -249,7 +265,7 @@ function _undoButton(): HTMLButtonElement {
   return undo;
 }
 
-/** A plan with a history: Luke wrote it on a call, over a first version. */
+/** A task with a history: Luke wrote it on a call, over a first version. */
 const _EDITED: TasksView = {
   ...OPEN,
   document: {
@@ -270,10 +286,10 @@ function _revisionLine(seq: number) {
 
 const _FIRST_VERSION = { body: "# Teammate invitations\n\n## Goal", assumptions: [] };
 
-/** A plan other than the open one, which the host opens in its place. */
+/** A task other than the open one, which the host opens in its place. */
 const OTHER_TASK_ID = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
 
-/** A plan's row of the list, started at `createdAt`, with whatever pin or archive it is given. */
+/** A task's row of the list, started at `createdAt`, with whatever pin or archive it is given. */
 function _row(
   id: string,
   createdAt: number,
@@ -290,7 +306,7 @@ function _row(
   };
 }
 
-/** A plan's row of the list, started at `createdAt`, with whatever pin or archive it is given. */
+/** A task's row of the list, started at `createdAt`, with whatever pin or archive it is given. */
 function row(
   id: string,
   createdAt: number,
@@ -323,7 +339,7 @@ const ACME = {
   github: null,
 };
 
-/** The account's plans across its two workspaces: two of its own, one of the team's, and one of each archived. */
+/** The account's tasks across its two workspaces: two of its own, one of the team's, and one of each archived. */
 const TWO_WORKSPACES: TasksView = {
   ...IDLE_TASKS_VIEW,
   listStatus: TASKS_READ.READY,
@@ -538,7 +554,7 @@ const CODE: TaskCode = {
   lines: [[{ text: "export function accept() {}" }]],
 };
 
-/** The code shown on the open plan: one snippet, then a second of the same file. */
+/** The code shown on the open task: one snippet, then a second of the same file. */
 const SHOWN: readonly TaskCodeShowing[] = [
   { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
 ];
@@ -547,7 +563,7 @@ const _SHOWN_AGAIN: readonly TaskCodeShowing[] = [
   { callId: "show-2", turnId: "turn-1", shownAt: 1, code: CODE },
 ];
 
-/** A call in progress about the open plan, which is what puts code on screen. */
+/** A call in progress about the open task, which is what puts code on screen. */
 const _ON_CALL: VoiceView = {
   ...IDLE_VOICE_VIEW,
   callTaskId: TASK.id,
@@ -560,7 +576,7 @@ function panelOf(tab: ReturnType<typeof mount>) {
   return { open, tab: shown };
 }
 
-/** One turn of Luke's planning model on the open plan. */
+/** One turn of Luke's brain on the open task. */
 const TURN: TaskWorkTurn = {
   turnId: "turn-1",
   startedAt: 1,
@@ -570,7 +586,7 @@ const TURN: TaskWorkTurn = {
   workers: [],
 };
 
-/** The open plan's calls read back: none, and one with a line said on it. */
+/** The open task's calls read back: none, and one with a line said on it. */
 const NO_CALLS: TasksView["transcript"] = {
   status: TASKS_READ.READY,
   transcript: { calls: [], earlierOmitted: false },
@@ -591,7 +607,7 @@ const _ONE_CALL: TasksView["transcript"] = {
   },
 };
 
-/** The open plan read with nothing on it yet: an empty board, no code, no call, no work. */
+/** The open task read with nothing on it yet: an empty board, no code, no call, no work. */
 const _NOTHING_YET: TasksView = {
   ...OPEN,
   board: EMPTY_BOARD,
@@ -619,7 +635,7 @@ async function settle(): Promise<void> {
   });
 }
 
-/** Luke's start of a coding agent in the open plan's work, as its call stands: still running, or answered. */
+/** Luke's start of a coding agent in the open task's work, as its call stands: still running, or answered. */
 function _startedAgent(
   state: typeof TASK_WORK_STATE.RUNNING | typeof TASK_WORK_STATE.DONE,
 ): TaskWorkTurn {
@@ -636,7 +652,7 @@ function _startedAgent(
   };
 }
 
-/** How many times the plan's agents were read. */
+/** How many times the task's agents were read. */
 function _listReads(tab: ReturnType<typeof mount>): number {
   return tab.agentActs.filter((kind) => kind === ACT_KIND.CODING_AGENTS_LIST).length;
 }
@@ -650,7 +666,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   const panel = () => tab.control().sidePanel;
   const column = () => tab.control().mainTabs;
   const file = { file: CODE.ref.path };
-  // The code shown on the plan stands its Code tab first.
+  // The code shown on the task stands its Code tab first.
   act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => panel().onChoose(SIDE_PANEL_TAB.CALL));
   act(() => panel().onOpenFile(CODE.ref));
@@ -788,6 +804,16 @@ test("Show panel on a plan whose strip holds no tab opens the tab last closed th
   assert.equal(fresh.control().sidePanel.open, false);
   act(() => fresh.control().sidePanel.onToggle());
   assert.deepEqual(panelOf(fresh), { open: true, tab: SIDE_PANEL_TAB.CALL });
+});
+
+test("Show panel beside the Inbox, its item's plan's strip holding no tab, shows the panel empty, though another plan stands open behind it", () => {
+  const tab = mount({ shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
+  assert.deepEqual(tab.control().sidePanel.strip, []);
+
+  act(() => tab.control().sidePanel.onToggle());
+  assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
 });
 
 test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
@@ -1125,7 +1151,7 @@ test("a press while a reopen waits on its plan takes no tab of another plan, whi
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
-/** A third plan, which neither tab was closed on. */
+/** A third task, which neither tab was closed on. */
 const THIRD_TASK_ID = "4e6a8c0e-2a4c-4e6a-8c0e-2a4c6e8a0c2e";
 
 test("a tab its strip no longer draws, its page gone since, is passed over for the tab closed before it", () => {
@@ -1215,7 +1241,7 @@ test("opening a plan of another workspace lists that workspace once it opened, o
   );
 });
 
-/** A plan's inbox waiting on the developer: `count` open items, each asked by one agent. */
+/** A task's inbox waiting on the developer: `count` open items, each asked by one agent. */
 function waitingIn(taskId: string, count: number): AppInboxTask {
   return {
     taskId: taskId,
@@ -1357,7 +1383,7 @@ test("a person's page opened in another workspace lists it without reopening its
   assert.equal(tab.control().personView.userId, "user-maya");
 });
 
-/** The plans each open the tab asked of main named, in order. */
+/** The tasks each open the tab asked of main named, in order. */
 function opensAsked(payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[]) {
   return payloads
     .filter((asked) => asked.kind === ACT_KIND.TASKS_SELECT)
@@ -1983,7 +2009,7 @@ test("a fixture run lists its first workspace's plans under the switcher, and a 
   assert.equal(window.localStorage.length, 0);
 });
 
-/** The plan as the list names it, archived where `archivedAt` is given. */
+/** The task as the list names it, archived where `archivedAt` is given. */
 function listed(archivedAt?: number): TasksView["tasks"][number] {
   const { document: _document, ...summary } = TASK;
   return archivedAt === undefined ? summary : { ...summary, archivedAt };
@@ -2000,14 +2026,14 @@ function listRead(tasks: TasksView["tasks"]): TasksView {
 /** A select's payload, read back as the act's own schema admits it. */
 const readSelect = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));
 
-/** The plans the launch asked the host to open, in order. */
+/** The tasks the launch asked the host to open, in order. */
 function selected(tab: ReturnType<typeof mount>): string[] {
   return tab.payloads
     .filter((each) => each.kind === ACT_KIND.TASKS_SELECT)
     .flatMap((each) => Option.toArray(readSelect(each.payload)).map((read) => read.taskId));
 }
 
-/** A run that had the plan open when it quit. */
+/** A run that had the task open when it quit. */
 function quitWithTaskOpen(account = "dev@example.com") {
   mount({ shown: true, account, tasks: { ...OPEN, tasks: [listed()] } });
 }
@@ -2255,6 +2281,47 @@ test("a pin dragged to a new place stands there at once, and goes back with what
   assert.equal(newestToastSays(), PIN_MOVE_FAILED_NOTE);
 });
 
+test("a change to the sections is drawn at once, sent after the one before it, and a refused one goes back with a toast", async () => {
+  const answers: ((changed: boolean) => void)[] = [];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_WRITE_SECTION]: () =>
+        new Promise((resolve) => {
+          answers.push(resolve);
+        }),
+    },
+  );
+  const sent = () => tab.payloads.filter((each) => each.kind === ACT_KIND.TASKS_WRITE_SECTION);
+  const titles = () => tab.control().taskSections.sections.map((section) => section.title);
+  const make = (id: string, title: string) => ({
+    kind: TASK_SECTION_WRITE.CREATE,
+    id,
+    workspaceId: "workspace-1",
+    title,
+  });
+
+  await act(async () =>
+    tab
+      .control()
+      .onWriteSections([
+        make("0a1b2c3d-0000-4000-8000-000000000001", "Launch"),
+        make("0a1b2c3d-0000-4000-8000-000000000002", "Later"),
+      ]),
+  );
+  const drawn = titles();
+  const sentFirst = sent().length;
+  await act(async () => answers[0]?.(true));
+  const sentSecond = sent().length;
+  await act(async () => answers[1]?.(false));
+
+  assert.deepEqual(drawn, ["Launch", "Later"]);
+  assert.deepEqual([sentFirst, sentSecond], [1, 2]);
+  // Main's view never carried either, as this test stands no answer in it, so both go once settled.
+  assert.deepEqual(titles(), []);
+  assert.equal(newestToastSays(), SECTION_WRITE_FAILED_NOTE);
+});
+
 test("a pin's place the service took follows the next list, even one a drag on another Mac has moved since", async () => {
   const pinned = { ...listed(), pinnedAt: 5, pinPosition: "a0" };
   const tab = mount(
@@ -2295,4 +2362,123 @@ test("opening Chat on a place, as a chat notice's Open in Chat does, asks first 
   assert.equal(asked.length, 1);
   act(() => asked[0]?.());
   assert.equal(tab.control().chatView.open, true);
+});
+
+test("a live run reads the listed workspace's chat only while the account has Chat on", async () => {
+  handState({});
+  const off = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
+  await settle();
+  assert.ok(!off.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT), "Chat off reads no chat");
+  assert.equal(off.control().chatView.available, false);
+
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const on = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(on.agentActs.includes(ACT_KIND.CODING_AGENTS_CHAT), "Chat on reads its chat");
+  });
+});
+
+test("a channel chosen in Chat is the listed workspace's, so another workspace listed puts Chat back on For you", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
+  act(() => tab.control().chatView.onOpen());
+  const channel = { kind: CHAT_PLACE.CHANNEL, channelId: "c0ffee00-0000-4000-8000-000000000001" };
+  act(() => tab.control().chatView.onChoose(channel));
+  assert.deepEqual(tab.control().chatView.place, channel);
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  assert.equal(tab.control().chatView.open, true, "Chat stays open");
+  assert.deepEqual(tab.control().chatView.place, FOR_YOU);
+});
+
+test("a chat notification's click, listing the workspace its message waits in and opening Chat in one press, stands on that workspace's Chat", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  act(() => tab.control().onChooseWorkspace(PERSONAL.id));
+  act(() => {
+    tab.control().onChooseWorkspace(ACME.id);
+    tab.control().chatView.onOpen();
+  });
+  assert.equal(tab.control().workspace?.id, ACME.id);
+  assert.equal(tab.control().chatView.open, true);
+  assert.deepEqual(tab.control().chatShown, { workspaceId: ACME.id, planId: null });
+});
+
+test("the task's Chat tab, opened from ⌘K's Chat row, stands on its strip only while the account has Chat on", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const on = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
+  await settle();
+  act(() => on.control().onShowChat(TASK.id));
+  assert.ok(on.control().mainTabs.tabs.includes(MAIN_TAB.CHAT));
+
+  handState({});
+  const off = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
+  await settle();
+  act(() => off.control().onShowChat(TASK.id));
+  assert.ok(!off.control().mainTabs.tabs.includes(MAIN_TAB.CHAT));
+});
+
+test("main is told a task's Chat tab on screen shows only its plan's channel, where the window's Chat shows the whole workspace's", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
+    {},
+    AtomRegistryModule.make(),
+  );
+  await settle();
+  act(() => tab.control().onShowChat(TASK.id));
+  const onTab = tab.shownChats.at(-1);
+  act(() => tab.control().chatView.onOpen());
+
+  assert.deepEqual(onTab, { workspaceId: PERSONAL.id, planId: TASK.id });
+  assert.deepEqual(tab.shownChats.at(-1), { workspaceId: PERSONAL.id, planId: null });
+  assert.deepEqual(tab.control().chatShown, tab.shownChats.at(-1));
+});
+
+test("the task's Chat tab on screen marks the task's plan channel read, as the window's Chat on that channel does", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const me = "b1c2d3e4-0000-4000-8000-000000000001";
+  const channelId = "c0ffee00-0000-4000-8000-000000000002";
+  const answer = {
+    self: me,
+    readSeq: 0,
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    channels: [
+      { id: channelId, kind: CHANNEL_KIND.PLAN, name: "invites", archived: false, planId: TASK.id },
+    ],
+    messages: [
+      {
+        id: "d0d0d0d0-0000-4000-8000-000000000003",
+        seq: 4,
+        touchedSeq: 4,
+        channelId,
+        authorId: "a0a0a0a0-0000-4000-8000-000000000004",
+        blocks: [],
+        mentions: [],
+        postedAt: 1,
+      },
+    ],
+    cursor: "4",
+  };
+  let reads = 0;
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
+    {
+      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
+        reads += 1;
+        return reads === 1 ? Promise.resolve(answer) : new Promise(() => undefined);
+      },
+      [ACT_KIND.CODING_AGENTS_CHAT_POST]: () => Promise.resolve({ readSeq: 0 }),
+    },
+    AtomRegistryModule.make(),
+  );
+  await settle();
+  act(() => tab.control().onShowChat(TASK.id));
+  await vi.waitFor(async () => {
+    await settle();
+    const wrote = tab.payloads.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_CHAT_POST);
+    assert.deepEqual(
+      wrote.map((each) => each.payload),
+      [{ workspaceId: PERSONAL.id, write: { readTo: 4, channelId } }],
+    );
+  });
 });

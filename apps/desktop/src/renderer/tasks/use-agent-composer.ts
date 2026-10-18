@@ -36,7 +36,10 @@ import {
  * is a new message under a new key, so Retry goes with the edit, as it
  * does with a file put on or taken off. The files go with the words and
  * come back into the box with them. A refusal
- * that is for good holds the box, disabled, with its reason under it.
+ * that is for good holds the box, disabled, with its reason under it, and
+ * keeps the line where it went, marked as not delivered, the box drawing
+ * none of the words its draft keeps for Continue, so they show once. The
+ * mark is this tab's alone: a tab opened again draws the words in its box.
  * Another agent's tab starts from nothing of this one's.
  *
  * The words and the files not yet sent are the agent's draft, kept apart from
@@ -118,9 +121,17 @@ function holdsNothing(draft: Draft): boolean {
   return draft.text === "" && draft.attachments.length === 0;
 }
 
+/** The composer as an agent's tab holds it: what it draws, and the words and files its draft keeps, which a closed box draws none of and Continue carries. */
+export interface HeldComposer extends AgentComposerControl {
+  readonly unsent: {
+    readonly words: string;
+    readonly attachments: readonly CodingAgentAttachment[];
+  };
+}
+
 export function useAgentComposer(input: {
   agentId: string;
-  /** The agent's plan, whose repository a refusal's remedy mends; null for an agent with no plan, whose refusal says its words alone. */
+  /** The agent's task, whose repository a refusal's remedy mends; null for an agent with no task, whose refusal says its words alone. */
   taskId: string | null;
   /** The transcript as the tab holds it, which a sent line is read back from. */
   messages: readonly CodingAgentMessage[];
@@ -129,7 +140,7 @@ export function useAgentComposer(input: {
   send: MessageSender;
   /** The service said where the agent stands now, which is newer than the list. */
   onStatus: (agentId: string, run: AgentRun) => void;
-}): AgentComposerControl {
+}): HeldComposer {
   const { agentId, messages } = input;
   const kept = useDraft({ kind: DRAFT_PLACE.AGENT, planId: input.taskId, agentId });
   const [held, setHeld] = useState<Held>(() => fresh(agentId));
@@ -187,14 +198,19 @@ export function useAgentComposer(input: {
             setHeld((was) => ({ ...was, sending: false }));
             return;
           }
-          // The words come back into the agent's draft where it holds nothing newer, and the line out of the transcript.
+          // The words come back into the agent's draft where it holds nothing newer; the line
+          // leaves the transcript, unless the refusal closed the box, when it stays where it
+          // went, marked as not delivered, and the box draws none of the words it holds.
+          const closes = closesComposer(answer.failure);
           update((now) => (holdsNothing(now) ? { ...EMPTY_DRAFT, text, attachments } : now));
           setHeld((was) => ({
             ...was,
             sending: false,
             failed: { clientKey, known, note },
-            closed: closesComposer(answer.failure) ? note.text : was.closed,
-            sent: was.sent.filter((each) => each.id !== id),
+            closed: closes ? note.text : was.closed,
+            sent: closes
+              ? was.sent.map((each) => (each.id === id ? { ...each, undelivered: true } : each))
+              : was.sent.filter((each) => each.id !== id),
           }));
           return;
         }
@@ -203,14 +219,17 @@ export function useAgentComposer(input: {
       });
   };
 
+  // Note that a closed box draws none of its words, because they stand in the transcript as the
+  // line not delivered, and the draft keeps them for Continue, which carries them (`unsent`).
+  const shown = held.closed === undefined ? kept.draft : EMPTY_DRAFT;
   return {
-    draft: kept.draft.text,
+    draft: shown.text,
     // Note that an edit lets Retry go, because the words are no longer the message that failed.
     setDraft: (text) => {
       if (text !== kept.draft.text) setHeld((was) => ({ ...was, failed: undefined }));
       kept.update((was) => ({ ...was, text }));
     },
-    attachments: kept.draft.attachments,
+    attachments: shown.attachments,
     // Note that a file put on or taken off lets Retry go too, since the message is another.
     setAttachments: (next) => {
       setHeld((was) => ({ ...was, failed: undefined }));
@@ -224,5 +243,6 @@ export function useAgentComposer(input: {
       if (held.failed !== undefined) sendDraft(held.failed.clientKey, held.failed.known);
     },
     sent,
+    unsent: { words: kept.draft.text, attachments: kept.draft.attachments },
   };
 }
