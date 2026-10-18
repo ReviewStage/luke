@@ -26,7 +26,7 @@ import {
   ProviderMark,
   UserIcon,
 } from "@luke/ui";
-import type { Actor } from "@luke/ui/actor-model";
+import { ACTOR_KIND, type Actor } from "@luke/ui/actor-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
   AppWindowIcon,
@@ -331,7 +331,11 @@ function MentionGlyph({
       return <AppWindowIcon aria-hidden="true" />;
     case MENTION_KIND.AGENT: {
       const look = mention.taskId === doors.taskId ? doors.agentOf?.(mention.agentId) : undefined;
-      return look === undefined ? (
+      // Note that a tile the page knows no harness of, its agents not yet read say, gives way to the mark read for it.
+      const harnessless =
+        look === undefined ||
+        (look.actor.kind === ACTOR_KIND.AGENT && look.actor.provider === undefined);
+      return harnessless ? (
         <KnownAgentMark
           agentId={mention.agentId}
           taskId={mention.taskId}

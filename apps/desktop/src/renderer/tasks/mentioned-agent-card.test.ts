@@ -3,21 +3,28 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
+import {
+  encodeMention,
+  MENTION_KIND,
+  type MentionPlace,
+  mentionMarkdown,
+} from "@luke/features/mention-link";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
+import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
+import { MentionNodeChip } from "./mention-chip";
 import { MentionedAgents } from "./mentioned-agent-card";
 import { TranscriptWords } from "./transcript-blocks";
 import { WordsWorkspace } from "./use-link-standing";
@@ -200,8 +207,11 @@ const LISTING_STATE: AppStateSnapshot = {
   },
 };
 
-/** The words drawn as the Inbox draws them, off any task's page, in the workspace given, main's document being `state`. */
-async function drawn(text: string, state: AppStateSnapshot = STATE): Promise<HTMLElement> {
+/** The words drawn as the Inbox draws them, off any task's page, in the workspace given, main's document being `state`; or, given an element, that element in their place. */
+async function drawn(
+  text: string | ReactElement,
+  state: AppStateSnapshot = STATE,
+): Promise<HTMLElement> {
   fakeAppBridge({
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
@@ -214,7 +224,7 @@ async function drawn(text: string, state: AppStateSnapshot = STATE): Promise<HTM
   root = createRoot(container);
   const words = createElement(WordsWorkspace, {
     value: ACME.id,
-    children: createElement(TranscriptWords, { text }),
+    children: typeof text === "string" ? createElement(TranscriptWords, { text }) : text,
   });
   act(() =>
     root?.render(
@@ -297,6 +307,90 @@ test("a chip of an agent the window lists not reads its task's agents once as it
   assert.ok(chip?.querySelector(".mention-chip-glyph .harness-mark"), "the chip wears its harness");
   const card = await cardOf(chip);
   assert.equal(card.name, "Prorate seat changes");
+  assert.deepEqual(agentReads(), [
+    {
+      kind: ACT_KIND.CODING_AGENTS_LIST,
+      payload: { taskId: BILLING.id, includeArchived: true },
+    },
+  ]);
+});
+
+test("a mention of an agent the window lists not, laid in a message box as an Inbox answer's is, wears its harness, its task's agents read once", async () => {
+  // The box stands on another task's page, whose doors know only that task's agents.
+  const container = await drawn(
+    createElement(MentionNodeChip, {
+      mention: {
+        name: "Prorate seat changes",
+        target: encodeMention(
+          { kind: MENTION_KIND.AGENT, taskId: BILLING.id, agentId: PRORATE.id },
+          PLACE,
+        ),
+      },
+      doors: {
+        taskId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+        place: PLACE,
+        anchors: new Set<string>(),
+        onOpenTask: () => undefined,
+        onOpenFile: undefined,
+        agentOf: () => ({
+          actor: {
+            kind: ACTOR_KIND.AGENT,
+            name: "Coding agent",
+            provider: undefined,
+            state: ACTOR_STATE.REST,
+          },
+          card: null,
+        }),
+      },
+    }),
+  );
+
+  assert.ok(
+    container.querySelector(".mention-chip-glyph .harness-mark"),
+    "the box's chip wears its harness",
+  );
+  assert.deepEqual(agentReads(), [
+    {
+      kind: ACT_KIND.CODING_AGENTS_LIST,
+      payload: { taskId: BILLING.id, includeArchived: true },
+    },
+  ]);
+});
+
+test("a mention of its own task's agent whose tile the page knows no harness of wears the harness read for it", async () => {
+  // The box stands on the agent's own task's page, whose agents are not yet read.
+  const container = await drawn(
+    createElement(MentionNodeChip, {
+      mention: {
+        name: "Prorate seat changes",
+        target: encodeMention(
+          { kind: MENTION_KIND.AGENT, taskId: BILLING.id, agentId: PRORATE.id },
+          PLACE,
+        ),
+      },
+      doors: {
+        taskId: BILLING.id,
+        place: PLACE,
+        anchors: new Set<string>(),
+        onOpenTask: () => undefined,
+        onOpenFile: undefined,
+        agentOf: () => ({
+          actor: {
+            kind: ACTOR_KIND.AGENT,
+            name: "Coding agent",
+            provider: undefined,
+            state: ACTOR_STATE.REST,
+          },
+          card: null,
+        }),
+      },
+    }),
+  );
+
+  assert.ok(
+    container.querySelector(".mention-chip-glyph .harness-mark"),
+    "the box's chip wears its harness",
+  );
   assert.deepEqual(agentReads(), [
     {
       kind: ACT_KIND.CODING_AGENTS_LIST,
