@@ -91,6 +91,20 @@ Dana Moreno (admin, `dana@acme.dev`), Jordan Lee (member,
 `jordan@acme.dev`), and sam@acme.dev, the teammate being invited. Avatars
 are initials on soft pastels (`#f2b880`, `#9fd8b4`, `#c7b4f5`).
 
+## Who made what (0.15.0 on)
+
+`team-world.ts` in `staging/releases/v0.15.0.patch` gives acme's tasks their
+creators and their agents their starters: Dean created Teammate invitations and
+started "Add teammate invitations"; Dana started "Invite emails" and created
+Usage-based billing, Webhook retries, and Onboarding checklist; Jordan, Priya,
+and Theo created the rest. Later pull requests: #217 "Expire invite links after
+7 days" (acme/relay, open), #207 and #209 merged on acme/relay, #131 and #135 on
+acme/web, #88, #90, and #91 on acme/ledger. Linear issues are `REL-…` (REL-142
+"Invite links last 7 days", In Progress). On
+GitHub Dean is `dastratakos`, Dana `danamoreno`, Jordan `jordanlee`. The product
+mockups an agent shows are Relay's Members page, invite dialog, and accept page
+(`relay-pictures.ts`).
+
 ## Automations
 
 From 0.14.0 (behind its experiment): **Morning Sentry triage**, acme's
