@@ -20,6 +20,7 @@ export type {
   CampusObject,
   CampusShape,
   PieceKind,
+  ScreenBounds,
   ShapeMark,
 } from "./campus-drawing.js";
 export {
@@ -37,6 +38,7 @@ export {
   campusGradientStopsOf,
   campusObjectsOf,
   campusProject,
+  campusSeen,
   containerOutlineOf,
   containerShadowOf,
   containerShapesOf,

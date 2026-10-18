@@ -33,6 +33,7 @@ import {
   campusPlanOf,
   campusProject,
   campusReadingOf,
+  campusSeen,
   containerOutlineOf,
   containerShadowOf,
   containerShapesOf,
@@ -54,6 +55,7 @@ import {
   type PlacedContainer,
   plotShapesOf,
   routePointsOf,
+  type ScreenBounds,
   SHAPE_MARK,
   type ShapeMark,
   shadowFillOf,
@@ -153,9 +155,6 @@ const WHEEL_ZOOM = { WHEEL: 0.0022, PINCH: 0.01 } as const;
 const CULL_MARGIN = 0.3;
 const NAME_REFIT = 0.12;
 
-/** How far, on screen at a scale of one, the largest building or a lot's stack reaches from the point it is culled by. */
-const CULL_REACH = 180;
-
 /** A big campus names only buildings where something happens; a smaller one names them all. */
 const NAME_ALL_UP_TO = 12;
 
@@ -253,20 +252,12 @@ interface Camera {
   s: number;
 }
 
-/** A rectangle on screen at a scale of one, in the campus's own projected units. */
-interface Window {
-  readonly x0: number;
-  readonly x1: number;
-  readonly y0: number;
-  readonly y1: number;
-}
-
 /** What the drawing reads off the camera: how near it is, what is culled to, and the scale the names were fitted at. */
 interface Frame {
   /** Whether the camera has been read once: nothing is drawn before it, so a first draw is drawn once. */
   readonly settled: boolean;
   readonly detail: CampusDetail;
-  readonly culled: Window | null;
+  readonly culled: ScreenBounds | null;
   readonly nameScale: number;
 }
 
@@ -661,7 +652,7 @@ const Districts = memo(function Districts({
 });
 
 /** The rectangle on screen the camera shows, at a scale of one, grown by `margin` of its size past each edge. */
-function windowOf(camera: Camera, width: number, height: number, margin: number): Window {
+function windowOf(camera: Camera, width: number, height: number, margin: number): ScreenBounds {
   return {
     x0: (-camera.x - width * margin) / camera.s,
     x1: (width * (1 + margin) - camera.x) / camera.s,
@@ -670,24 +661,9 @@ function windowOf(camera: Camera, width: number, height: number, margin: number)
   };
 }
 
-function within(outer: Window, inner: Window): boolean {
+function within(outer: ScreenBounds, inner: ScreenBounds): boolean {
   return (
     inner.x0 >= outer.x0 && inner.x1 <= outer.x1 && inner.y0 >= outer.y0 && inner.y1 <= outer.y1
-  );
-}
-
-function seen(
-  window: Window | null,
-  point: { readonly x: number; readonly y: number; readonly z: number },
-): boolean {
-  if (window === null) return true;
-  // Note that a thing is culled by its middle, so the window is widened by the most the largest building stands out from its own.
-  const [x, y] = campusProject(point.x, point.y, point.z);
-  return (
-    x > window.x0 - CULL_REACH &&
-    x < window.x1 + CULL_REACH &&
-    y > window.y0 - CULL_REACH &&
-    y < window.y1 + CULL_REACH
   );
 }
 
@@ -1160,7 +1136,7 @@ export function CampusScene({
         ? objects
         : objects.filter(
             (object) =>
-              seen(frame.culled, object.at) ||
+              campusSeen(frame.culled, object.at) ||
               (object.kind === CAMPUS_OBJECT.BUILDING && object.task.id === openTask),
           ),
     [objects, frame.culled, openTask],
@@ -1298,7 +1274,11 @@ export function CampusScene({
           ? "Not in code yet"
           : (view.zoneByPath.get(district.path)?.label ?? district.path);
       if (
-        seen(frame.culled, { x: district.x + district.w, y: district.y + district.d, z: 0 }) &&
+        campusSeen(frame.culled, {
+          x: district.x + district.w,
+          y: district.y + district.d,
+          z: 0,
+        }) &&
         fits(x, y + 44 / scale, text)
       ) {
         placed.push({ x, y, text, dot: null, painted: true });

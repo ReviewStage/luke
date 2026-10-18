@@ -38,6 +38,7 @@ import {
   campusObjectsOf,
   campusPlanOf,
   campusReadingOf,
+  campusSeen,
   containerLengthOf,
   GATE_LANE,
   NOT_IN_CODE,
@@ -404,4 +405,48 @@ test("only so many stacks smoke at once, and none far out", () => {
   const plan = campusPlanOf(campus, view, CAMPUS_LAYOUT.TOWN);
   assert.equal(smokeRationOf(campus.tasks, plan.plots, CAMPUS_DETAIL.NEAR).size, 24);
   assert.equal(smokeRationOf(campus.tasks, plan.plots, CAMPUS_DETAIL.FAR).size, 0);
+});
+
+/** The furthest each way a building's drawn shapes reach on screen at a scale of one. */
+function drawnExtent(pieces: ReturnType<typeof buildingPiecesOf>) {
+  const points = pieces.flatMap((piece) =>
+    piece.shapes.flatMap((shape) =>
+      (shape.attributes.points ?? "")
+        .split(" ")
+        .filter((pair) => pair !== "")
+        .map((pair) => pair.split(",").map(Number)),
+    ),
+  );
+  const xs = points.map(([x = 0]) => x);
+  const ys = points.map(([, y = 0]) => y);
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+}
+
+test("a culled campus keeps every building whose walls still cross the screen's edge, though its middle has passed it", () => {
+  const tasks = manyTasks(30);
+  const world = factoryWorldOf({ agents: tasks.map((task, n) => agentOn(n + 1, task)) });
+  const { view, campus } = campusOf(world, tasks);
+  for (const layout of [CAMPUS_LAYOUT.TOWN, CAMPUS_LAYOUT.DISTRICTS]) {
+    const plan = campusPlanOf(campus, view, layout);
+    for (const object of campusObjectsOf(plan, campus.tasks, campus.planned)) {
+      if (object.kind !== CAMPUS_OBJECT.BUILDING) continue;
+      const drawn = drawnExtent(
+        buildingPiecesOf(object.task, object.slot, { ...NEAR, big: true }, true),
+      );
+      const far = 1e6;
+      // A screen whose one edge just crosses the building's furthest wall, each way.
+      const edges = [
+        { x0: drawn.x1 - 1, x1: far, y0: -far, y1: far },
+        { x0: -far, x1: drawn.x0 + 1, y0: -far, y1: far },
+        { x0: -far, x1: far, y0: drawn.y1 - 1, y1: far },
+        { x0: -far, x1: far, y0: -far, y1: drawn.y0 + 1 },
+      ];
+      for (const edge of edges)
+        assert.ok(campusSeen(edge, object.at), `${object.task.name} is culled while it shows`);
+      assert.equal(
+        campusSeen({ x0: drawn.x1 + 400, x1: far, y0: -far, y1: far }, object.at),
+        false,
+      );
+    }
+  }
 });

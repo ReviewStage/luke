@@ -7,6 +7,7 @@ import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { factoryWorldViewOf } from "@luke/ui/factory-world";
 import {
   areaOf,
   FACTORY_NOW,
@@ -30,7 +31,9 @@ import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand, useAppCommand } from "../../app-commands";
 import { sideBundles } from "../../bundle-loader";
 import type { TasksControl } from "../../tasks/use-tasks-tab";
+import { PICK_KIND, WORLD_LAYER, type WorldState } from "../world";
 import { FactoryWorldPage } from "../world-page";
+import { CampusScene } from "./campus-scene";
 
 /**
  * campus-scene.test.ts -- the campus as the Factory page draws it: a building for each listed task of the snapshot's repository and a container for each open pull request, with no Three.js loaded; a press on a building opening its card and its door to the task; a layer switched off hidden; the Town and Districts layouts; motion held still; and Esc stepping back before it leaves.
@@ -292,4 +295,66 @@ test("a press that leaves the campus before it drags, and is let go outside, nev
   act(() => svg.dispatchEvent(new MouseEvent("pointerleave", { clientX: 12, clientY: 10 })));
   pointer("pointermove", 200, 0);
   assert.equal(camera?.style.transform, before);
+});
+
+test("an open building redraws its line's containers when a later snapshot changes only its pull request's lines", () => {
+  const worldWith = (additions: number): FactoryWorld =>
+    factoryWorldOf({
+      agents: [
+        factoryAgentOf(1, {
+          taskId: INVITES.id,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          pullRequest: factoryPullRequestOf({
+            number: 3501,
+            areas: [areaOf("apps/web", additions)],
+          }),
+        }),
+      ],
+    });
+  const stateOf = (world: FactoryWorld): WorldState => ({
+    view: factoryWorldViewOf(world),
+    snapshot: world,
+    live: true,
+    selected: { kind: PICK_KIND.TASK, id: INVITES.id },
+    hovered: undefined,
+    blast: new Map(),
+    layers: {
+      [WORLD_LAYER.PLANNED]: true,
+      [WORLD_LAYER.BUILDING]: true,
+      [WORLD_LAYER.SHIPPED]: true,
+      [WORLD_LAYER.DEFECTS]: true,
+    },
+    still: true,
+    dark: false,
+  });
+  const registry = AtomRegistry.make();
+  const home = { current: undefined };
+  const draw = (world: FactoryWorld) =>
+    act(() =>
+      root?.render(
+        onRegistry(
+          registry,
+          createElement(CampusScene, {
+            state: stateOf(world),
+            shown: true,
+            home,
+            onHover: () => undefined,
+            onPick: () => undefined,
+            onAway: () => undefined,
+            tasks: [INVITES],
+          }),
+        ),
+      ),
+    );
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  const line = () =>
+    [...container.querySelectorAll(".factory-campus-inside polygon")]
+      .map((shape) => shape.getAttribute("points"))
+      .join(" ");
+  draw(worldWith(40));
+  const small = line();
+  assert.notEqual(small, "", "the open building draws its line");
+  draw(worldWith(200));
+  assert.notEqual(line(), small, "the packed container grew with its pull request");
 });

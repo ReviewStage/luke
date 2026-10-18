@@ -1019,7 +1019,7 @@ interface YardAnchors {
 }
 
 /** A rectangle on screen at a scale of one. */
-interface ScreenBounds {
+export interface ScreenBounds {
   readonly x0: number;
   readonly x1: number;
   readonly y0: number;
@@ -2022,4 +2022,25 @@ export function campusObjectsOf(
   const depth = (object: CampusObject) =>
     campusDepthOf(object.at.x, object.at.y) + object.at.z * 0.5;
   return objects.sort((left, right) => depth(left) - depth(right));
+}
+
+/** How far, on screen at a scale of one, the largest building or a stack of containers reaches from the point it is culled by. */
+const CULL_REACH = 180;
+
+/**
+ * Whether a thing standing at `point` may show in `window`, a rectangle on
+ * screen at a scale of one; anything does where nothing is culled. Note that
+ * a thing is culled by one point, its middle, so the window is widened by
+ * the most anything reaches from its own: a building whose middle has passed
+ * the edge while its walls still cross it is drawn.
+ */
+export function campusSeen(window: ScreenBounds | null, point: CampusPoint): boolean {
+  if (window === null) return true;
+  const [x, y] = campusProject(point.x, point.y, point.z);
+  return (
+    x > window.x0 - CULL_REACH &&
+    x < window.x1 + CULL_REACH &&
+    y > window.y0 - CULL_REACH &&
+    y < window.y1 + CULL_REACH
+  );
 }
