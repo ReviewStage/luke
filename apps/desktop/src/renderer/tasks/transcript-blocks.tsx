@@ -151,9 +151,9 @@ function TranscriptLink({
   const openLink = useOpenLink();
   if (href === undefined || !opensAsLink(href)) {
     return (
-      <span className="text-link-inert" title={href}>
-        {children}
-      </span>
+      <Tooltip label={href}>
+        <span className="text-link-inert">{children}</span>
+      </Tooltip>
     );
   }
   return (

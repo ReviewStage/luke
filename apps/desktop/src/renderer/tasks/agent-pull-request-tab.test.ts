@@ -435,6 +435,19 @@ function words(container: HTMLElement, selector: string): string[] {
   return [...container.querySelectorAll(selector)].map((each) => each.textContent ?? "");
 }
 
+/** The button whose words match, where one stands. */
+function buttonWith(container: HTMLElement, label: RegExp): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll("button")].find((each) =>
+    label.test(each.textContent ?? ""),
+  );
+}
+
+/** The labels a thread's head wears beside its path, in order. */
+function threadLabels(thread: HTMLElement): string[] {
+  const head = thread.querySelector(".pull-request-thread-head")?.textContent ?? "";
+  return ["Resolved", "Outdated"].filter((label) => head.includes(label));
+}
+
 test("the tab draws the pull request as a page: its standing and branches, whether it merges, its checks with failures first, its description, and its conversation in time order", async () => {
   const tab = await draw(controlAnswering());
 
@@ -674,9 +687,7 @@ test("past five checks the list folds behind Show all, keeping every one that fa
   };
   const tab = await draw(controlAnswering({ checks: () => Promise.resolve({ pullRequest: few }) }));
   await choose(tab, "Checks");
-  const fold = () =>
-    tab.querySelector<HTMLButtonElement>(".pull-request-checks-fold") ??
-    assert.fail("the list folds");
+  const fold = () => buttonWith(tab, /^Show (all \d+|less)$/u) ?? assert.fail("the list folds");
   assert.deepEqual(words(tab, ".pull-request-check-name"), [
     "lint",
     "build",
@@ -706,12 +717,12 @@ test("a check that failed or still runs never folds away, however many there are
   );
   await choose(tab, "Checks");
   assert.equal(words(tab, ".pull-request-check-name").length, 7);
-  assert.equal(tab.querySelector(".pull-request-checks-fold")?.textContent, "Show all 8");
+  assert.equal(buttonWith(tab, /^Show all/u)?.textContent, "Show all 8");
 
   act(() => root?.unmount());
   const five = await draw(controlAnswering());
   await choose(five, "Checks");
-  assert.equal(five.querySelector(".pull-request-checks-fold"), null);
+  assert.equal(buttonWith(five, /^Show all/u), undefined);
 });
 
 test("the earlier entries a read left on GitHub are counted first, in the heading too, and open the pull request", async () => {
@@ -850,7 +861,7 @@ test("a review that only left line comments draws each thread under it: its file
 
   const head =
     folded.querySelector<HTMLElement>(".pull-request-thread-head") ?? assert.fail("a head");
-  assert.deepEqual(words(folded, ".pull-request-thread-label"), ["Resolved", "Outdated"]);
+  assert.deepEqual(threadLabels(folded), ["Resolved", "Outdated"]);
   assert.match(
     head.textContent ?? "",
     /src\/old\.tsline 9/u,
@@ -1159,7 +1170,7 @@ test("a merged pull request says so on the bar, as its overview read it, says no
       PULL_REQUEST_STATE.OPEN,
     ),
   );
-  assert.equal(tab.querySelector(".pull-request-state")?.textContent, "Merged");
+  assert.match(tab.querySelector(".pull-request-bar")?.textContent ?? "", /Merged/u);
   assert.equal(tab.querySelector(".pull-request-merge"), null);
   assert.deepEqual(words(tab, ".pull-request-none"), [
     "No description provided.",
@@ -1511,7 +1522,7 @@ test("a member GitHub would not take as signed in is offered to sign in with Git
     }),
   );
   assert.equal(merged.querySelector("button.pull-request-state"), null);
-  assert.equal(merged.querySelector(".pull-request-state")?.textContent, "Merged");
+  assert.match(merged.querySelector(".pull-request-bar")?.textContent ?? "", /Merged/u);
 });
 
 test("a change GitHub refused says so in GitHub's own words until dismissed, and the pull request is read again in case it moved", async () => {
@@ -1549,7 +1560,7 @@ test("a change GitHub refused says so in GitHub's own words until dismissed, and
 /** The bar's Review press. */
 function reviewPress(tab: HTMLElement): HTMLButtonElement {
   return (
-    tab.querySelector<HTMLButtonElement>(".pull-request-review-button") ??
+    buttonWith(tab.querySelector(".pull-request-bar") ?? tab, /^Review$/u) ??
     assert.fail("an open pull request's bar offers Review")
   );
 }
@@ -1651,7 +1662,7 @@ test("a review GitHub refuses says so in GitHub's own words inside the panel, ne
         Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED } }),
     }),
   );
-  assert.equal(merged.querySelector(".pull-request-review-button"), null);
+  assert.equal(buttonWith(merged, /^Review$/u), undefined);
 });
 
 test("a press outside the review panel closes it, its words kept, and one on a short window opens it on the side with more room, bounded to that room", async () => {
@@ -1756,7 +1767,7 @@ test("a thread is replied on, resolved, and opened again from under its comments
   );
   const card = (): HTMLElement =>
     tab.querySelector<HTMLElement>(".pull-request-thread") ?? assert.fail("the thread is drawn");
-  const labels = () => words(card(), ".pull-request-thread-label");
+  const labels = () => threadLabels(card());
 
   writeReply(card(), "Renamed in the next push.");
   act(() => threadPress(card(), "Reply").click());

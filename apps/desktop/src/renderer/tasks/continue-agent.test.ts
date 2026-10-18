@@ -377,14 +377,15 @@ test("a failed turn's end line ends on Continue in new agent, which continues th
 
   act(() => button.click());
   assert.deepEqual(tab.continued, [{ agentId: SOURCE, note: undefined, attachments: [] }]);
-  assert.equal(button.disabled, true, "held while the press is out");
   assert.equal(button.getAttribute("aria-busy"), "true");
+  act(() => button.click());
+  assert.equal(tab.continued.length, 1, "held while the press is out");
 
   await act(async () =>
     refuse({ reason: FAILURE_REASON.OTHER, text: "The agent could not be started. Try again." }),
   );
   await settle();
-  assert.equal(button.disabled, false);
+  assert.equal(button.getAttribute("aria-busy"), null);
   assert.match(line.textContent ?? "", /The agent could not be started\. Try again\./);
 });
 

@@ -25,7 +25,6 @@ import { SHOW_PAGE_TOOL_NAME } from "@luke/features/page-wire";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
-  planningPullRequestParamsSchema,
   TASK_CALL_FAILURE,
   TASK_WORK_STATE,
   TASKS_READ,
@@ -74,6 +73,7 @@ import {
   tasksPictureParamsSchema,
   tasksPinParamsSchema,
   tasksPinRepositoryParamsSchema,
+  tasksPullRequestParamsSchema,
   tasksRenameParamsSchema,
   tasksRepositoriesParamsSchema,
   tasksRevisionParamsSchema,
@@ -1224,7 +1224,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // its title and where it stands are read again on the next ask.
     [GATEWAY_METHOD.TASKS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(planningPullRequestParamsSchema)(unparsedWire(params));
+        const read = readEither(tasksPullRequestParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) {
           return yield* invalid(
             "reading a pull request names a workspace, its repository, and the pull request's number",

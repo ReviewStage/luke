@@ -90,7 +90,7 @@ export const chatMember = pgTable(
     userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
     /** The coding agent, on an agent's member; null once the agent is deleted. */
     agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
-    /** The plan, on a planner's member; null once the plan is deleted. */
+    /** The task, on its Luke's member; null once the task is deleted. */
     planId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
     /** The member's handle, without its `@`, minted once. */
     handle: text("handle").notNull(),
@@ -112,7 +112,7 @@ export const chatMember = pgTable(
     // A handle names one person or agent of the workspace; every planner is `luke`.
     uniqueIndex("chat_member_organization_handle")
       .on(table.organizationId, table.handle)
-      .where(sql`${table.kind} <> ${literal(MEMBER_KIND.PLANNER)}`),
+      .where(sql`${table.kind} <> ${literal(MEMBER_KIND.LUKE)}`),
     uniqueIndex("chat_member_organization_kind_ordinal").on(
       table.organizationId,
       table.kind,
@@ -128,7 +128,7 @@ export const chatMember = pgTable(
       "chat_member_id_of_kind",
       sql`(${table.kind} = ${literal(MEMBER_KIND.HUMAN)}) = (${table.userId} is not null)
         and (${table.agentId} is null or ${table.kind} = ${literal(MEMBER_KIND.AGENT)})
-        and (${table.planId} is null or ${table.kind} = ${literal(MEMBER_KIND.PLANNER)})`,
+        and (${table.planId} is null or ${table.kind} = ${literal(MEMBER_KIND.LUKE)})`,
     ),
   ],
 );

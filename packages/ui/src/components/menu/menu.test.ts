@@ -56,7 +56,7 @@ function Harness({ groups }: { groups: readonly (readonly MenuEntry[])[] }): Rea
 }
 
 /** A menu of Rename, a dimmed Move, and Archive, ruled from a red Delete. */
-function planGroups(chosen: Chosen): readonly (readonly MenuEntry[])[] {
+function taskGroups(chosen: Chosen): readonly (readonly MenuEntry[])[] {
   return [
     [
       action("Rename", chosen),
@@ -136,7 +136,7 @@ function pointerMove(from: HTMLElement | null, to: HTMLElement): void {
 
 test("the button opens the menu on its first item, the arrows pass over a dimmed item and wrap, and a choice acts and hands focus back", () => {
   const chosen: Chosen = [];
-  mount(createElement(Harness, { groups: planGroups(chosen) }));
+  mount(createElement(Harness, { groups: taskGroups(chosen) }));
   const more = button("More");
   press(more);
   expect(more.getAttribute("aria-expanded")).toBe("true");
@@ -162,7 +162,7 @@ test("the button opens the menu on its first item, the arrows pass over a dimmed
 });
 
 test("Escape closes the menu with focus back on its button, and a second press on the button closes it too", () => {
-  mount(createElement(Harness, { groups: planGroups([]) }));
+  mount(createElement(Harness, { groups: taskGroups([]) }));
   const more = button("More");
   press(more);
   key("Escape");
@@ -175,7 +175,7 @@ test("Escape closes the menu with focus back on its button, and a second press o
 });
 
 test("Tab closes the menu and hands focus back to its button, for the browser to go on from", () => {
-  mount(createElement(Harness, { groups: planGroups([]) }));
+  mount(createElement(Harness, { groups: taskGroups([]) }));
   press(button("More"));
   key("Tab");
   expect(openMenu()).toBeNull();
@@ -184,7 +184,7 @@ test("Tab closes the menu and hands focus back to its button, for the browser to
 
 test("a press elsewhere closes the menu and takes nothing it was offered", () => {
   const chosen: Chosen = [];
-  mount(createElement(Harness, { groups: planGroups(chosen) }));
+  mount(createElement(Harness, { groups: taskGroups(chosen) }));
   press(button("More"));
   act(() => {
     document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
@@ -195,7 +195,7 @@ test("a press elsewhere closes the menu and takes nothing it was offered", () =>
 
 test("a dimmed item is unavailable and takes no press", () => {
   const chosen: Chosen = [];
-  mount(createElement(Harness, { groups: planGroups(chosen) }));
+  mount(createElement(Harness, { groups: taskGroups(chosen) }));
   press(button("More"));
   const move = button("Move");
   expect(move.disabled).toBe(true);
@@ -205,7 +205,7 @@ test("a dimmed item is unavailable and takes no press", () => {
 });
 
 test("a right-click opens the same menu, and Escape hands focus to what was clicked", () => {
-  mount(createElement(Harness, { groups: planGroups([]) }));
+  mount(createElement(Harness, { groups: taskGroups([]) }));
   const row = document.querySelector("p") ?? expect.fail("the row is drawn");
   act(() => {
     row.dispatchEvent(
@@ -298,7 +298,7 @@ test("the menu key or Shift-F10 on a row opens its menu under it on the first it
         : createElement(Menu, {
             label: "Plan actions",
             menu: menu.drawn,
-            groups: planGroups([]),
+            groups: taskGroups([]),
             onClose: menu.close,
           }),
     );

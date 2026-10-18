@@ -5971,36 +5971,15 @@ button.integration-tool-head:hover,
   font-size: var(--luke-type-caption-size);
 }
 
+/* The send stands at the bar's end, past its hints. */
+.chat-composer-bar > :last-child {
+  margin-inline-start: auto;
+}
+
 .chat-composer[data-compact="true"] .chat-composer-bar {
   position: absolute;
   right: var(--luke-space-8);
   bottom: 6px;
-}
-
-/* Chat's send is round rather than an icon button's square, as a chat's own
-   send is drawn everywhere, and fills with the accent once there is
-   something to send, so the one press that sends stands apart from the
-   bar's hints. */
-.chat-send {
-  display: inline-grid;
-  width: 26px;
-  height: 26px;
-  margin-left: auto;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text-muted);
-}
-
-.chat-send:not(:disabled) {
-  background: var(--luke-color-accent);
-  color: var(--luke-color-on-accent);
-}
-
-.chat-send svg {
-  width: 14px;
-  height: 14px;
 }
 
 .chat-composer-note {
@@ -6085,31 +6064,10 @@ button.integration-tool-head:hover,
 
 .chat-notice-place {
   min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.chat-notice-open {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-  margin-left: auto;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-body-size);
-  white-space: nowrap;
-}
-
-.chat-notice-open:hover {
-  color: var(--luke-color-text);
-}
-
-.chat-notice-open svg {
-  width: 12px;
-  height: 12px;
 }
 
 .chat-empty {

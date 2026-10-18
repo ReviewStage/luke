@@ -747,7 +747,9 @@ test("a line a chat notice wrote draws as a card from its sender, naming the cha
     card.querySelector(".chat-notice-words")?.textContent ?? "",
     /^@agent-1 are you changing memberships columns\?/u,
   );
-  const open = card.querySelector<HTMLButtonElement>(".chat-notice-open");
+  const open = [...card.querySelectorAll("button")].find(
+    (each) => each.textContent === "Open in Chat",
+  );
   act(() => open?.click());
   assert.deepEqual(opened, [{ kind: CHAT_PLACE.CHANNEL, channelId: channelOf(43) }]);
 });
@@ -761,7 +763,12 @@ test("where the window holds no chat, a notice's card says its sender and place 
     card?.querySelector(".chat-notice-words")?.textContent?.trim(),
     "Chat: @agent-2 in #teammate-invitations asked about memberships.",
   );
-  assert.equal(card?.querySelector(".chat-notice-open"), null);
+  assert.equal(
+    [...(card?.querySelectorAll("button") ?? [])].some(
+      (each) => each.textContent === "Open in Chat",
+    ),
+    false,
+  );
 });
 
 test("with Chat off, a line a chat notice wrote is drawn as the plain line it is, with no card and nothing to open", () => {
