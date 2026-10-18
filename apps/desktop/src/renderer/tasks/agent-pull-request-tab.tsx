@@ -1014,12 +1014,15 @@ function PullRequestHead({
   parts,
   now,
   repository,
+  shown,
   writes,
 }: {
   parts: OverviewParts;
   now: number;
   /** The agent's repository, which the merge box keeps the method chosen by. */
   repository: string | null;
+  /** Whether the panel is on screen, which a merge asked about goes with. */
+  shown: boolean;
   writes: PullRequestWrites;
 }): React.JSX.Element {
   const { pullRequest: part, conversation } = parts;
@@ -1070,7 +1073,12 @@ function PullRequestHead({
         <MergeLine
           pullRequest={pullRequest}
           actions={
-            <MergeActions pullRequest={pullRequest} repository={repository} writes={writes} />
+            <MergeActions
+              pullRequest={pullRequest}
+              repository={repository}
+              shown={shown}
+              writes={writes}
+            />
           }
         />
       ) : null}
@@ -1647,7 +1655,13 @@ export function AgentPullRequestTab({
           <>
             <header className="pull-request-header">
               <HeaderTitle title={title} writes={writes} />
-              <PullRequestHead parts={parts} now={now} repository={repository} writes={writes} />
+              <PullRequestHead
+                parts={parts}
+                now={now}
+                repository={repository}
+                shown={shown}
+                writes={writes}
+              />
             </header>
             <Tabs<PullRequestView>
               label="Pull request"

@@ -1672,13 +1672,13 @@ function merging(merge: MergeState, merged: Partial<PullRequestMerging> = {}): C
 
 /** The merge box's presses, by their words. */
 function boxPresses(tab: HTMLElement): string[] {
-  return words(tab, ".merge-box-press");
+  return words(tab, ".merge-box-actions .luke-button-words");
 }
 
 /** The merge box's press of the words given, pressed. */
 async function pressBox(tab: HTMLElement, label: string): Promise<void> {
   const press =
-    [...tab.querySelectorAll<HTMLButtonElement>(".merge-box-press")].find(
+    [...tab.querySelectorAll<HTMLButtonElement>(".merge-box-actions button")].find(
       (each) => each.textContent === label,
     ) ?? assert.fail(`the merge box offers ${label}`);
   act(() => press.click());
@@ -2531,4 +2531,34 @@ test("a review thread on its line in Files changed is replied on and resolved fr
     ],
     [AGENT.id, { action: PULL_REQUEST_ACTION.RESOLVE_THREAD, threadId: "PRRT_flag" }],
   ]);
+});
+
+test("a merge asked about goes with its panel: hidden, the question is let go and nothing merges, and shown again it asks nothing", async () => {
+  let show: (shown: boolean) => void = () => undefined;
+  function Hiding() {
+    const [shown, setShown] = useState(true);
+    show = setShown;
+    return createElement(AgentPullRequestTab, {
+      agentId: AGENT.id,
+      control: merging(MERGE_STATE.CLEAN),
+      shown,
+      repository: "acme/relay",
+      tree: { open: false, onToggle: () => undefined },
+      view: PULL_REQUEST_VIEW.CONVERSATION,
+      onView: () => undefined,
+    });
+  }
+  const tab = await drawn(createElement(Hiding));
+  // Note that the question is read as whether it stands, so a failure prints a word rather than a whole DOM node.
+  const question = () => document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
+
+  await pressBox(tab, "Squash and merge");
+  assert.equal(question(), true, "the merge is asked about");
+  act(() => show(false));
+  assert.equal(question(), false, "the question goes as its panel hides");
+  act(() => show(true));
+  await settle();
+
+  assert.equal(question(), false, "the panel comes back asking nothing");
+  assert.deepEqual(changes, []);
 });
