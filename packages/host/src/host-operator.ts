@@ -103,6 +103,12 @@ import {
   providerKeysAnswerViewSchema,
 } from "@luke/features/coding-agent-view";
 import {
+  FACTORY_WORLD_CALL_FAILURE,
+  type FactoryWorldParams,
+  type FactoryWorldView,
+  factoryWorldViewSchema,
+} from "@luke/features/factory-world-view";
+import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationAccountView,
   type IntegrationConnectView,
@@ -539,6 +545,8 @@ export interface HostOperator {
   issueCreate(params: IssueCreateParams): Effect.Effect<IssueView>;
   /** One issue changed; the issue as it then stands, or why it is unchanged. */
   issueChange(params: IssueChangeParams): Effect.Effect<IssueView>;
+  /** One workspace's Factory world as it stands now, null where it has no repository to draw; or why there is none. */
+  factoryWorld(params: FactoryWorldParams): Effect.Effect<FactoryWorldView>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   codingAgentPullRequest(
     params: CodingAgentPullRequestParams,
@@ -737,6 +745,9 @@ const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as
 
 /** An issue call that reached no answer, as every issue method answers one. */
 const ISSUE_UNANSWERED = { failure: ISSUE_CALL_FAILURE.UNANSWERED } as const;
+
+/** A world call that reached no answer. */
+const FACTORY_WORLD_UNANSWERED = { failure: FACTORY_WORLD_CALL_FAILURE.UNANSWERED } as const;
 
 /** What an integration call the host could not answer is drawn as. */
 const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
@@ -1565,6 +1576,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(client.call(GATEWAY_METHOD.ISSUES_CREATE, params), issueAnswer(issueViewSchema)),
     issueChange: (params) =>
       Effect.map(client.call(GATEWAY_METHOD.ISSUES_CHANGE, params), issueAnswer(issueViewSchema)),
+    factoryWorld: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.FACTORY_WORLD, { workspaceId: params.workspaceId }),
+        (answer) =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(factoryWorldViewSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? FACTORY_WORLD_UNANSWERED,
+      ),
     codingAgentPullRequest: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: params.agentId }),

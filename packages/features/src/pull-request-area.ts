@@ -76,8 +76,8 @@ export interface ChangedFileLines {
   readonly deletions: number;
 }
 
-/** The area a file counts in: its directory, cut to `AREA_DEPTH`, or the root. */
-function areaPathOf(filePath: string): string {
+/** The area a file counts in: its directory, cut to `AREA_DEPTH`, or the root; the world's zones are cut by the same rule, so an area names the zone it landed in. */
+export function areaPathOf(filePath: string): string {
   const directories = filePath.split("/").filter((segment) => segment !== "");
   directories.pop();
   if (directories.length === 0) return AREA_PATH.ROOT;

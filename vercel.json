@@ -297,6 +297,10 @@
           "dest": "/api/default.js?route=events"
         },
         {
+          "src": "/api/factory/world",
+          "dest": "/api/default.js?route=factory/world"
+        },
+        {
           "src": "/api/github/connect",
           "dest": "/api/default.js?route=github/connect"
         },

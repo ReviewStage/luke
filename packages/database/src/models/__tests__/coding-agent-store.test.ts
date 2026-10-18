@@ -7,6 +7,7 @@ import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
   PULL_REQUEST_STATE,
+  type PullRequestState,
 } from "@luke/features/coding-agent-wire";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import {
@@ -41,6 +42,7 @@ import {
   listPublishedCodingAgentsById,
   listTasklessCodingAgents,
   listWorkspaceCodingAgents,
+  listWorldCodingAgents,
   pinCodingAgent,
   planNamesOf,
   readCodingAgent,
@@ -890,6 +892,91 @@ it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
           [onTheWire],
         );
         assert.equal(yield* readCodingAgentPublished(starter, quiet.agentId), null);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's agents of a workspace's world", (it) => {
+  /** A pull request as the row keeps it, in the state given, merged at the instant given where it merged. */
+  const keptPullRequest = (number: number, state: PullRequestState, mergedAt?: number) => ({
+    number,
+    title: `Change ${number}`,
+    url: `https://github.com/acme/relay/pull/${number}`,
+    state,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: 4,
+    deletions: 1,
+    changedFiles: 1,
+    areas: [{ path: "packages/api", additions: 4, deletions: 1 }],
+    ...(mergedAt === undefined ? undefined : { mergedAt }),
+  });
+  const since = Date.parse("2026-10-11T00:00:00Z");
+  const at = (hour: number) => new Date(`2026-10-14T${String(hour).padStart(2, "0")}:00:00Z`);
+
+  it.effect(
+    "a member reads every standing agent, and of the archived those whose pull request is still open or merged within the window, each with its pull request whole and its plan's Linear issue, while an account outside the workspace reads none",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        yield* openWorkspace(outsider);
+        const linked = yield* createTask(starter, {
+          organizationId: workspace,
+          name: "Invite expiry",
+          linearIssue: {
+            identifier: "ENG-7",
+            title: "Expire invitations",
+            url: "https://linear.app/acme/issue/ENG-7",
+            description: "",
+          },
+        });
+        const archive = (agentId: string) =>
+          Effect.asVoid(archiveCodingAgent(starter, agentId, true));
+        const standing = yield* tasklessAgent(starter, workspace, {
+          planId: linked.id,
+          createdAt: at(1),
+        });
+        const open = yield* tasklessAgent(starter, workspace, { createdAt: at(2) });
+        yield* recordCodingAgentPublished(
+          starter,
+          open.agentId,
+          keptPullRequest(1, PULL_REQUEST_STATE.OPEN),
+        );
+        yield* archive(open.agentId);
+        const shipped = keptPullRequest(2, PULL_REQUEST_STATE.MERGED, since + 1);
+        const recent = yield* tasklessAgent(starter, workspace, { createdAt: at(3) });
+        yield* recordCodingAgentPublished(starter, recent.agentId, shipped);
+        yield* archive(recent.agentId);
+        const old = yield* tasklessAgent(starter, workspace, { createdAt: at(4) });
+        yield* recordCodingAgentPublished(
+          starter,
+          old.agentId,
+          keptPullRequest(3, PULL_REQUEST_STATE.MERGED, since - 1),
+        );
+        yield* archive(old.agentId);
+        const idle = yield* tasklessAgent(starter, workspace, { createdAt: at(5) });
+        yield* archive(idle.agentId);
+
+        const read = yield* listWorldCodingAgents(teammate, workspace, {
+          mergedSince: since,
+          limit: 10,
+        });
+
+        assert.deepEqual(
+          read.map(({ agent, published, linearIssue }) => [agent.id, published, linearIssue]),
+          [
+            [recent.agentId, shipped, null],
+            [open.agentId, keptPullRequest(1, PULL_REQUEST_STATE.OPEN), null],
+            [standing.agentId, null, "ENG-7"],
+          ],
+        );
+        assert.deepEqual(
+          yield* listWorldCodingAgents(outsider, workspace, { mergedSince: since, limit: 10 }),
+          [],
+        );
       }),
   );
 });

@@ -14,6 +14,11 @@ import {
   codingAgentActRows,
 } from "./coding-agent-acts.js";
 import {
+  type FactoryActKind,
+  type FactoryActsDependencies,
+  factoryActRows,
+} from "./factory-acts.js";
+import {
   type IntegrationActKind,
   type IntegrationActsDependencies,
   integrationActRows,
@@ -35,7 +40,8 @@ export type HostActKind =
   | CodingAgentActKind
   | IntegrationActKind
   | AutomationActKind
-  | IssueActKind;
+  | IssueActKind
+  | FactoryActKind;
 
 /** What the host's rows are handed, by the group of rows that uses it. */
 export interface HostActDependencies<Sender> {
@@ -46,6 +52,7 @@ export interface HostActDependencies<Sender> {
   readonly integrations: IntegrationActsDependencies;
   readonly automations: AutomationActsDependencies;
   readonly issues: IssueActsDependencies;
+  readonly factory: FactoryActsDependencies;
 }
 
 /** The host's own rows, the same on every platform that runs the host. */
@@ -60,5 +67,6 @@ export function hostActRows<Sender>(
     ...integrationActRows(dependencies.integrations),
     ...automationActRows(dependencies.automations),
     ...issueActRows(dependencies.issues),
+    ...factoryActRows(dependencies.factory),
   };
 }

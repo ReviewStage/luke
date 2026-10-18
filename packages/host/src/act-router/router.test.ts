@@ -79,6 +79,7 @@ const UNREACHED = {
   integrations: {},
   automations: {},
   issues: {},
+  factory: {},
 } as unknown as HostActDependencies<unknown>;
 
 /** A platform table of every kind the host's rows leave, each recording that it ran. */

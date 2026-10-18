@@ -9,6 +9,7 @@ import {
   type ContextWindow,
   codingAgentPullRequestSchema,
   contextWindowSchema,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
   integrationConnectionNameSchema,
@@ -913,6 +914,54 @@ const findAgentPublished = SqlSchema.findOneOption({
     ),
 });
 
+/** The Linear issue an agent's task links, by its key; null for an agent with no task, or a task that links none. */
+const AGENT_LINEAR_ISSUE = sql<
+  string | null
+>`(select ${task.linearIssue} ->> 'identifier' from ${task} where ${task.id} = ${codingAgent.taskId})`;
+
+/** The pull request states under which a pull request is still open for review or still a draft. */
+const OPEN_PULL_REQUEST_STATES: readonly string[] = [
+  PULL_REQUEST_STATE.OPEN,
+  PULL_REQUEST_STATE.DRAFT,
+];
+
+const findWorldAgents = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    organizationId: Schema.String,
+    mergedSince: Schema.Number,
+    limit: Schema.Number,
+  }),
+  Result: Schema.Struct({
+    ...CodingAgentRowSchema.fields,
+    published: Schema.NullOr(PublishedColumnSchema),
+    linearIssue: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ userId, organizationId, mergedSince, limit }) =>
+    Database.use((db) =>
+      db
+        .select({
+          ...CODING_AGENT_COLUMNS,
+          published: codingAgent.published,
+          linearIssue: AGENT_LINEAR_ISSUE,
+        })
+        .from(codingAgent)
+        .where(
+          and(
+            agentReachableBy(userId),
+            eq(AGENT_WORKSPACE, organizationId),
+            or(
+              isNull(codingAgent.archivedAt),
+              inArray(sql`${codingAgent.published} ->> 'state'`, [...OPEN_PULL_REQUEST_STATES]),
+              sql`(${codingAgent.published} ->> 'mergedAt')::numeric >= ${mergedSince}`,
+            ),
+          ),
+        )
+        .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id))
+        .limit(limit),
+    ),
+});
+
 const findAgentsOfTasks = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -1385,6 +1434,30 @@ export function readCodingAgentPublished(
 ): CodingAgentStoreEffect<StoredPullRequest | null> {
   return Effect.map(findAgentPublished({ userId, agentId }), (row) =>
     Option.isSome(row) ? row.value.published : null,
+  );
+}
+
+/** One agent as the Factory's world reads it: the agent, the pull request its row keeps whole, and the key of the Linear issue its task links, null where it links none. */
+export interface WorldCodingAgent {
+  readonly agent: CodingAgent;
+  readonly published: StoredPullRequest | null;
+  readonly linearIssue: string | null;
+}
+
+/**
+ * The workspace's agents the Factory's world draws, by any member, newest
+ * started first and at most `limit`: every one standing, and of the archived
+ * those whose pull request is still open or a draft, or merged at or after
+ * `mergedSince` (epoch milliseconds), each with its pull request whole and
+ * its task's Linear issue; a workspace the account is not in has none.
+ */
+export function listWorldCodingAgents(
+  userId: string,
+  organizationId: string,
+  options: { readonly mergedSince: number; readonly limit: number },
+): CodingAgentStoreEffect<readonly WorldCodingAgent[]> {
+  return Effect.map(findWorldAgents({ userId, organizationId, ...options }), (rows) =>
+    rows.map(({ published, linearIssue, ...agent }) => ({ agent, published, linearIssue })),
   );
 }
 
