@@ -13,11 +13,12 @@
     "renderer/avatar-session.js": 149485,
     "renderer/diagram.js": 195519,
     "renderer/diff-view.js": 142443,
-    "renderer/factory-world.js": 161010,
+    "renderer/factory-world.js": 161504,
     "renderer/factory-world-dev.js": 1745,
     "renderer/factory-world-station.js": 31732,
     "renderer/factory-world-citadel.js": 31274,
     "renderer/factory-world-railway.js": 41051,
-    "renderer/factory-world-archipelago.js": 35105
+    "renderer/factory-world-archipelago.js": 35105,
+    "renderer/factory-world-neon.js": 29957
   }
 }
