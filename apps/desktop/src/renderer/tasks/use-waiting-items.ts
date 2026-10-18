@@ -11,6 +11,7 @@ import {
   taskHolder,
   tasklessGroups,
 } from "./inbox-model";
+import { useSettledReads } from "./inbox-settling";
 import { useInboxItems } from "./use-inbox-items";
 import type { TasksControl } from "./use-tasks-tab";
 
@@ -60,7 +61,10 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
     [inboxTasks, listed],
   );
   const read = useInboxItems({ holdings, readInbox });
-  const taskless = useTasklessInboxItems(tasks.inboxTaskless);
+  const tasklessReads = useTasklessInboxItems(tasks.inboxTaskless);
+  // Note that the window's own answers and messages stand over the agents' reads until they hold them, so a stale read never brings an answered item back.
+  const tasklessItems = useSettledReads(tasklessReads.items);
+  const taskless = { ...tasklessReads, items: tasklessItems };
   const entries = [
     ...holdings.flatMap((holding) => {
       const task = listed.find((each) => each.id === holding.taskId);

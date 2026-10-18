@@ -85,6 +85,7 @@ import { RepositoryPicture } from "../repository-picture";
 import { Shortcut } from "../shortcut";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model";
+import { type SettledWaiting, useSettledWaiting } from "../tasks/inbox-settling";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel";
 import { useUnreadTasks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
@@ -896,12 +897,13 @@ function ListSkeleton(): React.JSX.Element {
  * tasks, the sum of the Inbox's row counts, and every one from an agent
  * with no task that the developer started (`waitsOnReader`), which names no
  * workspace to be counted in; a teammate's is listed in the Inbox, and waits
- * on the teammate.
+ * on the teammate. An item the window answered is counted no longer from the
+ * moment it was sent (`inbox-settling.ts`).
  */
-function waitingItems(tasks: TasksControl): number {
-  return tasks.listed.inbox.reduce(
+function waitingItems({ waiting, taskless }: SettledWaiting, readerId: string | undefined): number {
+  return waiting.reduce(
     (sum, task) => sum + task.items.length,
-    tasks.inboxTaskless.filter((each) => waitsOnReader(each, tasks.me)).length,
+    taskless.filter((each) => waitsOnReader(each, readerId)).length,
   );
 }
 
@@ -1291,6 +1293,7 @@ function SidebarColumn({
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
+  const settledWaiting = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -1568,7 +1571,7 @@ function SidebarColumn({
         </NavItem>
         <SidebarHomeRow current={atHome} disabled={!tasks.signedIn} onOpen={chosen(goHome)} />
         <SidebarInboxRow
-          waiting={tasks.signedIn ? waitingItems(tasks) : 0}
+          waiting={tasks.signedIn ? waitingItems(settledWaiting, tasks.me) : 0}
           current={inInbox}
           disabled={!tasks.signedIn}
           onOpen={chosen(openInbox)}

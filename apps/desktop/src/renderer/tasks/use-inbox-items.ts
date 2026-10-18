@@ -5,6 +5,7 @@ import {
 import { INBOX_CURSOR_START, type InboxItem } from "@luke/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSettledReads } from "./inbox-settling";
 import type { InboxReader } from "./use-task-inbox";
 
 /**
@@ -18,7 +19,9 @@ import type { InboxReader } from "./use-task-inbox";
  * task: main's own read is already held open on the account, and is what
  * hears a change. The task whose item is chosen holds its own read open
  * besides (`use-task-inbox.ts`), which answers and is drawn in this one's
- * place, so an answer shows at once. An answer to a read a newer one
+ * place, and the window's own answers stand over every task's read until
+ * it holds them (`inbox-settling.ts`), so a stale read never brings an
+ * answered item back. An answer to a read a newer one
  * overtook is let go, items and failure alike. A read that did not answer leaves the
  * task as it was last read, or unread, and says so, with Try again; a
  * later change of the task's asks again of its own accord.
@@ -116,10 +119,12 @@ export function useInboxItems(input: {
     asking.current.clear();
     setAttempt((count) => count + 1);
   }, []);
-  const items = useMemo(
+  const readItems = useMemo(
     () => new Map([...reads].map(([taskId, read]) => [taskId, read.items])),
     [reads],
   );
+  // Note that the window's own answers and messages stand over a read until it holds them, so a stale read never brings an answered item back.
+  const items = useSettledReads(readItems);
   // Note that only a task still listed fails the list, because one another workspace listed is not drawn.
   const pending = holdings.some(
     ({ taskId, updatedAt }) => reads.get(taskId)?.at !== updatedAt && !failed.has(taskId),

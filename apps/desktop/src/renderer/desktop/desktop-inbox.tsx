@@ -45,6 +45,7 @@ import {
 } from "../tasks/inbox-model";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager";
 import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane";
+import { useSettledReads } from "../tasks/inbox-settling";
 import { SkillFiles } from "../tasks/skill-chip";
 import {
   type TasklessPlace,
@@ -204,7 +205,10 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     [inboxTasks, listedTasks],
   );
   const read = useInboxItems({ holdings, readInbox });
-  const taskless = useTasklessInboxItems(tasks.inboxTaskless);
+  const tasklessReads = useTasklessInboxItems(tasks.inboxTaskless);
+  // Note that the window's own answers and messages stand over the agents' reads until they hold them, so a stale read never brings an answered item back.
+  const tasklessItems = useSettledReads(tasklessReads.items);
+  const taskless = { ...tasklessReads, items: tasklessItems };
   const asked = view.chosen;
   const chosenTask =
     asked !== undefined && "taskId" in asked
