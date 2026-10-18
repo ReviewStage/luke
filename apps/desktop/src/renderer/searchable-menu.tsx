@@ -534,7 +534,7 @@ export function SearchableMenu(props: {
         groups={optionGroups(matches, value)}
         active={at}
         onActiveChange={moveTo}
-        onChoose={(index) => onPick(matches[index]?.id ?? "")}
+        onChoose={(_index, option) => onPick(option.id)}
         steer={searching ? undefined : keys}
         note={props.note}
         empty={props.note === undefined ? props.noMatch : undefined}
@@ -567,11 +567,14 @@ export function SearchableMenu(props: {
               <div className="task-compose-menu-branch">
                 {item}
                 {index === footAt && open !== undefined ? (
+                  // Note that a press anywhere on the submenu, its note too, keeps the focus in the field.
+                  // biome-ignore lint/a11y/noStaticElementInteractions: the press is its options'; the box only keeps the focus where it is.
                   <div
                     ref={panel}
                     className="menu-surface task-compose-submenu"
                     data-side={place.side}
                     data-stand={place.stand}
+                    onMouseDown={(event) => event.preventDefault()}
                   >
                     <ComboboxList
                       id={submenuId}

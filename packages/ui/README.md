@@ -65,6 +65,11 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   set under the web profile only; the window has no display type.
 - **Motion** (`motion.css`): `--loop-motion`, the play state an endless loop
   holds, paused under reduced motion.
+- **Placement hooks**: the few properties an app may set on a component's
+  container, each the one way a measurement of the app's reaches inside.
+  `--luke-combobox-list-max` caps a `ComboboxList`'s height (280px where
+  unset), so a picker placed against the window's edge hands its list the
+  room it found; nothing else inside the list is the app's to set.
 
 ## Using a component
 
