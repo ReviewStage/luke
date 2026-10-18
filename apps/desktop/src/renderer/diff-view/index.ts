@@ -14,11 +14,7 @@ import {
   sameLook,
   sameNotes,
 } from "@luke/panel/diff-view/contract";
-import {
-  type Highlighting,
-  poolRenderOptions,
-  startHighlighting,
-} from "@luke/panel/diff-view/highlight-pool";
+import { type Highlighting, startHighlighting } from "@luke/panel/diff-view/highlight-pool";
 import { FIND_SHADOW_ATTRIBUTE } from "@luke/panel/find-matches";
 import { DIFF_FONT, DIFF_LAYOUT, DIFF_LINE_HEIGHT } from "@luke/settings/diff-view";
 import {
@@ -257,7 +253,7 @@ function highlightWorkerText(): string | undefined {
   }
 }
 
-let highlighting: Highlighting | undefined;
+let kept: Highlighting | undefined;
 
 /**
  * How a list's files are highlighted (`@luke/panel/diff-view/highlight-pool`),
@@ -266,7 +262,11 @@ let highlighting: Highlighting | undefined;
  * each worker started from the text the build carried, as a `blob:`.
  */
 function listHighlighting(drawn: DiffLook): Highlighting {
-  if (highlighting !== undefined) return highlighting;
+  if (kept !== undefined) {
+    // A list drawn after the settings changed hands the kept pool its own look.
+    kept.follow(drawn);
+    return kept;
+  }
   const text = highlightWorkerText();
   const address =
     text === undefined
@@ -274,8 +274,8 @@ function listHighlighting(drawn: DiffLook): Highlighting {
       : URL.createObjectURL(new Blob([text], { type: "text/javascript" }));
   const startWorker =
     address === undefined ? undefined : () => new Worker(address, { name: "diff-highlight" });
-  highlighting = startHighlighting(startWorker, drawn, MAX_LINE_DIFF_LENGTH);
-  return highlighting;
+  kept = startHighlighting(startWorker, drawn, MAX_LINE_DIFF_LENGTH);
+  return kept;
 }
 
 /** How many patches the list has read, which names each read in the pool's cache. */
@@ -492,7 +492,8 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   const commentable = (path: string) => drawnFiles.get(path)?.file.lead === false;
   const optionsFor = (next: DiffListProps) =>
     listOptions(next.look, () => latest, dress, commentable);
-  const { pool } = listHighlighting(props.look);
+  const highlighting = listHighlighting(props.look);
+  const { pool } = highlighting;
   const view = new CodeView<string, undefined>(optionsFor(props), pool);
   view.setup(host);
   view.setItems(itemsOf(props.files));
@@ -524,9 +525,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       typeset(host, next.look);
       if (!sameLook(next.look, was.look)) {
         // A look the pool's workers do not hold yet is handed them first, since the pool's colours stand over the list's own.
-        pool
-          ?.setRenderOptions(poolRenderOptions(next.look, MAX_LINE_DIFF_LENGTH))
-          .catch(() => undefined);
+        highlighting.follow(next.look);
       }
       if (
         !sameLook(next.look, was.look) ||

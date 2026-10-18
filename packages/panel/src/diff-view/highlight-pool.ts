@@ -32,14 +32,20 @@ type HighlightMode = (typeof HIGHLIGHT_MODE)[keyof typeof HIGHLIGHT_MODE];
  */
 const HIGHLIGHT_WORKERS = 2;
 
-/** What a list highlights with: the pool to hand Pierre, none for the window's own thread, and where it settles once started. */
+/**
+ * What a list highlights with: the pool to hand Pierre, none for the
+ * window's own thread, where it settles once started, and the door that
+ * hands its workers a look, since a pool kept across lists holds the look
+ * it was last handed, not the one a list is drawn in.
+ */
 export interface Highlighting {
   readonly pool: WorkerPoolManager | undefined;
   readonly settled: Promise<HighlightMode>;
+  readonly follow: (drawn: DiffLook) => void;
 }
 
 /** What the pool's workers highlight with, read off the look: its themes and how a changed line is marked, up to the longest line marked. */
-export function poolRenderOptions(drawn: DiffLook, maxLineDiffLength: number) {
+function poolRenderOptions(drawn: DiffLook, maxLineDiffLength: number) {
   return {
     theme: drawn.themes,
     lineDiffType: drawn.inlineDiff,
@@ -58,7 +64,11 @@ export function startHighlighting(
   maxLineDiffLength: number,
 ): Highlighting {
   if (startWorker === undefined) {
-    return { pool: undefined, settled: Promise.resolve(HIGHLIGHT_MODE.MAIN_THREAD) };
+    return {
+      pool: undefined,
+      settled: Promise.resolve(HIGHLIGHT_MODE.MAIN_THREAD),
+      follow: () => undefined,
+    };
   }
   const pool = new WorkerPoolManager(
     {
@@ -73,5 +83,9 @@ export function startHighlighting(
     () => (pool.isWorkingPool() ? HIGHLIGHT_MODE.POOL : HIGHLIGHT_MODE.MAIN_THREAD),
     () => HIGHLIGHT_MODE.MAIN_THREAD,
   );
-  return { pool, settled };
+  // Note that a look not taken, the pool having failed, leaves the list on the window's own thread in its own look.
+  const follow = (next: DiffLook) => {
+    pool.setRenderOptions(poolRenderOptions(next, maxLineDiffLength)).catch(() => undefined);
+  };
+  return { pool, settled, follow };
 }

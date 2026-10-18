@@ -8,7 +8,7 @@ import {
   DIFF_LINE_HEIGHT,
   INLINE_DIFF,
 } from "@luke/settings/diff-view";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import type { DiffLook } from "./contract.js";
 import { HIGHLIGHT_MODE, type Highlighting, startHighlighting } from "./highlight-pool.js";
 
@@ -39,7 +39,11 @@ const LOOK: DiffLook = {
 interface Request {
   readonly type: string;
   readonly id: string;
+  readonly renderOptions?: { readonly theme?: unknown };
 }
+
+/** Every request the stand-in workers were sent, in order. */
+let sent: Request[] = [];
 
 /** A worker stood in for: it answers the pool's start as Pierre's own worker does, or fails as it loads. */
 class StandInWorker extends EventTarget implements Worker {
@@ -57,8 +61,8 @@ class StandInWorker extends EventTarget implements Worker {
         this.dispatchEvent(new Event("error", { cancelable: true }));
         return;
       }
-      if (message.type !== "initialize") return;
-      const data = { type: "success", id: message.id, requestType: "initialize", sentAt: 0 };
+      sent.push(message);
+      const data = { type: "success", id: message.id, requestType: message.type, sentAt: 0 };
       this.dispatchEvent(new MessageEvent("message", { data }));
     });
   }
@@ -71,6 +75,7 @@ let started: Highlighting | undefined;
 afterEach(() => {
   started?.pool?.terminate();
   started = undefined;
+  sent = [];
 });
 
 test("a list with no door to start a worker through highlights on the window's own thread", async () => {
@@ -101,4 +106,16 @@ test("a list whose door throws, or whose worker fails as it loads, highlights on
   started = failing;
   assert.equal(await failing.settled, HIGHLIGHT_MODE.MAIN_THREAD);
   assert.equal(failing.pool?.isWorkingPool(), false);
+});
+
+test("a pool kept for a list drawn in another look hands its workers that look", async () => {
+  started = startHighlighting(() => new StandInWorker(true), LOOK, 1000);
+  await started.settled;
+  const solarized = { dark: "solarized-dark", light: "solarized-light" } as const;
+  started.follow({ ...LOOK, themes: solarized });
+  await vi.waitFor(() => {
+    const told = sent.filter((request) => request.type === "set-render-options");
+    assert.equal(told.length, 2, "both workers are told");
+    for (const request of told) assert.deepEqual(request.renderOptions?.theme, solarized);
+  });
 });
