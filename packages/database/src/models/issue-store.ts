@@ -8,7 +8,7 @@ import {
   issuePrioritySchema,
   issueStatusSchema,
 } from "@luke/features/issue-wire";
-import { and, desc, eq, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -343,4 +343,41 @@ export function changeIssue(
       }),
     ),
   );
+}
+
+/** The statuses work on an issue has not yet begun in, which an agent started on it moves it out of. */
+const NOT_BEGUN: readonly IssueStatus[] = [ISSUE_STATUS.BACKLOG, ISSUE_STATUS.TODO];
+
+const beginIssue = SqlSchema.findOneOption({
+  Request: Schema.Struct({ ...IssueKeySchema.fields, now: Schema.Date }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, issueId, now }) =>
+    Database.use((db) =>
+      db
+        .update(issue)
+        .set({ status: ISSUE_STATUS.IN_PROGRESS, updatedAt: now })
+        .where(
+          and(
+            eq(issue.id, issueId),
+            inArray(issue.status, [...NOT_BEGUN]),
+            isNull(issue.archivedAt),
+            workspaceReachableBy(userId, issue.organizationId),
+          ),
+        )
+        .returning({ id: issue.id }),
+    ),
+});
+
+/**
+ * Moves an issue whose work has not begun, in the backlog or to do, to in
+ * progress, as an agent started on a task from it does, and answers whether
+ * it moved. An issue already in progress, done, or canceled, an archived
+ * one, and one of a workspace the account is not a member of stand as they
+ * were, so asking again moves nothing and nothing ever moves an issue back.
+ */
+export function beginIssueWork(userId: string, issueId: string): IssueStoreEffect<boolean> {
+  return Effect.gen(function* () {
+    const now = yield* DateTime.nowAsDate;
+    return Option.isSome(yield* beginIssue({ userId, issueId, now }));
+  });
 }

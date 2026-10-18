@@ -622,13 +622,11 @@ function tasksStartedFrom(issueId: string, listed: TasksControl["listed"]): Task
  */
 export function IssuesPage({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const work: IssueWork = {
-    onStartTask: (issue, identifier) =>
-      tasks.onNewTaskFrom({
-        id: issue.id,
-        workspaceId: issue.workspaceId,
-        identifier,
-        title: issue.title,
-      }),
+    onStartTask: (issue, identifier, agent) =>
+      tasks.onNewTaskFrom(
+        { id: issue.id, workspaceId: issue.workspaceId, identifier, title: issue.title },
+        agent,
+      ),
     tasksOf: (issueId) => tasksStartedFrom(issueId, tasks.listed),
     onOpenTask: tasks.onSelect,
   };

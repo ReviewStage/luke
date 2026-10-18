@@ -2538,3 +2538,88 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
     );
   });
 });
+
+test("a task started from an issue's Start agent… presses its Start once it stands open, with no planning, linked to the issue, and the agent's tab opens; an agent that did not start says why beside the Start", async () => {
+  let agents = 0;
+  let listed: CodingAgentSummary[] = [];
+  const started: Task = { ...TASK, id: OTHER_TASK_ID, name: "Invites", repository: "acme/web" };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
+      // The service lists the agent once it started, as it does.
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
+      [ACT_KIND.CODING_AGENTS_START]: () => {
+        if (agents++ > 0) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+        listed = [{ ...RUNNING_AGENT, id: AGENT_ID }];
+        return Promise.resolve({ agent: { ...RUNNING_AGENT, id: AGENT_ID } });
+      },
+    },
+  );
+  await settle();
+  const issue = {
+    id: "issue-1",
+    workspaceId: "workspace-acme",
+    identifier: "ACME-7",
+    title: "Invites",
+  };
+  const agentStarts = () =>
+    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START);
+  /** Start agent… pressed and its card's Start answered, then the task standing open as the host opens it. */
+  const startFrom = async () => {
+    act(() => tab.control().onNewTaskFrom(issue, true));
+    await act(async () => {
+      await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
+        issueId: issue.id,
+        agent: true,
+      });
+    });
+    await settle();
+    tab.stand({
+      tasks: {
+        ...OPEN,
+        activeTaskId: OTHER_TASK_ID,
+        document: { status: TASKS_READ.READY, task: started },
+      },
+    });
+    await settle();
+  };
+
+  act(() => tab.control().onNewTaskFrom(issue, true));
+  assert.deepEqual(tab.control().newTask.preset, { issue, agent: true });
+  act(() => tab.control().newTask.onClose());
+  act(() => tab.control().onNewTaskFrom(issue, true));
+  await act(async () => {
+    await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
+      issueId: issue.id,
+      agent: true,
+    });
+  });
+  await settle();
+  assert.deepEqual(agentStarts(), [], "no agent starts before its task stands open");
+  assert.deepEqual(tab.payloads.find(({ kind }) => kind === ACT_KIND.TASKS_START)?.payload, {
+    name: "Invites",
+    repository: "acme/web",
+    workspaceId: "workspace-acme",
+    issueId: issue.id,
+    planning: false,
+  });
+  tab.stand({
+    tasks: {
+      ...OPEN,
+      activeTaskId: OTHER_TASK_ID,
+      document: { status: TASKS_READ.READY, task: started },
+    },
+  });
+  await settle();
+
+  assert.equal(agentStarts().length, 1);
+  assert.equal(JSON.parse(JSON.stringify(agentStarts()[0]?.payload)).taskId, OTHER_TASK_ID);
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+
+  tab.stand({ tasks: OPEN });
+  await settle();
+  await startFrom();
+  assert.equal(agentStarts().length, 2);
+  assert.ok(tab.control().agents.start.note, "why the agent did not start stands beside the Start");
+});
