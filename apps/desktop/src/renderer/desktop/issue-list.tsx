@@ -5,10 +5,20 @@ import {
 } from "@luke/features/issue-list-model";
 import type { Issue } from "@luke/features/issue-wire";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
-import { List, ListRow, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text, useMenu } from "@luke/ui";
+import {
+  LIST_ROW_CURRENT,
+  List,
+  ListRow,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useMenu,
+} from "@luke/ui";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
 import { IssueActions } from "./issue-actions";
+import { ISSUE_OPENING, type IssueOpening, openingOf, pageKey } from "./issue-peek";
 import { PriorityMark, StatusGlyph } from "./issue-pickers";
 
 /**
@@ -16,7 +26,8 @@ import { PriorityMark, StatusGlyph } from "./issue-pickers";
  *
  * The sections are Home's own (`desktop-home.tsx`): a heading with its
  * count over a `List` of `ListRow`s, each a press, so the page's ↑ and ↓
- * move through the rows and Return opens the one reached. A right-click on
+ * move through the rows and Return peeks the one reached, ⌘Return opening
+ * its page (`issue-peek.tsx`); the row peeked is current. A right-click on
  * a row, or the menu key or ⇧F10 on it, opens its actions
  * (`issue-actions.tsx`), which hand the keyboard back to the row's press.
  * The order is the view model's (`issue-list-model.ts`); nothing is sorted
@@ -37,6 +48,7 @@ function IssueRow({
   workspaceName,
   now,
   focused,
+  peeked,
   shown,
   onOpen,
   onChange,
@@ -45,8 +57,10 @@ function IssueRow({
   workspaceName: string;
   now: number;
   focused: boolean;
+  /** Whether its issue is the one read in the peek beside the list. */
+  peeked: boolean;
   shown: boolean;
-  onOpen: () => void;
+  onOpen: (opening: IssueOpening) => void;
   onChange: (change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
   const menu = useMenu(shown);
@@ -79,9 +93,15 @@ function IssueRow({
             <RelativeTime at={issue.updatedAt} now={now} />
           </span>
         }
-        onPress={onOpen}
+        current={peeked ? LIST_ROW_CURRENT.ITEM : undefined}
+        onPress={(event) => onOpen(openingOf(event))}
         onContextMenu={menu.contextMenu(row)}
-        onKeyDown={menu.keyMenu}
+        onKeyDown={(event) => {
+          // Note that ⌘Return is taken before the row's own Return, which would peek it.
+          if (!pageKey(event)) return menu.keyMenu(event);
+          event.preventDefault();
+          onOpen(ISSUE_OPENING.PAGE);
+        }}
       />
       {/* Note that the menu and its question stand beside the row, not in it, because a press inside them would otherwise reach the row's own right-click. */}
       <IssueActions
@@ -102,6 +122,7 @@ export function IssueList({
   workspaceName,
   now,
   focused,
+  peeked,
   shown,
   onOpen,
   onChange,
@@ -112,9 +133,12 @@ export function IssueList({
   now: number;
   /** The issue whose row takes the keyboard as the list is drawn: the one the page came back from. */
   focused: string | undefined;
+  /** The issue read in the peek beside the list, whose row is current; none while none is. */
+  peeked: string | undefined;
   /** Whether the page stands, which a card's menu and question do not outlive. */
   shown: boolean;
-  onOpen: (issue: Issue) => void;
+  /** Opens an issue as its row was pressed: in the peek, or on its own page. */
+  onOpen: (issue: Issue, opening: IssueOpening) => void;
   /** Sends a change to an issue from its menu, answering whether it was kept. */
   onChange: (issue: Issue, change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
@@ -139,8 +163,9 @@ export function IssueList({
                 workspaceName={workspaceName}
                 now={now}
                 focused={issue.id === focused}
+                peeked={issue.id === peeked}
                 shown={shown}
-                onOpen={() => onOpen(issue)}
+                onOpen={(opening) => onOpen(issue, opening)}
                 onChange={(change) => onChange(issue, change)}
               />
             ))}

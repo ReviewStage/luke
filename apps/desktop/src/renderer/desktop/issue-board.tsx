@@ -22,6 +22,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
 import { Tooltip } from "../tooltip";
 import { IssueActions } from "./issue-actions";
+import { ISSUE_OPENING, type IssueOpening, openingOf, pageKey } from "./issue-peek";
 import { PriorityMark, StatusGlyph } from "./issue-pickers";
 import { useRowDrag } from "./use-row-drag";
 
@@ -38,7 +39,8 @@ import { useRowDrag } from "./use-row-drag";
  * list's one line. A column's head ends in a + that opens the new issue's
  * card with that column's status chosen. ↑ and ↓ move through a column's cards,
  * ← and → to the nearest card of the next column holding any, from the
- * window itself as from a card, and Return opens the card reached. A
+ * window itself as from a card, and Return peeks the card reached, ⌘Return
+ * opening its page (`issue-peek.tsx`); the card peeked is marked. A
  * right-click on a card, or the menu key or ⇧F10 on it, opens its actions
  * (`issue-actions.tsx`). A card dragged onto another column is moved to
  * that column's status, sent as its menu's Status sends it, so it stands
@@ -181,6 +183,7 @@ function IssueCard({
   workspaceName,
   now,
   focused,
+  peeked,
   shown,
   onOpen,
   onChange,
@@ -189,8 +192,10 @@ function IssueCard({
   workspaceName: string;
   now: number;
   focused: boolean;
+  /** Whether its issue is the one read in the peek beside the board. */
+  peeked: boolean;
   shown: boolean;
-  onOpen: () => void;
+  onOpen: (opening: IssueOpening) => void;
   onChange: (change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
   const menu = useMenu(shown);
@@ -208,9 +213,15 @@ function IssueCard({
         ref={card}
         type="button"
         className="sidebar-task"
-        onClick={onOpen}
+        aria-current={peeked ? true : undefined}
+        onClick={(event) => onOpen(openingOf(event))}
         onContextMenu={menu.contextMenu()}
-        onKeyDown={menu.keyMenu}
+        onKeyDown={(event) => {
+          // Note that ⌘Return is taken before the button's own Return, which would peek it.
+          if (!pageKey(event)) return menu.keyMenu(event);
+          event.preventDefault();
+          onOpen(ISSUE_OPENING.PAGE);
+        }}
       >
         <span className="sidebar-task-line">
           <span className="issue-row-identifier">{identifier}</span>
@@ -245,6 +256,7 @@ function IssueColumn({
   workspaceName,
   now,
   focused,
+  peeked,
   shown,
   onOpen,
   onCompose,
@@ -254,8 +266,9 @@ function IssueColumn({
   workspaceName: string;
   now: number;
   focused: string | undefined;
+  peeked: string | undefined;
   shown: boolean;
-  onOpen: (issue: Issue) => void;
+  onOpen: (issue: Issue, opening: IssueOpening) => void;
   onCompose: ((status: IssueStatus) => void) | undefined;
   onChange: (issue: Issue, change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
@@ -307,8 +320,9 @@ function IssueColumn({
               workspaceName={workspaceName}
               now={now}
               focused={issue.id === focused}
+              peeked={issue.id === peeked}
               shown={shown}
-              onOpen={() => onOpen(issue)}
+              onOpen={(opening) => onOpen(issue, opening)}
               onChange={(change) => onChange(issue, change)}
             />
           ))}
@@ -329,6 +343,7 @@ export function IssueBoard({
   workspaceName,
   now,
   focused,
+  peeked,
   shown,
   onOpen,
   onCompose,
@@ -339,9 +354,12 @@ export function IssueBoard({
   now: number;
   /** The issue whose card takes the keyboard as the board is drawn: the one the page came back from. */
   focused: string | undefined;
+  /** The issue read in the peek beside the board, whose card is marked; none while none is. */
+  peeked: string | undefined;
   /** Whether the page stands, which a card's menu and question do not outlive. */
   shown: boolean;
-  onOpen: (issue: Issue) => void;
+  /** Opens an issue as its card was pressed: in the peek, or on its own page. */
+  onOpen: (issue: Issue, opening: IssueOpening) => void;
   /** Opens the new issue's card with a column's status chosen; none while no workspace is listed to file one in. */
   onCompose: ((status: IssueStatus) => void) | undefined;
   /** Sends a change to an issue from its menu, answering whether it was kept. */
@@ -356,6 +374,7 @@ export function IssueBoard({
           workspaceName={workspaceName}
           now={now}
           focused={focused}
+          peeked={peeked}
           shown={shown}
           onOpen={onOpen}
           onCompose={onCompose}

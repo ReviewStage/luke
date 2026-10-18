@@ -48,7 +48,7 @@ import {
   SquareKanbanIcon,
   UsersIcon,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
@@ -62,9 +62,11 @@ import { IssueBoard, IssueBoardSkeleton, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail, IssueDetailSkeleton, IssueDocumentPage } from "./issue-detail";
 import { type IssueFilterControl, useIssueFilter } from "./issue-filter-view";
 import { IssueList, listRowIssue } from "./issue-list";
+import { ISSUE_OPENING, type IssueOpening, IssuePeek, peekFits, usePeekWidth } from "./issue-peek";
 import { PRIORITY_ORDER, PriorityGlyph } from "./issue-pickers";
 import { type IssueWork, IssueWorkProvider } from "./issue-work";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
+import { PaneGlide } from "./pane-motion";
 import { createdByEntries } from "./sidebar-task-view";
 import { useRowKeys } from "./use-row-keys";
 
@@ -80,9 +82,12 @@ import { useRowKeys } from "./use-row-keys";
  * board column's + opens it with that column's status chosen. A workspace
  * with no issue yet says so in either layout, New issue its one way on.
  * ↑ and ↓ move through the rows from anywhere on the
- * page, and Return opens the one reached on its own page
- * (`issue-detail.tsx`), from which Escape comes back to the list with that
- * row holding the keyboard. Board or List, as View options last chose, and
+ * page. A press or Return on a card or row peeks its issue beside the
+ * board or list (`issue-peek.tsx`), which follows the keyboard from card
+ * to card and which Escape puts away; with ⌘ held, or from the peek's Open
+ * as page, the issue opens on its own page instead (`issue-detail.tsx`),
+ * from which Escape comes back to the list with that row holding the
+ * keyboard. Board or List, as View options last chose, and
  * whether the List groups by status or by priority, are kept in the
  * renderer's own storage as the Inbox's view choices are
  * (`folded-groups.ts`), so the page opens in them again on this Mac. View
@@ -91,6 +96,10 @@ import { useRowKeys } from "./use-row-keys";
  * same way (`issue-filter-view.ts`); a filter that keeps none of a
  * workspace's issues says so, with Clear filters.
  */
+
+/** A board's card, and every press that opens an issue: a card, or a list row. */
+const CARD = ".sidebar-task";
+const PRESSES = `${CARD}, button.luke-list-row-main`;
 
 /** What takes typing, where C is a letter rather than the command: a field, or words edited where they stand. */
 const TYPED_INTO = "input, textarea, select, [contenteditable]:not([contenteditable='false'])";
@@ -186,6 +195,20 @@ function keyboardLeftWith(issueId: string): boolean {
   );
 }
 
+/** The issue a card's or a list row's press opens, if the element is one. */
+function pressIssue(element: HTMLElement): string | undefined {
+  if (element.matches(CARD))
+    return element.closest<HTMLElement>("[data-issue-id]")?.dataset.issueId;
+  return listRowIssue(element);
+}
+
+/** The press of an issue's card or row as the page draws it now, if it stands. */
+function pressOf(page: HTMLElement, issueId: string): HTMLElement | undefined {
+  return [...page.querySelectorAll<HTMLElement>(PRESSES)].find(
+    (press) => pressIssue(press) === issueId,
+  );
+}
+
 /**
  * What the list's page stands, by its read, its layout, and what its
  * filter keeps. Note that a workspace with no issue yet stands the empty
@@ -211,11 +234,13 @@ function ListPage({
   tasks,
   issues,
   focused,
+  peeked,
   layout,
   onLayout,
   grouping,
   filter,
   onFocus,
+  onOpen,
   onCompose,
   onComposeIn,
 }: {
@@ -225,6 +250,8 @@ function ListPage({
   issues: ReturnType<typeof useIssues>;
   /** The issue whose card or row takes the keyboard as it is drawn. */
   focused: string | undefined;
+  /** The issue read in the peek beside the page, whose card or row is marked; none while none is. */
+  peeked: string | undefined;
   layout: IssuesLayout;
   onLayout: (layout: IssuesLayout) => void;
   grouping: GroupingControl;
@@ -232,6 +259,8 @@ function ListPage({
   filter: IssueFilterControl;
   /** Hands the keyboard to an issue's card or row wherever it is drawn next, or to none. */
   onFocus: (issueId: string | undefined) => void;
+  /** Opens an issue as its card or row was pressed: in the peek, or on its own page. */
+  onOpen: (issue: Issue, opening: IssueOpening) => void;
   /** Opens the new issue's card; none while no workspace is listed to file one in. */
   onCompose: (() => void) | undefined;
   /** Opens the card with a board column's status chosen; none while no workspace is listed. */
@@ -245,7 +274,6 @@ function ListPage({
   const onBoard = layout === ISSUES_LAYOUT.BOARD;
   useRowKeys(root, tasks.shown && !onBoard);
   useBoardKeys(root, tasks.shown && onBoard);
-  const open = (issue: Issue) => view.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId: issue.id });
   const said = useChangeSaid();
   const change = (issue: Issue, asked: IssueChange) => {
     const sent = said(asked, issues.change({ issueId: issue.id, change: asked }));
@@ -336,8 +364,9 @@ function ListPage({
           workspaceName={workspaceName}
           now={now}
           focused={focused}
+          peeked={peeked}
           shown={tasks.shown}
-          onOpen={open}
+          onOpen={onOpen}
           onCompose={onComposeIn}
           onChange={change}
         />
@@ -349,8 +378,9 @@ function ListPage({
             workspaceName={workspaceName}
             now={now}
             focused={focused}
+            peeked={peeked}
             shown={tasks.shown}
-            onOpen={open}
+            onOpen={onOpen}
             onChange={change}
           />
         </div>
@@ -628,6 +658,21 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   );
   const filter = useIssueFilter(tasks.me, workspace?.id);
   const [pages, setPages] = useState<HTMLDivElement | null>(null);
+  // Note that the pane motion reads the root as a ref, and the arrows and C as the element itself.
+  const pagesRef = useRef<HTMLDivElement | null>(null);
+  const holdPages = useCallback((node: HTMLDivElement | null) => {
+    pagesRef.current = node;
+    setPages(node);
+  }, []);
+  const [peeked, setPeeked] = useState<string | undefined>(undefined);
+  // Note that a peek is of the workspace it was opened in, so another workspace listed puts it away for good.
+  const [peekedIn, setPeekedIn] = useState(workspace?.id);
+  if (peekedIn !== workspace?.id) {
+    setPeekedIn(workspace?.id);
+    setPeeked(undefined);
+  }
+  const peekWidth = usePeekWidth();
+  const said = useChangeSaid();
   const listedNow = useRef(workspace?.id);
   listedNow.current = workspace?.id;
   /**
@@ -659,8 +704,63 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
     if (place.kind === ISSUES_PAGE.ISSUE) setCameFrom(place.issueId);
     view.onOpen({ kind: ISSUES_PAGE.LIST });
   };
+  // Note that the peek reads the issues the page draws, so one View options or the minute filters out is peeked no more.
+  const now = useMinute();
+  const listedIssues =
+    issues.read !== undefined && "issues" in issues.read
+      ? filteredIssues(issues.read.issues, filter.filter, now)
+      : undefined;
+  const peekedIssue =
+    place.kind === ISSUES_PAGE.LIST && peeked !== undefined
+      ? listedIssues?.find((each) => each.id === peeked)
+      : undefined;
+  // Note that an issue the page no longer draws, archived, filtered out, or of a workspace no longer listed, is peeked no more.
+  if (peeked !== undefined && listedIssues !== undefined && peekedIssue === undefined) {
+    setPeeked(undefined);
+  }
+  const openPage = (issue: Issue) => {
+    setPeeked(undefined);
+    view.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId: issue.id });
+  };
+  // Note that a page with no room for the peek beside a column opens the issue's page, as before there was a peek.
+  const open = (issue: Issue, opening: IssueOpening) => {
+    if (opening === ISSUE_OPENING.PAGE || pages === null || !peekFits(pages)) openPage(issue);
+    else setPeeked(issue.id);
+  };
+  /** Puts the peek away, handing its card or row the keyboard where the peek held it, or nothing did. */
+  const closePeek = () => {
+    const at = document.activeElement;
+    const keyless =
+      at === null ||
+      at === document.body ||
+      (pages?.querySelector(".issue-peek-pane")?.contains(at) ?? false);
+    if (peeked !== undefined && pages !== null && keyless) pressOf(pages, peeked)?.focus();
+    setPeeked(undefined);
+  };
+  // While a peek stands it follows the keyboard: a card or row reached by an arrow, Tab, or a press is the one peeked.
+  const peeking = peekedIssue !== undefined;
+  useEffect(() => {
+    if (pages === null || !peeking) return;
+    const follow = (event: FocusEvent) => {
+      const issueId = event.target instanceof HTMLElement ? pressIssue(event.target) : undefined;
+      if (issueId !== undefined) setPeeked(issueId);
+    };
+    pages.addEventListener("focusin", follow);
+    return () => pages.removeEventListener("focusin", follow);
+  }, [pages, peeking]);
+  // Note that a window narrowed past the peek's room beside a column puts the peek away, as one that never had it opens none.
+  const closeNow = useRef(closePeek);
+  closeNow.current = closePeek;
+  useEffect(() => {
+    if (pages === null || !peeking) return;
+    const observer = new ResizeObserver(() => {
+      if (!peekFits(pages)) closeNow.current();
+    });
+    observer.observe(pages);
+    return () => observer.disconnect();
+  }, [pages, peeking]);
   return (
-    <div ref={setPages} className="issues-pages">
+    <div ref={holdPages} className="issues-pages">
       {place.kind === ISSUES_PAGE.LIST ? (
         // The workspace's members, read for View options' Created by: their faces, and Me for the reader.
         <MemberDirectory workspace={workspace} readerId={tasks.me}>
@@ -669,6 +769,7 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
             tasks={tasks}
             issues={issues}
             focused={cameFrom}
+            peeked={peekedIssue?.id}
             layout={layout}
             onLayout={(chosen) => {
               // Note that the row the page came back from is let go, so the new layout's row takes no keyboard from the menu.
@@ -694,6 +795,7 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
               },
             }}
             onFocus={setCameFrom}
+            onOpen={open}
             onCompose={onCompose}
             onComposeIn={onComposeIn}
           />
@@ -708,6 +810,23 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
           onBack={back}
         />
       )}
+      {/* The workspace's members, read for the peeked issue's creator: their picture, and You for the reader's own. */}
+      <MemberDirectory workspace={workspace} readerId={tasks.me}>
+        <IssuePeek
+          issue={peekedIssue}
+          workspaceName={workspace?.name ?? ""}
+          width={peekWidth}
+          onChange={(asked) =>
+            peeked === undefined
+              ? Promise.resolve(false)
+              : said(asked, issues.change({ issueId: peeked, change: asked }))
+          }
+          onClose={closePeek}
+          onOpenPage={openPage}
+        />
+      </MemberDirectory>
+      {/* The board or list glides as the peek takes its room and gives it back. */}
+      <PaneGlide root={pagesRef} layout={{ peekOpen: peeking }} />
       {/* Keyed by the workspace, so a title typed in one is never filed in another. */}
       <NewIssueDialog
         key={workspace?.id}
