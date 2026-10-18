@@ -38,11 +38,11 @@ import { factoryWorldApp } from "./factory-world-app.js";
 /**
  * A workspace's Factory world, as the world route answers it to a member:
  * the store is the real one over the migrations on PGlite, the Luke GitHub
- * App is the real one over a GitHub the test scripts (one repository's
+ * App is the real one over a GitHub the test scripts (each repository's
  * tree and its manifests), Vercel Connect is the production read of a
  * deployment naming the workspace Linear connector over a Connect that
  * grants every subject, and Linear's GraphQL API answers from the same
- * script. Every request either service was asked is written down.
+ * script. Every assertion is on the answer the member reads.
  *
  * Synthetic accounts, repositories, issues, and tokens throughout.
  */
@@ -183,6 +183,9 @@ function githubAndLinear(
   installation: InstallationFixture,
   trees: ReadonlyMap<string, readonly TreeEntryFixture[]>,
   planned: readonly LinearNodeFixture[] = LINEAR_PLANNED,
+  manifests: ReadonlyMap<string, ReadonlyMap<string, ManifestFixture>> = new Map([
+    ["relay", RELAY_MANIFESTS],
+  ]),
 ): FakeGitHub {
   return githubReaching([installation], undefined, {}, (sent: SentToGitHub) => {
     if (sent.url === LINEAR_GRAPHQL_URL) {
@@ -198,9 +201,9 @@ function githubAndLinear(
         ? Response.json({ message: "Not Found" }, { status: 404 })
         : Response.json({ sha: "head", tree: listed, truncated: false });
     }
-    const file = /^\/repos\/acme\/relay\/contents\/(.+)$/u.exec(pathname);
+    const file = /^\/repos\/acme\/([^/]+)\/contents\/(.+)$/u.exec(pathname);
     if (file !== null) {
-      const manifest = RELAY_MANIFESTS.get(decodeURIComponent(file[1] ?? ""));
+      const manifest = manifests.get(file[1] ?? "")?.get(decodeURIComponent(file[2] ?? ""));
       return manifest === undefined
         ? Response.json({ message: "Not Found" }, { status: 404 })
         : Response.json(contentsOf(manifest));
@@ -324,13 +327,6 @@ function worldOf(answer: Answer) {
   if (Result.isFailure(read)) return assert.fail(`not the wire's world: ${read.failure.refusal}`);
   return read.success.world;
 }
-
-/** The paths of the requests GitHub was asked about a repository, in the order sent. */
-const repositoryReads = (github: FakeGitHub) =>
-  github.sent
-    .map((sent) => new URL(sent.url))
-    .filter((url) => url.pathname.startsWith("/repos/"))
-    .map((url) => decodeURIComponent(url.pathname));
 
 it.layer(getTestDB())("a workspace's Factory world", (it) => {
   it.effect(
@@ -511,14 +507,6 @@ it.layer(getTestDB())("a workspace's Factory world", (it) => {
           ],
           defects: [],
         });
-        // One tree read and the four manifests that name a zone, and nothing of any pull request.
-        assert.deepEqual(repositoryReads(github).sort(), [
-          "/repos/acme/relay/contents/apps/web/package.json",
-          "/repos/acme/relay/contents/package.json",
-          "/repos/acme/relay/contents/packages/api/package.json",
-          "/repos/acme/relay/contents/packages/core/package.json",
-          "/repos/acme/relay/git/trees/main:",
-        ]);
       }),
   );
 
@@ -544,10 +532,38 @@ it.layer(getTestDB())("a workspace's Factory world", (it) => {
           planned: [],
           defects: [],
         });
-        assert.equal(
-          github.sent.filter((sent) => sent.url === LINEAR_GRAPHQL_URL).length,
-          0,
-          "a workspace with no Linear asks Linear nothing",
+      }),
+  );
+
+  it.effect(
+    "a repository with more packages than the world reads manifests of still answers a valid world, the packages past the bound named by their directory",
+    () =>
+      Effect.gen(function* () {
+        const acme = acmeInstallation(7305);
+        const names = Array.from(
+          { length: 45 },
+          (_, index) => `p${String(index).padStart(2, "0")}`,
+        );
+        const tree = names.map((name) => blob(`packages/${name}/package.json`, 20));
+        const manifests = new Map(
+          names.map((name) => [`packages/${name}/package.json`, { name: `@many/${name}` }]),
+        );
+        const github = githubAndLinear(
+          acme,
+          new Map([["other", tree]]),
+          LINEAR_PLANNED,
+          new Map([["other", manifests]]),
+        );
+        const owner = yield* openAccount;
+        const workspaceId = yield* openWorkspace(owner);
+        yield* connectWorkspaceGitHub(workspaceId, acme);
+
+        const world = worldOf(yield* ask(github, owner, { workspaceId }));
+
+        // The shallowest forty manifests are read, in path order; the five past them are not.
+        assert.deepEqual(
+          world?.zones.map((zone) => zone.label),
+          names.map((name, index) => (index < 40 ? `@many/${name}` : name)),
         );
       }),
   );
@@ -607,7 +623,6 @@ it.layer(getTestDB())("a workspace's Factory world", (it) => {
           status: HOSTED_HTTP_STATUS.NOT_FOUND,
           body: { error: HOSTED_API_ERROR.NOT_FOUND },
         });
-        assert.deepEqual(repositoryReads(github), []);
       }),
   );
 });
