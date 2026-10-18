@@ -37,6 +37,8 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
   type CodingAgentInboxMessagedView,
+  type CodingAgentInboxReadAllView,
+  type CodingAgentInboxReadStateView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -91,12 +93,16 @@ import { imageBodyOf } from "./image-body.js";
 import {
   type InboxAnswerRequest,
   type InboxMessageRequest,
+  type InboxReadAllRequest,
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
   inboxImageTypeSchema,
   inboxMessagedSchema,
   inboxMessageRequestSchema,
+  inboxReadAllRequestSchema,
+  inboxReadAllSchema,
+  inboxReadStateSchema,
 } from "./inbox-wire.js";
 import {
   codingAgentDefaultAnswerSchema,
@@ -139,6 +145,7 @@ import {
   HOSTED_SERVICE_PATH,
   inboxAttachmentPath,
   inboxItemPath,
+  inboxItemReadPath,
   inboxMessagesPath,
   planTemplateRestorePath,
   planTemplateRevisionPath,
@@ -981,6 +988,52 @@ export class HostedCodingAgentClient {
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, inboxMessagedSchema, INBOX_ANSWER_REFUSALS),
+    );
+  }
+
+  /**
+   * One item marked read for the account, as opening it does: its id and
+   * its read state; not found where the item is not one the account
+   * reaches. Marking an item read that is read already changes nothing, so
+   * the window may ask on every open.
+   */
+  markInboxItemRead(
+    itemId: string,
+  ): Effect.Effect<CodingAgentInboxReadStateView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.PUT, path: inboxItemReadPath(itemId) }),
+      (answer) => readAnswer(answer, inboxReadStateSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** One item marked unread for the account until it reads the item again: its id and its read state; not found where the item is not one the account reaches. */
+  markInboxItemUnread(
+    itemId: string,
+  ): Effect.Effect<CodingAgentInboxReadStateView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.DELETE, path: inboxItemReadPath(itemId) }),
+      (answer) => readAnswer(answer, inboxReadStateSchema, ROW_REFUSALS),
+    );
+  }
+
+  /**
+   * Every item the account's Inbox lists marked read for it, open or
+   * settled, in the one workspace the request names or in all of its
+   * workspaces: how many were unread. It clears the unread dots alone; an
+   * item still waiting on an answer still waits.
+   */
+  markInboxRead(
+    request: InboxReadAllRequest = {},
+  ): Effect.Effect<CodingAgentInboxReadAllView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(inboxReadAllRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.PUT,
+        path: HOSTED_SERVICE_PATH.INBOX_READ,
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, inboxReadAllSchema, {}),
     );
   }
 }

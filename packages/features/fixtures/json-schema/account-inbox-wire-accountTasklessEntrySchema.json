@@ -69,6 +69,9 @@
     "updatedAt": {
       "type": "number",
       "minimum": 0
+    },
+    "unread": {
+      "type": "boolean"
     }
   },
   "required": [

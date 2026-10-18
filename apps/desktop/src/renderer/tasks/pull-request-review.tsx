@@ -4,7 +4,14 @@ import {
   REVIEW_EVENT,
   type ReviewEvent,
 } from "@luke/features/pull-request-write-wire";
-import { AnchoredPopover, BUTTON_VARIANT, Button, POPOVER_ALIGN } from "@luke/ui";
+import {
+  AnchoredPopover,
+  BUTTON_VARIANT,
+  Button,
+  ChoiceList,
+  type ChoiceOption,
+  POPOVER_ALIGN,
+} from "@luke/ui";
 import { MessageSquarePlusIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { PopoverPanel } from "../popover-panel";
@@ -49,17 +56,17 @@ const REVIEW_WORDS = {
 /** What the review may say, in the order GitHub's own review box offers it, and what each means. */
 const EVENT_OPTIONS = [
   {
-    event: REVIEW_EVENT.COMMENT,
+    value: REVIEW_EVENT.COMMENT,
     label: "Comment",
     detail: "Submit general feedback without approval.",
   },
-  { event: REVIEW_EVENT.APPROVE, label: "Approve", detail: "Approve this pull request." },
+  { value: REVIEW_EVENT.APPROVE, label: "Approve", detail: "Approve this pull request." },
   {
-    event: REVIEW_EVENT.REQUEST_CHANGES,
+    value: REVIEW_EVENT.REQUEST_CHANGES,
     label: "Request changes",
     detail: "Submit feedback that must be addressed.",
   },
-] as const satisfies readonly { event: ReviewEvent; label: string; detail: string }[];
+] as const satisfies readonly ChoiceOption<ReviewEvent>[];
 
 /** The field's prompt, by what the review says: changes asked for want their summary. */
 function placeholderOf(event: ReviewEvent): string {
@@ -110,7 +117,6 @@ function ReviewPanel({
   const field = useRef<HTMLTextAreaElement>(null);
   const [mode, setMode] = useState<BodyMode>(BODY_MODE.WRITE);
   const sending = writes.pending !== undefined;
-  const eventsName = useId();
 
   const onKey = (event: React.KeyboardEvent) => {
     if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
@@ -160,24 +166,15 @@ function ReviewPanel({
           </div>
         )}
       </div>
-      <fieldset className="pull-request-review-events" disabled={sending}>
-        <legend className="visually-hidden">{REVIEW_WORDS.EVENTS}</legend>
-        {EVENT_OPTIONS.map((option) => (
-          <label key={option.event} className="pull-request-review-event">
-            <input
-              type="radio"
-              name={eventsName}
-              value={option.event}
-              checked={draft.event === option.event}
-              onChange={() => draft.setEvent(option.event)}
-            />
-            <span className="pull-request-review-event-words">
-              <span className="pull-request-review-event-label">{option.label}</span>
-              <span className="pull-request-quiet">{option.detail}</span>
-            </span>
-          </label>
-        ))}
-      </fieldset>
+      <ChoiceList<ReviewEvent>
+        legend={REVIEW_WORDS.EVENTS}
+        options={EVENT_OPTIONS}
+        value={[draft.event]}
+        disabled={sending}
+        onChange={([event]) => {
+          if (event !== undefined) draft.setEvent(event);
+        }}
+      />
       <PullRequestWriteNote writes={writes} className="pull-request-review-note" />
       <div className="pull-request-review-foot">
         <Button onClick={onClose}>{REVIEW_WORDS.CANCEL}</Button>

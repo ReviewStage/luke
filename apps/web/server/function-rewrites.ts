@@ -23,11 +23,16 @@ export interface Rewrite {
   readonly dest: string;
 }
 
-/** Rewrites that read a path segment into the route's query, so a route sees `?id=` as it was written to. */
+/**
+ * Rewrites that read a path segment into the route's query, so a route sees
+ * `?id=` as it was written to, and the few exact paths that must stand ahead
+ * of a segment rewrite whose pattern would otherwise take them, which carry
+ * no query of their own.
+ */
 interface SegmentRewrite {
   readonly src: string;
   readonly route: string;
-  readonly query: string;
+  readonly query?: string;
 }
 
 const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
@@ -160,6 +165,9 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     query: "id=$1&attachment=$2",
   },
   { src: "/api/inbox/([^/]+)/messages", route: "inbox/messages", query: "id=$1" },
+  { src: "/api/inbox/([^/]+)/read", route: "inbox/read", query: "id=$1" },
+  // Every item of the Inbox marked read, ahead of the one item's rewrite that would read `read` as an id.
+  { src: "/api/inbox/read", route: "inbox/read" },
   { src: "/api/inbox/([^/]+)", route: "inbox/item", query: "id=$1" },
   { src: "/api/workspaces/([^/]+)/photo", route: "workspaces/photo", query: "id=$1" },
   { src: "/api/automations/([^/]+)/webhook", route: "automations/webhook", query: "id=$1" },

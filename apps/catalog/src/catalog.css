@@ -689,10 +689,3 @@ body {
   width: 100%;
   height: 100%;
 }
-
-/* A provider's mark at a control's glyph size. */
-.catalog-auth-provider {
-  display: block;
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
