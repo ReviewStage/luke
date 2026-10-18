@@ -248,8 +248,15 @@
      and a name cut short at a short name's width, the description's words
      following it on the line. */
   .luke-list-row-lead {
+    /* Note that the name is cut short at a short name's measure, its glyph
+       and the gap after it beside that. */
+    --luke-list-row-lead-measure: 18ch;
     display: inline-flex;
-    max-width: calc(18ch + 1em);
+    max-width: calc(
+      var(--luke-list-row-lead-measure) +
+      var(--luke-type-caption-size) +
+      var(--luke-space-2)
+    );
     align-items: center;
     gap: var(--luke-space-2);
     margin-inline-end: var(--luke-space-4);
@@ -266,8 +273,8 @@
   }
 
   .luke-list-row-lead-icon > svg {
-    width: 1em;
-    height: 1em;
+    width: var(--luke-type-caption-size);
+    height: var(--luke-type-caption-size);
   }
 
   .luke-list-row-lead-label {
