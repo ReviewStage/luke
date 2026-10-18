@@ -12,10 +12,10 @@ import { type RowMediaReads, useRowMediaReads } from "./inbox-row-media";
 
 /**
  * inbox-row-media.test.ts -- the window Inbox's reads of its rows' pictures
- * hold a picture while an item whose row asked for it is listed, and let it
- * go once none is, a read still out for it landing nowhere; a picture asked
- * for again once its item is listed again is read again. Synthetic items
- * and attachments.
+ * hold a picture while a listed item's row draws it, and let it go once its
+ * item leaves the list or is reposted without it, a read still out for it
+ * landing nowhere; a picture asked for again once its item is listed again
+ * is read again. Synthetic items and attachments.
  */
 
 const ITEM_A = "a1b2c3d4-0000-4000-8000-00000000000a";
@@ -68,8 +68,9 @@ function reads(first: readonly string[]) {
   const hook = () => held ?? assert.fail("the hook stands");
   return {
     list,
-    /** A row asks for a picture its item carries. */
-    ask: (itemId: string, attachmentId: string) => act(() => hook().onImage(itemId, attachmentId)),
+    /** A row says which pictures its item carries now. */
+    draw: (itemId: string, attachmentIds: readonly string[]) =>
+      act(() => hook().onImages(itemId, attachmentIds)),
     /** Answers the read out for a picture. */
     answer: (attachmentId: string) =>
       (out.get(attachmentId) ?? assert.fail(`a read is out for ${attachmentId}`))(),
@@ -83,8 +84,8 @@ function reads(first: readonly string[]) {
 
 test("a picture is held while its item is listed and let go once the item leaves the list, the rest kept", async () => {
   const hook = reads([ITEM_A, ITEM_B]);
-  hook.ask(ITEM_A, PICTURE_A);
-  hook.ask(ITEM_B, PICTURE_B);
+  hook.draw(ITEM_A, [PICTURE_A]);
+  hook.draw(ITEM_B, [PICTURE_B]);
   await hook.answer(PICTURE_A);
   await hook.answer(PICTURE_B);
   assert.equal(hook.image(PICTURE_A), "data:image/png;base64,iVBORw0KGgoA");
@@ -98,12 +99,23 @@ test("a picture is held while its item is listed and let go once the item leaves
 
 test("a read still out when its item leaves lands nowhere, and the picture is read again once its item is listed and asks again", async () => {
   const hook = reads([ITEM_A]);
-  hook.ask(ITEM_A, PICTURE_A);
+  hook.draw(ITEM_A, [PICTURE_A]);
   hook.list([]);
   await hook.answer(PICTURE_A);
   assert.equal(hook.image(PICTURE_A), undefined, "the late answer holds nothing");
   hook.list([ITEM_A]);
-  hook.ask(ITEM_A, PICTURE_A);
+  hook.draw(ITEM_A, [PICTURE_A]);
   await hook.answer(PICTURE_A);
   assert.equal(hook.image(PICTURE_A), "data:image/png;base64,iVBORw0KGgoA");
+});
+
+test("an item reposted with other pictures, still listed, lets go of the one it no longer carries", async () => {
+  const hook = reads([ITEM_A]);
+  hook.draw(ITEM_A, [PICTURE_A]);
+  await hook.answer(PICTURE_A);
+  assert.equal(hook.image(PICTURE_A), "data:image/png;base64,iVBORw0KGgoA");
+  hook.draw(ITEM_A, [PICTURE_B]);
+  await hook.answer(PICTURE_B);
+  assert.equal(hook.image(PICTURE_A), undefined, "the old version's picture goes with it");
+  assert.equal(hook.image(PICTURE_B), "data:image/png;base64,iVBORw0KGgoB");
 });

@@ -19,8 +19,9 @@ import type { InboxImage } from "./use-task-inbox";
  * a page's newest version through its task's pages
  * (`ACT_KIND.TASKS_PAGES`), each task read once, and again once an item
  * naming one of its pages changes, as an agent showing a page anew does. A
- * picture is let go once no item whose row asked for it is listed, as the
- * task Inbox lets go of a picture its items no longer name, so the list holds
+ * picture is let go once no listed item's row draws it, its item having left
+ * the list or been reposted without it, as the task Inbox lets go of a
+ * picture its items no longer name, so the list holds
  * the bytes of what it lists rather than of every picture it ever drew, and
  * none while it shows no media. A picture is drawn to fill its tile; a page
  * in a frame laid out four times the tile's width and
@@ -39,8 +40,8 @@ type PageRead = readonly PageLine[] | "failed";
 /** The list's reads of its rows' media, shared by every row. */
 export interface RowMediaReads {
   readonly images: ReadonlyMap<string, InboxImage>;
-  /** Asks for a picture a row draws, where it is neither held nor on its way. */
-  readonly onImage: (itemId: string, attachmentId: string) => void;
+  /** Says which pictures an item's row draws now, asking for each that is neither held nor on its way, and letting go of those no listed row draws any longer. */
+  readonly onImages: (itemId: string, attachmentIds: readonly string[]) => void;
   /** Each task's pages as read, by the task's id. */
   readonly pages: ReadonlyMap<string, PageRead>;
   /** Asks for a task's pages for an item changed at `at`, where no read asked since it changed is held or on its way. */
@@ -57,7 +58,7 @@ function imagesWithout(
 
 /**
  * The reads of the list's rows' media: each picture and each task's pages read once, as a row first asks,
- * and a picture let go once none of the items whose rows asked for it is among `listed`.
+ * and a picture let go once no item among `listed` draws it.
  */
 export function useRowMediaReads(
   /** The ids of the items whose rows may show their media: every item listed while media is shown, none while it is not. */
@@ -66,22 +67,30 @@ export function useRowMediaReads(
   const { act } = useAct();
   const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
   const [pages, setPages] = useState<ReadonlyMap<string, PageRead>>(new Map());
-  // Note that what is on its way is kept apart from what landed, so a row drawn while a read is out asks nothing again;
-  // each picture asked for is kept with the items whose rows asked, so it can be let go once none of them is listed.
-  const asked = useRef(new Map<string, Set<string>>());
+  // Note that what is on its way is kept apart from what landed, so a row drawn while a read is out asks nothing again.
+  // Each read is kept under a token of its own, so one whose picture was let go while it was out lands nowhere.
+  const asked = useRef(new Map<string, object>());
+  // The pictures each item's row draws now, as it last said: a folded row keeps its say, since its item is still listed.
+  const drawn = useRef(new Map<string, ReadonlySet<string>>());
   // Each task's pages are read again once an item naming one changed since they were last asked for,
   // since a page it names may have been shown, or shown again, since.
   const pagesAsked = useRef(new Map<string, number>());
-  const onImage = useCallback(
+  /** Lets go of every picture asked for that no item's row draws any longer, and of any read still out for one. */
+  const letGo = useCallback(() => {
+    const named = new Set<string>();
+    for (const each of drawn.current.values())
+      for (const attachmentId of each) named.add(attachmentId);
+    const gone = new Set(
+      [...asked.current.keys()].filter((attachmentId) => !named.has(attachmentId)),
+    );
+    if (gone.size === 0) return;
+    for (const attachmentId of gone) asked.current.delete(attachmentId);
+    setImages((standing) => imagesWithout(standing, gone));
+  }, []);
+  const read = useCallback(
     (itemId: string, attachmentId: string) => {
-      const askers = asked.current.get(attachmentId);
-      if (askers !== undefined) {
-        askers.add(itemId);
-        return;
-      }
-      const mine = new Set([itemId]);
+      const mine = {};
       asked.current.set(attachmentId, mine);
-      // Note that a read whose picture was let go while it was out lands nowhere, so it holds no bytes the list no longer lists.
       const standsFor = () => asked.current.get(attachmentId) === mine;
       act(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, { itemId, attachmentId }).then(
         (answer) => {
@@ -101,16 +110,28 @@ export function useRowMediaReads(
     },
     [act],
   );
+  const onImages = useCallback(
+    (itemId: string, attachmentIds: readonly string[]) => {
+      const before = drawn.current.get(itemId);
+      const now = new Set(attachmentIds);
+      drawn.current.set(itemId, now);
+      for (const attachmentId of now) {
+        if (!asked.current.has(attachmentId)) read(itemId, attachmentId);
+      }
+      // Note that an item reposted under its key keeps its id, so a picture it no longer carries goes with the old version.
+      if (before !== undefined && [...before].some((attachmentId) => !now.has(attachmentId))) {
+        letGo();
+      }
+    },
+    [read, letGo],
+  );
   useEffect(() => {
     const still = new Set(listed);
-    const gone = new Set<string>();
-    for (const [attachmentId, askers] of asked.current) {
-      if (![...askers].some((itemId) => still.has(itemId))) gone.add(attachmentId);
-    }
-    if (gone.size === 0) return;
-    for (const attachmentId of gone) asked.current.delete(attachmentId);
-    setImages((standing) => imagesWithout(standing, gone));
-  }, [listed]);
+    const left = [...drawn.current.keys()].filter((itemId) => !still.has(itemId));
+    if (left.length === 0) return;
+    for (const itemId of left) drawn.current.delete(itemId);
+    letGo();
+  }, [listed, letGo]);
   const onPages = useCallback(
     (taskId: string, at: number) => {
       const last = pagesAsked.current.get(taskId);
@@ -132,7 +153,7 @@ export function useRowMediaReads(
     },
     [act],
   );
-  return { images, onImage, pages, onPages };
+  return { images, onImages, pages, onPages };
 }
 
 /** One picture's tile: the picture once read, its glyph where the read did not answer. */
@@ -205,13 +226,15 @@ export function RowMedia({
   media: readonly InboxMedia[];
   reads: RowMediaReads;
 }): React.JSX.Element {
-  const { onImage, onPages } = reads;
+  const { onImages, onPages } = reads;
   useEffect(() => {
+    const pictures: string[] = [];
     for (const each of media) {
-      if (each.kind === INBOX_MEDIA.IMAGE) onImage(itemId, each.attachmentId);
+      if (each.kind === INBOX_MEDIA.IMAGE) pictures.push(each.attachmentId);
       else onPages(each.taskId, changedAt);
     }
-  }, [itemId, changedAt, media, onImage, onPages]);
+    onImages(itemId, pictures);
+  }, [itemId, changedAt, media, onImages, onPages]);
   return (
     <>
       {media.map((each) =>
