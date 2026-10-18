@@ -26,7 +26,12 @@ afterEach(() => {
 type RefreshingProps = Omit<Parameters<typeof Refreshing>[0], "children">;
 
 /** A page holding the answer under `Refreshing`, and a way to draw it again with new props. */
-function mount(): { page: HTMLElement; draw: (props: RefreshingProps) => void } {
+interface Mounted {
+  readonly page: HTMLElement;
+  readonly draw: (props: RefreshingProps) => void;
+}
+
+function mount(): Mounted {
   const page = document.createElement("div");
   document.body.append(page);
   const root = createRoot(page);
