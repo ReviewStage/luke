@@ -10,6 +10,7 @@ import {
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
+  type InboxChoice,
   type InboxCodeBlock,
   type InboxFieldValue,
   type InboxForm,
@@ -182,6 +183,86 @@ export function inboxReply(
     ...(note === "" ? undefined : { note }),
   };
   return inboxReplyRefusal(item, answer, draft.attachments) === undefined ? answer : undefined;
+}
+
+/** What an open item's answer still lacks: an option picked, a required field filled, or the developer's own words. */
+export const INBOX_MISSING = {
+  OPTION: "option",
+  FIELD: "field",
+  WORDS: "words",
+} as const;
+
+/** What the answer lacks, with the line the box's foot says it in; a field's by its label. */
+export type InboxMissing =
+  | { readonly kind: typeof INBOX_MISSING.OPTION; readonly line: string }
+  | { readonly kind: typeof INBOX_MISSING.FIELD; readonly label: string; readonly line: string }
+  | { readonly kind: typeof INBOX_MISSING.WORDS; readonly line: string };
+
+/** What the box's foot says an answer lacks, by what it lacks. */
+const MISSING_LINE = {
+  ONE: "Pick an option",
+  MANY: "Pick at least one",
+  WORDS: "Write your answer",
+} as const;
+
+/**
+ * What the card's answer still lacks, the first thing in the item's order,
+ * or nothing where it lacks nothing it can be told to fill: a choice with
+ * no pick and no words of the developer's own lacks an option, a form its
+ * first required field left empty, and words their words. An item
+ * answered by a press lacks nothing here.
+ */
+export function inboxMissing(
+  item: Pick<InboxItem, "response">,
+  draft: InboxDraft,
+): InboxMissing | undefined {
+  const response = item.response;
+  if (!knownResponse(response)) return undefined;
+  const ownWords = draft.note.trim() !== "" || draft.attachments.length > 0;
+  switch (response.type) {
+    case INBOX_RESPONSE.CHOICE:
+      if (draft.choices.length > 0 || ownWords) return undefined;
+      return {
+        kind: INBOX_MISSING.OPTION,
+        line: response.multiple === true ? MISSING_LINE.MANY : MISSING_LINE.ONE,
+      };
+    case INBOX_RESPONSE.FORM: {
+      const sent = new Set(sentValues(response, draft).map((value) => value.label));
+      const empty = response.fields.find(
+        (field) => field.required === true && !sent.has(field.label),
+      );
+      return empty === undefined
+        ? undefined
+        : { kind: INBOX_MISSING.FIELD, label: empty.label, line: `Fill in ${empty.label}` };
+    }
+    case INBOX_RESPONSE.TEXT:
+      return ownWords ? undefined : { kind: INBOX_MISSING.WORDS, line: MISSING_LINE.WORDS };
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * The draft after the option labelled is picked by its number: the one
+ * pick of a choice of one, which picking again keeps, or one more of a
+ * choice of several, which picking again lets go, as a press on its row
+ * would.
+ */
+export function withChoice(
+  choice: Pick<InboxChoice, "multiple">,
+  draft: InboxDraft,
+  label: string,
+): InboxDraft {
+  if (choice.multiple !== true) return { ...draft, choices: [label] };
+  const choices = draft.choices.includes(label)
+    ? draft.choices.filter((each) => each !== label)
+    : [...draft.choices, label];
+  return { ...draft, choices };
+}
+
+/** What the box's foot says of a choice of several: how many are picked, or that any may be. */
+export function pickedWords(count: number): string {
+  return count === 0 ? "Pick any that apply" : `${count} picked`;
 }
 
 /** What follows an item's question on its thread: a message on it, or where it was settled. */

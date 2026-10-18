@@ -4090,6 +4090,12 @@ ol.transcript-list {
   white-space: nowrap;
 }
 
+/* What a send found the answer lacking reads in the attention ink, as the
+   item's own mark does, until it is filled. */
+.inbox-answer-quiet [data-wanting] {
+  color: var(--luke-color-attention);
+}
+
 .inbox-presses {
   display: flex;
   flex: none;
