@@ -6,6 +6,11 @@ import {
   PUBLIC_SECTIONS,
   PublicPage,
   PublicSection,
+  TEXT_ELEMENT,
+  TEXT_FONT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
 } from "@luke/ui";
 import changelogMarkdown from "../../../CHANGELOG.md?raw";
 import {
@@ -75,8 +80,15 @@ function ReleaseEntry({ release }: { readonly release: Release }): React.JSX.Ele
         >
           v{release.version}
         </a>
-        <time className="font-mono text-xs text-muted-foreground" dateTime={release.date}>
-          {formatReleaseDate(release.date)}
+        <time dateTime={release.date}>
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.CAPTION}
+            tone={TEXT_TONE.MUTED}
+            font={TEXT_FONT.MONO}
+          >
+            {formatReleaseDate(release.date)}
+          </Text>
         </time>
       </div>
       <Prose html={release.html} />
