@@ -52,8 +52,8 @@ import { CODER } from "./bounds.js";
  * GitHub itself. The row keeps beside it the head it was read at, when it
  * merged, and its lines by directory, folded from its changed files
  * (`@luke/features/pull-request-area`); the files cost a read of their
- * own, so they are read again only where the pull request, its head, or
- * where it stands moved since the row's, and a check's delivery, which
+ * own, so they are read again only where the pull request, its head,
+ * where it stands, or its size moved since the row's, and a check's delivery, which
  * moves none of them, reads only the checks. The answer is kept per
  * agent for `CODER.PUBLISHED_TTL` so a tab reading it beside every page of
  * a held transcript asks GitHub a few times a minute at most, under a key
@@ -78,10 +78,21 @@ interface Published {
   readonly stored: StoredPullRequest | null;
 }
 
-/** Whether the files the row's areas were folded from may have moved since: another pull request, another head, or a move of where it stands. */
+/**
+ * Whether the files the row's areas were folded from may have moved since:
+ * another pull request, another head, a move of where it stands, or another
+ * size. Note that the size is compared too, because the files are counted
+ * against the base, which can move, or be retargeted, under a head that
+ * stays.
+ */
 function filesMoved(kept: StoredPullRequest, found: GitHubPullRequest): boolean {
   return (
-    kept.number !== found.number || kept.headSha !== found.headSha || kept.state !== found.state
+    kept.number !== found.number ||
+    kept.headSha !== found.headSha ||
+    kept.state !== found.state ||
+    kept.additions !== found.additions ||
+    kept.deletions !== found.deletions ||
+    kept.changedFiles !== found.changedFiles
   );
 }
 

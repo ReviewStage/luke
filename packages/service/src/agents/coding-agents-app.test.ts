@@ -1786,25 +1786,23 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
     patch: "@@ -1 +1 @@",
   });
 
-  /** Where the published pull request stands on GitHub as a test moves it: its head, its files there, and when it merged, none while open. */
+  /** Where the published pull request stands on GitHub as a test moves it: its head, the lines it adds against its base, the files its files read lists, and when it merged, none while open. */
   interface Standing {
     sha: string;
+    additions: number;
     files: readonly ReturnType<typeof githubFile>[];
     mergedAt: string | null;
   }
 
   const MERGED_AT = "2026-10-17T09:00:00Z";
 
-  /** The repository answering the published pull request as `standing` holds it, writing down the head each read of its files came at. */
+  /** The repository answering the published pull request as `standing` holds it. */
   const standingPullRequest =
-    (standing: Standing, filesRead: string[]): RepositoryScript =>
+    (standing: Standing): RepositoryScript =>
     async (sent) => {
       const pull = `/repos/${RELAY.owner}/${RELAY.name}/pulls/${PUBLISHED.number}`;
       const { pathname } = new URL(sent.url);
-      if (pathname === `${pull}/files`) {
-        filesRead.push(standing.sha);
-        return Response.json(standing.files);
-      }
+      if (pathname === `${pull}/files`) return Response.json(standing.files);
       const answered = await publishedPullRequest(sent);
       if (answered === undefined || pathname !== pull) return answered;
       const merged = standing.mergedAt !== null;
@@ -1813,6 +1811,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
         ...(merged ? { state: "closed" } : undefined),
         merged,
         merged_at: standing.mergedAt,
+        additions: standing.additions,
         head: { ref: PUBLISHED.branch, sha: standing.sha },
       });
     };
@@ -1820,10 +1819,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
   /** The owner's agent on the published branch, its pull request answered as `standing` holds it, and a read of it a kept answer's TTL after the last. */
   const publishedAs = (standing: Standing) =>
     Effect.gen(function* () {
-      const filesRead: string[] = [];
-      const { owner, task, ask } = yield* openTask({
-        github: standingPullRequest(standing, filesRead),
-      });
+      const { owner, task, ask } = yield* openTask({ github: standingPullRequest(standing) });
       const { agent } = yield* startedAgent(owner, task.id, ask);
       yield* updateCodingAgentBranch(owner, agent.id, PUBLISHED.branch);
       const read = Effect.gen(function* () {
@@ -1833,7 +1829,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
         return answered.body;
       });
       const kept = readCodingAgentPublished(owner, agent.id);
-      return { read, kept, filesRead };
+      return { read, kept };
     });
 
   it.effect(
@@ -1842,6 +1838,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
       Effect.gen(function* () {
         const { read, kept } = yield* publishedAs({
           sha: PUBLISHED.headSha,
+          additions: 4,
           files: [
             githubFile("packages/service/src/agents/coder-host/published.ts", 4, 1),
             githubFile("README.md", 1, 0),
@@ -1876,38 +1873,43 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
   );
 
   it.effect(
-    "a pull request's files are read again only once its head or where it stands moved, and a read between keeps the areas it had",
+    "a pull request's areas follow its files once its head, its size, or where it stands moved, and a read that moved none of them keeps the areas it had",
     () =>
       Effect.gen(function* () {
         const standing: Standing = {
           sha: PUBLISHED.headSha,
+          additions: 2,
           files: [githubFile("apps/web/vite.config.ts", 2, 0)],
           mergedAt: null,
         };
-        const { read, kept, filesRead } = yield* publishedAs(standing);
+        const { read, kept } = yield* publishedAs(standing);
         const areas = Effect.map(kept, (stored) => stored?.areas);
+        const file = (path: string) => [githubFile(path, 2, 0)];
 
         yield* read;
-        yield* read;
-        assert.deepEqual(filesRead, [PUBLISHED.headSha]);
         assert.deepEqual(yield* areas, [{ path: "apps/web", additions: 2, deletions: 0 }]);
         assert.equal((yield* kept)?.mergedAt, undefined);
 
-        standing.sha = "beef002";
-        standing.files = [
-          githubFile("apps/web/vite.config.ts", 2, 0),
-          githubFile("docs/a.md", 5, 0),
-        ];
+        // A check's delivery moves nothing the pull request's read says, so its files are not read.
+        standing.files = file("docs/unread.md");
         yield* read;
-        assert.deepEqual(filesRead, [PUBLISHED.headSha, "beef002"]);
-        assert.deepEqual(yield* areas, [
-          { path: "docs", additions: 5, deletions: 0 },
-          { path: "apps/web", additions: 2, deletions: 0 },
-        ]);
+        assert.deepEqual(yield* areas, [{ path: "apps/web", additions: 2, deletions: 0 }]);
+
+        standing.sha = "beef002";
+        standing.files = file("apps/desktop/src/main.ts");
+        yield* read;
+        assert.deepEqual(yield* areas, [{ path: "apps/desktop/src", additions: 2, deletions: 0 }]);
+
+        // The base moved under the same head, which GitHub's count of its lines says.
+        standing.additions = 3;
+        standing.files = file("packages/ui/src/a.ts");
+        yield* read;
+        assert.deepEqual(yield* areas, [{ path: "packages/ui/src", additions: 2, deletions: 0 }]);
 
         standing.mergedAt = MERGED_AT;
+        standing.files = file("tools/a.ts");
         yield* read;
-        assert.deepEqual(filesRead, [PUBLISHED.headSha, "beef002", "beef002"]);
+        assert.deepEqual(yield* areas, [{ path: "tools", additions: 2, deletions: 0 }]);
         assert.equal((yield* kept)?.mergedAt, Date.parse(MERGED_AT));
       }),
   );
