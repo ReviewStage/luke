@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "events": {
+      "type": "number",
+      "minimum": 0
+    },
+    "users": {
+      "type": "number",
+      "minimum": 0
+    },
+    "zonePaths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 16
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "events",
+    "users",
+    "zonePaths"
+  ],
+  "additionalProperties": false
+}
