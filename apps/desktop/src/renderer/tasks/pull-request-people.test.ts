@@ -16,12 +16,12 @@ import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { MemberDirectory } from "@luke/panel/member-directory";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { Tooltip } from "@luke/panel/tooltip";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { Tooltip } from "../tooltip";
 import { AgentChangesTab, ChangesCard, peopleOf } from "./agent-changes-tab";
 import { agentSubject, NOTHING_HELD } from "./agent-ref";
 

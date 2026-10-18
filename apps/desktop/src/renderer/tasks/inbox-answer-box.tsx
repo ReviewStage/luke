@@ -19,6 +19,10 @@ import { imageFiles } from "@luke/panel/feedback-images";
 import { type IntegrationStatuses, useIntegrationStatuses } from "@luke/panel/integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "@luke/panel/plan-editor/contract";
 import { readFiles, withFiles } from "@luke/panel/tasks/attached-files";
+import { ComposerField } from "@luke/panel/tasks/composer-field";
+import { DictateButton, DictationStrip } from "@luke/panel/tasks/dictation-strip";
+import { ComposerQuoteView, ReplyToSelection } from "@luke/panel/tasks/reply-to-selection";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
@@ -33,11 +37,8 @@ import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useRef, useState } from "react";
 import { useSideBundles } from "../bundle-loader";
-import { Tooltip } from "../tooltip";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
-import { ComposerField } from "./composer-field";
 import { useComposerPickers } from "./composer-pickers";
-import { DictateButton, DictationStrip } from "./dictation-strip";
 import {
   type InboxDraft,
   type InboxMissing,
@@ -46,7 +47,6 @@ import {
   inboxReply,
   pickedWords,
 } from "./inbox-model";
-import { ComposerQuoteView, ReplyToSelection } from "./reply-to-selection";
 import type { SkillSource } from "./skill-picker";
 import type { TaskInboxControl } from "./use-task-inbox";
 

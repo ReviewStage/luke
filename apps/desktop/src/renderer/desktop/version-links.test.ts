@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { SIDEBAR_OVERLAY } from "@luke/panel/desktop/sidebar-collapse";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { newestToastSays } from "@luke/panel/testing/toast";
@@ -16,7 +17,6 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform
 import { tasksControl } from "#testing/tasks-control";
 import { HISTORY_READ } from "../tasks/use-plan-history";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
-import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
  * A plan's version has a link of its own: a version's row's menu copies its

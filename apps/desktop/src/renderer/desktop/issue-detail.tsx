@@ -2,9 +2,13 @@ import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import { usePerson } from "@luke/panel/member-directory";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArrowUpRightIcon,
@@ -21,12 +25,8 @@ import {
 } from "@luke/ui";
 import { ListTodoIcon } from "lucide-react";
 import { type ReactNode, useRef } from "react";
-import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag } from "../experiment-marks";
 import { DocumentByline, DocumentScroll } from "../tasks/document-frame";
-import { RelativeTime } from "../tasks/relative-time";
-import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction } from "./action-menu";
 import {
   archiveAnswered,
   archiveItem,

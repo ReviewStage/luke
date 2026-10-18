@@ -25,6 +25,7 @@ import {
   type LiveBrain,
   type LiveBrainAsk,
   type LiveBrainCancel,
+  type LiveBrainJoin,
   type LiveBrainRecoveredRun,
   type LiveBrainRecovery,
   type LiveBrainRunEvent,
@@ -163,6 +164,12 @@ interface ScriptedRecovery {
   readonly told: readonly LiveBrainRunEvent[];
 }
 
+/** A join as the fake answers it: what the call finds, and the events its follow tells the moment it runs. */
+interface ScriptedJoin {
+  readonly join: Omit<LiveBrainJoin, "follow">;
+  readonly told: readonly LiveBrainRunEvent[];
+}
+
 class FakeBrain implements LiveBrain {
   readonly asks: LiveBrainAsk[] = [];
   refuse: string | undefined;
@@ -179,8 +186,11 @@ class FakeBrain implements LiveBrain {
     runs: [],
     told: [],
   };
-  /** The run each fresh session's exploring is taken as, by the session; none refuses it, as a backend out of reach would. */
-  exploring: ((sessionId: string) => string) | undefined;
+  /** What each fresh session finds as it joins the plan, and what its follow tells; nothing by default, as a first call whose exploring the backend refused. */
+  joining: ScriptedJoin = {
+    join: { joined: false, runs: [], missed: undefined, questions: [] },
+    told: [],
+  };
   readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
   #runs = 0;
 
@@ -196,12 +206,22 @@ class FakeBrain implements LiveBrain {
     });
   }
 
-  explore(sessionId: string): Effect.Effect<LiveBrainSubmission> {
-    return Effect.sync(() =>
-      this.exploring === undefined
-        ? { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: "unreachable" }
-        : { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: this.exploring(sessionId) },
-    );
+  /** While set, a join answers only once this settles, as a brain reading its store does. */
+  joinWhen: Deferred.Deferred<void> | undefined;
+  /** How many joins had their follow run, which is when what they handed over counts heard. */
+  followed = 0;
+
+  join(): Effect.Effect<LiveBrainJoin> {
+    return Effect.gen({ self: this }, function* () {
+      if (this.joinWhen !== undefined) yield* Deferred.await(this.joinWhen);
+      return {
+        ...this.joining.join,
+        follow: Effect.sync(() => {
+          this.followed += 1;
+          for (const event of this.joining.told) this.fire(event);
+        }),
+      };
+    });
   }
 
   cancelRun(runId: string): Effect.Effect<LiveBrainCancel> {
@@ -703,5 +723,182 @@ it.effect(
       f.brain.fire(sentence("run-2", "Current reply."));
       yield* settle();
       assert.deepEqual(said(sideband), ["The repository has an invites module.", "Current reply."]);
+    }),
+);
+
+it.effect(
+  "a call that ends while Luke is still working cancels none of his runs, so the work goes on with no call up",
+  () =>
+    Effect.gen(function* () {
+      const { f, sideband } = yield* askedRun();
+      f.brain.fire(sentence("run-1", "Halfway there."));
+      yield* settle();
+      sideband.closedBy("remote_hangup", 12);
+      yield* settle();
+      assert.equal(f.service.sessionStands(), false);
+      assert.deepEqual(f.brain.cancels, []);
+    }),
+);
+
+/** What each thinking append told the voice, in wire order. */
+function thought(sideband: FakeSideband) {
+  return appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).map((event) =>
+    "content" in event ? event.content : undefined,
+  );
+}
+
+it.effect(
+  "a call back hears what Luke said while nobody was on the call as a short catch-up, then the run still under way from its follow, and the old run never ends the new call",
+  () =>
+    Effect.gen(function* () {
+      const brain = new FakeBrain();
+      brain.joining = {
+        join: {
+          joined: true,
+          runs: ["earlier-run"],
+          missed: "Invites expire after seven days.",
+          questions: [],
+        },
+        // The run finishes as the call joins it, and its end of the call was the last call's goodbye.
+        told: [
+          sentence("earlier-run", "The resend button is wired too."),
+          { kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "earlier-run" },
+          {
+            kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+            runId: "earlier-run",
+            end: LIVE_BRAIN_RUN_END.COMPLETED,
+          },
+        ],
+      };
+      const f = yield* fixture(brain);
+      const sideband = yield* f.open();
+      yield* settle();
+      assert.deepEqual(said(sideband), [
+        "While the developer was away, Luke kept working. Catch them up in a sentence or two, in your own words rather than reading this out: Invites expire after seven days. He is still working, and will say more when he has it.",
+        "The resend button is wired too.",
+      ]);
+      assert.equal(f.endings.count, 0);
+      // Joining asks the brain nothing: no delegation is composed and nothing is cancelled.
+      assert.deepEqual(f.brain.asks, []);
+      assert.deepEqual(f.brain.cancels, []);
+    }),
+);
+
+it.effect(
+  "a call back whose earlier work is still under way with nothing new yet is told so quietly, and the developer's ask then supersedes it",
+  () =>
+    Effect.gen(function* () {
+      const brain = new FakeBrain();
+      brain.joining = {
+        join: { joined: true, runs: ["earlier-run"], missed: undefined, questions: [] },
+        told: [],
+      };
+      const f = yield* fixture(brain);
+      const sideband = yield* f.open();
+      yield* settle();
+      assert.deepEqual(said(sideband), []);
+      assert.deepEqual(thought(sideband), [
+        "Luke is still working on what the developer asked on an earlier call; his findings will follow when he has them.",
+      ]);
+      sideband.input("How's it going?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire(sentence("earlier-run", "Old finding."));
+      f.brain.fire(sentence("run-1", "Current reply."));
+      yield* settle();
+      assert.deepEqual(said(sideband), ["Current reply."]);
+    }),
+);
+
+it.effect(
+  "a plan's first call says no catch-up: its exploring is heard as a run of the brain's own",
+  () =>
+    Effect.gen(function* () {
+      const brain = new FakeBrain();
+      brain.joining = {
+        join: { joined: false, runs: ["explore-1"], missed: undefined, questions: [] },
+        told: [sentence("explore-1", "This is the web app.")],
+      };
+      const f = yield* fixture(brain);
+      const sideband = yield* f.open();
+      yield* settle();
+      assert.deepEqual(said(sideband), ["This is the web app."]);
+      assert.deepEqual(thought(sideband), []);
+    }),
+);
+
+it.effect(
+  "a call back asks the questions Luke queued while no call was up, after its catch-up, one at a time",
+  () =>
+    Effect.gen(function* () {
+      const brain = new FakeBrain();
+      brain.joining = {
+        join: {
+          joined: true,
+          runs: [],
+          missed: "Invites expire after seven days.",
+          questions: [
+            { question: "Which email provider?", recommendation: "Postmark." },
+            { question: "Resend after a day?", recommendation: "Yes." },
+          ],
+        },
+        told: [],
+      };
+      const f = yield* fixture(brain);
+      const sideband = yield* f.open();
+      yield* settle();
+      assert.deepEqual(said(sideband), [
+        "While the developer was away, Luke kept working. Catch them up in a sentence or two, in your own words rather than reading this out: Invites expire after seven days.",
+        "Ask the developer this next, once they have answered anything you have already asked: Which email provider? Recommended answer: Postmark.",
+      ]);
+      assert.equal(brain.followed, 1);
+    }),
+);
+
+it.effect(
+  "a call that ends while it is still joining hands nothing over and counts nothing heard, so the next call is caught up instead",
+  () =>
+    Effect.gen(function* () {
+      const brain = new FakeBrain();
+      brain.joining = {
+        join: { joined: true, runs: ["earlier-run"], missed: "Unheard.", questions: [] },
+        told: [],
+      };
+      brain.joinWhen = yield* Deferred.make<void>();
+      const f = yield* fixture(brain);
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.closedBy("remote_hangup", 3);
+      yield* settle();
+      yield* Deferred.succeed(brain.joinWhen, undefined);
+      yield* settle();
+      assert.deepEqual(said(sideband), []);
+      assert.equal(brain.followed, 0);
+    }),
+);
+
+it.effect(
+  "an ask the developer makes while the call is still joining supersedes the earlier work: nothing of it is said, stood, or counted heard",
+  () =>
+    Effect.gen(function* () {
+      const brain = new FakeBrain();
+      brain.joining = {
+        join: { joined: true, runs: ["earlier-run"], missed: "Stale finding.", questions: [] },
+        told: [],
+      };
+      brain.joinWhen = yield* Deferred.make<void>();
+      const f = yield* fixture(brain);
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Check the email path instead.", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      yield* Deferred.succeed(brain.joinWhen, undefined);
+      yield* settle();
+      f.brain.fire(sentence("earlier-run", "Old reply."));
+      f.brain.fire(sentence("run-1", "Current reply."));
+      yield* settle();
+      assert.deepEqual(said(sideband), ["Current reply."]);
+      assert.equal(brain.followed, 0);
     }),
 );

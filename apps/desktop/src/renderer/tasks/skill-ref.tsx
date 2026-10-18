@@ -1,3 +1,4 @@
+import { InlineRef } from "@luke/panel/inline-ref";
 import {
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -8,7 +9,6 @@ import {
 } from "@luke/ui";
 import { type SkillOption, skillWord } from "@luke/ui/skill-mention";
 import { BookOpenIcon } from "lucide-react";
-import { InlineRef } from "../inline-ref";
 import { FileTypeIcon } from "./file-type-icon";
 
 /**

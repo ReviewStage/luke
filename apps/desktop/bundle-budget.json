@@ -12,7 +12,7 @@
     "renderer/pcm-tee-worklet.js": 413,
     "renderer/avatar-session.js": 149485,
     "renderer/diagram.js": 195523,
-    "renderer/diff-view.js": 178690,
+    "renderer/diff-view.js": 256515,
     "renderer/factory-world.js": 161840,
     "renderer/factory-world-dev.js": 1745,
     "renderer/factory-world-station.js": 32657,

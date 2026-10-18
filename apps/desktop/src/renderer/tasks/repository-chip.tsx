@@ -3,6 +3,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "@luke/panel/open-settings";
 import { RepositoryPicture } from "@luke/panel/repository-picture";
+import { type MenuRow, SearchableMenu } from "@luke/panel/searchable-menu";
 import { Spinner } from "@luke/panel/spinner";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
@@ -24,7 +25,6 @@ import {
 import { repositoryFailureNote } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row";
 
 /**

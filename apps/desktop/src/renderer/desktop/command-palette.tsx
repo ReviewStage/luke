@@ -53,15 +53,26 @@ import {
   useAppCommand,
   useOverlayHold,
 } from "@luke/panel/app-commands";
+import { WorkspaceRef } from "@luke/panel/desktop/workspace-ref";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import { Highlighted } from "@luke/panel/search-field";
 import { settingsPageOf, settingsPageShown } from "@luke/panel/settings/pages";
+import {
+  landOnSettingsRow,
+  resultPageWord,
+  type SettingsSearchInput,
+  settingsSearchEntries,
+} from "@luke/panel/settings-search";
 import { Shortcut } from "@luke/panel/shortcut";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { markReadItem } from "@luke/panel/tasks/task-menu-items";
+import { SIDE_PANEL_TABS } from "@luke/panel/tasks/use-side-panel";
 import { type ReadMarks, useReadMarks } from "@luke/panel/tasks/use-task-looks";
 import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
 } from "@luke/panel/tasks/use-workspace-members";
+import { Tooltip } from "@luke/panel/tooltip";
 import type { HostCapability } from "@luke/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import {
@@ -102,27 +113,16 @@ import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand";
-import { Highlighted } from "../search-field";
-import {
-  landOnSettingsRow,
-  resultPageWord,
-  type SettingsSearchInput,
-  settingsSearchEntries,
-} from "../settings-search";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
 import { refusalLine } from "../tasks/file-tab-model";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look";
-import { markReadItem } from "../tasks/task-menu-items";
-import { SIDE_PANEL_TABS } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
-import { Tooltip } from "../tooltip";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs";
 import { changesOffers, panelEntries, taskWorkers } from "./side-panel";
 import { taskOf } from "./task-actions";
-import { WorkspaceRef } from "./workspace-ref";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the chips stand. */
 const PALETTE_FILTER = {
@@ -605,7 +605,7 @@ function agentRows(
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
   const taskName = [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.name;
-  const workers = taskWorkers(workRowsOf(tasks.work.conversation, tasks.work.callLive));
+  const workers = taskWorkers(workRowsOf(tasks.work.conversation));
   const inbox = inboxEntries(tasks.agents, () => tasks.onShowInbox(taskId));
   const chat = chatEntries(chatOn && tasks.chatView.available, () => tasks.onShowChat(taskId));
   const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({

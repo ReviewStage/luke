@@ -5,6 +5,7 @@ import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/cod
 import type { Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
+import { SIDE_PANEL_TAB } from "@luke/panel/tasks/use-side-panel";
 import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
 import { ellipsized } from "@luke/panel/testing/action-label";
 import { relayout } from "@luke/panel/testing/resize-observer";
@@ -14,7 +15,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopTasks } from "./desktop-tasks";
 

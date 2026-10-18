@@ -4,11 +4,11 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { Shimmer } from "@luke/panel/ai-elements/shimmer";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { callHeading, useMinute } from "@luke/panel/tasks/task-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import { cn } from "@luke/ui";
 import { Clock, Duration, Option, Schedule, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { ReactNode } from "react";
-import { Tooltip } from "../tooltip";
 import { TurnCard } from "./turn-card";
 
 /**

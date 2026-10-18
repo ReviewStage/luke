@@ -308,6 +308,40 @@ const LOADED_AFTER = {
   ),
 };
 
+// The worker Pierre's diffs highlights a Files changed list in
+// (`src/renderer/diff-view/index.ts`'s `highlightPool`), bundled whole as one
+// classic script and handed to the diff bundle as text
+// (`DIFF_HIGHLIGHT_WORKER`), which starts each worker from a `blob:`, the one
+// place the panel's policy admits a worker from. Its WebAssembly engine is
+// answered with nothing, since the policy admits no WebAssembly and the
+// bundle asks for Shiki's JavaScript engine; carried, it would be 600 KB of
+// the worker's text.
+const SHIKI_WASM = /^shiki\/wasm$/;
+const shikiWasmLeftOut = {
+  name: "shiki-wasm-left-out",
+  setup(build) {
+    build.onResolve({ filter: SHIKI_WASM }, (args) => ({ path: args.path, namespace: "no-wasm" }));
+    build.onLoad({ filter: /.*/, namespace: "no-wasm" }, () => ({
+      contents: "export default undefined;",
+      loader: "js",
+    }));
+  },
+};
+const highlightWorker = await build({
+  entryPoints: [fileURLToPath(import.meta.resolve("@pierre/diffs/worker/worker.js"))],
+  bundle: true,
+  write: false,
+  platform: "browser",
+  format: "iife",
+  target: "chrome140",
+  minify: true,
+  conditions: ["production"],
+  plugins: [shikiWasmLeftOut],
+  define: { "process.env.NODE_ENV": '"production"' },
+  logLevel: "info",
+});
+const highlightWorkerText = highlightWorker.outputFiles[0]?.text ?? "";
+
 // The renderer, as ES modules: one entry per window role, so a window parses
 // only the surface it mounts, the side bundles above, and the chunks the
 // entries share, with no wrapper around the whole, which is about 6 KB
@@ -357,6 +391,7 @@ const rendererBuild = build({
     // kill switch the site's own counting has, so a local run or an
     // unconfigured build cannot record into a stranger's project.
     PACKAGED_POSTHOG_PROJECT_API_KEY: JSON.stringify(process.env.POSTHOG_PROJECT_API_KEY ?? ""),
+    DIFF_HIGHLIGHT_WORKER: JSON.stringify(highlightWorkerText),
   },
 });
 

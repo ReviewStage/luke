@@ -8,6 +8,7 @@ import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { runAppCommand } from "@luke/panel/app-commands";
 import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
+import { SIDE_PANEL_TAB, type SidePanelTab } from "@luke/panel/tasks/use-side-panel";
 import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "@luke/panel/testing/app-state";
@@ -23,7 +24,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { DesktopTasks } from "../desktop/desktop-tasks";
-import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel";
 
 /**
  * Show terminal (⌘J) and New terminal from each place a developer can be,

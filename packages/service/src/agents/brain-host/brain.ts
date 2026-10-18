@@ -306,8 +306,9 @@ Return the relevant facts and where the work stands now. Don't repeat the questi
 `;
 
 /**
- * The message a fresh call opens the brain's turn with, sent as the
- * session starts rather than at the developer's first words. It is general
+ * The message a task's first call opens the brain's turn with, sent as the
+ * session starts rather than at the developer's first words; a call back
+ * sends nothing, and takes up the work earlier calls left. It is general
  * on purpose, because nothing of the task has been said yet: the task's name,
  * the developer's brief, and saved document reach the model as standing context beside it. Note
  * that it asks for no question, because a question queued now would be

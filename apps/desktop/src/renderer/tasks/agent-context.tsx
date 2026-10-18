@@ -1,9 +1,9 @@
 import type { CodingAgentBrief, CodingAgentContext } from "@luke/features/coding-agent-wire";
+import { PopoverPanel } from "@luke/panel/popover-panel";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import { AnchoredPopover, IconButton, POPOVER_ALIGN } from "@luke/ui";
 import { useId, useRef, useState } from "react";
-import { PopoverPanel } from "../popover-panel";
-import { Tooltip } from "../tooltip";
 import {
   contextFullLine,
   contextHint,

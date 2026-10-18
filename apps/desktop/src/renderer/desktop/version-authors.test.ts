@@ -5,6 +5,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { SIDEBAR_OVERLAY } from "@luke/panel/desktop/sidebar-collapse";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
@@ -15,7 +16,6 @@ import { afterEach, beforeEach, test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
 import { HISTORY_READ } from "../tasks/use-plan-history";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
-import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
 /**
  * Who wrote a plan's version, as its history names them: a member who left

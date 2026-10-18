@@ -4,6 +4,10 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { runAppCommand } from "@luke/panel/app-commands";
 import { appPlatform } from "@luke/panel/app-platform";
+import { ActionMenu, type MenuEntry } from "@luke/panel/desktop/action-menu";
+import { OfflineMark } from "@luke/panel/desktop/offline-mark";
+import { useOpenPerson } from "@luke/panel/person-door";
+import { Tooltip } from "@luke/panel/tooltip";
 import { useCapability } from "@luke/panel/use-app-state";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -44,10 +48,6 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { useOpenPerson } from "../person-door";
-import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuEntry } from "./action-menu";
-import { OfflineMark } from "./offline-mark";
 
 /**
  * sidebar-foot.tsx -- the sidebar's last row: who is signed in and their menu, the Mac offline, a release on its way in, and Settings' gear.

@@ -7,12 +7,12 @@ import type {
   FolderEntry,
   ReadFolder,
 } from "@luke/panel/file-tree/contract";
+import { Tooltip } from "@luke/panel/tooltip";
 import { IconButton, SearchField } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader";
-import { Tooltip } from "../tooltip";
 import { entriesOf } from "./folder-listings";
 
 /**

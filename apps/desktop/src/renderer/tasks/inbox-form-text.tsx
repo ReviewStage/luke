@@ -3,12 +3,12 @@ import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/cod
 import { INBOX_BOUNDS, type InboxField } from "@luke/features/inbox-wire";
 import { useIntegrationStatuses } from "@luke/panel/integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "@luke/panel/plan-editor/contract";
+import { ComposerField } from "@luke/panel/tasks/composer-field";
 import type { FieldControl } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef } from "react";
 import { useSideBundles } from "../bundle-loader";
-import { ComposerField } from "./composer-field";
 import { useComposerPickers } from "./composer-pickers";
 import type { SkillSource } from "./skill-picker";
 

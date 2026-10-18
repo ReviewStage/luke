@@ -17,15 +17,20 @@ import type { AutomationScope, AutomationSummary } from "@luke/features/automati
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { LinkWorkspaceProvider, useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { ActionMenu } from "@luke/panel/desktop/action-menu";
 import {
   automationNextText,
   automationOwnerName,
   READING_AUTOMATIONS,
 } from "@luke/panel/desktop/automation-words";
 import { useAutomations } from "@luke/panel/desktop/use-automations";
+import { FoldingButton } from "@luke/panel/folding-button";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
+import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "@luke/panel/state-glyph";
 import { momentText, useMinute } from "@luke/panel/tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
+import { Tooltip } from "@luke/panel/tooltip";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -57,13 +62,8 @@ import {
 } from "@luke/ui";
 import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useRef, useState } from "react";
-import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
-import { FoldingButton } from "../folding-button";
-import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "../state-glyph";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
-import { Tooltip } from "../tooltip";
-import { ActionMenu } from "./action-menu";
 import { AutomationEditor } from "./automation-editor";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel, FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel";

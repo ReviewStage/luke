@@ -13,6 +13,9 @@ import {
 import { useIntegrationGrant } from "@luke/panel/integration-grant";
 import type { IntegrationStatuses } from "@luke/panel/integration-statuses";
 import { useIntegrationTools } from "@luke/panel/integration-tools";
+import { PopoverPanel } from "@luke/panel/popover-panel";
+import { Highlighted } from "@luke/panel/search-field";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   AnchoredPopover,
   ArrowLeftIcon,
@@ -69,9 +72,6 @@ import {
   useState,
 } from "react";
 import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
-import { PopoverPanel } from "../popover-panel";
-import { Highlighted } from "../search-field";
-import { Tooltip } from "../tooltip";
 
 /**
  * agent-servers.tsx -- the MCP button at an agent box's foot, and the popover that lists the servers the agent is handed with a switch for each, and each server's tools.

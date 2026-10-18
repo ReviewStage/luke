@@ -15,6 +15,7 @@
 import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { AvatarVoice, CallVideoTile } from "@luke/panel/call/call-video-tile";
 import { useAppState, useExperiment } from "@luke/panel/use-app-state";
 import { useVoiceView } from "@luke/panel/use-voice-view";
 import { EXPERIMENT } from "@luke/settings";
@@ -31,7 +32,6 @@ import {
   NO_AVATAR_TRACKS,
 } from "./call-avatar";
 import { type CallCardVideo, cardVideo, useCardVideoStatus } from "./call-card";
-import { AvatarVoice, CallVideoTile } from "./call-video-tile";
 
 /** The avatar's tracks as published so far, none before a session stands. */
 function useAvatarTracks(): CallAvatarTracks {

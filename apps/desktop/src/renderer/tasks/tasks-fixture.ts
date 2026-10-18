@@ -20,15 +20,15 @@ import {
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@luke/live";
-import type { VoiceView } from "@luke/voice/voice-view";
-import type { WireRecord, WireValue } from "@luke/wire";
-import { TOOL_STATE } from "../ai-elements/tool";
 import {
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
   type SidePanelState,
-} from "./use-side-panel";
+} from "@luke/panel/tasks/use-side-panel";
+import type { VoiceView } from "@luke/voice/voice-view";
+import type { WireRecord, WireValue } from "@luke/wire";
+import { TOOL_STATE } from "../ai-elements/tool";
 
 /**
  * tasks-fixture.ts -- the synthetic tasks a fixture run's Tasks tab draws in place of the service's.

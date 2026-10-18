@@ -225,3 +225,65 @@ it.effect(
       assert.equal(call.mutes, 2);
     }),
 );
+
+it.effect(
+  "hanging up while Luke speaks silences him on this device and closes the call without telling the host to stop his work",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const pressed = yield* Effect.forkChild(f.talkAboutTask(INVITES_TASK), {
+        startImmediately: true,
+      });
+      const call = f.latest();
+      assert.ok(call);
+      call.started();
+      yield* Fiber.join(pressed);
+      call.settle(LIVE_STATUS.SPEAKING);
+      yield* f.stopCall();
+      assert.equal(call.silences, 1);
+      assert.equal(call.closes, 1);
+      assert.equal(call.status, LIVE_STATUS.IDLE);
+      // The host's stop cancels every run of the call, so a hang-up never sends it.
+      assert.deepEqual(f.stops, []);
+    }),
+);
+
+it.effect(
+  "hanging up while Luke is thinking quietly closes the call and tells the host nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const pressed = yield* Effect.forkChild(f.talkAboutTask(INVITES_TASK), {
+        startImmediately: true,
+      });
+      const call = f.latest();
+      assert.ok(call);
+      call.started();
+      yield* Fiber.join(pressed);
+      yield* f.endTalk();
+      yield* f.stopCall();
+      assert.equal(call.silences, 0);
+      assert.equal(call.closes, 1);
+      assert.deepEqual(f.stops, []);
+    }),
+);
+
+it.effect(
+  "the stop key while Luke speaks still silences him first and then tells the host to stop, leaving the call up",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const pressed = yield* Effect.forkChild(f.talkAboutTask(INVITES_TASK), {
+        startImmediately: true,
+      });
+      const call = f.latest();
+      assert.ok(call);
+      call.started();
+      yield* Fiber.join(pressed);
+      call.settle(LIVE_STATUS.SPEAKING);
+      assert.equal(yield* f.stopSpeaking(), true);
+      assert.deepEqual(f.silencedAtStops, [1]);
+      assert.equal(f.stops.length, 1);
+      assert.equal(call.closes, 0);
+    }),
+);

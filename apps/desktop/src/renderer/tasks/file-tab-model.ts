@@ -9,8 +9,8 @@ import type {
   TaskFileShown,
   TasksFileAnswer,
 } from "@luke/features/tasks-view";
+import type { OpenFile } from "@luke/panel/tasks/use-side-panel";
 import { githubPath } from "./coding-agent-model";
-import type { OpenFile } from "./use-side-panel";
 
 /**
  * file-tab-model.ts -- what a File tab holds of its file, apart from drawing it: the windows read so far, joined into one run of lines, and why a file is not shown.

@@ -22,8 +22,13 @@ import {
   type TurnRow,
 } from "@luke/features/turn-rows";
 import { Fold, FoldBody, FoldSummary } from "@luke/panel/ai-elements/fold";
+import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "@luke/panel/ai-elements/message";
+import { Reasoning, ReasoningContent, ReasoningTrigger } from "@luke/panel/ai-elements/reasoning";
 import { Shimmer } from "@luke/panel/ai-elements/shimmer";
+import { GLYPH_STATE, StateGlyph } from "@luke/panel/state-glyph";
 import { opensAsLink, useOpenLink } from "@luke/panel/tasks/use-open-link";
+import { TextLink } from "@luke/panel/text-link";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   Disclosure,
   DisclosureBody,
@@ -93,8 +98,6 @@ import {
   type ExtraProps,
 } from "streamdown";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef } from "../actor-ref";
-import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message";
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
 import {
   TOOL_BLOCK,
   TOOL_STATE,
@@ -109,9 +112,6 @@ import {
   type ToolState,
   ToolStateMark,
 } from "../ai-elements/tool";
-import { GLYPH_STATE, StateGlyph } from "../state-glyph";
-import { TextLink } from "../text-link";
-import { Tooltip } from "../tooltip";
 import { linkChip } from "./mention-chip";
 import { ModelLabel } from "./model-label";
 import { usePlanPictureDrawer } from "./plan-pictures";

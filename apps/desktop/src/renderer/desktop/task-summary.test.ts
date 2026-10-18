@@ -9,6 +9,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
+import { LinkWorkspaceProvider } from "@luke/panel/copy-link-item";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { relayout } from "@luke/panel/testing/resize-observer";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -17,7 +18,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
-import { LinkWorkspaceProvider } from "../copy-link-item";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import type { HeldTranscripts } from "./strip-tabs";
 import {

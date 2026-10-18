@@ -16,11 +16,17 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { useCopyToast } from "@luke/panel/copy-feedback";
+import { ActionMenu } from "@luke/panel/desktop/action-menu";
+import { sharedWords } from "@luke/panel/desktop/workspace-ref";
 import { TILE_SIZE, WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
 import { encodeImage } from "@luke/panel/feedback-images";
+import { useOpenPerson } from "@luke/panel/person-door";
 import { MacRepositoriesGroup } from "@luke/panel/settings/mac-repository-settings";
+import { MenuRow } from "@luke/panel/settings/menu-row";
 import { dayAndTimeText } from "@luke/panel/tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
+import { wholeWordsHint } from "@luke/panel/tooltip";
 import { useCapability } from "@luke/panel/use-app-state";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
@@ -68,12 +74,6 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
-import { useCopyToast } from "../copy-feedback";
-import { ActionMenu } from "../desktop/action-menu";
-import { sharedWords } from "../desktop/workspace-ref";
-import { useOpenPerson } from "../person-door";
-import { wholeWordsHint } from "../tooltip";
-import { MenuRow } from "./menu-row";
 
 /**
  * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members, its invitations, its integrations, and the way out of it.

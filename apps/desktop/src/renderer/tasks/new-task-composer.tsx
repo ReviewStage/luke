@@ -8,6 +8,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { NEW_TASK_MODE, type NewTaskMode, useNewTaskMode } from "@luke/panel/tasks/new-task-mode";
+import { Tooltip } from "@luke/panel/tooltip";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import {
   CHIP_LOOK,
@@ -31,7 +32,6 @@ import {
 } from "@luke/ui/tasks-model";
 import { useEffect, useRef, useState } from "react";
 import { PICKER_ALIGN } from "../settings/picker-row";
-import { Tooltip } from "../tooltip";
 import { AgentComposer, type ComposerWords } from "./agent-composer";
 import { LINEAR_CHORD, LinearIssueChip } from "./linear-issue-chip";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";

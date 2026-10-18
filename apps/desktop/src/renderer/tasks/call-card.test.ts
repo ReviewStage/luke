@@ -92,7 +92,6 @@ test("the Code tab begins and ends each call as the Call tab does: the same divi
       region: { kind: TRANSCRIPT_REGION.READY, earlierOmitted: false, calls: CALLS },
       onRetry: () => undefined,
       conversation: undefined,
-      callLive: true,
       onLoadEarlier: () => Promise.resolve(),
       onOpenSubagent: () => undefined,
       shown: true,

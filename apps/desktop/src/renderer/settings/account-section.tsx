@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { wholeWordsHint } from "@luke/panel/tooltip";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
@@ -16,7 +17,6 @@ import {
 import { accountActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { wholeWordsHint } from "../tooltip";
 
 /**
  * Who is signed in, and the two ways out of that, at the head of the Account

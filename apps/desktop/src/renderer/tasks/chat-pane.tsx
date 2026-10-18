@@ -9,6 +9,8 @@ import {
   knownBlock,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
+import { ChatComposer } from "@luke/panel/tasks/chat-composer";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -38,9 +40,7 @@ import {
 } from "@luke/ui/chat-model";
 import { useState } from "react";
 import { AskCard } from "./chat-ask";
-import { ChatComposer } from "./chat-composer";
 import { LinkBlock } from "./inbox-pane";
-import { RelativeTime } from "./relative-time";
 import { AgentGlyph } from "./tab-look";
 import { TranscriptWords } from "./transcript-blocks";
 

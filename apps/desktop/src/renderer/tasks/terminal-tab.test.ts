@@ -20,6 +20,7 @@ import {
   type ActResultFor,
 } from "@luke/host/acts";
 import { runAppCommand } from "@luke/panel/app-commands";
+import { FindScope } from "@luke/panel/find-in-tab";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -33,7 +34,6 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { bundleLanded, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { SIDE_BUNDLES, type SideBundles, sideBundles } from "../bundle-loader";
-import { FindScope } from "../find-in-tab";
 import { TerminalCardFoot } from "./terminal-shells";
 import { TerminalTab } from "./terminal-tab";
 

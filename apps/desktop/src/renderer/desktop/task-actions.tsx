@@ -2,10 +2,22 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { useCopyToast } from "@luke/panel/copy-feedback";
+import { ActionMenu, type MenuAction, type MenuEntry } from "@luke/panel/desktop/action-menu";
 import { DraftMark } from "@luke/panel/draft-mark";
 import { useMemberDirectory } from "@luke/panel/member-directory";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
+import {
+  copyTaskLinkItem,
+  markReadItem,
+  type ReadMark,
+  renameTaskItem,
+  taskLinkPlace,
+  versionHistoryItem,
+} from "@luke/panel/tasks/task-menu-items";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { useReadMarks } from "@luke/panel/tasks/use-task-looks";
+import { RowHint, RowHintOptions, Tooltip } from "@luke/panel/tooltip";
 import { useAppState, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -45,21 +57,9 @@ import { FolderInputIcon } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
 import { usePlanDrafted } from "../composer-drafts";
-import { useCopyToast } from "../copy-feedback";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref";
 import { lastEditOf } from "../tasks/plan-body";
-import { RelativeTime } from "../tasks/relative-time";
-import {
-  copyTaskLinkItem,
-  markReadItem,
-  type ReadMark,
-  renameTaskItem,
-  taskLinkPlace,
-  versionHistoryItem,
-} from "../tasks/task-menu-items";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections";
 import { TaskStatusMark, taskCardOf } from "./task-card";
