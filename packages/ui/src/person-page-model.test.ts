@@ -37,7 +37,7 @@ function task(
   createdBy: typeof CHARLES,
   agents: readonly TaskAgentLine[] = [],
 ): TaskSummary {
-  const plan: TaskSummary = {
+  const summary: TaskSummary = {
     id: `11111111-0000-4000-8000-${String(n).padStart(12, "0")}`,
     workspaceId: "workspace-acme",
     name,
@@ -47,9 +47,9 @@ function task(
     ownerId: createdBy.userId,
     createdBy,
   };
-  if (agents.length === 0) return plan;
+  if (agents.length === 0) return summary;
   return {
-    ...plan,
+    ...summary,
     agents: {
       total: agents.length,
       working: agents.filter((each) => each.status === CODING_AGENT_STATUS.RUNNING).length,
@@ -75,7 +75,7 @@ test("a person's agents at work and their other agents are theirs alone, newest 
   const page = personPage(CHARLES.userId, TASKS);
 
   assert.deepEqual(
-    page.working.map(({ plan, agent }) => [plan.name, agent.title]),
+    page.working.map(({ plan: summary, agent }) => [summary.name, agent.title]),
     [
       ["Cache keys", "Agent 2"],
       ["Relay retries", "Agent 1"],
@@ -89,11 +89,11 @@ test("a person's agents at work and their other agents are theirs alone, newest 
 
 test("a person's tasks are those they created, the latest updated first", () => {
   assert.deepEqual(
-    personPage(CHARLES.userId, TASKS).created.map((plan) => plan.name),
+    personPage(CHARLES.userId, TASKS).created.map((summary) => summary.name),
     ["Relay retries", "Retry dashboard"],
   );
   assert.deepEqual(
-    personPage(DANA.userId, TASKS).created.map((plan) => plan.name),
+    personPage(DANA.userId, TASKS).created.map((summary) => summary.name),
     ["Cache keys"],
   );
 });

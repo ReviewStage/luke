@@ -75,6 +75,7 @@ import {
   ChipName,
   ConfirmDialog,
   EllipsisIcon,
+  ErrorState,
   IconButton,
   POPOVER_ALIGN,
   ProviderMark,
@@ -438,16 +439,6 @@ function OwnServersRow({
         />
       )}
     </SettingsRow>
-  );
-}
-
-/** What stops a save, said under the row it belongs to once a save was pressed. */
-function Problem({ problem }: { problem: string | undefined }): React.JSX.Element | null {
-  if (problem === undefined) return null;
-  return (
-    <p className="error-message automation-form-problem" role="alert">
-      {problem}
-    </p>
   );
 }
 
@@ -1503,10 +1494,14 @@ function EditorForm({
           rows={5}
           placeholder="Find the flakiest test in CI this week and fix it."
           value={draft.prompt}
+          invalid={problems[DRAFT_FIELD.PROMPT] !== undefined}
           onEscape={() => prompt.current?.blur()}
           onChange={(text) => onDraft({ prompt: text })}
         />
-        <Problem problem={problems[DRAFT_FIELD.PROMPT]} />
+        {/* What stops a save, said under the prompt once a save was pressed. */}
+        {problems[DRAFT_FIELD.PROMPT] === undefined ? null : (
+          <ErrorState>{problems[DRAFT_FIELD.PROMPT]}</ErrorState>
+        )}
       </SettingsSection>
       <RunsGroup
         draft={draft}

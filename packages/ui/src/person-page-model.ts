@@ -41,21 +41,21 @@ const AT_WORK: ReadonlySet<TaskAgentLine["status"]> = new Set([
 ]);
 
 /** When an agent last moved, for ordering: its line's time, else its task's. */
-function agentTime({ plan, agent }: PersonAgent): number {
-  return agent.at ?? taskTime(plan, TASK_ORDER.UPDATED);
+function agentTime({ plan: task, agent }: PersonAgent): number {
+  return agent.at ?? taskTime(task, TASK_ORDER.UPDATED);
 }
 
 /** The person's page from the listed workspace's tasks, the archived left out by the list itself. */
-export function personPage(userId: string, plans: readonly TaskSummary[]): PersonPage {
-  const theirs = plans.flatMap((plan) =>
-    (plan.agents?.agents ?? [])
+export function personPage(userId: string, tasks: readonly TaskSummary[]): PersonPage {
+  const theirs = tasks.flatMap((task) =>
+    (task.agents?.agents ?? [])
       .filter((agent) => agent.startedBy?.userId === userId)
-      .map((agent) => ({ plan, agent })),
+      .map((agent) => ({ plan: task, agent })),
   );
   const newest = (a: PersonAgent, b: PersonAgent) => agentTime(b) - agentTime(a);
   return {
     working: theirs.filter(({ agent }) => AT_WORK.has(agent.status)).toSorted(newest),
-    created: createdByOnly(plans, userId).toSorted(
+    created: createdByOnly(tasks, userId).toSorted(
       (a, b) => taskTime(b, TASK_ORDER.UPDATED) - taskTime(a, TASK_ORDER.UPDATED),
     ),
     agents: theirs.filter(({ agent }) => !AT_WORK.has(agent.status)).toSorted(newest),
@@ -70,19 +70,19 @@ export function personPage(userId: string, plans: readonly TaskSummary[]): Perso
  */
 export function personRef(
   userId: string,
-  plans: readonly TaskSummary[],
+  tasks: readonly TaskSummary[],
 ): { readonly userId: string; readonly name: string } | undefined {
-  for (const plan of plans) {
-    if (plan.createdBy?.userId === userId) return plan.createdBy;
-    const agent = plan.agents?.agents.find((each) => each.startedBy?.userId === userId);
+  for (const task of tasks) {
+    if (task.createdBy?.userId === userId) return task.createdBy;
+    const agent = task.agents?.agents.find((each) => each.startedBy?.userId === userId);
     if (agent?.startedBy !== undefined) return agent.startedBy;
   }
   return undefined;
 }
 
 /** Who started an agent a task's row names, by account id; none where the row names no such agent or no starter. */
-export function agentStarter(plan: TaskSummary, agentId: string): string | undefined {
-  return plan.agents?.agents.find((agent) => agent.id === agentId)?.startedBy?.userId;
+export function agentStarter(task: TaskSummary, agentId: string): string | undefined {
+  return task.agents?.agents.find((agent) => agent.id === agentId)?.startedBy?.userId;
 }
 
 /** Whether the page has nothing of the person's to list. */

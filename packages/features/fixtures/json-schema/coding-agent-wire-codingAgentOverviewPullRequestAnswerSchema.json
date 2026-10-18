@@ -232,6 +232,83 @@
                 "checks"
               ],
               "additionalProperties": false
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "color": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "color"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 100
+            },
+            "stack": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "number": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "draft": {
+                    "type": "boolean"
+                  },
+                  "agent": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 36
+                      },
+                      "taskId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 36
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "taskId"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "number",
+                  "title",
+                  "url",
+                  "draft"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 30
             }
           },
           "required": [

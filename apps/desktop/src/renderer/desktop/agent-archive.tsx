@@ -1,8 +1,10 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   ArchiveIcon,
+  BUTTON_SIZE,
   ConfirmDialog,
   type DialogQuestion,
+  IconButton,
   UnarchiveIcon,
   useConfirmDialog,
   useMenu,
@@ -156,14 +158,12 @@ function ArchivedAgentRow({
       </Tooltip>
       <span className="task-summary-marks">
         <Tooltip label={UNARCHIVE_LABEL}>
-          <button
-            type="button"
-            className="sidebar-task-mark"
-            aria-label={UNARCHIVE_LABEL}
+          <IconButton
+            icon={<UnarchiveIcon />}
+            label={UNARCHIVE_LABEL}
+            size={BUTTON_SIZE.COMPACT}
             onClick={unarchive}
-          >
-            <UnarchiveIcon />
-          </button>
+          />
         </Tooltip>
       </span>
       {menu.drawn === undefined ? null : (

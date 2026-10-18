@@ -65,6 +65,14 @@
     padding: 0;
   }
 
+  /* Compact, a row's mark: a smaller square on a smaller corner, its glyph
+     the control's own. */
+  .luke-button[data-icon-only="true"][data-size="compact"] {
+    width: var(--luke-space-24);
+    height: var(--luke-space-24);
+    border-radius: var(--luke-radius-6);
+  }
+
   .luke-button[data-variant="outline"] {
     --luke-button-edge: var(--luke-color-border-strong);
   }
@@ -126,6 +134,22 @@
     --luke-button-ink: var(--luke-color-text);
     background: linear-gradient(var(--luke-button-fill), var(--luke-button-fill))
       var(--luke-button-ground, transparent);
+  }
+
+  /* A compact quiet mark lights its glyph alone, under the pointer, while
+     its menu is open, and while a toggle stands on, because the row it
+     stands in is already lit. */
+  .luke-button[data-size="compact"][data-variant="quiet"]:where(
+    :hover:not(:disabled, [aria-disabled="true"]),
+    [aria-expanded="true"],
+    [aria-pressed="true"]
+  ),
+  .luke-button[data-size="compact"][data-variant="quiet"]:active:not(
+    :disabled,
+    [aria-disabled="true"]
+  ) {
+    --luke-button-fill: transparent;
+    background: transparent;
   }
 
   /* A button that goes to the page on show reads in the full ink, as one
@@ -207,6 +231,23 @@
     background: var(--luke-button-fill-faded);
     color: color-mix(in srgb, var(--luke-button-ink) 45%, transparent);
     cursor: default;
+  }
+
+  /* A submit unavailable stands on the strong fill with a muted glyph rather
+     than fading, so the glyph stays a colour apart from its disc. */
+  .luke-button[data-submit]:is(:disabled, [aria-disabled="true"]):not([aria-busy="true"]) {
+    --luke-button-fill: var(--luke-color-fill-strong);
+    --luke-button-ink: var(--luke-color-text-muted);
+    background: var(--luke-button-fill);
+    color: var(--luke-button-ink);
+    opacity: 1;
+    filter: none;
+  }
+
+  .luke-button-ring {
+    display: block;
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
   }
 
   /* Busy, its words keep their room under the ring, so the button neither

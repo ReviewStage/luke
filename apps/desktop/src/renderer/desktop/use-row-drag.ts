@@ -26,9 +26,14 @@
  * under `data-row-drop-rows`). Letting go there hands the zone's id and that
  * place to the list's owner instead of a move. A list whose rows keep the
  * view's order rather than one dragged gives no move, so a row there goes
- * only elsewhere. A list of groups dragged by their headers names the
- * handle a press must land on, so a press on a row inside a group starts
- * that row's own drag and not the group's.
+ * only elsewhere, and follows the pointer wherever it is carried, its own
+ * zone's header included, rather than being held within its list. A row of
+ * a list that reorders is held within its list only while the pointer is
+ * level with its own zone; carried above or below it, across the gap
+ * between two zones, it follows the pointer too, and is let go nowhere
+ * unless it is over another zone. A list of groups dragged by their headers
+ * names the handle a press must land on, so a press on a row inside a group
+ * starts that row's own drag and not the group's.
  *
  * A drop scope (an element wearing `data-row-drop-scope`, the Issues board)
  * keeps its zones to its own lists' rows, and a row of one of its lists
@@ -253,6 +258,19 @@ function drawOut(press: RowPress, list: HTMLElement): void {
   });
 }
 
+/**
+ * Whether the pressed row is reordered among its list's rows where the
+ * pointer is now: only in a list that reorders, and only while the pointer
+ * is level with the list's own zone, or with the list where it stands in
+ * none, however far it strays sideways.
+ */
+function heldHome(press: RowPress, list: HTMLElement): boolean {
+  if (!press.reorders) return false;
+  const home = list.closest(`[${DROP_ZONE}]`) ?? list;
+  const box = home.getBoundingClientRect();
+  return box.top <= press.pointer && press.pointer < box.bottom;
+}
+
 /** Draws the drag where the pointer has it: the pressed row follows, and those it passed stand aside, or it is carried over another zone. */
 function draw(press: RowPress, list: HTMLElement, out: boolean): void {
   const zone = out ? zoneUnder(press, list) : undefined;
@@ -262,7 +280,7 @@ function draw(press: RowPress, list: HTMLElement, out: boolean): void {
     drawCarried(press, press.carried, press.scope);
     return;
   }
-  if (zone !== undefined) {
+  if (zone !== undefined || (out && !heldHome(press, list))) {
     drawOut(press, list);
     return;
   }
