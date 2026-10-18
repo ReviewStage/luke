@@ -386,7 +386,6 @@ function ViewOptions({
     items: [
       {
         label: "Any priority",
-        icon: <SignalHighIcon />,
         checked: filter.priorities === undefined,
         onSelect: () => onFilter(issueFilterAnyPriority(filter)),
       },
