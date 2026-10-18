@@ -37,6 +37,7 @@ import {
   lineSendersOf,
   readCodingAgent,
   readCodingAgentByKey,
+  readCodingAgentPublished,
   recordCodingAgentCompaction,
   recordCodingAgentPublished,
   recordCodingAgentStep,
@@ -1773,6 +1774,184 @@ function userTexts(page: {
       return isRecord(part) && isWireString(part.text) ? part.text : undefined;
     });
 }
+
+it.layer(getTestDB())("an agent's kept pull request", (it) => {
+  /** One file as GitHub lists a pull request's files. */
+  const githubFile = (filename: string, additions: number, deletions: number) => ({
+    filename,
+    status: "modified",
+    additions,
+    deletions,
+    changes: additions + deletions,
+    patch: "@@ -1 +1 @@",
+  });
+
+  /** Where the published pull request stands on GitHub as a test moves it: its head, the lines it adds against its base, the files its files read lists, and when it merged, none while open. */
+  interface Standing {
+    sha: string;
+    additions: number;
+    files: readonly ReturnType<typeof githubFile>[];
+    mergedAt: string | null;
+    /** Whether GitHub's read of the files answers unavailable; it answers them unless a test says so. */
+    filesDown?: boolean;
+  }
+
+  const MERGED_AT = "2026-10-17T09:00:00Z";
+
+  /** The repository answering the published pull request as `standing` holds it. */
+  const standingPullRequest =
+    (standing: Standing): RepositoryScript =>
+    async (sent) => {
+      const pull = `/repos/${RELAY.owner}/${RELAY.name}/pulls/${PUBLISHED.number}`;
+      const { pathname } = new URL(sent.url);
+      if (pathname === `${pull}/files`) {
+        return standing.filesDown === true
+          ? Response.json({ message: "Service Unavailable" }, { status: 503 })
+          : Response.json(standing.files);
+      }
+      const answered = await publishedPullRequest(sent);
+      if (answered === undefined || pathname !== pull) return answered;
+      const merged = standing.mergedAt !== null;
+      return Response.json({
+        ...(await answered.json()),
+        ...(merged ? { state: "closed" } : undefined),
+        merged,
+        merged_at: standing.mergedAt,
+        additions: standing.additions,
+        head: { ref: PUBLISHED.branch, sha: standing.sha },
+      });
+    };
+
+  /** The owner's agent on the published branch, its pull request answered as `standing` holds it, and a read of it a kept answer's TTL after the last. */
+  const publishedAs = (standing: Standing) =>
+    Effect.gen(function* () {
+      const { owner, task, ask } = yield* openTask({ github: standingPullRequest(standing) });
+      const { agent } = yield* startedAgent(owner, task.id, ask);
+      yield* updateCodingAgentBranch(owner, agent.id, PUBLISHED.branch);
+      const read = Effect.gen(function* () {
+        yield* TestClock.adjust(CODER.PUBLISHED_TTL);
+        const answered = yield* ask(request(AGENT_PULL_REQUEST, owner, { id: agent.id }));
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(answered.body));
+        return answered.body;
+      });
+      const kept = readCodingAgentPublished(owner, agent.id);
+      return { read, kept };
+    });
+
+  it.effect(
+    "a merged pull request is kept with the instant GitHub says it merged and its lines by directory, while the tab's answer carries what it always did",
+    () =>
+      Effect.gen(function* () {
+        const { read, kept } = yield* publishedAs({
+          sha: PUBLISHED.headSha,
+          additions: 4,
+          files: [
+            githubFile("packages/service/src/agents/coder-host/published.ts", 4, 1),
+            githubFile("README.md", 1, 0),
+          ],
+          mergedAt: MERGED_AT,
+        });
+
+        const answered = yield* read;
+
+        const stored = yield* kept;
+        assert.equal(stored?.state, PULL_REQUEST_STATE.MERGED);
+        assert.equal(stored?.mergedAt, Date.parse(MERGED_AT));
+        assert.deepEqual(stored?.areas, [
+          { path: "packages/service/src/agents", additions: 4, deletions: 1 },
+          { path: ".", additions: 1, deletions: 0 },
+        ]);
+        assert.deepEqual(answered, {
+          repository: RELAY_FULL_NAME,
+          branch: PUBLISHED.branch,
+          pullRequest: {
+            number: PUBLISHED.number,
+            title: "Expire teammate invitations",
+            url: `https://github.com/${RELAY_FULL_NAME}/pull/${PUBLISHED.number}`,
+            state: PULL_REQUEST_STATE.MERGED,
+            checks: CHECK_SUMMARY.NONE,
+            additions: 4,
+            deletions: 1,
+            changedFiles: 1,
+          },
+        });
+      }),
+  );
+
+  it.effect(
+    "a pull request whose files GitHub cannot list now is still answered and kept, with no areas until a later read lists them",
+    () =>
+      Effect.gen(function* () {
+        const standing: Standing = {
+          sha: PUBLISHED.headSha,
+          additions: 2,
+          files: [githubFile("apps/web/vite.config.ts", 2, 0)],
+          mergedAt: MERGED_AT,
+          filesDown: true,
+        };
+        const { read, kept } = yield* publishedAs(standing);
+
+        const answered = yield* read;
+
+        assert.equal(
+          readAnswer(codingAgentPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, {
+            status: HOSTED_HTTP_STATUS.OK,
+            body: answered,
+          }).pullRequest?.state,
+          PULL_REQUEST_STATE.MERGED,
+        );
+        const stored = yield* kept;
+        assert.equal(stored?.mergedAt, Date.parse(MERGED_AT));
+        assert.equal(stored?.areas, undefined);
+
+        standing.filesDown = false;
+        yield* read;
+        assert.deepEqual((yield* kept)?.areas, [{ path: "apps/web", additions: 2, deletions: 0 }]);
+      }),
+  );
+
+  it.effect(
+    "a pull request's areas follow its files once its head, its size, or where it stands moved, and a read that moved none of them keeps the areas it had",
+    () =>
+      Effect.gen(function* () {
+        const standing: Standing = {
+          sha: PUBLISHED.headSha,
+          additions: 2,
+          files: [githubFile("apps/web/vite.config.ts", 2, 0)],
+          mergedAt: null,
+        };
+        const { read, kept } = yield* publishedAs(standing);
+        const areas = Effect.map(kept, (stored) => stored?.areas);
+        const file = (path: string) => [githubFile(path, 2, 0)];
+
+        yield* read;
+        assert.deepEqual(yield* areas, [{ path: "apps/web", additions: 2, deletions: 0 }]);
+        assert.equal((yield* kept)?.mergedAt, undefined);
+
+        // A check's delivery moves nothing the pull request's read says, so its files are not read.
+        standing.files = file("docs/unread.md");
+        yield* read;
+        assert.deepEqual(yield* areas, [{ path: "apps/web", additions: 2, deletions: 0 }]);
+
+        standing.sha = "beef002";
+        standing.files = file("apps/desktop/src/main.ts");
+        yield* read;
+        assert.deepEqual(yield* areas, [{ path: "apps/desktop/src", additions: 2, deletions: 0 }]);
+
+        // The base moved under the same head, which GitHub's count of its lines says.
+        standing.additions = 3;
+        standing.files = file("packages/ui/src/a.ts");
+        yield* read;
+        assert.deepEqual(yield* areas, [{ path: "packages/ui/src", additions: 2, deletions: 0 }]);
+
+        standing.mergedAt = MERGED_AT;
+        standing.files = file("tools/a.ts");
+        yield* read;
+        assert.deepEqual(yield* areas, [{ path: "tools", additions: 2, deletions: 0 }]);
+        assert.equal((yield* kept)?.mergedAt, Date.parse(MERGED_AT));
+      }),
+  );
+});
 
 it.layer(getTestDB())("messaging a coding agent", (it) => {
   /** An agent started on the owner's task, its session claimed, and its first turn where asked. */

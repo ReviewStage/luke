@@ -15,6 +15,7 @@ import {
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { pullRequestAreasSchema } from "@luke/features/pull-request-area";
 import { TURN_STATUS } from "@luke/wire";
 import {
   and,
@@ -44,6 +45,7 @@ import {
   type StoredAgentStep,
   type StoredArchive,
   type StoredAutomationOrigin,
+  type StoredPullRequest,
   type StoredStartedFrom,
 } from "../schemas/coding-agent.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
@@ -114,7 +116,10 @@ import type { ConversationTarget } from "./writer.js";
  * the transcript, which is what the tab's context ring draws. The pull
  * request from the agent's branch is written as GitHub answered each read
  * of it (`coder-host/published.ts`), and read back beside the agents of
- * every task the list names, so the list asks GitHub nothing. An agent
+ * every task the list names, so the list asks GitHub nothing, as the wire
+ * carries it; the row keeps more than that, the head it was read at, when
+ * it merged, and its lines by directory, read back whole by the next read
+ * of it alone. An agent
  * the developer archived is a stamp on its row: every list leaves it out
  * but the task's own where it asks for archived agents, and a read of the
  * agent by its id still finds it, so its transcript and pull request stand.
@@ -875,15 +880,36 @@ const findPlanlessAgents = SqlSchema.findAll({
     ),
 });
 
+/** The `published` column as the service writes it (`StoredPullRequest`): the wire's pull request, and what the service alone reads, absent from a row written before it was kept. */
+const PublishedColumnSchema = Schema.Struct({
+  ...codingAgentPullRequestSchema.fields,
+  headSha: Schema.optionalKey(Schema.String),
+  mergedAt: Schema.optionalKey(Schema.Number),
+  areas: Schema.optionalKey(pullRequestAreasSchema),
+});
+
 const updateAgentPublished = SqlSchema.void({
   Request: Schema.Struct({
     userId: Schema.String,
     agentId: Schema.String,
-    published: Schema.NullOr(codingAgentPullRequestSchema),
+    published: Schema.NullOr(PublishedColumnSchema),
   }),
   execute: ({ userId, agentId, published }) =>
     Database.use((db) =>
       db.update(codingAgent).set({ published }).where(reachableAgent(userId, agentId)),
+    ),
+});
+
+const findAgentPublished = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ published: Schema.NullOr(PublishedColumnSchema) }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ published: codingAgent.published })
+        .from(codingAgent)
+        .where(reachableAgent(userId, agentId))
+        .limit(1),
     ),
 });
 
@@ -1347,9 +1373,19 @@ export function continuationsOf(
 export function recordCodingAgentPublished(
   userId: string,
   agentId: string,
-  published: CodingAgentPullRequest | null,
+  published: StoredPullRequest | null,
 ): CodingAgentStoreEffect<void> {
   return updateAgentPublished({ userId, agentId, published });
+}
+
+/** The pull request the agent's row keeps as GitHub last answered, whole; null before a read found one, and for an agent the account does not reach. */
+export function readCodingAgentPublished(
+  userId: string,
+  agentId: string,
+): CodingAgentStoreEffect<StoredPullRequest | null> {
+  return Effect.map(findAgentPublished({ userId, agentId }), (row) =>
+    Option.isSome(row) ? row.value.published : null,
+  );
 }
 
 /** One agent and the account that owns it, as a delivery from GitHub that names a repository and a branch finds it. */

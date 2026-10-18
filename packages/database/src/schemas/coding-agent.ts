@@ -6,6 +6,7 @@ import {
   type CodingAgentPullRequest,
   type ContextWindow,
 } from "@luke/features/coding-agent-wire";
+import type { PullRequestArea } from "@luke/features/pull-request-area";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -163,6 +164,20 @@ export interface StoredArchive {
   readonly reason?: string;
 }
 
+/**
+ * The pull request from an agent's branch as its row keeps it: what the
+ * wire carries of it, and beside that what the service alone reads. The
+ * head it was read at, so the next read knows whether its files moved;
+ * when it merged, as GitHub reports it, absent until it has; and the lines
+ * it changed in each directory (`pullRequestAreasOf`). A row written
+ * before these were kept holds none of them.
+ */
+export interface StoredPullRequest extends CodingAgentPullRequest {
+  readonly headSha?: string;
+  readonly mergedAt?: number;
+  readonly areas?: readonly PullRequestArea[];
+}
+
 export const codingAgent = pgTable(
   "coding_agent",
   {
@@ -214,7 +229,7 @@ export const codingAgent = pgTable(
     /** When eve last compacted the agent's own conversation; null where it never has. */
     compactedAt: timestamptz("compacted_at"),
     /** The pull request from the agent's branch as GitHub last answered; null before a read found one. */
-    published: jsonb("published").$type<CodingAgentPullRequest>(),
+    published: jsonb("published").$type<StoredPullRequest>(),
     /** When the developer archived the agent; null while it is not. */
     archivedAt: timestamptz("archived_at"),
     /** Who archived the agent, and why; null while it is not, and for an archive no one was recorded for. */
