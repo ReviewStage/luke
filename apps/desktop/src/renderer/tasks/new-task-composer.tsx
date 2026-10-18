@@ -169,14 +169,14 @@ function IssueChip({
 }
 
 /**
- * Every mounted card's hearing of a model picked as the default in another,
- * Home's and the dialog's over it standing at once, so a card whose chip was
- * not picked in it follows the default the other kept.
+ * Every mounted card's hearing that the default may have moved, Home's and
+ * the dialog's over it standing at once, so a card whose chip was not picked
+ * in it reads the default again and follows what the account kept.
  */
-const defaultPicks = new Set<(choice: ModelChoice) => void>();
+const defaultMoves = new Set<() => void>();
 
-/** How many default writes any card has asked for, so only the latest one kept is told to the others. */
-let defaultWrites = 0;
+/** How many default writes any card is waiting on, the others told only once none is. */
+let pendingWrites = 0;
 
 /** The account's default model as read, the chip's pick, which is written back as the default, and why that write did not take, where it did not. */
 function useDefaultChoice(
@@ -185,26 +185,35 @@ function useDefaultChoice(
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
   const [refused, setRefused] = useState<string | undefined>(undefined);
   // Note that the control is read through a ref, because the tab hands a
-  // new one on every render and the default is read once, as the card opens.
+  // new one on every render; the default is read as the card opens, and
+  // again where another card's writes have settled.
   const latest = useRef(newTask);
   latest.current = newTask;
-  // Whether the chip was picked in this card, whose pick then stands over one made in another.
+  // Whether the chip was picked in this card, whose pick then stands over the default.
   const pickedHere = useRef(false);
-  // This card's hearing of another's pick, left out when it tells the others its own.
-  const hearing = useRef<((choice: ModelChoice) => void) | undefined>(undefined);
+  // This card's hearing of another's writes, left out when it tells the others of its own.
+  const hearing = useRef<(() => void) | undefined>(undefined);
   useEffect(() => {
     let live = true;
     latest.current.readDefault().then((answer) => {
       if (live && !("failure" in answer)) setChoice((picked) => picked ?? answer.choice);
     });
-    const hear = (next: ModelChoice) => {
-      if (!pickedHere.current) setChoice(next);
+    // How many reads of the default this card asked for, so only the latest one's answer stands.
+    let reads = 0;
+    const hear = () => {
+      if (pickedHere.current) return;
+      reads += 1;
+      const read = reads;
+      latest.current.readDefault().then((answer) => {
+        if (!live || pickedHere.current || read !== reads || "failure" in answer) return;
+        setChoice(answer.choice);
+      });
     };
     hearing.current = hear;
-    defaultPicks.add(hear);
+    defaultMoves.add(hear);
     return () => {
       live = false;
-      defaultPicks.delete(hear);
+      defaultMoves.delete(hear);
     };
   }, []);
   // A pick names the chip at once and is kept as the default, as Start's menu
@@ -214,15 +223,15 @@ function useDefaultChoice(
     pickedHere.current = true;
     setChoice(next);
     setRefused(undefined);
-    defaultWrites += 1;
-    const write = defaultWrites;
+    pendingWrites += 1;
     latest.current.writeDefault(next).then((answer) => {
       setRefused("failure" in answer ? DEFAULT_NOT_KEPT : undefined);
-      // Note that the others follow only a default that was kept, and only
-      // the one asked for last, so a write refused, or one overtaken by a
-      // later pick, moves no other card's chip.
-      if ("failure" in answer || write !== defaultWrites) return;
-      for (const hear of defaultPicks) if (hear !== hearing.current) hear(answer.choice);
+      pendingWrites -= 1;
+      // Note that the others read the default the account kept rather than
+      // take this answer, and only once every write has answered, so writes
+      // refused or answered out of order leave them on what was stored.
+      if (pendingWrites > 0) return;
+      for (const hear of defaultMoves) if (hear !== hearing.current) hear();
     });
   };
   return [choice, choose, refused];

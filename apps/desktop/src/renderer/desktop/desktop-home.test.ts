@@ -942,14 +942,47 @@ const MODELS: readonly CatalogModel[] = [
   },
 ];
 
-/** Home with New task's dialog open over it, as ⌘N opens it, each start written down, a model kept as the default unless `keeps` says otherwise; Escape in the dialog's words puts it away. */
-async function mountUnderDialog(keeps = true) {
+/** How the account answers a model kept as its default: keeps it, refuses it, or holds the answer for the test to give. */
+const WRITE = { KEEP: "keep", REFUSE: "refuse", HOLD: "hold" } as const;
+
+/** A write of the default held unanswered, and its two answers. */
+interface HeldWrite {
+  readonly choice: ModelChoice;
+  readonly keep: () => void;
+  readonly refuse: () => void;
+}
+
+/**
+ * Home with New task's dialog open over it, as ⌘N opens it, each start
+ * written down, and the account's default as a store: read as it stands,
+ * and written as `write` says. Escape in the dialog's words puts it away.
+ */
+async function mountUnderDialog(write: (typeof WRITE)[keyof typeof WRITE] = WRITE.KEEP) {
   const started: Started[] = [];
+  const held: HeldWrite[] = [];
+  let stored = DEFAULT_CHOICE;
+  const refusal = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
   const newTask: TasksControl["newTask"] = {
     ...newTaskControl(started),
     models: MODELS,
-    writeDefault: (choice) =>
-      Promise.resolve(keeps ? { choice } : { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readDefault: () => Promise.resolve({ choice: stored }),
+    writeDefault: (choice) => {
+      if (write === WRITE.REFUSE) return Promise.resolve(refusal);
+      if (write === WRITE.KEEP) {
+        stored = choice;
+        return Promise.resolve({ choice });
+      }
+      return new Promise((resolve) =>
+        held.push({
+          choice,
+          keep: () => {
+            stored = choice;
+            resolve({ choice });
+          },
+          refuse: () => resolve(refusal),
+        }),
+      );
+    },
   };
   const tasks = tasksControl({
     tasks: TASKS,
@@ -981,6 +1014,8 @@ async function mountUnderDialog(keeps = true) {
     container.querySelector<HTMLElement>(".home-start") ?? assert.fail("Home's composer stands");
   return {
     started,
+    /** The writes of the default still unanswered, the first asked first. */
+    held,
     dialog,
     home,
     /** Puts the dialog away with nothing started, as Escape in its words does. */
@@ -1009,12 +1044,13 @@ test("Plan turned on in the dialog over Home and the dialog put away, Home's com
   );
 });
 
-/** Picks Fast on the dialog's model chip, which asks for it to be kept as the account's default. */
+/** Turns Fast on the dialog's model chip, on or off, which asks for the model to be kept as the account's default. */
 async function pickFastInDialog(dialog: HTMLElement): Promise<void> {
   const chip =
     dialog.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
     assert.fail("the dialog's model chip stands");
-  act(() => chip.click());
+  // The menu stays open after a turn of Fast, so a second turn finds it standing.
+  if (dialog.querySelector('[role="switch"]') === null) act(() => chip.click());
   const fast =
     dialog.querySelector<HTMLButtonElement>('[role="switch"]') ??
     assert.fail("the menu offers Fast");
@@ -1035,7 +1071,7 @@ test("a model picked as the default in the dialog over Home is the one Home's co
 });
 
 test("a model picked in the dialog over Home that the account's default refused leaves Home's composer on the default it read", async () => {
-  const page = await mountUnderDialog(false);
+  const page = await mountUnderDialog(WRITE.REFUSE);
   await pickFastInDialog(page.dialog());
   await page.closeDialog();
 
@@ -1044,4 +1080,24 @@ test("a model picked in the dialog over Home that the account's default refused 
   await settle();
 
   assert.deepEqual(page.started[0]?.agent?.choice, DEFAULT_CHOICE);
+});
+
+test("a pick in the dialog the account kept is the one Home's composer starts on, though a later pick answered first was refused", async () => {
+  const page = await mountUnderDialog(WRITE.HOLD);
+  await pickFastInDialog(page.dialog());
+  await pickFastInDialog(page.dialog());
+  const [first, second] = page.held;
+  assert.equal(first?.choice.model, "anthropic/claude-opus-5.5-fast", "Fast was asked first");
+  assert.equal(second?.choice.model, "anthropic/claude-opus-5.5", "Opus was asked after it");
+  act(() => second?.refuse());
+  await settle();
+  act(() => first?.keep());
+  await settle();
+  await page.closeDialog();
+
+  typeInComposer(page.home(), "Speed up the build");
+  pressInComposer(page.home(), "Enter");
+  await settle();
+
+  assert.equal(page.started[0]?.agent?.choice?.model, "anthropic/claude-opus-5.5-fast");
 });
