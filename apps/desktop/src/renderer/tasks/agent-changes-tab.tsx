@@ -17,6 +17,7 @@ import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   Button,
+  Checkbox,
   CopyIcon,
   DownloadIcon,
   EmptyState,
@@ -77,7 +78,9 @@ import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff";
 import { LineComment, type PendingReview } from "./line-comment";
 import { PullRequestMark } from "./pull-request-mark";
 import { OpenedBy, PullRequestPeople, ReviewersLine } from "./pull-request-people";
+import { PullRequestWriteNote } from "./pull-request-writes";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents";
+import { useViewedFiles } from "./viewed-files";
 
 /**
  * agent-changes-tab.tsx -- the Files changed view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's files drawn as a File tab draws a file, the chosen file's unified diff under the same bar and beside the same tree.
@@ -388,9 +391,14 @@ function entryOf(
       <FileHead
         file={file}
         controls={
-          image === undefined || fileNotice(file) !== undefined ? null : (
-            <SourceToggle source={source} onToggle={() => list.toggleSource(path)} />
-          )
+          <>
+            {image === undefined || fileNotice(file) !== undefined ? null : (
+              <SourceToggle source={source} onToggle={() => list.toggleSource(path)} />
+            )}
+            {list.viewed === undefined || list.markViewed === undefined ? null : (
+              <ViewedBox viewed={list.viewed(path)} onToggle={() => list.markViewed?.(path)} />
+            )}
+          </>
         }
         collapsed={collapsed}
         standing={list.standing === path}
@@ -473,6 +481,23 @@ function useListCommenting(
     ),
   };
   return { open, note: { path, picked, content } };
+}
+
+/** A file's Viewed box at the end of its header, GitHub's own, as the member's marks hold it; V does the same for the file the keys stand on. */
+function ViewedBox({
+  viewed,
+  onToggle,
+}: {
+  viewed: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
+  return (
+    <span className="diff-list-viewed">
+      <Checkbox checked={viewed} onChange={onToggle}>
+        {LIST_WORDS.VIEWED}
+      </Checkbox>
+    </span>
+  );
 }
 
 /** An SVG's turn between its picture and its source's lines, at the end of its header. */
@@ -706,7 +731,13 @@ export function AgentChangesTab({
     const paths = files.map((file) => file.path);
     return { files, paths, marks: changeMarks(files), folders: changedFolders(paths) };
   }, [pullRequest]);
-  const list = useChangesList(changed.files);
+  // Note that the marks are read with each answer the changes read lands with, so the two describe the same push.
+  const viewedFiles = useViewedFiles(
+    agentId,
+    control.readPullRequestViewed,
+    pullRequest === null ? undefined : reads.current.count,
+  );
+  const list = useChangesList(changed.files, viewedFiles.marks);
   const { closeOver } = room;
   const { go } = list;
   // A file chosen in the tree floating over the list takes the tree down, to show the file.
@@ -758,6 +789,15 @@ export function AgentChangesTab({
     <>
       {count} {count === 1 ? "file" : "files"} changed{" "}
       <LinesChanged additions={total.additions} deletions={total.deletions} />
+      {list.viewed === undefined ? null : (
+        <span className="diff-list-progress">
+          {" · "}
+          {LIST_WORDS.viewedOf(
+            pullRequest.files.filter((file) => list.viewed?.(file.path) === true).length,
+            count,
+          )}
+        </span>
+      )}
     </>
   );
   return (
@@ -789,6 +829,7 @@ export function AgentChangesTab({
         }
         tree={room.toggles}
       />
+      <PullRequestWriteNote writes={viewedFiles} />
       <PullRequestPeople people={pullRequest} />
       {pullRequest.truncated ? (
         <div className="file-tab-notice">

@@ -1,0 +1,80 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "done"
+          ]
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "viewed",
+                  "unviewed",
+                  "dismissed"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 300
+        }
+      },
+      "required": [
+        "outcome",
+        "files"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "sign-in-required"
+          ]
+        }
+      },
+      "required": [
+        "outcome"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "refused"
+          ]
+        },
+        "words": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      },
+      "required": [
+        "outcome",
+        "words"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

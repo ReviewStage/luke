@@ -37,6 +37,7 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentReviewOptionsAnswerView,
   codingAgentAgentAnswerSchema,
@@ -79,6 +80,7 @@ import {
   codingAgentPullRequestActionParamsSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
+  codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentRenameParamsSchema,
   codingAgentReviewOptionsAnswerViewSchema,
@@ -485,6 +487,8 @@ export const ACT_KIND = {
   CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
   /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
   CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
+  /** Which of an agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in. */
+  CODING_AGENTS_PULL_REQUEST_VIEWED: "codingAgents.pullRequestViewed",
   /** The account's automations: listed, made, changed, deleted, run now, and one's runs read. */
   AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
@@ -1358,6 +1362,13 @@ export const ACT = {
       isReadable(codingAgentPullRequestWriteAnswerViewSchema),
     ),
     refusal: "Could not change the pull request on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]: {
+    payload: actSchema(codingAgentPullRequestParamsSchema),
+    result: wireResult<CodingAgentPullRequestViewedAnswerView>(
+      isReadable(codingAgentPullRequestViewedAnswerViewSchema),
+    ),
+    refusal: "Could not read which files you viewed on this system.",
   },
   [ACT_KIND.AUTOMATIONS_LIST]: {
     payload: actSchema(automationListParamsSchema),

@@ -63,7 +63,9 @@ import { modelChoiceSchema } from "@luke/features/models-wire";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_BOUNDS,
+  PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
+  type PullRequestViewedAnswer,
   pullRequestActionRequestSchema,
 } from "@luke/features/pull-request-write-wire";
 import { readEither } from "@luke/wire/effect";
@@ -88,9 +90,11 @@ import {
   type GitHubWriteFailure,
   mergePullRequest,
   pullRequestNodeId,
+  pullRequestViewedStates,
   reactOnPullRequest,
   replyToReviewThread,
   setAutoMerge,
+  setFileViewed,
   setLabelled,
   setPullRequestDraft,
   setPullRequestOpen,
@@ -263,7 +267,10 @@ import {
  * published answer is let go, so the next read asks GitHub afresh. What the
  * reviewer and label pickers offer (`GET /api/agents/{id}/review-options`),
  * the repository's labels, collaborators, and teams, is read on a token for
- * the agent's repository, as the overview is. An image
+ * the agent's repository, as the overview is. Which of its files the member
+ * marked viewed on GitHub, a mark GitHub keeps for each account, is read
+ * through the member's own sign-in (`GET /api/agents/{id}/pull-request/viewed`),
+ * and set by two of the changes. An image
  * those words name (`GET /api/agents/{id}/github-image`) is
  * read on a token for the agent's repository too, an upload re-signed by its
  * asset's id (`github/github-images.ts`), and answered as bytes.
@@ -301,6 +308,7 @@ const AGENTS_PATH = {
   OVERVIEW_CONVERSATION: "/api/agents/overview-conversation",
   /** POST makes one change to the agent's pull request as the asking member; the rewrite moves the path's agent id into the `id` query. */
   PULL_REQUEST_ACTION: "/api/agents/pull-request-action",
+  PULL_REQUEST_VIEWED: "/api/agents/pull-request-viewed",
   /** GET reads what the reviewer and label pickers of the agent's Pull request tab offer; the rewrite moves the path's agent id into the `id` query. */
   REVIEW_OPTIONS: "/api/agents/review-options",
   /** GET reads one image its pull request's overview names, by its address in the `src` query; the rewrite moves the path's agent id into the `id` query. */
@@ -1198,6 +1206,14 @@ function writeOf(
     }
     case PULL_REQUEST_ACTION.DISCARD_REVIEW:
       return discardPendingReview(token, id);
+    case PULL_REQUEST_ACTION.MARK_FILE_VIEWED:
+    case PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED:
+      return setFileViewed(
+        token,
+        id,
+        request.path,
+        request.action === PULL_REQUEST_ACTION.MARK_FILE_VIEWED,
+      );
   }
 }
 
@@ -1265,6 +1281,40 @@ const pullRequestActionEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullReques
       actionWrite(asked.success),
     ).pipe(Effect.ensuring(forgetPublished(published, agent.id)));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, writeAnswerOf(written));
+  },
+);
+
+/**
+ * GET reads which of the files of the pull request the agent's kept
+ * published answer names the asking member marked viewed on GitHub, on
+ * their own GitHub sign-in (`pull-request-write.ts`), since GitHub keeps the
+ * mark for each account alone and the App sees none of it; no files where it
+ * names no pull request yet. Nothing is let go, as nothing changed.
+ */
+const pullRequestViewedEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestViewedEndpoint")(
+  function* (
+    seams: CodingAgentsAppSeams,
+    published: PublishedCache,
+  ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+    const incoming = yield* HttpServerRequest.HttpServerRequest;
+    if (incoming.method !== HTTP_METHOD.GET) {
+      return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+    }
+    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+    const { userId, agent } = yield* reachedAgent(seams, request);
+    const { pullRequest } = yield* keptPublished(published, userId, agent);
+    if (pullRequest === null) {
+      const none: PullRequestViewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
+      return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, none);
+    }
+    const read = yield* memberPullRequestWrite(userId, agent, pullRequest.number, (member) =>
+      pullRequestViewedStates(member.token, member.repository, member.number),
+    );
+    const answer: PullRequestViewedAnswer =
+      read.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE
+        ? { outcome: read.outcome, files: read.value }
+        : read;
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
   },
 );
 
@@ -1748,6 +1798,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.PULL_REQUEST_ACTION,
           hostedRefusing(pullRequestActionEndpoint(seams, published)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.PULL_REQUEST_VIEWED,
+          hostedRefusing(pullRequestViewedEndpoint(seams, published)),
         ),
         HttpRouter.add(
           ANY_METHOD,
