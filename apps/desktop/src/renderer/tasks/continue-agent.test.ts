@@ -35,10 +35,9 @@ import { AgentTab } from "./agent-tab";
 import {
   continuationsOf,
   continuedByIds,
-  END_PRESS,
   endLineContinues,
+  endLineOffersContinue,
   endLineParts,
-  endLinePress,
   endLineReason,
   MESSAGE_RETIRED,
   messageFailureWords,
@@ -56,9 +55,9 @@ import type { AgentContinuer } from "./use-coding-agents";
  * box's words and files and letting them go once the new agent started.
  * Once an agent continues it, whatever it stands as, its box gives way to
  * Continued in with the continuing agents' chips, Continue again, and
- * Archive, the failed end line keeping its press, and Continued in is drawn
- * nowhere else, unless an archive took the box, when the transcript ends
- * on it. Nothing is offered on a refused API key, an archived task, or a
+ * Archive, the one Continue on screen, and Continued in is drawn nowhere
+ * else, unless an archive took the box, when the transcript ends on it.
+ * Words beside a Continue never tell the reader to start a new agent. Nothing is offered on a refused API key, an archived task, or a
  * turn that did not fail. Synthetic throughout.
  */
 
@@ -381,18 +380,17 @@ test("only a failed turn's end line continues the agent, and not one failed on t
   assert.equal(endLineContinues(CODING_AGENT_STATUS.COMPLETED, endLineReason(undefined)), false);
 });
 
-test("a failed end line's row ends on a press that carries nothing, carries the box's words once a continued note took the box, and none where a closed box offers its own", () => {
+test("a failed end line's row ends on Continue only where no other place offers it, so one Continue stands on screen: not beside the continued note, nor beside a closed box's own", () => {
   const failed = { status: CODING_AGENT_STATUS.FAILED, endReason: endLineReason(undefined) };
   const key = { ...failed, endReason: endLineReason(CODING_AGENT_FAILURE.PROVIDER_KEY) };
 
-  assert.equal(endLinePress({ ...failed, continued: false, boxClosed: false }), END_PRESS.EMPTY);
-  assert.equal(endLinePress({ ...failed, continued: true, boxClosed: false }), END_PRESS.CARRYING);
-  assert.equal(endLinePress({ ...failed, continued: true, boxClosed: true }), END_PRESS.CARRYING);
-  assert.equal(endLinePress({ ...failed, continued: false, boxClosed: true }), END_PRESS.NONE);
-  assert.equal(endLinePress({ ...key, continued: true, boxClosed: false }), END_PRESS.NONE);
+  assert.equal(endLineOffersContinue({ ...failed, noted: false, boxClosed: false }), true);
+  assert.equal(endLineOffersContinue({ ...failed, noted: true, boxClosed: false }), false);
+  assert.equal(endLineOffersContinue({ ...failed, noted: false, boxClosed: true }), false);
+  assert.equal(endLineOffersContinue({ ...key, noted: false, boxClosed: false }), false);
   for (const status of [CODING_AGENT_STATUS.CANCELLED, CODING_AGENT_STATUS.COMPLETED]) {
     const settled = { status, endReason: endLineReason(undefined), boxClosed: false };
-    assert.equal(endLinePress({ ...settled, continued: true }), END_PRESS.NONE, status);
+    assert.equal(endLineOffersContinue({ ...settled, noted: false }), false, status);
   }
 });
 
@@ -470,10 +468,7 @@ test("a box closed on an ended agent offers Continue in new agent beside its not
   await settle();
 
   const note = tab.note() ?? assert.fail("the box says why it closed");
-  assert.match(
-    note.textContent ?? "",
-    /This agent has ended\. Continue in a new one to carry on\./,
-  );
+  assert.match(note.textContent ?? "", /^This agent has ended\.(?!.*Continue in a new one)/);
   // The refused line stays where it went, marked, and the closed box does not draw its words again.
   assert.equal(composerEditor(tab.container).textContent, "", "the words show once");
   assert.ok(
@@ -582,7 +577,7 @@ test("words changed in the closed box while its continue is out stay once it lan
 
 const FROM_SOURCE = { agentId: SOURCE, steps: 4, totalSteps: 4 };
 
-test("once agents continue the agent, its box gives way to Continued in with each continuing agent's chip, oldest first and archived ones too, which opens that agent's tab, beside Continue again, and the failed end line keeps its press", async () => {
+test("once agents continue the agent, its box gives way to Continued in with each continuing agent's chip, oldest first and archived ones too, which opens that agent's tab, beside Continue again, the one Continue on screen", async () => {
   const tab = await drawnTab({
     status: CODING_AGENT_STATUS.FAILED,
     failure: CODING_AGENT_FAILURE.SANDBOX,
@@ -594,8 +589,15 @@ test("once agents continue the agent, its box gives way to Continued in with eac
   const note = tab.continuedNote() ?? assert.fail("the box gives way to its note");
 
   assert.equal(tab.sendButton(), null, "the box takes no message");
-  assert.equal(tab.endRow()?.presses.length, 1, "the end line still offers Continue");
-  assert.ok(tab.named(note, AGAIN), "the note offers Continue again");
+  assert.equal(tab.endRow()?.presses.length, 0, "the end line gives way to the note's press");
+  assert.match(tab.endLine()?.textContent ?? "", /^Failed: /, "and keeps its words");
+  assert.deepEqual(
+    [...tab.container.querySelectorAll("button")]
+      .map((each) => each.textContent)
+      .filter((words) => words === LABEL || words === AGAIN),
+    [AGAIN],
+    "one Continue on screen",
+  );
   assert.deepEqual(
     [...note.querySelectorAll("button")].slice(-2).map((each) => each.textContent),
     [AGAIN, "Archive"],
@@ -611,7 +613,7 @@ test("once agents continue the agent, its box gives way to Continued in with eac
   assert.deepEqual(tab.opened, [{ kind: TOOL_TARGET.AGENT, agent: NEXT }]);
 });
 
-test("a continued agent is continued again from its note whatever it stands as, a completed one among them, and from its failed end line, each press a continue of its own carrying the box's words", async () => {
+test("a continued agent is continued again from its note whatever it stands as, a completed one among them, each press a continue of its own carrying the box's words", async () => {
   for (const each of [
     { status: CODING_AGENT_STATUS.COMPLETED },
     { status: CODING_AGENT_STATUS.CANCELLED },
@@ -642,12 +644,11 @@ test("a continued agent is continued again from its note whatever it stands as, 
     others: [agentOf(NEXT, { from: FROM_SOURCE })],
     drafts: true,
   });
-  const [onLine] = failed.endRow()?.presses ?? [];
-  assert.ok(onLine, "the end line keeps its press");
-  await act(async () => onLine.click());
-  await act(async () =>
-    failed.named(failed.continuedNote() ?? assert.fail("the note stands"), AGAIN)?.click(),
-  );
+  const again =
+    failed.named(failed.continuedNote() ?? assert.fail("the note stands"), AGAIN) ??
+    assert.fail("the note offers Continue again");
+  await act(async () => again.click());
+  await act(async () => again.click());
   assert.deepEqual(
     failed.drafted,
     [
@@ -758,22 +759,32 @@ test("the continued box's Archive archives a settled agent at once, asks first w
   assert.deepEqual(archived, [{ agentId: SOURCE, archived: true }]);
 });
 
-test("a continued agent's end line no longer tells the reader to start a new one", async () => {
-  const tab = await drawnTab({
+test("an end line beside a Continue, or of an agent already continued, never tells the reader to start a new one; where no Start could run it still does", async () => {
+  const offered = await drawnTab({
     status: CODING_AGENT_STATUS.FAILED,
     failure: CODING_AGENT_FAILURE.NOT_STARTED,
     messages: [],
-    others: [agentOf(NEXT, { from: FROM_SOURCE })],
   });
-  const line = tab.endLine() ?? assert.fail("the empty tab says how it ended");
-
+  const line = offered.endLine() ?? assert.fail("the empty tab says how it ended");
   assert.match(line.textContent ?? "", /^Failed: the agent never started/);
   assert.doesNotMatch(line.textContent ?? "", /start a new one/);
-  assert.match(
-    endLineParts(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.NOT_STARTED)?.words ?? "",
-    /start a new one$/,
-    "one not continued still is",
-  );
+  assert.equal(offered.endRow()?.presses.length, 1, "beside the press");
+
+  const continued = await drawnTab({
+    status: CODING_AGENT_STATUS.FAILED,
+    failure: CODING_AGENT_FAILURE.SESSION_ENDED,
+    others: [agentOf(NEXT, { from: FROM_SOURCE })],
+  });
+  assert.doesNotMatch(continued.endLine()?.textContent ?? "", /start a new one/);
+
+  const unstartable = await drawnTab({
+    status: CODING_AGENT_STATUS.FAILED,
+    failure: CODING_AGENT_FAILURE.NOT_STARTED,
+    messages: [],
+    continues: false,
+  });
+  assert.match(unstartable.endLine()?.textContent ?? "", /start a new one/);
+  assert.equal(unstartable.buttons(unstartable.container).length, 0);
 });
 
 test("where an archive took the box, the transcript's end names the agents that continued it instead, under the end line or alone, read from the summary where the list does not hold them", async () => {

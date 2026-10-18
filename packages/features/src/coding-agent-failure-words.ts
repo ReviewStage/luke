@@ -6,8 +6,9 @@ import { CODING_AGENT_FAILURE, type CodingAgentFailure } from "./coding-agent-wi
  * A failed agent's end line says it after "Failed", and an automation's run
  * whose agent failed says it after "Its agent failed", so the two read one
  * table. A failure the window has no words for says nothing more. A
- * failure a new agent mends says so after its words, unless one already
- * continued it, when the advice is stale.
+ * failure a new agent mends says so after its words, unless Continue
+ * stands beside them or one already continued it (`continuable`), when the
+ * advice is redundant or stale.
  */
 
 /** Why a turn failed, by the service's one word for it; nothing for a reason with no words. */
@@ -45,7 +46,7 @@ const MENDED_BY_NEW_AGENT: ReadonlySet<CodingAgentFailure> = new Set([
 export function agentFailureWords(
   failure: CodingAgentFailure,
   holder: string | undefined,
-  continued = false,
+  continuable = false,
 ): string | undefined {
   if (holder !== undefined && failure === CODING_AGENT_FAILURE.PROVIDER_KEY) {
     return `${holder}'s API key was refused or can't be read`;
@@ -54,6 +55,6 @@ export function agentFailureWords(
     return `Fast isn't available on ${holder}'s own API key; choose the model with Fast off`;
   }
   const words = AGENT_FAILURE_WORDS[failure];
-  const advises = !continued && MENDED_BY_NEW_AGENT.has(failure);
+  const advises = !continuable && MENDED_BY_NEW_AGENT.has(failure);
   return words === undefined || !advises ? words : `${words}; ${RESTART_ADVICE}`;
 }

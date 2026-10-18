@@ -4567,6 +4567,21 @@ ol.transcript-list {
   background: var(--luke-color-sidebar);
 }
 
+/* Note that the arrow, the words' first line, and the presses share one
+   centre, the presses' own, so chips that wrap to a second line leave the
+   arrow on the first rather than centred between the two. */
+.continued-composer .luke-banner-row {
+  align-items: flex-start;
+}
+
+.continued-composer .luke-banner-glyph {
+  height: var(--luke-control-height);
+}
+
+.continued-composer .luke-banner-words {
+  padding-block: calc((var(--luke-control-height) - var(--luke-type-body-leading)) / 2);
+}
+
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
    bar naming the agent and where the connection stands in words, over the
    terminal's screen on the terminal's own ground. A state with an action

@@ -33,8 +33,9 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * while a turn still runs, Continue again, since a continuation may itself
  * fail or go wrong, and Archive, since a continued agent is done with; or,
  * where the box is taken by an archived task's note, the row at the
- * transcript's end (`ContinuedTrail`). A failed end line keeps its press
- * then too. Each press is a continue of its own, under a key of its own
+ * transcript's end (`ContinuedTrail`). While the note holds the box, its
+ * Continue again is the one press on screen, the failed end line's giving
+ * way to it. Each press is a continue of its own, under a key of its own
  * (`use-coding-agents.ts`). A fork is no continuation, so a source with
  * only forks keeps its box.
  */

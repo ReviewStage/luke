@@ -89,10 +89,9 @@ import {
   continuedByTitles,
   delegates,
   dockedTodos,
-  END_PRESS,
   type EndLineParts,
+  endLineOffersContinue,
   endLineParts,
-  endLinePress,
   endLineReason,
   lineSender,
   macOwnerOf,
@@ -1511,6 +1510,7 @@ function AgentTabView({
   endTrail,
   closedRemedy,
   continuedNote,
+  continuable = false,
 }: {
   agent: CodingAgentSummary;
   /** Where a replay the agent opens on is drawn (`replay-card.tsx`); none where none is read. */
@@ -1558,8 +1558,10 @@ function AgentTabView({
   endTrail?: ReactNode;
   /** What mends the box once it closed for good (`continue-agent.tsx`). */
   closedRemedy?: ReactNode;
-  /** What stands in the box's place once another agent continued this one (`ContinuedComposerNote`), which also drops the end line's advice to start a new one; none while none has. */
+  /** What stands in the box's place once another agent continued this one (`ContinuedComposerNote`); none while none has. */
   continuedNote?: ReactNode;
+  /** Whether the tab offers Continue somewhere, or another agent continued this one, so the end line tells no one to start a new one. */
+  continuable?: boolean;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const chatOn = useChatOn();
@@ -1621,7 +1623,7 @@ function AgentTabView({
                   agent.status,
                   transcript.failure,
                   starter,
-                  continuedNote !== undefined,
+                  continuable,
                 )}
                 endReason={endLineReason(transcript.failure, starter)}
                 onOpenApiKeys={onOpenApiKeys}
@@ -1815,10 +1817,11 @@ export function AgentTab({
     attachments: composer.unsent.attachments,
     taskId: agent.planId,
   };
-  const press = endLinePress({
+  // One Continue stands on screen: the continued note's while it holds the box, else the end line's.
+  const pressed = endLineOffersContinue({
     status: agent.status,
     endReason: endLineReason(transcript.failure, starter),
-    continued: continued.length > 0,
+    noted: continued.length > 0 && control.onUnarchive === undefined,
     boxClosed: composer.closed !== undefined,
   });
   return (
@@ -1860,15 +1863,8 @@ export function AgentTab({
           onOpenTarget,
           openGitHub,
         })}
-        endPress={
-          press === END_PRESS.NONE ? undefined : (
-            <ContinueAgent
-              agentId={agent.id}
-              control={control}
-              carry={press === END_PRESS.CARRYING ? carry : undefined}
-            />
-          )
-        }
+        endPress={pressed ? <ContinueAgent agentId={agent.id} control={control} /> : undefined}
+        continuable={continued.length > 0 || control.continueAgent !== undefined}
         endTrail={
           // Note that the box's note names them while it stands, so the transcript names them only where an archive took the box.
           continued.length === 0 || control.onUnarchive === undefined ? undefined : (
