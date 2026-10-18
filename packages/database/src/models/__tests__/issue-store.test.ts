@@ -8,7 +8,7 @@ import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { getTestDB } from "../../testing/index.js";
-import { changeIssue, createIssue, listIssues, readIssue } from "../issue-store.js";
+import { beginIssueWork, changeIssue, createIssue, listIssues, readIssue } from "../issue-store.js";
 
 /**
  * A workspace's issues over a real dialect: numbered from one in the order
@@ -271,6 +271,73 @@ it.layer(getTestDB())("the issue store", (it) => {
       assert.deepEqual(
         Option.map(read, (issue) => [issue.title, issue.creator]),
         Option.some(["Orphan", null]),
+      );
+    }),
+  );
+});
+
+it.layer(getTestDB())("work begun on an issue", (it) => {
+  it.effect(
+    "moves an issue in the backlog or to do into progress once, and leaves one already moved on, or archived, as it stood",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const filed = (status: (typeof ISSUE_STATUS)[keyof typeof ISSUE_STATUS]) =>
+          Effect.map(
+            createIssue(owner, { organizationId: workspace, title: status, status }),
+            (made) => Option.getOrElse(made, () => assert.fail("the issue was not filed")),
+          );
+        const backlog = yield* filed(ISSUE_STATUS.BACKLOG);
+        const todo = yield* filed(ISSUE_STATUS.TODO);
+        const settled = [
+          yield* filed(ISSUE_STATUS.IN_PROGRESS),
+          yield* filed(ISSUE_STATUS.DONE),
+          yield* filed(ISSUE_STATUS.CANCELED),
+        ];
+        const archived = yield* filed(ISSUE_STATUS.TODO);
+        yield* changeIssue(owner, archived.id, { archived: true });
+        yield* TestClock.adjust("1 minute");
+
+        const moved = [
+          yield* beginIssueWork(owner, backlog.id),
+          yield* beginIssueWork(owner, todo.id),
+          yield* beginIssueWork(owner, backlog.id),
+          ...(yield* Effect.forEach([...settled, archived], (each) =>
+            beginIssueWork(owner, each.id),
+          )),
+        ];
+
+        assert.deepEqual(moved, [true, true, false, false, false, false, false]);
+        const statusOf = (issueId: string) =>
+          Effect.map(readIssue(owner, issueId), (read) => Option.getOrUndefined(read)?.status);
+        assert.equal(yield* statusOf(backlog.id), ISSUE_STATUS.IN_PROGRESS);
+        assert.equal(yield* statusOf(todo.id), ISSUE_STATUS.IN_PROGRESS);
+        assert.deepEqual(yield* Effect.forEach(settled, (each) => statusOf(each.id)), [
+          ISSUE_STATUS.IN_PROGRESS,
+          ISSUE_STATUS.DONE,
+          ISSUE_STATUS.CANCELED,
+        ]);
+        assert.equal(yield* statusOf(archived.id), ISSUE_STATUS.TODO);
+        const untouched = Option.getOrUndefined(yield* readIssue(owner, settled[1]?.id ?? ""));
+        assert.equal(untouched?.updatedAt, settled[1]?.updatedAt);
+      }),
+  );
+
+  it.effect("an account outside the issue's workspace moves nothing", () =>
+    Effect.gen(function* () {
+      const owner = yield* openAccount;
+      const outsider = yield* openAccount;
+      const workspace = yield* openWorkspace(owner);
+      const made = Option.getOrElse(
+        yield* createIssue(owner, { organizationId: workspace, title: "Invites expire" }),
+        () => assert.fail("the issue was not filed"),
+      );
+
+      assert.equal(yield* beginIssueWork(outsider, made.id), false);
+      assert.equal(
+        Option.getOrUndefined(yield* readIssue(owner, made.id))?.status,
+        ISSUE_STATUS.BACKLOG,
       );
     }),
   );
