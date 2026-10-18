@@ -150,7 +150,13 @@ subpath door of its own, so the panel bundle never resolves the server.
 - `errors.ts`: the encoder writing `{ error: slug }` with
   `HOSTED_REFUSAL_STATUS`, and an `effect/wrap` turning a `HostedRefusal` in
   an Effect's failure channel into the declared oRPC error, so endpoint bodies
-  move over nearly unchanged.
+  move over nearly unchanged. A refusal is not always a bare slug:
+  `repositoryNotReachable` (`packages/service/src/http/http-effect.ts`) adds
+  an `unreached: { reason, repository }` that `repositoryNotReachableSchema`
+  (`packages/features/src/repository-reach-wire.ts`) reads for the failure's
+  remedy. Each such refusal is declared with its extra fields as the oRPC
+  error's `data` schema, and the encoder writes them beside `error`, at the
+  top level, exactly as today.
 - `router.ts`: the implemented resources merged into one router.
 
 Each resource's implementation lives beside its old `*-app.ts` as
@@ -162,10 +168,17 @@ has no routes left and is deleted.
 `effect/context` read once per instance through `runWeb`, exactly as
 `route-effect.ts` does today. It is a runtime edge, listed in
 `tools/anti-slop/effect-edges.json`. Until the routing collapse (W20), a
-migrated route file exports this route and its rewrite carries the whole
-client path in `?route-path=` (the auth catch-all's mechanism in
-`function-dispatch.ts`), so the oRPC handler matches the public path rather
-than the flattened one.
+migrated route file exports this route, and its rewrite must carry the whole
+public path in `?route-path=` (the auth catch-all's mechanism in
+`function-dispatch.ts`), so the oRPC handler matches `/api/issues/abc` rather
+than the flattened `/api/issues/issue?id=abc`. Today's generator does not do
+this: a `SEGMENT_REWRITES` row in `function-rewrites.ts` forwards its
+segments only as query parameters, so regenerating alone leaves a migrated
+parameterized route answering 404. W1 adds the mechanism: a segment rule
+marked as oRPC emits `route-path` built from the captured segments (and
+still emits the old query parameters, harmlessly), and the generator's tests
+drive a parameterized oRPC route end to end through rewrite, dispatcher and
+handler.
 
 **The client** gets `packages/features/src/hosted-link.ts`: an `OpenAPILink`
 whose `fetch` is `accountCall`'s `send`, so the credential, the 401 renew,
@@ -198,10 +211,15 @@ subscribes to.
   migrated resource adds one test through the oRPC route proving a refusal's
   status and body match the old ones.
 - A resource PR migrates its server procedures and its client together,
-  deletes the old `HttpRouter` endpoints and client code it replaces, and
-  regenerates `apps/web/server/api-rewrites.json` and `vercel.json` with
+  deletes the old `HttpRouter` endpoints and client code it replaces, marks
+  each migrated parameterized route's `SEGMENT_REWRITES` row as oRPC (W1's
+  mechanism, §4) and tests one of them through the rewrite and dispatcher,
+  and regenerates `apps/web/server/api-rewrites.json` and `vercel.json` with
   `pnpm --filter @luke/web functions:rewrites`. On a rebase conflict in a
   generated file, regenerate rather than merge by hand.
+- A refusal carrying more than its slug (`unreached` today) keeps its extra
+  fields, declared as the error's `data` (§4); the PR that migrates a route
+  answering one tests that refusal through the route, read by the client.
 - Shared files many PRs touch (`contract/index.ts`, `orpc/router.ts`,
   `features/src/index.ts`, `service-paths.ts`, `compose-host.ts`): add one
   line per resource, in alphabetical order, so conflicts stay trivial.
@@ -219,11 +237,16 @@ five packages to the catalog at `2.0.0-beta.44` (D1) and declare them where
 used. Build `features/src/contract/` with the shared errors map and the
 `models` procedure; `service/src/orpc/` (`base.ts`, `errors.ts`,
 `router.ts`); `apps/web/server/orpc-route.ts` as a runtime edge; move
-`/api/models` onto it, its rewrite carrying `route-path`. Confirm in the PR:
-Effect 4.0.4 Schema works with the extension, the function bundle's
-isolation load test passes, the externals and bundle budget. Acceptance:
-`/api/models` answers byte-for-byte what it did (success, 401, 405), proven
-by a test through the route; `knip`, effect edges and repository checks pass.
+`/api/models` onto it, its rewrite carrying `route-path`. Teach
+`function-rewrites.ts` the oRPC segment rule (§4), proven by a test of a
+parameterized procedure through rewrite, dispatcher and handler, since
+`/api/models` has no segment. Build the encoder's `data` path for refusals
+with extra fields, proven with `repository-not-reachable` and its
+`unreached`. Confirm in the PR: Effect 4.0.4 Schema works with the
+extension, the function bundle's isolation load test passes, the externals
+and bundle budget. Acceptance: `/api/models` answers byte-for-byte what it
+did (success, 401, 405), proven by a test through the route; `knip`, effect
+edges and repository checks pass.
 
 **W2 — feat(features,host): the hosted oRPC client over `accountCall`.**
 `hosted-link.ts` as §4 says, with per-procedure deadlines; switch the
@@ -285,12 +308,19 @@ are based on W2 and independent of each other.
 Optional; only if W3–W18 left `fakeCloudApi` tables that a contract-typed
 fake would make shorter. Skip if not.
 
-**W20 — refactor(web): one oRPC function route, no segment rewrites.** Once
-every JSON route is oRPC: the oRPC route matches `/api/*` itself, so the 59
-segment rewrites and the route files of migrated routes go;
-`function-bundles.ts`, `function-dispatch.ts`, `function-layout.ts` and
-`function-rewrites.ts` keep only the 15 external routes, the two WebSockets
-and the sweep. `api-callers.ts` is replaced by a check that every client path
+**W20 — refactor(web): one oRPC function route, fewer rewrites.** Once
+every JSON route is oRPC: the oRPC route matches its public paths itself, so
+the segment rewrites of **migrated** routes and their route files go, and
+one fallback rule sends what is left of `/api/*` to it. The segment rules of
+the external-shape routes stay, since their public URLs have variable
+segments a literal rule cannot carry (`/api/automations/:id/webhook`,
+`/api/plans/:id/attachments/:attachment`, `agents/picture`,
+`inbox/attachment`, `workspaces/photo`, …), and they stay ordered before
+the fallback so it never shadows them. `function-bundles.ts`,
+`function-dispatch.ts`, `function-layout.ts` and `function-rewrites.ts` keep
+the 15 external routes, the two WebSockets and the sweep; a test proves every
+external route's public URL, parameterized ones included, still reaches its
+handler. `api-callers.ts` is replaced by a check that every client path
 outside the contract still resolves (the external routes, the WebSockets).
 `preview-probe.ts` probes the contract's procedures. Based on all of W3–W18.
 
