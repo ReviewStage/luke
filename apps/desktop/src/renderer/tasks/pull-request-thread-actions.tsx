@@ -53,8 +53,13 @@ const ThreadWritesContext = createContext<ThreadWrites | undefined>(undefined);
 /** Gives every review thread drawn under it its controls, on the agent named. */
 export const ThreadWritesProvider = ThreadWritesContext.Provider;
 
+/** Which agent's pull request the tab around the caller writes to, and what it reads again after; none outside a tab. A reaction's controls take it too (`pull-request-reactions.tsx`). */
+export function useThreadWriting(): ThreadWrites | undefined {
+  return useContext(ThreadWritesContext);
+}
+
 /** What a thread drawn outside a tab reads again once changed: nothing, since it offers no change. */
-function noop(): void {}
+export function noop(): void {}
 
 /**
  * The reply being written: a field, Cancel, and Reply; ⌘↩ sends it and
@@ -131,7 +136,7 @@ function resolveWords(resolved: boolean, out: boolean): string {
  * the read named no id for it.
  */
 export function ThreadActions({ thread }: { thread: ReviewThread }): React.JSX.Element | null {
-  const writing = useContext(ThreadWritesContext);
+  const writing = useThreadWriting();
   const writes = usePullRequestWrites(writing?.agentId ?? "", writing?.onWritten ?? noop);
   const [replying, setReplying] = useState(false);
   const { id } = thread;
