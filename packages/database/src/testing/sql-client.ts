@@ -52,6 +52,9 @@ async function migrateFreshPglite(): Promise<PGlite> {
   const migrationRuntime = ManagedRuntime.make(sqlClientOverPglite(client));
   try {
     await migrationRuntime.runPromise(runWebMigrations());
+  } catch (error) {
+    await client.close();
+    throw error;
   } finally {
     await migrationRuntime.dispose();
   }
@@ -69,8 +72,19 @@ export async function openMigratedPglite(): Promise<PGlite> {
     return new PGlite({ loadDataDir: await migratedDataDirectory });
   }
   const first = migrateFreshPglite();
-  migratedDataDirectory = first.then((client) => client.dumpDataDir("none"));
-  await migratedDataDirectory;
+  const dumped = first.then((client) => client.dumpDataDir("none"));
+  migratedDataDirectory = dumped;
+  try {
+    await dumped;
+  } catch (error) {
+    // Note that we forget a failed dump, so a later opening migrates afresh rather than inheriting the failure.
+    migratedDataDirectory = undefined;
+    await first.then(
+      (client) => client.close(),
+      () => undefined,
+    );
+    throw error;
+  }
   return first;
 }
 

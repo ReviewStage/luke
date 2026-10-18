@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
-import type { PGlite } from "@electric-sql/pglite";
-import { type TestContext, test } from "vitest";
+import { PGlite } from "@electric-sql/pglite";
+import { afterEach, type TestContext, test, vi } from "vitest";
 import { openMigratedPglite } from "../sql-client.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 /** The first opening migrates, about 4 s on an idle machine, so the test is held to the config's hook bar. */
 const MIGRATING_TIMEOUT_MS = 30_000;
@@ -38,6 +42,23 @@ test(
       (await tables(first)).filter((name) => !migrated.includes(name)),
       ["written_after_opening"],
     );
+  },
+  MIGRATING_TIMEOUT_MS,
+);
+
+test(
+  "a first opening whose dump fails leaves a later opening free to migrate afresh",
+  async (t) => {
+    // Note that we load a module of the test's own, so no earlier opening has dumped already.
+    vi.resetModules();
+    const fresh = await import("../sql-client.js");
+    vi.spyOn(PGlite.prototype, "dumpDataDir").mockRejectedValueOnce(new Error("dump refused"));
+
+    await assert.rejects(fresh.openMigratedPglite(), /dump refused/);
+
+    const client = await fresh.openMigratedPglite();
+    t.onTestFinished(() => client.close());
+    assert.ok((await tables(client)).length > 0);
   },
   MIGRATING_TIMEOUT_MS,
 );
