@@ -7,6 +7,7 @@ import {
   CloseIcon,
   ConfirmDialog,
   IconButton,
+  InlineEdit,
   PlusIcon,
   useConfirmDialog,
   useMenu,
@@ -15,7 +16,6 @@ import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { ActionMenu } from "../desktop/action-menu";
 import type { FloatingBox } from "../desktop/hover-pane";
-import { TaskNameField } from "../desktop/task-name-field";
 import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject } from "./agent-ref";
 import { agentStillWriting } from "./coding-agent-model";
@@ -82,18 +82,16 @@ function ShellRow({
   return (
     <li className="terminal-shell" aria-current={shown ? "true" : undefined}>
       <TerminalIcon className="terminal-shell-glyph" aria-hidden="true" />
-      {renaming ? (
-        <TaskNameField
-          name={shell.title}
-          className="terminal-shell-field"
-          label="Shell name"
-          maxLength={TITLE_MAX}
-          onEnd={({ name }) => {
-            setRenaming(false);
-            if (name !== undefined) session.onRename(shell.id, name);
-          }}
-        />
-      ) : (
+      <InlineEdit
+        value={shell.title}
+        label="Shell name"
+        editing={renaming}
+        maxLength={TITLE_MAX}
+        onEnd={({ value }) => {
+          setRenaming(false);
+          if (value !== undefined) session.onRename(shell.id, value);
+        }}
+      >
         <button
           ref={row}
           type="button"
@@ -104,7 +102,7 @@ function ShellRow({
           <span className="terminal-shell-name">{shell.title}</span>
           <span className="terminal-shell-detail">{shellDetail(shell)}</span>
         </button>
-      )}
+      </InlineEdit>
       <span className="terminal-shell-mark">
         {shell.running ? (
           <span className="terminal-shell-running" role="img" aria-label="Running" />

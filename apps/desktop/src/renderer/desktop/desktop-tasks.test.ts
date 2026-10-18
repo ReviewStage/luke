@@ -321,7 +321,7 @@ async function narrowTaskInbox(
           ?.click(),
       ),
     rows: () =>
-      [...tab.querySelectorAll(".inbox-tasks .sidebar-task-name")].map((row) => row.textContent),
+      [...tab.querySelectorAll(".inbox-tasks .luke-list-row-title")].map((row) => row.textContent),
     /** Needs you's empty state in the list as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
     filteredOut: () => {
       const empty = tab.querySelector(".inbox-tasks:not([hidden]) .luke-empty-state");
@@ -350,7 +350,7 @@ async function narrowTaskInbox(
         ...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
       ].find((button) => button.textContent === "Inbox") ?? null,
     row: (title: string) =>
-      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-task")].find((each) =>
+      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li > button")].find((each) =>
         each.textContent?.includes(title),
       ),
     unmount: () => {

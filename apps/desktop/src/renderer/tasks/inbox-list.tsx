@@ -1,7 +1,7 @@
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { DocumentIcon, EmptyState, IconButton, useMenu } from "@luke/ui";
+import { DocumentIcon, EmptyState, IconButton, LIST_ROW_CURRENT, ListRow, useMenu } from "@luke/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -17,7 +17,7 @@ import {
   SlidersHorizontalIcon,
   UsersIcon,
 } from "lucide-react";
-import { useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { useAutomation } from "../automation-directory";
 import { useCopyLinkItem } from "../copy-link-item";
@@ -35,7 +35,12 @@ import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
-import { INBOX_COLUMNS, type InboxColumnsShown, needsYouButton } from "./inbox-columns";
+import {
+  INBOX_COLUMNS,
+  type InboxColumnsShown,
+  type InboxRowPresses,
+  needsYouButton,
+} from "./inbox-columns";
 import {
   holderKey,
   holderName,
@@ -197,12 +202,13 @@ export function ItemMark({
 }
 
 /**
- * One item as a sidebar row: the agent's mark, the title, and how long ago it
+ * One item as a `ListRow`: the agent's mark, the title, and how long ago it
  * changed, a teammate's face before the time where the item is theirs and
- * `face` allows it; one that needs the developer in the unread weight with a
- * dot past its time, and a teammate's open one a hollow dot. The home page's
- * Needs you names the item's plan after its title, in `context`, since its
- * rows stand under no plan's header, as a person's group does. Its right-click offers
+ * `face` allows it; one that needs the developer unread, with a dot past its
+ * time, and a teammate's open one a hollow dot. The title hangs in the
+ * window's pill, since a narrow list cuts it short. The home page's Inbox
+ * names the item's plan at the row's end, in `context`, since its rows stand
+ * under no plan's header, as a person's group does. Its right-click offers
  * Copy link, the item's link under the task or the agent that holds it, where
  * the list hands down a workspace to write it under.
  */
@@ -214,6 +220,7 @@ export function InboxItemRow({
   readerId,
   context,
   face = true,
+  ref,
   onChoose,
 }: {
   listed: InboxListed;
@@ -225,6 +232,8 @@ export function InboxItemRow({
   context?: string;
   /** Whether a teammate's item wears their face, which a person's group header says instead. */
   face?: boolean;
+  /** Handed the row's press, by which the list finds the row of an item. */
+  ref?: React.RefCallback<HTMLElement> | undefined;
   onChoose: (listed: InboxListed) => void;
 }): React.JSX.Element {
   const { holder, item } = listed;
@@ -242,55 +251,51 @@ export function InboxItemRow({
       ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.task.id, itemId: item.id }
       : { kind: LINK_PLACE.INBOX_ITEM, agentId: item.agentId, itemId: item.id },
   );
+  const press = useRef<HTMLElement | null>(null);
+  const hold = useCallback(
+    (element: HTMLElement | null) => {
+      press.current = element;
+      ref?.(element);
+    },
+    [ref],
+  );
   return (
-    <li className="sidebar-task-item inbox-row">
-      <Tooltip label={title}>
-        <button
-          type="button"
-          className="sidebar-task"
-          aria-current={chosen ? "page" : undefined}
-          data-unread={String(needsYou)}
-          data-item-id={item.id}
-          onClick={() => onChoose(listed)}
-          onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
-        >
-          <span className="sidebar-task-line">
-            <span className="inbox-row-mark">
-              <ItemMark
-                holder={holder}
-                agentId={item.agentId}
-                models={models}
-                readerId={readerId}
-              />
-            </span>
-            <span className="sidebar-task-name">{title}</span>
-            {context === undefined ? null : <span className="home-row-context">{context}</span>}
-            {starter === undefined || !face ? (
-              <RelativeTime
-                className="sidebar-task-time"
-                at={item.updatedAt}
-                now={now}
-                hint={false}
-              />
-            ) : (
-              // Note that the face stands in the time's own box, as a sidebar row's does, so it sits beside the time rather than the title.
-              <span className="sidebar-task-time">
-                <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
-                <RelativeTime at={item.updatedAt} now={now} hint={false} />
-              </span>
-            )}
-            {needsYou ? (
-              <span className="inbox-row-dot">
-                <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
-              </span>
-            ) : waitsOnTeammate ? (
-              <span className="inbox-row-dot" data-hollow="true">
-                <span className="visually-hidden">{waitingOn(starter)}</span>
-              </span>
-            ) : null}
+    <>
+      <ListRow
+        ref={hold}
+        leading={
+          <span className="inbox-row-mark">
+            <ItemMark holder={holder} agentId={item.agentId} models={models} readerId={readerId} />
           </span>
-        </button>
-      </Tooltip>
+        }
+        title={title}
+        meta={
+          <span className="home-row-meta">
+            {context === undefined ? null : <span className="home-row-context">{context}</span>}
+            {starter === undefined || !face ? null : (
+              <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
+            )}
+            <RelativeTime at={item.updatedAt} now={now} hint={false} />
+            {/* Note that the dot's place stands on every row, so the times line up whether a row wears one or not. */}
+            <span className="inbox-row-dot-place">
+              {needsYou ? (
+                <span className="inbox-row-dot">
+                  <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+                </span>
+              ) : waitsOnTeammate ? (
+                <span className="inbox-row-dot" data-hollow="true">
+                  <span className="visually-hidden">{waitingOn(starter)}</span>
+                </span>
+              ) : null}
+            </span>
+          </span>
+        }
+        current={chosen ? LIST_ROW_CURRENT.PAGE : undefined}
+        unread={needsYou}
+        hint={{ Hint: Tooltip, label: title }}
+        onPress={() => onChoose(listed)}
+        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu(press)}
+      />
       {menu.drawn === undefined || copyLink === undefined ? null : (
         <ActionMenu
           label={ITEM_ACTIONS}
@@ -299,7 +304,7 @@ export function InboxItemRow({
           onClose={menu.close}
         />
       )}
-    </li>
+    </>
   );
 }
 
@@ -551,15 +556,14 @@ interface RowFocus {
  * out. Note that a removed row fires no blur, so the row last focused is
  * remembered and looked for after every render.
  */
-function useRowFocusKept(): RowFocus {
+function useRowFocusKept(rows: InboxRowPresses): RowFocus {
   const ref = useRef<HTMLElement | null>(null);
   const focusedRow = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
     const list = ref.current;
     const row = focusedRow.current;
     if (list === null || row === undefined || list.hidden) return;
-    const rows = list.querySelectorAll<HTMLElement>("[data-item-id]");
-    if ([...rows].some((each) => each.dataset.itemId === row)) return;
+    if (rows.find(row) !== undefined) return;
     focusedRow.current = undefined;
     if (document.activeElement !== null && document.activeElement !== document.body) return;
     needsYouButton(list)?.focus();
@@ -567,8 +571,7 @@ function useRowFocusKept(): RowFocus {
   return {
     ref,
     onFocus: (event) => {
-      focusedRow.current =
-        event.target instanceof HTMLElement ? event.target.dataset.itemId : undefined;
+      focusedRow.current = rows.itemOf(event.target);
     },
     onBlur: () => {
       focusedRow.current = undefined;
@@ -585,6 +588,7 @@ export function InboxList({
   models,
   readerId,
   columns,
+  rows,
   onChoose,
 }: {
   view: InboxListView;
@@ -599,11 +603,13 @@ export function InboxList({
   note: React.ReactNode;
   /** Which of the Inbox's columns stand. */
   columns: InboxColumnsShown;
+  /** Where each row's press is kept, by the item it opens. */
+  rows: InboxRowPresses;
   onChoose: (listed: InboxListed) => void;
 }): React.JSX.Element {
   const now = useMinute();
   const { width, onResize } = useInboxListWidth();
-  const rowFocus = useRowFocusKept();
+  const rowFocus = useRowFocusKept(rows);
   const edge = useResizableEdge({
     side: EDGE_SIDE.RIGHT,
     width,
@@ -621,6 +627,7 @@ export function InboxList({
       models={models}
       readerId={readerId}
       face={!byPerson}
+      ref={rows.hold(listed.item.id)}
       {...(byPerson ? { context: holderName(listed.holder) } : undefined)}
       onChoose={onChoose}
     />
