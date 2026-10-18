@@ -13,9 +13,11 @@ import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent
 import { firstMessageParts } from "@luke/features/agent-replay";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import { UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { generateText, isTextUIPart, type LanguageModel } from "ai";
 import { Effect, Option, type Schema } from "effect";
+import { SqlClient } from "effect/sql";
 import { MESSAGE_CHANNEL, MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
 import { CODER } from "./bounds.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -96,7 +98,11 @@ function tidyAgentTitle(answer: string): Option.Option<string> {
     .trim()
     .slice(0, CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)
     .trim();
-  return title.length === 0 ? Option.none() : Option.some(title);
+  // A task's own sentinel names nothing, so a task it would name stays open to the next title.
+  if (title.length === 0 || title.toLowerCase() === UNTITLED_TASK_NAME.toLowerCase()) {
+    return Option.none();
+  }
+  return Option.some(title);
 }
 
 /** A part's words without the replay of another agent or the note's marker: the brief and the note where either stands, the part whole otherwise. */
@@ -274,6 +280,26 @@ function generateAgentTitle(
 }
 
 /**
+ * The agent's title filled, and its task named with it where the task still
+ * stands untitled, in one transaction, so a rename that fails takes the
+ * title back with it and the next words or turn's end ask again. Note that
+ * a title the developer set meanwhile is theirs for the agent alone, so the
+ * fill that finds one names no task.
+ */
+function titledWithTask(
+  userId: string,
+  agent: CodingAgent,
+  title: string,
+): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {
+  const written = Effect.gen(function* () {
+    const filled = yield* fillCodingAgentTitle(userId, agent.id, title);
+    if (!filled || agent.taskId === null) return;
+    yield* nameUntitledTask(userId, agent.taskId, title);
+  });
+  return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(written));
+}
+
+/**
  * A subagent's title generated from the task it was handed and filled on
  * its child conversation, for a child that has none yet: a title already
  * standing is never asked for again, and a call that fails leaves the child
@@ -322,9 +348,6 @@ export function titleCodingAgent(
     if (exchange.length === 0) return;
     const title = yield* generateAgentTitle(model, exchange);
     if (Option.isNone(title)) return;
-    const filled = yield* fillCodingAgentTitle(target.userId, agent.id, title.value);
-    // A title the developer set meanwhile is theirs for the agent alone, so it names no task.
-    if (!filled || agent.taskId === null) return;
-    yield* nameUntitledTask(target.userId, agent.taskId, title.value);
+    yield* titledWithTask(target.userId, agent, title.value);
   });
 }

@@ -15,7 +15,7 @@ import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay"
 import { AUTOMATION_FIRING, GITHUB_TRIGGER_EVENT } from "@luke/features/automation-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
-import { Effect, Option } from "effect";
+import { Clock, Effect, Option } from "effect";
 import { BRAIN_TURN_TRIGGER, userMetadataOf } from "../../core.js";
 import { openGithubUser } from "../../testing/github-app-fake.js";
 import { titleCodingAgent } from "./title.js";
@@ -71,6 +71,7 @@ const startOnTask = (owner: string, taskId: string, prompt: string) =>
         repository: "acme/relay",
       }),
     );
+    const placedAt = new Date(yield* Clock.currentTimeMillis);
     yield* Database.use((db) =>
       db.insert(messages).values({
         userId: owner,
@@ -80,7 +81,7 @@ const startOnTask = (owner: string, taskId: string, prompt: string) =>
         role: MESSAGE_ROLE.USER,
         parts: [{ type: "text", text: prompt }],
         metadata: userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
-        placedAt: new Date(),
+        placedAt,
       }),
     );
     return started.agent;
@@ -113,6 +114,22 @@ it.layer(getTestDB())("an untitled task's name", (it) => {
       assert.equal(yield* taskName(owner, task.id), "Expire teammate invitations");
       const secondTitled = Option.getOrThrow(yield* readCodingAgent(owner, second.id));
       assert.equal(secondTitled.title, "Send invitation reminders");
+    }),
+  );
+
+  it.effect("a model answering the untitled name names neither the agent nor its task", () =>
+    Effect.gen(function* () {
+      const owner = yield* openGithubUser();
+      const organizationId = yield* openWorkspace(owner);
+      const task = yield* createTask(owner, { organizationId, planning: false });
+      const first = yield* startOnTask(owner, task.id, "Expire teammate invitations after a week.");
+      const second = yield* startOnTask(owner, task.id, "Send a reminder the day before.");
+
+      yield* titledAs(owner, first, "untitled.");
+      yield* titledAs(owner, second, "Send invitation reminders");
+
+      assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, first.id)).title, null);
+      assert.equal(yield* taskName(owner, task.id), "Send invitation reminders");
     }),
   );
 
