@@ -140,13 +140,38 @@ function changed(
   return next;
 }
 
-/** The account signed in to this window, whose sends the book holds, by its address. */
-type Owner = string | null;
+/** The account signed in to this window, as its identity names it. */
+interface Identity {
+  readonly id?: string | undefined;
+  readonly email: string;
+}
 
-const ownerAtom = Atom.keepAlive(Atom.make<Owner>(null));
+/** The account whose book the window draws: its identity as last heard, and the key its book is kept under, which it keeps for as long as it is the same account. */
+interface Owner {
+  readonly key: string | null;
+  readonly identity: Identity | undefined;
+}
+
+const NO_OWNER: Owner = { key: null, identity: undefined };
+
+/** Whether two identities are one account: the same id, or the same address, so learning its id or changing its address leaves it the same. */
+function sameAccount(one: Identity | undefined, other: Identity | undefined): boolean {
+  if (one === undefined || other === undefined) return false;
+  if (one.id !== undefined && one.id === other.id) return true;
+  return one.email === other.email;
+}
+
+/** The owner once `identity` is signed in: the same key for the same account, a new one for another. */
+function ownedBy(owner: Owner, identity: Identity | undefined): Owner {
+  if (identity === undefined) return NO_OWNER;
+  if (sameAccount(owner.identity, identity)) return { key: owner.key, identity };
+  return { key: identity.id ?? identity.email, identity };
+}
+
+const ownerAtom = Atom.keepAlive(Atom.make<Owner>(NO_OWNER));
 
 /** Each account's sends, apart, so what one account sent never stands over another's reads. */
-const settlingOf = Atom.family((_owner: Owner) => {
+const settlingOf = Atom.family((_key: string | null) => {
   const self: Atom.Writable<ReadonlyMap<string, Settling>, Change> = Atom.keepAlive(
     Atom.writable(
       (): ReadonlyMap<string, Settling> => NOTHING_LAID,
@@ -158,23 +183,28 @@ const settlingOf = Atom.family((_owner: Owner) => {
 
 /** What the account signed in to this window sent, kept for the window's life whichever page draws it. */
 const settlingAtom = Atom.writable(
-  (get) => get(settlingOf(get(ownerAtom))),
-  (ctx, change: Change) => ctx.set(settlingOf(ctx.get(ownerAtom)), change),
+  (get) => get(settlingOf(get(ownerAtom).key)),
+  (ctx, change: Change) => ctx.set(settlingOf(ctx.get(ownerAtom).key), change),
 );
 
 /**
  * Hands the book to the account signed in to this window, before the window
  * is painted, so a send one account made never stands over the next one's
  * reads; a send still on its way when the account changes finds nothing of
- * its own in the next account's book, and moves nothing there.
+ * its own in the next account's book, and moves nothing there. Note that
+ * the same account keeps its book as its identity learns its id or its
+ * address changes, since its sends are no less its own.
  */
-export function useInboxSettlingOwner(account: { readonly email: string } | undefined): void {
+export function useInboxSettlingOwner(account: Identity | undefined): void {
+  const owner = useAtomValue(ownerAtom);
   const own = useAtomSet(ownerAtom);
-  // Note that the book is the address's, never the id's, because an identity stored without an id learns it as it renews, and the book must not change hands then.
-  const owner = account?.email ?? null;
+  const id = account?.id;
+  const email = account?.email;
   useLayoutEffect(() => {
-    own(owner);
-  }, [own, owner]);
+    const next = ownedBy(owner, email === undefined ? undefined : { id, email });
+    const heard = owner.identity?.id === id && owner.identity?.email === email;
+    if (next.key !== owner.key || !heard) own(next);
+  }, [own, owner, id, email]);
 }
 
 /** Whether a read holds the item changed since the entry: posted again, or changed after the service's word on the send. */
