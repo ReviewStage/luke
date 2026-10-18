@@ -1,0 +1,58 @@
+/* popover-panel.css -- the panel a button opens inside its anchored popover
+   (`popover-panel.tsx`): the menu's surface, its ground, edge, corner,
+   shadow, and entrance, never taller than the room its side of the button
+   leaves and scrolling within it. A card stands its title and × at its head
+   and its sections apart in one column at the caption's type; a menu's
+   content runs edge to edge, its own rows carrying the inset. */
+
+@layer components {
+  .luke-popover-panel {
+    display: flex;
+    flex-direction: column;
+    max-height: var(--luke-popover-room, none);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--luke-color-border-strong);
+    border-radius: var(--luke-menu-radius);
+    background: var(--luke-color-overlay);
+    box-shadow: 0 12px 32px var(--luke-color-shadow);
+    color: var(--luke-color-text);
+    animation:
+      luke-menu-arrive var(--duration-quick, 0s) var(--motion-exit, ease) both,
+      luke-menu-drop var(--duration-fast, 0s) var(--spring-fast, ease) both;
+  }
+
+  .luke-popover-panel:focus-visible {
+    outline: none; /* no ring: a panel holding focus for its controls */
+  }
+
+  /* Note that no section gives up its height to the bound, because the
+     panel scrolls rather than squeezing what it holds. */
+  .luke-popover-panel > * {
+    flex-shrink: 0;
+  }
+
+  .luke-popover-panel[data-look="card"] {
+    gap: var(--luke-space-12);
+    padding: var(--luke-space-12) var(--luke-space-16) var(--luke-space-16);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  /* The × is pulled out to the edge by its own inset, so its glyph, not
+     its square, lines up with the card's content. */
+  .luke-popover-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--luke-control-gap);
+    margin-right: calc(-1 * var(--luke-space-8));
+  }
+
+  .luke-popover-panel-title {
+    margin: 0;
+    font-size: var(--luke-type-section-size);
+    font-weight: 600;
+    line-height: var(--luke-type-section-leading);
+  }
+}
