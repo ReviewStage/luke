@@ -1193,11 +1193,6 @@ const newTaskOf = (caller: AgentCaller, name: string) =>
       repository: reached.success.fullName,
       planning: false,
     });
-    yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
-      source: SERVER_TASK_SOURCE.AGENT,
-      is_planning: false,
-      has_issue: false,
-    });
     return Result.succeed(yield* newTaskReading(userId, workspace.value, made.id, made.name));
   });
 
@@ -1618,6 +1613,14 @@ export function runStartAgent(
         yield* discardNewTask(userId, made.id);
         const standing = yield* startedBefore(call, true);
         if (Option.isSome(standing)) return standing.value;
+      }
+      // Counted only once the start keeps it, so a task the discard above took back is never counted.
+      if (made !== undefined && Result.isSuccess(started) && started.success.created) {
+        yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
+          source: SERVER_TASK_SOURCE.AGENT,
+          is_planning: false,
+          has_issue: false,
+        });
       }
       if (Result.isFailure(started)) {
         const refusal = started.failure;

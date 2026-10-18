@@ -332,6 +332,10 @@ const answerAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[answered.failure]);
   }
   const { ask: now, reply: posted, taken } = answered.success;
+  // The answer's reply is a member's message in the ask's thread; one sent again under its key is not new.
+  if (taken && Option.isSome(posted) && message.value.answerKey !== asked.clientKey) {
+    yield* recordServerEvent(SERVER_EVENT.CHAT_MESSAGE_SEND, userId, { is_reply: true });
+  }
   if (taken && Option.isSome(posted) && ask.value.needsReply !== false) {
     yield* tellMessage(yield* telling, posted.value, []);
   }

@@ -188,3 +188,18 @@ export function recordServerEvent<Name extends ServerEventName>(
         analytics.value.capture({ name, userId, properties } as ServerEvent),
   );
 }
+
+/**
+ * Analytics that keeps what it was handed rather than posting it, for a test
+ * that asserts what an endpoint counted.
+ */
+export function recordingProductAnalytics(): {
+  readonly layer: Layer.Layer<ProductAnalytics>;
+  readonly recorded: readonly ServerEvent[];
+} {
+  const recorded: ServerEvent[] = [];
+  const layer = Layer.succeed(ProductAnalytics, {
+    capture: (event) => Effect.sync(() => void recorded.push(event)),
+  });
+  return { layer, recorded };
+}
