@@ -66,6 +66,7 @@
     "./schemas/inbox": "./src/schemas/inbox.js",
     "./schemas/conversation-attachment": "./src/schemas/conversation-attachment.js",
     "./schemas/inbox-attachment": "./src/schemas/inbox-attachment.js",
+    "./schemas/inbox-item-read": "./src/schemas/inbox-item-read.js",
     "./schemas/inbox-message": "./src/schemas/inbox-message.js",
     "./schemas/integration": "./src/schemas/integration.js",
     "./schemas/issue": "./src/schemas/issue.js",
