@@ -1361,17 +1361,9 @@ ul.actor-stack {
 
 /* A sidebar plan renamed in place keeps its row: the field takes the name's
    own line and type, ringed. */
-.sidebar-task-field {
+.sidebar-task > .luke-inline-edit {
   width: calc(100% + 10px);
   margin: -2px -5px; /* off-scale */
-  padding: 1px 4px; /* off-scale */
-  border: 0;
-  border-radius: 5px;
-  background: var(--luke-color-ground);
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
-  color: var(--luke-color-text);
-  font-family: inherit;
-  font-size: var(--luke-type-body-size);
 }
 
 /* A row's first line: the plan's name, cut short where it must, and how long
@@ -2498,8 +2490,7 @@ ul.actor-stack {
    (`retry-button.tsx`) or a note's dismissal: a labelled toolbar button in
    the muted voice of the words it follows, lit like any other on hover, and
    tighter at its sides, since it stands beside words rather than in a
-   toolbar. A failed row that is itself the button draws the retry's glyph
-   and word in its own colour (`.retry-label`), its hover lighting both. */
+   toolbar. */
 .quiet-button {
   padding: 0 var(--luke-space-8);
   color: var(--luke-color-text-muted);
@@ -2528,14 +2519,6 @@ ul.actor-stack {
   height: 13px;
 }
 
-.retry-label {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--luke-space-4);
-  margin-left: var(--luke-space-4);
-  font-weight: 600;
-}
-
 /* A failure's line (`failure-note.tsx`): its words, then the press that
    mends it inside a hairline, since it is the act the line is there for,
    with Cancel or Retry quiet beside it. The press keeps the words' size and
@@ -2557,13 +2540,6 @@ ul.actor-stack {
 .failure-note-remedy :is(svg, .luke-spinner-ring) {
   width: 13px;
   height: 13px;
-}
-
-.retry-label svg {
-  width: 12px;
-  height: 12px;
-  flex: none;
-  align-self: center;
 }
 
 /* Chips ----------------------------------------------------------------------- */
@@ -2879,7 +2855,7 @@ ul.actor-stack {
 
 /* A pane that scrolls a list lays its empty state out as a column the state
    fills, while it holds one. */
-:is(.automations-scroll, .factory-scroll, .inbox-tasks-scroll):has(.luke-empty-state) {
+:is(.automations-scroll, .inbox-tasks-scroll):has(.luke-empty-state) {
   display: flex;
   flex-direction: column;
 }
@@ -4790,8 +4766,9 @@ button.integration-tool-head:hover,
 
 /* Factory -------------------------------------------------------------------- */
 
-/* Factory stands in the plan's place as the Inbox does: the toolbar, the
-   summary line, then the line of stations, each Settings' card holding
+/* Factory stands in the plan's place as the Inbox does: @luke/ui's
+   CollectionPage under the toolbar, across the room, holding the summary
+   line, then the line of stations, each Settings' card holding
    Home's rows, what waits on the developer first and set off from the rest
    by a hairline. The stations stretch to one height and fill the room, so
    the line reads as one piece, and the arrows between them carry the flow
@@ -4800,6 +4777,13 @@ button.integration-tool-head:hover,
    the room. Where three busy cards could not each hold a readable row,
    about 300px apiece, the stations stack, the arrows turn down, and an idle
    station is one line. */
+/* The line's page and a world's share one root, which the rows' keys and
+   motion are read against; it draws no box of its own. */
+.factory-pages {
+  display: contents;
+}
+
+/* A world's page: the toolbar over the world. */
 .factory-view {
   display: flex;
   min-width: 0;
@@ -4808,12 +4792,12 @@ button.integration-tool-head:hover,
   flex-direction: column;
 }
 
-.factory-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 var(--content-inset) var(--luke-space-32);
+/* What the line's page holds, which the stations measure their room by.
+   Note that it sets Home's rows at the window's own leading, as Home does,
+   rather than at the page's body leading around it. */
+.factory-board {
   container: factory / inline-size;
+  line-height: normal;
 }
 
 .factory-summary {
@@ -4821,7 +4805,12 @@ button.integration-tool-head:hover,
   align-items: center;
   gap: var(--luke-space-8);
   margin: 0;
-  padding: var(--luke-space-12) 0;
+  padding: 0 0 var(--luke-space-12);
+}
+
+/* Under a failure the summary keeps its own room from it. */
+.factory-summary:not(:first-child) {
+  padding-top: var(--luke-space-12);
 }
 
 /* What waits on the developer leads the line in the label's full ink, its
@@ -5330,54 +5319,18 @@ button.integration-tool-head:hover,
   margin-top: var(--luke-space-16);
 }
 
-/* One automation's row: its clock wearing its newest run's state, its name
-   over what fires it, its owner, when it runs next in the tertiary ink, a
-   failure's mark, and its switch, divided by the card's hairlines. */
-.automation-row {
-  position: relative;
-  display: flex;
-  min-height: 52px; /* off-scale */
+/* An automation's or a run's metadata at its row's end (`ListRow`'s meta):
+   its owner, when it runs next or when it fired, and a failure's mark, in a
+   line of their own. */
+.automation-row-meta {
+  display: inline-flex;
   align-items: center;
   gap: var(--luke-space-12);
-  padding-right: var(--luke-space-16);
-}
-
-.automation-row-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-.automation-row-name,
-.automation-row-detail {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The name in the body role, what fires it and when it runs next in the
-   caption role's quietest ink. */
-.automation-row-name {
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-}
-
-.automation-row-detail,
-.automation-row-when {
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.automation-row-when {
-  flex: none;
-  font-variant-numeric: tabular-nums;
+  vertical-align: top;
 }
 
 /* An automation turned off reads as set aside: its name in the muted ink. */
-.automation-row[data-enabled="false"] .automation-row-name {
+.automation-row-name[data-enabled="false"] {
   color: var(--luke-color-text-muted);
 }
 
@@ -5406,61 +5359,6 @@ button.integration-tool-head:hover,
 
 .automation-owner[data-owner="workspace"] {
   color: var(--luke-color-text);
-}
-
-/* A row is its press, which opens its page, from its edge to its switch, as
-   a sidebar task's row is: the owner, the next run, and the failure's mark
-   stand in it, and the switch stands beside it, so the switch stays a
-   switch. */
-.automation-row-open {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-self: stretch;
-  align-items: center;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-8) 0 var(--luke-space-8) var(--luke-space-16);
-  border-radius: inherit;
-  background: none;
-  color: inherit;
-  text-align: left;
-}
-
-/* Note that the press reaches past its own box to the row's, because the
-   gap before the switch and the inset after it would otherwise be filled
-   by the hover yet answer no press. */
-.automation-row-open::after {
-  position: absolute;
-  border-radius: inherit;
-  content: "";
-  inset: 0;
-}
-
-/* The row's cells and its switch stand above that reach, so the owner's and
-   the next run's titles still answer the pointer; a press on a cell still
-   reaches the button it stands in. */
-.automation-row-open > *,
-.automation-row > .luke-switch {
-  position: relative;
-  z-index: 1;
-}
-
-.automation-row-open > .state-glyph {
-  color: var(--luke-color-text-muted);
-}
-
-/* The row fills wherever it is pointed at, its switch's end included, as a sidebar task's row does. */
-.automation-row:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-.automation-row-open:focus-visible {
-  outline: none; /* no ring: the row around it rings, its switch included, as a sidebar header does */
-}
-
-:root[data-keyboard="true"] .automation-row:has(> .automation-row-open:focus-visible) {
-  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: calc(var(--focus-ring-width) / -2);
 }
 
 /* The suggested automations, each a card of its own in a grid that wraps
@@ -5733,32 +5631,6 @@ button.integration-tool-head:hover,
   overflow-y: auto;
   padding: var(--luke-space-16);
   border-left: 1px solid var(--luke-color-border);
-}
-
-.automation-runs-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.automation-run {
-  display: flex;
-  width: 100%;
-  min-height: 44px; /* off-scale */
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-6) var(--luke-space-8);
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: inherit;
-  text-align: left;
-}
-
-.automation-run > .state-glyph {
-  color: var(--luke-color-text-muted);
-}
-
-button.automation-run:hover {
-  background: var(--luke-color-fill-hover);
 }
 
 /* Chat ----------------------------------------------------------------------- */
@@ -7961,15 +7833,8 @@ button.automation-run:hover {
   box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
-.tab-field {
+.tab-button > .luke-inline-edit {
   width: 24ch;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  outline: none; /* no ring: its tab rings */
 }
 
 /* The × keeps none of a button's own padding, which would leave its glyph
@@ -8556,6 +8421,26 @@ button.automation-run:hover {
   margin-left: auto;
 }
 
+/* A ListRow's metadata on Home, the Issues list, and a person's page: what
+   the row is about, a teammate's face, the row's mark, and its time, set
+   apart by the line's own gap and centred on it. */
+.home-row-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+}
+
+/* Note that the context gives way before the marks and the time, because
+   the metadata's slot clips at its end and the time is what ends it. */
+.home-row-meta > .home-row-context {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.home-row-meta > :not(.home-row-context) {
+  flex: none;
+}
+
 .home-row-picture {
   display: inline-flex;
   width: 16px;
@@ -8578,10 +8463,9 @@ button.automation-run:hover {
 }
 
 /* A person's page (`person-page.tsx`): Home's column, headed by their face
-   at the page's size beside their name and who they are here. It and the
-   Issues page stand that column under their toolbar, not Home's way down. */
-.person-column,
-.issues-column {
+   at the page's size beside their name and who they are here. It stands
+   that column under its toolbar, not Home's way down. */
+.person-column {
   margin-top: 0;
   gap: var(--luke-space-24);
 }
