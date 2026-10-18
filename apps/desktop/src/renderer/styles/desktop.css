@@ -4230,6 +4230,12 @@ button.integration-tool-head:hover,
   gap: var(--luke-space-8);
 }
 
+/* An automation's toolbar while the list is read: its name's crumb is a
+   block with no words, so no baseline, and the heading centres instead. */
+.desktop-toolbar-heading.automation-toolbar-reading {
+  align-items: center;
+}
+
 .experiment-tag {
   flex: none;
   padding: 0 var(--luke-space-6);
@@ -4733,7 +4739,8 @@ button.integration-tool-head:hover,
   padding: var(--luke-space-16) var(--content-inset) var(--luke-space-32);
 }
 
-.automation-group {
+.automation-group,
+.automations-skeleton {
   max-width: var(--luke-page-measure);
   margin-inline: auto;
 }
@@ -5002,6 +5009,12 @@ button.integration-tool-head:hover,
   display: flex;
   flex-direction: column;
   gap: var(--luke-section-gap);
+}
+
+/* The prompt's placeholder, the height of its five-row field
+   (`text-field.css`). */
+.automation-prompt-skeleton {
+  height: calc(5 * var(--luke-type-body-leading) + 2 * var(--luke-space-6) + 2px);
 }
 
 /* The servers left on, by their marks, inside the servers row's field chip. */
