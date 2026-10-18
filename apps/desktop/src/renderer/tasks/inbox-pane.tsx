@@ -16,6 +16,7 @@ import {
   type InboxImageBlock,
   type InboxItem,
   type InboxMessage,
+  type InboxReplyKind,
   inboxAnswerHeard,
   knownBlock,
   knownResponse,
@@ -25,8 +26,10 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BackIcon,
+  CHOICE_FLOW,
   CHOICE_LOOK,
   CHOICE_SELECT,
+  CHOICE_TONE,
   ChevronRightIcon,
   ChoiceList,
   type ChoiceOption,
@@ -81,9 +84,12 @@ import {
   codeNotice,
   codeReadOf,
   codeWindow,
+  decidedOf,
+  decisionsOf,
   fieldValueOf,
   INBOX_HOLDER,
   INBOX_MISSING,
+  type InboxDecided,
   type InboxDraft,
   type InboxHolder,
   type InboxMissing,
@@ -91,6 +97,7 @@ import {
   itemWorkspaceId,
   NEEDS_YOU,
   needsReader,
+  numberedPick,
   proposedOptions,
   readersItem,
   SETTLED_BY,
@@ -100,7 +107,7 @@ import {
   THREAD_ENTRY,
   threadCut,
   threadEntries,
-  withChoice,
+  withDecision,
   withValue,
 } from "./inbox-model";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
@@ -138,21 +145,22 @@ import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
  * an attached file opens in (`attachment-viewer.tsx`). What the item asks for closes the
  * message: a choice's options, one perhaps recommended, a radio list where
  * it takes one and a checkbox list where it takes several, each numbered
- * for the key that picks it from anywhere in the Inbox but a field; a
+ * for the key that picks it from anywhere in the Inbox but a field; an
+ * approval's two cards, Approve and Decline, picked as a choice of two is,
+ * a green or a red mark once picked; a to-do's card, its step beside a
+ * checkbox and a "Couldn't do it" pill under it, picked the same way; a
  * form's fields, each the control Settings draws for its type; nothing for
- * the rest. Enter on an option or in a field sends the answer as the box's
- * Send does, and never presses the option, Space and the arrow keys being
- * an option's own. While the item
+ * words or a note. Enter on an option or in a field sends the answer as
+ * the box's Send does, and never presses the option, Space and the arrow
+ * keys being an option's own. While the item
  * waits, the agent composer's box, its card and its field, with its `@`
  * mentions, its skills, and its microphone (`inbox-answer-box.tsx`), is
- * docked under the thread for the note: an approval, a task, and an item
- * asking nothing are answered by presses in its footer, the one that holds
- * back and the one that goes ahead, as a confirm's are; words, a choice,
- * and a form by the box's own Send. A card whose agent need not hear back
- * says whether its answer will message the agent: a bare press does not, and
- * a typed note does. Once the item is settled,
+ * docked under the thread for the note, and every item is sent by its one
+ * Send, a note's reading "Got it" until a word is written. A card whose
+ * agent need not hear back says whether its answer will message the agent:
+ * a bare answer does not, and a typed note does. Once the item is settled,
  * what it offered folds to one line saying who picked which, which opens
- * to the options, or the presses it was answered by, with the developer's
+ * to the options, or the decisions it was answered by, with the developer's
  * pick marked and the rest stepped back; the developer's answer follows as
  * their comment, when and whether it reached the agent as a message or was
  * kept for it to read, then what they picked as a chip and what they
@@ -553,6 +561,151 @@ export function ChoiceOptions({
   );
 }
 
+/** What an approval's cards are named by, for a reader that does not see the question over them. */
+const DECISION_LEGEND = "Decision";
+
+/** What each decision's mark fills with once picked: going ahead in green, holding back in red. */
+const DECISION_TONE = [CHOICE_TONE.COMPLETE, CHOICE_TONE.DANGER] as const;
+
+/**
+ * An approval's two cards side by side, Approve and Decline, picked as a
+ * choice of two is and numbered for the keys that pick them, the pick's
+ * mark green for Approve and red for Decline. The pick waits for Send.
+ */
+function DecisionCards({
+  response,
+  draft,
+  disabled,
+  onDraft,
+}: {
+  response: InboxDecided;
+  draft: InboxDraft;
+  disabled: boolean;
+  onDraft: (draft: InboxDraft) => void;
+}): React.JSX.Element {
+  const decided = decidedOf(response, draft);
+  return (
+    <div {...{ [OPTIONS_ATTRIBUTE]: "" }}>
+      <ChoiceList
+        legend={DECISION_LEGEND}
+        options={decisionsOf(response).map((decision, index) => ({
+          value: decision.reply,
+          label: decision.label,
+          tone: DECISION_TONE[index],
+        }))}
+        value={decided === undefined ? [] : [decided]}
+        look={CHOICE_LOOK.MARKED}
+        flow={CHOICE_FLOW.ACROSS}
+        numbered
+        clearable
+        disabled={disabled}
+        onChange={(picked) => {
+          const [reply] = picked;
+          onDraft(reply === undefined ? { ...draft, choices: [] } : withDecision(draft, reply));
+        }}
+      />
+    </div>
+  );
+}
+
+/** What a to-do's card is named by, for a reader that does not see the question over it. */
+const TODO_LEGEND = "To-do";
+
+/** The keys that step between a to-do's two picks, and which way. */
+const TODO_STEP_KEYS = new Map([
+  ["ArrowDown", 1],
+  ["ArrowRight", 1],
+  ["ArrowUp", -1],
+  ["ArrowLeft", -1],
+]);
+
+/**
+ * A to-do as a task card: a checkbox beside its step, the item's own title,
+ * which ticks it done, and a "Couldn't do it" pill under it, the two picked
+ * as a choice of two is: a radio group whose Tab lands on the pick, or the
+ * step while none is, the arrows moving between them and picking as they
+ * go, Space or a press picking, a press on the pick taking it back, and
+ * each numbered for its key. Note that the card is drawn here rather than
+ * by `@luke/ui`'s ChoiceList, whose rows are all one shape, because a step
+ * ticked off with a pill under it is the to-do's own look.
+ */
+function TodoCard({
+  item,
+  response,
+  draft,
+  disabled,
+  onDraft,
+}: {
+  item: InboxItem;
+  response: InboxDecided;
+  draft: InboxDraft;
+  disabled: boolean;
+  onDraft: (draft: InboxDraft) => void;
+}): React.JSX.Element {
+  const decided = decidedOf(response, draft);
+  const decisions = decisionsOf(response);
+  const pick = (reply: InboxReplyKind) =>
+    onDraft(reply === decided ? { ...draft, choices: [] } : withDecision(draft, reply));
+  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = TODO_STEP_KEYS.get(event.key);
+    if (step === undefined || disabled) return;
+    event.preventDefault();
+    const radios = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    const focused = event.target instanceof HTMLButtonElement ? radios.indexOf(event.target) : -1;
+    const from =
+      focused >= 0
+        ? focused
+        : Math.max(
+            0,
+            decisions.findIndex((each) => each.reply === decided),
+          );
+    const next = (from + step + decisions.length) % decisions.length;
+    const reply = decisions[next]?.reply;
+    if (reply !== undefined && reply !== decided) onDraft(withDecision(draft, reply));
+    radios[next]?.focus();
+  };
+  const checked = (index: number) => {
+    const reply = decisions[index]?.reply;
+    return reply !== undefined && reply === decided;
+  };
+  const radio = (index: number) => {
+    const reply = decisions[index]?.reply;
+    return {
+      type: "button",
+      "aria-keyshortcuts": String(index + 1),
+      tabIndex: checked(index) || (decided === undefined && index === 0) ? 0 : -1,
+      disabled,
+      onClick: () => {
+        if (reply !== undefined) pick(reply);
+      },
+    } as const;
+  };
+  return (
+    <div {...{ [OPTIONS_ATTRIBUTE]: "" }}>
+      <div role="radiogroup" aria-label={TODO_LEGEND} className="inbox-todo" onKeyDown={onKeyDown}>
+        {/* biome-ignore lint/a11y/useSemanticElements: the step is drawn as a button holding a box, its words, and its key, which a native radio cannot be, and speaks as the radio it behaves as. */}
+        <button role="radio" aria-checked={checked(0)} className="inbox-todo-step" {...radio(0)}>
+          <span className="inbox-todo-box" aria-hidden="true" />
+          <span className="inbox-todo-words">{cardTitle(item.title)}</span>
+          <span className="inbox-todo-number" aria-hidden="true">
+            1
+          </span>
+        </button>
+        <div className="inbox-todo-acts">
+          {/* biome-ignore lint/a11y/useSemanticElements: the pill is drawn as a button holding a check and its words, which a native radio cannot be, and speaks as the radio it behaves as. */}
+          <button role="radio" aria-checked={checked(1)} className="inbox-todo-pill" {...radio(1)}>
+            <CheckIcon aria-hidden="true" />
+            {decisions[1]?.label}
+            <span className="inbox-todo-number" aria-hidden="true">
+              2
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** A field's name over or beside its control, saying where it must be filled. */
 function FieldName({ field }: { field: InboxField }): React.JSX.Element {
   return (
@@ -702,6 +855,20 @@ function ResponseControls({
           onDraft={onDraft}
         />
       );
+    case INBOX_RESPONSE.APPROVAL:
+      return (
+        <DecisionCards response={response} draft={draft} disabled={disabled} onDraft={onDraft} />
+      );
+    case INBOX_RESPONSE.TODO:
+      return (
+        <TodoCard
+          item={item}
+          response={response}
+          draft={draft}
+          disabled={disabled}
+          onDraft={onDraft}
+        />
+      );
     case INBOX_RESPONSE.FORM:
       return <FormFields form={response} draft={draft} disabled={disabled} onDraft={onDraft} />;
     default:
@@ -782,11 +949,19 @@ function focusMissing(pane: HTMLElement | null, missing: InboxMissing): void {
     ?.focus();
 }
 
+/** The responses whose options a number key picks: a choice's, and an approval's or a to-do's two. */
+const NUMBERED_RESPONSES: ReadonlySet<string> = new Set([
+  INBOX_RESPONSE.CHOICE,
+  INBOX_RESPONSE.APPROVAL,
+  INBOX_RESPONSE.TODO,
+]);
+
 /** The keys 1 to 9, each the option of its number. */
 const OPTION_NUMBER = /^[1-9]$/u;
 
 /**
- * The number keys pick an open choice's options, 1 the first, as a press on
+ * The number keys pick an open item's options, a choice's or an approval's
+ * or a to-do's two, 1 the first, as a press on
  * the option would, and take the keyboard to it, wherever in the Inbox the
  * developer stands but a field or an editor, whose keys are its own, and
  * never under a dialog. Note that the keys are heard on the document,
@@ -801,9 +976,9 @@ function useOptionNumbers(
 ): void {
   const latest = useRef({ item, draft, control });
   latest.current = { item, draft, control };
-  const choice = item.status === INBOX_STATUS.OPEN && item.response.type === INBOX_RESPONSE.CHOICE;
+  const numbered = item.status === INBOX_STATUS.OPEN && NUMBERED_RESPONSES.has(item.response.type);
   useEffect(() => {
-    if (!choice) return;
+    if (!numbered) return;
     const onKey = (event: KeyboardEvent) => {
       const { item, draft, control } = latest.current;
       const shown = pane.current;
@@ -820,18 +995,16 @@ function useOptionNumbers(
       const from = event.target;
       if (from !== document.body && !(from instanceof Node && inbox?.contains(from) === true))
         return;
-      const response = item.response;
-      if (!knownResponse(response) || response.type !== INBOX_RESPONSE.CHOICE) return;
-      const at = Number(event.key) - 1;
-      const option = response.options[at];
-      if (option === undefined || control.sending.has(item.id)) return;
+      const number = Number(event.key);
+      const picked = numberedPick(item, draft, number);
+      if (picked === undefined || control.sending.has(item.id)) return;
       event.preventDefault();
-      control.onDraft(item, withChoice(response, draft, option.label));
-      optionRows(shown)[at]?.focus();
+      control.onDraft(item, picked);
+      optionRows(shown)[number - 1]?.focus();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [choice, pane]);
+  }, [numbered, pane]);
 }
 
 /** The item's agent as the pane names it, the catalog its card names the model from, and the press that opens its tab. */

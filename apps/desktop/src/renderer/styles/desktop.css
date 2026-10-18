@@ -3774,6 +3774,118 @@ body:has(.app-stage[data-capture="true"])
   flex: none;
 }
 
+/* A to-do's card (`inbox-pane.tsx`'s TodoCard): its step beside a checkbox,
+   ticked in the complete green, and under a hairline a pill saying it could
+   not be done, filled in the danger tint once picked. Each pick wears its
+   number at its right, as a choice's options do. */
+.inbox-todo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+}
+
+.inbox-todo-step {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: var(--luke-space-12);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--luke-color-text);
+  font: inherit;
+  font-weight: var(--luke-weight-medium);
+  text-align: left;
+}
+
+.inbox-todo-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inbox-todo-number {
+  flex: none;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--luke-weight-regular);
+}
+
+.inbox-todo-box {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--luke-space-16);
+  height: var(--luke-space-16);
+  margin-top: calc(
+    (1lh - var(--luke-space-16)) /
+    2
+  ); /* off-scale: centres the box on the first line */
+  border: 1.5px solid var(--luke-color-text-subtle); /* off-scale: a checkbox's ring, as a choice's is */
+  border-radius: var(--luke-space-4);
+}
+
+.inbox-todo-step[aria-checked="true"] > .inbox-todo-box {
+  border-color: var(--luke-color-complete);
+  background: var(--luke-color-complete);
+}
+
+.inbox-todo-step[aria-checked="true"] > .inbox-todo-box::after {
+  width: var(--luke-space-8);
+  height: var(--luke-space-4);
+  margin-top: -2px; /* off-scale: lifts the tick to the box's centre */
+  border-bottom: 2px solid var(--luke-color-ground);
+  border-left: 2px solid var(--luke-color-ground);
+  transform: rotate(-45deg);
+  content: "";
+}
+
+.inbox-todo-acts {
+  display: flex;
+  padding-top: var(--luke-space-8);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.inbox-todo-pill {
+  display: inline-flex;
+  height: var(--luke-control-height);
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding: 0 var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: 999px;
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
+  font: inherit;
+  font-size: var(--luke-type-caption-size);
+}
+
+.inbox-todo-pill svg {
+  display: none;
+  width: 12px;
+  height: 12px;
+}
+
+.inbox-todo-pill[aria-checked="true"] {
+  border-color: var(--luke-color-danger);
+  background: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
+  color: var(--luke-color-danger-text);
+}
+
+.inbox-todo-pill[aria-checked="true"] svg {
+  display: block;
+}
+
+.inbox-todo-step:disabled,
+.inbox-todo-pill:disabled {
+  opacity: 0.4;
+}
+
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
    by the strip's gap and the breadcrumbs' chevron, and a crumb under the
    pointer's press takes the chosen tab's fill, where a tab pressed lands. */
