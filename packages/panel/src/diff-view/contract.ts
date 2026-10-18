@@ -153,6 +153,14 @@ export interface DiffListProps {
   readonly onTopFile: (path: string) => void;
   readonly onComment?: ((picked: DiffListSelection) => void) | undefined;
   readonly selected?: DiffListSelection | undefined;
+  /** Reads a file's whole text on both sides, the first time the lines between its hunks are asked for; none offers no such lines. */
+  readonly readTexts?: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
+}
+
+/** A changed file's whole text before and after, which the lines between its hunks are drawn from; none where it could not be read whole. */
+export interface DiffFileTexts {
+  readonly before: string;
+  readonly after: string;
 }
 
 /** Whether two lists light the same lines of the same file, or both none. */

@@ -8,7 +8,11 @@ import {
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
 import { parsePatch } from "diff";
-import { DIFF_SELECTION_SIDE, type DiffSelection } from "../diff-view/contract.js";
+import {
+  DIFF_SELECTION_SIDE,
+  type DiffFileTexts,
+  type DiffSelection,
+} from "../diff-view/contract.js";
 import {
   FILE_MARK,
   type FileMark,
@@ -634,4 +638,80 @@ export function commentLinesLabel(lines: CommentLines): string {
       : `${side === DIFF_SIDE.LEFT ? "L" : "R"}${line}`;
   if (lines.startLine === undefined) return `line ${lines.line}`;
   return `lines ${mark(lines.startLine, lines.startSide ?? lines.side)}–${mark(lines.line, lines.side)}`;
+}
+
+/** A text's lines, and whether its last line ends in a newline, as a patch counts them. */
+function linesOf(text: string): {
+  readonly lines: readonly string[];
+  readonly endsInNewline: boolean;
+} {
+  const endsInNewline = text.endsWith("\n");
+  const body = endsInNewline ? text.slice(0, -1) : text;
+  return {
+    lines: body === "" && endsInNewline ? [""] : body === "" ? [] : body.split("\n"),
+    endsInNewline,
+  };
+}
+
+/** Whether a file's lines between its hunks can be drawn: a file changed in place or moved with changes, whose patch is drawn. */
+export function expandable(file: CodingAgentChangedFile): boolean {
+  const changedInPlace =
+    file.status === CHANGED_FILE_STATUS.MODIFIED || file.status === CHANGED_FILE_STATUS.RENAMED;
+  return changedInPlace && fileNotice(file) === undefined;
+}
+
+/**
+ * A changed file's whole text before and after, from its text after alone
+ * and its patch: every line no hunk holds is the same on both sides, so the
+ * text before is the text after with each hunk turned back, its context and
+ * removed lines kept and its added lines dropped. None where the text after
+ * is not the one the patch was made against, any hunk's context or added
+ * lines differing from the text at its place, because the lines between
+ * hunks would then be drawn from another commit; and none for a file
+ * whose lines between hunks are not drawn (`expandable`).
+ */
+export function textsOf(file: CodingAgentChangedFile, after: string): DiffFileTexts | undefined {
+  const patch = file.patch;
+  if (!expandable(file) || patch === null) return undefined;
+  let hunks: ReturnType<typeof parsePatch>[number]["hunks"];
+  try {
+    hunks = parsePatch(patch)[0]?.hunks ?? [];
+  } catch {
+    return undefined;
+  }
+  const { lines, endsInNewline } = linesOf(after);
+  const before: string[] = [];
+  let at = 0;
+  // Which side a "No newline at end of file" marker followed: the text before's last line, or the text after's alone.
+  let beforeUnended = false;
+  let afterOnlyUnended = false;
+  for (const hunk of hunks) {
+    // A hunk adding nothing names the line before its place, as a patch does.
+    const start = hunk.newLines === 0 ? hunk.newStart : hunk.newStart - 1;
+    if (start < at || start > lines.length) return undefined;
+    before.push(...lines.slice(at, start));
+    const beforeStart = hunk.oldLines === 0 ? hunk.oldStart : hunk.oldStart - 1;
+    if (before.length !== beforeStart) return undefined;
+    at = start;
+    let previous = " ";
+    for (const line of hunk.lines) {
+      const mark = line.slice(0, 1);
+      const text = line.slice(1);
+      if (mark === "\\") {
+        if (previous === "+") afterOnlyUnended = true;
+        else beforeUnended = true;
+        continue;
+      }
+      if (mark !== "-") {
+        if (lines[at] !== text) return undefined;
+        at += 1;
+      }
+      if (mark !== "+") before.push(text);
+      previous = mark;
+    }
+  }
+  before.push(...lines.slice(at));
+  const text = before.join("\n");
+  const beforeEndsInNewline = beforeUnended ? false : afterOnlyUnended ? true : endsInNewline;
+  return { before: beforeEndsInNewline && before.length > 0 ? `${text}\n` : text, after };
 }

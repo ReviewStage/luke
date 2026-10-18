@@ -5,6 +5,7 @@ import {
   DIFF_SIDE,
   PATCH_OMITTED,
 } from "@luke/features/coding-agent-wire";
+import { createPatch } from "diff";
 import { test } from "vitest";
 import { DIFF_SELECTION_SIDE } from "../diff-view/contract.js";
 import {
@@ -12,6 +13,7 @@ import {
   commentLinesLabel,
   filterFiles,
   startsCollapsed,
+  textsOf,
   threadPreview,
   threadsOn,
   treeOrder,
@@ -334,5 +336,93 @@ test("no comment is offered where GitHub takes none: a line no row stands for, a
   assert.equal(
     commentLines(changed("logo.png", { patch: null, omitted: PATCH_OMITTED.BINARY }), picked(1, 1)),
     undefined,
+  );
+});
+
+/** A file changed from `before` to `after`, its patch the hunks GitHub sends: from the first `@@` on, three lines of context. */
+function changedFrom(
+  before: string,
+  after: string,
+  overrides: Partial<CodingAgentChangedFile> = {},
+): CodingAgentChangedFile {
+  const whole = createPatch("src/a.ts", before, after, "", "", { context: 3 });
+  return changed("src/a.ts", { patch: whole.slice(whole.indexOf("@@")), ...overrides });
+}
+
+/** Lines numbered from 1 to `count`, each ending in a newline. */
+function numbered(count: number, from = 1): string[] {
+  return Array.from({ length: count }, (_, at) => `line ${from + at}`);
+}
+
+test("a changed file's text before is its text after with each hunk turned back, wherever its hunks stand", () => {
+  const lines = numbered(40);
+  const cases: Array<[string, string[]]> = [
+    ["a line changed between others", lines.map((line, at) => (at === 20 ? "changed" : line))],
+    ["the first line changed", lines.map((line, at) => (at === 0 ? "first" : line))],
+    ["the last line changed", lines.map((line, at) => (at === 39 ? "last" : line))],
+    ["lines added alone", [...lines.slice(0, 10), "new a", "new b", ...lines.slice(10)]],
+    ["lines removed alone", [...lines.slice(0, 10), ...lines.slice(14)]],
+    [
+      "two hunks far apart",
+      lines.map((line, at) => (at === 3 ? "three" : at === 33 ? "thirty-three" : line)),
+    ],
+  ];
+  const before = `${lines.join("\n")}\n`;
+  for (const [name, afterLines] of cases) {
+    const after = `${afterLines.join("\n")}\n`;
+    assert.deepEqual(textsOf(changedFrom(before, after), after), { before, after }, name);
+  }
+});
+
+test("a file ending without a newline, before or after, is turned back to the ending it had", () => {
+  const base = numbered(12);
+  const pairs: Array<[string, string, string]> = [
+    ["the newline taken away", `${base.join("\n")}\n`, `${base.join("\n")}`],
+    ["the newline added", `${base.join("\n")}`, `${base.join("\n")}\n`],
+    ["neither ending in one", `${base.join("\n")}`, `${[...base.slice(0, 11), "end"].join("\n")}`],
+    [
+      "the end changed far from the hunk",
+      `${base.join("\n")}`,
+      `${["start", ...base.slice(1)].join("\n")}`,
+    ],
+  ];
+  for (const [name, before, after] of pairs) {
+    assert.deepEqual(textsOf(changedFrom(before, after), after), { before, after }, name);
+  }
+});
+
+test("a file moved with changes is turned back too, and one whose lines between hunks are not drawn is not", () => {
+  const before = `${numbered(20).join("\n")}\n`;
+  const after = before.replace("line 10", "ten");
+  const moved = changedFrom(before, after, {
+    status: CHANGED_FILE_STATUS.RENAMED,
+    previousPath: "src/old.ts",
+  });
+  assert.deepEqual(textsOf(moved, after), { before, after });
+  for (const status of [CHANGED_FILE_STATUS.ADDED, CHANGED_FILE_STATUS.DELETED]) {
+    assert.equal(textsOf(changedFrom(before, after, { status }), after), undefined, status);
+  }
+  const omitted = changedFrom(before, after, { patch: null, omitted: PATCH_OMITTED.TOO_LARGE });
+  assert.equal(textsOf(omitted, after), undefined);
+});
+
+test("a text after that is not the one the patch was made against is not turned back, so no line of another commit is drawn", () => {
+  const before = `${numbered(30).join("\n")}\n`;
+  const after = before.replace("line 15", "fifteen");
+  const file = changedFrom(before, after);
+  assert.equal(
+    textsOf(file, after.replace("line 13", "pushed since")),
+    undefined,
+    "a context line differs",
+  );
+  assert.equal(
+    textsOf(file, after.replace("fifteen", "sixteen")),
+    undefined,
+    "an added line differs",
+  );
+  assert.equal(
+    textsOf(file, numbered(5).join("\n")),
+    undefined,
+    "the file is shorter than its hunks",
   );
 });

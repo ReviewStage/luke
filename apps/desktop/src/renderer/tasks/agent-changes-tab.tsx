@@ -12,9 +12,12 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { imageTypeOfPath } from "@luke/features/github-image";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
 import {
   DIFF_SELECTION_SIDE,
+  type DiffFileTexts,
   type DiffListSelection,
   type DiffSelection,
   FILE_NOTE_LINE,
@@ -25,6 +28,7 @@ import {
   changedFolders,
   changeMarks,
   commentLines,
+  expandable,
   fileNotice,
   filePatch,
   headerPatch,
@@ -32,6 +36,7 @@ import {
   listPatch,
   STATUS_LETTER,
   STATUS_WORDS,
+  textsOf,
   threadsOn,
 } from "@luke/panel/tasks/changes-model";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
@@ -126,7 +131,9 @@ import { useViewedFiles } from "./viewed-files";
  * and wrapped as the File tabs' settings say, their numbers left out of the
  * find and of a copy as a File tab's are; what is a diff's alone is the
  * tint of a line added or removed, the words a changed line changed, and
- * the count of unchanged lines between two hunks.
+ * the count of unchanged lines between two hunks, which open twenty at a
+ * time or all at once, read from the file at the pull request's head the
+ * first time one of its gaps is opened (`useTextsReader`).
  * Every name and line here is the repository's, so the tab is left out of
  * the screen recording (`ph-no-capture`).
  */
@@ -608,6 +615,63 @@ function imagesOf(
   };
 }
 
+/** The repository a pull request's page on GitHub names, as `owner/name`; none where it names none. */
+function repositoryOf(url: string): string | undefined {
+  const [owner, name] = URL.canParse(url)
+    ? new URL(url).pathname.split("/").filter((segment) => segment !== "")
+    : [];
+  return owner === undefined || name === undefined ? undefined : `${owner}/${name}`;
+}
+
+/**
+ * How Files changed reads a changed file whole, for the lines between its
+ * hunks: its text at the pull request's head, read as a File tab reads one
+ * (`TASKS_FILE`, raw, at that commit) the first time a gap of it is
+ * opened, and kept for the answer's life, and its text before turned back
+ * from that text and its patch (`textsOf`), so one read stands for both.
+ * None where the read could not be promised to reach the pull request's own
+ * files: an agent on no task, a head the service did not name, or a task
+ * whose repository is not the one the pull request is in, since the read
+ * is the task's. A file that is not changed in place, or whose text is not
+ * the one its patch was made against, is not read whole.
+ */
+function useTextsReader(
+  taskId: string | null,
+  repository: string | null,
+  pullRequest: { readonly url: string; readonly headSha?: string } | null,
+  files: readonly CodingAgentChangedFile[],
+): ((path: string) => Promise<DiffFileTexts | undefined>) | undefined {
+  const { act } = useAct();
+  return useMemo(() => {
+    const headSha = pullRequest?.headSha;
+    const own = pullRequest === null ? undefined : repositoryOf(pullRequest.url);
+    if (taskId === null || headSha === undefined || repository === null || own === undefined) {
+      return undefined;
+    }
+    if (repository.toLowerCase() !== own.toLowerCase()) return undefined;
+    const read = new Map<string, Promise<DiffFileTexts | undefined>>();
+    return (path: string) => {
+      const file = files.find((each) => each.path === path);
+      if (file === undefined || !expandable(file)) return Promise.resolve(undefined);
+      const kept = read.get(path);
+      if (kept !== undefined) return kept;
+      const reading = act(ACT_KIND.TASKS_FILE, {
+        taskId,
+        path,
+        firstLine: 1,
+        lastLine: 1,
+        raw: true,
+        ref: headSha,
+      }).then(
+        (answer) => ("text" in answer ? textsOf(file, answer.text.text) : undefined),
+        () => undefined,
+      );
+      read.set(path, reading);
+      return reading;
+    };
+  }, [act, taskId, repository, pullRequest, files]);
+}
+
 /** Collapse all or Expand all, for the files the filter keeps, in the bar. */
 function FoldAllButton({ list }: { list: ChangesList }): React.JSX.Element {
   const label = list.allCollapsed ? LIST_WORDS.EXPAND_ALL : LIST_WORDS.COLLAPSE_ALL;
@@ -635,6 +699,7 @@ function FilesList({
   threads,
   images,
   commenting,
+  readTexts,
   filterShown,
   roomy,
   boxRef,
@@ -645,6 +710,8 @@ function FilesList({
   images: ImageSides | undefined;
   /** The comment being written, and where the gutter's + opens one; none offers no +. */
   commenting: ListCommenting | undefined;
+  /** Reads a file whole, for the lines between its hunks; none offers none. */
+  readTexts: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
   /** Whether the tree, whose search is the filter, is drawn, so the filter is in sight. */
   filterShown: boolean;
   roomy: boolean;
@@ -674,6 +741,7 @@ function FilesList({
           boxRef={boxRef}
           onComment={commenting?.open}
           selected={commenting?.note?.picked}
+          readTexts={readTexts}
         />
       )}
     </section>
@@ -817,6 +885,8 @@ export function AgentChangesTab({
     ask();
     threads?.refresh?.();
   };
+  const taskId = control.agents?.find((each) => each.id === agentId)?.planId ?? null;
+  const readTexts = useTextsReader(taskId, repository, pullRequest, changed.files);
   const commenting = useListCommenting(
     agentId,
     changed.files,
@@ -899,6 +969,7 @@ export function AgentChangesTab({
           threads={threads}
           images={images}
           commenting={commenting}
+          readTexts={readTexts}
           filterShown={room.drawn}
           roomy={roomy}
           boxRef={setDiffBox}

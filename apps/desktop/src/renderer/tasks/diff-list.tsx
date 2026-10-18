@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
   type DiffAnnotation,
+  type DiffFileTexts,
   type DiffListFile,
   type DiffListHandle,
   type DiffListProps,
@@ -120,6 +121,7 @@ export function PierreDiffList({
   boxRef,
   onComment,
   selected,
+  readTexts,
 }: {
   entries: readonly DiffListEntry[];
   look: DiffLook;
@@ -133,6 +135,8 @@ export function PierreDiffList({
   onComment?: ((picked: DiffListSelection) => void) | undefined;
   /** The lines being commented on, lit. */
   selected?: DiffListSelection | undefined;
+  /** Reads a file whole, the first time the lines between its hunks are asked for; none offers none. */
+  readTexts?: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
 }): React.JSX.Element {
   const loaded = useAtomValue(useSideBundles().diffView);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
@@ -158,6 +162,12 @@ export function PierreDiffList({
   const comment = useRef(onComment);
   comment.current = onComment;
   const tellComment = useCallback((picked: DiffListSelection) => comment.current?.(picked), []);
+  const texts = useRef(readTexts);
+  texts.current = readTexts;
+  const askTexts = useCallback(
+    (path: string) => texts.current?.(path) ?? Promise.resolve(undefined),
+    [],
+  );
   const files = entries.map(listFileOf);
   const props: DiffListProps = {
     files,
@@ -167,6 +177,7 @@ export function PierreDiffList({
     onTopFile: tellTop,
     onComment: onComment === undefined ? undefined : tellComment,
     selected,
+    readTexts: readTexts === undefined ? undefined : askTexts,
   };
   // What the list was last drawn with; the mount reads the latest, so it is mounted once.
   const drawn = useRef(props);
@@ -201,7 +212,8 @@ export function PierreDiffList({
       sameFiles(was.files, files) &&
       sameLook(was.look, look) &&
       sameListSelection(was.selected, selected) &&
-      (was.onComment === undefined) === (onComment === undefined)
+      (was.onComment === undefined) === (onComment === undefined) &&
+      (was.readTexts === undefined) === (readTexts === undefined)
     )
       return;
     drawn.current = latest.current;
