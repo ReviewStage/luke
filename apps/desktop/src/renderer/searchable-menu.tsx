@@ -36,7 +36,10 @@ import { Tooltip } from "./tooltip";
  * are `@luke/ui`'s `useComboboxField`, the one `Combobox` reads, so keys an
  * input method is composing with move and pick nothing here either. A
  * list too short to search is drawn with no field, the list itself
- * holding focus, naming the highlight, and reading the same keys. The owner says
+ * holding focus, naming the highlight, and reading the same keys. An owner
+ * that answers a search itself, such as one a service answers as the typing
+ * rests, hears each query as it is typed and hands the rows that answer it,
+ * which the menu lists as they come rather than filtering them. The owner says
  * what to list, what to say in the list's place while there is nothing to
  * list, and what a pick does; the menu decides nothing about either.
  * Its owner holds it drawn through its exit (`useDisclosure`), handing it
@@ -285,6 +288,8 @@ export function SearchableMenu(props: {
   note?: React.ReactNode;
   /** Said when a query matches nothing. */
   noMatch: string;
+  /** Present, the owner answers the search: it hears each query as typed, and the rows it hands are listed as they are, unfiltered. */
+  onSearch?: ((query: string) => void) | undefined;
   onPick: (id: string) => void;
   /** Escape was pressed: the owner closes the menu and hands focus back to its trigger. */
   onClose: () => void;
@@ -303,7 +308,9 @@ export function SearchableMenu(props: {
   const { rows, value, onPick } = props;
   const leaving = props.leaving === true;
   const [query, setQuery] = useState("");
-  const matches = matchingRows(rows, query);
+  // Note that rows an owner searched for are its answer to the query already, so the menu filters nothing.
+  const answered = props.onSearch !== undefined;
+  const matches = answered ? rows : matchingRows(rows, query);
   const foot = props.foot ?? [];
   // Until the arrows or the pointer move it, the highlight follows the chosen
   // row, which may arrive after the menu opened, so Enter keeps what stands.
@@ -502,9 +509,11 @@ export function SearchableMenu(props: {
             onChange={(event) => {
               const typed = event.currentTarget.value;
               setQuery(typed);
+              props.onSearch?.(typed);
               // The first match that may be picked takes the highlight; with
-              // none, nothing does, so Enter picks nothing.
-              const first = firstOpen(matchingRows(rows, typed));
+              // none, nothing does, so Enter picks nothing. The owner's own
+              // answer is not in yet, so its first row takes it as it comes.
+              const first = answered ? NOWHERE : firstOpen(matchingRows(rows, typed));
               moveTo(first === NOWHERE ? undefined : first);
             }}
           />

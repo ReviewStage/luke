@@ -297,7 +297,7 @@ test("Tab from the workspace picker's open list moves on to the Plan switch besi
   assert.deepEqual([forward, backward], ["Plan with Luke", "Workspace: Acme"]);
 });
 
-test("issues put away with Escape come back for the workspace chosen next, its own issues matched against the name as typed", async () => {
+test("a switch of workspace closes the Linear search, and the chip then lists the issues of the workspace chosen", async () => {
   const issuesOf = (workspaceId: string): readonly LinearIssueSummary[] => [
     {
       id: `${workspaceId}-1`,
@@ -325,25 +325,19 @@ test("issues put away with Escape come back for the workspace chosen next, its o
     ),
   );
   await settle();
-  const name =
-    document.querySelector<HTMLInputElement>('input[aria-label="Task name"]') ??
-    assert.fail("the name field stands");
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(name, "deploy");
-    name.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await settle();
+  const openLinear = async () => {
+    const chip =
+      document.querySelector<HTMLButtonElement>('[aria-label="Choose from Linear"]') ??
+      assert.fail("the Linear chip stands");
+    act(() => chip.click());
+    await settle();
+  };
   const listed = () =>
     [
-      ...document.querySelectorAll(
-        '[role="listbox"] [role="group"][aria-label="Linear issues"] [role="option"]',
-      ),
+      ...document.querySelectorAll('[role="dialog"][aria-label="Linear issues"] [role="option"]'),
     ].map((option) => option.textContent);
+  await openLinear();
   const before = listed();
-  act(() => {
-    name.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  });
-  const dismissed = listed();
 
   const workspaceChip =
     document.querySelector<HTMLButtonElement>('[aria-label="Workspace: Personal"]') ??
@@ -356,7 +350,10 @@ test("issues put away with Escape come back for the workspace chosen next, its o
   act(() => optionNamed(menu, "Acme").click());
   await settle();
 
+  const afterSwitch = listed();
+  await openLinear();
+
   assert.deepEqual(before, ["Rotate the deploy keyME-1"]);
-  assert.deepEqual(dismissed, []);
+  assert.deepEqual(afterSwitch, []);
   assert.deepEqual(listed(), ["Rotate the deploy keyACME-1"]);
 });

@@ -2849,6 +2849,29 @@ ul.actor-stack {
   max-height: min(288px, var(--settings-picker-list-max, 288px));
 }
 
+/* New task's Linear chip (`linear-issue-chip.tsx`) stands after the
+   repository chip in the card's foot and hangs its menu from its leading
+   edge, placed as a Settings picker's is, wide enough for an issue's title
+   with its key and state after it. */
+.linear-issue-chip {
+  position: relative;
+  min-width: 0;
+}
+
+.linear-issue-chip .searchable-menu {
+  width: 420px;
+  max-width: var(--settings-picker-width-max, 420px);
+}
+
+.linear-issue-chip[data-side="above"] .searchable-menu {
+  top: auto;
+  bottom: calc(100% + var(--luke-space-4));
+}
+
+.linear-issue-chip .task-compose-menu-list {
+  max-height: min(288px, var(--settings-picker-list-max, 288px));
+}
+
 /* A harness's mark keeps its box in a row however tight the row is, drawn
    as an image (`harness-marks.tsx`) as the traced provider marks
    (`@luke/ui`'s `ProviderMark`) keep theirs. */
@@ -6257,15 +6280,17 @@ body:has(.app-stage[data-capture="true"])
 
 /* A file's row keeps its name whole and cuts its folder short instead, so
    a deep path never hides which file the row opens, and a repository's row
-   its name rather than its owner (`repository-chip.tsx`); either fades where
+   its name rather than its owner (`repository-chip.tsx`), and an issue's its
+   title rather than its key (`linear-issue-chip.tsx`); each fades where
    it is cut. A row with no folder gives its name the whole width. */
-:is(.tab-add-menu, .side-panel-no-tabs, .repository-chip)
+:is(.tab-add-menu, .side-panel-no-tabs, .repository-chip, .linear-issue-chip)
 .task-compose-menu-name:has(+ .task-compose-menu-detail) {
   flex: 0 0 auto;
   max-width: 70%;
 }
 
-:is(.tab-add-menu, .side-panel-no-tabs, .repository-chip) .task-compose-menu-detail {
+:is(.tab-add-menu, .side-panel-no-tabs, .repository-chip, .linear-issue-chip)
+  .task-compose-menu-detail {
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
