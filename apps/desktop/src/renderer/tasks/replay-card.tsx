@@ -3,6 +3,7 @@ import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-age
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -377,14 +378,11 @@ function ReplayFoot({
         </span>
       )}
       {onOpenTranscript === undefined ? null : (
-        <button
-          type="button"
-          className="text-link ml-auto cursor-pointer border-0 bg-transparent p-0 text-[12.5px] text-foreground"
-          data-replay-open=""
-          onClick={onOpenTranscript}
-        >
-          {FULL_TRANSCRIPT_WORDS} ›
-        </button>
+        <span className="ml-auto text-foreground" data-replay-open="">
+          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={onOpenTranscript}>
+            {FULL_TRANSCRIPT_WORDS} ›
+          </TextButton>
+        </span>
       )}
     </div>
   );

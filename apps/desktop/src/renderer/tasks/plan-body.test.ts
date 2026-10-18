@@ -229,7 +229,9 @@ test("the time opens the version history, on the plan as it stands or on the sec
     editedAs({ actor: PLAN_ACTOR.DEVELOPER, duringCall: false, by: CHARLES }, at),
     { readerId: DEAN.userId, onShowHistory: (save) => shown.push(save) },
   );
-  const times = [...view.querySelectorAll<HTMLButtonElement>(".plan-edit-link")];
+  const times = [
+    ...view.querySelectorAll<HTMLButtonElement>('button[aria-label$="Show version history"]'),
+  ];
 
   assert.deepEqual(
     times.map((time) => [time.textContent, time.getAttribute("aria-label")]),

@@ -9,6 +9,7 @@ import {
   knownBlock,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
+import { TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
 import type { ChatTarget } from "@luke/ui/chat-mention";
 import {
   CHAT_PLACE,
@@ -239,14 +240,13 @@ function ThreadRow({
   const { message, replies } = thread;
   const who = chatWho(context.chat, context.names, message.authorId);
   const toggle = (
-    <button
-      type="button"
-      className="chat-thread-toggle"
+    <TextButton
+      tone={TEXT_BUTTON_TONE.ACCENT}
       aria-expanded={open}
       onClick={() => setOpen((was) => !was)}
     >
       {threadToggleWords(open, replies.length)}
-    </button>
+    </TextButton>
   );
   // A message nobody has replied to offers Reply at its byline's end, out of the way until wanted.
   const quiet = replies.length === 0 && !open;
@@ -264,7 +264,7 @@ function ThreadRow({
         <Body message={message} context={context} />
         {quiet ? null : (
           <div className="chat-thread" data-open={String(open)}>
-            {toggle}
+            <p className="chat-thread-toggle">{toggle}</p>
             {open && replies.length > 0 ? (
               <ul className="chat-replies">
                 {replies.map((reply) => (

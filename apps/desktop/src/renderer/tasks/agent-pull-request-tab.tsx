@@ -38,6 +38,8 @@ import {
   Skeleton,
   SkeletonRegion,
   Switch,
+  TEXT_BUTTON_TONE,
+  TextButton,
   useMenu,
 } from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
@@ -809,13 +811,11 @@ function ThreadCard({
             ))}
           </ol>
           {thread.more === 0 || last === undefined ? null : (
-            <button
-              type="button"
-              className="pull-request-more pull-request-thread-more"
-              onClick={() => openLink(last.url)}
-            >
-              {PULL_REQUEST_WORDS.moreReplies(thread.more)}
-            </button>
+            <p className="pull-request-more pull-request-thread-more">
+              <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(last.url)}>
+                {PULL_REQUEST_WORDS.moreReplies(thread.more)}
+              </TextButton>
+            </p>
           )}
           <ThreadActions thread={thread} />
         </FoldBody>
@@ -1084,13 +1084,11 @@ function ConversationPart({
     >
       {/* The earlier entries a read left on GitHub are counted where they would stand, first. */}
       {earlier === 0 || url === undefined ? null : (
-        <button
-          type="button"
-          className="pull-request-more pull-request-earlier"
-          onClick={() => openLink(url)}
-        >
-          {PULL_REQUEST_WORDS.earlier(earlier)}
-        </button>
+        <p className="pull-request-more pull-request-earlier">
+          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(url)}>
+            {PULL_REQUEST_WORDS.earlier(earlier)}
+          </TextButton>
+        </p>
       )}
       {conversation.length === 0 ? (
         earlier === 0 ? (

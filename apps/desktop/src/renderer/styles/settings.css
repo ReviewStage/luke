@@ -215,21 +215,10 @@
   line-height: 1.4;
 }
 
-.settings-copy small a,
-.settings-detail-act {
+.settings-copy small a {
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-
-/* A press among a row's detail words, drawn as the links beside it are: an
-   experiment's Send feedback, which opens a dialog rather than a page. */
-.settings-detail-act {
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  cursor: pointer;
 }
 
 /* A row's picker: the chip naming the value, and the app's own menu under
@@ -654,33 +643,6 @@
 .integration-tools-line {
   flex-wrap: wrap;
   white-space: nowrap;
-}
-
-.integration-tools-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  margin: -1px -4px;
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: none;
-  color: inherit;
-  font: inherit;
-}
-
-.integration-tools-toggle:hover {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-}
-
-.integration-tools-toggle svg {
-  width: 10px;
-  height: 10px;
-  transition: transform var(--duration-fast) var(--spring-fast);
-}
-
-.integration-tools-toggle[aria-expanded="true"] svg {
-  transform: rotate(90deg);
 }
 
 .integration-row > .integration-tools-panel {

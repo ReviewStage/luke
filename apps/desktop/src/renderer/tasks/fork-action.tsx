@@ -1,6 +1,6 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { IconButton } from "@luke/ui";
+import { IconButton, TextButton } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { ArrowRightIcon, SplitIcon, XIcon } from "lucide-react";
@@ -236,9 +236,9 @@ export function ForkChip({
               <span className="draft-fork-quote">{quote}</span>
             ) : (
               <Tooltip label={FORK_WORDS.OPEN_SOURCE}>
-                <button type="button" className="draft-fork-quote" onClick={open}>
-                  {quote}
-                </button>
+                <span className="draft-fork-quote">
+                  <TextButton onClick={open}>{quote}</TextButton>
+                </span>
               </Tooltip>
             )}
           </>

@@ -33,6 +33,7 @@ export * from "./components/skeleton/skeleton.js";
 export * from "./components/spinner/spinner.js";
 export * from "./components/switch/switch.js";
 export * from "./components/text/text.js";
+export * from "./components/text-button/text-button.js";
 export * from "./components/text-field/text-field.js";
 export * from "./components/tooltip/tooltip.js";
 export * from "./css.js";

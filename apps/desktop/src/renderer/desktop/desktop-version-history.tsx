@@ -14,6 +14,7 @@ import {
   ErrorState,
   Skeleton,
   SkeletonRegion,
+  TextButton,
   useMenu,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
@@ -287,14 +288,11 @@ function SectionsHead({
   source: SourceDoor | undefined;
   onBack: () => void;
 }): React.JSX.Element {
-  const who = (
-    <>
-      <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
-      <span className="version-row-author" data-author={author.kind}>
-        {actorName(author)}
-        <LeftWords actor={author} />
-      </span>
-    </>
+  const name = (
+    <span className="version-row-author" data-author={author.kind}>
+      {actorName(author)}
+      <LeftWords actor={author} />
+    </span>
   );
   return (
     <>
@@ -302,19 +300,16 @@ function SectionsHead({
         <BackIcon />
         All versions
       </button>
-      {source === undefined ? (
-        <p className="version-sections-head">{who}</p>
-      ) : (
-        <Tooltip label={source.label}>
-          <button
-            type="button"
-            className="version-sections-head version-sections-source"
-            onClick={source.onOpen}
-          >
-            {who}
-          </button>
-        </Tooltip>
-      )}
+      <p className="version-sections-head">
+        <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
+        {source === undefined ? (
+          name
+        ) : (
+          <Tooltip label={source.label}>
+            <TextButton onClick={source.onOpen}>{name}</TextButton>
+          </Tooltip>
+        )}
+      </p>
     </>
   );
 }

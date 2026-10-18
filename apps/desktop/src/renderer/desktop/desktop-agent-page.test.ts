@@ -600,7 +600,9 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   assert.deepEqual(openedOnGitHub, [other]);
 
   // A link in the pull request's own tab, to what its read left on GitHub, still leaves for GitHub.
-  const more = container.querySelector<HTMLButtonElement>("aside.side-panel .pull-request-earlier");
+  const more = container.querySelector<HTMLButtonElement>(
+    "aside.side-panel .pull-request-earlier button",
+  );
   assert.ok(more, "the tab counts the earlier comments");
   act(() => more.click());
   assert.deepEqual(openedOnGitHub, [other, url]);

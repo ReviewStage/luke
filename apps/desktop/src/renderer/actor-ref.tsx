@@ -16,6 +16,7 @@ import {
   HoverCardHead,
   HoverCardNote,
   HoverCardRule,
+  TextButton,
   WingFace,
 } from "@luke/ui";
 import {
@@ -360,9 +361,7 @@ function ActorHead({
           ) : onOpen === undefined ? (
             name
           ) : (
-            <button type="button" className="card-name-link" onClick={onOpen}>
-              {name}
-            </button>
+            <TextButton onClick={onOpen}>{name}</TextButton>
           )
         }
         sub={sub}

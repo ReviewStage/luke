@@ -13,6 +13,7 @@
 @import "./components/list-row/list-row.css";
 @import "./components/menu/menu.css";
 @import "./components/text/text.css";
+@import "./components/text-button/text-button.css";
 @import "./components/attachment-chip/attachment-chip.css";
 @import "./components/avatar/avatar.css";
 @import "./components/badge/badge.css";

@@ -480,7 +480,7 @@
    press drawn as the line over the document's is. Note that both take the
    pointer although the line fades out, because a pointer on them is on
    their section, which shows it. */
-.plan-unit-byline > :is(.actor-ref, .plan-edit-link) {
+.plan-unit-byline > :is(.actor-ref, button) {
   pointer-events: auto;
 }
 
@@ -2652,14 +2652,13 @@ button.pull-request-check:hover {
   padding-inline: var(--row-inset);
 }
 
+/* What a read left on GitHub, counted as a press in the caption's type. */
 .pull-request-more {
   align-self: flex-start;
-  padding: 0;
-  border: 0;
-  background: none;
+  max-width: 100%;
   color: var(--luke-color-text-muted);
-  font-size: 12px;
-  text-decoration: underline;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .file-tab-snippet-label {
@@ -3639,10 +3638,6 @@ ol.transcript-list {
   color: var(--luke-color-text);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-button.draft-fork-quote:hover {
-  text-decoration: underline;
 }
 
 .draft-fork-drop {

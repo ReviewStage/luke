@@ -31,6 +31,7 @@ import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
+import { TEXT_BUTTONS_EXAMPLE } from "./examples/text-buttons";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
@@ -71,6 +72,7 @@ export const EXAMPLES: readonly Example[] = [
   FORM_FIELD_EXAMPLE,
   FORM_SECTION_EXAMPLE,
   HOVER_CARDS_EXAMPLE,
+  TEXT_BUTTONS_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
   TOOLTIPS_EXAMPLE,
   CHECKBOXES_EXAMPLE,

@@ -39,6 +39,7 @@ import {
   windowOf,
 } from "../tasks/coding-agent-model";
 import { useOpenLink } from "../tasks/use-open-link";
+import { TextLink } from "../text-link";
 import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
 import { ReadFailed } from "./settings-group";
@@ -223,16 +224,9 @@ function DefaultRows({
               {fastAskable ? (
                 <>
                   {" "}
-                  <a
-                    className="settings-detail-act"
-                    href={FAST_ACCESS_URL}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      openLink(FAST_ACCESS_URL);
-                    }}
-                  >
+                  <TextLink href={FAST_ACCESS_URL} words={FAST_ACCESS_WORD} onOpen={openLink}>
                     {FAST_ACCESS_WORD}
-                  </a>
+                  </TextLink>
                 </>
               ) : null}
             </>

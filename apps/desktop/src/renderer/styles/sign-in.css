@@ -121,9 +121,11 @@
 /* The one line under the buttons, a caption's height whether or not it says
    anything: what the wait is for and the way to take it back, or why the
    last attempt did not land, in the attention ink. */
+/* Note that its Cancel is a press, so the line takes no part in a drag. */
 .sign-in-note {
   min-height: var(--luke-type-caption-leading);
   margin-top: var(--luke-space-20);
+  -webkit-app-region: no-drag;
 }
 
 .sign-in-error {
@@ -131,16 +133,4 @@
   color: var(--luke-color-attention);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-}
-
-.sign-in-cancel {
-  padding: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-semibold);
-  -webkit-app-region: no-drag;
-}
-
-.sign-in-cancel:hover {
-  text-decoration: underline;
 }
