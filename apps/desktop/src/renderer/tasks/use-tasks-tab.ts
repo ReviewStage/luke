@@ -2304,6 +2304,14 @@ export function useTasksTab(input: {
     sidePanel.onShow(taskId, tab);
   };
 
+  // Note that a pull request two of the open task's agents share opens in the tab already open on it, whichever agent it stands under, as the panel's own door picks it (`changesTabOf`), so a link never stands a second tab on one pull request.
+  const sharedChangesAgent = (planId: string, agentId: string): string => {
+    const url = planId === tasks.activeTaskId ? agents.pullRequests.get(agentId)?.url : undefined;
+    if (url === undefined) return agentId;
+    const open = sidePanel.changes.find((tab) => agents.pullRequests.get(tab.changes)?.url === url);
+    return open?.changes ?? agentId;
+  };
+
   // A link's workspace, by its slug or its id, listed where the account is in it and another is listed; answers the workspace listed after it.
   const listLinked = (workspace: string): string | undefined => {
     const home = viewed.workspaces.find((each) => each.slug === workspace || each.id === workspace);
@@ -2384,7 +2392,7 @@ export function useTasksTab(input: {
         });
         return;
       case LINK_PLACE.CHANGES:
-        showPanelTab(place.planId, { changes: place.agentId });
+        showPanelTab(place.planId, { changes: sharedChangesAgent(place.planId, place.agentId) });
         return;
       case LINK_PLACE.AGENT:
         if (place.planId === undefined)

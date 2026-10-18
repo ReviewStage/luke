@@ -5,7 +5,12 @@ import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
@@ -893,6 +898,45 @@ test("a Luke link to an agent's worker opens the worker's own tab in the task's 
     "the worker's agent's tab opens with it, which draws the worker",
   );
   assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
+});
+
+test("a link to an agent's Pull request tab, on a pull request another of the task's agents shares whose tab is open, opens that tab rather than a second", async () => {
+  const EARLIER = { ...RUNNING_AGENT, id: "5e3b6f1d-2a10-4c7a-9a55-7b0f5f3e2c1d", createdAt: 2 };
+  const shared = {
+    repository: "acme/relay",
+    branch: "luke/invites",
+    pullRequest: {
+      number: 41,
+      title: "Teammate invitations",
+      url: "https://github.com/acme/relay/pull/41",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 12,
+      deletions: 3,
+      changedFiles: 2,
+    },
+  };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [EARLIER, RUNNING_AGENT] }),
+      [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: () => Promise.resolve(shared),
+    },
+  );
+  await settle();
+  const open = (agentId: string) =>
+    act(() =>
+      tab.control().onOpenLink({
+        workspace: "acme",
+        place: { kind: LINK_PLACE.CHANGES, planId: TASK.id, agentId },
+      }),
+    );
+
+  open(EARLIER.id);
+  open(AGENT_ID);
+
+  assert.deepEqual(panelOf(tab), { open: true, tab: { changes: EARLIER.id } });
+  assert.deepEqual(tab.control().sidePanel.changes, [{ changes: EARLIER.id }]);
 });
 
 test("a Luke link to an agent's message opens the agent and asks its tab to bring the message into view, each ask its own, let go once answered", async () => {
