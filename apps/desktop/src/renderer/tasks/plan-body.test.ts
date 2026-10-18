@@ -29,8 +29,8 @@ import { PlanBody } from "./plan-body";
 import type { TaskLooks } from "./use-task-looks";
 
 /**
- * plan-body.test.ts -- the open task's document says who last wrote it,
- * over its text and on each section, each writer on their own face hanging
+ * plan-body.test.ts -- the open task's document says who created it and who last wrote it,
+ * under its title and on each section, each writer on their own face hanging
  * their card, and the time opening the version history. Synthetic people.
  */
 
@@ -135,7 +135,7 @@ function editedAs(edit: Omit<PlanLastEdit, "at">, at = Date.now()): Task {
 /** The words of the line over the document and of the Goal section's byline, as a screen reader reads them. */
 function editedLines(view: HTMLElement): (string | undefined)[] {
   return [
-    lineWords(view.querySelector(".plan-edit-note")),
+    lineWords(view.querySelector(".plan-byline-edited")),
     lineWords(view.querySelector(".plan-unit-byline")),
   ];
 }
@@ -153,7 +153,7 @@ function shownWords(line: Element | null): string | undefined {
 function cardOf(
   view: HTMLElement,
   selector = "[data-actor-ref]",
-  line = ".plan-edit-note",
+  line = ".plan-byline-edited",
 ): HTMLElement {
   const anchor = view.querySelector(`${line} ${selector}`) ?? assert.fail("the ref stands");
   act(() => {
@@ -169,20 +169,46 @@ test("the saved body is drawn as Markdown", () => {
   assert.match(markup, /Invite a teammate by email\./u);
 });
 
+test("under its title the plan says who created the task and when, then who last edited it and when, and a plan nobody edited says only who created it", async () => {
+  const day = 24 * 60 * 60 * 1000;
+  const started = { ...TASK, createdAt: Date.now() - 3 * day, createdBy: CHARLES };
+  const edited = {
+    ...started,
+    lastEdit: { actor: PLAN_ACTOR.DEVELOPER, duringCall: false, by: DEAN, at: Date.now() },
+  };
+
+  const view = await draw(edited, { readerId: DEAN.userId });
+  const byline = view.querySelector(".plan-byline");
+  const unedited = await draw(started, { readerId: DEAN.userId });
+
+  assert.equal(
+    byline?.previousElementSibling?.textContent,
+    TASK.name,
+    "the line stands under the title",
+  );
+  assert.deepEqual([...(byline?.querySelectorAll(".actor-line") ?? [])].map(lineWords), [
+    "Created by Charles Pan · 3d ago",
+    "Last edited by you · now",
+  ]);
+  assert.deepEqual([...unedited.querySelectorAll(".plan-byline .actor-line")].map(lineWords), [
+    "Created by Charles Pan · 3d ago",
+  ]);
+});
+
 test("two members each see the other's edits under the other's name on their face, and only their own as you", async () => {
   const byDean = { actor: PLAN_ACTOR.DEVELOPER, duringCall: false, by: DEAN };
   const byCharles = { ...byDean, by: CHARLES };
 
   const charles = await draw(editedAs(byCharles), { readerId: DEAN.userId });
-  assert.deepEqual(editedLines(charles), ["Edited by Charles Pan · now", "Charles Pan now"]);
-  assert.equal(charles.querySelector(".plan-edit-note .actor-mark")?.textContent, "C");
+  assert.deepEqual(editedLines(charles), ["Last edited by Charles Pan · now", "Charles Pan now"]);
+  assert.equal(charles.querySelector(".plan-byline-edited .actor-mark")?.textContent, "C");
 
   assert.deepEqual(editedLines(await draw(editedAs(byDean), { readerId: CHARLES.userId })), [
-    "Edited by Dean Stratakos · now",
+    "Last edited by Dean Stratakos · now",
     "Dean Stratakos now",
   ]);
   assert.deepEqual(editedLines(await draw(editedAs(byDean), { readerId: DEAN.userId })), [
-    "Edited by you · now",
+    "Last edited by you · now",
     "You now",
   ]);
 });
@@ -192,11 +218,11 @@ test("Luke's notes on a teammate's call name whose call it was, the teammate on 
 
   const dean = await draw(editedAs(onCharlesCall), { readerId: DEAN.userId });
   assert.deepEqual(editedLines(dean), [
-    "Edited by Luke during Charles Pan’s call · now",
+    "Last edited by Luke during Charles Pan’s call · now",
     "Luke during Charles Pan’s call now",
   ]);
   assert.deepEqual(
-    [...dean.querySelectorAll(".plan-edit-note .actor-mark")].map((mark) =>
+    [...dean.querySelectorAll(".plan-byline-edited .actor-mark")].map((mark) =>
       mark.getAttribute("data-kind"),
     ),
     ["luke", "person"],
@@ -204,10 +230,10 @@ test("Luke's notes on a teammate's call name whose call it was, the teammate on 
 
   const charles = await draw(editedAs(onCharlesCall), { readerId: CHARLES.userId });
   assert.deepEqual(editedLines(charles), [
-    "Edited by Luke during your call · now",
+    "Last edited by Luke during your call · now",
     "Luke during your call now",
   ]);
-  assert.equal(charles.querySelectorAll(".plan-edit-note .actor-mark").length, 1);
+  assert.equal(charles.querySelectorAll(".plan-byline-edited .actor-mark").length, 1);
 });
 
 test("an edit the service names no member for, or read without an account id, is never yours, and a member who left keeps their face and is heard as having left", async () => {
@@ -215,15 +241,15 @@ test("an edit the service names no member for, or read without an account id, is
 
   assert.equal(
     editedLines(await draw(editedAs(unnamed), { readerId: DEAN.userId }))[0],
-    "Edited by someone · now",
+    "Last edited by someone · now",
   );
   assert.equal(
     editedLines(await draw(editedAs({ ...unnamed, by: DEAN })))[0],
-    "Edited by Dean Stratakos · now",
+    "Last edited by Dean Stratakos · now",
   );
   const former = await draw(editedAs({ ...unnamed, by: LEE }), { readerId: DEAN.userId });
-  assert.equal(editedLines(former)[0], "Edited by Lee Park (former member) · now");
-  const mark = former.querySelector(".plan-edit-note .actor-mark");
+  assert.equal(editedLines(former)[0], "Last edited by Lee Park (former member) · now");
+  const mark = former.querySelector(".plan-byline-edited .actor-mark");
   assert.equal(mark?.querySelector("img")?.getAttribute("src"), LEE_PICTURE);
 });
 
@@ -243,7 +269,7 @@ test("the time opens the version history, on the plan as it stands or on the sec
       ["2h", "Goal: edited 2h ago. Show version history"],
     ],
   );
-  assert.equal(view.querySelector(".plan-edit-note [data-actor-ref]")?.tagName, "SPAN");
+  assert.equal(view.querySelector(".plan-byline-edited [data-actor-ref]")?.tagName, "SPAN");
   for (const time of times) act(() => time.click());
   assert.deepEqual(shown, [undefined, at]);
 });
@@ -320,11 +346,11 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
     onOpen: (agentId) => opened.push(agentId),
   };
   const view = await draw(byAgent, { readerId: DEAN.userId, agents });
-  const ref = view.querySelector<HTMLElement>(".plan-edit-note [data-actor-ref]");
+  const ref = view.querySelector<HTMLElement>(".plan-byline-edited [data-actor-ref]");
 
-  assert.equal(editedLines(view)[0], "Edited by Fix auth flow · now");
+  assert.equal(editedLines(view)[0], "Last edited by Fix auth flow · now");
   assert.equal(ref?.tagName, "BUTTON");
-  assert.ok(view.querySelector('.plan-edit-note .actor-mark[data-kind="agent"] .state-glyph'));
+  assert.ok(view.querySelector('.plan-byline-edited .actor-mark[data-kind="agent"] .state-glyph'));
   assert.equal(cardOf(view).querySelector(".luke-hover-card-name")?.textContent, "Fix auth flow");
   act(() => ref?.click());
   assert.deepEqual(opened, [AGENT.id]);
@@ -333,7 +359,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
     readerId: DEAN.userId,
     agents: { ...agents, control: codingAgentsControl() },
   });
-  assert.equal(unlisted.querySelector(".plan-edit-note [data-actor-ref]")?.tagName, "SPAN");
+  assert.equal(unlisted.querySelector(".plan-byline-edited [data-actor-ref]")?.tagName, "SPAN");
 });
 
 test("the sections changed since the last look are counted beside a face for each who changed them", async () => {

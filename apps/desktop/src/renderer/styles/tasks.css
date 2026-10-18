@@ -181,7 +181,21 @@
   }
 }
 
-/* Who last edited the plan, over the document in the muted meta weight. */
+/* Who created the task and when, and who last edited its plan and when,
+   under its title, in the words of an issue's own line
+   (`.issue-byline`). Each phrase wraps whole onto the next line rather
+   than leaving a name cut from its time. */
+.plan-byline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4) var(--luke-space-16);
+  margin: 0 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+/* Who last edited the plan template, under its title in the muted meta weight. */
 .plan-edit-note {
   margin: 0 0 var(--luke-space-12);
   color: var(--luke-color-text-muted);

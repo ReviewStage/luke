@@ -97,8 +97,8 @@
 }
 
 /* Who filed the issue and when, and when it last changed, under its title:
-   the quiet words of the plan's own line over its document
-   (`.plan-edit-note`). Each phrase wraps whole onto the next line rather
+   the quiet words of the plan's own line under its title
+   (`.plan-byline`). Each phrase wraps whole onto the next line rather
    than leaving a name cut from its time. */
 .issue-byline {
   display: flex;
