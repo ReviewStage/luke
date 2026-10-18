@@ -753,7 +753,7 @@ function stripTabs(input: {
 function PanelTabs({
   panel,
   holder,
-  taskId: planId,
+  taskId,
   keys,
   unread,
   agents,
@@ -820,10 +820,10 @@ function PanelTabs({
     repository,
     held,
     copied,
-    readWorker: (callId) => readWholeTranscript(readWorker, { agentId: planId, callId }),
+    readWorker: (callId) => readWholeTranscript(readWorker, { agentId: taskId, callId }),
     onOpenAgent,
     shownAgent,
-    taskId: planId,
+    taskId: taskId,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   const copyLink = useCopyLinkItem();
@@ -833,16 +833,16 @@ function PanelTabs({
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
   const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
     if (holder !== SIDE_PANEL_HOLDER.PLAN || !isPinnable(tab)) return undefined;
-    const pinned = panel.pins.some((pin) => pin.task === planId && sameTab(pin.tab, tab));
+    const pinned = panel.pins.some((pin) => pin.task === taskId && sameTab(pin.tab, tab));
     return {
       pinned,
-      onToggle: () => (pinned ? panel.onUnpin(planId, tab) : panel.onPin(tab, look.label)),
+      onToggle: () => (pinned ? panel.onUnpin(taskId, tab) : panel.onPin(tab, look.label)),
     };
   };
   const doorsOf = (entry: DrawnTab, at: number): TabDoors => {
     const others = strip.filter((_, place) => place !== at);
     // Note that only a task's panel names its tabs by the task: an agent's page holds its panel under the agent's id.
-    const linked = holder === SIDE_PANEL_HOLDER.PLAN ? panelTabPlace(planId, entry.tab) : undefined;
+    const linked = holder === SIDE_PANEL_HOLDER.PLAN ? panelTabPlace(taskId, entry.tab) : undefined;
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
@@ -1689,7 +1689,7 @@ export function SidePanel({
   edge,
   unread,
   holder,
-  planId,
+  planId: taskId,
   repository,
   board,
   shownCode,
@@ -1772,7 +1772,7 @@ export function SidePanel({
   // The file tabs of files shown on the task or browsed to on it, in the strip's order.
   const offered = shownFiles(shownCode ?? []);
   const files = panel.files.filter(
-    (file) => file.browsedOn === planId || offered.some((ref) => ref.path === file.path),
+    (file) => file.browsedOn === taskId || offered.some((ref) => ref.path === file.path),
   );
   // An agent's Changes tab stands while the agent is the task's.
   const changes = panel.changes.filter((each) =>
@@ -1870,7 +1870,7 @@ export function SidePanel({
           <PanelTabs
             panel={panel}
             holder={holder}
-            taskId={planId}
+            taskId={taskId}
             keys={keys && focused}
             unread={unread}
             agents={agents}
@@ -1912,11 +1912,11 @@ export function SidePanel({
             role="tabpanel"
             aria-label={label}
             active={keys && focused && tab !== SIDE_PANEL_TAB.BOARD && !isPageTab(tab)}
-            subject={{ task: planId, tab }}
+            subject={{ task: taskId, tab }}
           >
             <TabContent
               tab={tab}
-              taskId={planId}
+              taskId={taskId}
               repository={repository}
               board={board}
               shownCode={shownCode}

@@ -360,7 +360,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       assert.ok("agent" in STARTED);
-      const planless = fixture({ agent: { ...STARTED.agent, planId: null } });
+      const taskless = fixture({ agent: { ...STARTED.agent, planId: null } });
       const onTask = fixture();
       const rename = {
         kind: ACT_KIND.CODING_AGENTS_RENAME,
@@ -376,12 +376,12 @@ it.effect(
         payload: { agentId: AGENT_ID, pinned: true },
       } as const;
 
-      yield* planless.router.performAct(rename, PANEL);
-      yield* planless.router.performAct(archive, PANEL);
-      yield* planless.router.performAct(pin, PANEL);
+      yield* taskless.router.performAct(rename, PANEL);
+      yield* taskless.router.performAct(archive, PANEL);
+      yield* taskless.router.performAct(pin, PANEL);
       yield* onTask.router.performAct(rename, PANEL);
 
-      assert.deepEqual(planless.asked, [
+      assert.deepEqual(taskless.asked, [
         `rename:${AGENT_ID}:Triage`,
         "refresh",
         `archive:${AGENT_ID}:true`,

@@ -3,11 +3,13 @@ import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
+  type InboxMessage,
 } from "@luke/features/inbox-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
@@ -26,6 +28,7 @@ import {
   type InboxListView,
   inboxBoard,
   inboxList,
+  inboxPreview,
   inboxReply,
   inboxSteps,
   listedItems,
@@ -501,7 +504,7 @@ const SHARED = [
   },
 ];
 
-test("only an open item the reader's own agent asks needs them, or one whose starter the service does not name: Needs you leaves a teammate's out, though the list holds it, and the Inbox's dot does not count it", () => {
+test("only an open item the reader's own agent asks needs them, or one whose starter the service does not name: Needs you leaves a teammate's out, though the list holds it, and the Inbox's attention mark does not count it", () => {
   const newest = { grouping: INBOX_GROUPING.NEWEST, chosen: undefined } as const;
   assert.deepEqual(
     drawn(inboxList(SHARED, { ...newest, waitingOnly: true, readerId: ME.userId })),
@@ -709,5 +712,177 @@ test("the items of agents with no plan stand under the automation that started t
       ["Other agents", ["three"]],
       ["Old", []],
     ],
+  );
+});
+
+/** Names a member as a row's preview does: "You" for the reader, a teammate by name, someone unnamed where the service names nobody. */
+function previewName(
+  member: { readonly userId: string; readonly name: string } | undefined,
+): string {
+  if (member === undefined) return "Someone";
+  return member.userId === READER ? "You" : member.name;
+}
+
+const READER = "user-reader";
+const YOU = { userId: READER, name: "Dean Stratakos" };
+const CHARLES = { userId: "user-charles", name: "Charles Pan" };
+
+/** A message on an item's thread, written at `createdAt`. */
+function message(
+  overrides: Partial<InboxMessage> & Pick<InboxMessage, "text" | "createdAt">,
+): InboxMessage {
+  return {
+    id: `b1b2c3d4-0000-4000-8000-${String(overrides.createdAt).padStart(12, "0")}`,
+    author: INBOX_MESSAGE_AUTHOR.MEMBER,
+    ...overrides,
+  };
+}
+
+test("an open item nobody has written on previews what it asks: a choice by its options and whether one is recommended, a form by its fields, and anything else by its kind and the first words of its context", () => {
+  const context = [
+    { type: INBOX_BLOCK.MARKDOWN, text: "Add the token under **Production**." },
+  ] as const;
+  const previews = [
+    {
+      ...QUEUE,
+      response: {
+        type: INBOX_RESPONSE.CHOICE,
+        options: [{ label: "Postgres" }, { label: "Redis" }, { label: "SQS" }],
+        recommended: "Postgres",
+      },
+    },
+    QUEUE,
+    {
+      ...QUEUE,
+      response: {
+        type: INBOX_RESPONSE.CHOICE,
+        options: [{ label: "Postgres" }, { label: "Redis" }],
+        recommended: "Kafka",
+      },
+    },
+    SMTP,
+    item({ id: "c1", response: { type: INBOX_RESPONSE.TODO }, blocks: context }),
+    item({ id: "c2", response: { type: INBOX_RESPONSE.APPROVAL } }),
+    item({ id: "c3", response: { type: INBOX_RESPONSE.TEXT }, blocks: context }),
+    item({ id: "c4", response: { type: INBOX_RESPONSE.NONE } }),
+  ].map((each) => inboxPreview(each, previewName));
+  assert.deepEqual(previews, [
+    "Choice · 3 options, one recommended",
+    "Choice · 2 options",
+    "Choice · 2 options",
+    "Form · 4 fields",
+    "To-do · Add the token under Production.",
+    "Approval",
+    "Question · Add the token under Production.",
+    "Note",
+  ]);
+});
+
+test("an answered item previews its answer after who gave it: the options picked, their own words, or what they did, each with their note, and files alone where they wrote nothing", () => {
+  const answered = (answer: NonNullable<InboxItem["answer"]>, extra: Partial<InboxItem> = {}) =>
+    inboxPreview(
+      item({ id: "d1", status: INBOX_STATUS.ANSWERED, answer, answeredBy: YOU, ...extra }),
+      previewName,
+    );
+  assert.equal(
+    answered({ reply: INBOX_REPLY.CHOSE, choices: ["Per 1,000, rounded up"] }),
+    "You: Per 1,000, rounded up",
+  );
+  assert.equal(
+    answered(
+      { reply: INBOX_REPLY.CHOSE, choices: ["Email", "Slack"], note: "Not **SMS**." },
+      { answeredBy: CHARLES },
+    ),
+    "Charles Pan: Email, Slack · Not SMS.",
+  );
+  assert.equal(
+    answered({ reply: INBOX_REPLY.ANSWERED, note: "Admins and\nwhoever sent it" }),
+    "You: Admins and whoever sent it",
+  );
+  assert.equal(answered({ reply: INBOX_REPLY.APPROVED }), "You: Approved");
+  assert.equal(
+    answered({ reply: INBOX_REPLY.DECLINED, note: "Wait for Monday" }),
+    "You: Declined · Wait for Monday",
+  );
+  assert.equal(answered({ reply: INBOX_REPLY.DONE }), "You: Marked it done");
+  const file = {
+    attachmentId: "e1b2c3d4-0000-4000-8000-000000000001",
+    name: "a.png",
+    mediaType: "image/png",
+  };
+  assert.equal(
+    answered({ reply: INBOX_REPLY.ANSWERED }, { answerFiles: [file, file] }),
+    "You: Sent 2 files",
+  );
+  const { answeredBy: _by, ...unnamed } = item({
+    id: "d2",
+    status: INBOX_STATUS.ANSWERED,
+    answer: { reply: INBOX_REPLY.APPROVED },
+    answeredBy: YOU,
+  });
+  assert.equal(inboxPreview(unnamed, previewName), "Someone: Approved");
+});
+
+test("an item its agent took back previews that it was withdrawn and why, or that alone where it gave no reason", () => {
+  const withdrawn = item({
+    id: "f1",
+    status: INBOX_STATUS.CLOSED,
+    closedReason: "the plan settled on 5",
+  });
+  assert.equal(inboxPreview(withdrawn, previewName), "Withdrawn: the plan settled on 5");
+  const { closedReason: _reason, ...unexplained } = withdrawn;
+  assert.equal(inboxPreview(unexplained, previewName), "Withdrawn");
+});
+
+test("the latest message on an item's thread is its preview, open or settled, led by the agent, You, or the teammate who wrote it, a message of files alone saying so; a settlement after the last message is the preview instead", () => {
+  const thread = [
+    message({ text: "Is 80% too eager?", createdAt: 2_000, member: CHARLES }),
+    message({
+      text: "Backfilled 41,208 rows; staging totals match",
+      createdAt: 3_000,
+      author: INBOX_MESSAGE_AUTHOR.AGENT,
+    }),
+  ];
+  const open = item({ id: "g1", response: { type: INBOX_RESPONSE.APPROVAL }, messages: thread });
+  assert.equal(
+    inboxPreview(open, previewName),
+    "Agent: Backfilled 41,208 rows; staging totals match",
+  );
+  assert.equal(
+    inboxPreview({ ...open, messages: thread.slice(0, 1) }, previewName),
+    "Charles Pan: Is 80% too eager?",
+  );
+  const mine = message({ text: "Go ahead.", createdAt: 4_000, member: YOU });
+  assert.equal(
+    inboxPreview({ ...open, messages: [...thread, mine] }, previewName),
+    "You: Go ahead.",
+  );
+  const filesOnly = message({
+    text: "",
+    createdAt: 4_000,
+    member: CHARLES,
+    files: [
+      {
+        attachmentId: "e1b2c3d4-0000-4000-8000-000000000002",
+        name: "b.png",
+        mediaType: "image/png",
+      },
+    ],
+  });
+  assert.equal(
+    inboxPreview({ ...open, messages: [filesOnly] }, previewName),
+    "Charles Pan: Sent a file",
+  );
+  const settledAfter = {
+    ...open,
+    status: INBOX_STATUS.ANSWERED,
+    answer: { reply: INBOX_REPLY.APPROVED },
+    answeredBy: YOU,
+    settledAt: 5_000,
+  };
+  assert.equal(inboxPreview(settledAfter, previewName), "You: Approved");
+  assert.equal(
+    inboxPreview({ ...settledAfter, settledAt: 2_500 }, previewName),
+    "Agent: Backfilled 41,208 rows; staging totals match",
   );
 });

@@ -704,7 +704,7 @@ function PlanCard({
   sentAt,
   body,
   messageId,
-  planId,
+  planId: taskId,
 }: {
   text: string;
   lead: TranscriptLead;
@@ -731,10 +731,10 @@ function PlanCard({
           <PlanTitle label={lead.label}>{title}</PlanTitle>
         </PlanHeader>
         <PlanContent>
-          {planId === undefined ? (
+          {taskId === undefined ? (
             words
           ) : (
-            <PlanPictures planId={planId} text={text}>
+            <PlanPictures planId={taskId} text={text}>
               {words}
             </PlanPictures>
           )}
@@ -1029,7 +1029,7 @@ export function AgentMessage({
   sender,
   origin,
   arrived = NO_ARRIVED,
-  planId,
+  planId: taskId,
   forkable = true,
   forkCut,
 }: {
@@ -1070,7 +1070,7 @@ export function AgentMessage({
         sentAt={message.sentAt}
         body={origin?.body}
         messageId={message.id}
-        planId={planId}
+        planId={taskId}
       />
     );
   }
@@ -1263,7 +1263,7 @@ function AgentTranscriptView({
   briefSender,
   origin,
   readerId,
-  planId,
+  planId: taskId,
   replay,
   endTrail,
 }: {
@@ -1343,7 +1343,7 @@ function AgentTranscriptView({
               <AgentMessage
                 message={message === first && opening !== undefined ? opening.brief : message}
                 plan={message === plan}
-                planId={message === plan ? planId : undefined}
+                planId={message === plan ? taskId : undefined}
                 lead={lead}
                 moving={working && index === placed.length - 1}
                 forkCut={forkCutOf(message, open)}
@@ -1367,7 +1367,7 @@ function AgentTranscriptView({
                     replay={opening.replay}
                     sentAt={first.sentAt}
                     place={replay}
-                    planId={planId}
+                    planId={taskId}
                   />
                   {opening.note === undefined ? null : (
                     <AgentMessage

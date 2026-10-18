@@ -3,8 +3,10 @@ import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
   codeLinesReadable,
   fieldValueWords,
+  INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -17,7 +19,9 @@ import {
   type InboxReadResponse,
   type InboxReply,
   type InboxReplyKind,
+  type InboxResponse,
   inboxReplyRefusal,
+  knownBlock,
   knownResponse,
 } from "@luke/features/inbox-wire";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
@@ -26,6 +30,7 @@ import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header";
 import { refusalLine, refusalPasses } from "./file-tab-model";
+import { plainWords } from "./tool-call-model";
 
 /**
  * inbox-model.ts -- the Inbox as pure decisions: which items it lists and how, what an item's answer is, and how a settled one reads.
@@ -379,6 +384,126 @@ export function settlementOf(item: InboxItem): Settlement | undefined {
     ...(values === undefined ? undefined : { values }),
     ...(answer.note === undefined ? undefined : { note: answer.note }),
   };
+}
+
+/** A member named on an item, as an answer's or a message's writer. */
+type InboxMember = NonNullable<InboxItem["answeredBy"]>;
+
+/** What parts a preview's words, as a menu's detail parts them. */
+const PREVIEW_PART = " · ";
+
+/** What each response an open item asks is called at the head of its row's preview. */
+const ASKS_WORDS = {
+  [INBOX_RESPONSE.CHOICE]: "Choice",
+  [INBOX_RESPONSE.APPROVAL]: "Approval",
+  [INBOX_RESPONSE.TEXT]: "Question",
+  [INBOX_RESPONSE.TODO]: "To-do",
+  [INBOX_RESPONSE.FORM]: "Form",
+  [INBOX_RESPONSE.NONE]: "Note",
+} as const satisfies Record<InboxResponse["type"], string>;
+
+/** What a row's preview says of an item asking a response this build does not know. */
+const ASKS_NEWER = "Open this in a newer Luke";
+
+/** A count with its noun, "1 option", "3 options". */
+function counted(count: number, one: string): string {
+  return count === 1 ? `1 ${one}` : `${count} ${one}s`;
+}
+
+/** The words of an item's first Markdown block on one line; nothing where it has none. */
+function contextWords(item: InboxItem): string | undefined {
+  for (const block of item.blocks) {
+    if (!knownBlock(block) || block.type !== INBOX_BLOCK.MARKDOWN) continue;
+    const words = plainWords(block.text);
+    if (words !== "") return words;
+  }
+  return undefined;
+}
+
+/**
+ * What an open item asks, as its row says it before anyone has written on
+ * it: a choice by how many options it offers and whether one is
+ * recommended, a form by its fields, and anything else by its kind and the
+ * first words of its context.
+ */
+function asksWords(item: InboxItem): string {
+  const response = item.response;
+  if (!knownResponse(response)) return ASKS_NEWER;
+  const kind = ASKS_WORDS[response.type];
+  if (response.type === INBOX_RESPONSE.CHOICE) {
+    const recommended = response.options.some((option) => option.label === response.recommended);
+    const options = counted(response.options.length, "option");
+    return `${kind}${PREVIEW_PART}${options}${recommended ? ", one recommended" : ""}`;
+  }
+  if (response.type === INBOX_RESPONSE.FORM) {
+    return `${kind}${PREVIEW_PART}${counted(response.fields.length, "field")}`;
+  }
+  const context = contextWords(item);
+  return context === undefined ? kind : `${kind}${PREVIEW_PART}${context}`;
+}
+
+/** What files alone say where a message or an answer carried no words. */
+function filesWords(files: readonly unknown[] | undefined): string | undefined {
+  const count = files?.length ?? 0;
+  if (count === 0) return undefined;
+  return count === 1 ? "Sent a file" : `Sent ${count} files`;
+}
+
+/** Words, then a note after them where there is one. */
+function withNote(words: string, note: string | undefined): string {
+  const said = note === undefined ? "" : plainWords(note);
+  return said === "" ? words : `${words}${PREVIEW_PART}${said}`;
+}
+
+/**
+ * What an answer says in a few words: the options picked, the developer's
+ * own words, or what they did, "Approved", each with the note they wrote
+ * beside it; files alone where they wrote nothing.
+ */
+function answerWords(item: InboxItem): string {
+  const answer = item.answer;
+  if (answer === undefined) return sentenceCased(REPLY_WORDS[INBOX_REPLY.ANSWERED]);
+  if (answer.reply === INBOX_REPLY.CHOSE) {
+    return withNote((answer.choices ?? []).join(", "), answer.note);
+  }
+  if (answer.reply === INBOX_REPLY.ANSWERED) {
+    const words = answer.note === undefined ? "" : plainWords(answer.note);
+    if (words !== "") return words;
+    return filesWords(item.answerFiles) ?? sentenceCased(REPLY_WORDS[INBOX_REPLY.ANSWERED]);
+  }
+  return withNote(sentenceCased(REPLY_WORDS[answer.reply]), answer.note);
+}
+
+/** A word set as the start of a sentence. */
+export function sentenceCased(words: string): string {
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+}
+
+/**
+ * The last word in an item's thread, as its row's second line says it,
+ * led by who said it: a message on the thread by its writer, "Agent" for
+ * the item's own and a member by `nameOf`, which says "You" for the
+ * reader; the answer by its answerer, in a few words; the agent taking the
+ * item back as "Withdrawn" and why; and, on an open item nobody has
+ * written on, what it asks, "Choice · 3 options, one recommended".
+ */
+export function inboxPreview(
+  item: InboxItem,
+  nameOf: (member: InboxMember | undefined) => string,
+): string {
+  const last = threadEntries(item).at(-1);
+  if (last === undefined) return asksWords(item);
+  if (last.kind === THREAD_ENTRY.MESSAGE) {
+    const { message } = last;
+    const who = message.author === INBOX_MESSAGE_AUTHOR.AGENT ? "Agent" : nameOf(message.member);
+    const words = plainWords(message.text);
+    return `${who}: ${words === "" ? (filesWords(message.files) ?? "") : words}`;
+  }
+  if (item.status === INBOX_STATUS.CLOSED) {
+    const why = item.closedReason === undefined ? "" : plainWords(item.closedReason);
+    return why === "" ? "Withdrawn" : `Withdrawn: ${why}`;
+  }
+  return `${nameOf(item.answeredBy)}: ${answerWords(item)}`;
 }
 
 /**

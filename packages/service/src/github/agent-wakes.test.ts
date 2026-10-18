@@ -153,15 +153,15 @@ function fakeEve() {
 /** An account whose plan's workspace reaches the repository, with one agent standing on a branch of its own, its session opened. */
 const openAgent = Effect.gen(function* () {
   const owner = yield* openGithubUser();
-  const plan = yield* startTask(owner, {
+  const task = yield* startTask(owner, {
     name: "Teammate invitations",
     repository: RELAY_FULL_NAME,
   });
   const installation = INSTALLATIONS[installationsConnected++];
   assert.ok(installation);
-  yield* connectWorkspaceGitHub(plan.workspaceId, installation);
+  yield* connectWorkspaceGitHub(task.workspaceId, installation);
   const started = yield* createCodingAgent(owner, {
-    taskId: plan.id,
+    taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",

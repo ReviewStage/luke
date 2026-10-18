@@ -373,14 +373,14 @@ function isNewAgent(kept: KeptDraft): kept is KeptDraft<NewAgentPlace> {
  * of its own on the same plan.
  */
 export function useNewAgentDraft(
-  planId: string | undefined,
+  taskId: string | undefined,
   draftId: string | undefined,
 ): KeptDraft<NewAgentPlace> | undefined {
   return useAtomValue(draftsAtom, (drafts) => {
-    const plans = drafts.filter(isNewAgent).filter((kept) => kept.place.planId === planId);
+    const onTask = drafts.filter(isNewAgent).filter((kept) => kept.place.planId === taskId);
     return draftId === undefined
-      ? plans.at(-1)
-      : plans.find((kept) => kept.place.draftId === draftId);
+      ? onTask.at(-1)
+      : onTask.find((kept) => kept.place.draftId === draftId);
   });
 }
 
@@ -395,10 +395,10 @@ function isInbox(kept: KeptDraft): kept is KeptDraft<InboxPlace> {
  * drafts changes, so the inbox reading it draws again only then, never on a
  * word typed in another box.
  */
-export function useInboxDrafts(planId: string | null): readonly KeptDraft<InboxPlace>[] {
+export function useInboxDrafts(taskId: string | null): readonly KeptDraft<InboxPlace>[] {
   const last = useRef<readonly KeptDraft<InboxPlace>[]>([]);
   return useAtomValue(draftsAtom, (drafts) => {
-    const found = drafts.filter(isInbox).filter((kept) => kept.place.planId === planId);
+    const found = drafts.filter(isInbox).filter((kept) => kept.place.planId === taskId);
     const same =
       found.length === last.current.length && found.every((kept, at) => kept === last.current[at]);
     if (!same) last.current = found;
@@ -422,6 +422,6 @@ export function useDraftWriter(): DraftWriter {
 }
 
 /** Whether a plan holds a draft: one of its agents', its draft agent's, or an inbox card's. */
-export function usePlanDrafted(planId: string): boolean {
-  return useAtomValue(draftedAtom, (plans) => plans.includes(planId));
+export function usePlanDrafted(taskId: string): boolean {
+  return useAtomValue(draftedAtom, (tasks) => tasks.includes(taskId));
 }

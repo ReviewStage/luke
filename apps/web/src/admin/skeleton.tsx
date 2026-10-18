@@ -1,14 +1,20 @@
 import {
+  SKELETON_SHAPE as BONE_SHAPE,
+  Skeleton as Bone,
   CARD_PADDING,
   Card,
-  Skeleton as LineBone,
+  GAP,
+  Inline,
+  List,
+  ListRow,
+  Stack,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
+  type TextVariant,
 } from "@luke/ui";
 import { ChartFrameSkeleton } from "./charts/chart-frame";
 import {
-  METRIC_STATUS,
   MetricCardSkeleton,
   SectionHeading,
   STAT_CELL,
@@ -35,29 +41,18 @@ import {
  * time, so a section added to a page is a line here, not a page-shaped copy
  * that drifts from the page the moment either moves.
  */
-function Skeleton({
-  className,
-  circle = false,
-}: {
-  className: string;
-  circle?: boolean;
-}): React.JSX.Element {
+
+/** A bone set in the type of the line it stands for, so the swap to words moves nothing. */
+function SkeletonLine({ variant, width }: SkeletonTextLine): React.JSX.Element {
   return (
-    <div
-      aria-hidden="true"
-      className={`${circle ? "rounded-full" : "rounded-md"} animate-pulse bg-muted motion-reduce:animate-none ${className}`}
-    />
+    <Text as={TEXT_ELEMENT.DIV} variant={variant}>
+      <Bone width={width} />
+    </Text>
   );
 }
 
-/** A bone boxed to the height of the text line it stands for, so the swap to words moves nothing. */
-function SkeletonLine({ box, bone }: { box: string; bone: string }): React.JSX.Element {
-  return (
-    <div className={`flex items-center ${box}`}>
-      <Skeleton className={bone} />
-    </div>
-  );
-}
+/** The small avatar's bone, the size of a table row's avatar. */
+const AVATAR_BONE = { small: "32px", large: "56px" } as const;
 
 /** Each plot height is its chart's own fixed height, so the bars land where the bone stood. */
 export const SKELETON_PLOT = {
@@ -82,10 +77,10 @@ export const SKELETON_SHAPE = {
   STATIC: "static",
 } as const;
 
-/** A bone standing in for one line of text: the box it holds, and the bone in it. */
+/** A bone standing in for one line of text: the type it is set in, and how wide it stands. */
 interface SkeletonTextLine {
-  box: string;
-  bone: string;
+  variant: TextVariant;
+  width: string;
 }
 
 /** One region of a loading page, in the order the page stacks them. */
@@ -102,12 +97,12 @@ export type SkeletonShape =
       rows: number;
       numericColumns: number;
     }
+  /** Lines of body text, each as wide as the share of the line given. */
   | { kind: typeof SKELETON_SHAPE.LINES; bones: readonly string[] }
   | { kind: typeof SKELETON_SHAPE.HEALTH }
   | {
       kind: typeof SKELETON_SHAPE.MASTHEAD;
       avatar?: boolean;
-      title?: string;
       lines: readonly SkeletonTextLine[];
     }
   /** Words the page knows without reading anything, drawn as themselves. */
@@ -149,11 +144,11 @@ function SkeletonAccountsTable({
     <Card padding={CARD_PADDING.FLUSH}>
       <div className="flex items-center gap-6 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
-          <SkeletonLine box="h-[18px]" bone="h-3 w-16" />
+          <SkeletonLine variant={TEXT_VARIANT.LABEL} width="64px" />
         </div>
         {columns.map((column) => (
           <div key={column} className="flex w-14 shrink-0 justify-end">
-            <SkeletonLine box="h-[18px]" bone="h-3 w-10" />
+            <SkeletonLine variant={TEXT_VARIANT.LABEL} width="40px" />
           </div>
         ))}
       </div>
@@ -163,15 +158,17 @@ function SkeletonAccountsTable({
           className="flex items-center gap-6 border-b border-border px-5 py-3 last:border-0"
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <Skeleton circle className="size-8 shrink-0" />
+            <span className="flex shrink-0">
+              <Bone shape={BONE_SHAPE.CIRCLE} width={AVATAR_BONE.small} />
+            </span>
             <div className="min-w-0">
-              <SkeletonLine box="h-[18px]" bone="h-3.5 w-36" />
-              <SkeletonLine box="h-4" bone="h-3 w-44" />
+              <SkeletonLine variant={TEXT_VARIANT.LABEL} width="144px" />
+              <SkeletonLine variant={TEXT_VARIANT.CAPTION} width="176px" />
             </div>
           </div>
           {columns.map((column) => (
             <div key={column} className="flex w-14 shrink-0 justify-end">
-              <SkeletonLine box="h-5" bone="h-3.5 w-10" />
+              <SkeletonLine variant={TEXT_VARIANT.BODY} width="40px" />
             </div>
           ))}
         </div>
@@ -238,9 +235,11 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
       return (
         <Card>
           <div className="grid gap-1">
-            <SkeletonLine box="h-4" bone="h-3 w-full" />
+            <SkeletonLine variant={TEXT_VARIANT.CAPTION} width="100%" />
             {bones(8).map((row) => (
-              <Skeleton key={row} className="h-9 w-full" />
+              <div key={row} className="h-9">
+                <Bone shape={BONE_SHAPE.BLOCK} />
+              </div>
             ))}
           </div>
         </Card>
@@ -250,8 +249,8 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
     case SKELETON_SHAPE.LINES:
       return (
         <>
-          {shape.bones.map((bone, index) => (
-            <SkeletonLine key={index} box="h-5" bone={`h-3.5 ${bone}`} />
+          {shape.bones.map((width, index) => (
+            <SkeletonLine key={index} variant={TEXT_VARIANT.BODY} width={width} />
           ))}
         </>
       );
@@ -259,52 +258,33 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
       return (
         <div className="grid gap-3 min-[720px]:grid-cols-[1fr_1.4fr]">
           <MetricCardSkeleton>
-            <div className={METRIC_STATUS}>
-              <LineBone width="128px" />
-            </div>
+            <Text as={TEXT_ELEMENT.DIV}>
+              <Bone width="96px" />
+            </Text>
           </MetricCardSkeleton>
           <MetricCardSkeleton hint={false}>
-            <div>
+            <List label="Integrations">
               {bones(5).map((row) => (
-                <div key={row} className="border-b border-border py-3 last:border-0">
-                  {/* Note that the tracks start at zero, so the bones give way in a
-                  narrow card rather than holding it wider than its column. */}
-                  <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)] items-center gap-4">
-                    <Text as={TEXT_ELEMENT.DIV}>
-                      <LineBone width="192px" />
-                    </Text>
-                    <div className="flex justify-end">
-                      <Text as={TEXT_ELEMENT.DIV}>
-                        <LineBone width="96px" />
-                      </Text>
-                    </div>
-                  </div>
-                </div>
+                <ListRow key={row} title={<Bone width="192px" />} meta={<Bone width="96px" />} />
               ))}
-            </div>
+            </List>
           </MetricCardSkeleton>
         </div>
       );
     case SKELETON_SHAPE.MASTHEAD:
       return (
-        <div className={shape.avatar ? "flex flex-wrap items-center gap-4" : undefined}>
-          {shape.avatar ? <Skeleton circle className="size-14 shrink-0" /> : null}
-          <div>
-            {shape.title === undefined ? null : (
-              <Text as={TEXT_ELEMENT.H1} variant={TEXT_VARIANT.TITLE}>
-                {shape.title}
-              </Text>
-            )}
-            {shape.lines.map((line, index) => (
-              <div
-                key={line.bone}
-                className={shape.title !== undefined || index > 0 ? "mt-1" : undefined}
-              >
-                <SkeletonLine box={line.box} bone={line.bone} />
-              </div>
+        <Inline gap={GAP.FIELD}>
+          {shape.avatar ? (
+            <span className="flex shrink-0">
+              <Bone shape={BONE_SHAPE.CIRCLE} width={AVATAR_BONE.large} />
+            </span>
+          ) : null}
+          <Stack gap={GAP.TIGHT}>
+            {shape.lines.map((line) => (
+              <SkeletonLine key={line.width} variant={line.variant} width={line.width} />
             ))}
-          </div>
-        </div>
+          </Stack>
+        </Inline>
       );
     case SKELETON_SHAPE.STATIC:
       return <>{shape.node}</>;

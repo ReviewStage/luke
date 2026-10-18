@@ -4,7 +4,7 @@ The React that more than one app mounts: the face and the glyphs traced from
 `@luke/brand`'s generated art, every provider's brand mark, the chart, `cn`, and
 the custom-property bridge a component's `style` reads; and the DOM-free view
 models a page is drawn from (the site's account initials, activity calendar,
-daily series, animations roster, and OAuth card classes).
+daily series, and animations roster).
 
 - A view model is a `.ts` module that imports no React, at a subpath of its
   own (`@luke/ui/<name>`), so an app that reads one never resolves React

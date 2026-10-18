@@ -58,18 +58,18 @@ const names = (groups: readonly { rows: readonly TaskRow[] }[]) =>
 
 /** The tasks grouped by repository, as their rows are. */
 const groupsByRepository = (
-  plans: readonly TaskSummary[],
+  tasks: readonly TaskSummary[],
   order?: TaskOrder,
-): readonly RepositoryGroup[] => repositoryGroups(plans.map(taskRow), order);
+): readonly RepositoryGroup[] => repositoryGroups(tasks.map(taskRow), order);
 
 /** The tasks grouped by creator, as their rows are, each named by its plan. */
 const groupsByCreator = (
-  plans: readonly TaskSummary[],
+  tasks: readonly TaskSummary[],
   order: TaskOrder,
   readerId: string | undefined,
-  nameOf: (plan: TaskSummary) => string,
+  nameOf: (summary: TaskSummary) => string,
 ): readonly CreatorGroup[] =>
-  creatorGroups(plans.map(taskRow), order, readerId, (row) =>
+  creatorGroups(tasks.map(taskRow), order, readerId, (row) =>
     row.kind === TASK_ROW.TASK ? nameOf(row.plan) : "",
   );
 
@@ -201,7 +201,7 @@ test("a task whose agent ended a turn after another task's plan was edited stand
 });
 
 test("an agent's activity older than the plan's own edit leaves the plan's time standing", () => {
-  const plan = {
+  const summary = {
     ...task("Edited after its agent", "acme/relay", 1, 900),
     agents: {
       total: 1,
@@ -212,8 +212,8 @@ test("an agent's activity older than the plan's own edit leaves the plan's time 
       pullRequests: [],
     },
   };
-  expect(taskTime(plan, TASK_ORDER.UPDATED)).toBe(900);
-  expect(taskTime(plan, TASK_ORDER.CREATED)).toBe(1);
+  expect(taskTime(summary, TASK_ORDER.UPDATED)).toBe(900);
+  expect(taskTime(summary, TASK_ORDER.CREATED)).toBe(1);
 });
 
 test("ordered by name, two tasks of one name stand by their later activity, the time each row shows", () => {

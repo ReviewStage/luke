@@ -718,8 +718,8 @@ export function sectionAnchors(headings: readonly string[]): readonly string[] {
 
 /** A task's address, a section's with its anchor; the task's own where the anchor is empty. */
 function taskTarget(taskId: string, place: MentionPlace, anchor: string): string {
-  const plan = `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.TASK_STEP}/${encodedPart(taskId)}`;
-  return anchor === "" ? plan : `${plan}#${encodedPart(anchor)}`;
+  const task = `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.TASK_STEP}/${encodedPart(taskId)}`;
+  return anchor === "" ? task : `${task}#${encodedPart(anchor)}`;
 }
 
 /** A file's or a folder's page on GitHub, or the legacy form where the task has no repository to name it under. */

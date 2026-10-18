@@ -992,6 +992,10 @@ export const OVERVIEW_BOUNDS = {
   MAX_THREADS: 100,
   /** The most comments of one review thread a read carries, its first kept, the rest counted. */
   MAX_THREAD_COMMENTS: 50,
+  /** The most labels one read carries; GitHub allows a hundred on a pull request. */
+  MAX_LABELS: 100,
+  /** The most pull requests of a stack one read names, the pull request itself among them. */
+  MAX_STACK: 30,
 } as const;
 
 /** The side of a diff a review thread's line counts on: the old file's, or the new file's. */
@@ -1116,6 +1120,35 @@ const conversationEntrySchema = EffectSchema.Struct({
 
 export type ConversationEntry = typeof conversationEntrySchema.Type;
 
+/** A label on a pull request: its name, and its colour as GitHub spells it, six hex digits with no `#`. */
+const pullRequestLabelSchema = EffectSchema.Struct({
+  name: overviewName,
+  color: EffectSchema.String,
+});
+
+export type PullRequestLabel = typeof pullRequestLabelSchema.Type;
+
+/** The agent whose pull request one of a stack is: its id, and its plan's, null for an agent on none. */
+const stackAgentSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  taskId: EffectSchema.NullOr(wireUuidSchema),
+});
+
+/**
+ * One open pull request of the stack a pull request stands in: its number,
+ * title, and page; whether it is a draft; and the agent of the workspace
+ * whose branch is its head, where one is.
+ */
+const stackEntrySchema = EffectSchema.Struct({
+  number: countedNumber,
+  title: EffectSchema.String,
+  url: EffectSchema.String,
+  draft: EffectSchema.Boolean,
+  agent: EffectSchema.optionalKey(stackAgentSchema),
+});
+
+export type PullRequestStackEntry = typeof stackEntrySchema.Type;
+
 /**
  * The pull request itself as its Pull request tab's overview draws it (GET),
  * the first of the overview's three reads, each of which lands on its own:
@@ -1123,8 +1156,11 @@ export type ConversationEntry = typeof conversationEntrySchema.Type;
  * renders it (`body_html`), empty where it has none; the branch it merges
  * into and the one it merges from; when it was opened, and merged where it
  * was; whether it would merge as it stands; who opened it, who the agent
- * writes as on GitHub, and who it still asks for a review. Null where the
- * agent has opened none yet, or the repository no longer holds it.
+ * writes as on GitHub, and who it still asks for a review; its labels; and,
+ * while it is open, the stack it stands in, base first and itself among it,
+ * empty where it stands in none. Its labels and its stack are absent from a
+ * service before them. Null where the agent has opened none yet, or the
+ * repository no longer holds it.
  */
 export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
@@ -1145,6 +1181,16 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
       ),
       requested: EffectSchema.Array(githubPersonSchema).check(
         EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
+      ),
+      labels: EffectSchema.optionalKey(
+        EffectSchema.Array(pullRequestLabelSchema).check(
+          EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_LABELS),
+        ),
+      ),
+      stack: EffectSchema.optionalKey(
+        EffectSchema.Array(stackEntrySchema).check(
+          EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_STACK),
+        ),
       ),
     }),
   ),
