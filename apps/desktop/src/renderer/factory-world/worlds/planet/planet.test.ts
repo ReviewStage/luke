@@ -248,6 +248,25 @@ test("each layer switched off takes what it names out of reach, and leaves the r
   planet.dispose();
 });
 
+test("with one layer drawn alone, a failed agent is in reach under Defects and not under Planned", () => {
+  const { host, pickable } = standInHost();
+  const planet = world.create(host);
+  const world0 = snapshot();
+  const alone = (layer: keyof WorldLayers): WorldLayers => ({
+    planned: layer === "planned",
+    building: layer === "building",
+    shipped: layer === "shipped",
+    defects: layer === "defects",
+  });
+  planet.update(stateOf(world0, { layers: alone("planned") }));
+  assert.deepEqual(pickable(PICK_KIND.AGENT), []);
+  planet.update(stateOf(world0, { layers: alone("defects") }));
+  assert.deepEqual(pickable(PICK_KIND.AGENT), [uuidOf(2)]);
+  planet.update(stateOf(world0, { layers: alone("shipped") }));
+  assert.deepEqual(pickable(PICK_KIND.AGENT), []);
+  planet.dispose();
+});
+
 test("scrubbed back before a merge, the merge is not there to pick, and back at now it is", () => {
   const { host, pickable } = standInHost();
   const planet = world.create(host);

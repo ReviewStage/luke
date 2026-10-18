@@ -253,7 +253,8 @@ export const world: WorldModule = {
         reshaped ||
         before === undefined ||
         before.view.agents !== state.view.agents ||
-        before.layers.building !== state.layers.building;
+        before.layers.building !== state.layers.building ||
+        before.layers.defects !== state.layers.defects;
       if (agentsMoved) cast.cast(placed, drawnAgents(state), takenCopy());
       if (reshaped || before === undefined || before.view.timeline !== state.view.timeline) {
         shipped.show(placed, state.view.timeline, state.view.snapshotAt, takenCopy());

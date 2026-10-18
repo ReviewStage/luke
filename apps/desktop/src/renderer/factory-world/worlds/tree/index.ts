@@ -159,7 +159,7 @@ export const world: WorldModule = {
         }
         grownFrom = view.zones;
 
-        // Note that a failed agent is a defect as much as a builder, so it stands with the building layer off.
+        // Note that a failed agent is a defect as much as a builder, so it stands under Defects with the building layer off.
         const agents = view.agents.filter((agent) => agentDrawnUnder(agent, layers));
         if (
           plannedFrom === undefined ||
