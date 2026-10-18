@@ -885,6 +885,9 @@ const reviewCommentSchema = EffectSchema.Struct({
   at: countedNumber,
 });
 
+/** A commit as GitHub names it: forty hex digits. */
+const commitShaSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{40}$/u));
+
 /**
  * One agent's changes (GET): the pull request it published, as its page on
  * GitHub, its files in the order GitHub lists them now, and whether the
@@ -894,12 +897,15 @@ const reviewCommentSchema = EffectSchema.Struct({
  * reviewers and where each stands, who authored its commits, and its
  * reviews that said something ride beside the files, each absent from a
  * service before them, and who the agent writes as absent too for an agent
- * whose first session never settled it.
+ * whose first session never settled it. The head its files were read at
+ * rides beside them too (`headSha`), which a comment on one of their lines
+ * is anchored to, absent where it could not be read.
  */
 export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
     EffectSchema.Struct({
       url: EffectSchema.String,
+      headSha: EffectSchema.optionalKey(commitShaSchema),
       files: EffectSchema.Array(changedFileSchema).check(
         EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_FILES),
       ),
@@ -1311,10 +1317,13 @@ export type CodingAgentOverviewChecks = NonNullable<
  * read's reviewers still asked for override; and its comments and reviews,
  * oldest first, its newest entries kept up to the bound, with how many
  * earlier ones were left on GitHub (`earlier`), review threads past their
- * bound among them; and the reactions its description wears, read with the
+ * bound among them; the reactions its description wears, read with the
  * conversation rather than the description itself, since they are read in
- * the same ask as the reactions of its comments. Null where the agent has
- * opened no pull request yet.
+ * the same ask as the reactions of its comments; and, read beside it on the
+ * reader's own token, the review they hold pending on it, by how many
+ * comments it holds, null where they hold none or it could not be read as
+ * theirs, absent from a service before it. Null where the agent has opened
+ * no pull request yet.
  */
 export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
@@ -1327,6 +1336,9 @@ export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
       ),
       earlier: countedNumber,
       descriptionReactions: EffectSchema.optionalKey(reactionsSchema),
+      pendingReview: EffectSchema.optionalKey(
+        EffectSchema.NullOr(EffectSchema.Struct({ comments: countedNumber })),
+      ),
     }),
   ),
 });

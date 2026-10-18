@@ -11,6 +11,9 @@
                 "url": {
                   "type": "string"
                 },
+                "headSha": {
+                  "type": "string"
+                },
                 "files": {
                   "type": "array",
                   "items": {

@@ -26,6 +26,8 @@ export const PULL_REQUEST_WRITE_BOUNDS = {
   MAX_BODY_CHARS: 65_536,
   /** The longest GitHub id for a review thread the request names; GitHub's run near thirty. */
   MAX_NODE_ID_CHARS: 256,
+  /** The longest path a line comment names; GitHub's own paths stop well short of it. */
+  MAX_PATH_CHARS: 4_096,
 } as const;
 
 /** How a pull request is merged, as GitHub offers each where the repository allows it. */
@@ -73,6 +75,10 @@ export const PULL_REQUEST_ACTION = {
   UNRESOLVE_THREAD: "unresolve-thread",
   /** A comment on the pull request itself, at the foot of its conversation. */
   COMMENT: "comment",
+  /** A comment on a line or lines of a changed file, published at once or added to the member's pending review. */
+  ADD_REVIEW_COMMENT: "add-review-comment",
+  /** The member's own pending review thrown away, the comments it held with it. */
+  DISCARD_REVIEW: "discard-review",
 } as const;
 
 export type PullRequestAction = (typeof PULL_REQUEST_ACTION)[keyof typeof PULL_REQUEST_ACTION];
@@ -86,6 +92,27 @@ export const REVIEW_EVENT = {
 } as const;
 
 export type ReviewEvent = (typeof REVIEW_EVENT)[keyof typeof REVIEW_EVENT];
+
+/** Where a line comment goes, as GitHub's own line comment offers: published at once as a review of its own, or added to the member's pending review, which one is started for where they hold none. */
+export const REVIEW_COMMENT_MODE = {
+  SINGLE: "single",
+  REVIEW: "review",
+} as const;
+
+export type ReviewCommentMode = (typeof REVIEW_COMMENT_MODE)[keyof typeof REVIEW_COMMENT_MODE];
+
+/** The side of a diff a line comment counts its line on: the old file's, or the new file's. */
+export const REVIEW_COMMENT_SIDE = {
+  LEFT: "left",
+  RIGHT: "right",
+} as const;
+
+export type ReviewCommentSide = (typeof REVIEW_COMMENT_SIDE)[keyof typeof REVIEW_COMMENT_SIDE];
+
+const reviewCommentSideSchema = EffectSchema.Literals(Object.values(REVIEW_COMMENT_SIDE));
+
+/** A line of a file, counted from one. */
+const fileLineSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
 
 /** A review's words, Markdown, which may be empty where GitHub allows it; GitHub's bound. */
 const reviewBodySchema = EffectSchema.String.check(
@@ -138,6 +165,25 @@ export const pullRequestActionRequestSchema = EffectSchema.Union([
     action: EffectSchema.Literal(PULL_REQUEST_ACTION.COMMENT),
     body: replyBodySchema,
   }),
+  /**
+   * A comment on the lines from `startLine` on `startSide` to `line` on
+   * `side` of the file at `path`, as the diff read at `headSha` counts them;
+   * one line where no start is named.
+   */
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT),
+    mode: EffectSchema.Literals(Object.values(REVIEW_COMMENT_MODE)),
+    path: EffectSchema.NonEmptyString.check(
+      EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_PATH_CHARS),
+    ),
+    line: fileLineSchema,
+    side: reviewCommentSideSchema,
+    startLine: EffectSchema.optionalKey(fileLineSchema),
+    startSide: EffectSchema.optionalKey(reviewCommentSideSchema),
+    body: replyBodySchema,
+    headSha: headShaSchema,
+  }),
+  EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.DISCARD_REVIEW) }),
 ]);
 
 export type PullRequestActionRequest = typeof pullRequestActionRequestSchema.Type;

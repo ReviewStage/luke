@@ -81,7 +81,9 @@ import {
 import { githubReadOrRefusal, logGitHubReadFailure } from "../github/github-refusal.js";
 import { pullRequestMerging } from "../github/pull-request-merging.js";
 import {
+  addLineComment,
   commentOnPullRequest,
+  discardPendingReview,
   type GitHubWriteFailure,
   mergePullRequest,
   pullRequestNodeId,
@@ -93,12 +95,15 @@ import {
   takeOutOfMergeQueue,
 } from "../github/pull-request-writes.js";
 import {
+  type GitHubPullRequest,
   type PullRequestReadFailure,
+  pullRequestByNumber,
   pullRequestChecks,
   pullRequestConversation,
   pullRequestDeployments,
   pullRequestFiles,
   pullRequestOverview,
+  viewerPendingReviewOf,
 } from "../github/pull-requests.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -168,6 +173,7 @@ import {
 import {
   type MemberPullRequest,
   memberPullRequestWrite,
+  memberReadToken,
   writeAnswerOf,
 } from "./pull-request-write.js";
 
@@ -926,14 +932,18 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
   const listed = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
-    const [files, people] = yield* Effect.all(
+    // Note that the pull request itself is read beside its files for its head, which a comment on their lines is anchored to; a read that does not land names none.
+    const [files, people, whole] = yield* Effect.all(
       [
         pullRequestFiles(token, agent.repository, pullRequest),
         changesPeople(token, agent, pullRequest.number),
+        Effect.orElseSucceed(pullRequestByNumber(token, agent.repository, pullRequest.number), () =>
+          Option.none(),
+        ),
       ],
       { concurrency: "unbounded" },
     );
-    return { ...files, ...people };
+    return { ...headOf(whole), ...files, ...people };
   }).pipe(
     Effect.catch((failure) => {
       switch (failure._tag) {
@@ -957,11 +967,21 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
   });
 });
 
+/** The head a pull request's files were read at, where it was read and spelled as a commit. */
+function headOf(whole: Option.Option<Pick<GitHubPullRequest, "headSha">>): { headSha?: string } {
+  return Option.match(whole, {
+    onNone: () => ({}),
+    onSome: ({ headSha }) => (/^[0-9a-f]{40}$/u.test(headSha) ? { headSha } : {}),
+  });
+}
+
 /** One of the overview's reads of the agent's pull request, on the token minted for its repository; null where GitHub holds no such pull request. */
 type OverviewRead<A> = (
   token: Redacted.Redacted,
   agent: CodingAgent,
   pullRequest: CodingAgentPullRequest,
+  /** The member reading, whose own reads mark what is theirs. */
+  userId: string,
 ) => Effect.Effect<A | null, PullRequestReadFailure, AgentsServices>;
 
 /**
@@ -985,7 +1005,7 @@ const overviewPart = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
   const part = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
-    return yield* read(token, agent, pullRequest);
+    return yield* read(token, agent, pullRequest, userId);
   }).pipe(
     Effect.catch((failure) => {
       switch (failure._tag) {
@@ -1000,6 +1020,7 @@ const overviewPart = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
       }
     }),
   );
+  // Note that a part may carry what is the reader's own, such as the review they hold pending, which every hosted answer's `private, no-store` keeps from anyone else.
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest: part });
 });
 
@@ -1072,6 +1093,12 @@ const overviewChecksEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewCheck
   },
 );
 
+/** The review the member holds pending on the pull request, read on their own token; none where they hold none, or no sign-in GitHub takes. */
+const memberPendingReview = (userId: string, repository: string, number: number) =>
+  Effect.flatMap(memberReadToken(userId), (token) =>
+    token === undefined ? Effect.succeed(null) : viewerPendingReviewOf(token, repository, number),
+  );
+
 /**
  * GET reads the agent's pull request's conversation: its comments, its
  * reviews and their threads, and where each reviewer stands by their
@@ -1080,9 +1107,19 @@ const overviewChecksEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewCheck
 const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
   "web/agentOverviewConversationEndpoint",
 )(function* (seams: CodingAgentsAppSeams, published: PublishedCache) {
-  return yield* overviewPart(seams, published, (token, agent, pullRequest) =>
-    Effect.flatMap(pullRequestConversation(token, agent.repository, pullRequest), (read) =>
-      namedOverviewConversation(agent, pullRequest.number, read),
+  return yield* overviewPart(seams, published, (token, agent, pullRequest, userId) =>
+    Effect.map(
+      Effect.all(
+        [
+          Effect.flatMap(pullRequestConversation(token, agent.repository, pullRequest), (read) =>
+            namedOverviewConversation(agent, pullRequest.number, read),
+          ),
+          memberPendingReview(userId, agent.repository, pullRequest.number),
+        ],
+        { concurrency: "unbounded" },
+      ),
+      ([conversation, pendingReview]) =>
+        conversation === null ? null : { ...conversation, pendingReview },
     ),
   );
 });
@@ -1120,6 +1157,12 @@ function writeOf(
       );
     case PULL_REQUEST_ACTION.COMMENT:
       return commentOnPullRequest(token, id, request.body);
+    case PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT: {
+      const { action: _action, ...comment } = request;
+      return addLineComment(token, id, comment);
+    }
+    case PULL_REQUEST_ACTION.DISCARD_REVIEW:
+      return discardPendingReview(token, id);
   }
 }
 

@@ -111,8 +111,10 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   codingAgentAnswerSchema,
+  codingAgentChangesAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentOverviewConversationAnswerSchema,
   codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPullRequestAnswerSchema,
@@ -1284,6 +1286,8 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
 
 const AGENT_PULL_REQUEST_ACTION = "/api/agents/pull-request-action";
 const AGENT_PULL_REQUEST = "/api/agents/pull-request";
+/** The agent's changes, the files Files changed draws. */
+const AGENT_CHANGES = "/api/agents/changes";
 const AGENT_OVERVIEW_PULL_REQUEST = AGENT_OVERVIEW[0];
 
 /** The GraphQL id GitHub gives the published pull request. */
@@ -1420,6 +1424,46 @@ function threadsAnswering(threadPullRequestId: string): (call: GraphqlCall) => R
 /** The GitHub mutation a document makes, by the name its first field spells. */
 function mutationName(query: string): string {
   return /\{\s*(\w+)\(/u.exec(query)?.[1] ?? "";
+}
+
+/** The head a line comment names, as GitHub spells a commit. */
+const LINE_HEAD = "c0ffee1c0ffee1c0ffee1c0ffee1c0ffee1c0ffe";
+
+/** A comment on lines of the agent's pull request as the bearer given, on `src/invite.ts` line 12 on the new side unless the fields say otherwise. */
+function lineCommentAs(
+  bearer: string,
+  agentId: string,
+  fields: Readonly<Record<string, string | number>>,
+): Request {
+  return request(AGENT_PULL_REQUEST_ACTION, bearer, {
+    method: "POST",
+    id: agentId,
+    body: {
+      action: "add-review-comment",
+      path: "src/invite.ts",
+      line: 12,
+      side: "right",
+      body: "Rename this.",
+      headSha: LINE_HEAD,
+      ...fields,
+    },
+  });
+}
+
+/** GitHub answering a line comment's and a discard's calls: the member's pending reviews as given, a started review as `PRR_started`, and an empty answer to every other mutation. */
+function linesAnswering(
+  pending: readonly { readonly id: string; readonly viewerDidAuthor: boolean }[],
+): (call: GraphqlCall) => Response {
+  return (call) => {
+    if (
+      call.query.includes("addPullRequestReview(input: { pullRequestId: $id, commitOID: $commit })")
+    ) {
+      return Response.json({
+        data: { addPullRequestReview: { pullRequestReview: { id: "PRR_started" } } },
+      });
+    }
+    return reviewsAnswering(pending)(call);
+  };
 }
 
 it.layer(getTestDB())("changing an agent's pull request", (it) => {
@@ -1903,6 +1947,211 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           [["addComment", { id: PULL_REQUEST_NODE_ID, body: "Shipping after lunch." }]],
         );
         assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+      }),
+  );
+
+  it.effect(
+    "a single line comment is published at once as a review of its own, on the member's token, at the head their diff was read at",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: linesAnswering([]),
+        });
+
+        const answered = yield* ask(
+          lineCommentAs(other, agent.id, { mode: "single", startLine: 10, startSide: "right" }),
+        );
+
+        assert.deepEqual(answered, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        const mutations = calls.filter((call) => call.query.includes("mutation"));
+        assert.deepEqual(
+          mutations.map((call) => [mutationName(call.query), call.variables]),
+          [
+            [
+              "addPullRequestReview",
+              {
+                id: PULL_REQUEST_NODE_ID,
+                commit: LINE_HEAD,
+                path: "src/invite.ts",
+                body: "Rename this.",
+                line: 12,
+                side: "RIGHT",
+                startLine: 10,
+                startSide: "RIGHT",
+              },
+            ],
+          ],
+        );
+        assert.match(mutations[0]?.query ?? "", /event: COMMENT, threads: \[/u);
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+      }),
+  );
+
+  it.effect(
+    "a comment for a review starts the member's pending review on the head their diff was read at where they hold none, and joins the one they hold otherwise, nobody else's",
+    () =>
+      Effect.gen(function* () {
+        const fresh = yield* published({ answer: linesAnswering([]) });
+        const started = yield* fresh.ask(
+          lineCommentAs(fresh.other, fresh.agent.id, { mode: "review", side: "left" }),
+        );
+        const holding = yield* published({
+          answer: linesAnswering([
+            { id: "PRR_someone_else", viewerDidAuthor: false },
+            { id: "PRR_member_pending", viewerDidAuthor: true },
+          ]),
+        });
+        const joined = yield* holding.ask(
+          lineCommentAs(holding.other, holding.agent.id, { mode: "review" }),
+        );
+
+        for (const answered of [started, joined]) {
+          assert.deepEqual(answered, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        }
+        const thread = (calls: readonly GraphqlCall[]) =>
+          calls
+            .filter((call) => call.query.includes("mutation"))
+            .map((call) => [mutationName(call.query), call.variables.id ?? call.variables.review]);
+        assert.deepEqual(thread(fresh.calls), [
+          ["addPullRequestReview", PULL_REQUEST_NODE_ID],
+          ["addPullRequestReviewThread", "PRR_started"],
+        ]);
+        assert.equal(
+          fresh.calls.find((call) => call.query.includes("addPullRequestReviewThread"))?.variables
+            .side,
+          "LEFT",
+        );
+        assert.deepEqual(thread(holding.calls), [
+          ["addPullRequestReviewThread", "PRR_member_pending"],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "Discard throws away the member's own pending review and nobody else's, and is refused in words where they hold none",
+    () =>
+      Effect.gen(function* () {
+        const holding = yield* published({
+          answer: linesAnswering([
+            { id: "PRR_someone_else", viewerDidAuthor: false },
+            { id: "PRR_member_pending", viewerDidAuthor: true },
+          ]),
+        });
+        const empty = yield* published({
+          answer: linesAnswering([{ id: "PRR_someone_else", viewerDidAuthor: false }]),
+        });
+
+        const discarded = yield* holding.ask(
+          actionAs(holding.other, holding.agent.id, "discard-review"),
+        );
+        const refused = yield* empty.ask(actionAs(empty.other, empty.agent.id, "discard-review"));
+
+        assert.deepEqual(discarded, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(
+          holding.calls
+            .filter((call) => call.query.includes("mutation"))
+            .map((call) => [mutationName(call.query), call.variables]),
+          [["deletePullRequestReview", { id: "PRR_member_pending" }]],
+        );
+        assert.deepEqual(refused, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { outcome: "refused", words: "You have no pending review on this pull request." },
+        });
+        assert.ok(empty.calls.every((call) => !call.query.includes("mutation")));
+      }),
+  );
+
+  it.effect(
+    "a line comment on no line, on a side GitHub does not name, or at a head that is no commit, never reaches GitHub",
+    () =>
+      Effect.gen(function* () {
+        const { owner, agent, calls, ask } = yield* published({ answer: linesAnswering([]) });
+
+        const answers = [
+          yield* ask(lineCommentAs(owner, agent.id, { mode: "single", line: 0 })),
+          yield* ask(lineCommentAs(owner, agent.id, { mode: "single", side: "middle" })),
+          yield* ask(lineCommentAs(owner, agent.id, { mode: "review", headSha: "main" })),
+          yield* ask(lineCommentAs(owner, agent.id, { mode: "later" })),
+        ];
+
+        for (const answered of answers) {
+          assert.deepEqual(
+            answered,
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          );
+        }
+        assert.deepEqual(calls, []);
+      }),
+  );
+
+  it.effect(
+    "each member reads the review they hold pending beside the conversation, on their own token, and one with no sign-in or whom GitHub would not answer reads none",
+    () =>
+      Effect.gen(function* () {
+        const pendingAnswer = (call: GraphqlCall) => {
+          if (!call.query.includes("ViewerPendingReview")) return Response.json({ data: null });
+          if (call.authorization === "Bearer ghu_broken") {
+            return Response.json({ message: "Server Error" }, { status: 502 });
+          }
+          const nodes =
+            call.authorization === "Bearer ghu_teammate"
+              ? [{ viewerDidAuthor: true, comments: { totalCount: 2 } }]
+              : [];
+          return Response.json({ data: { repository: { pullRequest: { reviews: { nodes } } } } });
+        };
+        const pendingOf = (
+          opened: { readonly ask: (request: Request) => Effect.Effect<Answer> },
+          bearer: string,
+          agentId: string,
+        ) =>
+          Effect.map(
+            opened.ask(request(AGENT_OVERVIEW[2], bearer, { id: agentId })),
+            (answered) =>
+              readAnswer(
+                codingAgentOverviewConversationAnswerSchema,
+                HOSTED_HTTP_STATUS.OK,
+                answered,
+              ).pullRequest?.pendingReview,
+          );
+        const two = yield* published({ otherToken: "ghu_teammate", answer: pendingAnswer });
+        const unsigned = yield* published({ otherToken: null, answer: pendingAnswer });
+        const broken = yield* published({ otherToken: "ghu_broken", answer: pendingAnswer });
+
+        assert.deepEqual(yield* pendingOf(two, two.other, two.agent.id), { comments: 2 });
+        assert.equal(yield* pendingOf(two, two.owner, two.agent.id), null);
+        assert.equal(yield* pendingOf(unsigned, unsigned.other, unsigned.agent.id), null);
+        assert.equal(yield* pendingOf(broken, broken.other, broken.agent.id), null);
+        assert.deepEqual(
+          two.calls
+            .filter((call) => call.query.includes("ViewerPendingReview"))
+            .map((call) => call.authorization),
+          ["Bearer ghu_teammate", "Bearer ghu_standing"],
+        );
+        assert.ok(unsigned.calls.every((call) => !call.query.includes("ViewerPendingReview")));
+      }),
+  );
+
+  it.effect(
+    "the changes name the head their files were read at, which a line comment is anchored to",
+    () =>
+      Effect.gen(function* () {
+        const headed: RepositoryScript = async (sent) => {
+          const answered = await publishedPullRequest(sent);
+          const pull = `/repos/${RELAY.owner}/${RELAY.name}/pulls/${PUBLISHED.number}`;
+          if (answered === undefined || new URL(sent.url).pathname !== pull) return answered;
+          const read: Record<string, unknown> = await answered.json();
+          return Response.json({ ...read, head: { ref: PUBLISHED.branch, sha: LINE_HEAD } });
+        };
+        const { owner, agent, ask } = yield* published({ repository: headed });
+
+        const changes = readAnswer(
+          codingAgentChangesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_CHANGES, owner, { id: agent.id })),
+        );
+
+        assert.equal(changes.pullRequest?.headSha, LINE_HEAD);
       }),
   );
 
