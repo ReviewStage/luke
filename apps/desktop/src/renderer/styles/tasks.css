@@ -3747,12 +3747,12 @@ button.draft-fork-quote:hover {
   display: none;
 }
 
-/* Too narrow for every press: the ⋯ takes in the Changes chip, the MCP
-   servers, the context ring, and the microphone. The servers' and the
+/* Too narrow for every press: the ⋯ takes in the MCP servers, the
+   context ring, and the microphone. The servers' and the
    ring's boxes stay, out of the row at its right end, so a popover the ⋯
    opens for them hangs where the ⋯ stands. */
 @container composer (max-width: 399px) {
-  .agent-composer :is(.agent-changes-chip, .agent-servers-button, .agent-context-button),
+  .agent-composer :is(.agent-servers-button, .agent-context-button),
   .agent-composer > form:not(.inbox-answer) .dictate-button {
     display: none;
   }
@@ -4985,10 +4985,9 @@ button.attached-file-face:hover img {
   --context-part: var(--luke-color-text-muted);
 }
 
-/* The published chips' boxes (agent-published.tsx) draw no box of their
-   own, so each chip stands in the composer's row as the row's own. */
-.agent-published-chip,
-.agent-changes-chip {
+/* The published chip's box (agent-published.tsx) draws no box of its
+   own, so the chip stands in the composer's row as the row's own. */
+.agent-published-chip {
   display: contents;
 }
 

@@ -1045,7 +1045,7 @@ test("where the filters leave nothing of the conversation, it says no comment ma
   );
 });
 
-test("opened on its files, as the Changes chip opens it, the header stands above them with where each reviewer stands, and switching between the tabs draws each as it was", async () => {
+test("opened on its files, as a link to its changes opens it, the header stands above them with where each reviewer stands, and switching between the tabs draws each as it was", async () => {
   const approved = { login: "alexr", bot: false };
   const tab = await draw(
     controlAnswering({

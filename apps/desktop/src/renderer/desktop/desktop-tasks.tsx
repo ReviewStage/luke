@@ -530,11 +530,8 @@ function PlanDocument({
     views.onWorkerStatus(callId, status);
     sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
   };
-  // An agent's Changes chip opens its pull request's changes in the side panel, beside its
-  // tab, in the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its files.
-  const openChanges = (agentId: string) =>
-    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.FILES);
-  // Its pull request's chip opens the same tab on the pull request's conversation.
+  // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
+  // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
   const openPullRequest = (agentId: string) =>
     showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION);
   // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
@@ -815,7 +812,6 @@ function PlanDocument({
                           shown={tasks.shown && !sidePanel.fullScreen}
                           views={views}
                           onOpenDelegation={openDelegation}
-                          onOpenChanges={openChanges}
                           onOpenPullRequest={openPullRequest}
                           onOpenTarget={openTarget}
                           cards={cards}
