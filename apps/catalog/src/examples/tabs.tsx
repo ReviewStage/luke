@@ -7,9 +7,11 @@ import {
   GAP,
   Stack,
   TAB_COUNT_TONE,
+  TABS_INSET,
   TabCount,
   type TabItem,
   Tabs,
+  type TabsInset,
   TEXT_TONE,
   Text,
   UserIcon,
@@ -19,8 +21,9 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * tabs.tsx -- a row of tabs with glyphs and counts in each tone, a plain row
- * of names, and a row too narrow for its names.
+ * tabs.tsx -- a row of tabs with glyphs and counts in each tone, one set in
+ * to a reading measure, a plain row of names, and a row too narrow for its
+ * names.
  */
 
 const VIEW = {
@@ -56,13 +59,28 @@ const PLAIN: readonly TabItem<View>[] = [
 ];
 
 /** A row the example holds, over a panel for each of its views. */
-function Held({ tabs, start }: { tabs: readonly TabItem<View>[]; start: View }): React.JSX.Element {
+function Held({
+  tabs,
+  start,
+  inset,
+}: {
+  tabs: readonly TabItem<View>[];
+  start: View;
+  inset?: TabsInset | undefined;
+}): React.JSX.Element {
   const [view, setView] = useState<View>(start);
   const id = useId();
   const ids = (each: View) => ({ tab: `${id}-${each}-tab`, panel: `${id}-${each}-panel` });
   return (
     <Stack gap={GAP.CONTROL}>
-      <Tabs<View> label="Pull request" tabs={tabs} value={view} onChange={setView} ids={ids} />
+      <Tabs<View>
+        label="Pull request"
+        tabs={tabs}
+        value={view}
+        onChange={setView}
+        ids={ids}
+        inset={inset}
+      />
       {tabs.map((tab) => (
         <div
           key={tab.value}
@@ -108,6 +126,9 @@ function TabsExample(): React.JSX.Element {
             )}
           />
         </Stack>
+      </CatalogSection>
+      <CatalogSection id="tabs-reading" title="Set in to a reading measure">
+        <Held start={VIEW.CONVERSATION} tabs={viewsCounting("4")} inset={TABS_INSET.READING} />
       </CatalogSection>
       <CatalogSection id="tabs-plain" title="Names alone">
         <Held start={VIEW.CONVERSATION} tabs={PLAIN} />

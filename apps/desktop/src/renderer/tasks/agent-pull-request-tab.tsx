@@ -39,6 +39,7 @@ import {
   SkeletonRegion,
   Switch,
   TAB_COUNT_TONE,
+  TABS_INSET,
   TabCount,
   type TabCountTone,
   type TabItem,
@@ -1487,6 +1488,7 @@ export function AgentPullRequestTab({
               value={view}
               onChange={onView}
               ids={ids}
+              inset={TABS_INSET.READING}
             />
             <div
               className="pull-request-view"

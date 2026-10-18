@@ -2,20 +2,25 @@
    name, and a quiet count, the selected one underlined in the text's ink
    over the hairline. The row scrolls sideways rather than wrap, and
    narrower than its tabs need, a tab other than the selected one keeps its
-   glyph and its count, its name left to a reader who cannot see it. A
-   container insets the tabs, the hairline still running to its edges, by
-   setting `--luke-tabs-inset`. */
+   glyph and its count, its name left to a reader who cannot see it. Set
+   in from a page read at its measure, the tabs line up with its words, a
+   column's inset at least, the hairline still running to the edges. */
 
 @layer components {
   .luke-tabs {
     display: flex;
     flex: none;
     gap: var(--luke-space-2);
-    padding-inline: var(--luke-tabs-inset, var(--luke-space-0));
     overflow-x: auto;
     border-bottom: 1px solid var(--luke-color-border);
     container: luke-tabs / inline-size;
     scrollbar-width: none;
+  }
+
+  /* Note that the room either side of the measure is a share of the row's
+     own width, which is its container's, so the tabs centre with the page. */
+  .luke-tabs[data-inset="reading"] {
+    padding-inline: max(var(--luke-space-12), calc((100% - var(--luke-page-measure)) / 2));
   }
 
   .luke-tab {

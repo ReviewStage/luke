@@ -1745,10 +1745,6 @@ button.file-ref:hover .file-ref-path {
    content inset to the pixel. */
 .pull-request-tab {
   --boxed-inset: calc(var(--row-inset) - 1px);
-  /* The row of tabs under the header (`Tabs`) stands its tabs at the
-     column's inset, as the header's words do, its hairline still running
-     to the panel's edges. */
-  --luke-tabs-inset: var(--column-inset);
 }
 
 .pull-request-bar,
@@ -1786,10 +1782,6 @@ button.file-ref:hover .file-ref-path {
 
 .side-panel-content .pull-request-header {
   padding-inline: max(var(--column-inset), var(--reading-room));
-}
-
-.side-panel-content .pull-request-tab {
-  --luke-tabs-inset: max(var(--column-inset), var(--reading-room));
 }
 
 /* The Conversation's filters, Hide resolved and Hide bots, at the end of a
