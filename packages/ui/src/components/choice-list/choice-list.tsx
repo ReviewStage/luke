@@ -203,13 +203,16 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     const step = STEP_KEYS.get(event.key);
     if (step === undefined || open.length === 0 || disabled) return;
     event.preventDefault();
-    const at = open.findIndex((option) => value.includes(option.value));
+    // Note that the step counts from the focused row, because a cleared
+    // choice leaves the keyboard on a row that no longer holds the value.
+    const radios = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    const focused = event.target instanceof HTMLButtonElement ? radios.indexOf(event.target) : -1;
+    const from = open.findIndex((option) => option === options[focused]);
+    const at = from >= 0 ? from : open.findIndex((option) => value.includes(option.value));
     const next = open[(Math.max(at, 0) + step + open.length) % open.length];
     if (next === undefined) return;
     if (!value.includes(next.value)) props.onChange([next.value]);
-    event.currentTarget
-      .querySelectorAll<HTMLButtonElement>('[role="radio"]')
-      [options.indexOf(next)]?.focus();
+    radios[options.indexOf(next)]?.focus();
   };
   const rows = options.map((option) => (
     <ChoiceRow

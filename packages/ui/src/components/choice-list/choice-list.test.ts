@@ -145,6 +145,17 @@ test("a press chooses a row; a press on the checked row keeps it, unless the lis
   assert.equal(row(cleared, "Never retry").getAttribute("aria-checked"), "false");
 });
 
+test("after a clearable list's pick is taken back, the arrows step from the row the keyboard is on", () => {
+  const page = render(createElement(Held, { clearable: true }));
+  const never = row(page, "Never retry");
+  act(() => never.focus());
+  act(() => never.click());
+  act(() => never.click());
+  key(never, "ArrowDown");
+  assert.equal(heard(page), "never,none,three");
+  assert.equal(document.activeElement, row(page, "Retry 3 times"));
+});
+
 test("a pick-several list is a group of checkboxes, each its own Tab stop, toggled on its own", () => {
   const page = render(createElement(Held, { select: CHOICE_SELECT.MANY }));
   assert.equal(page.querySelector("fieldset")?.getAttribute("aria-label"), "Retries");
