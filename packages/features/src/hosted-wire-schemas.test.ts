@@ -13,6 +13,7 @@ import * as chatWire from "./chat-wire.js";
 import * as codingAgentView from "./coding-agent-view.js";
 import * as codingAgentWire from "./coding-agent-wire.js";
 import * as dictationWire from "./dictation-wire.js";
+import * as factoryWorldWire from "./factory-world-wire.js";
 import * as githubConnectionWire from "./github-connection-wire.js";
 import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as inboxWire from "./inbox-wire.js";
@@ -30,6 +31,7 @@ import * as planCommentWire from "./plan-comment-wire.js";
 import * as planDocumentTemplate from "./plan-document-template.js";
 import * as planEdit from "./plan-edit.js";
 import * as providerKeyWire from "./provider-key-wire.js";
+import * as pullRequestArea from "./pull-request-area.js";
 import * as pullRequestWriteWire from "./pull-request-write-wire.js";
 import * as repositoryReachWire from "./repository-reach-wire.js";
 import * as serviceWire from "./service-wire.js";
@@ -454,6 +456,22 @@ const EFFECT_MODULE_SCHEMAS = {
     taskTranscriptSchema: transcriptWire.taskTranscriptSchema,
     taskTranscriptAnswerSchema: transcriptWire.taskTranscriptAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof transcriptWire>,
+  "factory-world-wire": {
+    factoryRepositorySchema: factoryWorldWire.factoryRepositorySchema,
+    factoryZoneSchema: factoryWorldWire.factoryZoneSchema,
+    factoryPullRequestSchema: factoryWorldWire.factoryPullRequestSchema,
+    factoryAgentSchema: factoryWorldWire.factoryAgentSchema,
+    factoryShippedSchema: factoryWorldWire.factoryShippedSchema,
+    factoryPlannedSchema: factoryWorldWire.factoryPlannedSchema,
+    factoryDefectSchema: factoryWorldWire.factoryDefectSchema,
+    factoryWorldSchema: factoryWorldWire.factoryWorldSchema,
+    factoryWorldRequestSchema: factoryWorldWire.factoryWorldRequestSchema,
+    factoryWorldAnswerSchema: factoryWorldWire.factoryWorldAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof factoryWorldWire>,
+  "pull-request-area": {
+    pullRequestAreaSchema: pullRequestArea.pullRequestAreaSchema,
+    pullRequestAreasSchema: pullRequestArea.pullRequestAreasSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof pullRequestArea>,
   "workspace-wire": {
     workspacePhotoTypeSchema: workspaceWire.workspacePhotoTypeSchema,
     workspaceGithubSchema: workspaceWire.workspaceGithubSchema,
