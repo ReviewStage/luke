@@ -469,7 +469,7 @@ test("the button beside a list comments on the bullet under the pointer, a paren
 
 test("a thread at rest opens from a press anywhere on its card", () => {
   const { container } = drawn("page");
-  act(() => container.querySelector<HTMLButtonElement>(".comment-count")?.click());
+  act(() => container.querySelector<HTMLButtonElement>(".comment-count button")?.click());
   const card = () =>
     container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.GONE}"]`);
   assert.equal(card()?.dataset.open, "false");
@@ -496,7 +496,7 @@ test("the pointer on a thread's words marks its card before a press", () => {
 test("a line's count stands every thread on the line under it, the first open", () => {
   const { container } = drawn("page");
 
-  act(() => container.querySelector<HTMLButtonElement>(".comment-count")?.click());
+  act(() => container.querySelector<HTMLButtonElement>(".comment-count button")?.click());
 
   const cards = [...container.querySelectorAll<HTMLElement>(".comment-float .comment-card")];
   assert.deepEqual(

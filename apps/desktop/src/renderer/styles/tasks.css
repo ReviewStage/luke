@@ -5600,15 +5600,6 @@ button.picture-frame {
   position: relative;
 }
 
-/* With a margin, the reading column steps left by half the margin's room,
-   so the words and the margin stand centred together, as a document's
-   margin comments do. */
-.desktop-document
-  .plan-document-scroll[data-comments="margin"]
-  :is(.plan-body, .plan-crumb, .plan-edit-note, .plan-changed-note) {
-  margin-left: max(0px, calc((100% - var(--luke-page-measure) - var(--comment-margin-room)) / 2));
-}
-
 /* Everything the comments draw over the body, one box laid over it whole, so the
    gap the body opens between its children opens none here, and only what is
    drawn in it takes the pointer. */
@@ -5674,33 +5665,12 @@ button.picture-frame {
   transform: translateY(calc(-100% - var(--luke-space-6)));
 }
 
-/* Where the margin folds: a count at the end of a line holding marks, and the open thread floating under it. */
-/* A line's comments at its end where no margin fits: a plain toolbar
-   button (`.toolbar-button`), the glyph and how many, filled on hover and
-   while its threads stand under it, as the toolbar's buttons are. */
-/* Note that the gutter is the page's 40px inset, so the count stands a hair
-   past the column and keeps its padding tight, its glyph and two digits
-   inside the inset the scroller clips at. */
+/* Where the margin folds: a line's comments counted at its end, in the
+   gutter past the column where the block's button stands, a quiet button
+   lit while its threads stand under it; the open thread floats under it. */
 .comment-count {
   position: absolute;
   left: calc(100% + var(--luke-space-2));
-  height: 24px; /* off-scale: a size under a control's, so it sits on the line it counts */
-  gap: 3px; /* off-scale: a 12px glyph's gap to its digits */
-  padding: 0 var(--luke-space-4);
-  color: var(--luke-color-text-muted);
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-}
-
-.comment-count svg {
-  width: 13px;
-  height: 13px;
-}
-
-.comment-count[aria-expanded="true"] {
-  background: var(--luke-color-fill-selected);
-  color: var(--luke-color-text);
 }
 
 .comment-float {
@@ -5727,6 +5697,10 @@ button.picture-frame {
 
 /* A thread: at rest its words on the column's ground, open on a menu's surface. */
 .comment-card {
+  --comment-indent: calc(
+    16px +
+    5px
+  ); /* off-scale: under the name, past the actor's 16px mark and its gap */
   padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-8);
   border: 1px solid transparent;
   border-radius: var(--luke-menu-radius);
@@ -5749,11 +5723,6 @@ button.picture-frame {
   padding-top: var(--luke-space-8);
   border-color: var(--luke-color-border-strong);
   background: var(--luke-color-overlay);
-  box-shadow: var(--luke-menu-shadow);
-}
-
-.comment-float .comment-card,
-.side-panel .comment-card[data-open="true"] {
   box-shadow: var(--luke-menu-shadow);
 }
 
@@ -5801,38 +5770,21 @@ button.picture-frame {
   white-space: nowrap;
 }
 
+/* A comment's words, as Markdown spaces a message's blocks, under the name. */
 .comment-words {
   display: block;
-  margin-left: calc(
-    16px +
-    5px
-  ); /* off-scale: under the name, past the actor's 16px mark and its gap */
+  margin-left: var(--comment-indent);
   color: var(--luke-color-text-body);
   overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-/* A comment drawn as Markdown: its blocks close together, as a short
-   message's are, rather than with a page's breaks between them. */
-.comment-words.markdown {
-  white-space: normal;
-}
-
-.comment-words.markdown :is(p, ul, ol, pre, blockquote) {
-  margin: 0;
-}
-
-.comment-words.markdown > * + * {
-  margin-top: var(--luke-space-6);
 }
 
 /* The thread's quote under its first comment's writer, level with the words. */
 .comment-entry > :is(.comment-quote, .comment-gone) {
-  margin-left: calc(16px + 5px); /* off-scale: under the name, as the words stand */
+  margin-left: var(--comment-indent);
 }
 
 .comment-entry > .comment-quote-link {
-  width: calc(100% - 16px - 5px); /* off-scale: as the indent it stands at */
+  width: calc(100% - var(--comment-indent));
 }
 
 .comment-entry > .comment-quote {
@@ -5871,7 +5823,7 @@ button.picture-frame {
   display: flex;
   align-items: center;
   gap: var(--luke-space-6);
-  margin: var(--luke-space-2) 0 0 calc(16px + 5px); /* off-scale: under the words */
+  margin: var(--luke-space-2) 0 0 var(--comment-indent);
   color: var(--luke-color-text-muted);
   font-size: 12px;
 }
@@ -5910,11 +5862,6 @@ button.picture-frame {
 .comment-head-end:has(.comment-tools:focus-within) > .comment-time,
 .comment-head-end:has([aria-expanded="true"]) > .comment-time {
   opacity: 0;
-}
-
-.comment-tools .icon-button {
-  width: 26px; /* off-scale: a thread's tools stand smaller than a page's, as a row's marks do */
-  height: 26px;
 }
 
 /* What happened to a thread, a line drawn as a comment's head: its writer
@@ -5973,6 +5920,7 @@ button.picture-frame {
 
 /* The field that answers a thread, or starts one, in the composer's well. */
 .comment-field {
+  --comment-field-inline: var(--luke-space-8);
   margin-top: var(--luke-space-8);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
@@ -5983,14 +5931,12 @@ button.picture-frame {
   display: block;
   width: 100%;
   min-height: 36px; /* off-scale: one line and its padding */
-  padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-2);
+  padding: var(--luke-space-8) var(--comment-field-inline) var(--luke-space-2);
   border: 0;
   background: none;
   color: var(--luke-color-text);
   font: inherit;
-  font-size: 13px;
   line-height: 1.45;
-  outline: none; /* no ring: the well rings for it (`.field-well`) */
   resize: none;
 }
 
@@ -5998,19 +5944,16 @@ button.picture-frame {
   color: var(--luke-color-text-muted);
 }
 
-/* The agent box's editor as a comment's field: its placeholder and its
-   paragraphs at the comment field's padding and type. */
+/* The agent box's editor as a comment's field, its placeholder and its
+   paragraphs at the comment field's padding. */
 .comment-field .agent-composer-placeholder {
-  padding: var(--luke-space-8) var(--luke-space-8) 0;
-  font-size: 13px;
+  padding: var(--luke-space-8) var(--comment-field-inline) 0;
 }
 
-/* The box's editor at the comment field's own padding and type. */
 .comment-field .agent-composer-input {
   min-height: 36px; /* off-scale: one line and its padding, as the plain field stands */
   max-height: calc(8 * 1.45em + 10px); /* off-scale: eight lines and the padding */
-  padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-2);
-  font-size: 13px;
+  padding: var(--luke-space-8) var(--comment-field-inline) var(--luke-space-2);
   line-height: 1.45;
 }
 
@@ -6040,19 +5983,10 @@ button.picture-frame {
 /* A thread's first comment is the card itself: its words on the card's own
    surface, no well inside it, its tools along the card's foot. */
 .comment-field[data-variant="first"] {
+  --comment-field-inline: 0;
   margin-top: 0;
   border: 0;
   background: none;
-}
-
-.comment-field[data-variant="first"] :is(.comment-composer, .comment-text) {
-  padding-right: 0;
-  padding-left: 0;
-}
-
-.comment-field[data-variant="first"] .agent-composer-placeholder {
-  padding-right: 0;
-  padding-left: 0;
 }
 
 .comment-field[data-variant="first"] .comment-field-foot {
@@ -6065,40 +5999,12 @@ button.picture-frame {
    the caret. */
 .comment-field[data-variant="reply"] {
   border-color: var(--luke-color-border);
-  border-radius: 0.75rem; /* off-scale: a composer's round, as Tailwind's rounded-xl draws it */
+  border-radius: var(--luke-radius-14);
   background: var(--luke-color-sidebar);
 }
 
-/* Send, as the composer's: a disc in the primary ink. */
-.comment-send {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: var(--luke-color-text);
-  color: var(--luke-color-ground);
-  cursor: pointer;
-}
-
-.comment-send svg {
-  width: 14px;
-  height: 14px;
-}
-
-.comment-send:disabled {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text-muted);
-  cursor: default;
-}
-
 .comment-editing {
-  margin-left: calc(16px + 5px); /* off-scale: under the name */
-}
-
-.comment-save {
-  height: 26px;
+  margin-left: var(--comment-indent);
 }
 
 /* The side panel's Comments tab: the plan's threads, open or resolved, each under its section. */
@@ -6128,14 +6034,6 @@ button.picture-frame {
   align-items: baseline;
   gap: var(--luke-space-6);
   padding-left: var(--luke-space-12);
-  color: var(--luke-color-text-muted);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.comments-head-count {
-  color: var(--luke-color-text-subtle);
-  font-variant-numeric: tabular-nums;
 }
 
 /* A list with nothing in it lays its empty state out as the column it fills (`empty-state.tsx`). */
@@ -6150,12 +6048,6 @@ button.picture-frame {
   padding: 0 var(--luke-space-16) var(--luke-space-24);
   overflow-x: hidden;
   overflow-y: auto;
-}
-
-.comments-empty {
-  padding: var(--luke-space-8) var(--luke-space-12);
-  color: var(--luke-color-text-muted);
-  font-size: 12.5px;
 }
 
 .comments-row + .comments-row {

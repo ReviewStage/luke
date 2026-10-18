@@ -39,12 +39,23 @@ import { useKnownNames } from "@luke/panel/tasks/use-known-names";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { Tooltip } from "@luke/panel/tooltip";
 import {
+  BUTTON_SIZE,
+  BUTTON_VARIANT,
+  Button,
   CommentsIcon,
   ConfirmDialog,
   DIALOG_TONE,
   type DialogQuestion,
   EllipsisIcon,
   EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  IconButton,
+  SUBMIT_STATE,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
   TrashIcon,
   useConfirmDialog,
   useMenu,
@@ -61,7 +72,6 @@ import {
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
-  ArrowUpIcon,
   CheckIcon,
   CircleCheckIcon,
   MessageSquareIcon,
@@ -378,29 +388,25 @@ function CommentEntry({
           <div className="comment-tools">
             {first ? (
               <Tooltip label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}>
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}
+                <IconButton
+                  size={BUTTON_SIZE.COMPACT}
+                  icon={settle ? <CheckIcon /> : <RotateCcwIcon />}
+                  label={settle ? COMMENT_WORDS.RESOLVE : COMMENT_WORDS.REOPEN}
                   onClick={() =>
                     void doors.control.act(thread.id, {
                       action: settle ? PLAN_COMMENT_ACTION.RESOLVE : PLAN_COMMENT_ACTION.REOPEN,
                     })
                   }
-                >
-                  {settle ? <CheckIcon aria-hidden="true" /> : <RotateCcwIcon aria-hidden="true" />}
-                </button>
+                />
               </Tooltip>
             ) : null}
             <Tooltip label={COMMENT_WORDS.MORE}>
-              <button
-                type="button"
-                className="icon-button"
-                aria-label={COMMENT_WORDS.MORE}
+              <IconButton
+                size={BUTTON_SIZE.COMPACT}
+                icon={<EllipsisIcon />}
+                label={COMMENT_WORDS.MORE}
                 {...trigger}
-              >
-                <EllipsisIcon />
-              </button>
+              />
             </Tooltip>
             {menu.drawn === undefined ? null : (
               <ActionMenu
@@ -431,12 +437,10 @@ function CommentEntry({
             autoFocus
           />
           <div className="comment-field-foot">
-            <button type="button" className="quiet-button" onClick={() => setEditing(undefined)}>
-              {COMMENT_WORDS.CANCEL}
-            </button>
-            <button type="button" className="primary-button comment-save" onClick={save}>
+            <Button onClick={() => setEditing(undefined)}>{COMMENT_WORDS.CANCEL}</Button>
+            <Button variant={BUTTON_VARIANT.PRIMARY} onClick={save}>
               {COMMENT_WORDS.SAVE}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -615,7 +619,6 @@ function ReplyField({
   onSend,
   onCancel,
   autoFocus,
-  onDraft,
   variant = REPLY_VARIANT.REPLY,
 }: {
   label: string;
@@ -624,8 +627,6 @@ function ReplyField({
   onSend: (words: string, clientKey: string) => Promise<boolean>;
   onCancel: () => void;
   autoFocus: boolean;
-  /** Told the words as they are typed, and whether a dictation is under way, as a thread being started tells whether it holds a draft. */
-  onDraft?: ((words: string, dictating: boolean) => void) | undefined;
   /** A thread's first comment, which is the card itself, or a reply under its comments, which stays a line until it is used. */
   variant?: ReplyVariant;
 }): React.JSX.Element {
@@ -638,11 +639,6 @@ function ReplyField({
   const [words, setWords] = useState("");
   // The words sent and not yet answered, which the field holds as a draft while it stands empty, so a send that fails finds them.
   const [inFlight, setInFlight] = useState("");
-  // A dictation under way holds the field as words do, since its words land only once it is heard.
-  const told = useRef(onDraft);
-  told.current = onDraft;
-  const held = words === "" ? inFlight : words;
-  useEffect(() => told.current?.(held, dictating), [held, dictating]);
   const attempt = useRef<{ words: string; key: string } | undefined>(undefined);
   const send = () => {
     const trimmed = words.trim();
@@ -663,10 +659,10 @@ function ReplyField({
   };
   return (
     <div
-      // Note that a thread's first comment is the card itself, so it draws no well of its own inside it.
-      className={variant === REPLY_VARIANT.FIRST ? "comment-field" : "comment-field field-well"}
+      className="comment-field"
       data-variant={variant}
-      data-held={words.trim() !== "" || dictating}
+      // Note that the words in flight, and a dictation whose words land once heard, hold the field as typed words do, so a press away keeps a thread being started.
+      data-held={(words === "" ? inFlight : words).trim() !== "" || dictating}
     >
       <CommentText
         value={words}
@@ -687,21 +683,15 @@ function ReplyField({
         {dictating ? (
           <DictationStrip dictation={dictation} />
         ) : (
-          // Note that a thread is sent by mentioning Luke or an agent in its words, so the foot holds the field's tools alone.
-          <span />
-        )}
-        {dictating ? null : (
           <span className="comment-field-tools">
             {dictates ? <DictateButton dictation={dictation} disabled={sending} /> : null}
-            <button
-              type="button"
-              className="comment-send"
-              aria-label={label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY}
+            <IconButton
+              submit={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
+              variant={BUTTON_VARIANT.INK}
+              label={label === COMMENT_WORDS.ADD ? COMMENT_WORDS.COMMENT : COMMENT_WORDS.REPLY}
               disabled={words.trim() === "" || sending}
               onClick={send}
-            >
-              <ArrowUpIcon aria-hidden="true" />
-            </button>
+            />
           </span>
         )}
       </div>
@@ -786,8 +776,10 @@ function ThreadCard({
   thread: PlanCommentThread;
   open: boolean;
   doors: ThreadDoors;
-  onOpen: () => void;
-  onClose: () => void;
+  /** Opens the card at rest; none where it always stands open, as in the Comments tab. */
+  onOpen?: (() => void) | undefined;
+  /** Closes it, as its field's Escape asks. */
+  onClose?: (() => void) | undefined;
   /** Whether the quote stands over it, as in the Comments tab, where its words are not beside it. */
   quote?: boolean;
   /** Whether the pointer is on the thread's words, which the card at rest answers as it answers the pointer itself. */
@@ -818,7 +810,7 @@ function ThreadCard({
         event.target instanceof Element
           ? event.target.closest("a, button, [role='button'], [role='menuitem']")
           : null;
-      if (inner === null || inner.classList.contains("comment-open")) onOpen();
+      if (inner === null || inner.classList.contains("comment-open")) onOpen?.();
     };
     return (
       // biome-ignore lint/a11y/noStaticElementInteractions: the card's own button takes the keyboard, and this widens its press to the card
@@ -835,7 +827,7 @@ function ThreadCard({
             event.target instanceof Element &&
             event.target.closest("[data-mention-ref]") !== null
           ) {
-            onOpen();
+            onOpen?.();
           }
         }}
       >
@@ -857,7 +849,7 @@ function ThreadCard({
         {/* Note that the card's button is the keyboard's way in, the replies drawn on it, or its name alone where there are none. */}
         <button type="button" className="comment-open">
           {replies.length === 0 ? (
-            <span className="sr-only">{COMMENT_WORDS.OPEN_THREAD}</span>
+            <span className="luke-visually-hidden">{COMMENT_WORDS.OPEN_THREAD}</span>
           ) : (
             <span className="comment-replies">
               <span className="comment-faces">
@@ -905,7 +897,7 @@ function ThreadCard({
           label={COMMENT_WORDS.REPLY}
           sending={sending}
           autoFocus={false}
-          onCancel={onClose}
+          onCancel={() => onClose?.()}
           onSend={async (words, clientKey) => {
             setSending(true);
             const sent = await doors.control.act(thread.id, {
@@ -929,7 +921,6 @@ function PendingCard({
   text,
   onStarted,
   onCancel,
-  onDraft,
 }: {
   pending: PendingThread;
   doors: ThreadDoors;
@@ -937,7 +928,6 @@ function PendingCard({
   text: string;
   onStarted: (thread: PlanCommentThread) => void;
   onCancel: () => void;
-  onDraft: (words: string, dictating: boolean) => void;
 }): React.JSX.Element {
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
@@ -953,7 +943,6 @@ function PendingCard({
         sending={sending}
         autoFocus
         onCancel={onCancel}
-        onDraft={onDraft}
         variant={REPLY_VARIANT.FIRST}
         onSend={async (words, clientKey) => {
           setSending(true);
@@ -1026,7 +1015,9 @@ function pendingOf(
   quote: string,
 ): PendingThread | undefined {
   const span = sourceSpan(unit, section, drawn);
-  return span === undefined ? undefined : { ...span, scope, quote: quote.slice(0, 2_000) };
+  return span === undefined
+    ? undefined
+    : { ...span, scope, quote: quote.slice(0, PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS) };
 }
 
 /** Where an element's top stands in the plan body's own box. */
@@ -1077,9 +1068,6 @@ function editorOpenThread(thread: string | undefined): void {
 
 /** The thread itself and what it opened over the page, where a caret or the focus is the thread's rather than the words'. */
 const THREAD_ITSELF = '.comment-card, [role="menu"], [role="dialog"], [role="alertdialog"]';
-
-/** What a thread being started holds while a dictation is under way, which a press away keeps as it keeps words. */
-const DICTATING_DRAFT = "\u2026";
 
 /** What a press may land on and leave the open thread open: its card, a thread's words or count, the controls that start one, and a menu or dialog it opened. */
 const KEEPS_THREAD_OPEN = [
@@ -1391,11 +1379,6 @@ export function PlanCommentLayer({
     editorOpenThread(editorActive);
     return () => editorOpenThread(undefined);
   }, [editorActive]);
-  // The words typed into the thread being started, or a dictation under way, which say whether a press away keeps it.
-  const pendingDraft = useRef("");
-  useEffect(() => {
-    pendingDraft.current = "";
-  }, [pending]);
   // A press anywhere but the thread, its words, or what it opened over the page closes it; a thread being started goes too while empty, and stays holding a draft, as a box's draft does.
   useEffect(() => {
     if (active === undefined) return;
@@ -1404,7 +1387,7 @@ export function PlanCommentLayer({
         return;
       }
       if (active === PENDING_THREAD) {
-        if (pendingDraft.current.trim() !== "") return;
+        if (cards.current.get(PENDING_THREAD)?.querySelector('[data-held="true"]')) return;
         setPending(undefined);
       }
       onActive(undefined);
@@ -1424,9 +1407,6 @@ export function PlanCommentLayer({
         doors={doors}
         text={text}
         onCancel={close}
-        onDraft={(words, dictating) => {
-          pendingDraft.current = dictating ? DICTATING_DRAFT : words;
-        }}
         onStarted={(thread) => {
           setPending(undefined);
           onActive(thread.id);
@@ -1435,33 +1415,24 @@ export function PlanCommentLayer({
     );
   const blockButton =
     hovered === undefined ? null : (
-      <div className="comment-block-button" data-folded={!wide} style={{ top: hovered.top }}>
+      <div className="comment-block-button" style={{ top: hovered.top }}>
         <Tooltip label={COMMENT_WORDS.COMMENT}>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={COMMENT_WORDS.COMMENT}
-            // Note that the press takes no focus, so an open editor stays to measure the block through.
-            onMouseDown={(event) => event.preventDefault()}
+          {/* Note that the press takes no focus, so an open editor stays to measure the block through. */}
+          <IconButton
+            keepFocus
+            icon={<MessageSquarePlusIcon />}
+            label={COMMENT_WORDS.COMMENT}
             onClick={hovered.start}
-          >
-            <MessageSquarePlusIcon aria-hidden="true" />
-          </button>
+          />
         </Tooltip>
       </div>
     );
   const bubbleDrawn =
     bubble === undefined ? null : (
       <div className="comment-bubble menu-surface" style={{ top: bubble.top, left: bubble.left }}>
-        <button
-          type="button"
-          className="toolbar-button"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={bubble.start}
-        >
-          <MessageSquarePlusIcon aria-hidden="true" />
+        <Button keepFocus icon={<MessageSquarePlusIcon />} onClick={bubble.start}>
           {COMMENT_WORDS.COMMENT}
-        </button>
+        </Button>
       </div>
     );
   if (wide) {
@@ -1527,20 +1498,18 @@ export function PlanCommentLayer({
         );
         const first = threads[0];
         return (
-          <button
-            key={top}
-            type="button"
-            className="toolbar-button comment-count"
-            style={{ top }}
-            aria-expanded={threads.some((thread) => thread.id === active)}
-            aria-label={`${comments} ${comments === 1 ? "comment" : "comments"}`}
-            onClick={() =>
-              onActive(threads.some((thread) => thread.id === active) ? undefined : first?.id)
-            }
-          >
-            <MessageSquareIcon aria-hidden="true" />
-            {comments}
-          </button>
+          <span key={top} className="comment-count" style={{ top }}>
+            <Button
+              icon={<MessageSquareIcon />}
+              label={`${comments} ${comments === 1 ? "comment" : "comments"}`}
+              aria-expanded={threads.some((thread) => thread.id === active)}
+              onClick={() =>
+                onActive(threads.some((thread) => thread.id === active) ? undefined : first?.id)
+              }
+            >
+              {comments}
+            </Button>
+          </span>
         );
       })}
       {shown === undefined || shownTop === undefined ? null : (
@@ -1651,15 +1620,12 @@ function ResolvedOnly({
 }): React.JSX.Element {
   return (
     <Tooltip label={shown ? RESOLVED_PRESS.HIDE : RESOLVED_PRESS.SHOW}>
-      <button
-        type="button"
-        className="icon-button"
-        aria-label={COMMENTS_FILTER_WORDS[COMMENTS_FILTER.RESOLVED]}
-        aria-pressed={shown}
+      <IconButton
+        icon={<CircleCheckIcon />}
+        label={COMMENTS_FILTER_WORDS[COMMENTS_FILTER.RESOLVED]}
+        pressed={shown}
         onClick={() => onShown(!shown)}
-      >
-        <CircleCheckIcon className="icon-button-glyph" />
-      </button>
+      />
     </Tooltip>
   );
 }
@@ -1672,9 +1638,9 @@ const NO_COMMENTS = {
   },
   [COMMENTS_FILTER.RESOLVED]: {
     title: "No resolved comments",
-    line: "Threads stay here once they are resolved.",
+    line: undefined,
   },
-} as const satisfies Record<CommentsFilter, { title: string; line: string }>;
+} as const satisfies Record<CommentsFilter, { title: string; line: string | undefined }>;
 
 /**
  * The side panel's Comments tab: the plan's threads, open or resolved, each
@@ -1727,8 +1693,12 @@ export function PlanCommentsTab({
     <div className="comments-tab">
       <div className="comments-head">
         <span className="comments-head-title">
-          {COMMENTS_FILTER_WORDS[filter]}
-          <span className="comments-head-count">{listed.length}</span>
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            {COMMENTS_FILTER_WORDS[filter]}
+          </Text>
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            {listed.length}
+          </Text>
         </span>
         <ResolvedOnly
           shown={filter === COMMENTS_FILTER.RESOLVED}
@@ -1737,12 +1707,9 @@ export function PlanCommentsTab({
       </div>
       <div ref={list} className="comments-list scroll-fade">
         {control.failed ? (
-          <div className="comments-empty" role="alert">
-            The comments could not be read.{" "}
-            <button type="button" className="quiet-button" onClick={control.onRetry}>
-              Try again
-            </button>
-          </div>
+          <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={control.onRetry}>
+            The comments could not be read.
+          </ErrorState>
         ) : listed.length === 0 ? (
           control.read ? (
             <EmptyState icon={<CommentsIcon />} title={NO_COMMENTS[filter].title}>
@@ -1758,16 +1725,14 @@ export function PlanCommentsTab({
                 open
                 quote
                 doors={full}
-                onOpen={() => undefined}
-                onClose={() => undefined}
-                {...(openThread(thread)
-                  ? {
-                      onShowWords: () => {
+                onShowWords={
+                  openThread(thread)
+                    ? () => {
                         onShowDocument();
                         reveal(thread.id);
-                      },
-                    }
-                  : {})}
+                      }
+                    : undefined
+                }
               />
             </div>
           ))
