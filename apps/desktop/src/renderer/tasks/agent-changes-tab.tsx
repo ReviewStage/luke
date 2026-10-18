@@ -641,7 +641,7 @@ export function ChangesCard({
         sub={<AgentActorRef subject={subject} models={models} onOpen={onOpenAgent} />}
         corner={
           <>
-            <PullRequestMark pullRequest={pullRequest} />
+            <PullRequestMark pullRequest={pullRequest} className="card-corner-mark" />
             {pullRequestNumberLabel(pullRequest)}
           </>
         }

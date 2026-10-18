@@ -116,7 +116,7 @@ function NewTaskButton({ tasks }: { tasks: TasksControl }): React.JSX.Element {
       onClick={tasks.onNewTask}
     >
       New task
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} />
+      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} className="button-chord" />
     </Button>
   );
 }
