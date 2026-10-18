@@ -53,6 +53,7 @@ import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
+import { providerOf } from "./coding-agent-model";
 import {
   INBOX_COLUMNS,
   type InboxColumnsShown,
@@ -76,6 +77,7 @@ import {
   needsReader,
   readersItem,
 } from "./inbox-model";
+import { ReadAgentModel } from "./mentioned-agent-card";
 import { RelativeTime } from "./relative-time";
 import { markReadItem } from "./task-menu-items";
 import { useMinute } from "./task-time";
@@ -236,8 +238,10 @@ function itemSubject(
 
 /**
  * The tile of the agent that posted an item, hanging the agent's card and
- * leaving the press to its row; a bare tile of no known harness where the
- * holder names no such agent.
+ * leaving the press to its row; where the holder names no such agent, an
+ * archived one say, whose items still stand, a bare tile of the harness
+ * read for it on its task (`ReadAgentModel`), and of no known harness
+ * while that is read and where nothing is.
  */
 export function ItemMark({
   holder,
@@ -251,7 +255,21 @@ export function ItemMark({
   readerId: string | undefined;
 }): React.JSX.Element {
   const subject = itemSubject(holder, agentId, models, readerId);
-  if (subject === undefined) return <ActorMark actor={UNNAMED_AGENT} />;
+  if (subject === undefined) {
+    if (holder.kind !== INBOX_HOLDER.TASK) return <ActorMark actor={UNNAMED_AGENT} />;
+    return (
+      <ReadAgentModel agentId={agentId} taskId={holder.task.id}>
+        {(model) => (
+          <ActorMark
+            actor={{
+              ...UNNAMED_AGENT,
+              provider: model === undefined ? undefined : providerOf(model),
+            }}
+          />
+        )}
+      </ReadAgentModel>
+    );
+  }
   return <AgentMarkRef subject={subject} models={models} />;
 }
 
