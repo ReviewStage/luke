@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, createElement, useId, useRef, useState } from "react";
+import { act, createElement, createRef, useId, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";
 import { DIALOG_ROLE, Dialog } from "./dialog.js";
@@ -248,7 +248,7 @@ test("a question that must be answered is an alert dialog, named by its title an
 });
 
 test("a dialog given a title and actions is named by its title, and what it holds comes before its tool and then its answers, Tab wrapping from the last answer", () => {
-  const field: { current: HTMLTextAreaElement | null } = { current: null };
+  const field = createRef<HTMLTextAreaElement>();
   draw(
     createElement(Dialog, {
       title: "Send feedback",
