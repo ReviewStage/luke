@@ -110,6 +110,7 @@ import {
   inboxMedia,
   inboxPreview,
   isUnread,
+  listedItems,
   NEEDS_YOU,
   needsReader,
   readersItem,
@@ -191,6 +192,9 @@ const MARK_ALL_READ = "Mark all as read";
 
 /** What the view's menu offers to show or hide the media under each row's preview with. */
 const MEDIA_PREVIEWS = "Media previews";
+
+/** The items whose media the rows show while they show none, kept as one so the reads see no change. */
+const NO_ITEMS: readonly string[] = [];
 
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
@@ -1163,8 +1167,12 @@ export function InboxList({
   const { width, onResize } = useInboxListWidth();
   const rowFocus = useRowFocusKept(rows);
   // Note that only the window's Inbox shows its rows' media, as its view's menu chooses; a task's own shows none.
-  const mediaReads = useRowMediaReads();
-  const media = head.view?.choices.mediaPreviews === true ? mediaReads : undefined;
+  // The reads hold the pictures of the items listed alone, and none while the rows show no media.
+  const previews = head.view?.choices.mediaPreviews === true;
+  const mediaReads = useRowMediaReads(
+    previews ? listedItems(view).map(({ item }) => item.id) : NO_ITEMS,
+  );
+  const media = previews ? mediaReads : undefined;
   const edge = useResizableEdge({
     side: EDGE_SIDE.RIGHT,
     width,

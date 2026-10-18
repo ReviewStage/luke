@@ -18,8 +18,12 @@ import type { InboxImage } from "./use-task-inbox";
  * (`ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT`), held by its attachment, and
  * a page's newest version through its task's pages
  * (`ACT_KIND.TASKS_PAGES`), each task read once, and again once an item
- * naming one of its pages changes, as an agent showing a page anew does. A picture is drawn to
- * fill its tile; a page in a frame laid out four times the tile's width and
+ * naming one of its pages changes, as an agent showing a page anew does. A
+ * picture is let go once no item whose row asked for it is listed, as the
+ * task Inbox lets go of a picture its items no longer name, so the list holds
+ * the bytes of what it lists rather than of every picture it ever drew, and
+ * none while it shows no media. A picture is drawn to fill its tile; a page
+ * in a frame laid out four times the tile's width and
  * scaled down to it, as a page's card draws its preview (`page-card.tsx`),
  * under the same sandbox, taking no pointer and no focus, and left out of
  * the screen recording. Until a picture or a page's frame lands its tile
@@ -43,33 +47,70 @@ export interface RowMediaReads {
   readonly onPages: (taskId: string, at: number) => void;
 }
 
-/** The reads of the list's rows' media: each picture and each task's pages read once, as a row first asks. */
-export function useRowMediaReads(): RowMediaReads {
+/** The pictures held but those under the attachments given. */
+function imagesWithout(
+  images: ReadonlyMap<string, InboxImage>,
+  gone: ReadonlySet<string>,
+): ReadonlyMap<string, InboxImage> {
+  return new Map([...images].filter(([attachmentId]) => !gone.has(attachmentId)));
+}
+
+/**
+ * The reads of the list's rows' media: each picture and each task's pages read once, as a row first asks,
+ * and a picture let go once none of the items whose rows asked for it is among `listed`.
+ */
+export function useRowMediaReads(
+  /** The ids of the items whose rows may show their media: every item listed while media is shown, none while it is not. */
+  listed: readonly string[],
+): RowMediaReads {
   const { act } = useAct();
   const [images, setImages] = useState<ReadonlyMap<string, InboxImage>>(new Map());
   const [pages, setPages] = useState<ReadonlyMap<string, PageRead>>(new Map());
-  // Note that what is on its way is kept apart from what landed, so a row drawn while a read is out asks nothing again.
-  const asked = useRef(new Set<string>());
+  // Note that what is on its way is kept apart from what landed, so a row drawn while a read is out asks nothing again;
+  // each picture asked for is kept with the items whose rows asked, so it can be let go once none of them is listed.
+  const asked = useRef(new Map<string, Set<string>>());
   // Each task's pages are read again once an item naming one changed since they were last asked for,
   // since a page it names may have been shown, or shown again, since.
   const pagesAsked = useRef(new Map<string, number>());
   const onImage = useCallback(
     (itemId: string, attachmentId: string) => {
-      if (asked.current.has(attachmentId)) return;
-      asked.current.add(attachmentId);
+      const askers = asked.current.get(attachmentId);
+      if (askers !== undefined) {
+        askers.add(itemId);
+        return;
+      }
+      const mine = new Set([itemId]);
+      asked.current.set(attachmentId, mine);
+      // Note that a read whose picture was let go while it was out lands nowhere, so it holds no bytes the list no longer lists.
+      const standsFor = () => asked.current.get(attachmentId) === mine;
       act(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, { itemId, attachmentId }).then(
         (answer) => {
+          if (!standsFor()) return;
           const image: InboxImage =
             "failure" in answer
               ? { failed: true }
               : { url: `data:${answer.contentType};base64,${answer.base64}` };
           setImages((standing) => new Map(standing).set(attachmentId, image));
         },
-        () => setImages((standing) => new Map(standing).set(attachmentId, { failed: true })),
+        () => {
+          if (standsFor()) {
+            setImages((standing) => new Map(standing).set(attachmentId, { failed: true }));
+          }
+        },
       );
     },
     [act],
   );
+  useEffect(() => {
+    const still = new Set(listed);
+    const gone = new Set<string>();
+    for (const [attachmentId, askers] of asked.current) {
+      if (![...askers].some((itemId) => still.has(itemId))) gone.add(attachmentId);
+    }
+    if (gone.size === 0) return;
+    for (const attachmentId of gone) asked.current.delete(attachmentId);
+    setImages((standing) => imagesWithout(standing, gone));
+  }, [listed]);
   const onPages = useCallback(
     (taskId: string, at: number) => {
       const last = pagesAsked.current.get(taskId);
