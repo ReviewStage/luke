@@ -44,6 +44,7 @@ import {
   pinCodingAgent,
   planNamesOf,
   readCodingAgent,
+  readCodingAgentPublished,
   recordCodingAgentAuthor,
   recordCodingAgentPublished,
   recordTurnFastRefused,
@@ -818,6 +819,77 @@ it.layer(getTestDB())("the coding-agent store's agents with no plan of an accoun
           [newest.agentId, archived.agentId, oldest.agentId],
         );
         assert.deepEqual(ids(yield* listTasklessCodingAgents(outsider)), [outside.agentId]);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's kept pull request", (it) => {
+  /** The pull request as the wire carries it, which is what the task list reads. */
+  const onTheWire = {
+    number: 7,
+    title: "Expire teammate invitations",
+    url: "https://github.com/acme/relay/pull/7",
+    state: PULL_REQUEST_STATE.MERGED,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: 12,
+    deletions: 3,
+    changedFiles: 2,
+  };
+
+  it.effect(
+    "a merged pull request is read back whole, its head, merge instant, and areas among it, by a member of the agent's workspace, while the list reads only what the wire carries and an outsider reads none",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        yield* openWorkspace(outsider);
+        const { agentId } = yield* tasklessAgent(starter, workspace);
+        const kept = {
+          ...onTheWire,
+          headSha: "c0ffee1",
+          mergedAt: Date.parse("2026-10-17T09:00:00Z"),
+          areas: [
+            { path: "packages/service/src/agents", additions: 10, deletions: 2 },
+            { path: ".", additions: 2, deletions: 1 },
+          ],
+        };
+
+        yield* recordCodingAgentPublished(starter, agentId, kept);
+
+        assert.deepEqual(yield* readCodingAgentPublished(teammate, agentId), kept);
+        const listed = yield* listPublishedCodingAgentsById(teammate, [agentId]);
+        assert.deepEqual(
+          listed.map(({ published }) => published),
+          [onTheWire],
+        );
+        assert.equal(yield* readCodingAgentPublished(outsider, agentId), null);
+      }),
+  );
+
+  it.effect(
+    "a row kept before the merge instant and areas were reads back as it was written, and an agent that published nothing reads none",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const { agentId } = yield* tasklessAgent(starter, workspace);
+        const quiet = yield* tasklessAgent(starter, workspace);
+        // Written past the store, as a row from before the keys were kept stands.
+        yield* Effect.flatMap(Database, (db) =>
+          db.update(codingAgent).set({ published: onTheWire }).where(eq(codingAgent.id, agentId)),
+        );
+
+        assert.deepEqual(yield* readCodingAgentPublished(starter, agentId), onTheWire);
+        assert.deepEqual(
+          (yield* listPublishedCodingAgentsById(starter, [agentId])).map(
+            ({ published }) => published,
+          ),
+          [onTheWire],
+        );
+        assert.equal(yield* readCodingAgentPublished(starter, quiet.agentId), null);
       }),
   );
 });
