@@ -1984,7 +1984,7 @@ ul.actor-stack {
 
 /* A pane that scrolls a list lays its empty state out as a column the state
    fills, while it holds one. */
-:is(.automations-scroll, .inbox-tasks-scroll):has(.luke-empty-state) {
+.inbox-tasks-scroll:has(.luke-empty-state) {
   display: flex;
   flex-direction: column;
 }
@@ -4361,9 +4361,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* Automations ---------------------------------------------------------------- */
 
-/* A window-wide place beside the sidebar, as Factory is: its toolbar, then
-   each owner's automations in a Settings card, at the measure a plan is read
-   at and centred in the room beside the sidebar, as a plan is. */
+/* A window-wide place beside the sidebar, as Factory is: its toolbar over
+   its page. The list is a `CollectionPage` of each owner's automations in a
+   Settings card, and an automation's page its toolbar over its setup (a
+   `DetailPage`) and its Runs panel beside it. */
 .automations-view {
   display: flex;
   min-width: 0;
@@ -4372,34 +4373,17 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex-direction: column;
 }
 
-.automations-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: var(--luke-space-16) var(--content-inset) var(--luke-space-32);
-}
-
-.automation-group,
-.automations-skeleton {
-  max-width: var(--luke-page-measure);
-  margin-inline: auto;
-}
-
 .automation-group + .automation-group {
   margin-top: var(--luke-space-24);
 }
 
-/* The suggested automations, at the list's measure, a group's gap below it,
-   their heading a short step above the cards and inset a hair, as a
-   settings section's is. */
+/* The suggested automations, a group's gap below the list, their heading a
+   short step above the cards and inset a hair, as a settings section's is. */
 .automation-suggestions {
   display: flex;
   width: 100%;
-  max-width: var(--luke-page-measure);
   flex-direction: column;
   gap: var(--luke-space-8);
-  margin-inline: auto;
 }
 
 .automation-suggestions-head,
@@ -4637,9 +4621,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 .automation-editor {
   display: flex;
-  max-width: var(--luke-page-measure);
   flex-direction: column;
-  margin-inline: auto;
   gap: var(--luke-space-12);
 }
 
@@ -4701,18 +4683,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
   min-width: 0;
 }
 
-/* An automation's page: its setup at the measure a plan is read at, centred
-   in the room between the sidebar and its runs, then its runs in a panel of
-   their own on the right, each scrolling by itself. */
+/* An automation's page: its setup, a `DetailPage` in the room between the
+   sidebar and its runs, then its runs in a panel of their own on the right,
+   each scrolling by itself. */
 .automation-editor-layout {
   position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
-}
-
-.automation-editor-layout > .automations-scroll {
-  min-width: 0;
 }
 
 /* The Runs panel's pane, its width the developer's (`useRunsPanel`), its left
@@ -6827,11 +6805,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-inline-start: var(--luke-icon-gap);
 }
 
-/* The home page (`desktop-home.tsx`): one column at a reading measure, a
-   little above the window's middle, its rows the sidebar's own, each with
-   its context, the plan or the repository, in the faint ink between its name
-   and its time. The column is the scroller, so a long Recent never pushes
-   the greeting off a short window for good. */
+/* The home page (`desktop-home.tsx`), a `DetailPage`: its sections a
+   little apart, their rows the Inbox's and Recent's own, each with its
+   context, the plan or the repository, in the faint ink between its name
+   and its time. */
 .home {
   display: flex;
   min-height: 0;
@@ -6839,28 +6816,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex-direction: column;
 }
 
-.home-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: var(--luke-space-32) var(--luke-page-inset) var(--luke-space-48);
-}
-
-.home-column {
-  display: flex;
-  width: min(600px, 100%);
-  flex-direction: column;
-  gap: var(--luke-space-32);
-  margin: clamp(var(--luke-space-0), 7vh, var(--luke-space-64)) auto 0;
-}
-
-.home-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-space-16);
-  padding: 0 var(--row-inset);
+/* The box the arrow keys find Home's rows in lays nothing out, so the page
+   fills the room as it would alone. */
+.home-rows {
+  display: contents;
 }
 
 .home-section {
@@ -6869,20 +6828,23 @@ polygon.factory-campus-edge[data-edge="selected"] {
   gap: var(--luke-space-4);
 }
 
+.home-section + .home-section {
+  margin-top: var(--luke-space-32);
+}
+
 .home-section-title {
   display: flex;
   align-items: baseline;
   gap: var(--luke-space-6);
   margin: 0 0 var(--luke-space-2);
-  padding: 0 var(--row-inset);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
 }
 
-/* A section's note, nothing waiting or a read refused, on its rows' inset. */
+/* A section's note, nothing waiting or a read refused, on the title's edge. */
 .home-note {
-  margin: var(--luke-space-4) var(--row-inset);
+  margin: var(--luke-space-4) 0;
 }
 
 /* Needs you's count, in a group count's ink, as the sidebar's Inbox row counts it. */
@@ -6982,12 +6944,16 @@ polygon.factory-campus-edge[data-edge="selected"] {
   height: 16px;
 }
 
-/* A person's page (`person-page.tsx`): Home's column, headed by their face
-   at the page's size beside their name and who they are here. It stands
-   that column under its toolbar, not Home's way down. */
-.person-column {
-  margin-top: 0;
-  gap: var(--luke-space-24);
+/* A person's page (`person-page.tsx`), a `DetailPage` under its toolbar:
+   Home's sections, headed by their face at the page's size beside their
+   name and who they are here, and each block a section's gap under the
+   head. Show all stands close under the section it lists in full. */
+.person-top ~ * {
+  margin-top: var(--luke-space-24);
+}
+
+.person-top ~ .person-section-foot {
+  margin-top: var(--luke-space-4);
 }
 
 .person-head {
@@ -6995,7 +6961,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-12);
-  padding: 0 var(--row-inset);
 }
 
 /* Note that a long name or email wraps anywhere rather than run past the
@@ -7022,13 +6987,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   align-items: baseline;
   gap: var(--luke-space-6);
   margin-bottom: var(--luke-space-2);
-  padding: 0 var(--row-inset);
   font-variant-numeric: tabular-nums;
 }
 
 /* The way to the rest of their tasks, standing under the section's rows. */
 .person-section-foot {
-  margin: calc(-1 * var(--luke-space-20)) 0 0;
+  margin-bottom: 0;
 }
 
 /* A new account's welcome: Luke's face on a tile, a title, a line, and New plan, centred. */

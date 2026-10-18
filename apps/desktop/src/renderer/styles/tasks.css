@@ -1861,13 +1861,10 @@
   gap: var(--luke-space-4);
 }
 
-/* A tab's page has the header above it, so it starts close under the row. */
-.pull-request-view > .pull-request-page {
-  padding-top: var(--luke-space-4);
-}
-
-.pull-request-view > .pull-request-page > .pull-request-section:first-child {
-  margin-top: var(--luke-space-12);
+/* A tab's page (a `DetailPage` at the tabs' inset) opens its own gap under
+   the row, so its first section adds none. */
+.pull-request-section:first-child {
+  margin-top: 0;
 }
 
 /* Where GitHub did not take the last change: a line under the bar, at the
@@ -2045,24 +2042,10 @@
   color: var(--luke-color-text-subtle);
 }
 
-.pull-request-page {
-  min-height: 0;
-  flex: 1;
-  padding: var(--luke-space-12) var(--column-inset) var(--luke-space-24);
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-/* In the side panel, the page keeps to the reading measure a transcript
-   keeps to, so a panel filling the window reads in one column. */
-.side-panel-content .pull-request-page {
-  padding-inline: max(var(--column-inset), var(--reading-room));
-}
-
 /* The words that stand on the page rather than in a box, at the content
    inset. */
 .pull-request-title,
-.pull-request-page .pull-request-branches,
+.pull-request-view .pull-request-branches,
 .pull-request-header .pull-request-branches,
 .changes-people.pull-request-people,
 .pull-request-heading,

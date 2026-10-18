@@ -19,6 +19,7 @@ import {
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_META,
+  List,
   ListRow,
   SKELETON_SHAPE,
   Skeleton,
@@ -38,6 +39,7 @@ import {
   memberActor,
   personActor,
 } from "@luke/ui/actor-model";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
   ArrowDownNarrowWideIcon,
   CheckCheckIcon,
@@ -974,7 +976,7 @@ export function InboxListSkeleton({
 }): React.JSX.Element {
   return (
     <SkeletonRegion label={READING_ITEMS}>
-      <ul className="sidebar-tasks">
+      <List label={TAB_WORDS.INBOX}>
         {SKELETON_ROWS.slice(0, rows).map(({ title, preview }) => (
           <ListRow
             key={title}
@@ -994,7 +996,7 @@ export function InboxListSkeleton({
             metaAt={LIST_ROW_META.TITLE}
           />
         ))}
-      </ul>
+      </List>
     </SkeletonRegion>
   );
 }

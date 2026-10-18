@@ -281,7 +281,7 @@ test("while the task list is unread, Home stands in its own shape: New task, and
   assert.deepEqual(waits(page), ["Reading your inbox…", "Reading your tasks…"]);
   assert.ok(page.querySelectorAll(".luke-list-row .luke-skeleton").length > 0, "rows of blocks");
   assert.doesNotMatch(page.textContent ?? "", /Welcome back|Nothing needs you/u);
-  assert.equal(page.querySelector("h1"), null);
+  assert.equal(page.querySelector("h1")?.textContent ?? "", "", "its title says nothing yet");
 });
 
 test("an account whose task list is unread is neither welcomed as new nor greeted back until the list says which it is", () => {

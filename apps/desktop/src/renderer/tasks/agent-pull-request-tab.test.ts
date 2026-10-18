@@ -1576,7 +1576,7 @@ test("an agent with no pull request yet says so", async () => {
     }),
   );
   assert.match(none.textContent ?? "", /No pull request yet\./u);
-  assert.equal(none.querySelector(".pull-request-page"), null);
+  assert.equal(none.querySelector("section[aria-label='Pull request conversation']"), null);
 });
 
 test("the bar, the title, and the files' count stand from what Luke holds before any read lands; each part is a skeleton until its own read lands, and is drawn the moment it does, whatever the order", async () => {
