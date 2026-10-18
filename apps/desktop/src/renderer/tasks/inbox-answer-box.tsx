@@ -20,7 +20,7 @@ import {
 } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type RefObject, useRef, useState } from "react";
 import {
   PromptInput,
   PromptInputFooter,
@@ -39,7 +39,7 @@ import { ComposerField } from "./composer-field";
 import { useComposerPickers } from "./composer-pickers";
 import { DictateButton, DictationStrip } from "./dictation-strip";
 import { type InboxDraft, inboxMessageOf, inboxReply, pressesOf } from "./inbox-model";
-import { ComposerQuoteView } from "./reply-to-selection";
+import { ComposerQuoteView, ReplyToSelection } from "./reply-to-selection";
 import type { SkillSource } from "./skill-picker";
 import type { TaskInboxControl } from "./use-task-inbox";
 
@@ -74,7 +74,10 @@ import type { TaskInboxControl } from "./use-task-inbox";
  * are laid into the box as a quote block where the caret stands, the box
  * then taking the caret, as the agent's own box takes them
  * (`reply-to-selection.tsx`); a quote goes out as a Markdown blockquote,
- * part of the answer or the message like any other words.
+ * part of the answer or the message like any other words. The box stands
+ * Reply itself, over the thread it is handed, and only while its editor is
+ * loaded and takes a quote, never while an answer is out or a dictation
+ * holds it, since a press lets the selection go.
  *
  * A card whose agent need not hear back says whether its answer will
  * message the agent: a bare press does not, and a typed note or an attached
@@ -213,13 +216,8 @@ interface AnswerBoxProps {
   skills: SkillSource | undefined;
   /** The words a dictation into the box is likely to say (`dictation-keywords.ts`). */
   keywords: readonly string[];
-  /** Where the box hands the thread's Reply the door that lays a quote in at its caret. */
-  replyDoor: RefObject<((words: string) => void) | undefined>;
-}
-
-/** Whether an item's box takes words at all: a settled item's always, an open one's where this build knows what it asks. */
-export function boxTakesWords(item: InboxItem): boolean {
-  return item.status !== INBOX_STATUS.OPEN || knownResponse(item.response);
+  /** The thread whose agent's words the box stands Reply over, quoting them in. */
+  replyScope: RefObject<HTMLElement | null>;
 }
 
 /** One item's box, its editor, its lists, its dictation, and what its note says all its own. */
@@ -230,7 +228,7 @@ function AnswerCard({
   agentName,
   skills,
   keywords,
-  replyDoor,
+  replyScope,
   statuses,
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
@@ -246,15 +244,6 @@ function AnswerCard({
   // while and the item they land on is whichever revision is current by then.
   const latest = useRef(item);
   latest.current = item;
-  // The thread's Reply lays its quote in where the caret stands, for as long as this item's box stands.
-  useEffect(() => {
-    replyDoor.current = (words) => {
-      editor.current?.insertQuote(words);
-    };
-    return () => {
-      replyDoor.current = undefined;
-    };
-  }, [replyDoor]);
   // Note that a settled item's box writes a message on its thread, which no response shapes.
   const answering = item.status === INBOX_STATUS.OPEN;
   const byPress = answering && pressesOf(item.response) !== undefined;
@@ -319,8 +308,10 @@ function AnswerCard({
       })
       .finally(() => setReading((count) => count - 1));
   };
-  const takes = boxTakesWords(item);
+  const takes = !answering || knownResponse(item.response);
   const takesFiles = takes && !sending;
+  // Note that Reply stands only while the editor stands and takes a quote, since a press lets the selection go.
+  const quotes = takes && !sending && !dictating && module !== undefined;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
     <div
@@ -460,6 +451,14 @@ function AnswerCard({
           {note}
         </p>
       )}
+      {quotes ? (
+        <ReplyToSelection
+          scope={replyScope}
+          onReply={(words) => {
+            editor.current?.insertQuote(words);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

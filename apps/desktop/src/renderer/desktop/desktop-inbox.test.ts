@@ -3050,7 +3050,7 @@ test("words selected in the agent's part of a thread stand Reply over them, whic
   );
 });
 
-test("words selected in an open item's question quote into its box, and its answer's note carries the quote", async () => {
+test("words selected in an open item's question quote into its box, its answer's note carries the quote, and Reply stands down while the answer is out", async () => {
   const asking: InboxItem = {
     ...THRESHOLD,
     blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "Usage alerts fire at 80% of the plan's quota." }],
@@ -3074,6 +3074,8 @@ test("words selected in an open item's question quote into its box, and its answ
   pressInComposer(pane, "Enter");
   await settle();
 
+  selectInPane(page, "Usage alerts fire", "Usage", "quota.");
+  assert.equal(replyPress(), undefined, "no quote is offered while the answer is out");
   assert.deepEqual(
     sent.map(({ itemId, note }) => ({ itemId, note })),
     [
