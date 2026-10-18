@@ -17,7 +17,6 @@ import {
   positionedView,
   TASK_MARK,
   taskNameOfIssue,
-  taskNameOfWords,
   unsettledPinPositions,
 } from "./tasks-model.js";
 
@@ -140,17 +139,6 @@ test("an agent New task starts is handed a mention of the issue picked, then a b
     agentPromptOf(undefined, " Make the sidebar keep its folds. "),
     "Make the sidebar keep its folds.",
   );
-});
-
-test("a task started in Plan mode is named by the first line of the words, cut to a name's bound, and by nothing for a blank box", () => {
-  const long = "x".repeat(TASK_BOUNDS.MAX_NAME_CHARS + 20);
-
-  assert.equal(
-    taskNameOfWords("\n  Rethink automations  \nwhich agent they reuse"),
-    "Rethink automations",
-  );
-  assert.equal(taskNameOfWords(long).length, TASK_BOUNDS.MAX_NAME_CHARS);
-  assert.equal(taskNameOfWords(" \n "), "");
 });
 
 test("a pin dragged here stands at its new place until the list carries it, and is let go once it does, the pin is gone, or the service answered", () => {

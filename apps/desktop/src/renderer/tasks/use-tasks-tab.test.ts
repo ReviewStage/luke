@@ -1772,6 +1772,30 @@ test("New plan with Plan off asks for a task without planning, and with it on na
   );
 });
 
+test("New plan hands Luke the brief it was given beside its issue, and a blank brief is not sent", async () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, UNSTARTED);
+
+  await tab.control().newTask.start("", null, "workspace-acme", true, {
+    linearIssueId: "issue-1",
+    brief: "Keep the queue order stable.",
+  });
+  await tab.control().newTask.start("", null, "workspace-acme", true, { brief: " \n " });
+
+  assert.deepEqual(
+    tab.payloads
+      .filter((asked) => asked.kind === ACT_KIND.TASKS_START)
+      .map((asked) => asked.payload),
+    [
+      {
+        workspaceId: "workspace-acme",
+        linearIssueId: "issue-1",
+        brief: "Keep the queue order stable.",
+      },
+      { workspaceId: "workspace-acme" },
+    ],
+  );
+});
+
 test("Settings' GitHub row is the connection main's view holds, its Connect and Disconnect ask main, and a refused Disconnect says why", async () => {
   const tab = mount(
     { shown: true, tasks: { ...TWO_WORKSPACES, github: { connected: true, login: null } } },

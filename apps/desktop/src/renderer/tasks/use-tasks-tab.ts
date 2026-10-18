@@ -420,14 +420,16 @@ export interface NewTaskPreset {
 /**
  * What a start comes from beyond its name, repository, workspace, and
  * planning: a Linear issue, one of the workspace's own issues, whether an
- * agent starts on the task's plan at once (`agent`), and the agent New
- * task's composer starts on its words (`handed`).
+ * agent starts on the task's plan at once (`agent`), the agent New task's
+ * composer starts on its words (`handed`), and the words Plan mode hands
+ * Luke as the task's brief (`brief`), trimmed and none where blank.
  */
 export interface NewTaskStart {
   readonly linearIssueId?: string;
   readonly issueId?: string;
   readonly agent?: boolean;
   readonly handed?: NewTaskAgent;
+  readonly brief?: string;
 }
 
 /** Which Issues page stands: the list, or one issue's. */
@@ -695,7 +697,8 @@ export interface TasksControl {
      * Starts the plan on the repository given, or none, in the workspace
      * given, with its planning phase or without it, from the Linear issue
      * given where one was picked, or from the workspace's own issue the
-     * dialog was opened on, which closes the dialog and opens the plan; with
+     * dialog was opened on, with the brief Plan mode hands Luke where words
+     * were written, which closes the dialog and opens the plan; with
      * an agent asked for at once it presses the task's Start once it stands
      * open, and with an agent handed over it opens the task on a draft
      * agent's tab holding the agent's prompt, files, and model, which starts
@@ -2369,7 +2372,9 @@ export function useTasksTab(input: {
   // which main leaves for this question to end or keep. A start without
   // planning opens no call, so it asks nothing about the one standing; it
   // names its planning only where it is off, so a request with planning is
-  // the one every service has read. New task's Agent mode hands the task it
+  // the one every service has read. New task's Plan mode hands its words
+  // over as the task's brief, which Luke reads beside the plan, and a blank
+  // brief is not sent. New task's Agent mode hands the task it
   // started a draft agent holding the prompt, files, and model, and opens
   // the task on that draft's tab, which starts the agent at once, so a
   // refused agent leaves the words in that tab's box with why and Retry.
@@ -2392,6 +2397,7 @@ export function useTasksTab(input: {
       ...(workspaceId === undefined ? undefined : { workspaceId }),
       ...(from.linearIssueId === undefined ? undefined : { linearIssueId: from.linearIssueId }),
       ...(from.issueId === undefined ? undefined : { issueId: from.issueId }),
+      ...(from.brief === undefined || from.brief.trim() === "" ? undefined : { brief: from.brief }),
       ...(planning ? undefined : { planning }),
     }).then(
       (answer) => {
