@@ -10,9 +10,11 @@ import type { DialogConfirm } from "@luke/ui";
 import {
   ACTIONS_SHOWN,
   BackIcon,
+  BUTTON_SIZE,
   EllipsisIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  IconButton,
   LIST_ROW_CURRENT,
   List,
   ListRow,
@@ -253,15 +255,13 @@ function RevisionRow({
         actions={
           offered ? (
             <Tooltip label={ACTIONS_LABEL}>
-              <button
+              <IconButton
                 ref={ellipsis}
-                type="button"
-                className="sidebar-task-mark"
-                aria-label={ACTIONS_LABEL}
+                icon={<EllipsisIcon />}
+                label={ACTIONS_LABEL}
+                size={BUTTON_SIZE.COMPACT}
                 {...menu.trigger()}
-              >
-                <EllipsisIcon />
-              </button>
+              />
             </Tooltip>
           ) : null
         }

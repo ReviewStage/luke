@@ -313,7 +313,7 @@ test("a press on the name in a section's byline opens no editor, while a press o
   const edit = { actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at: Date.now(), duringCall: false };
   render({ ...DOCUMENT_TASK, sectionEdits: [{ section: "Goal", ...edit }] });
   const goal = block(container, "Goal");
-  const name = goal.querySelector(".plan-unit-byline .actor-ref");
+  const name = goal.querySelector(".plan-unit-byline [data-actor-ref]");
   assert.ok(name, "the byline names who last changed the section");
 
   act(() => {

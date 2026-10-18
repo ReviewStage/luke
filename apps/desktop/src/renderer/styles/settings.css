@@ -1,69 +1,5 @@
 /* The settings tab: pages of rows, credentials, and the controls that write them. */
 
-/* A group of a page (`settings-group.tsx`): its name above the card, small
-   and muted, as macOS and Linear head a group, and the card holding the rows
-   with a hairline between each and the next, edge to edge. The card's corner
-   is a button's, so the page draws one corner throughout. */
-.settings-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-}
-
-.settings-group-title {
-  margin: 0;
-  padding: 0 var(--luke-space-2);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.settings-card {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-surface);
-}
-
-.settings-card > .settings-row {
-  min-height: var(--luke-settings-row-min-height);
-  padding: var(--luke-space-12) var(--luke-space-16);
-}
-
-.settings-card > * + * {
-  border-top: 1px solid var(--luke-color-border);
-}
-
-/* What a card says where its rows would be: who to sign in as, a read that
-   failed and its Retry, or the rows on their way. */
-.settings-card-line {
-  display: flex;
-  min-height: var(--luke-settings-row-min-height);
-  align-items: center;
-  gap: var(--luke-space-8);
-  margin: 0;
-  padding: var(--luke-space-12) var(--luke-space-16);
-}
-
-/* A row's refusal stands under the row it belongs to, inside the same rule. */
-.settings-card > .error-message {
-  padding: 0 var(--luke-space-16) var(--luke-space-12);
-}
-
-.settings-card > .settings-row + .error-message {
-  margin-top: calc(-1 * var(--luke-space-4));
-  border-top: 0;
-}
-
-/* Settings › Coding agents › Default model: a refusal of any of its rows
-   stands under them all, inside the last row's rule. */
-.luke-settings-section-card > .luke-settings-row + .error-message {
-  margin-top: calc(-1 * var(--luke-space-4));
-  padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block);
-  border-top: 0;
-}
-
 /* Sized to the heading it labels rather than to a grid: the glyph is a letter
    in the line, not an element beside it. */
 .settings-icon {
@@ -116,17 +52,6 @@
   }
 }
 
-/* A page that is one nameless group is no group at all: its rows stand on the
-   page itself, under the header that already names it, and a card around them
-   would be a border around nothing. With no card there is no card inset
-   either: the rows keep the header's own 2px, flush with the page's left
-   edge, rather than hanging indented where a border used to be. */
-.settings-plain {
-  padding: var(--luke-space-2);
-  border: 0;
-  background: none;
-}
-
 /* A chip draws its own chevron (`chip.css`), which this unlayered rule
    would otherwise win over. */
 .settings-chevron:where(:not(.luke-chip *)) {
@@ -170,13 +95,13 @@
 }
 
 /* The word a row wears while its value differs from the default, riding the
-   name's line in the small tertiary type of a caption. The tertiary colour
-   rather than a state colour on purpose — changed is a fact about a
-   preference, never an urgency. */
+   name's line (the row's adornment) in the small tertiary type of a caption.
+   The tertiary colour rather than a state colour on purpose — changed is a
+   fact about a preference, never an urgency. */
 .settings-changed {
-  margin-left: var(--luke-space-6);
   color: var(--luke-color-text-subtle);
   font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   font-weight: var(--luke-weight-medium);
 }
 
@@ -201,16 +126,7 @@
   line-height: 1;
 }
 
-/* Inside a running name — a talk key's label — the mark is a word in the
-   line rather than a flex sibling, so it carries the spacing the flex gaps
-   give it everywhere else, and sits on the text's own middle. */
-.luke-settings-row-label > .settings-attention {
-  margin-left: var(--luke-space-6);
-  vertical-align: -3px;
-}
-
-.settings-copy small,
-.settings-note {
+.settings-copy small {
   margin: 0;
   color: var(--luke-color-text-subtle);
   font-size: var(--luke-type-caption-size);
@@ -224,7 +140,7 @@
   text-underline-offset: 2px;
 }
 
-/* A press among a row's detail words, drawn as the links beside it are: an
+/* A press among a row's detail words, drawn as an underlined link is: an
    experiment's Send feedback, which opens a dialog rather than a page. */
 .settings-detail-act {
   padding: 0;
@@ -384,9 +300,11 @@
 }
 
 /* Settings › Coding agents › API keys: a key being added or edited grows its
-   row a field, Cancel, and Save, under the row's words and inside its rule,
-   and a refused save says why under them. The field takes the line's room.
-   The hint is the key's own characters, so it reads in the code face. */
+   row a field, Cancel, and Save under the row's words (the row's `below`),
+   and a refused save says why under them. The field takes the line's room,
+   and takes the whole line, its presses under it, where the row is too
+   narrow for the field's least width beside them. The hint is the key's own
+   characters, so it reads in the code face. */
 .api-key,
 .workspace-identity,
 .workspace-member,
@@ -400,27 +318,15 @@
 
 .api-key-form {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--luke-control-gap);
-  margin-top: calc(-1 * var(--luke-space-4));
-  padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block)
-    calc(var(--luke-settings-row-inline) + 20px + var(--luke-space-12));
 }
 
 .api-key-form > :first-child {
   min-width: 0;
-  flex: 1;
-}
-
-.api-key > .error-message,
-.workspace-identity > .error-message,
-.workspace-member > .error-message,
-.workspace-invite-row > .error-message,
-.workspace-github > .error-message,
-.workspace-linear > .error-message,
-.integration-row > .error-message {
-  margin-top: calc(-1 * var(--luke-space-4));
-  padding: 0 var(--luke-settings-row-inline) var(--luke-settings-row-block);
+  flex: 1 1 var(--luke-select-field-width);
 }
 
 .api-key-hint {
@@ -428,20 +334,24 @@
 }
 
 /* Settings › Workspace › Invitations (`.workspace-invite-row`, a refusal
-   standing under the form as API keys' does): the invite form, a row's
-   height and inset, an address field taking its room, then the role's chip
-   and Invite. The chip is a field chip of one width, as every Settings
-   picker shares one, so the row does not reshape as the role changes. */
+   standing under the form in a line of its own): the invite form, a row's height and inset, an
+   address field taking its room, then the role's chip and Invite, the field
+   taking the whole line and the chip and Invite dropping under it where the
+   row is too narrow for the field's least width beside them. The chip is a
+   field chip of one width, as every Settings picker shares one, so the row
+   does not reshape as the role changes. */
 .workspace-invite {
   display: flex;
+  flex-wrap: wrap;
   min-height: var(--luke-settings-row-min-height);
   align-items: center;
+  justify-content: flex-end;
   gap: var(--luke-control-gap);
   padding: var(--luke-settings-row-block) var(--luke-settings-row-inline);
 }
 
 .workspace-invite > .luke-text-field {
-  flex: 1;
+  flex: 1 1 var(--luke-select-field-width);
 }
 
 .workspace-invite-role {
@@ -571,21 +481,9 @@
   height: 20px;
 }
 
-/* A workspace's GitHub account (`.workspace-github-account`), which belongs
-   to GitHub's row above it: inset to the words of its parent, past the
-   parent's mark and gap, so its hairline starts there too and the card reads
-   as one provider with its accounts under it. The row is pulled back by its
-   own inset, so its mark stands where its hairline starts. Its mark is a tile
-   a step smaller than a provider's. */
-.workspace-github-account {
-  margin-left: calc(var(--luke-settings-row-inline) + 20px + var(--luke-space-12));
-}
-
-.workspace-github-account > .luke-settings-row {
-  margin-left: calc(-1 * var(--luke-settings-row-inline));
-}
-
-.workspace-github-account .settings-row-mark > .workspace-tile {
+/* A workspace's GitHub account, an indented row under GitHub's: its mark is
+   a tile a step smaller than a provider's. */
+.workspace-github-account-mark > .workspace-tile {
   width: 18px;
   height: 18px;
   font-size: var(--luke-type-caption-size);
@@ -668,14 +566,6 @@
 .integration-row > .integration-tools-panel {
   border-top: 1px solid var(--luke-color-border);
   container: integration-tools / inline-size;
-}
-
-/* A refusal under a row whose tools stand open says so below them, over a
-   hairline of its own. */
-.integration-row > .integration-tools-panel + .error-message {
-  margin-top: 0;
-  padding-top: var(--luke-settings-row-block);
-  border-top: 1px solid var(--luke-color-border);
 }
 
 .integration-tools-split {
@@ -860,57 +750,4 @@
   .picture-choice-stage {
     width: min(100%, 200px);
   }
-}
-
-/* A page too narrow for a row's words and its controls side by side
-   stacks them, as System Settings does in a narrow window: the words, and
-   the mark or face leading them, keep the row's first line, and whatever
-   does not fit beside them drops under them to the row's end, rather than
-   squeezing the words into a column a word wide. The words claim three
-   fifths of the row, so a switch or a ⋯ still stands beside them while a
-   picker, a button, or a member's role drops. A form's field takes the
-   first line whole, its chip and its press under it. */
-@container settings (max-width: 379px) {
-  .settings-row:has(> .settings-copy),
-  .workspace-invite,
-  .api-key-form {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    row-gap: var(--luke-space-8);
-  }
-
-  .settings-row > .settings-copy {
-    min-width: 60%;
-  }
-
-  .workspace-invite > .luke-text-field,
-  .api-key-form > :first-child {
-    flex-basis: 100%;
-  }
-}
-
-/* One repository on the Workspace page's Repositories group: its name, then
-   its clone's folder and its run command, each a row of their own, a rule
-   between repositories. */
-.mac-repository {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-  padding-block: var(--luke-space-8);
-}
-
-.mac-repository + .mac-repository {
-  border-top: 1px solid var(--luke-color-border);
-}
-
-.mac-repository-command {
-  flex: 1;
-  font-family: var(--luke-font-mono);
-}
-
-.mac-repository-name {
-  flex: 0 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

@@ -36,6 +36,7 @@
 @import "./components/form-section/form-section.css";
 @import "./components/hover-card/hover-card.css";
 @import "./components/inline-edit/inline-edit.css";
+@import "./components/inline-ref/inline-ref.css";
 @import "./components/pagination/pagination.css";
 @import "./components/public-page/public-page.css";
 @import "./components/search-field/search-field.css";

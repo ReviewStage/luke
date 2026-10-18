@@ -920,7 +920,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
       },
     },
   });
-  const chip = page.querySelector(".mention-chip");
+  const chip = page.querySelector("[data-mention-ref]");
   assert.ok(chip, "the version draws the plan's chip");
 
   act(() => {

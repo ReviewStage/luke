@@ -97,7 +97,7 @@ test("an agent's written mentions of a page, an agent, a section, and a file are
   const opened: ReadLink[] = [];
   const container = drawn(REPLY, opened);
 
-  const chips = [...container.querySelectorAll<HTMLElement>(".mention-chip")];
+  const chips = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")];
   const page = chips.find((chip) => chip.dataset.kind === "page");
   assert.ok(page instanceof HTMLButtonElement, "the page is a chip that opens");
   act(() => page.click());
@@ -136,7 +136,7 @@ test("a page's chip on the open plan hangs the page's tab's card, previewing its
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
-  const page = container.querySelector<HTMLElement>('.mention-chip[data-kind="page"]');
+  const page = container.querySelector<HTMLElement>('[data-mention-ref][data-kind="page"]');
   assert.ok(page, "the page's chip");
   act(() => {
     page.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));

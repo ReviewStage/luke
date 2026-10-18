@@ -5,13 +5,18 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { Button } from "../button/button.js";
 import { SettingsRow } from "../settings-row/settings-row.js";
-import { SettingsSection } from "../settings-section/settings-section.js";
+import {
+  SETTINGS_LINE_KIND,
+  SettingsLine,
+  SettingsSection,
+} from "../settings-section/settings-section.js";
 import { SettingsPage } from "./settings-page.js";
 
 /**
  * settings-page.test.ts -- the page's title is its one `h1`, each headed
- * section under it is a region its `h2` names, and what acts on the whole
- * page stands in the page's head beside the title.
+ * section under it is a region its `h2` names, what acts on the whole
+ * page stands in the page's head beside the title, and the page holds its
+ * sections back, busy, while it is pending or a loading line stands in them.
  */
 
 const roots: Root[] = [];
@@ -98,4 +103,47 @@ test("a page with no actions holds only its title in its head", async () => {
   const head = container.querySelector("header");
   expect(head?.textContent).toBe("Voice");
   expect(head?.querySelector("button")).toBeNull();
+});
+
+/** Whether the page holds its sections back, as it does while a read is out. */
+function heldBack(container: HTMLElement): boolean {
+  return container.querySelector('[aria-busy="true"]') !== null;
+}
+
+/** A page whose one section reads its rows until `read`, a loading line standing in their place. */
+function ReadingPage({ read }: { read: boolean }): React.JSX.Element {
+  return createElement(SettingsPage, {
+    title: "Workspace",
+    children: createElement(SettingsSection, {
+      title: "Members",
+      children: read
+        ? createElement(SettingsRow, {
+            label: "Ada",
+            children: () => createElement(Button, { children: "Remove" }),
+          })
+        : createElement(SettingsLine, {
+            kind: SETTINGS_LINE_KIND.LOADING,
+            children: "Loading the members",
+          }),
+    }),
+  });
+}
+
+test("a loading line holds the page's sections back until its read lands", async () => {
+  const container = await render(createElement(ReadingPage, { read: false }));
+  expect(heldBack(container)).toBe(true);
+  await act(async () => roots[0]?.render(createElement(ReadingPage, { read: true })));
+  expect(heldBack(container)).toBe(false);
+  expect(container.textContent).toContain("Ada");
+});
+
+test("a pending page holds its sections back, and one with nothing out does not", async () => {
+  const pending = await render(
+    createElement(SettingsPage, { title: "Voice", pending: true, children: section("Microphone") }),
+  );
+  const settled = await render(
+    createElement(SettingsPage, { title: "Voice", children: section("Microphone") }),
+  );
+  expect(heldBack(pending)).toBe(true);
+  expect(heldBack(settled)).toBe(false);
 });

@@ -69,7 +69,7 @@ function agents(): CodingAgentsControl {
   };
 }
 
-test('an agent\'s Changes chip opens the one tab the "+" offers for its pull request', () => {
+test('an agent\'s pull request chip opens the one tab the "+" offers for its pull request', () => {
   const control = agents();
   const offered = changesOffers(control).map((offer) => ({ changes: offer.agentId }));
   assert.deepEqual(offered, [{ changes: FIRST.id }, { changes: THIRD.id }]);
@@ -84,7 +84,7 @@ test('an agent\'s Changes chip opens the one tab the "+" offers for its pull req
   });
 });
 
-test("an agent's chips open the one Pull request tab of its pull request: its pull request's chip on the overview, its Changes chip on the files", () => {
+test("an agent's pull request opens in the one Pull request tab of its pull request, on the overview or on the files", () => {
   const control = agents();
   const asked: unknown[] = [];
   const panel = {
@@ -152,7 +152,7 @@ test("a Changes card names the coding agent whose pull request it is by its tile
     /^6 files changed/,
   );
   const named = container.querySelector<HTMLButtonElement>(
-    '.luke-hover-card-sub button.actor-ref[data-kind="agent"]',
+    '.luke-hover-card-sub button[data-actor-ref][data-kind="agent"]',
   );
   assert.ok(named, "the agent is named as an actor");
   assert.equal(named.textContent, "Expiry job");

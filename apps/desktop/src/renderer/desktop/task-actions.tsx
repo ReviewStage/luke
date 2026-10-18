@@ -6,6 +6,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ACTIONS_SHOWN,
   ArchiveIcon,
+  BUTTON_SIZE,
   ConfirmDialog,
   CopyIcon,
   type DialogQuestion,
@@ -165,15 +166,13 @@ function SidebarTaskMarks({
           label={label}
           {...(current && mark === TASK_MARK.ARCHIVE ? { command: APP_COMMAND.ARCHIVE_TASK } : {})}
         >
-          <button
-            type="button"
-            className="sidebar-task-mark"
-            aria-label={label}
+          <IconButton
+            icon={icon}
+            label={label}
+            size={BUTTON_SIZE.COMPACT}
             disabled={disabled}
             onClick={() => tasks.onMarkTask(task.id, mark)}
-          >
-            {icon}
-          </button>
+          />
         </Tooltip>
       ))}
     </>

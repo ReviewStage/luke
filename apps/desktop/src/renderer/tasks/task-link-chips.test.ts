@@ -88,9 +88,9 @@ function drawn(node: ReactNode): HTMLElement {
 
 /** Each chip drawn: its kind and the name it says. */
 function chips(container: HTMLElement): [string | undefined, string | null][] {
-  return [...container.querySelectorAll<HTMLElement>(".mention-chip")].map((chip) => [
+  return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,
-    chip.querySelector(".mention-chip-label")?.textContent ?? null,
+    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
   ]);
 }
 
@@ -144,7 +144,7 @@ test("a version's diff draws a mention written in as its chip, still marked as w
 
   assert.deepEqual(chips(container), THREE_CHIPS);
   assert.deepEqual(
-    [...container.querySelectorAll(".mention-chip")].map(
+    [...container.querySelectorAll("[data-mention-ref]")].map(
       (chip) => chip.closest("ins.markdown-inserted") !== null,
     ),
     [true, true, true],
@@ -180,7 +180,7 @@ test("a link whose label a version changed in part is drawn as words with the ch
     }),
   );
 
-  assert.equal(container.querySelector(".mention-chip"), null);
+  assert.equal(container.querySelector("[data-mention-ref]"), null);
   assert.equal(
     container.querySelector(".luke-text-link ins.markdown-inserted")?.textContent,
     "new ",
