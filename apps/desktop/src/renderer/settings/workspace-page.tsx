@@ -1255,7 +1255,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
           confirm={disconnect}
           question={{
             title: `Disconnect Linear from ${workspace.name}?`,
-            body: "Nobody in the workspace can start a plan from an issue until Linear is connected again.",
+            body: "Nobody in the workspace can start a task from an issue until Linear is connected again.",
             verb: "Disconnect",
             running: "Disconnecting",
           }}

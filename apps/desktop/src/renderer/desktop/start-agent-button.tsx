@@ -1,9 +1,8 @@
 import { FAILURE_REASON, remedyLabel, retriesBesideRemedy } from "@luke/features/failure-remedy";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { ChevronDownIcon, ERROR_STATE_PLACEMENT, ErrorState, PlayIcon } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, PlayIcon, SplitButton } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
-import { BusyLabel } from "../spinner";
 import { choiceLabel } from "../tasks/coding-agent-model";
 import { ModelMenu, settledChoice } from "../tasks/model-menu";
 import { useRepositoryRemedy } from "../tasks/repository-remedy";
@@ -26,6 +25,8 @@ import { Tooltip } from "../tooltip";
  * Escape stops there, so it closes the menu and not the task behind it.
  * In a toolbar short of room the main part draws its glyph alone, named
  * still, its hover saying the model as before (desktop.css's `plan-toolbar`).
+ * The split button itself, its two halves and their states, is `@luke/ui`'s
+ * `SplitButton`.
  */
 
 export function StartAgentButton({ control }: { control: CodingAgentsControl }): React.JSX.Element {
@@ -35,7 +36,6 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   const drawn = useDisclosure(open);
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
   const menuId = useId();
-  const root = useRef<HTMLDivElement>(null);
   const chevron = useRef<HTMLButtonElement>(null);
   const latest = useRef(control);
   latest.current = control;
@@ -89,8 +89,12 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   };
 
   // A press of the main part closes the menu whether or not it starts
-  // anything: the main part sits inside the button, so the focus moving to it
-  // is not focus leaving, and nothing else would close the menu.
+  // anything. Note that a refused press, busy or unavailable, never reaches
+  // `press`, so the split button's own click, heard as it passes, closes it
+  // for any press but the chevron's, which toggles the menu itself.
+  const pressed = (event: React.MouseEvent<HTMLElement>) => {
+    if (!(event.target instanceof Node && chevron.current?.contains(event.target))) setOpen(false);
+  };
   const press = () => {
     setOpen(false);
     if (unavailable || start.busy) return;
@@ -100,27 +104,12 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   const hint =
     start.reason ??
     (models !== undefined && chosen !== undefined ? choiceLabel(chosen, models) : undefined);
-  const main = (
-    <button
-      type="button"
-      className="toolbar-button start-agent-main"
-      aria-disabled={unavailable || start.busy ? "true" : undefined}
-      aria-label="Start a coding agent"
-      aria-busy={start.busy ? "true" : undefined}
-      onClick={press}
-    >
-      <BusyLabel busy={start.busy} label="Starting">
-        <PlayIcon />
-        <span className="start-agent-word">Start</span>
-      </BusyLabel>
-    </button>
-  );
 
   const note = start.note;
   const remedyWords = note === undefined ? undefined : remedyLabel(note);
   const remedy = note === undefined ? undefined : repositoryRemedy(note, () => press());
   return (
-    <div className="start-agent" ref={root} data-unavailable={String(unavailable)}>
+    <div className="start-agent">
       {note !== undefined ? (
         // Start itself is the retry of a plain refusal; a repository's remedy keeps Retry
         // beside it where it is finished elsewhere, and a move presses Start again by itself.
@@ -143,25 +132,27 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           </ErrorState>
         </div>
       ) : null}
-      <div className="start-agent-split">
-        {hint !== undefined ? <Tooltip label={hint}>{main}</Tooltip> : main}
-        <button
-          ref={chevron}
-          type="button"
-          className="icon-button start-agent-chevron"
-          aria-label="Choose a model to start with"
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? menuId : undefined}
-          aria-disabled={unavailable ? "true" : undefined}
-          onClick={() => {
-            if (unavailable) return;
-            setOpen(!open);
+      <span className="start-agent-split" onClickCapture={pressed}>
+        <SplitButton
+          icon={<PlayIcon />}
+          label="Start a coding agent"
+          disabled={unavailable}
+          busy={start.busy ? "Starting" : undefined}
+          hint={Tooltip}
+          hintLabel={hint}
+          onClick={press}
+          menu={{
+            label: "Choose a model to start with",
+            "aria-haspopup": "dialog",
+            "aria-expanded": open,
+            "aria-controls": open ? menuId : undefined,
+            ref: chevron,
+            onClick: () => setOpen(!open),
           }}
         >
-          <ChevronDownIcon />
-        </button>
-      </div>
+          Start
+        </SplitButton>
+      </span>
       {drawn.mounted ? (
         <ModelMenu
           leaving={drawn.leaving}
@@ -173,7 +164,11 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           onChoose={keep}
           onClose={close}
           onLeave={(left) => {
-            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+            // Focus moving within the menu, or to the chevron whose own press toggles it, keeps it open.
+            const kept = [document.getElementById(menuId), chevron.current].some(
+              (part) => left instanceof Node && part?.contains(left) === true,
+            );
+            if (!kept) setOpen(false);
           }}
         />
       ) : null}

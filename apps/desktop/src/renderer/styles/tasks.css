@@ -147,25 +147,6 @@
   pointer-events: none;
 }
 
-/* A run a link named in an automation's runs (automation-runs-panel.tsx):
-   lit once, as a fresh edit of the plan is, and marked current. Note that it
-   names Luke's own ink, because no `--accent` is set above an automation. */
-[data-run-linked] {
-  position: relative;
-  isolation: isolate;
-}
-
-[data-run-linked]::before {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  border-radius: var(--luke-control-radius);
-  background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
-  animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
-  content: "";
-  pointer-events: none;
-}
-
 /* A message a link named, brought into view in its agent's transcript
    (message-links.tsx): lit once, as a fresh edit of the plan is. */
 [data-message-revealed] {
@@ -815,6 +796,302 @@
       0 6px 16px var(--luke-color-shadow-soft);
     translate: -50% 0;
   }
+}
+
+/* A transcript's messages (../ai-elements/message.tsx) and the quiet lines
+   between them (working-time.tsx, call-card.tsx, inbox-pane.tsx). They sit in
+   the components layer, as the frame above does, so a surface's own rule for
+   a message (`.agent-origin`, `.agent-turn-foot > [data-worked]`) still says
+   the last word, as it did over the utilities these replaced. */
+@layer components {
+  .transcript-message {
+    position: relative;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: var(--luke-space-4);
+  }
+
+  .transcript-message.is-user {
+    max-width: 95%;
+    margin-left: auto;
+    align-items: flex-end;
+    justify-content: flex-end;
+  }
+
+  /* A reply is reading text, so it keeps a reading leading rather than the
+     body role's. It clips past the keyboard's ring rather than at its edge,
+     so a fold, a tool line, or a chip it holds keeps its ring. */
+  .message-content {
+    min-width: 0;
+    max-width: 100%;
+    overflow: clip;
+    overflow-clip-margin: var(--focus-ring-room);
+    color: var(--luke-color-text);
+    font-size: var(--luke-type-body-size);
+    line-height: 1.625;
+  }
+
+  /* Note that the rhythm between a message's blocks weighs nothing, so a
+     block's own margin, a quiet line's or a note's, still wins. */
+  :where(.message-content > :not(:last-child)) {
+    margin-block: 0 var(--luke-space-8);
+  }
+
+  .transcript-message.is-user .message-content {
+    width: fit-content;
+    padding: var(--luke-space-8) var(--luke-space-12);
+    border-radius: var(--luke-radius-14);
+    background: var(--luke-color-fill-strong);
+  }
+
+  .message-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-space-2);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-quick) var(--spring);
+  }
+
+  .message-actions[data-placement="floating"] {
+    position: absolute;
+    top: calc(-1 * var(--luke-space-8));
+    right: 0;
+    z-index: 10;
+    padding: var(--luke-space-2);
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-radius-6);
+    background: var(--luke-color-overlay);
+    box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
+  }
+
+  .message-actions:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  @media (hover: hover) {
+    .transcript-message:hover .message-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  /* A working line and the line a finished turn or a call ends on: the
+     caption type, muted, its words selectable. */
+  .status-line {
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    user-select: text;
+  }
+
+  .status-line:is([data-worked], [data-call-ended]) {
+    width: fit-content;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .status-line[data-worked] {
+    margin-block: var(--luke-space-8) 0;
+  }
+
+  /* Only its top margin is cleared, because the conversation's gap below it
+     is a bottom margin. */
+  .status-line[data-working] {
+    margin-top: 0;
+  }
+
+  .status-line[data-working]:last-child {
+    margin-bottom: 0;
+  }
+
+  .working-time {
+    color: var(--luke-color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .working-time-after {
+    margin-left: var(--luke-space-6);
+  }
+
+  /* How long ago a thread's line says something happened. */
+  .thread-time {
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* The Inbox's thread, scrolling inside the room its pane leaves it. */
+  .inbox-board {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--luke-space-12);
+    overflow-y: auto;
+    padding-top: var(--luke-section-gap);
+  }
+
+  /* Words with a light passing along them (../ai-elements/shimmer.tsx): the
+     muted gray with the highlight in the text's own ink. Its duration is a
+     literal as DESIGN.md allows a loop with no end of its own, because it
+     answers `--loop-motion` with its play state. */
+  .shimmer {
+    display: inline-block;
+    background-image: linear-gradient(
+      90deg,
+      var(--luke-color-text-muted) 0%,
+      var(--luke-color-text-muted) 40%,
+      var(--luke-color-text) 50%,
+      var(--luke-color-text-muted) 60%,
+      var(--luke-color-text-muted) 100%
+    );
+    background-size: 300% 100%;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 2s linear infinite;
+    animation-play-state: var(--loop-motion);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% center;
+  }
+
+  to {
+    background-position: 0% center;
+  }
+}
+
+/* A fold among a transcript's rows, a turn's calls or a replay's summary
+   (transcript-blocks.tsx, replay-card.tsx), in the caption type, and the one
+   quiet line that opens it, or that draws a replay's earlier steps, its
+   glyphs the control icon. */
+.transcript-fold {
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.transcript-fold-line {
+  display: flex;
+  height: var(--luke-control-height);
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  margin: 0;
+  padding: 0 var(--luke-space-4);
+  border: 0;
+  border-radius: var(--luke-radius-6);
+  background: transparent;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.transcript-fold-line:hover {
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
+}
+
+.transcript-fold-line > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
+}
+
+/* A turn's calls, opened, in from the line's chevron. */
+.turn-fold-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  margin-left: var(--luke-space-24);
+  padding-top: var(--luke-space-4);
+}
+
+/* A replay card's head: what it is, the source's chip, and how many steps,
+   on one line that gives way at its end. */
+.replay-card-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--luke-space-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-summary-body {
+  padding: var(--luke-space-4);
+}
+
+.replay-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+  outline: none;
+}
+
+/* A replay card's foot: the branch, the pull request, and the way to the
+   whole transcript, over a dashed rule. */
+.replay-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4) var(--luke-space-12);
+  padding-top: var(--luke-space-8);
+  border-top: 1px dashed var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.replay-foot > * {
+  min-width: 0;
+}
+
+/* A message's actions, their glyphs the control icon whichever way each is
+   drawn, a copy's glyph inside its own swap. */
+.message-actions svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+/* An Inbox item's words and what was filled in, which a reader may select
+   and copy; what was filled in keeps the lines it was typed on. */
+.inbox-words {
+  margin: 0;
+  user-select: text;
+}
+
+.inbox-lines {
+  white-space: pre-line;
+}
+
+/* A link the window does not open: its address beside its label, to copy. */
+.inbox-link-address {
+  color: var(--luke-color-text-muted);
+  user-select: text;
+}
+
+/* A typed field of an Inbox form: its name over its box. */
+.inbox-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+}
+
+/* A code card's failure stands at its foot, so it draws no rule under it. */
+.code-card > .file-tab-notice {
+  border-bottom: 0;
 }
 
 /* The Code and Call tabs' logs, whose calls each open at a checkpoint stuck
@@ -3496,6 +3773,9 @@ ol.transcript-list {
 }
 
 .agent-continued > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
   align-self: center;
 }
 
@@ -3532,6 +3812,12 @@ ol.transcript-list {
   margin: 0;
   color: var(--luke-color-danger-text);
   font-size: var(--luke-type-caption-size);
+}
+
+.agent-undelivered > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
 }
 
 .is-user:has(> .agent-undelivered) > :not(.agent-undelivered, .message-meta) {
@@ -3573,6 +3859,12 @@ ol.transcript-list {
   margin: var(--luke-space-2) 0 0;
   color: var(--luke-color-text-subtle);
   font-size: var(--luke-type-caption-size);
+}
+
+.agent-forked-to > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
 }
 
 .agent-forked-to-item {
@@ -4160,6 +4452,10 @@ button.skill-chip:hover,
   display: flex;
   flex: 1 1 0;
   min-width: 0;
+  padding-inline: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .inbox-answer-actions {
@@ -4178,10 +4474,11 @@ button.skill-chip:hover,
 }
 
 .inbox-presses {
+  display: flex;
   flex: none;
   flex-wrap: wrap;
   justify-content: flex-end;
-  row-gap: var(--luke-space-8);
+  gap: var(--luke-space-8) var(--luke-control-gap);
 }
 
 /* A box answered in words alone holds its round Send at the field's end
