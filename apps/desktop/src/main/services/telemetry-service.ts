@@ -119,6 +119,10 @@ export function createTelemetryService(
     start: () => Effect.void,
     // A report queued when the quit began would otherwise go with the
     // process; the flush is bounded so it cannot be what holds one open.
-    stop: () => Effect.asVoid(Effect.promise(() => Sentry.close(CRASH_REPORT_FLUSH_MS))),
+    // Note that it flushes rather than closes, because a launch that fails
+    // after this service started runs this stop before the entry captures
+    // the failure, and a closed client would drop that report; so would it
+    // every defect a later stop of the same quit reports.
+    stop: () => Effect.asVoid(Effect.promise(() => Sentry.flush(CRASH_REPORT_FLUSH_MS))),
   };
 }

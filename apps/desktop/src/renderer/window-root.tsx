@@ -11,7 +11,6 @@
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { sentryReporterLayer } from "@luke/features/sentry-reporting";
 import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@luke/features/sentry-tracing";
 import type { AppBridge } from "@luke/host/bridge";
 import { installAppBridge } from "@luke/panel/app-bridge";
@@ -64,18 +63,19 @@ export function mountWindow(surface: ReactNode): void {
   if (!rootElement) throw new Error("Renderer root element is missing");
   const root = createRoot(rootElement);
 
-  // A window whose document cannot be read stays blank, so the failure is
-  // sent to Sentry as an event, through this window's own SDK and its
-  // filters, and not only to the console, which Sentry keeps as a breadcrumb.
-  const firstRead = appStateFirstRead.pipe(
-    Effect.withErrorReporting,
-    Effect.provide(sentryReporterLayer(Sentry)),
-  );
   void (async () => {
     try {
-      await Effect.runPromise(firstRead);
+      await Effect.runPromise(appStateFirstRead);
     } catch (error) {
       console.error("The window's state could not be read; nothing is drawn.", error);
+      // A blank window is a failure, so it is sent as an event through this
+      // window's SDK and its filters, not only kept as the console's
+      // breadcrumb. Note that it is captured here rather than through main's
+      // Effect reporter, because providing a reporter layer on this path put
+      // 90 to 130 KB gzipped on every window's first load.
+      Sentry.captureException(error, {
+        mechanism: { type: "auto.electron.renderer.first_read", handled: false },
+      });
       return;
     }
     root.render(
