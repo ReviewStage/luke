@@ -177,11 +177,16 @@ function titledSubject(subject: AgentSubject, title: string | undefined): AgentS
 
 /** Names made one apart from another where two continuing agents share one, as a menu tells its items apart by their words. */
 function distinctNames(names: readonly string[]): readonly string[] {
-  const seen = new Map<string, number>();
+  // Note that every name is held taken first, so a suffix never lands on a name another already has.
+  const taken = new Set(names);
+  const given = new Set<string>();
   return names.map((name) => {
-    const count = (seen.get(name) ?? 0) + 1;
-    seen.set(name, count);
-    return count === 1 ? name : `${name} · ${count}`;
+    let label = name;
+    for (let count = 2; given.has(label) || (label !== name && taken.has(label)); count += 1) {
+      label = `${name} · ${count}`;
+    }
+    given.add(label);
+    return label;
   });
 }
 

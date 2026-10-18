@@ -727,6 +727,28 @@ test("past three continuations, the note names the newest two by their chips and
   assert.equal(whole.textContent?.includes("more"), false);
 });
 
+test("the +N more menu names each earlier continuation apart, even where a title already reads as another's told-apart name", async () => {
+  const ids = [NEXT, LATER, FORK, TURN, "d16fbf9e-8c7d-42d0-9abb-be91d07d8e76"];
+  const titles = ["Fix", "Fix", "Fix · 2", "Later", "Latest"];
+  const tab = await drawnTab({
+    status: CODING_AGENT_STATUS.COMPLETED,
+    others: ids.map((id, index) =>
+      agentOf(id, { title: titles[index] ?? null, from: FROM_SOURCE, createdAt: index + 2 }),
+    ),
+  });
+  const note = tab.continuedNote() ?? assert.fail("the box gives way to its note");
+  act(() => tab.named(note, "+3 more")?.click());
+  const menu = document.querySelector<HTMLElement>('[role="menu"]') ?? assert.fail("a menu opens");
+  const labels = [...menu.querySelectorAll<HTMLElement>('[role^="menuitem"]')].map(
+    (item) => item.textContent,
+  );
+
+  assert.equal(labels.length, 3);
+  assert.equal(new Set(labels).size, 3, labels.join(" | "));
+  assert.equal(labels[0], "Fix");
+  assert.equal(labels[2], "Fix · 2", "a title is never renamed for another's sake");
+});
+
 test("Continued in is named once whatever the continued agent stands as: starting, running, completed, stopped, failed, or failed on a refused key", async () => {
   const cases: readonly { status: CodingAgentStatus; failure?: CodingAgentFailure }[] = [
     { status: CODING_AGENT_STATUS.STARTING },
