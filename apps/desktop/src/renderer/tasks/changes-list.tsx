@@ -199,24 +199,20 @@ export function useChangesList(files: readonly CodingAgentChangedFile[]): Change
 }
 
 /**
- * A file's header in the list: its fold, the letter of what became of it,
- * its path, from the path it moved from where it moved, and the lines it
- * adds and removes, and under them, while it is open, why it has no hunks
- * where it has none, which stands here rather than as a note because a note
- * on the whole file stands on one side of a split. Pierre keeps it at the
- * top of the list while the file's lines scroll under it.
+ * A file's header in the list, one row: its fold, the letter of what
+ * became of it, its path, from the path it moved from where it moved, and
+ * the lines it adds and removes. Pierre keeps it at the top of the list
+ * while the file's lines scroll under it, at the height it reserves for it,
+ * so nothing more stands in it.
  */
 export function FileHead({
   file,
-  notice,
   collapsed,
   standing,
   onToggle,
   onStand,
 }: {
   file: CodingAgentChangedFile;
-  /** Why the file has no hunks to draw; none for a file that has them. */
-  notice: string | undefined;
   collapsed: boolean;
   /** Whether the keys stand on the file, which outlines it. */
   standing: boolean;
@@ -258,7 +254,6 @@ export function FileHead({
         </span>
         <LinesChanged additions={file.additions} deletions={file.deletions} />
       </div>
-      {notice === undefined || collapsed ? null : <p className="diff-list-notice">{notice}</p>}
     </div>
   );
 }

@@ -279,12 +279,33 @@ const ABOVE_KEY = {
   [DIFF_SELECTION_SIDE.ADDITIONS]: "above-additions",
 } as const satisfies Record<DiffSelection["side"], string>;
 
+/** The key of what stands in the place of the lines of a file that draws none; a review thread's note is keyed by its page, which this never is. */
+const LEAD_KEY = "lead";
+
+/** A file's review threads that stand above its lines, as one list. */
+function AboveThreads({
+  above,
+  threads,
+}: {
+  above: readonly { readonly key: string; readonly thread: ReviewThread }[];
+  threads: ChangesThreads | undefined;
+}): React.JSX.Element {
+  return (
+    <ol className="diff-outdated-threads" aria-label={CHANGES_WORDS.UNPLACED_THREADS}>
+      {above.map((each) => (
+        <li key={each.key}>{threads?.draw(each.thread, THREAD_PLACE.ABOVE)}</li>
+      ))}
+    </ol>
+  );
+}
+
 /**
  * A file of the list as the bundle is handed it: its patch, its fold, its
- * header, saying why it has no hunks where it has none, and its notes: each
- * review thread under its line, and those its diff draws no row for above
- * the first hunk (`threadsOn`), on the side each counts on, as GitHub's
- * split diff has them.
+ * header, and its notes: each review thread under its line, and those its
+ * diff draws no row for above the first hunk (`threadsOn`), on the side
+ * each counts on, as GitHub's split diff has them. A file with no hunks to
+ * draw stands as what is said in their place alone (`lead`), across its
+ * width: why it has none, and every one of its review threads.
  */
 function entryOf(
   file: CodingAgentChangedFile,
@@ -292,26 +313,34 @@ function entryOf(
   threads: ChangesThreads | undefined,
 ): DiffListEntry {
   const { placed, above } = threadsOn(threads?.list ?? [], file);
+  const notice = fileNotice(file);
   const notes: DiffNote[] = placed.map((each) => ({
     key: each.key,
     side: each.side,
     line: each.line,
     content: threads?.draw(each.thread, THREAD_PLACE.ON_LINE),
   }));
-  for (const side of Object.values(DIFF_SELECTION_SIDE)) {
+  if (notice !== undefined) {
+    notes.unshift({
+      key: LEAD_KEY,
+      side: DIFF_SELECTION_SIDE.ADDITIONS,
+      line: FILE_NOTE_LINE,
+      content: (
+        <>
+          <p className="diff-list-notice">{notice}</p>
+          {above.length === 0 ? null : <AboveThreads above={above} threads={threads} />}
+        </>
+      ),
+    });
+  }
+  for (const side of notice === undefined ? Object.values(DIFF_SELECTION_SIDE) : []) {
     const unplaced = above.filter((each) => each.side === side);
     if (unplaced.length === 0) continue;
     notes.unshift({
       key: ABOVE_KEY[side],
       side,
       line: FILE_NOTE_LINE,
-      content: (
-        <ol className="diff-outdated-threads" aria-label={CHANGES_WORDS.UNPLACED_THREADS}>
-          {unplaced.map((each) => (
-            <li key={each.key}>{threads?.draw(each.thread, THREAD_PLACE.ABOVE)}</li>
-          ))}
-        </ol>
-      ),
+      content: <AboveThreads above={unplaced} threads={threads} />,
     });
   }
   const path = file.path;
@@ -320,10 +349,10 @@ function entryOf(
     path,
     patch: listPatch(file),
     collapsed,
+    lead: notice !== undefined,
     header: (
       <FileHead
         file={file}
-        notice={fileNotice(file)}
         collapsed={collapsed}
         standing={list.standing === path}
         onToggle={() => list.toggle(path)}

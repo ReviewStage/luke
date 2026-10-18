@@ -116,12 +116,18 @@ export interface DiffViewProps {
  */
 export const FILE_NOTE_LINE = 0;
 
-/** One file of a list: its path, which keys it; its patch, headed as git writes one, with no hunks where it has none to draw; whether only its header is drawn; and its notes. */
+/** One file of a list: its path, which keys it; its patch, headed as git writes one, with no hunks where it has none to draw; whether only its header is drawn; its notes; and whether those notes stand in the place of its lines. */
 export interface DiffListFile {
   readonly path: string;
   readonly patch: string;
   readonly collapsed: boolean;
   readonly annotations: readonly DiffAnnotation[];
+  /**
+   * Whether the file draws no lines of its own, only what stands in their
+   * place: its notes on the whole file (`FILE_NOTE_LINE`), drawn across the
+   * whole of its width, which say why it has no lines or show what it is.
+   */
+  readonly lead: boolean;
 }
 
 /**

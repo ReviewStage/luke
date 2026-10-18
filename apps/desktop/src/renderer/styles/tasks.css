@@ -1512,7 +1512,8 @@
   text-overflow: ellipsis;
 }
 
-/* Why a file has no hunks to draw, under its header's row in the list. */
+/* Why a file has no hunks to draw, in their place under its header in the
+   list (diff-view/index.ts draws it across the file's width). */
 .diff-list-notice {
   margin: 0;
   padding: var(--space-12) var(--space-12) var(--space-12) 38px;

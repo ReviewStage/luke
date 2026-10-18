@@ -8,7 +8,9 @@ import {
   type FileDiffMetadata,
   type FileDiffOptions,
   getSingularPatch,
+  type File as PierreFile,
   FileDiff as PierreFileDiff,
+  type PostRenderPhase,
 } from "@pierre/diffs";
 import { FIND_SHADOW_ATTRIBUTE } from "../find-matches";
 import {
@@ -69,8 +71,16 @@ import { adoptShadowStyles } from "./inline-styles";
  * file's light DOM, so the panel's own stylesheets draw it and the view
  * fills it as it does any of its own; a note under a line, a review
  * thread's, is the same, by its key, and a note on the whole file stands
- * under its header (`FILE_NOTE_LINE`). The view is told which file stands at
- * the top as the list scrolls, and scrolls it to a file's header.
+ * under its header (`FILE_NOTE_LINE`). A file that draws no lines of its own,
+ * one binary or too large, or an image the view draws as a picture, stands
+ * as its notes on the whole file alone (`DiffListFile.lead`): Pierre draws
+ * such notes only above a line, and measures them there, so the file is
+ * handed one empty line, hidden with the old side and the numbers, and its
+ * notes run across the whole of its width. Note that nothing is put in the
+ * header beyond its one row, because Pierre reserves the header a height of
+ * its own and holds it at the top while the file scrolls by. The view is
+ * told which file stands at the top as the list scrolls, and scrolls it to
+ * a file's header.
  */
 
 /** Each font's stack, ending in the window's own code type should the Mac lack it. */
@@ -94,6 +104,9 @@ const LIGATURES = { ON: "'liga' 1, 'calt' 1", OFF: "'liga' 0, 'calt' 0" } as con
 
 /** The longest line, in characters, whose changed words are marked; a longer one is tinted whole. */
 const MAX_LINE_DIFF_LENGTH = 1000;
+
+/** The attribute a list's file wears while it is drawn as its notes alone. */
+const LEAD_ATTRIBUTE = "data-lead";
 
 /** What the find leaves out of the shadow root's words: the gutter of numbers, as a File tab's numbers are. */
 const FIND_SKIPPED = "[data-gutter]";
@@ -131,6 +144,21 @@ const LOOK_CSS = `
   [data-code],
   [data-gutter] {
     scrollbar-width: thin;
+  }
+  /* A file drawn as its notes alone, laid out as blocks: its one empty line, the old side, the numbers, and the hatching beside a side's missing lines are hidden, so its notes run across its whole width, as tall as Pierre measured them. */
+  :host([${LEAD_ATTRIBUTE}]) pre,
+  :host([${LEAD_ATTRIBUTE}]) [data-code],
+  :host([${LEAD_ATTRIBUTE}]) [data-content] {
+    display: block;
+  }
+  :host([${LEAD_ATTRIBUTE}]) pre {
+    padding-bottom: 0;
+  }
+  :host([${LEAD_ATTRIBUTE}]) [data-deletions],
+  :host([${LEAD_ATTRIBUTE}]) [data-gutter],
+  :host([${LEAD_ATTRIBUTE}]) [data-line],
+  :host([${LEAD_ATTRIBUTE}]) [data-content-buffer] {
+    display: none;
   }
   ::highlight(find-match) {
     background-color: var(--find-match);
@@ -244,8 +272,16 @@ function annotationsOf(notes: readonly DiffAnnotation[]): DiffLineAnnotation<str
   return notes.map((note) => ({ side: note.side, lineNumber: note.line, metadata: note.key }));
 }
 
+/** A file drawn as its notes alone, as Pierre takes it: a new file of one empty line, which Pierre draws its notes on the whole file above. */
+function leadPatchOf(path: string): FileDiffMetadata {
+  return getSingularPatch(
+    `diff --git a/${path} b/${path}\n--- /dev/null\n+++ b/${path}\n@@ -0,0 +1 @@\n+\n`,
+  );
+}
+
 /** A file's patch read, or, where it does not read as one, the file with no hunks, so one unreadable patch costs its own lines and not the list. */
 function patchOf(file: DiffListFile): FileDiffMetadata {
+  if (file.lead) return leadPatchOf(file.path);
   try {
     return getSingularPatch(file.patch);
   } catch {
@@ -263,12 +299,12 @@ interface DrawnFile {
 /**
  * Pierre's options for a list: the look, each file's header and notes drawn
  * in the elements the view keeps for them, read off the latest props, and
- * each file's shadow root dressed as it is first drawn.
+ * each file's element dressed as it is drawn.
  */
 function listOptions(
   drawn: DiffLook,
   latest: () => DiffListProps,
-  dress: (element: HTMLElement) => void,
+  dress: (element: HTMLElement, path: string) => void,
 ): CodeViewOptions<string, undefined> {
   return {
     ...sharedOptions(drawn),
@@ -285,7 +321,12 @@ function listOptions(
     ) => latest().renderHeader(context.item.id),
     renderAnnotation: (note: { metadata: string }, context: { item: { id: string } }) =>
       latest().renderAnnotation(context.item.id, note.metadata),
-    onPostRender: (node: HTMLElement) => dress(node),
+    onPostRender: (
+      node: HTMLElement,
+      _instance: PierreFileDiff<string, undefined> | PierreFile<string, undefined>,
+      _phase: PostRenderPhase,
+      context: { item: { id: string } },
+    ) => dress(node, context.item.id),
   };
 }
 
@@ -301,8 +342,10 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   const releases: Array<() => void> = [];
   const dressed = new WeakSet<HTMLElement>();
   // Note that Pierre keeps a file's element for another file once the first
-  // scrolls away, so each element is dressed once, the first time it is drawn.
-  const dress = (element: HTMLElement) => {
+  // scrolls away, so each element's shadow root is dressed once, the first
+  // time it is drawn, and whether it is drawn as notes alone every time.
+  const dress = (element: HTMLElement, path: string) => {
+    element.toggleAttribute(LEAD_ATTRIBUTE, drawnFiles.get(path)?.file.lead === true);
     if (dressed.has(element) || element.shadowRoot === null) return;
     dressed.add(element);
     element.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
@@ -314,6 +357,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       if (
         held !== undefined &&
         held.file.patch === file.patch &&
+        held.file.lead === file.lead &&
         held.file.collapsed === file.collapsed &&
         sameNotes(held.file.annotations, file.annotations)
       ) {
@@ -322,7 +366,10 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       const item: CodeViewDiffItem<string> = {
         id: file.path,
         type: "diff",
-        fileDiff: held?.file.patch === file.patch ? held.item.fileDiff : patchOf(file),
+        fileDiff:
+          held?.file.patch === file.patch && held.file.lead === file.lead
+            ? held.item.fileDiff
+            : patchOf(file),
         collapsed: file.collapsed,
         annotations: annotationsOf(file.annotations),
         version: (held?.item.version ?? 0) + 1,

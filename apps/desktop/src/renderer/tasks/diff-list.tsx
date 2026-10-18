@@ -32,11 +32,12 @@ export interface DiffNote extends DiffAnnotation {
   readonly content: ReactNode;
 }
 
-/** One file of the list as the view hands it: its path, its patch, whether it is collapsed, its header, and its notes. */
+/** One file of the list as the view hands it: its path, its patch, whether it is collapsed, whether its notes stand in the place of its lines, its header, and its notes. */
 export interface DiffListEntry {
   readonly path: string;
   readonly patch: string;
   readonly collapsed: boolean;
+  readonly lead: boolean;
   readonly header: ReactNode;
   readonly notes: readonly DiffNote[];
 }
@@ -62,6 +63,7 @@ function sameFiles(a: readonly DiffListFile[], b: readonly DiffListFile[]): bool
         file.path === other.path &&
         file.patch === other.patch &&
         file.collapsed === other.collapsed &&
+        file.lead === other.lead &&
         sameNotes(file.annotations, other.annotations)
       );
     })
@@ -124,6 +126,7 @@ export function PierreDiffList({
     path: entry.path,
     patch: entry.patch,
     collapsed: entry.collapsed,
+    lead: entry.lead,
     annotations: entry.notes.map(placeOf),
   }));
   const props: DiffListProps = { files, look, renderHeader, renderAnnotation, onTopFile: tellTop };

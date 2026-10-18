@@ -309,19 +309,31 @@ test("every file is handed over whole as git writes it, in the tree's order, dra
   assert.deepEqual(props.look, DEFAULT_LOOK);
 });
 
-test("a file with no hunks to draw stands in the list under its header, which says why", async () => {
+test("a file with no hunks to draw stands in the list as what is said in their place: why, and its review threads", async () => {
   files = [
     changed("logo.png", { omitted: PATCH_OMITTED.BINARY, patch: null, additions: 0, deletions: 0 }),
   ];
-  const props = await drawTab();
+  const props = await drawTab({
+    threads: {
+      list: [{ ...seatsThread(2, "why-binary"), path: "logo.png" }],
+      draw: (thread) => createElement("p", null, thread.comments[0]?.body),
+    },
+  });
 
+  const [file] = props.files;
+  assert.equal(file?.patch, "diff --git a/logo.png b/logo.png\n--- a/logo.png\n+++ b/logo.png\n");
+  assert.equal(file?.lead, true);
+  assert.deepEqual(file?.annotations, [{ key: "lead", side: "additions", line: 0 }]);
+  const lead = props.renderAnnotation("logo.png", "lead");
+  assert.equal(lead.querySelector(".diff-list-notice")?.textContent, "Binary file not shown.");
   assert.equal(
-    props.files[0]?.patch,
-    "diff --git a/logo.png b/logo.png\n--- a/logo.png\n+++ b/logo.png\n",
+    lead.querySelector('[aria-label="Comments on lines this diff does not show"]')?.textContent,
+    "why-binary",
   );
   assert.equal(
-    header("logo.png").querySelector(".diff-list-notice")?.textContent,
-    "Binary file not shown.",
+    header("logo.png").querySelector(".diff-list-notice"),
+    null,
+    "the header is one row",
   );
 });
 
