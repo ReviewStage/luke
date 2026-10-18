@@ -6,7 +6,16 @@ import {
   PATCH_OMITTED,
 } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
-import { filterFiles, startsCollapsed, threadPreview, threadsOn, treeOrder } from "./changes-model";
+import { DIFF_SELECTION_SIDE } from "../diff-view/contract";
+import {
+  commentLines,
+  commentLinesLabel,
+  filterFiles,
+  startsCollapsed,
+  threadPreview,
+  threadsOn,
+  treeOrder,
+} from "./changes-model";
 
 /**
  * changes-model.test.ts -- a review thread previews the end of the hunk
@@ -268,5 +277,62 @@ test("a deleted file, a lockfile, and a file of more than a thousand changed lin
   assert.equal(
     startsCollapsed(changed("pnpm-lock.yaml", { patch: null, omitted: PATCH_OMITTED.TOO_LARGE })),
     false,
+  );
+});
+
+/** A pick of lines on the sides given, from `start` to `end`, as the gutter's + tells it. */
+function picked(
+  start: number,
+  end: number,
+  side: (typeof DIFF_SELECTION_SIDE)[keyof typeof DIFF_SELECTION_SIDE] = DIFF_SELECTION_SIDE.ADDITIONS,
+  endSide = side,
+) {
+  return { start, side, end, endSide };
+}
+
+test("a comment's lines are GitHub's: in the order the diff draws them however they were picked, one line where both ends are one row, and each end on its own side", () => {
+  assert.deepEqual(commentLines(FILE_A, picked(5, 3)), {
+    line: 5,
+    side: DIFF_SIDE.RIGHT,
+    startLine: 3,
+    startSide: DIFF_SIDE.RIGHT,
+  });
+  assert.deepEqual(commentLines(FILE_A, picked(4, 4, DIFF_SELECTION_SIDE.DELETIONS)), {
+    line: 4,
+    side: DIFF_SIDE.LEFT,
+  });
+  assert.deepEqual(
+    commentLines(
+      FILE_A,
+      picked(5, 4, DIFF_SELECTION_SIDE.ADDITIONS, DIFF_SELECTION_SIDE.DELETIONS),
+    ),
+    { line: 5, side: DIFF_SIDE.RIGHT, startLine: 4, startSide: DIFF_SIDE.LEFT },
+  );
+  assert.deepEqual(
+    commentLines(FILE_A, picked(5, 5, DIFF_SELECTION_SIDE.DELETIONS)),
+    { line: 5, side: DIFF_SIDE.LEFT },
+    "an unchanged line counts on the old side too",
+  );
+  assert.equal(
+    commentLinesLabel({ line: 5, side: DIFF_SIDE.RIGHT, startLine: 3, startSide: DIFF_SIDE.RIGHT }),
+    "lines 3–5",
+  );
+  assert.equal(
+    commentLinesLabel({ line: 5, side: DIFF_SIDE.RIGHT, startLine: 4, startSide: DIFF_SIDE.LEFT }),
+    "lines L4–R5",
+  );
+});
+
+test("no comment is offered where GitHub takes none: a line no row stands for, a range across two hunks, or a file that draws no lines of its own", () => {
+  const twoHunks = changed("src/two.ts", {
+    patch: "@@ -1,2 +1,2 @@\n-a\n+b\n c\n@@ -10,2 +10,2 @@\n x\n-y\n+z",
+  });
+
+  assert.equal(commentLines(FILE_A, picked(9, 9)), undefined);
+  assert.equal(commentLines(FILE_A, picked(6, 6, DIFF_SELECTION_SIDE.DELETIONS)), undefined);
+  assert.equal(commentLines(twoHunks, picked(1, 11)), undefined);
+  assert.equal(
+    commentLines(changed("logo.png", { patch: null, omitted: PATCH_OMITTED.BINARY }), picked(1, 1)),
+    undefined,
   );
 });

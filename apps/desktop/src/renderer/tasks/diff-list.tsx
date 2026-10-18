@@ -8,7 +8,9 @@ import {
   type DiffListFile,
   type DiffListHandle,
   type DiffListProps,
+  type DiffListSelection,
   type DiffLook,
+  sameListSelection,
   sameLook,
   sameNotes,
 } from "../diff-view/contract";
@@ -24,7 +26,9 @@ import {
  * the file and under its line, so a header and a note are this window's own
  * React and stylesheets. The view is told the file whose header stands at
  * the top as the list scrolls, and scrolls the list to a file through
- * `door`.
+ * `door`. Where the view comments on lines, the gutter's + tells it the
+ * lines picked (`onComment`), and the lines it is commenting on stand lit
+ * (`selected`).
  */
 
 /** A note drawn in a file of the list, a review thread's under its line or what stands above the file's first hunk: where it stands, and what it says. */
@@ -91,6 +95,8 @@ export function PierreDiffList({
   door,
   onTopFile,
   boxRef,
+  onComment,
+  selected,
 }: {
   entries: readonly DiffListEntry[];
   look: DiffLook;
@@ -100,6 +106,10 @@ export function PierreDiffList({
   onTopFile: (path: string) => void;
   /** Handed the box the list is drawn in, which the view measures for a split's room; a door that stays the same, as a state's setter does. */
   boxRef: (element: HTMLDivElement | null) => void;
+  /** Told the lines a press of the gutter's + picked; none offers no +. */
+  onComment?: ((picked: DiffListSelection) => void) | undefined;
+  /** The lines being commented on, lit. */
+  selected?: DiffListSelection | undefined;
 }): React.JSX.Element {
   const loaded = useAtomValue(useSideBundles().diffView);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
@@ -122,6 +132,9 @@ export function PierreDiffList({
   const topFile = useRef(onTopFile);
   topFile.current = onTopFile;
   const tellTop = useCallback((path: string) => topFile.current(path), []);
+  const comment = useRef(onComment);
+  comment.current = onComment;
+  const tellComment = useCallback((picked: DiffListSelection) => comment.current?.(picked), []);
   const files = entries.map((entry) => ({
     path: entry.path,
     patch: entry.patch,
@@ -129,7 +142,15 @@ export function PierreDiffList({
     lead: entry.lead,
     annotations: entry.notes.map(placeOf),
   }));
-  const props: DiffListProps = { files, look, renderHeader, renderAnnotation, onTopFile: tellTop };
+  const props: DiffListProps = {
+    files,
+    look,
+    renderHeader,
+    renderAnnotation,
+    onTopFile: tellTop,
+    onComment: onComment === undefined ? undefined : tellComment,
+    selected,
+  };
   // What the list was last drawn with; the mount reads the latest, so it is mounted once.
   const drawn = useRef(props);
   const latest = useRef(props);
@@ -159,7 +180,13 @@ export function PierreDiffList({
   useEffect(() => {
     if (handle.current === undefined) return;
     const was = drawn.current;
-    if (sameFiles(was.files, files) && sameLook(was.look, look)) return;
+    if (
+      sameFiles(was.files, files) &&
+      sameLook(was.look, look) &&
+      sameListSelection(was.selected, selected) &&
+      (was.onComment === undefined) === (onComment === undefined)
+    )
+      return;
     drawn.current = latest.current;
     handle.current.update(latest.current);
   });

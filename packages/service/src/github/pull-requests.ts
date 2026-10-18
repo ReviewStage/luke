@@ -2402,6 +2402,86 @@ export function pullRequestDeployments(
   );
 }
 
+/** The member's own pending review on a pull request, as the conversation's read carries it: how many comments it holds. */
+export interface ViewerPendingReview {
+  readonly comments: number;
+}
+
+/** At most this many pending reviews are read to find the member's own; GitHub shows a member only theirs, so one is the most ever answered. */
+const VIEWER_PENDING_READ = 10;
+
+const VIEWER_PENDING_QUERY = `query ViewerPendingReview($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviews(states: PENDING, first: ${VIEWER_PENDING_READ}) {
+        nodes { viewerDidAuthor comments { totalCount } }
+      }
+    }
+  }
+}`;
+
+const ViewerPendingAnswerSchema = Schema.Struct({
+  data: Schema.optionalKey(
+    Schema.NullOr(
+      Schema.Struct({
+        repository: Schema.NullOr(
+          Schema.Struct({
+            pullRequest: Schema.NullOr(
+              Schema.Struct({
+                reviews: Schema.Struct({
+                  nodes: Schema.Array(
+                    Schema.NullOr(
+                      Schema.Struct({
+                        viewerDidAuthor: Schema.Boolean,
+                        comments: Schema.Struct({ totalCount: Schema.Number }),
+                      }),
+                    ),
+                  ),
+                }),
+              }),
+            ),
+          }),
+        ),
+      }),
+    ),
+  ),
+});
+
+/**
+ * The review the member holds pending on the pull request, read on their
+ * own token, since nobody else sees it; none where they hold none, and none
+ * where GitHub would not answer them, which leaves the conversation without
+ * it rather than failing it, said once in the log.
+ */
+export function viewerPendingReviewOf(
+  token: Redacted.Redacted,
+  fullName: string,
+  number: number,
+): Effect.Effect<ViewerPendingReview | null, never, HttpClient.HttpClient> {
+  const [owner = "", name = ""] = fullName.split("/");
+  const request = githubPost(GRAPHQL_PATH, token, {
+    query: VIEWER_PENDING_QUERY,
+    variables: { owner, name, number },
+  });
+  return Effect.scoped(
+    Effect.flatMap(send(request), (response) => readBody(response, ViewerPendingAnswerSchema)),
+  ).pipe(
+    Effect.map((answer) => {
+      const nodes = answer.data?.repository?.pullRequest?.reviews.nodes ?? [];
+      const own = nodes.find((node) => node?.viewerDidAuthor === true);
+      return own == null ? null : { comments: own.comments.totalCount };
+    }),
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(
+          `the member's own pending review on pull request ${number} was not read: ${failure._tag}`,
+        ),
+        null,
+      ),
+    ),
+  );
+}
+
 /** The repository's labels, as its pickers list them. */
 const LabelsSchema = Schema.Array(Schema.Struct({ name: Schema.String, color: Schema.String }));
 

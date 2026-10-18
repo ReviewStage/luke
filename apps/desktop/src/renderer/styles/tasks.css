@@ -1948,6 +1948,21 @@
   margin: 0;
 }
 
+/* The pending comments the member's review holds, counted on the bar's
+   Review press as stage-cli's badge counts them. */
+.pull-request-review-count {
+  min-width: 16px;
+  margin-inline-start: var(--luke-space-4);
+  padding: 0 var(--luke-space-4);
+  border-radius: 999px;
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
+}
+
 .pull-request-review-foot {
   display: flex;
   justify-content: flex-end;
@@ -2393,6 +2408,41 @@
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
   background: var(--luke-color-surface);
+}
+
+/* A comment being written on lines of a file (`line-comment.tsx`), under
+   the last of them as a review thread stands: a card of the thread's own
+   face, its head naming the lines, the words with their preview, GitHub's
+   refusal, and what GitHub's own line comment offers at its foot. */
+.line-comment {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  max-width: 720px;
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+}
+
+.line-comment-head {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  font-weight: 600;
+}
+
+.line-comment-note {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+.line-comment-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--luke-control-gap);
 }
 
 .diff-outdated-threads {
