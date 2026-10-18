@@ -715,9 +715,12 @@ export function agentsLayerOf(palette: WorldPalette, materials: AgentMaterials):
           x: clamp(target.cx + (rng() - 0.5) * target.W * 0.5, target.x0 + 2, target.x1 - 2),
           z: target.z1 - 1.6,
         };
-        const go = keptRight(roadRoute(currentLayout, walker.park, home, dock, target), 1.3);
+        // Note that each way is kept to its own right, so a forklift coming back drives the other lane.
+        const road = roadRoute(currentLayout, walker.park, home, dock, target);
+        const go = keptRight(road, 1.3);
         go[0] = walker.park;
-        const back = [...go].reverse();
+        const back = keptRight([...road].reverse(), 1.3);
+        back[back.length - 1] = walker.park;
         const seat = { x: walker.park.x - 0.9, z: walker.park.z };
         steps.push(
           { kind: STEP.WALK, duration: 0, path: new Path([walker.work, seat]) },
@@ -1080,7 +1083,9 @@ export function agentsLayerOf(palette: WorldPalette, materials: AgentMaterials):
           before.placement.z === placement.z &&
           before.placement.size === placement.size &&
           before.placement.view.state === placement.view.state &&
-          before.placement.deliveries.length === placement.deliveries.length;
+          before.placement.lot === placement.lot &&
+          before.placement.deliveries.length === placement.deliveries.length &&
+          before.placement.deliveries.every((lot, index) => placement.deliveries[index] === lot);
         if (same && before !== undefined) {
           next.set(placement.view.id, { ...before, placement });
           continue;

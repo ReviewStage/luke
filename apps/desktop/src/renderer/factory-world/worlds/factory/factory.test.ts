@@ -24,12 +24,16 @@ import {
 } from "@luke/ui/testing";
 import {
   Color,
+  InstancedBufferGeometry,
   InstancedMesh,
+  type Material,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   type Object3D,
   PerspectiveCamera,
   Scene,
+  ShaderMaterial,
 } from "three";
 import { test } from "vitest";
 import {
@@ -219,7 +223,17 @@ function idsOf(found: Map<PickKind, Set<string>>, kind: PickKind): string[] {
   return [...(found.get(kind) ?? [])].sort();
 }
 
-/** Whether anything visible is drawn in `hex`'s colour, at any brightness: a material's, or an instance's. */
+/** The colour a material draws in: its own, or a shader's `uColor`; white for one that takes it all from its instances. */
+function baseColourOf(material: Material | Material[]): Color {
+  if (material instanceof MeshBasicMaterial || material instanceof MeshStandardMaterial)
+    return material.color;
+  if (material instanceof ShaderMaterial && material.uniforms.uColor?.value instanceof Color) {
+    return material.uniforms.uColor.value;
+  }
+  return new Color(1, 1, 1);
+}
+
+/** Whether anything visible is drawn in `hex`'s colour, at any brightness: a material's, an instance's, or the two together. */
 function drawsColour(scene: Scene, hex: string): boolean {
   const wanted = new Color(hex);
   const top = Math.max(wanted.r, wanted.g, wanted.b);
@@ -236,15 +250,28 @@ function drawsColour(scene: Scene, hex: string): boolean {
   const color = new Color();
   scene.traverse((object) => {
     if (drawn || !(object instanceof Mesh) || !shownIn(scene, object)) return;
-    if (object instanceof InstancedMesh) {
-      if (object.count === 0 || object.instanceColor === null) return;
-      for (let index = 0; index < object.count && !drawn; index += 1) {
-        object.getColorAt(index, color);
-        drawn = same(color);
-      }
+    const base = baseColourOf(object.material);
+    if (!(object instanceof InstancedMesh)) {
+      drawn = same(base);
       return;
     }
-    if (object.material instanceof MeshBasicMaterial) drawn = same(object.material.color);
+    for (let index = 0; index < object.count && !drawn; index += 1) {
+      if (object.instanceColor === null) color.copy(base);
+      else object.getColorAt(index, color).multiply(base);
+      drawn = same(color);
+    }
+  });
+  return drawn;
+}
+
+/** How many particles are drawn at all: smoke, steam, and sparks with any alpha left. */
+function particlesDrawn(scene: Scene): number {
+  let drawn = 0;
+  scene.traverse((object) => {
+    if (!(object instanceof Mesh) || !(object.geometry instanceof InstancedBufferGeometry)) return;
+    const tint = object.geometry.getAttribute("aTint");
+    if (tint === undefined) return;
+    for (let index = 0; index < tint.count; index += 1) if (tint.getW(index) > 0) drawn += 1;
   });
   return drawn;
 }
@@ -359,6 +386,32 @@ test("scrubbing back redraws the factory as it stood: later merges unlit, an age
     idsOf(pickable(scene, registrations), PICK_KIND.SHIPPED).length,
     snapshot.shipped.length,
   );
+});
+
+test("scrubbing a moving factory back to before every merge leaves nothing shipped drawn or pickable, its glow and trucks included", () => {
+  const snapshot = snapshotOf();
+  const { host, scene, registrations } = hostOf();
+  const instance = world.create(host);
+  instance.update(stateOf(snapshot, { still: false }));
+  for (let step = 0; step < 90; step += 1) instance.frame?.(1 / 30, step / 30);
+  assert.ok(drawsColour(scene, SIGNAL_COLOR.SHIPPED));
+  const before = factoryWorldAsOf(snapshot, snapshot.shippedSince);
+  instance.update({ ...stateOf(before), live: false, still: false });
+  assert.deepEqual(idsOf(pickable(scene, registrations), PICK_KIND.SHIPPED), []);
+  assert.equal(drawsColour(scene, SIGNAL_COLOR.SHIPPED), false);
+});
+
+test("switching defects off takes their smoke and embers with them at once, and leaves the chimneys' smoke", () => {
+  const snapshot = snapshotOf();
+  const { host, scene } = hostOf();
+  const instance = world.create(host);
+  instance.update(stateOf(snapshot, { still: false }));
+  for (let step = 0; step < 90; step += 1) instance.frame?.(1 / 30, step / 30);
+  const withDefects = particlesDrawn(scene);
+  instance.update(stateOf(snapshot, { still: false, layers: { ...ALL_LAYERS, defects: false } }));
+  const without = particlesDrawn(scene);
+  assert.ok(without < withDefects, "the wrecks' smoke is gone");
+  assert.ok(without > 0, "the yard still smokes");
 });
 
 test("redrawing builds nothing new, and a repository changed and changed back stands as it did", () => {

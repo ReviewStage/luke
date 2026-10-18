@@ -295,6 +295,17 @@ export interface ParticleSpec {
   readonly gravity: number;
 }
 
+/** What a particle rose from, so switching a layer off takes its smoke and sparks with it. */
+export const PARTICLE_SOURCE = {
+  /** The yard's own chimneys and towers, which no layer switches. */
+  YARD: 0,
+  BUILDING: 1,
+  SHIPPED: 2,
+  DEFECTS: 3,
+} as const;
+
+export type ParticleSource = (typeof PARTICLE_SOURCE)[keyof typeof PARTICLE_SOURCE];
+
 /**
  * A ring of particles drawn as one instanced quad: smoke drifts with the
  * wind and fades in and out; sparks fall and fade. Emitting past the ring's
@@ -311,6 +322,7 @@ export class Particles {
   private readonly pointAttribute: InstancedBufferAttribute;
   private readonly tintAttribute: InstancedBufferAttribute;
   private readonly smoke: boolean;
+  private readonly sources: Uint8Array;
 
   constructor(count: number, smoke: boolean) {
     this.count = count;
@@ -320,6 +332,7 @@ export class Particles {
     this.velocity = new Float32Array(count * 3);
     // Note that each particle keeps six numbers of state: its life left and whole, its first size, its growth, its first alpha, and its gravity.
     this.state = new Float32Array(count * 6);
+    this.sources = new Uint8Array(count);
     const geometry = new InstancedBufferGeometry();
     geometry.setAttribute(
       "position",
@@ -350,9 +363,10 @@ export class Particles {
     this.mesh.renderOrder = 10;
   }
 
-  emit(spec: ParticleSpec): void {
+  emit(spec: ParticleSpec, source: ParticleSource = PARTICLE_SOURCE.YARD): void {
     const index = this.head;
     this.head = (this.head + 1) % this.count;
+    this.sources[index] = source;
     this.point.set([spec.x, spec.y, spec.z, spec.size], index * 4);
     this.tint.set([spec.color.r, spec.color.g, spec.color.b, 0], index * 4);
     this.velocity.set([spec.vx, spec.vy, spec.vz], index * 3);
@@ -362,10 +376,13 @@ export class Particles {
     );
   }
 
-  /** Lets every particle go at once, as a still frame or a hidden layer wants. */
-  clear(): void {
-    this.state.fill(0);
-    this.tint.fill(0);
+  /** Lets every particle go at once, as a still frame wants, or only those from `source`, as a hidden layer does. */
+  clear(source?: ParticleSource): void {
+    for (let index = 0; index < this.count; index += 1) {
+      if (source !== undefined && this.sources[index] !== source) continue;
+      this.state[index * 6] = 0;
+      this.tint[index * 4 + 3] = 0;
+    }
     this.tintAttribute.needsUpdate = true;
   }
 

@@ -66,6 +66,8 @@ export interface Trucks {
   ) => readonly { haul: Haul; x: number; z: number }[];
   /** Takes every truck off the road. */
   readonly clear: () => void;
+  /** Takes off the road every truck whose load `keep` no longer holds. */
+  readonly retain: (keep: (target: PickTarget) => boolean) => void;
 }
 
 /** Builds the fleet in `palette`'s signals. */
@@ -202,6 +204,15 @@ export function trucksOf(palette: WorldPalette, solid: Material): Trucks {
     },
     clear: () => {
       slots.fill(undefined);
+      recount();
+    },
+    retain: (keep) => {
+      slots.forEach((truck, index) => {
+        if (truck === undefined || keep(truck.target)) return;
+        slots[index] = undefined;
+        for (const mesh of [cabs, boxes, lights]) mesh.setMatrixAt(index, hidden);
+      });
+      for (const mesh of [cabs, boxes, lights]) mesh.instanceMatrix.needsUpdate = true;
       recount();
     },
   };

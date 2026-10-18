@@ -61,10 +61,11 @@ export interface ShippedLayer {
   readonly pins: InstancedMesh;
   readonly lampUrlAt: (index: number) => string | undefined;
   readonly pinPathAt: (index: number) => string | undefined;
-  /** Hangs every merge in `timeline` as of `instant`, and glows each lot by its zone's `alive`. */
+  /** Hangs every merge in `timeline` as of `instant`, and glows each lot as alive as `aliveOf` says its zone is now. */
   readonly show: (
     timeline: readonly TimelineEntry[],
     instant: number,
+    aliveOf: (path: string) => number,
     chosen: (url: string) => boolean,
     shown: boolean,
   ) => void;
@@ -147,6 +148,8 @@ export function shippedLayerOf(palette: WorldPalette): ShippedLayer {
   let entries: readonly TimelineEntry[] = [];
   let at = 0;
   let isChosen: (url: string) => boolean = () => false;
+  // Note that a lot keeps the zone it was built from, so how alive a zone is now is read from the latest view.
+  let aliveNow: (path: string) => number = () => 0;
   let visible = true;
   let hung: Lamp[] = [];
   let flown: Pin[] = [];
@@ -235,12 +238,13 @@ export function shippedLayerOf(palette: WorldPalette): ShippedLayer {
     if (visible && layout !== undefined) {
       for (const lot of layout.lots) {
         const building = buildings[lot.index];
-        if (building === undefined || lot.zone.alive < 0.02) continue;
+        const alive = aliveNow(lot.zone.path);
+        if (building === undefined || alive < 0.02) continue;
         scratch.matrix
           .makeScale(building.w * 2, 1, building.d * 2)
           .setPosition(lot.bx, 0.36, lot.bz);
         halos.setMatrixAt(count, scratch.matrix);
-        halos.setColorAt(count, scratch.tint.setScalar(Math.min(0.45, lot.zone.alive * 0.5)));
+        halos.setColorAt(count, scratch.tint.setScalar(Math.min(0.45, alive * 0.5)));
         count += 1;
       }
     }
@@ -257,9 +261,10 @@ export function shippedLayerOf(palette: WorldPalette): ShippedLayer {
     pins,
     lampUrlAt: (index) => (index < lamps.count ? hung[index]?.url : undefined),
     pinPathAt: (index) => (index < pins.count ? flown[index]?.path : undefined),
-    show: (timeline, instant, chosen, shown) => {
+    show: (timeline, instant, aliveOf, chosen, shown) => {
       entries = timeline;
       at = instant;
+      aliveNow = aliveOf;
       isChosen = chosen;
       visible = shown;
       hang();

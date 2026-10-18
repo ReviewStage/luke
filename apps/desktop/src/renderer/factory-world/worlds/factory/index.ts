@@ -31,7 +31,13 @@ import { type AgentPlacement, agentsLayerOf, raisesSite, SITE, siteSizeOf } from
 import { type Belts, beltsOf, paintCrates, rideBelts } from "./belts";
 import { buildingPlanOf } from "./buildings";
 import { type DefectPin, type DefectPlacement, defectsLayerOf, wreckSizeOf } from "./defects";
-import { atmosphereOf, type ParticleSpec, Particles } from "./effects";
+import {
+  atmosphereOf,
+  PARTICLE_SOURCE,
+  type ParticleSource,
+  type ParticleSpec,
+  Particles,
+} from "./effects";
 import { clamp, col, rngOf, shade } from "./geo";
 import {
   type Layout,
@@ -551,6 +557,7 @@ export const world: WorldModule = {
       shipped.show(
         view.timeline,
         view.snapshotAt,
+        (path) => view.zoneByPath.get(path)?.alive ?? 0,
         (url) => isChosen(state, PICK_KIND.SHIPPED, url),
         state.layers.shipped,
       );
@@ -595,7 +602,11 @@ export const world: WorldModule = {
       birds.right.instanceMatrix.needsUpdate = true;
     };
 
-    const puff = (into: Particles, spec: ParticleSpec) => into.emit(spec);
+    const puff = (
+      into: Particles,
+      spec: ParticleSpec,
+      source: ParticleSource = PARTICLE_SOURCE.YARD,
+    ) => into.emit(spec, source);
 
     /** Puffs every chimney's smoke and every cooling tower's steam for `delta` seconds. */
     const breathe = (delta: number) => {
@@ -647,40 +658,48 @@ export const world: WorldModule = {
         if (strike.site === SITE.FEAT) {
           for (let k = 0; k < 2; k += 1) {
             if (motion() < 0.8) {
-              puff(sparks, {
-                x: strike.x,
-                y: strike.y,
-                z: strike.z,
-                vx: j() * 3,
-                vy: motion() * 2.5,
-                vz: j() * 3,
-                color: motion() < 0.5 ? WELD : SPARK,
-                size: 0.13,
-                life: 0.25 + motion() * 0.4,
-                grow: 0,
-                alpha: 1,
-                gravity: 9.8,
-              });
+              puff(
+                sparks,
+                {
+                  x: strike.x,
+                  y: strike.y,
+                  z: strike.z,
+                  vx: j() * 3,
+                  vy: motion() * 2.5,
+                  vz: j() * 3,
+                  color: motion() < 0.5 ? WELD : SPARK,
+                  size: 0.13,
+                  life: 0.25 + motion() * 0.4,
+                  grow: 0,
+                  alpha: 1,
+                  gravity: 9.8,
+                },
+                PARTICLE_SOURCE.BUILDING,
+              );
             }
           }
         } else if (strike.site !== SITE.FIX) {
           const c = ((time + strike.phase) * 1.5) % 1;
           if (c > 0.6 && c < 0.66) {
             for (let k = 0; k < 4; k += 1) {
-              puff(sparks, {
-                x: strike.x,
-                y: strike.y,
-                z: strike.z,
-                vx: j() * 3.5,
-                vy: 1 + motion() * 2.5,
-                vz: j() * 3.5,
-                color: SPARK,
-                size: 0.1,
-                life: 0.3 + motion() * 0.3,
-                grow: 0,
-                alpha: 1,
-                gravity: 9.8,
-              });
+              puff(
+                sparks,
+                {
+                  x: strike.x,
+                  y: strike.y,
+                  z: strike.z,
+                  vx: j() * 3.5,
+                  vy: 1 + motion() * 2.5,
+                  vz: j() * 3.5,
+                  color: SPARK,
+                  size: 0.1,
+                  life: 0.3 + motion() * 0.3,
+                  grow: 0,
+                  alpha: 1,
+                  gravity: 9.8,
+                },
+                PARTICLE_SOURCE.BUILDING,
+              );
             }
           }
         }
@@ -689,35 +708,43 @@ export const world: WorldModule = {
         for (const smoulder of defects.smoulders()) {
           if (motion() > delta * smoulder.rate) continue;
           const burning = smoulder.fire;
-          puff(smoke, {
-            x: smoulder.x + j() * 1.2,
-            y: smoulder.y,
-            z: smoulder.z + j() * 1.2,
-            vx: j() * 1.6,
-            vy: (burning ? 2.2 : 1.4) + motion() * 1.6,
-            vz: j() * 1.6,
-            color: motion() < (burning ? 0.5 : 0.3) ? FIRE : burning ? SOOT : ASH,
-            size: smoulder.size * (burning ? 2.4 : 2.0),
-            life: (burning ? 5 : 3.5) + motion() * 2,
-            grow: burning ? 3.4 : 2.8,
-            alpha: burning ? 0.7 : 0.6,
-            gravity: burning ? -0.12 : -0.05,
-          });
-          if (motion() < 0.3)
-            puff(sparks, {
-              x: smoulder.x,
+          puff(
+            smoke,
+            {
+              x: smoulder.x + j() * 1.2,
               y: smoulder.y,
-              z: smoulder.z,
-              vx: j() * 5,
-              vy: 3 + motion() * 4,
-              vz: j() * 5,
-              color: EMBER,
-              size: 0.16,
-              life: 0.6,
-              grow: 0,
-              alpha: 1,
-              gravity: 9.8,
-            });
+              z: smoulder.z + j() * 1.2,
+              vx: j() * 1.6,
+              vy: (burning ? 2.2 : 1.4) + motion() * 1.6,
+              vz: j() * 1.6,
+              color: motion() < (burning ? 0.5 : 0.3) ? FIRE : burning ? SOOT : ASH,
+              size: smoulder.size * (burning ? 2.4 : 2.0),
+              life: (burning ? 5 : 3.5) + motion() * 2,
+              grow: burning ? 3.4 : 2.8,
+              alpha: burning ? 0.7 : 0.6,
+              gravity: burning ? -0.12 : -0.05,
+            },
+            PARTICLE_SOURCE.DEFECTS,
+          );
+          if (motion() < 0.3)
+            puff(
+              sparks,
+              {
+                x: smoulder.x,
+                y: smoulder.y,
+                z: smoulder.z,
+                vx: j() * 5,
+                vy: 3 + motion() * 4,
+                vz: j() * 5,
+                color: EMBER,
+                size: 0.16,
+                life: 0.6,
+                grow: 0,
+                alpha: 1,
+                gravity: 9.8,
+              },
+              PARTICLE_SOURCE.DEFECTS,
+            );
         }
       }
     };
@@ -730,20 +757,24 @@ export const world: WorldModule = {
         const theta = motion() * Math.PI * 2;
         const phi = Math.acos(motion() * 2 - 1);
         const speed = 5 + motion() * 4;
-        puff(sparks, {
-          x: lot.bx,
-          y: y + 4,
-          z: lot.bz,
-          vx: Math.sin(phi) * Math.cos(theta) * speed,
-          vy: Math.cos(phi) * speed * 0.8 + 3,
-          vz: Math.sin(phi) * Math.sin(theta) * speed,
-          color: shippedSpark,
-          size: 0.35,
-          life: 1.1 + motion() * 0.6,
-          grow: 0,
-          alpha: 1,
-          gravity: 4,
-        });
+        puff(
+          sparks,
+          {
+            x: lot.bx,
+            y: y + 4,
+            z: lot.bz,
+            vx: Math.sin(phi) * Math.cos(theta) * speed,
+            vy: Math.cos(phi) * speed * 0.8 + 3,
+            vz: Math.sin(phi) * Math.sin(theta) * speed,
+            color: shippedSpark,
+            size: 0.35,
+            life: 1.1 + motion() * 0.6,
+            grow: 0,
+            alpha: 1,
+            gravity: 4,
+          },
+          PARTICLE_SOURCE.SHIPPED,
+        );
       }
     };
     const shippedSpark = shade(signal.SHIPPED, 4);
@@ -806,20 +837,24 @@ export const world: WorldModule = {
       for (const truck of arrived) {
         if (truck.haul !== HAUL.BACK || !state.layers.defects) continue;
         for (let k = 0; k < 30; k += 1) {
-          puff(sparks, {
-            x: truck.x,
-            y: 1.5,
-            z: truck.z,
-            vx: (motion() - 0.5) * 6,
-            vy: 2 + motion() * 4,
-            vz: (motion() - 0.5) * 6,
-            color: EMBER,
-            size: 0.25,
-            life: 0.8,
-            grow: 0,
-            alpha: 1,
-            gravity: 9.8,
-          });
+          puff(
+            sparks,
+            {
+              x: truck.x,
+              y: 1.5,
+              z: truck.z,
+              vx: (motion() - 0.5) * 6,
+              vy: 2 + motion() * 4,
+              vz: (motion() - 0.5) * 6,
+              color: EMBER,
+              size: 0.25,
+              life: 0.8,
+              grow: 0,
+              alpha: 1,
+              gravity: 9.8,
+            },
+            PARTICLE_SOURCE.DEFECTS,
+          );
         }
       }
     };
@@ -875,6 +910,18 @@ export const world: WorldModule = {
         );
 
         place(state, layout, aprons);
+        // Note that what a switched-off layer or a scrubbed-back instant no longer holds leaves at once: its trucks, its sparks, its smoke.
+        const merged = new Set(view.timeline.map((entry) => entry.url));
+        const broken = new Set(state.snapshot.defects.map((defect) => defect.id));
+        trucks.retain((load) =>
+          load.kind === PICK_KIND.SHIPPED ? merged.has(load.id) : broken.has(load.id),
+        );
+        if (!state.layers.building) sparks.clear(PARTICLE_SOURCE.BUILDING);
+        if (!state.layers.shipped) sparks.clear(PARTICLE_SOURCE.SHIPPED);
+        if (!state.layers.defects) {
+          smoke.clear(PARTICLE_SOURCE.DEFECTS);
+          sparks.clear(PARTICLE_SOURCE.DEFECTS);
+        }
 
         const day = atmosphere.apply(state.dark);
         materials.glow.color.setScalar(day.glow);

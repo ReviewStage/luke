@@ -30,7 +30,13 @@ import { type Layout, type Lot, onRoadX, onRoadZ, ROAD } from "./layout";
 const LANES_X = [-2.4, -1.2, 0, 1.2, 2.4] as const;
 const LANES_Y = [5.0, 6.6] as const;
 
-/** The most belts drawn: dependencies between zones first, then a zone in its parent, each in the reading's order. */
+/**
+ * The most belts drawn. Note that this is a sacrifice: a belt is a swept
+ * mesh of a couple of thousand vertices, and a repository at the contract's
+ * two hundred zones can name several hundred edges, so past this many the
+ * least-depended-on edges go unbelted. The blast radius and every zone stay
+ * drawn whatever the belts show; the belts are the dependencies' picture.
+ */
 const MAX_BELTS = 100;
 
 /** The most crates riding all of them. */
@@ -307,11 +313,20 @@ function record(ledger: LaneLedger, stretches: readonly Stretch[], lane: number)
   }
 }
 
-/** The edges drawn as belts, at most `MAX_BELTS`: dependencies before nesting. */
-function beltEdgesOf(edges: readonly ZoneEdge[]): ZoneEdge[] {
-  const depends = edges.filter((edge) => edge.kind === ZONE_EDGE_KIND.DEPENDS);
-  const inside = edges.filter((edge) => edge.kind !== ZONE_EDGE_KIND.DEPENDS);
-  return [...depends, ...inside].slice(0, MAX_BELTS);
+/**
+ * The edges drawn as belts, at most `MAX_BELTS`: a dependency before a zone
+ * sitting inside another, and among each, the edge into what more of the
+ * product depends on first, so the belts out of the core are the last to go.
+ */
+function beltEdgesOf(edges: readonly ZoneEdge[], layout: Layout): ZoneEdge[] {
+  const weight = (edge: ZoneEdge) => layout.lotByPath.get(edge.to)?.zone.transitiveDependents ?? 0;
+  const ranked = (kind: boolean) =>
+    edges
+      .filter((edge) => (edge.kind === ZONE_EDGE_KIND.DEPENDS) === kind)
+      .map((edge, order) => ({ edge, order }))
+      .sort((left, right) => weight(right.edge) - weight(left.edge) || left.order - right.order)
+      .map(({ edge }) => edge);
+  return [...ranked(true), ...ranked(false)].slice(0, MAX_BELTS);
 }
 
 /** Sweeps one belt's profile along its samples into `into`, tagged with its two lots. */
@@ -441,7 +456,7 @@ export function beltsOf(
 ): Belts {
   const ledger: LaneLedger = new Map();
   const list: Belt[] = [];
-  for (const edge of beltEdgesOf(edges)) {
+  for (const edge of beltEdgesOf(edges, layout)) {
     // Note that `from` depends on `to`, so work rides out of `to` and into `from`.
     const source = layout.lotByPath.get(edge.to);
     const sink = layout.lotByPath.get(edge.from);
