@@ -35,6 +35,9 @@
 @import "./components/disclosure/disclosure.css";
 @import "./components/empty-state/empty-state.css";
 @import "./components/error-state/error-state.css";
+/* The wiring first, then the generated motions that assume it. */
+@import "./face/face.css";
+@import "./face/face-motion.css";
 @import "./components/form-field/form-field.css";
 @import "./components/form-section/form-section.css";
 @import "./components/one-line/one-line.css";
