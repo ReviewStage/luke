@@ -562,6 +562,19 @@ const findTask = SqlSchema.findOneOption({
     ),
 });
 
+const findTaskWorkspace = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
+  Result: Schema.Struct({ organizationId: Schema.String }),
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ organizationId: task.organizationId })
+        .from(task)
+        .where(reachableTask(userId, taskId))
+        .limit(1),
+    ),
+});
+
 const replaceText = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -878,6 +891,21 @@ export function readTask(
 ): TaskStoreEffect<Option.Option<StoredTask>> {
   return Effect.flatMap(findTask({ userId, taskId }), (found) =>
     Effect.transposeOption(Option.map(found, (row) => storedTaskOf(userId, row))),
+  );
+}
+
+/**
+ * The workspace of a task the account reaches, as `readTask` would name it,
+ * in one statement rather than the whole task: what a GitHub read of the
+ * task's repository needs, once per agent where a delivery reads several.
+ */
+export function readTaskWorkspace(
+  userId: string,
+  taskId: string,
+): TaskStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findTaskWorkspace({ userId, taskId }),
+    Option.map((row) => row.organizationId),
   );
 }
 

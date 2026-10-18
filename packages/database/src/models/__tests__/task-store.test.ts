@@ -18,6 +18,7 @@ import {
   listTasks,
   nameUntitledTask,
   readTask,
+  readTaskWorkspace,
   updateTask,
 } from "../task-store.js";
 
@@ -372,5 +373,27 @@ it.layer(getTestDB())("a plan started from an issue", (it) => {
       assert.equal(listed.issueId, undefined);
       assert.equal(Option.getOrUndefined(yield* readTask(dean, started.id))?.issue, undefined);
     }),
+  );
+});
+
+it.layer(getTestDB())("a plan's workspace", (it) => {
+  it.effect(
+    "names the workspace the plan stands in to every member, follows a move, and names none to an account outside it",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId } = yield* openSharedTask;
+        const stranger = yield* openAccount;
+        const workspace = Option.getOrUndefined(yield* readTask(dean, taskId))?.task.workspaceId;
+        assert.ok(workspace);
+
+        assert.deepEqual(yield* readTaskWorkspace(dean, taskId), Option.some(workspace));
+        assert.deepEqual(yield* readTaskWorkspace(charles, taskId), Option.some(workspace));
+        assert.deepEqual(yield* readTaskWorkspace(stranger, taskId), Option.none());
+
+        const elsewhere = yield* openWorkspace(dean);
+        yield* updateTask(dean, taskId, { organizationId: elsewhere });
+        assert.deepEqual(yield* readTaskWorkspace(dean, taskId), Option.some(elsewhere));
+        assert.deepEqual(yield* readTaskWorkspace(charles, taskId), Option.none());
+      }),
   );
 });
