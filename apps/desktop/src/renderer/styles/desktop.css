@@ -2997,6 +2997,15 @@ ul.actor-stack {
   display: none;
 }
 
+/* The chip saying whose items the list holds, under its tabs and over its
+   rows, on the rows' inset. */
+.inbox-tasks-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-8) var(--column-inset) 0;
+}
+
 .inbox-tasks {
   position: relative;
   display: flex;
