@@ -17,15 +17,19 @@
  * to the model as the call's result, which the AI SDK integration would
  * capture as unhandled; it stays a breadcrumb and an errored span.
  *
- * Note that the options are Sentry's defaults: its `dataCollection` is left
- * as the SDK ships it, which `PRIVACY.md` describes. A deployment without
+ * Note that the options are Sentry's defaults but for that filter and one
+ * more: its `dataCollection` is left as the SDK ships it, which `PRIVACY.md`
+ * describes, while every address a span, an event, or a log line carries
+ * leaves with its query's values and its credential-shaped path segments
+ * redacted. A deployment without
  * `SENTRY_DSN` starts the SDK disabled, and every layer here then sends
  * nothing.
  */
 
 import * as Sentry from "@sentry/effect";
 import { addBreadcrumb, type ErrorEvent } from "@sentry/effect/server";
-import { Effect, ErrorReporter, Exit, Layer, type Logger, Tracer } from "effect";
+import { Effect, ErrorReporter, Exit, Layer, type Logger, Predicate, Tracer } from "effect";
+import { redactCredentials } from "./credentials.js";
 
 const SENTRY_ENVIRONMENT = {
   /** The `luke-web` project's DSN; absent means nothing is sent. */
@@ -88,6 +92,15 @@ function isAnsweredToolError(event: ErrorEvent): boolean {
   );
 }
 
+/** What a redacted value, segment, or fragment reads as. */
+const REDACTED = "[redacted]";
+
+/** A UUID path segment, which names a row rather than proving who asks, so it is kept. */
+const UUID_SEGMENT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** An address's scheme and authority, user info included, ahead of its path. */
+const URL_AUTHORITY_PATTERN = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i;
+
 /**
  * Sends every error event but a tool call's failure answered to the model,
  * which is kept as a breadcrumb instead, so a real error later in the same
@@ -109,6 +122,108 @@ function dropAnsweredToolErrors(event: ErrorEvent): ErrorEvent | null {
   return null;
 }
 
+/** A path segment, kept unless it is shaped like a credential, which is replaced whole. */
+function scrubbedSegment(segment: string): string {
+  if (UUID_SEGMENT_PATTERN.test(segment)) return segment;
+  return redactCredentials(segment) === segment ? segment : REDACTED;
+}
+
+/** A query string with every value redacted and its names kept, but for one shaped like a credential, so the shape of a request still reads. */
+function scrubbedQuery(query: string): string {
+  return query
+    .split("&")
+    .map((pair) => {
+      const equals = pair.indexOf("=");
+      const name = scrubbedSegment(equals === -1 ? pair : pair.slice(0, equals));
+      return equals === -1 ? name : `${name}=${REDACTED}`;
+    })
+    .join("&");
+}
+
+/**
+ * An address, whole or a path alone: its user info, its query's values, its
+ * fragment, and every credential-shaped path segment redacted; its scheme,
+ * host, and the rest of its path kept as written.
+ */
+function scrubbedUrl(address: string): string {
+  const fragmentAt = address.indexOf("#");
+  const beforeFragment = fragmentAt === -1 ? address : address.slice(0, fragmentAt);
+  const queryAt = beforeFragment.indexOf("?");
+  const beforeQuery = queryAt === -1 ? beforeFragment : beforeFragment.slice(0, queryAt);
+  const authority = URL_AUTHORITY_PATTERN.exec(beforeQuery)?.[0] ?? "";
+  const userAt = authority.lastIndexOf("@");
+  const host =
+    userAt === -1
+      ? authority
+      : `${authority.slice(0, authority.indexOf("//") + 2)}${REDACTED}${authority.slice(userAt)}`;
+  const path = beforeQuery.slice(authority.length).split("/").map(scrubbedSegment).join("/");
+  const query = queryAt === -1 ? "" : `?${scrubbedQuery(beforeFragment.slice(queryAt + 1))}`;
+  const fragment = fragmentAt === -1 ? "" : `#${REDACTED}`;
+  return `${host}${path}${query}${fragment}`;
+}
+
+/**
+ * The attributes that carry an address, a path, or a query, by the names
+ * Effect's HTTP spans (`url.*`), Sentry's HTTP integrations (`http.*`), and a
+ * breadcrumb (`url`) give them, each with how it is scrubbed.
+ */
+const URL_ATTRIBUTES: ReadonlyMap<string, (value: string) => string> = new Map([
+  ["url.full", scrubbedUrl],
+  ["url.path", scrubbedUrl],
+  ["url.query", scrubbedQuery],
+  ["url.fragment", () => REDACTED],
+  ["http.url", scrubbedUrl],
+  ["http.target", scrubbedUrl],
+  ["http.query", scrubbedQuery],
+  ["http.fragment", () => REDACTED],
+  ["url", scrubbedUrl],
+]);
+
+/** Attributes with every address among them scrubbed and the rest as they were. */
+function scrubbedAttributes<Attributes extends object>(attributes: Attributes): Attributes {
+  const entries = Object.entries(attributes).map(([name, value]: [string, unknown]) => {
+    const scrub = URL_ATTRIBUTES.get(name);
+    return [name, scrub && Predicate.isString(value) ? scrub(value) : value];
+  });
+  // SAFETY: each entry keeps its name, and a string value is replaced only by a string.
+  return Object.fromEntries(entries) as Attributes;
+}
+
+type QueryParams = NonNullable<NonNullable<Sentry.ErrorEvent["request"]>["query_string"]>;
+
+/** A request's query as an event carries it, a string or its pairs, with every value redacted. */
+function scrubbedQueryParams(query: QueryParams): QueryParams {
+  if (Predicate.isString(query)) return scrubbedQuery(query);
+  if (Array.isArray(query)) return query.map(([name]) => [scrubbedSegment(name), REDACTED]);
+  return Object.fromEntries(Object.keys(query).map((name) => [scrubbedSegment(name), REDACTED]));
+}
+
+/** An event with the addresses its request, its trace, and its breadcrumbs carry scrubbed. */
+function scrubbedEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
+  const { request, contexts, breadcrumbs } = event;
+  const trace = contexts?.trace;
+  return {
+    ...event,
+    ...(request && {
+      request: {
+        ...request,
+        ...(request.url !== undefined && { url: scrubbedUrl(request.url) }),
+        ...(request.query_string !== undefined && {
+          query_string: scrubbedQueryParams(request.query_string),
+        }),
+      },
+    }),
+    ...(trace?.data && {
+      contexts: { ...contexts, trace: { ...trace, data: scrubbedAttributes(trace.data) } },
+    }),
+    ...(breadcrumbs && {
+      breadcrumbs: breadcrumbs.map((crumb) =>
+        crumb.data ? { ...crumb, data: scrubbedAttributes(crumb.data) } : crumb,
+      ),
+    }),
+  };
+}
+
 /**
  * The options every process starts Sentry with. The release is the SDK's
  * own: it reads Vercel's `VERCEL_GIT_COMMIT_SHA`, which is the release the
@@ -123,7 +238,19 @@ export function sentryOptions(): SentryOptions {
     // hour in production, which a plan's span quota does not hold. Errors,
     // logs, and check-ins are not sampled by this.
     tracesSampleRate: TRACES_SAMPLE_RATE,
-    beforeSend: dropAnsweredToolErrors,
+    beforeSend: (event) => {
+      const kept = dropAnsweredToolErrors(event);
+      return kept && scrubbedEvent(kept);
+    },
+    // Note that a span is scrubbed as it streams, because Sentry streams spans by default
+    // and runs no `beforeSendTransaction` then, and its own credential filter runs only in
+    // its HTTP integrations, never over the spans Effect's HTTP client and server open.
+    beforeSendSpan: Sentry.withStreamedSpan((span) => ({
+      ...span,
+      attributes: scrubbedAttributes(span.attributes),
+    })),
+    beforeSendLog: (log) =>
+      log.attributes ? { ...log, attributes: scrubbedAttributes(log.attributes) } : log,
   };
 }
 
