@@ -16,7 +16,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { ModelChoice } from "@luke/features/models-wire";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
@@ -29,7 +29,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import {
@@ -40,6 +40,7 @@ import {
   typeInComposer,
 } from "#testing/composer";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
+import { NewTaskDialog } from "../tasks/new-task-dialog";
 import type { InboxChoice, NewTaskAgent, TasksControl } from "../tasks/use-tasks-tab";
 import { commandKeyshortcuts } from "../tooltip";
 import { DesktopHome } from "./desktop-home";
@@ -920,4 +921,102 @@ test("a recent task a teammate created wears their face before its time, and the
     return face === null ? [] : [[row.querySelector(NAME)?.textContent, face.src]];
   });
   assert.deepEqual(faces, [[INVITES.name, CHARLES_PICTURE]]);
+});
+
+/** The models the composers' chips offer: Opus, and its fast version. */
+const MODELS: readonly CatalogModel[] = [
+  {
+    id: "anthropic/claude-opus-5.5",
+    name: "Claude Opus 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+  },
+  {
+    id: "anthropic/claude-opus-5.5-fast",
+    name: "Claude Opus 5.5 (Fast)",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+  },
+];
+
+/** Home with New task's dialog open over it, as ⌘N opens it, each start written down; Escape in the dialog's words puts it away. */
+async function mountUnderDialog() {
+  const started: Started[] = [];
+  const newTask = { ...newTaskControl(started), models: MODELS };
+  const tasks = tasksControl({
+    tasks: TASKS,
+    listed: { tasks: TASKS, archived: [], ...HOLDING },
+    ...HOLDING,
+  });
+  function Window() {
+    const [open, setOpen] = useState(true);
+    const control = { ...newTask, open, onClose: () => setOpen(false) };
+    return createElement(
+      "div",
+      null,
+      createElement(DesktopHome, {
+        tasks: { ...tasks, newTask: control },
+        accountName: "Dean Stratakos",
+      }),
+      createElement(NewTaskDialog, { newTask: control }),
+    );
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Window))));
+  await settle();
+  const dialog = () =>
+    document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]') ??
+    assert.fail("the dialog stands");
+  const home = () =>
+    container.querySelector<HTMLElement>(".home-start") ?? assert.fail("Home's composer stands");
+  return {
+    started,
+    dialog,
+    home,
+    /** Puts the dialog away with nothing started, as Escape in its words does. */
+    closeDialog: async () => {
+      pressInComposer(dialog(), "Escape");
+      await settle();
+      assert.equal(document.querySelector('[role="dialog"][aria-modal="true"]'), null);
+    },
+  };
+}
+
+test("Plan turned on in the dialog over Home and the dialog put away, Home's composer is in Plan mode too, and starts the plan and its call", async () => {
+  const page = await mountUnderDialog();
+  pressInComposer(page.dialog(), "Tab", { shiftKey: true });
+  await page.closeDialog();
+
+  const toggle = page.home().querySelector('button[aria-label="Plan with Luke first"]');
+  assert.equal(toggle?.getAttribute("aria-pressed"), "true", "Home's card shows Plan mode");
+  typeInComposer(page.home(), "Rethink automations");
+  pressInComposer(page.home(), "Enter");
+  await settle();
+
+  assert.deepEqual(
+    page.started.map(({ planning, agent }) => ({ planning, agent })),
+    [{ planning: true, agent: undefined }],
+  );
+});
+
+test("a model picked as the default in the dialog over Home is the one Home's composer then starts its agent on", async () => {
+  const page = await mountUnderDialog();
+  const chip =
+    page.dialog().querySelector<HTMLButtonElement>(".agent-model-chip button") ??
+    assert.fail("the dialog's model chip stands");
+  act(() => chip.click());
+  const fast =
+    page.dialog().querySelector<HTMLButtonElement>('[role="switch"]') ??
+    assert.fail("the menu offers Fast");
+  act(() => fast.click());
+  await settle();
+  await page.closeDialog();
+
+  typeInComposer(page.home(), "Speed up the build");
+  pressInComposer(page.home(), "Enter");
+  await settle();
+
+  assert.equal(page.started[0]?.agent?.choice?.model, "anthropic/claude-opus-5.5-fast");
 });

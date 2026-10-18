@@ -63,7 +63,8 @@ import type { NewTaskIssue, NewTaskStart, TasksControl } from "./use-tasks-tab";
  *   the chip, which starts the agent at once (`draft-agent-tab.tsx`), so an
  *   agent refused leaves the words there with why and Retry. The model chip
  *   starts on the account's default, and a pick here is written as the
- *   default, as Start's menu writes it.
+ *   default, as Start's menu writes it, which another card standing, Home's
+ *   under the dialog, follows where its own chip was not picked.
  * - Plan mode: the task starts from the plan template and opens its call
  *   with Luke, as New task always did. Start always stands, an empty box
  *   starting today's blank plan, and the model chip stands down, since the
@@ -167,6 +168,13 @@ function IssueChip({
   );
 }
 
+/**
+ * Every mounted card's hearing of a model picked as the default in another,
+ * Home's and the dialog's over it standing at once, so a card whose chip was
+ * not picked in it follows the default the other kept.
+ */
+const defaultPicks = new Set<(choice: ModelChoice) => void>();
+
 /** The account's default model as read, the chip's pick, which is written back as the default, and why that write did not take, where it did not. */
 function useDefaultChoice(
   newTask: TasksControl["newTask"],
@@ -177,21 +185,33 @@ function useDefaultChoice(
   // new one on every render and the default is read once, as the card opens.
   const latest = useRef(newTask);
   latest.current = newTask;
+  // Whether the chip was picked in this card, whose pick then stands over one made in another.
+  const pickedHere = useRef(false);
+  // This card's hearing of another's pick, left out when it tells the others its own.
+  const hearing = useRef<((choice: ModelChoice) => void) | undefined>(undefined);
   useEffect(() => {
     let live = true;
     latest.current.readDefault().then((answer) => {
       if (live && !("failure" in answer)) setChoice((picked) => picked ?? answer.choice);
     });
+    const hear = (next: ModelChoice) => {
+      if (!pickedHere.current) setChoice(next);
+    };
+    hearing.current = hear;
+    defaultPicks.add(hear);
     return () => {
       live = false;
+      defaultPicks.delete(hear);
     };
   }, []);
   // A pick names the chip at once and is kept as the default, as Start's menu
   // keeps it; a write that did not take says so under the card, and the
   // agent still starts on the pick.
   const choose = (next: ModelChoice) => {
+    pickedHere.current = true;
     setChoice(next);
     setRefused(undefined);
+    for (const hear of defaultPicks) if (hear !== hearing.current) hear(next);
     latest.current.writeDefault(next).then((answer) => {
       setRefused("failure" in answer ? DEFAULT_NOT_KEPT : undefined);
     });

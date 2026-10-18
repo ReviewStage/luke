@@ -14,7 +14,7 @@
  * Agent mode.
  */
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 /** What New task starts: a coding agent on the words, or a plan and a call with Luke. */
 export const NEW_TASK_MODE = {
@@ -38,17 +38,40 @@ function readMode(): NewTaskMode {
   }
 }
 
-/** The mode New task offers and a setter that keeps it for the next one. */
-export function useNewTaskMode(): readonly [NewTaskMode, (mode: NewTaskMode) => void] {
-  const [mode, setMode] = useState(readMode);
+/** Every mounted card's hearing of the mode, told each time one of them turns it. */
+const listeners = new Set<() => void>();
+
+/** A turn storage refused to keep, which the window holds for as long as it stands. */
+let unkept: NewTaskMode | undefined;
+
+/** The mode as the window holds it now: storage's, read afresh, unless it refused the last turn. */
+function modeNow(): NewTaskMode {
+  return unkept ?? readMode();
+}
+
+function hear(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/** Turns the mode for every card standing and keeps it for the next one. */
+function turn(mode: NewTaskMode): void {
   // A write that fails costs only the preference, so it is not worth a word
-  // on screen.
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(NEW_TASK_MODE_KEY, mode);
-    } catch {
-      // The card keeps the choice for as long as it stands.
-    }
-  }, [mode]);
-  return [mode, setMode];
+  // on screen; the window keeps the choice for as long as it stands.
+  try {
+    window.localStorage.setItem(NEW_TASK_MODE_KEY, mode);
+    unkept = undefined;
+  } catch {
+    unkept = mode;
+  }
+  for (const listener of listeners) listener();
+}
+
+/**
+ * The mode New task offers and a setter that keeps it for the next one. Note
+ * that the cards standing at once, Home's and the dialog's over it, read one
+ * mode, so a turn in one is the other's too.
+ */
+export function useNewTaskMode(): readonly [NewTaskMode, (mode: NewTaskMode) => void] {
+  return [useSyncExternalStore(hear, modeNow), turn];
 }
