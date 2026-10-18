@@ -10,6 +10,10 @@ afterEach(() => {
 /** The first opening migrates, about 4 s on an idle machine, so the test is held to the config's hook bar. */
 const MIGRATING_TIMEOUT_MS = 30_000;
 
+/** The PGlite calls a first opening makes that a test fails: the migration's queries, then the dump. */
+const FAILING_METHOD = { QUERY: "query", DUMP_DATA_DIR: "dumpDataDir" } as const;
+type FailingMethod = (typeof FAILING_METHOD)[keyof typeof FAILING_METHOD];
+
 /** A migrated PGlite of the test's own, closed when the test ends. */
 async function opened(t: TestContext): Promise<PGlite> {
   const client = await openMigratedPglite();
@@ -51,7 +55,7 @@ test(
  * which PGlite that was. Note that we pass over the calls PGlite makes of its
  * own while it starts, because it dumps its own data directory then.
  */
-function failingOnce(method: "dumpDataDir" | "query"): () => PGlite | undefined {
+function failingOnce(method: FailingMethod): () => PGlite | undefined {
   let failed: PGlite | undefined;
   const refuse = (client: PGlite) => {
     if (failed !== undefined || !client.ready) return false;
@@ -59,21 +63,27 @@ function failingOnce(method: "dumpDataDir" | "query"): () => PGlite | undefined 
     return true;
   };
   const refusal = () => Promise.reject(new Error(`${method} refused`));
-  if (method === "dumpDataDir") {
+  if (method === FAILING_METHOD.DUMP_DATA_DIR) {
     const dump = PGlite.prototype.dumpDataDir;
-    vi.spyOn(PGlite.prototype, "dumpDataDir").mockImplementation(function (this: PGlite, ...args) {
+    vi.spyOn(PGlite.prototype, FAILING_METHOD.DUMP_DATA_DIR).mockImplementation(function (
+      this: PGlite,
+      ...args
+    ) {
       return refuse(this) ? refusal() : dump.apply(this, args);
     });
   } else {
     const query = PGlite.prototype.query;
-    vi.spyOn(PGlite.prototype, "query").mockImplementation(function (this: PGlite, ...args) {
+    vi.spyOn(PGlite.prototype, FAILING_METHOD.QUERY).mockImplementation(function (
+      this: PGlite,
+      ...args
+    ) {
       return refuse(this) ? refusal() : query.apply(this, args);
     });
   }
   return () => failed;
 }
 
-for (const method of ["query", "dumpDataDir"] as const) {
+for (const method of Object.values(FAILING_METHOD)) {
   test(
     `a first opening whose ${method} fails is closed, and a later opening migrates afresh`,
     async (t) => {
