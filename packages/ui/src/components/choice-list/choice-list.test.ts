@@ -17,7 +17,7 @@ import {
  * choice-list.test.ts -- a pick-one list is a radio group the arrows walk
  * past an unavailable row, a press on its checked row keeping or clearing
  * the choice as asked; a pick-several list toggles each row on its own, the
- * arrows moving along it; Enter presses no row; a marked and numbered list
+ * arrows moving along it; a marked and numbered list
  * leads each row with its control and wears its key; and a settled list
  * names what was picked and takes no press.
  */
@@ -187,32 +187,6 @@ test("a pick-several list is a group of checkboxes, each its own Tab stop, toggl
   act(() => row(page, "Retry 3 times").click());
   assert.equal(heard(page), "three,three+never,never");
   assert.equal(row(page, "Never retry").getAttribute("aria-checked"), "true");
-});
-
-/** Enter pressed on a row as the browser presses it: the row is pressed unless a handler held the key back. */
-function enterOn(element: HTMLButtonElement): void {
-  act(() => {
-    const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
-    element.dispatchEvent(event);
-    if (!event.defaultPrevented) element.click();
-  });
-}
-
-test("Enter presses no row, picked or not, so a pick is never taken back by it, and the key goes on to what holds the list", () => {
-  const page = render(createElement(Held, { select: CHOICE_SELECT.MANY, start: ["three"] }));
-  let heldEnter = 0;
-  page.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") heldEnter += 1;
-  });
-  enterOn(row(page, "Retry 3 times"));
-  enterOn(row(page, "Never retry"));
-  assert.equal(heard(page), "");
-  assert.equal(row(page, "Retry 3 times").getAttribute("aria-checked"), "true");
-  assert.equal(heldEnter, 2);
-
-  const one = render(createElement(Held, { clearable: true, start: ["never"] }));
-  enterOn(row(one, "Never retry"));
-  assert.equal(heard(one), "");
 });
 
 test("the arrows move the keyboard along a pick-several list, past an unavailable row and wrapping at either end, and toggle nothing", () => {

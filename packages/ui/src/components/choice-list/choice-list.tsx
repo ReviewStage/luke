@@ -12,10 +12,10 @@ import { BADGE_TONE, Badge, type BadgeTone } from "../badge/badge.js";
  * `clearable`, where it takes the choice back. Picking several is a group of
  * checkboxes in a fieldset, each its own Tab stop, toggled by a press or
  * Space, the arrow keys moving the keyboard along them without toggling.
- * Enter presses no row: it is left to what holds the list, a form's send,
- * so a reader's Enter on a picked row never takes the pick back. A row may
- * be unavailable on its own, saying why in its detail, and the keyboard
- * steps past it.
+ * Enter presses a row as a button's Enter does, unless what holds the list
+ * takes the key first, as the Inbox does for its send. A row may be
+ * unavailable on its own, saying why in its detail, and the keyboard steps
+ * past it.
  *
  * A `marked` list leads each row with the control it behaves as, a radio's
  * round mark or a checkbox's square, filled in the accent once checked, so
@@ -210,10 +210,6 @@ function ChoiceRow({
     disabled,
     "aria-keyshortcuts": number === undefined ? undefined : String(number),
     onClick: onPress,
-    // Note that Enter presses no row, because it is the send of whatever holds the list.
-    onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => {
-      if (event.key === "Enter") event.preventDefault();
-    },
   } as const;
   const words = (
     <>

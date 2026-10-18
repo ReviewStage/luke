@@ -748,7 +748,7 @@ function onResponseKey(
   pane: React.RefObject<HTMLElement | null>,
   event: React.KeyboardEvent,
 ): void {
-  // Note that an option's own Enter is already held back from pressing it (`ChoiceList`), which leaves the send to this.
+  // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
   if (event.key !== "Enter" || event.shiftKey || !bareKey(event) || event.nativeEvent.isComposing) {
     return;
   }
