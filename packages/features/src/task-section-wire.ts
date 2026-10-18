@@ -99,7 +99,7 @@ function isOneEmoji(text: string): boolean {
 }
 
 /** One emoji, its ends trimmed. */
-const emojiSchema = EffectSchema.Trim.check(
+export const taskSectionEmojiSchema = EffectSchema.Trim.check(
   EffectSchema.isMaxLength(TASK_SECTION_BOUNDS.MAX_EMOJI_UNITS),
   EffectSchema.makeFilter(isOneEmoji),
 );
@@ -114,7 +114,7 @@ const glyphSchema = EffectSchema.String.check(
 export const taskSectionIconSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(TASK_SECTION_ICON_KIND.EMOJI),
-    emoji: emojiSchema,
+    emoji: taskSectionEmojiSchema,
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(TASK_SECTION_ICON_KIND.GLYPH),
@@ -126,7 +126,7 @@ export const taskSectionIconSchema = EffectSchema.Union([
 export type TaskSectionIcon = typeof taskSectionIconSchema.Type;
 
 /** A section's title: its ends trimmed, never blank, and bounded. */
-const titleSchema = EffectSchema.Trim.check(
+export const taskSectionTitleSchema = EffectSchema.Trim.check(
   EffectSchema.isNonEmpty(),
   EffectSchema.isMaxLength(TASK_SECTION_BOUNDS.MAX_TITLE_CHARS),
 );
@@ -135,7 +135,7 @@ const titleSchema = EffectSchema.Trim.check(
 export const taskSectionSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   workspaceId: workspaceIdSchema,
-  title: titleSchema,
+  title: taskSectionTitleSchema,
   icon: EffectSchema.optionalKey(taskSectionIconSchema),
   /** Where it stands among the account's sections once dragged there; absent while it stands by `createdAt`. */
   position: EffectSchema.optionalKey(pinPositionSchema),
@@ -177,13 +177,13 @@ export const taskSectionWriteSchema = EffectSchema.Union([
     kind: EffectSchema.Literal(TASK_SECTION_WRITE.CREATE),
     id: wireUuidSchema,
     workspaceId: workspaceIdSchema,
-    title: titleSchema,
+    title: taskSectionTitleSchema,
     icon: EffectSchema.optionalKey(taskSectionIconSchema),
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(TASK_SECTION_WRITE.EDIT),
     id: wireUuidSchema,
-    title: titleSchema,
+    title: taskSectionTitleSchema,
     icon: EffectSchema.NullOr(taskSectionIconSchema),
   }),
   EffectSchema.Struct({

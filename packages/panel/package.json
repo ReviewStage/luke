@@ -1,0 +1,37 @@
+{
+  "name": "@luke/panel",
+  "version": "0.17.0",
+  "private": true,
+  "type": "module",
+  "description": "The panel every Luke client mounts: its surfaces, and the doors its shell installs the bridge and the platform into",
+  "exports": {
+    "./act": "./src/act.js",
+    "./app-bridge": "./src/app-bridge.js",
+    "./app-platform": "./src/app-platform.js",
+    "./desktop/use-run-choices": "./src/desktop/use-run-choices.js",
+    "./settings/writes": "./src/settings/writes.js",
+    "./sources.css": "./src/sources.css",
+    "./tasks/use-inbox-pages": "./src/tasks/use-inbox-pages.js",
+    "./tasks/use-open-link": "./src/tasks/use-open-link.js",
+    "./tasks/use-taskless-inbox-items": "./src/tasks/use-taskless-inbox-items.js",
+    "./tasks/use-workspace-members": "./src/tasks/use-workspace-members.js",
+    "./use-sign-in": "./src/use-sign-in.js"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@luke/credentials": "workspace:*",
+    "@luke/features": "workspace:*",
+    "@luke/host": "workspace:*",
+    "@luke/settings": "workspace:*",
+    "@luke/ui": "workspace:*",
+    "@luke/wire": "workspace:*",
+    "react": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "19.2.18",
+    "typescript": "catalog:"
+  }
+}

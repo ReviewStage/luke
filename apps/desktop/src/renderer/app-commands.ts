@@ -14,6 +14,7 @@
  * swipe hands the window the same way) leaves the page behind it alone.
  */
 
+import { appPlatform } from "@luke/panel/app-platform";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
@@ -25,7 +26,6 @@ import {
   shortcutLayered,
 } from "@luke/settings/shortcuts";
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { appPlatform } from "./app-platform";
 
 type CommandRun = { current: () => void };
 

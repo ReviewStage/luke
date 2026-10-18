@@ -3,7 +3,7 @@
  */
 
 import type { AppBridge } from "@luke/host/bridge";
-import { installAppBridge } from "../renderer/app-bridge";
+import { installAppBridge } from "@luke/panel/app-bridge";
 
 let answering: Partial<AppBridge> = {};
 

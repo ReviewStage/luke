@@ -4,8 +4,8 @@ import {
 } from "@luke/features/integration-view";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { useEffect, useRef, useState } from "react";
-import { useAct } from "./act";
 
 /**
  * integration-tools.ts -- what each connected integration's server answered when asked for its tools, read for as long as a surface that draws it is drawn.

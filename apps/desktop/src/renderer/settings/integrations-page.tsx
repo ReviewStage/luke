@@ -26,6 +26,7 @@ import {
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { type ActHandle, useAct } from "@luke/panel/act";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
@@ -60,7 +61,6 @@ import { searchTokens } from "@luke/ui/search-tokens";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { type ActHandle, useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { type GitHubConnectControl, useGitHubConnection } from "../github-connect";
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant";

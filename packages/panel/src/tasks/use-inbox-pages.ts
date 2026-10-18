@@ -1,7 +1,7 @@
 import type { PageLine } from "@luke/features/page-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useState } from "react";
-import { useAct } from "../act";
+import { useAct } from "../act.js";
 
 /**
  * use-inbox-pages.ts -- the pages of the task whose item the window's Inbox shows, for the panel beside it.

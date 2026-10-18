@@ -13,7 +13,7 @@ import { TASK_WORK_STATE, type TaskWorkState } from "@luke/features/tasks-view";
 import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
 import { isRecord, isWireString, TURN_ORIGIN, type WireRecord, type WireValue } from "@luke/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
-import { cardTitle } from "./tool-call-model";
+import { cardTitle, changesSidebar } from "./tool-call-model";
 
 /**
  * work-model.ts -- the open task's Call tab as an agent's transcript reads: each of the brain's turns one of Luke's messages, in the agent tab's own parts.
@@ -181,20 +181,20 @@ export function agentListCallIds(conversation: TaskConversation): readonly strin
 }
 
 /**
- * The answered starts of the open plan's work by which Luke made a new
- * task, by call id, so the tasks are read again as one lands and the new
- * task stands in the sidebar; none where the plan has had no turn or its
- * work is unread.
+ * The answered calls of the open plan's work that changed the sidebar
+ * (`changesSidebar`), a start by which Luke made a new task or a section he
+ * made, deleted, or moved a task into, by call id, so the tasks are read
+ * again as one lands and the sidebar draws the change; none where the plan
+ * has had no turn or its work is unread.
  */
-export function newTaskCallIds(conversation: TaskConversation): readonly string[] {
-  const start = `${TOOL_PART_TYPE_PREFIX}${AGENT_TOOL.START_AGENT}`;
+export function sidebarCallIds(conversation: TaskConversation): readonly string[] {
   return (conversation?.messages ?? []).flatMap((message) =>
     message.parts.flatMap((part) =>
       isRecord(part) &&
-      part.type === start &&
+      isWireString(part.type) &&
+      part.type.startsWith(TOOL_PART_TYPE_PREFIX) &&
       isWireString(part.toolCallId) &&
-      isRecord(part.output) &&
-      isRecord(part.output.newTask)
+      changesSidebar(part.type.slice(TOOL_PART_TYPE_PREFIX.length), part.output)
         ? [part.toolCallId]
         : [],
     ),

@@ -32,7 +32,6 @@ import {
   messageFailureWords,
   messageWords,
   modelLabel,
-  newTaskCallIds,
   offeredModels,
   publishedUrl,
   pullRequestPillLabel,
@@ -40,6 +39,7 @@ import {
   readModelChoice,
   type SentLine,
   settledPlanEdits,
+  sidebarCallIds,
   startedAgentOf,
   unreadSentLines,
 } from "./coding-agent-model";
@@ -439,7 +439,7 @@ test("the calls that move a task's agents are its starts, archives, and unarchiv
   assert.deepEqual(agentListCallIds([]), []);
 });
 
-test("the starts that made a new task are named by call id once answered, and a start on a task, a call still out, or another tool's answer names none", () => {
+test("the starts that made a new task and the accepted section calls are named by call id once answered, and a start on a task, a refused section call, a call still out, or another tool's answer names none", () => {
   const call = (callId: string, tool: string, output?: WireRecord) => ({
     type: `tool-${tool}`,
     toolCallId: callId,
@@ -457,11 +457,15 @@ test("the starts that made a new task are named by call id once answered, and a 
         call("c2", "start_agent", { status: "accepted", agent: { id: "agent-3" } }),
         call("c3", "start_agent"),
         call("c4", "message_agent", made),
+        call("c5", "create_section", { status: "accepted", section: { id: "s-1" } }),
+        call("c6", "move_task", { status: "rejected", reason: "Not moved." }),
+        call("c7", "delete_section"),
+        call("c8", "move_task", { status: "accepted", task: { id: "task-2" }, section: null }),
       ],
     },
   ];
 
-  assert.deepEqual(newTaskCallIds(messages), ["c1"]);
+  assert.deepEqual(sidebarCallIds(messages), ["c1", "c5", "c8"]);
 });
 
 test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {

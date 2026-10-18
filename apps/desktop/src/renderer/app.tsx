@@ -12,6 +12,11 @@ import {
   RUN_PROFILE,
   sessionReplayBootstrap,
 } from "@luke/host/app-state";
+import { useAct } from "@luke/panel/act";
+import { appBridge } from "@luke/panel/app-bridge";
+import { appPlatform } from "@luke/panel/app-platform";
+import { ListedPullRequestsProvider, OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
+import { useSignIn } from "@luke/panel/use-sign-in";
 import { APP_SETTING_SCHEMA, EXPERIMENT, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -39,10 +44,7 @@ import {
 } from "@luke/voice/volume-hint";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "./act";
-import { appBridge } from "./app-bridge";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
-import { appPlatform } from "./app-platform";
 import { usePrefetchEditorBundle } from "./bundle-loader";
 import { type CallCardInput, callControls } from "./call/call-card";
 import { useCallCardVideo } from "./call/panel-avatar";
@@ -73,13 +75,11 @@ import { useChatToasts } from "./tasks/chat-toast";
 import { useInboxToasts } from "./tasks/inbox-toast";
 import { MessageRevealProvider } from "./tasks/message-links";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy";
-import { ListedPullRequestsProvider, OpenLinkProvider } from "./tasks/use-open-link";
 import { useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast";
 import { useUpdatedToast } from "./update-toast";
 import { useAppState, useExperiment } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
-import { useSignIn } from "./use-sign-in";
 import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view";
 import { useWindowFullScreen } from "./window-full-screen";
 import { useWindowZoom } from "./window-zoom";

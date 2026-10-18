@@ -43,6 +43,7 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -66,7 +67,6 @@ import { AgentPullRequestTab } from "./agent-pull-request-tab";
 import { TAB_KIND, tabLook } from "./tab-look";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { OpenLinkProvider } from "./use-open-link";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel";
 
 /**

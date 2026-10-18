@@ -24,6 +24,7 @@ import {
 } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { CodeRef } from "@luke/features/task-wire";
+import { opensAsLink } from "@luke/panel/tasks/use-open-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BackIcon,
@@ -122,7 +123,6 @@ import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { WordsWorkspace } from "./use-link-standing";
-import { opensAsLink } from "./use-open-link";
 import type { InboxImage, TaskInboxControl } from "./use-task-inbox";
 
 /**

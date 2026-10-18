@@ -1,4 +1,5 @@
 import { CHANNEL_KIND } from "@luke/features/chat-wire";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, NAV_CURRENT, NavItem } from "@luke/ui";
 import {
   CHAT_PLACE,
@@ -13,7 +14,6 @@ import { useMemo } from "react";
 import { SpinnerRegion } from "../spinner";
 import { ChatPane, MemberMark } from "../tasks/chat-pane";
 import { useMinute } from "../tasks/task-time";
-import { useOpenLink } from "../tasks/use-open-link";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 
 /**

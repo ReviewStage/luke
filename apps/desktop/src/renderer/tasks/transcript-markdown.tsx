@@ -1,5 +1,6 @@
 import type { CodeLines } from "@luke/features/tasks-view";
 import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
+import { type ActHandle, useAct } from "@luke/panel/act";
 import { IconButton } from "@luke/ui";
 import {
   type ComponentProps,
@@ -11,7 +12,6 @@ import {
   useState,
 } from "react";
 import type { Components, ExtraProps } from "streamdown";
-import { type ActHandle, useAct } from "../act";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { Tooltip } from "../tooltip";
 import { runColours } from "./code-pane";

@@ -2,8 +2,8 @@
  * app-platform.ts -- what a test's window can do that only its shell can: a fake answering only the calls its test gives it.
  */
 
-import type { AppPlatform } from "../renderer/app-platform";
-import { installAppPlatform } from "../renderer/app-platform";
+import type { AppPlatform } from "@luke/panel/app-platform";
+import { installAppPlatform } from "@luke/panel/app-platform";
 import { DESKTOP_PLATFORM } from "../renderer/desktop-platform";
 
 /**

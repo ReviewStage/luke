@@ -4,16 +4,16 @@ import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import type { TaskSummary } from "@luke/features/task-wire";
+import {
+  ListedPullRequestsProvider,
+  OpenLinkProvider,
+  PullRequestsOnGitHub,
+} from "@luke/panel/tasks/use-open-link";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { fakeAppPlatform } from "#testing/app-platform";
 import { PullRequestLine } from "../desktop/task-card";
-import {
-  ListedPullRequestsProvider,
-  OpenLinkProvider,
-  PullRequestsOnGitHub,
-} from "./use-open-link";
 
 /**
  * use-open-link.test.ts -- a pull request one of a listed task's agents

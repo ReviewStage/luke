@@ -15,8 +15,8 @@
  */
 
 import type { ChatShown } from "@luke/host/acts";
+import { appBridge } from "@luke/panel/app-bridge";
 import { useEffect, useRef } from "react";
-import { appBridge } from "../app-bridge";
 import { TOAST_HOLD, TOAST_TONE, useToast, useWithdrawToast } from "../toast";
 
 /** What a waiting message's toast offers, to open Chat. */

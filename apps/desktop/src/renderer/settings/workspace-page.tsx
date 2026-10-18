@@ -15,6 +15,7 @@ import {
   workspacePhotoOfDataUrl,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
@@ -60,7 +61,6 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu } from "../desktop/action-menu";

@@ -2,8 +2,8 @@ import type { AccountProvider } from "@luke/credentials/snapshot";
 import { ACT_KIND } from "@luke/host/acts";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { useCallback, useRef, useState } from "react";
-import { useAct } from "./act";
-import { appPlatform } from "./app-platform";
+import { useAct } from "./act.js";
+import { appPlatform } from "./app-platform.js";
 
 export interface SignIn {
   signInWait: AccountProvider | undefined;

@@ -380,7 +380,9 @@ const EFFECT_MODULE_SCHEMAS = {
     planCommentAnchorsSchema: planCommentWire.planCommentAnchorsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planCommentWire>,
   "task-section-wire": {
+    taskSectionEmojiSchema: taskSectionWire.taskSectionEmojiSchema,
     taskSectionIconSchema: taskSectionWire.taskSectionIconSchema,
+    taskSectionTitleSchema: taskSectionWire.taskSectionTitleSchema,
     taskSectionSchema: taskSectionWire.taskSectionSchema,
     taskSectionEntrySchema: taskSectionWire.taskSectionEntrySchema,
     taskSectionsAnswerSchema: taskSectionWire.taskSectionsAnswerSchema,

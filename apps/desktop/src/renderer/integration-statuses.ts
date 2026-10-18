@@ -19,10 +19,10 @@ import {
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAct } from "./act";
 import { rendererRuntime } from "./renderer-runtime";
 
 /**

@@ -31,6 +31,7 @@ import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -63,7 +64,6 @@ import {
 } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
-import { OpenLinkProvider } from "./use-open-link";
 
 /**
  * `@` in an agent's message box and its transcript, on a task's page and
