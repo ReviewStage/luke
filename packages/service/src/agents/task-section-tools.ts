@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
+import {
+  deleteTaskSectionIn,
+  listTaskSections,
+  writeTaskSections,
+} from "@luke/database/models/task-section-store";
 import { readTask } from "@luke/database/models/task-store";
 import {
   TASK_SECTION_BOUNDS,
@@ -211,7 +215,10 @@ export function runCreateSection(
       });
       // Note that the member was just read in the workspace, so a create refused is the bound's.
       if (Option.isNone(written)) return agentToolRejected(TASK_SECTION_TOOL_REFUSAL.FULL);
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, section: { id, title } };
+      // A call run again finds the section it made first, which keeps the title it was made with.
+      const made = written.value.sections.find((section) => section.id === id);
+      if (made === undefined) return agentToolRejected(TASK_SECTION_TOOL_REFUSAL.UNAVAILABLE);
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, section: sectionReading(made) };
     }),
   );
 }
@@ -233,19 +240,13 @@ export function runDeleteSection(
         return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       }
       const userId = callerUserId(call.caller);
-      const kept = yield* workspaceSections(userId, workspace.value);
-      const section = kept.sections.find((each) => each.id === sectionId);
-      if (section === undefined) return agentToolRejected(TASK_SECTION_TOOL_REFUSAL.NO_SECTION);
-      const returned = kept.entries.filter((entry) => entry.sectionId === sectionId).length;
-      const written = yield* writeTaskSections(userId, {
-        kind: TASK_SECTION_WRITE.DELETE,
-        id: sectionId,
-      });
-      if (Option.isNone(written)) return agentToolRejected(TASK_SECTION_TOOL_REFUSAL.UNAVAILABLE);
+      // Note that the read, the count, and the delete are one write under the account's lock, so the answer is what this call took.
+      const deleted = yield* deleteTaskSectionIn(userId, workspace.value, sectionId);
+      if (Option.isNone(deleted)) return agentToolRejected(TASK_SECTION_TOOL_REFUSAL.NO_SECTION);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        section: sectionReading(section),
-        tasksBackUnderTasks: returned,
+        section: sectionReading(deleted.value.section),
+        tasksBackUnderTasks: deleted.value.returnedTasks,
       };
     }),
   );

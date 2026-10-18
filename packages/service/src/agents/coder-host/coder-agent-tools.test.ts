@@ -2183,8 +2183,8 @@ test("create_section, move_task, and delete_section keep the caller's starter's 
   assert.ok(isRecord(made.section) && isWireString(made.section.id));
   const growth = made.section.id;
   assert.equal(made.section.title, "Growth");
-  // The same call run again names the section it made, and makes no second one.
-  assert.deepEqual(await call(CODER_TOOL.CREATE_SECTION, { title: "Growth" }, "call-1"), made);
+  // The same call run again names the section it made, as it was made, and makes no second one.
+  assert.deepEqual(await call(CODER_TOOL.CREATE_SECTION, { title: "Billing" }, "call-1"), made);
   const kept = await sectionsOf(caller.userId, workspaceId);
   assert.deepEqual(
     kept.sections.map((section) => [section.id, section.title, section.icon]),
