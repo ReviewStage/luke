@@ -63,11 +63,11 @@ export interface WorkWorkerBlock {
 export interface WorkTurnRow {
   key: string;
   startedAt: number;
-  /** When the turn ended, where the service said; none while it runs or was left running. */
+  /** When the turn ended, where the service said; none while it runs. */
   endedAt?: number;
-  /** Running only while the turn moves; a turn its call left running is drawn as stopped, since nothing more of it will be told. */
+  /** Running while the turn's record says so, whether or not a call stands. */
   state: TaskWorkState;
-  /** Whether the turn still moves: it runs on a call that still stands. */
+  /** Whether the turn still moves: its record says it runs. */
   moving: boolean;
   earlierOmitted: boolean;
   /** The turn as one of Luke's messages, in the agent tab's own parts. */
@@ -260,7 +260,6 @@ function workerOfPart(
   standing: CodingAgentSubagentStanding | undefined,
   title: string | undefined,
   moving: boolean,
-  callLive: boolean,
 ): WorkWorkerBlock {
   const task = inputText(part, "task") ?? inputText(part, "message") ?? "";
   const failed = part.state === TOOL_STATE.OUTPUT_ERROR;
@@ -289,7 +288,7 @@ function workerOfPart(
       kind: CALL_KIND.WORKER,
       subject: task,
       state,
-      running: callLive && state === TASK_WORK_STATE.RUNNING,
+      running: state === TASK_WORK_STATE.RUNNING,
     },
     task,
     session: {
@@ -360,24 +359,18 @@ function rowOf(
   message: CodingAgentMessage & { readonly turnId: string },
   standings: ReadonlyMap<string, CodingAgentSubagentStanding>,
   titles: ReadonlyMap<string, string>,
-  callLive: boolean,
 ): WorkTurnRow {
   const state = turnStateOf(message);
-  const moving = callLive && state === TASK_WORK_STATE.RUNNING;
-  const left = state === TASK_WORK_STATE.RUNNING && !moving;
+  // Note that a turn moves while its record says it runs, call or no call, because hanging up
+  // leaves Luke working: the record, not the call, says when the turn is over.
+  const moving = state === TASK_WORK_STATE.RUNNING;
   const workers: WorkWorkerBlock[] = [];
   const parts = settledJournal(message.parts, moving).map((part) => {
     if (!isRecord(part) || !isWireString(part.toolCallId) || !isWireString(part.type)) return part;
     if (!DELEGATION_PART_TYPES.has(part.type)) return part;
     const { toolCallId } = part;
     const standing = standings.get(toolCallId);
-    const worker = workerOfPart(
-      { ...part, toolCallId },
-      standing,
-      titles.get(toolCallId),
-      moving,
-      callLive,
-    );
+    const worker = workerOfPart({ ...part, toolCallId }, standing, titles.get(toolCallId), moving);
     workers.push(worker);
     return workerCallPart(part, worker);
   });
@@ -386,7 +379,7 @@ function rowOf(
     key: message.turnId,
     startedAt: message.startedAt ?? 0,
     ...(message.finishedAt === undefined ? undefined : { endedAt: message.finishedAt }),
-    state: left ? TASK_WORK_STATE.FAILED : state,
+    state,
     moving,
     earlierOmitted: message.earlierOmitted ?? false,
     message: {
@@ -410,16 +403,12 @@ function rowOf(
 
 /**
  * The open task's turns as the tab draws them, oldest first, each one of
- * Luke's messages. A turn moves only while the call it ran on stands: a
- * call that ended leaves its last turn as it was last told, with nothing on
- * it still turning, and drawn as stopped. A worker moves while the call
- * stands whether or not its turn still does, because a worker in the
- * background outlives the turn that started it.
+ * Luke's messages. A turn moves while its record says it runs, whether or
+ * not a call stands, since Luke goes on working after the developer hangs
+ * up; a worker moves while its own session says it runs, because a worker
+ * in the background outlives the turn that started it.
  */
-export function workRowsOf(
-  conversation: TaskConversation,
-  callLive: boolean,
-): readonly WorkTurnRow[] {
+export function workRowsOf(conversation: TaskConversation): readonly WorkTurnRow[] {
   const standings = new Map(
     (conversation?.subagents ?? []).map((standing) => [standing.callId, standing]),
   );
@@ -428,7 +417,7 @@ export function workRowsOf(
   );
   return (conversation?.messages ?? []).flatMap((message) => {
     const { turnId } = message;
-    return turnId === undefined ? [] : [rowOf({ ...message, turnId }, standings, titles, callLive)];
+    return turnId === undefined ? [] : [rowOf({ ...message, turnId }, standings, titles)];
   });
 }
 

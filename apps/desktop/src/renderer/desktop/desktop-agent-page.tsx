@@ -283,7 +283,6 @@ export function DesktopAgentPage({
   // An agent's workers are its delegations, read through its own transcript, so the panel's plan's work is none.
   const work = {
     conversation: undefined,
-    callLive: false,
     onLoadEarlier: () => Promise.resolve(),
     readWorker: control.readTranscript,
   };

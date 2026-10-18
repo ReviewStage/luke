@@ -420,23 +420,21 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
-   * The panel's stop: the standing call ends now, whatever it is about. Where
-   * Luke is speaking he is silenced on this device and the host tells the
-   * model to stop first, so his voice does not run on through the graceful
-   * close; then the microphone closes
-   * and the call is let go of at once, so the view reads no call before the
-   * close has finished behind it. Unlike the stop key, nothing stands after
-   * it: the next press opens a new call. A press over no call does nothing.
+   * The panel's hang-up: the standing call ends now, whatever it is about.
+   * Where Luke is speaking he is silenced on this device, so his voice does
+   * not run on through the graceful close; then the microphone closes and
+   * the call is let go of at once, so the view reads no call before the
+   * close has finished behind it. Note that the host is never told to stop,
+   * unlike under the stop key, because its stop cancels the work Luke has
+   * under way, and hanging up ends the voice alone: Luke goes on working and
+   * a call back finds him there. A press over no call does nothing.
    */
   stopCall(): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       this.#pressHeld = false;
       const call = this.#call;
       if (call?.standing && !this.#opening) {
-        if (call.status === LIVE_STATUS.SPEAKING) {
-          call.silenceOutput();
-          yield* this.#bridge.stopSpeaking();
-        }
+        if (call.status === LIVE_STATUS.SPEAKING) call.silenceOutput();
         yield* call.mute();
       }
       yield* this.#hangUp();

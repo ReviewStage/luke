@@ -1,5 +1,5 @@
 import { ASK_ORIGIN, type AskOrigin } from "@luke/features";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -107,6 +107,16 @@ export interface AskRecord {
   cancelRequested(id: string, at: Date): AskEffect<void>;
   /** The account's spoken asks delegated in the voice session, oldest revision first. */
   spokenIn(userId: string, voiceSessionId: string): AskEffect<readonly SpokenAsk[]>;
+  /**
+   * The conversation's spoken asks, whichever call they were asked on, made since the instant given
+   * and not yet told to their end nor stopped, oldest first: what a fresh call about the plan takes
+   * up of the work earlier calls left running or ended unheard.
+   */
+  unendedSpoken(
+    userId: string,
+    conversationId: string,
+    since: Date,
+  ): AskEffect<readonly SpokenAsk[]>;
   /** Moves how far the ask's run was told forward, never back: the seq only grows and the end's first instant stands. */
   told(id: string, told: AskTold): AskEffect<void>;
 }
@@ -363,6 +373,42 @@ const findSpokenIn = SqlSchema.findAll({
     ),
 });
 
+const UnendedSpokenSchema = Schema.Struct({
+  userId: Schema.String,
+  conversationId: Schema.String,
+  since: Schema.Date,
+});
+
+const findUnendedSpoken = SqlSchema.findAll({
+  Request: UnendedSpokenSchema,
+  Result: SpokenAskRowSchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: asks.id,
+          clientId: asks.clientId,
+          revision: sql<number>`coalesce(${asks.askRevision}, 0)`,
+          turnId: asks.turnId,
+          cancelRequestedAt: asks.cancelRequestedAt,
+          toldSeq: asks.toldSeq,
+          endToldAt: asks.endToldAt,
+        })
+        .from(asks)
+        .where(
+          and(
+            eq(asks.userId, key.userId),
+            eq(asks.conversationId, key.conversationId),
+            eq(asks.origin, ASK_ORIGIN.SPOKEN),
+            isNull(asks.endToldAt),
+            isNull(asks.cancelRequestedAt),
+            gte(asks.createdAt, key.since),
+          ),
+        )
+        .orderBy(asc(asks.createdAt)),
+    ),
+});
+
 function spokenAsk(read: Schema.Schema.Type<typeof SpokenAskRowSchema>): SpokenAsk {
   return {
     id: read.id,
@@ -557,6 +603,10 @@ export function askRecord(): AskRecord & AskDeliveryBinding {
     cancelRequested: (id, at) => markCancelRequested({ id, at }),
     spokenIn: (userId, voiceSessionId) =>
       Effect.map(findSpokenIn({ userId, voiceSessionId }), (rows) => rows.map(spokenAsk)),
+    unendedSpoken: (userId, conversationId, since) =>
+      Effect.map(findUnendedSpoken({ userId, conversationId, since }), (rows) =>
+        rows.map(spokenAsk),
+      ),
     told: (id, told) => markTold({ id, seq: told.seq, endAt: told.endAt?.toISOString() ?? null }),
     bindDeliveries: (target, deliveryIds, turnId) =>
       deliveryIds.length === 0

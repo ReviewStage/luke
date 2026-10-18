@@ -549,14 +549,13 @@ export interface TasksControl {
     reveal?: { readonly call: string; readonly onRevealed: () => void } | undefined;
   };
   /**
-   * What Luke's brain wrote and ran on the open task's calls,
-   * whether its call still stands, the turn the page before the oldest drawn
+   * What Luke's brain wrote and ran on the open task's calls, the turn the
+   * page before the oldest drawn
    * is read before where an older one stands, and that read.
    */
   work: {
     /** The open task's conversation with the brain as an agent's transcript is read; none before the first read lands. */
     conversation: TasksView["conversation"];
-    callLive: boolean;
     onLoadEarlier: () => Promise<void>;
     /** Reads the brain's worker's session past a cursor, as an agent's worker's tab reads its own, the task standing in the agent's place. */
     readWorker: TranscriptReader;
@@ -1351,7 +1350,7 @@ export function useTasksTab(input: {
   });
   // A subagent's tab is held to the task's work as an agent's is to its agents.
   const workers = useMemo(
-    () => workerCallIds(workRowsOf(viewed.conversation, false)),
+    () => workerCallIds(workRowsOf(viewed.conversation)),
     [viewed.conversation],
   );
   // An agent Luke started, archived, or brought back in the call moves in
@@ -2869,7 +2868,6 @@ export function useTasksTab(input: {
     // A fixture's open task is drawn mid-call, as its status and transcript are.
     work: {
       conversation: tasks.conversation,
-      callLive: fixture === undefined ? live : reported.callTaskId === tasks.activeTaskId,
       onLoadEarlier: () => act(ACT_KIND.TASKS_CONVERSATION_EARLIER),
       readWorker,
       reveal:

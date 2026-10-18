@@ -623,7 +623,7 @@ function PlanDocument({
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
   const cards = taskCards({
     agents,
-    workRows: workRowsOf(tasks.work.conversation, tasks.work.callLive),
+    workRows: workRowsOf(tasks.work.conversation),
     held: views.held,
     chosen: (opened) =>
       sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),
