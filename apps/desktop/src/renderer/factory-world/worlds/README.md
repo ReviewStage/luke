@@ -77,7 +77,9 @@ What `update(state)` gets (`WorldState`), whole, on every change:
 | `dark` | The window's appearance. Dress your ground to match. |
 
 `PickTarget` ids: an agent is its `id`, a zone its `path`, a shipped PR its
-`url`, a planned issue its `identifier`, and a defect its `id`. The host
+`url`, a planned issue its `identifier`, and a defect its `id`. A task, by its
+`id`, is the campus's alone (`../campus/`, the SVG view the picker offers
+beside the worlds, which is no world): a world never registers one. The host
 resolves them for the hover label and the card, and flies the camera to a
 newly selected target that you registered.
 

@@ -130,7 +130,7 @@ function boardStands(page: HTMLElement): boolean {
   );
 }
 
-test("Factory opens on the board, its picker offering the board first, then the worlds, and the development build's test pattern last", async () => {
+test("Factory opens on the board, its picker offering the board first, then the campus, then the worlds, and the development build's test pattern last", async () => {
   launch({ factory: true, packaged: false });
   const page = mount();
   await settle();
@@ -138,6 +138,7 @@ test("Factory opens on the board, its picker offering the board first, then the 
   assert.ok(boardStands(page));
   const offered = entries(page);
   assert.equal(offered[0], "Board");
+  assert.equal(offered[1], "Campus");
   assert.equal(offered.at(-1), "Test pattern");
   assert.deepEqual(asked, [], "no world is read while the board stands");
 });
@@ -156,6 +157,21 @@ test("a world chosen stands in the board's place and reads the listed workspace'
   await settle();
   assert.ok(boardStands(page));
   assert.equal(picker(page)?.getAttribute("aria-label"), "View: Board");
+});
+
+test("the campus chosen stands in the board's place over the listed workspace's world, drawn without the worlds' scene", async () => {
+  launch({ factory: true, packaged: true });
+  const page = mount();
+  await settle();
+  choose(page, "Campus");
+  await settle();
+  assert.equal(picker(page)?.getAttribute("aria-label"), "View: Campus");
+  assert.ok(!boardStands(page));
+  assert.deepEqual(asked, [WORKSPACE.id]);
+  assert.ok(
+    page.querySelector(".factory-campus-scene"),
+    "the campus is drawn though no scene bundle has landed",
+  );
 });
 
 test("the world chosen stands when Factory is opened again in the same session, and a new session opens on the board", async () => {

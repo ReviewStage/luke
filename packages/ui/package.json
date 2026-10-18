@@ -53,6 +53,7 @@
     "./chat-mention": "./src/chat-mention.js",
     "./chat-model": "./src/chat-model.js",
     "./factory-world": "./src/factory-world/factory-world.js",
+    "./factory-campus": "./src/factory-world/campus.js",
     "./testing": "./src/testing/index.js"
   },
   "types": "./src/index.ts",

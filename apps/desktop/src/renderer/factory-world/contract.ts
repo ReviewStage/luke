@@ -1,3 +1,4 @@
+import type { RefObject } from "react";
 import type { PickTarget, WorldModule, WorldState } from "./world";
 
 /**
@@ -57,4 +58,19 @@ export interface FactorySceneHandle {
 export interface FactorySceneModule {
   /** Mounts the world chosen in `element`; throws where the Mac's WebGL cannot be had. */
   readonly mount: (element: HTMLElement, props: FactorySceneProps) => FactorySceneHandle;
+}
+
+/**
+ * What the Factory page hands whichever scene it draws in, a world's or the
+ * campus's (`campus/`): the state, whether it is on screen, and the doors
+ * back, so the chrome over it serves both alike.
+ */
+export interface StageSceneProps {
+  readonly state: WorldState;
+  readonly shown: boolean;
+  /** Where the scene leaves its way back to the establishing shot, which the home button and Esc take. */
+  readonly home: RefObject<(() => void) | undefined>;
+  readonly onHover: (hover: SceneHover | undefined) => void;
+  readonly onPick: (target: PickTarget | undefined) => void;
+  readonly onAway: (away: boolean) => void;
 }
