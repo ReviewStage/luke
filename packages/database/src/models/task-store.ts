@@ -116,6 +116,8 @@ export interface StoredTask {
   readonly sectionWriters: readonly PlanSectionWriter[];
   /** The Linear issue the plan was started from, as it was read then; nothing for a plan started from none. */
   readonly linearIssue: TaskLinearIssue | undefined;
+  /** The developer's own words about the task as they started it; nothing for a task started with none. */
+  readonly brief: string | undefined;
   /** The workspace's own issue the plan was started from, as it reads now; nothing for a plan started from none, or once it is gone. */
   readonly issue: StoredTaskIssue | undefined;
 }
@@ -142,7 +144,8 @@ export interface StoredTaskIssue {
  * the caller confirms is an issue of the workspace it starts in. A plan started
  * with no name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is
  * renamed. A plan started with `planning` false skips its planning phase and
- * starts empty rather than as the template.
+ * starts empty rather than as the template. A brief is the developer's own
+ * words about the task, kept as written; a blank one is none.
  */
 export interface NewTask {
   readonly organizationId: string;
@@ -151,6 +154,7 @@ export interface NewTask {
   readonly linearIssue?: TaskLinearIssue;
   readonly issueId?: string;
   readonly planning?: boolean;
+  readonly brief?: string;
 }
 
 /**
@@ -195,6 +199,7 @@ const TASK_COLUMNS = {
   document: task.document,
   conversationId: task.conversationId,
   linearIssue: task.linearIssue,
+  brief: task.brief,
 };
 
 const TaskSummaryRowSchema = Schema.Struct({
@@ -233,6 +238,7 @@ const TaskRowSchema = Schema.Struct({
   document: Schema.String,
   conversationId: Schema.NullOr(Schema.String),
   linearIssue: Schema.NullOr(taskLinearIssueSchema),
+  brief: Schema.NullOr(Schema.String),
 });
 
 type TaskRow = typeof TaskRowSchema.Type;
@@ -414,6 +420,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
       saved: row.updatedAt.getTime() > row.createdAt.getTime(),
       sectionWriters,
       linearIssue: row.linearIssue ?? undefined,
+      brief: row.brief ?? undefined,
       issue:
         row.issueId === null
           ? undefined
@@ -472,6 +479,7 @@ const insertTask = SqlSchema.findOne({
     document: Schema.String,
     linearIssue: Schema.NullOr(taskLinearIssueSchema),
     issueId: Schema.NullOr(Schema.String),
+    brief: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
   Result: TaskRowSchema,
@@ -487,6 +495,7 @@ const insertTask = SqlSchema.findOne({
           document: write.document,
           linearIssue: write.linearIssue,
           issueId: write.issueId,
+          brief: write.brief,
           createdAt: write.now,
           updatedAt: write.now,
         })
@@ -791,6 +800,7 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
     const now = yield* DateTime.nowAsDate;
     const template = started.planning === false ? "" : yield* readPlanTemplate(userId);
     const named = started.name?.trim() ?? "";
+    const brief = started.brief?.trim() ?? "";
     const row = yield* insertTask({
       userId,
       organizationId: started.organizationId,
@@ -799,6 +809,7 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
       document: template ?? DEFAULT_PLAN_TEMPLATE,
       linearIssue: started.linearIssue ?? null,
       issueId: started.issueId ?? null,
+      brief: brief.length > 0 ? brief : null,
       now,
     }).pipe(
       // An insert that returned no row is the database breaking its own contract, not an outcome.
