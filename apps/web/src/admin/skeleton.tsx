@@ -1,6 +1,8 @@
 import {
   SKELETON_SHAPE as BONE_SHAPE,
   Skeleton as Bone,
+  CARD_PADDING,
+  Card,
   GAP,
   Inline,
   List,
@@ -139,7 +141,7 @@ function SkeletonAccountsTable({
 }): React.JSX.Element {
   const columns = bones(numericColumns);
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <Card padding={CARD_PADDING.FLUSH}>
       <div className="flex items-center gap-6 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
           <SkeletonLine variant={TEXT_VARIANT.LABEL} width="64px" />
@@ -171,7 +173,7 @@ function SkeletonAccountsTable({
           ))}
         </div>
       ))}
-    </div>
+    </Card>
   );
 }
 
@@ -231,7 +233,7 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
       return <SkeletonCalendarCard />;
     case SKELETON_SHAPE.RETENTION:
       return (
-        <div className="rounded-lg border border-border bg-card p-5">
+        <Card>
           <div className="grid gap-1">
             <SkeletonLine variant={TEXT_VARIANT.CAPTION} width="100%" />
             {bones(8).map((row) => (
@@ -240,7 +242,7 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       );
     case SKELETON_SHAPE.TABLE:
       return <SkeletonAccountsTable rows={shape.rows} numericColumns={shape.numericColumns} />;

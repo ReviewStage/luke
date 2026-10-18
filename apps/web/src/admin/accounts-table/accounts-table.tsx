@@ -1,6 +1,8 @@
 import {
   BADGE_TONE,
   Badge,
+  CARD_PADDING,
+  Card,
   EmptyState,
   IconButton,
   Inline,
@@ -158,7 +160,7 @@ export function AccountsTable<Row extends AccountsTableRow>({
   }
   const sorted = sortAccountsRows(rows, sort, detailColumns, favorite?.starred);
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <Card padding={CARD_PADDING.FLUSH}>
       <div className="overflow-x-auto">
         {/* Note that every cell keeps to one line, because the type roles break
             words anywhere: a narrow table would otherwise split a count or an
@@ -294,6 +296,6 @@ export function AccountsTable<Row extends AccountsTableRow>({
           </tbody>
         </table>
       </div>
-    </div>
+    </Card>
   );
 }

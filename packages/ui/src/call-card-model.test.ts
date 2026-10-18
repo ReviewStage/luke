@@ -99,7 +99,7 @@ test("a call's plan the list does not hold is named from the open document, or p
     callCard({ view: { ...LISTENING, callTaskId: BILLING }, tasks: open }).taskName,
     "Billing export",
   );
-  assert.equal(callCard({ view: LISTENING, tasks: IDLE_TASKS_VIEW }).taskName, "Planning call");
+  assert.equal(callCard({ view: LISTENING, tasks: IDLE_TASKS_VIEW }).taskName, "Task call");
 });
 
 test("a Luke window draws the card only with the keyboard, a call in progress, and anything but the call's plan on screen", () => {

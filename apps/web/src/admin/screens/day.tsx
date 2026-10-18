@@ -2,6 +2,8 @@ import type { AdminDayAccount, AdminDayDetail } from "@luke/service/admin/admin-
 import {
   BADGE_TONE,
   Badge,
+  CARD_PADDING,
+  Card,
   EmptyState,
   Inline,
   TEXT_ELEMENT,
@@ -62,7 +64,7 @@ function DayAccountsTable({
     return <EmptyState icon={<UserIcon />}>No hosted-tier calls recorded on this day.</EmptyState>;
   }
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <Card padding={CARD_PADDING.FLUSH}>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px]">
           <thead>
@@ -127,7 +129,7 @@ function DayAccountsTable({
           </tbody>
         </table>
       </div>
-    </div>
+    </Card>
   );
 }
 

@@ -1,7 +1,8 @@
 /* text.css -- the type roles: each role's size, leading, and weight from the
-   profile, and its ink from the palette. The element a caller chooses keeps
-   none of the user agent's own heading sizes or margins, so an `h1` set as a
-   caption looks like a caption. Outer spacing is the container's. */
+   profile, its ink from the palette, its face, and its one-line cut. The
+   element a caller chooses keeps none of the user agent's own heading sizes
+   or margins, so an `h1` set as a caption looks like a caption. Outer
+   spacing is the container's. */
 
 @layer components {
   .luke-text {
@@ -53,5 +54,18 @@
 
   .luke-text[data-tone="subtle"] {
     color: var(--luke-color-text-subtle);
+  }
+
+  .luke-text[data-font="mono"] {
+    font-family: var(--luke-font-mono);
+  }
+
+  /* One line, cut at the box's edge; a flex item gives up its content's
+     width so the cut can happen at all. */
+  .luke-text[data-truncate] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
