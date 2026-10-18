@@ -154,10 +154,15 @@ interface Owner {
 
 const NO_OWNER: Owner = { key: null, identity: undefined };
 
-/** Whether two identities are one account: the same id, or the same address, so learning its id or changing its address leaves it the same. */
+/**
+ * Whether two identities are one account: the same id where both name one,
+ * and the same address where either names none, so learning its id or
+ * changing its address leaves it the same, while two ids are two accounts
+ * whatever their addresses.
+ */
 function sameAccount(one: Identity | undefined, other: Identity | undefined): boolean {
   if (one === undefined || other === undefined) return false;
-  if (one.id !== undefined && one.id === other.id) return true;
+  if (one.id !== undefined && other.id !== undefined) return one.id === other.id;
   return one.email === other.email;
 }
 

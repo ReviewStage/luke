@@ -232,6 +232,14 @@ test("another account signed in to the window draws its reads as they hold them,
   );
   assert.equal(probe.drawn[0]?.status, INBOX_STATUS.ANSWERED);
 
+  // Another account under the same address is another account all the same.
+  act(() =>
+    root?.render(
+      onRegistry(registry, createElement(Page, { account: "dana.reyes", id: "user-other" })),
+    ),
+  );
+  assert.equal(probe.drawn[0]?.status, INBOX_STATUS.OPEN);
+
   signIn("charles");
   assert.equal(probe.drawn[0]?.status, INBOX_STATUS.OPEN);
   act(() => {
