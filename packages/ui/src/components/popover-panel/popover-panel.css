@@ -54,7 +54,7 @@
   .luke-popover-panel-title {
     margin: 0;
     font-size: var(--luke-type-section-size);
-    font-weight: 600;
+    font-weight: var(--luke-weight-semibold);
     line-height: var(--luke-type-section-leading);
   }
 }
