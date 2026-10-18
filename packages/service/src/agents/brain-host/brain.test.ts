@@ -503,14 +503,17 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
     "with Chat off for the plan's owner a turn is offered no chat tool and opens with no chat, and once the owner turns it on it is offered them and the chat said since",
     () =>
       Effect.gen(function* () {
-        const { host, userId, taskId: planId, conversationId } = yield* savedTaskWithConversation();
+        const { host, userId, taskId, conversationId } = yield* savedTaskWithConversation();
         const session = yield* startSession(host, userId, conversationId);
-        const channel = Option.getOrThrow(yield* ensureTaskChannel(userId, planId));
+        const channel = Option.getOrThrow(yield* ensureTaskChannel(userId, taskId));
         const person = Option.getOrThrow(
           yield* ensureMember(userId, channel.organizationId, { kind: MEMBER_KIND.HUMAN, userId }),
         );
         // Luke joins the chat before the post it should read, as a turn with Chat on would seat it.
-        yield* ensureMember(userId, channel.organizationId, { kind: MEMBER_KIND.LUKE, planId });
+        yield* ensureMember(userId, channel.organizationId, {
+          kind: MEMBER_KIND.LUKE,
+          planId: taskId,
+        });
         yield* postMessage(userId, channel.organizationId, {
           authorMemberId: person.id,
           to: { channelId: channel.id },
@@ -543,13 +546,13 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
     "asked to post, Luke posts in the plan's channel as @luke, and each turn opens with what was said there since Luke last read, until a turn handed it completes",
     () =>
       Effect.gen(function* () {
-        const { host, userId, taskId: planId, conversationId } = yield* savedTaskWithConversation();
+        const { host, userId, taskId, conversationId } = yield* savedTaskWithConversation();
         yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
         const session = yield* startSession(host, userId, conversationId);
 
         const reply = yield* brainTurn(host, session, "turn_0", `${SCRIPTED_POST}${CHAT.POSTED}`);
 
-        const channel = Option.getOrThrow(yield* ensureTaskChannel(userId, planId));
+        const channel = Option.getOrThrow(yield* ensureTaskChannel(userId, taskId));
         const { organizationId } = channel;
         const person = Option.getOrThrow(
           yield* ensureMember(userId, organizationId, { kind: MEMBER_KIND.HUMAN, userId }),
@@ -558,7 +561,7 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           yield* history(userId, organizationId, person.id, { channelId: channel.id }),
         );
         const luke = (yield* roster(userId, organizationId)).find(
-          (member) => member.kind === MEMBER_KIND.LUKE && member.planId === planId,
+          (member) => member.kind === MEMBER_KIND.LUKE && member.planId === taskId,
         );
         assert.ok(luke);
         assert.equal(luke.handle, "luke");

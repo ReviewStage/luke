@@ -130,7 +130,7 @@ function press(target: Element, init: MouseEventInit = {}): boolean {
 test("a loaded day names itself and states its totals and accounts under their headings", async () => {
   const { page } = await openDay(detail());
 
-  expect(headings(page, "h1")).toEqual(["Day", "October 12, 2026"]);
+  expect(headings(page, "h1")).toEqual(["October 12, 2026"]);
   expect(page.textContent).toContain("One UTC day of hosted-tier calls");
   expect(page.textContent).not.toContain("still filling");
   expect(headings(page, "h2")).toEqual(["Hosted tier · this day", "Accounts active this day"]);
@@ -184,7 +184,7 @@ test("a plain press on an account or its row opens it; a modified press is the b
 
 test("the way back to the dashboard moves in place on a plain press, loading or loaded", async () => {
   const loading = await openDay(undefined);
-  expect(headings(loading.page, "h1")).toEqual(["Day", "October 12, 2026"]);
+  expect(headings(loading.page, "h1")).toEqual(["October 12, 2026"]);
   expect(press(link(loading.page, "Dashboard"))).toBe(true);
   expect(loading.backs).toHaveLength(1);
   act(() => root?.unmount());

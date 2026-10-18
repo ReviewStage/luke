@@ -144,8 +144,17 @@ export function accountInboxPast(
     const failedRuns = yield* failedRunsOf(userId);
     const chat = yield* chatWaitingEntries(userId);
     const items = rows.map(({ status: _status, ...entry }) => entry);
-    const planless = tasklessRows.map(({ status: _status, ...entry }) => entry);
-    return { items, plans: tasks, planless, automations, failedRuns, chat, cursor, readAt };
+    const taskless = tasklessRows.map(({ status: _status, ...entry }) => entry);
+    return {
+      items,
+      plans: tasks,
+      planless: taskless,
+      automations,
+      failedRuns,
+      chat,
+      cursor,
+      readAt,
+    };
   });
   return heldUntilMoved(accountStamps(userId), after, CODER.ACCOUNT_INBOX_POLL).pipe(
     Effect.andThen(read),

@@ -136,6 +136,7 @@ function AdminActions({
  */
 export function AdminPage({
   title,
+  description,
   controls,
   account,
   accountSkeleton = false,
@@ -143,6 +144,8 @@ export function AdminPage({
   children,
 }: {
   title: string;
+  /** What the title means, under it ("One UTC day of hosted-tier calls"). */
+  description?: string | undefined;
   controls: React.ReactNode;
   account: ViewerAccount | undefined;
   accountSkeleton?: boolean;
@@ -153,6 +156,7 @@ export function AdminPage({
     <main className="flex min-h-0 flex-1 flex-col">
       <DetailPage
         title={title}
+        description={description}
         actions={
           <AdminActions
             controls={controls}
