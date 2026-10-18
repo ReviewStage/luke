@@ -1,4 +1,6 @@
 import {
+  AVATAR_SIZE,
+  Avatar,
   IconButtonLink,
   PublicPage,
   PublicSection,
@@ -13,8 +15,6 @@ type Founder = {
   readonly name: string;
   readonly role: string;
   readonly photoSrc: string;
-  /** Edge of the square source, so the image reserves its box before it loads. */
-  readonly photoEdge: number;
   readonly bio: string;
   readonly socials: {
     readonly linkedin: string;
@@ -36,7 +36,6 @@ const FOUNDERS: readonly Founder[] = [
     name: "Charles Pan",
     role: "Cofounder",
     photoSrc: "/assets/charles-pan.jpeg",
-    photoEdge: 500,
     bio: "Previously developer at Five Rings, early engineer at Yuzu Health.",
     socials: {
       linkedin: "https://www.linkedin.com/in/charleslpan/",
@@ -47,7 +46,6 @@ const FOUNDERS: readonly Founder[] = [
     name: "Dean Stratakos",
     role: "Cofounder",
     photoSrc: "/assets/dean-stratakos.jpeg",
-    photoEdge: 450,
     bio: "Previously building coding agents at Five Rings.",
     socials: {
       linkedin: "https://www.linkedin.com/in/dean-stratakos/",
@@ -80,14 +78,7 @@ export function AboutPage(): React.JSX.Element {
 function FounderCard({ founder }: { readonly founder: Founder }): React.JSX.Element {
   return (
     <article className="flex items-start gap-4">
-      <img
-        alt={founder.name}
-        className="size-16 shrink-0 rounded-full border border-border object-cover"
-        height={founder.photoEdge}
-        loading="lazy"
-        src={founder.photoSrc}
-        width={founder.photoEdge}
-      />
+      <Avatar name={founder.name} src={founder.photoSrc} size={AVATAR_SIZE.PORTRAIT} />
       <div className="min-w-0">
         <h3 className="m-0 text-base font-semibold tracking-[-0.01em]">{founder.name}</h3>
         <div className="mt-0.5">

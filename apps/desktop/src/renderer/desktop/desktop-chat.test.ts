@@ -255,7 +255,7 @@ test("an open choice in For you is answered by a pick and its send, which marks 
   const page = mount();
   const card = page.querySelector<HTMLElement>('.chat-ask[data-status="open"]');
   assert.ok(card, "the choice's card stands open");
-  const fourteen = [...card.querySelectorAll<HTMLButtonElement>(".inbox-option")].find((option) =>
+  const fourteen = [...card.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((option) =>
     option.textContent?.startsWith("14 days"),
   );
   act(() => fourteen?.click());
@@ -268,7 +268,9 @@ test("an open choice in For you is answered by a pick and its send, which marks 
   act(() => railRow(page, "teammate-invitations").click());
   const settled = page.querySelector('.chat-ask[data-status="answered"]');
   assert.equal(
-    settled?.querySelector('[data-picked="true"]')?.textContent?.startsWith("14 days"),
+    [...(settled?.querySelectorAll("li") ?? [])]
+      .find((option) => option.textContent?.includes("Picked"))
+      ?.textContent?.startsWith("14 days"),
     true,
   );
   assert.equal(

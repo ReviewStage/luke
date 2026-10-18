@@ -728,48 +728,28 @@ body,
 /* Whoever did something (`actor-ref.tsx`): a person on a circle, their
    picture or their letter on a hue; Luke, an agent, or an automation by its
    glyph alone in a rounded square's box, on a solid tile where a facepile
-   overlaps it; someone the window cannot name on a quiet outline.
-   One size per place, so a byline, a facepile, and a row read level whoever
-   is in them. A square's corner is rounder than a workspace tile's of its
-   size, and it never holds a letter, so the two never read as one. */
+   overlaps it; someone the window cannot name on a quiet outline. The face
+   is the shared Avatar, one box per size, so a byline, a facepile, and a row
+   read level whoever is in them; the mark holds it and takes its box, and
+   its outline, so a ring or an outline drawn on the mark follows the face.
+   A square's corner is a share of its edge, as the Avatar's is. */
 .actor-mark {
-  --actor-size: 16px;
-  --state-glyph-size: calc(var(--actor-size) * 0.66);
+  /* Note that a working glyph takes the share of the face a glyph does. */
+  --state-glyph-size: 62%;
 
   position: relative;
   display: inline-grid;
   flex: none;
-  place-items: center;
-  width: var(--actor-size);
-  height: var(--actor-size);
   border-radius: 50%;
-  background: var(--actor-tile);
   color: var(--actor-tile-ink);
   vertical-align: middle;
 }
 
-.actor-mark[data-size="mark"] {
-  --actor-size: 14px;
-}
-
-.actor-mark[data-size="stack"] {
-  --actor-size: 18px;
-}
-
-.actor-mark[data-size="row"] {
-  --actor-size: 20px;
-}
-
-.actor-mark[data-size="account"] {
-  --actor-size: 26px;
-}
-
-.actor-mark[data-size="card"] {
-  --actor-size: 32px;
-}
-
-.actor-mark[data-size="page"] {
-  --actor-size: 48px;
+/* Note that a glyph fills the share its state glyph is given, the working
+   mark included, which the window otherwise draws at a fixed size. */
+:is(.actor-mark, .chat-mark) .state-glyph > :is(svg, img) {
+  width: 100%;
+  height: 100%;
 }
 
 /* An App's bot on GitHub stands in the same square, its robot until its avatar loads. */
@@ -779,33 +759,25 @@ body,
   [data-kind="automation"],
   [data-kind="github"][data-bot="true"]
 ) {
-  border-radius: calc(var(--actor-size) * 0.36);
-}
-
-/* Note that a square outside a facepile stands bare, its glyph alone on the
-   ground beneath it as a tab's is, in the same box, so the rows and lines it
-   stands in keep their alignment; a facepile whose faces overlap tiles its
-   squares instead (`ActorStack`), so a face never shows through the one
-   overlapping it. */
-.actor-mark:is(
-  [data-kind="luke"],
-  [data-kind="agent"],
-  [data-kind="automation"],
-  [data-kind="github"][data-bot="true"]
-):not([data-tiled="true"]) {
-  background: none;
+  border-radius: 36%;
 }
 
 /* Luke wears his blue on his face, the colour his voice and the
    Transcript's face already answer in: 8.4:1 on the dark tile and 4.3:1 on
    the light one, and at least 8.9:1 and 4.2:1 bare on the window's grounds,
-   a hovered or chosen row's included. */
+   a hovered or chosen row's included. His face fills more of his square
+   than a glyph does, as it is drawn everywhere. */
 .actor-mark[data-kind="luke"] {
   color: var(--voice-luke);
 }
 
+.actor-mark[data-kind="luke"] .luke-face {
+  width: 80%;
+  height: 80%;
+  color: inherit;
+}
+
 .actor-mark[data-kind="someone"] {
-  background: none;
   box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
   color: var(--luke-color-text-subtle);
 }
@@ -821,46 +793,9 @@ body,
   box-shadow: none;
 }
 
-.actor-mark[data-left="true"] .actor-face {
+.actor-mark[data-left="true"] > * {
   filter: grayscale(1);
   opacity: 0.8;
-}
-
-.actor-face {
-  display: grid;
-  position: relative;
-  width: 100%;
-  height: 100%;
-  place-items: center;
-  overflow: hidden;
-  border-radius: inherit;
-  line-height: 1;
-}
-
-.actor-face > svg,
-.actor-face .state-glyph > :is(svg, img) {
-  width: calc(var(--actor-size) * 0.62);
-  height: calc(var(--actor-size) * 0.62);
-}
-
-.actor-mark[data-kind="luke"] .luke-face {
-  width: calc(var(--actor-size) * 0.8);
-  height: calc(var(--actor-size) * 0.8);
-  color: inherit;
-}
-
-/* An App's bot's avatar, hidden rather than absent until it has loaded, so
-   its robot stands while it loads and where it fails. */
-.actor-picture {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.actor-picture[data-loaded="false"] {
-  visibility: hidden;
 }
 
 /* A line that names an actor: its words and the actor in one row centred on
@@ -2621,6 +2556,7 @@ ul.actor-stack {
 
 .desktop-agent [role="log"],
 .desktop-agent .agent-todos-dock,
+.desktop-agent .agent-published-dock,
 .desktop-agent .draft-fork-dock,
 .desktop-agent .agent-composer,
 .desktop-inbox .inbox-board,
@@ -4464,6 +4400,12 @@ button.integration-tool-head:hover,
   color: var(--luke-color-text-subtle);
 }
 
+/* A placeholder row while the list is read stands in a row's own box, as
+   `.sidebar-task` pads it, but is no control: nothing to press or reach. */
+.factory-skeleton-row {
+  padding: var(--luke-space-8) var(--row-inset);
+}
+
 @container factory (width < 960px) {
   .factory-line-up {
     flex-direction: column;
@@ -5224,36 +5166,24 @@ button.integration-tool-head:hover,
   flex-direction: column;
 }
 
-/* A member's mark: an agent's glyph as its tab wears it, Luke's initial in
-   his blue, a person's initial on a quiet ground. */
+/* A member's mark holds its square (`MemberMark`), in the ink its glyph
+   wears: Luke's face in his blue, as he is drawn everywhere. */
 .chat-mark {
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  place-items: center;
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-bold);
-}
+  /* Note that a working glyph takes the share of the square a glyph does. */
+  --state-glyph-size: 62%;
 
-.chat-mark[data-size="small"] {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  font-size: 10px;
+  display: inline-grid;
+  flex: none;
+  color: var(--luke-color-text);
 }
 
 .chat-mark[data-kind="planner"] {
-  border: 1px solid color-mix(in srgb, var(--voice-luke) 35%, transparent);
-  background: color-mix(in srgb, var(--voice-luke) 12%, transparent);
   color: var(--voice-luke);
 }
 
-.chat-mark[data-kind="agent"] {
-  background: transparent;
+.chat-mark[data-kind="planner"] .luke-face {
+  width: 80%;
+  height: 80%;
 }
 
 .chat-stream {
@@ -6725,6 +6655,7 @@ button.integration-tool-head:hover,
    lines are read across all the width the developer gave the panel. */
 .side-panel-content [role="log"],
 .side-panel-content .agent-todos-dock,
+.side-panel-content .agent-published-dock,
 .side-panel-content .agent-composer {
   padding-inline: max(var(--luke-space-16), var(--reading-room));
 }
@@ -7964,11 +7895,10 @@ button.integration-tool-head:hover,
 }
 
 /* Move to workspace (`move-task-dialog.tsx`), inside the shared dialog's
-   card: the other workspaces as rows, a tile and two lines each, the chosen
-   one ringed and one that cannot take the task dimmed, then what the move
-   does in a well under them, and the answers at its foot. The rows are the
-   card's body, which scrolls where the window is too short for all of them,
-   padded by the ring's reach so a row's ring is never cut off. */
+   card: the other workspaces as `@luke/ui`'s ChoiceList, a tile and two
+   lines each, then what the move does in a well under them, and the answers
+   at its foot. The list is the card's body, which scrolls where the window
+   is too short for all of it. */
 .move-dialog {
   display: flex;
   min-height: 0;
@@ -7977,47 +7907,10 @@ button.integration-tool-head:hover,
 }
 
 .move-list {
-  display: grid;
   min-height: 0;
-  gap: var(--luke-space-2);
-  margin: calc(-1 * var(--luke-focus-ring-reach));
-  padding: var(--luke-focus-ring-reach);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-}
-
-.move-row {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-8);
-  border: 0;
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.move-row:hover:not(:disabled) {
-  background: var(--luke-color-fill-hover);
-}
-
-.move-row[aria-checked="true"] {
-  background: var(--luke-color-fill-strong);
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
-}
-
-.move-row:disabled {
-  opacity: 0.55;
-}
-
-.move-row .workspace-ref-name {
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-semibold);
 }
 
 .move-effects {

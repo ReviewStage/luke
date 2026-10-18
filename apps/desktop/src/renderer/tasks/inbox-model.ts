@@ -110,13 +110,6 @@ export function inboxBoard(items: readonly InboxItem[]): InboxBoardView {
   };
 }
 
-/** The draft with the option pressed: picked where it was not, let go where it was; one at a time unless the choice allows several. */
-export function withChoice(draft: InboxDraft, label: string, multiple: boolean): InboxDraft {
-  const picked = draft.choices.includes(label);
-  if (picked) return { ...draft, choices: draft.choices.filter((each) => each !== label) };
-  return { ...draft, choices: multiple ? [...draft.choices, label] : [label] };
-}
-
 /** What the draft holds for the field, or nothing where it is untouched. */
 export function fieldValueOf(draft: InboxDraft, label: string): InboxFieldValue | undefined {
   return draft.values.find((each) => each.label === label)?.value;

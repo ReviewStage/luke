@@ -9,7 +9,12 @@ import {
 } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
-import { CODE_PATH_MAX_CHARS, codeLineSchema, commitShaSchema } from "./task-wire.js";
+import {
+  CODE_PATH_MAX_CHARS,
+  codeLineSchema,
+  commitShaSchema,
+  workspaceIdSchema,
+} from "./task-wire.js";
 
 /**
  * inbox-wire.ts -- the developer's inbox: what a task's coding agents need of the developer, posted by the agents and answered on the desktop.
@@ -618,6 +623,14 @@ export const inboxItemSchema = EffectSchema.Struct({
   settledAt: EffectSchema.optionalKey(countedNumber),
   /** When the item last changed, by the agent or the developer, a message on its thread included. */
   updatedAt: countedNumber,
+  /**
+   * Whether the item is unread for the member reading it: it changed after
+   * the last change they read through, or they marked it unread and have
+   * not read it since. Their own answer or message leaves it read for them;
+   * another member's marker never moves it. Absent from a service before it,
+   * which the desktop reads as read.
+   */
+  unread: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type InboxItem = typeof inboxItemSchema.Type;
@@ -675,6 +688,26 @@ export type InboxMessageRequest = typeof inboxMessageRequestSchema.Type;
 
 /** What a member's message comes back as: the item as it then stands, its thread with the message on it. */
 export const inboxMessagedSchema = EffectSchema.Struct({ item: inboxItemSchema });
+
+/** One item's read state for the member who marked it, as marking it read or unread answers it. */
+export const inboxReadStateSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  unread: EffectSchema.Boolean,
+});
+
+/**
+ * Marking every item of the reader's Inbox read: every item it lists, in
+ * the one workspace named, or in every workspace of the account's where
+ * none is.
+ */
+export const inboxReadAllRequestSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
+});
+
+export type InboxReadAllRequest = typeof inboxReadAllRequestSchema.Type;
+
+/** What marking every item read answers: how many items it marked read that were unread. */
+export const inboxReadAllSchema = EffectSchema.Struct({ marked: countedNumber });
 
 /** How a member's message on an item's thread opens, in the message that hands it to the agent. */
 export const INBOX_MESSAGE_LEAD = "Inbox message";

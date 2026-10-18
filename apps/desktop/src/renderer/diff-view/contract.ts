@@ -59,6 +59,13 @@ export interface DiffSelection {
   readonly endSide: (typeof DIFF_SELECTION_SIDE)[keyof typeof DIFF_SELECTION_SIDE];
 }
 
+/** A note drawn under a line of the diff, a review thread's: its key, and the line it stands under on the side it counts on. */
+export interface DiffAnnotation {
+  readonly key: string;
+  readonly side: DiffSelection["side"];
+  readonly line: number;
+}
+
 /** What the view hands the bundle: one file's patch, headed as git writes one, how to draw it, the lines lit in it, if any, and whether it is an excerpt. */
 export interface DiffViewProps {
   readonly patch: string;
@@ -66,6 +73,10 @@ export interface DiffViewProps {
   readonly selected?: DiffSelection | undefined;
   /** Whether the patch is an excerpt, a few lines of a file as a review thread's, drawn with nothing said of the lines around them. */
   readonly excerpt?: boolean | undefined;
+  /** The notes drawn under lines, each by its key, whose element `renderAnnotation` hands over; none for none. */
+  readonly annotations?: readonly DiffAnnotation[] | undefined;
+  /** The element a note's key is drawn in, kept by the view and filled by it, which the bundle stands under its line. */
+  readonly renderAnnotation?: ((key: string) => HTMLElement) | undefined;
 }
 
 /** The diff as mounted: drawn again for new props, and taken down. */

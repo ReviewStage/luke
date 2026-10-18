@@ -53,6 +53,9 @@
               "updatedAt": {
                 "type": "number",
                 "minimum": 0
+              },
+              "unread": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -169,6 +172,9 @@
               "updatedAt": {
                 "type": "number",
                 "minimum": 0
+              },
+              "unread": {
+                "type": "boolean"
               }
             },
             "required": [
