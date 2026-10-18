@@ -1,10 +1,10 @@
 import { pathToFileURL } from "node:url";
 import { NodeRuntime } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
+import { runWebMigrations } from "@luke/database/core/migrator";
 import { waitingOutNeonComputeLimit } from "@luke/database/core/neon-compute-limit";
 import { databaseOverPgClient } from "@luke/database/core/query";
 import { POOL_LIMITS } from "@luke/service/db";
-import { migrateDeploymentDatabase } from "@luke/service/maintenance/preview-database";
 import { Config, Effect, Layer } from "effect";
 
 /**
@@ -22,11 +22,8 @@ const migrateConfiguredDatabase = Effect.gen(function* () {
   const url = yield* migrationConnectionString;
   // Note that the wait wraps the client's layer too, because Neon refuses the
   // compute as the connection opens, so each attempt needs a client of its own.
-  yield* waitingOutNeonComputeLimit(
-    // On a Preview, the step then makes the branch of production's database the
-    // Preview's own; it runs here, on the direct connection, because Neon puts
-    // bulk and admin work there rather than behind the pooler.
-    migrateDeploymentDatabase(process.env).pipe(
+  const applied = yield* waitingOutNeonComputeLimit(
+    runWebMigrations().pipe(
       Effect.provide(
         Layer.provideMerge(
           databaseOverPgClient,
@@ -35,6 +32,7 @@ const migrateConfiguredDatabase = Effect.gen(function* () {
       ),
     ),
   );
+  yield* Effect.logInfo(`Applied ${applied.length} migrations`, applied);
 });
 
 const executedPath = process.argv[1];
