@@ -267,6 +267,73 @@ function button(page: HTMLElement, text: string): HTMLButtonElement {
   return found;
 }
 
+/** What each region still being read says to a reader, in the order they stand. */
+function waits(page: HTMLElement): string[] {
+  return [...page.querySelectorAll('[role="status"][aria-busy="true"]')].map(
+    (region) => region.textContent ?? "",
+  );
+}
+
+test("while the task list is unread, Home stands in its own shape: New task, and placeholder rows under the Inbox and Recent, saying no greeting", () => {
+  const { page } = mount({ listRead: false });
+
+  assert.ok(button(page, "New task"));
+  assert.deepEqual(waits(page), ["Reading your inbox…", "Reading your tasks…"]);
+  assert.ok(page.querySelectorAll(".luke-list-row .luke-skeleton").length > 0, "rows of blocks");
+  assert.doesNotMatch(page.textContent ?? "", /Welcome back|Nothing needs you/u);
+  assert.equal(page.querySelector("h1"), null);
+});
+
+test("an account whose task list is unread is neither welcomed as new nor greeted back until the list says which it is", () => {
+  const { page } = mount({
+    listRead: false,
+    tasks: [],
+    listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] },
+    inbox: [],
+    inboxTasks: [],
+  });
+
+  assert.equal(page.querySelector("[aria-label='Welcome']"), null, "no welcome stands");
+  assert.doesNotMatch(page.textContent ?? "", /Start your first task|Welcome back/u);
+  assert.deepEqual(waits(page), ["Reading your inbox…", "Reading your tasks…"]);
+});
+
+test("once the task list lands, the page replaces its placeholder rows with the greeting, what waits, and the plans saved latest", async () => {
+  const { page } = mount({ listRead: false });
+  assert.equal(waits(page).length, 2, "the page stands in its own shape first");
+
+  const tasks = tasksControl({ tasks: TASKS, listed: { tasks: TASKS, archived: [], ...HOLDING } });
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopHome, { tasks, accountName: "Dean Stratakos" }),
+      ),
+    ),
+  );
+  await settle();
+
+  assert.deepEqual(waits(page), []);
+  assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
+  assert.equal(rows(page, "home-inbox").length, 2);
+  assert.equal(rows(page, "home-recent").length, 6);
+});
+
+test("while what waits is read, Home's Inbox stands a few placeholder rows under its name, and no ring", () => {
+  const { page } = mount();
+
+  const section = page.querySelector<HTMLElement>('section[aria-labelledby="home-inbox"]');
+  assert.ok(section, "Home's Inbox stands");
+  assert.equal(section.querySelector("#home-inbox")?.textContent, "Inbox");
+  assert.deepEqual(waits(section), ["Reading your inbox…"]);
+  assert.equal(section.querySelectorAll("li").length, 3, "fewer rows than a whole Inbox's five");
+  assert.equal(
+    section.querySelector(".luke-spinner"),
+    null,
+    "no ring stands at the section's edge",
+  );
+});
+
 test("the home page greets the account, lists what needs it with each item's plan, and the plans saved latest with their repositories", async () => {
   const { page } = mount();
   await settle();
