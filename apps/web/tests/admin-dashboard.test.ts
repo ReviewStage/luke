@@ -81,7 +81,11 @@ afterEach(() => {
 });
 
 /** The dashboard in `state`, recording what its controls hand up into `heard`. */
-function render(state: AdminRead<AdminMetrics>, heard: string[] = []): HTMLElement {
+function render(
+  state: AdminRead<AdminMetrics>,
+  heard: string[] = [],
+  refreshing = false,
+): HTMLElement {
   const container = document.createElement("div");
   document.body.replaceChildren(container);
   root = createRoot(container);
@@ -90,7 +94,7 @@ function render(state: AdminRead<AdminMetrics>, heard: string[] = []): HTMLEleme
       createElement(DashboardScreen, {
         read: {
           state,
-          refreshing: false,
+          refreshing,
           reload: () => heard.push("reload"),
           withdraw: async () => undefined,
           revise: () => undefined,
@@ -233,4 +237,20 @@ test("the window is one of three radios, and the hide-admins box hands its choic
   );
   act(() => hide?.querySelector("input")?.click());
   expect(heard).toEqual(["window 90", "hide true"]);
+});
+
+test("Retry refuses a press while a read is out, rather than abort it and start over", () => {
+  const heard: string[] = [];
+  const failed = render(
+    { status: "error", detail: "The metrics endpoint did not answer." },
+    heard,
+    true,
+  );
+  act(() => button(failed, "Retry").click());
+  act(() => root?.unmount());
+
+  const stale = render(ready(metrics(), "The metrics endpoint did not answer."), heard, true);
+  act(() => button(stale, "Retry").click());
+
+  expect(heard).toEqual([]);
 });

@@ -92,7 +92,9 @@ export function AccountScreen({
         />,
       );
     case "error":
-      return frame(<AdminErrorCard detail={state.detail} onRetry={reload} />);
+      return frame(
+        <AdminErrorCard detail={state.detail} refreshing={refreshing} onRetry={reload} />,
+      );
     case "ready": {
       const detail = state.value;
       const subject: AdminUserAccount = detail.account;

@@ -161,20 +161,19 @@ export function UsersScreen({
         {...content}
       />,
     );
-  const search = (tally?: React.ReactNode) => (
+  const search = (
     <SearchField
       label="Search accounts by name or email"
       placeholder="Search by name or email…"
       value={query}
       onChange={changeQuery}
       onClear={() => changeQuery("")}
-      trailing={tally}
     />
   );
 
   switch (state.status) {
     case "loading":
-      return page({ filters: search(), state: COLLECTION_STATE.LOADING });
+      return page({ filters: search, state: COLLECTION_STATE.LOADING });
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
@@ -182,7 +181,11 @@ export function UsersScreen({
     case "missing":
     case "error":
       return frame(
-        <AdminErrorCard detail={adminReadFailure(state, USERS_ERROR)} onRetry={reload} />,
+        <AdminErrorCard
+          detail={adminReadFailure(state, USERS_ERROR)}
+          refreshing={refreshing}
+          onRetry={reload}
+        />,
       );
     case "ready": {
       const list = state.value;
@@ -202,11 +205,16 @@ export function UsersScreen({
       );
 
       return page({
-        filters: search(
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {formatNumber(rows.length)} of {formatNumber(list.total)} accounts
-            {list.search === undefined ? "" : " matching"}
-          </Text>,
+        // Note that the count stands beside the field rather than in it, so a
+        // narrow page wraps it under the field instead of crowding the query.
+        filters: (
+          <>
+            {search}
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {formatNumber(rows.length)} of {formatNumber(list.total)} accounts
+              {list.search === undefined ? "" : " matching"}
+            </Text>
+          </>
         ),
         state: rows.length === 0 ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY,
         empty: refreshed(

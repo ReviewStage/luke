@@ -14,7 +14,8 @@ const WINDOW_OPTIONS = Object.entries(ADMIN_METRICS_WINDOW).map(([name, windowDa
  * What a refresh in flight dims, said busy to a reader until the answer
  * lands, under the failure a refresh landed on an answer that stays shown:
  * the numbers on screen are still the last ones actually read, and the
- * failure says the newer read did not arrive, with Retry beside it.
+ * failure says the newer read did not arrive, with Retry beside it, which
+ * refuses a press while a read is out rather than abort it and start over.
  */
 export function Refreshing({
   failure,
@@ -39,7 +40,11 @@ export function Refreshing({
   if (failure === undefined) return dimmed;
   return (
     <Stack>
-      <ErrorState onRetry={onRetry}>
+      <ErrorState
+        onRetry={() => {
+          if (!refreshing) onRetry();
+        }}
+      >
         Refresh failed. Still showing the earlier answer. {failure}
       </ErrorState>
       {dimmed}

@@ -88,18 +88,27 @@ export function ForbiddenCard({
 
 /**
  * The failed read's own region, with the Retry every screen offers on it.
- * The region is the page's `main`, as a loaded page's own root is.
+ * The region is the page's `main`, as a loaded page's own root is. Note
+ * that Retry refuses a press while a read is out, because a second read
+ * would abort the first and start the wait over.
  */
 export function AdminErrorCard({
   detail,
+  refreshing,
   onRetry,
 }: {
   detail: string;
+  refreshing: boolean;
   onRetry: () => void;
 }): React.JSX.Element {
   return (
     <main className="flex min-h-0 flex-1 flex-col">
-      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRetry}>
+      <ErrorState
+        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        onRetry={() => {
+          if (!refreshing) onRetry();
+        }}
+      >
         {detail}
       </ErrorState>
     </main>

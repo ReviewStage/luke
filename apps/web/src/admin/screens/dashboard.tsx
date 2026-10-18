@@ -130,7 +130,11 @@ export function DashboardScreen({
     case "missing":
     case "error":
       return frame(
-        <AdminErrorCard detail={adminReadFailure(state, METRICS_ERROR)} onRetry={reload} />,
+        <AdminErrorCard
+          detail={adminReadFailure(state, METRICS_ERROR)}
+          refreshing={refreshing}
+          onRetry={reload}
+        />,
       );
     case "ready": {
       const metrics = state.value;

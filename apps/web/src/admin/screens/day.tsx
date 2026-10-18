@@ -178,7 +178,13 @@ export function DayScreen({
       return <ForbiddenCard email={account?.email} onSignOut={signOut} />;
     case "missing":
     case "error":
-      return frame(<AdminErrorCard detail={adminReadFailure(state, DAY_ERROR)} onRetry={reload} />);
+      return frame(
+        <AdminErrorCard
+          detail={adminReadFailure(state, DAY_ERROR)}
+          refreshing={refreshing}
+          onRetry={reload}
+        />,
+      );
     case "ready": {
       const detail = state.value;
       const stillFilling = partialDayKey([{ day: detail.day }], detail.generatedAt) !== undefined;
