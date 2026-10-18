@@ -12,7 +12,14 @@ import { issue } from "../../schemas/issue.js";
 import { taskPin } from "../../schemas/task-pin.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import { createIssue } from "../issue-store.js";
-import { createTask, deleteTask, listTasks, readTask, updateTask } from "../task-store.js";
+import {
+  createTask,
+  deleteTask,
+  listTasks,
+  nameUntitledTask,
+  readTask,
+  updateTask,
+} from "../task-store.js";
 
 /**
  * A plan's pin is its reader's own: two members of one workspace read the
@@ -204,6 +211,44 @@ it.layer(getTestDB())("a plan's starting name", (it) => {
         Option.getOrUndefined(yield* readTask(owner, unnamed.id))?.task.name,
         "Untitled",
       );
+    }),
+  );
+});
+
+it.layer(getTestDB())("an untitled plan's name", (it) => {
+  it.effect("names an untitled plan once, and never one named or renamed meanwhile", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId: named } = yield* openSharedTask;
+      const workspace = (yield* listedTask(dean, named)).workspaceId;
+      const untitled = yield* createTask(dean, { organizationId: workspace });
+      const renamed = yield* createTask(dean, { organizationId: workspace });
+      yield* updateTask(charles, renamed.id, { name: "Rate limits" });
+
+      assert.equal(yield* nameUntitledTask(charles, untitled.id, "Expire invitations"), true);
+      assert.equal(yield* nameUntitledTask(dean, untitled.id, "Send reminders"), false);
+      assert.equal(yield* nameUntitledTask(dean, named, "Send reminders"), false);
+      assert.equal(yield* nameUntitledTask(dean, renamed.id, "Send reminders"), false);
+
+      assert.equal((yield* listedTask(dean, untitled.id)).name, "Expire invitations");
+      assert.equal((yield* listedTask(dean, named)).name, SHARED_TASK.name);
+      assert.equal((yield* listedTask(dean, renamed.id)).name, "Rate limits");
+    }),
+  );
+
+  it.effect("leaves an archived plan, and one of a workspace the account is not in, untitled", () =>
+    Effect.gen(function* () {
+      const owner = yield* openAccount;
+      const outsider = yield* openAccount;
+      const organizationId = yield* openWorkspace(owner);
+      const theirs = yield* createTask(owner, { organizationId });
+      const archived = yield* createTask(owner, { organizationId });
+      yield* updateTask(owner, archived.id, { archived: true });
+
+      assert.equal(yield* nameUntitledTask(outsider, theirs.id, "Expire invitations"), false);
+      assert.equal(yield* nameUntitledTask(owner, archived.id, "Expire invitations"), false);
+
+      assert.equal((yield* listedTask(owner, theirs.id)).name, "Untitled");
+      assert.equal((yield* listedTask(owner, archived.id)).name, "Untitled");
     }),
   );
 });
