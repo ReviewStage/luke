@@ -26,7 +26,7 @@ import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
  * repository.
  */
 
-const PLAN: Task = {
+const TASK: Task = {
   ...DOCUMENT_TASK,
   repository: "acme/relay",
   document: { body: "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.", assumptions: [] },
@@ -70,13 +70,13 @@ afterEach(() => {
 });
 
 /** The plan's page drawn editable with its mentions, its editor opened on Rollout, under the page's mentions where given. */
-async function opened(page?: TaskMentionsValue, plan: Task = PLAN) {
+async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const body = createElement(PlanBody, {
-    task: plan,
+    task: task,
     live: false,
     onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
     sectionLinks: {
@@ -232,11 +232,11 @@ test("a heading just renamed is offered by its new words, before the editor hand
 
 test("on the plan's page an @ typed in the plan offers its pages and its agents too", async () => {
   const page: TaskMentionsValue = {
-    taskId: PLAN.id,
-    taskName: PLAN.name,
+    taskId: TASK.id,
+    taskName: TASK.name,
     workspace: "acme",
-    repository: PLAN.repository,
-    text: () => PLAN.document.body,
+    repository: TASK.repository,
+    text: () => TASK.document.body,
     pages: [{ id: "page-1", title: "Invites by week" }],
     agents: [
       {
@@ -251,8 +251,8 @@ test("on the plan's page an @ typed in the plan offers its pages and its agents 
       },
     ],
     doors: {
-      taskId: PLAN.id,
-      place: { workspace: "acme", repository: PLAN.repository },
+      taskId: TASK.id,
+      place: { workspace: "acme", repository: TASK.repository },
       anchors: new Set(["goal", "rollout"]),
       onOpenTask: () => undefined,
       onOpenFile: undefined,
@@ -275,11 +275,11 @@ test("on the plan's page an @ typed in the plan offers the workspace's other age
     actor: { kind: ACTOR_KIND.AGENT, name, provider: undefined, state: ACTOR_STATE.REST },
   });
   const page: TaskMentionsValue = {
-    taskId: PLAN.id,
-    taskName: PLAN.name,
+    taskId: TASK.id,
+    taskName: TASK.name,
     workspace: "acme",
-    repository: PLAN.repository,
-    text: () => PLAN.document.body,
+    repository: TASK.repository,
+    text: () => TASK.document.body,
     agents: [agent("agent-2", "Wire the desktop")],
     readAgents: () =>
       Promise.resolve([
@@ -287,8 +287,8 @@ test("on the plan's page an @ typed in the plan offers the workspace's other age
         agent("agent-4", "Sweep flaky tests"),
       ]),
     doors: {
-      taskId: PLAN.id,
-      place: { workspace: "acme", repository: PLAN.repository },
+      taskId: TASK.id,
+      place: { workspace: "acme", repository: TASK.repository },
       anchors: new Set(["goal", "rollout"]),
       onOpenTask: () => undefined,
       onOpenFile: undefined,
@@ -307,8 +307,8 @@ test("on the plan's page an @ typed in the plan offers the workspace's other age
 test("a section's address pasted whole into the plan is laid in as its chip, called by its heading", async () => {
   const plan = await opened();
   const goal = encodeMention(
-    { kind: MENTION_KIND.SECTION, taskId: PLAN.id, anchor: "goal" },
-    { workspace: "acme", repository: PLAN.repository },
+    { kind: MENTION_KIND.SECTION, taskId: TASK.id, anchor: "goal" },
+    { workspace: "acme", repository: TASK.repository },
   );
 
   await plan.typeAtEnd(" See ");
@@ -327,7 +327,7 @@ function crumb(container: HTMLElement): string | undefined {
 }
 
 test("a plan with no repository offers no files and folders to narrow to", async () => {
-  const plan = await opened(undefined, { ...PLAN, repository: null });
+  const plan = await opened(undefined, { ...TASK, repository: null });
 
   await plan.typeAtEnd(" See @");
 
@@ -382,11 +382,11 @@ test("@plan: typed in the plan narrows the list to the plan, searched by the wor
 
 test("on the plan's page an @ typed in the plan offers the pull requests its agents published, a pick written as its link's chip", async () => {
   const page: TaskMentionsValue = {
-    taskId: PLAN.id,
-    taskName: PLAN.name,
+    taskId: TASK.id,
+    taskName: TASK.name,
     workspace: "acme",
-    repository: PLAN.repository,
-    text: () => PLAN.document.body,
+    repository: TASK.repository,
+    text: () => TASK.document.body,
     pullRequests: [
       {
         number: 3059,
@@ -398,8 +398,8 @@ test("on the plan's page an @ typed in the plan offers the pull requests its age
       },
     ],
     doors: {
-      taskId: PLAN.id,
-      place: { workspace: "acme", repository: PLAN.repository },
+      taskId: TASK.id,
+      place: { workspace: "acme", repository: TASK.repository },
       anchors: new Set(["goal", "rollout"]),
       onOpenTask: () => undefined,
       onOpenFile: undefined,

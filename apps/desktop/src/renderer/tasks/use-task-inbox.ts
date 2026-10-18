@@ -213,10 +213,10 @@ function imagesNamed(
  * and a message on its thread once it is settled, apart, so an answer left
  * unsent when another member settles the item never becomes a message.
  */
-function draftPlace(item: InboxItem, planId: string | null): InboxPlace {
+function draftPlace(item: InboxItem, taskId: string | null): InboxPlace {
   const place: InboxPlace = {
     kind: DRAFT_PLACE.INBOX,
-    planId,
+    planId: taskId,
     agentId: item.agentId,
     itemId: item.id,
     revision: item.revision,

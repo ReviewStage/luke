@@ -60,7 +60,7 @@ const GLOBEX: Workspace = {
   github: { login: "globex", active: true },
 };
 
-const PLAN: TaskSummary = {
+const TASK: TaskSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: ACME.id,
   name: "Teammate invitations",
@@ -127,7 +127,7 @@ async function inbox(options: {
   const asked: Act[] = [];
   const state = {
     ...signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" }),
-    tasks: { ...IDLE_TASKS_VIEW, tasks: [PLAN], workspaces: options.workspaces ?? [ACME, GLOBEX] },
+    tasks: { ...IDLE_TASKS_VIEW, tasks: [TASK], workspaces: options.workspaces ?? [ACME, GLOBEX] },
   };
   const inboxOf = (items: readonly InboxItem[]): Promise<ActOutcome> =>
     Promise.resolve({
@@ -176,15 +176,15 @@ async function inbox(options: {
     return createElement(DesktopInbox, {
       tasks: tasksControl({
         workspace: options.listed,
-        tasks: [PLAN],
+        tasks: [TASK],
         inbox:
           options.taskItems.length === 0
             ? []
-            : [{ taskId: PLAN.id, items: options.taskItems.map(waitingOf) }],
+            : [{ taskId: TASK.id, items: options.taskItems.map(waitingOf) }],
         inboxTasks:
           options.taskItems.length === 0
             ? []
-            : [{ taskId: PLAN.id, items: options.taskItems.length, updatedAt: 2_000 }],
+            : [{ taskId: TASK.id, items: options.taskItems.length, updatedAt: 2_000 }],
         inboxTaskless: sweep === undefined ? [] : [waitingSweep(sweep.item, sweep.workspaceId)],
         inboxView: {
           open: true,

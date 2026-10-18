@@ -151,7 +151,7 @@ function useTaskAgentsFollow(
   agent: { readonly planId: string | null; readonly archivedAt?: number | undefined } | undefined,
 ): void {
   const seen = useRef<{ agentId: string; archivedAt: number | undefined } | undefined>(undefined);
-  const planId = agent?.planId ?? null;
+  const taskId = agent?.planId ?? null;
   const archivedAt = agent?.archivedAt;
   const drawn = agent !== undefined;
   const { activeTaskId } = tasks;
@@ -161,8 +161,8 @@ function useTaskAgentsFollow(
     const was = seen.current;
     seen.current = { agentId, archivedAt };
     if (was === undefined || was.agentId !== agentId || was.archivedAt === archivedAt) return;
-    if (planId !== null && planId === activeTaskId) readTaskAgents();
-  }, [drawn, agentId, archivedAt, planId, activeTaskId, readTaskAgents]);
+    if (taskId !== null && taskId === activeTaskId) readTaskAgents();
+  }, [drawn, agentId, archivedAt, taskId, activeTaskId, readTaskAgents]);
 }
 
 /** One agent's page, in the plan's place: the agent read by its id, drawn as the task column's agent pane. */

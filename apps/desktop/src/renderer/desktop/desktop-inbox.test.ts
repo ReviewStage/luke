@@ -366,8 +366,8 @@ function mount(firstTaskless: readonly AppInboxTasklessItem[] = []) {
           pages: undefined,
           onRereadPages: () => undefined,
         },
-        onShowTask: (planId) => asked.shownTasks.push(planId),
-        onShowAgent: (planId, agentId) => asked.shownAgents.push([planId, agentId]),
+        onShowTask: (taskId) => asked.shownTasks.push(taskId),
+        onShowAgent: (taskId, agentId) => asked.shownAgents.push([taskId, agentId]),
         automationsView: {
           open: false,
           place: { kind: AUTOMATIONS_PAGE.LIST },
@@ -2574,8 +2574,8 @@ test("a link to a settled item of an agent with no plan, none of whose items wai
 });
 
 test("an item a link names is not found though another task's read failed, and in a narrow Inbox the notice stands alone, not the list, with a way back to it", async () => {
-  startRead = (planId) =>
-    planId === BILLING.id
+  startRead = (taskId) =>
+    taskId === BILLING.id
       ? Promise.resolve({
           status: ACT_OUTCOME_STATUS.DONE,
           value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
@@ -2666,8 +2666,8 @@ test("a link to an item newer than its task's last read waits for the read of it
   await settle();
   const posted = item("a1b2c3d4-0000-4000-8000-000000000005", "Page on-call too?", 7_000);
   let land: () => void = () => undefined;
-  startRead = (planId) =>
-    planId === INVITES.id
+  startRead = (taskId) =>
+    taskId === INVITES.id
       ? new Promise((resolve) => {
           land = () =>
             resolve({
@@ -2697,8 +2697,8 @@ test("a link to an item newer than its task's last read waits for the read of it
 
 test("an item a link names under a task whose own read fails is kept asked for, and no other task's item is chosen in its place", async () => {
   const quiet = { ...INVITES, id: "0f0e0d0c-0000-4000-8000-00000000a11f", name: "Quiet task" };
-  startRead = (planId) =>
-    planId === quiet.id
+  startRead = (taskId) =>
+    taskId === quiet.id
       ? Promise.resolve({
           status: ACT_OUTCOME_STATUS.DONE,
           value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },

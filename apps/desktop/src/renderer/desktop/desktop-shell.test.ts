@@ -175,7 +175,7 @@ function mount(
   const control = tasksControl();
   function Shell() {
     const [asked, setAsked] = useState(false);
-    const plans = tasksControl({
+    const tasks = tasksControl({
       page: TASKS_PAGE.HOME,
       restoring,
       inboxView: {
@@ -191,7 +191,7 @@ function mount(
       newTask: { ...control.newTask, open: asked, onClose: () => setAsked(false) },
       ...overrides,
     });
-    return createElement(DesktopShell, shellProps(plans, tab, onTabChange, sidebarPatch));
+    return createElement(DesktopShell, shellProps(tasks, tab, onTabChange, sidebarPatch));
   }
   act(() => root?.render(onRegistry(registry, createElement(Shell))));
   return container;
@@ -393,16 +393,16 @@ function mountListing(
   root = createRoot(container);
   const registry = AtomRegistry.make();
   return (open) => {
-    const plans = tasksControl({
+    const tasks = tasksControl({
       page: open === undefined ? TASKS_PAGE.HOME : TASKS_PAGE.DOCUMENT,
-      tasks: listed.map((plan) => (plan.id === open?.id ? open : plan)),
+      tasks: listed.map((task) => (task.id === open?.id ? open : task)),
       activeTaskId: open?.id,
       region:
         open === undefined
           ? { kind: DOCUMENT_REGION.NONE }
           : { kind: DOCUMENT_REGION.READY, task: open },
     });
-    const props = shellProps(plans, PANEL_TAB.TASKS, ignore, { collapsed: false });
+    const props = shellProps(tasks, PANEL_TAB.TASKS, ignore, { collapsed: false });
     act(() => root?.render(onRegistry(registry, createElement(DesktopShell, props))));
   };
 }

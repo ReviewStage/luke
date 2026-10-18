@@ -165,7 +165,7 @@ let pinsAsked: string[] = [];
 /** The sidebar listing `plans`, and `archived` archived, in `workspace`, read by Dean, with `agents` among them and the page of `agentShown` standing. */
 function mountSidebar(
   workspace: Workspace,
-  plans: readonly TaskSummary[] = TASKS,
+  tasks: readonly TaskSummary[] = TASKS,
   archived: readonly TaskSummary[] = ARCHIVED,
   agents: readonly TasklessAgent[] = [],
   agentShown?: string,
@@ -175,7 +175,7 @@ function mountSidebar(
   const root = createRoot(container);
   roots.push(root);
   const control = tasksControl({
-    tasks: [...plans],
+    tasks: [...tasks],
     archived: [...archived],
     workspace,
     workspaces: [workspace],
@@ -351,11 +351,11 @@ test("a workspace nobody shares offers no grouping by creator", () => {
 /** The sidebar once the workspace's members have answered. */
 async function mountRead(
   workspace: Workspace,
-  plans?: readonly TaskSummary[],
+  tasks?: readonly TaskSummary[],
   archived?: readonly TaskSummary[],
   agents?: readonly TasklessAgent[],
 ): Promise<HTMLElement> {
-  const sidebar = mountSidebar(workspace, plans, archived, agents);
+  const sidebar = mountSidebar(workspace, tasks, archived, agents);
   await act(async () => undefined);
   return sidebar;
 }
