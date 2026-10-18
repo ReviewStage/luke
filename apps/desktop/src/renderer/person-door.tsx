@@ -1,6 +1,6 @@
+import { appPlatform } from "@luke/panel/app-platform";
 import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { createContext, useContext } from "react";
-import { appPlatform } from "./app-platform";
 import { useMemberDirectory } from "./member-directory";
 
 /**

@@ -2,8 +2,8 @@
  * window-pointer.ts -- the floating call window's hover, not believed while the window moves under a still pointer.
  */
 
+import { appBridge } from "@luke/panel/app-bridge";
 import { useEffect } from "react";
-import { appBridge } from "../app-bridge";
 
 /**
  * A drag region moves the window under the pointer, and the engine keeps the

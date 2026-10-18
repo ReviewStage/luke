@@ -1,17 +1,22 @@
-/* motion.css -- the site's answer to reduced motion for an endless loop.
+/* motion.css -- reduced motion, answered at the motion tokens.
 
-   The motion tokens' durations are `@luke/brand`'s; what holds a loop with
-   no end of its own (a busy button's ring) is `--loop-motion`, its
-   `animation-play-state`. The desktop sets it in its own reset, where a
-   capture run holds it too; the site sets it here, paused for a visitor who
-   asked for reduced motion. */
+   The durations themselves are `@luke/brand`'s, generated into
+   `motion-tokens.css` under their `--luke-*` names. Reduced motion zeroes
+   them here rather than component by component, keeping hover feedback's
+   70ms (a colour settling is not motion), and pauses `--luke-loop-motion`,
+   the play state of a loop with no end of its own (a busy button's ring).
+   The desktop holds the same tokens still on its capture stage. */
 
-[data-luke-profile="web"] {
-  --loop-motion: running;
+:root {
+  --luke-loop-motion: running;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-luke-profile="web"] {
-    --loop-motion: paused;
+  :root {
+    --luke-duration-exit: 1ms;
+    --luke-duration-quick: 1ms;
+    --luke-duration-pane: 1ms;
+    --luke-duration-fast: 1ms;
+    --luke-loop-motion: paused;
   }
 }

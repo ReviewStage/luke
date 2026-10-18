@@ -58,6 +58,7 @@
   flex: 1;
   min-height: 0;
   padding: var(--luke-space-12) var(--luke-space-2) var(--luke-space-12);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-user-select: text;
@@ -634,6 +635,7 @@
   .conversation-log {
     min-height: 0;
     flex: 1;
+    overflow-x: hidden;
     overflow-y: auto;
     padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
   }
@@ -658,7 +660,7 @@
   }
 
   .conversation-empty-wide {
-    max-width: 440px; /* off-scale: a one-line failure's measure */
+    max-width: 560px; /* off-scale: a one-line failure's measure, Continue beside it */
   }
 
   /* Its own ground under the button, ringed and lifted off the lines, which
@@ -811,6 +813,7 @@
     flex: 1;
     flex-direction: column;
     gap: var(--luke-space-12);
+    overflow-x: hidden;
     overflow-y: auto;
     padding-top: var(--luke-section-gap);
   }
@@ -893,14 +896,10 @@
 }
 
 /* An Inbox item's words and what was filled in, which a reader may select
-   and copy; what was filled in keeps the lines it was typed on. */
+   and copy. */
 .inbox-words {
   margin: 0;
   user-select: text;
-}
-
-.inbox-lines {
-  white-space: pre-line;
 }
 
 /* A link the window does not open: its address beside its label, to copy. */
@@ -1020,6 +1019,7 @@
 .file-tab-lines {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1923,25 +1923,28 @@
   color: var(--luke-color-text-muted);
 }
 
-.pull-request-review-body {
+/* Words sent to GitHub as Markdown (`markdown-field.tsx`): Write and
+   Preview over the field, the preview drawn in the field's own box. */
+.markdown-field {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-8);
 }
 
-.pull-request-review-preview {
+.markdown-field-preview {
   box-sizing: border-box;
   width: 100%;
   min-height: 96px;
   max-height: 240px;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-10);
 }
 
-.pull-request-review-preview > p:only-child {
+.markdown-field-preview > p:only-child {
   margin: 0;
 }
 
@@ -2062,6 +2065,7 @@
   min-height: 0;
   flex: 1;
   padding: var(--luke-space-12) var(--column-inset) var(--luke-space-24);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -2588,6 +2592,21 @@ button.pull-request-reaction:disabled {
   color: var(--luke-color-text);
 }
 
+/* The comment box at the foot of the Conversation
+   (`pull-request-comment-box.tsx`): the words with their preview, GitHub's
+   refusal under them, drawn as every refusal is (`ErrorState`), and
+   Comment at the row's end. */
+.pull-request-comment-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
+.pull-request-comment-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* The earlier entries a read left on GitHub, counted where they would stand. */
 .pull-request-earlier {
   margin: 0 0 var(--luke-space-8);
@@ -2880,7 +2899,8 @@ ol.transcript-list {
   max-height: 256px; /* off-scale: a block's tallest before it scrolls */
   margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   color: var(--luke-color-text);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
@@ -3343,14 +3363,31 @@ ol.transcript-list {
 
 /* The block a transcript ends on once its turn was stopped or failed, or
    once another agent continued it (`agent-tab.tsx`'s AgentEndLine): the
-   end line, then under it the row the end leads on to, Continue in new
-   agent or Continued in. In an empty transcript the two stand as siblings
-   in the empty state's own centred column instead. */
+   end line's row, then under it Continued in, where an archive took the
+   box. In an empty transcript the two stand as siblings in the empty
+   state's own centred column instead. */
 .agent-end {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-8);
+}
+
+/* The end line's row: the line, then Continue in new agent (or Continue
+   again) after its words, centred on the line's text. Note that the line is
+   one flex item, so a failure too long to share the row takes it whole and
+   the press wraps under it, never between its words; in the empty state
+   the row is centred as its column is. */
+.agent-end-row {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+.conversation-empty > .agent-end-row {
+  justify-content: center;
 }
 
 /* Note that it keeps the gap the log's `space-y-3` leaves under every block
@@ -3387,9 +3424,9 @@ ol.transcript-list {
   vertical-align: middle;
 }
 
-/* Where an agent may be continued (`continue-agent.tsx`), under a failed
-   turn's end line or in a closed box's note: Continue in new agent, and
-   why it did not start where it did not. */
+/* Where an agent may be continued (`continue-agent.tsx`), on a failed
+   turn's end line's row, in a closed box's note, or in a continued box's:
+   Continue in new agent, and why it did not start where it did not. */
 .agent-continue {
   display: inline-flex;
   flex-wrap: wrap;
@@ -3845,6 +3882,7 @@ ol.transcript-list {
   width: 100%;
   min-height: calc(var(--luke-type-body-leading) + var(--agent-composer-field-block));
   max-height: calc(8 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-8);
   background: transparent;
@@ -4009,9 +4047,8 @@ ol.transcript-list {
 /* The Inbox's answer box draws the same card and field
    (`inbox-answer-box.tsx`): its + stands at the foot's left as the agent
    box's does, and its quiet line beside it is cut short before its
-   microphone and presses are, and goes once the card is too narrow for
-   both, when the microphone goes too and the presses tighten and, still
-   too wide, stack at the right rather than run past the card. */
+   microphone and Send are, and goes once the card is too narrow for
+   both, when the microphone goes too. */
 .inbox-answer-tools {
   flex: 1 1 0;
 }
@@ -4047,14 +4084,6 @@ ol.transcript-list {
   color: var(--luke-color-attention);
 }
 
-.inbox-presses {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--luke-space-8) var(--luke-control-gap);
-}
-
 /* A box answered in words alone holds its round Send at the field's end
    once the card is narrow, so the field keeps to one line and the thread
    above it keeps its room. */
@@ -4065,34 +4094,25 @@ ol.transcript-list {
 @container composer (max-width: 299px) {
   .inbox-answer-foot .inbox-answer-quiet,
   .inbox-answer .dictate-button,
-  .inbox-answer:not([data-presses]) .inbox-answer-tools {
+  .inbox-answer:not([data-named-send]) .inbox-answer-tools {
     display: none;
   }
 
-  .inbox-answer:not([data-presses]) .agent-composer-input {
+  .inbox-answer:not([data-named-send]) .agent-composer-input {
     padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6))
       var(--luke-space-12) var(--luke-space-12);
   }
 
-  .inbox-answer:not([data-presses]) .agent-composer-placeholder {
+  .inbox-answer:not([data-named-send]) .agent-composer-placeholder {
     padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6)) 0
       var(--luke-space-12);
   }
 
-  .inbox-answer:not([data-presses]) > .inbox-answer-foot {
+  .inbox-answer:not([data-named-send]) > .inbox-answer-foot {
     position: absolute;
     right: var(--luke-space-6);
     bottom: var(--luke-space-6);
     padding: 0;
-  }
-
-  .inbox-presses {
-    min-width: 0;
-    flex: 1 1 auto;
-  }
-
-  .inbox-presses > button {
-    padding-inline: var(--luke-space-8);
   }
 }
 
@@ -4452,7 +4472,8 @@ ol.transcript-list {
 }
 
 .attachment-viewer-lines {
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--code-ground);
   user-select: text;
 }
@@ -4499,6 +4520,21 @@ ol.transcript-list {
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-14);
   background: var(--luke-color-sidebar);
+}
+
+/* Note that the arrow, the words' first line, and the presses share one
+   centre, the presses' own, so chips that wrap to a second line leave the
+   arrow on the first rather than centred between the two. */
+.continued-composer .luke-banner-row {
+  align-items: flex-start;
+}
+
+.continued-composer .luke-banner-glyph {
+  height: var(--luke-control-height);
+}
+
+.continued-composer .luke-banner-words {
+  padding-block: calc((var(--luke-control-height) - var(--luke-type-body-leading)) / 2);
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
@@ -4606,6 +4642,7 @@ ol.transcript-list {
   min-height: 0;
   flex: 1;
   padding: var(--luke-space-4);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -4878,12 +4915,6 @@ ol.transcript-list {
   height: 40px;
   padding: 0 var(--luke-space-12) 0 var(--luke-space-6);
   border-bottom: 1px solid var(--luke-color-border);
-}
-
-.agent-servers-page-head .provider-mark {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: none;
 }
 
 .agent-servers-page-title {

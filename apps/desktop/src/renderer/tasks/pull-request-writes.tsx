@@ -16,6 +16,7 @@ import {
   type PullRequestActionRequest,
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import {
   Badge,
   BUTTON_SIZE,
@@ -36,7 +37,6 @@ import {
   PencilIcon,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-import { useAct } from "../act";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { useGitHubConnection } from "../github-connect";
 import { Tooltip } from "../tooltip";
@@ -82,6 +82,7 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE]: "Enable auto-merge",
   [PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE]: "Disable auto-merge",
   [PULL_REQUEST_ACTION.DEQUEUE]: "Remove from queue",
+  [PULL_REQUEST_ACTION.COMMENT]: "Comment",
   [PULL_REQUEST_ACTION.CLOSE]: "Close pull request",
   [PULL_REQUEST_ACTION.REOPEN]: "Reopen pull request",
   [PULL_REQUEST_ACTION.EDIT_TITLE]: "Edit title",

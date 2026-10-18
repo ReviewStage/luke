@@ -27,7 +27,7 @@ function ArrowMark(): React.JSX.Element {
   );
 }
 
-/** The service's mark, drawn `size-10` by the caller, then the arrow and Luke's face; the space around it is the card's. */
+/** The service's mark, drawn at `PROVIDER_MARK_SIZE.TILE` by the caller, then the arrow and Luke's face; the space around it is the card's. */
 export function ConnectionGraphic({ mark }: { mark: React.ReactNode }): React.JSX.Element {
   return (
     <div className="flex items-center justify-center gap-4 text-foreground" aria-hidden="true">

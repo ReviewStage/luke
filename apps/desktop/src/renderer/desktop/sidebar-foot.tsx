@@ -1,6 +1,8 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { appPlatform } from "@luke/panel/app-platform";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -39,10 +41,8 @@ import {
   UserRoundIcon,
 } from "lucide-react";
 import { useMemo } from "react";
-import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { runAppCommand } from "../app-commands";
-import { appPlatform } from "../app-platform";
 import { useOpenPerson } from "../person-door";
 import { Tooltip } from "../tooltip";
 import { useCapability } from "../use-app-state";

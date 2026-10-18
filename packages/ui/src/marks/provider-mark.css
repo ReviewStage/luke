@@ -1,0 +1,30 @@
+/* provider-mark.css -- a provider's mark at the size it is asked for.
+
+   A slot's mark has no size of its own: the row, chip, or button it leads
+   sizes its glyph cell. The four sizes are the mark's own. */
+
+@layer components {
+  .luke-provider-mark {
+    flex: none;
+  }
+
+  .luke-provider-mark-caption {
+    width: 12px;
+    height: 12px;
+  }
+
+  .luke-provider-mark-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .luke-provider-mark-row {
+    width: 20px;
+    height: 20px;
+  }
+
+  .luke-provider-mark-tile {
+    width: 40px;
+    height: 40px;
+  }
+}

@@ -19,11 +19,11 @@
  * they last asked for.
  */
 
+import { useAct } from "@luke/panel/act";
 import { APP_SETTING_DEFAULTS, type AppSettingField, type AppSettingValue } from "@luke/settings";
 import { type AppSettingsView, appSettingsView } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { useAct } from "../act";
 import { useAppState } from "../use-app-state";
 
 /** The settings code and diffs are drawn by, by their fields in the settings schema. */

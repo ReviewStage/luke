@@ -7,6 +7,7 @@ import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksEditAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { type ActHandle, useAct } from "@luke/panel/act";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   BANNER_LOOK,
@@ -36,7 +37,6 @@ import type { PersonActor } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type ActHandle, useAct } from "../act";
 import type { TaskReader } from "../tasks/edit-ref";
 import { PlanBody } from "../tasks/plan-body";
 import type { PlanEditDoor } from "../tasks/use-plan-editing";

@@ -23,10 +23,12 @@
     line-height: var(--luke-type-label-leading);
     font-weight: var(--luke-weight-regular);
     text-align: left;
+    /* Note that a NavItemLink is an anchor, which would otherwise wear the link's underline. */
+    text-decoration: none;
     cursor: pointer;
     transition:
-      background-color var(--duration-hover) ease,
-      color var(--duration-hover) ease;
+      background-color var(--luke-duration-hover) ease,
+      color var(--luke-duration-hover) ease;
   }
 
   /* A desktop control answers a press the way a Mac's does, without the
@@ -98,8 +100,8 @@
     grid-area: 1 / 1;
     place-items: center;
     transition:
-      opacity var(--duration-hover) ease,
-      transform var(--duration-hover) ease;
+      opacity var(--luke-duration-hover) ease,
+      transform var(--luke-duration-hover) ease;
   }
 
   .luke-nav-item-icon > svg {
@@ -177,7 +179,7 @@
     color: var(--luke-color-text-subtle);
     font-size: var(--luke-type-caption-size);
     font-variant-numeric: tabular-nums;
-    transition: opacity var(--duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) ease;
   }
 
   .luke-nav-item-count[data-shown="on-hover"] {
@@ -193,7 +195,7 @@
      while the row is hovered or has the keyboard. */
   .luke-nav-item-shortcut {
     opacity: 0;
-    transition: opacity var(--duration-quick, 0s) ease;
+    transition: opacity var(--luke-duration-quick) ease;
   }
 
   .luke-nav-item:is(:hover, :focus-visible):not(:disabled) > .luke-nav-item-shortcut {

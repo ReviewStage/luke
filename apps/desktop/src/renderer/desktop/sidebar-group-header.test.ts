@@ -139,9 +139,10 @@ test("a repository's header folds on its name, says its pin, counts its plans fo
   assert.equal(ellipsis?.getAttribute("aria-expanded"), "true");
 });
 
-test("the Inbox row counts what waits on a plan and what waits from an agent with no plan alike", () => {
+test("the Inbox row counts what waits on a plan and what waits from an agent with no plan alike, and not a teammate's agent's with no plan, which waits on them", () => {
   const page = mountSidebar(
     tasksControl({
+      me: "user-dean",
       inbox: [
         {
           taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -159,6 +160,19 @@ test("the Inbox row counts what waits on a plan and what waits from an agent wit
           automationId: null,
           automationName: null,
           repository: "acme/relay",
+          startedBy: "user-dean",
+        },
+        {
+          id: "item-3",
+          agentId: "agent-3",
+          title: "Bump the Node image?",
+          postedAt: 3,
+          agentTitle: null,
+          agentModel: "anthropic/claude-opus-5.5",
+          automationId: null,
+          automationName: null,
+          repository: "acme/relay",
+          startedBy: "user-charles",
         },
       ],
     }),

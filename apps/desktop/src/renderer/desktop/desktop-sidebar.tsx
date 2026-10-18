@@ -82,7 +82,7 @@ import { RepositoryPicture } from "../repository-picture";
 import { Shortcut } from "../shortcut";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { useChatOn } from "../tasks/chat-gate";
-import { NEEDS_YOU } from "../tasks/inbox-model";
+import { NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model";
 import { useMinute } from "../tasks/task-time";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel";
 import { useUnreadTasks } from "../tasks/use-task-looks";
@@ -894,12 +894,14 @@ function ListSkeleton(): React.JSX.Element {
 /**
  * How many items wait on the developer: those of the listed workspace's
  * tasks, the sum of the Inbox's row counts, and every one from an agent
- * with no task, which names no workspace to be counted in.
+ * with no task that the developer started (`waitsOnReader`), which names no
+ * workspace to be counted in; a teammate's is listed in the Inbox, and waits
+ * on the teammate.
  */
 function waitingItems(tasks: TasksControl): number {
   return tasks.listed.inbox.reduce(
     (sum, task) => sum + task.items.length,
-    tasks.inboxTaskless.length,
+    tasks.inboxTaskless.filter((each) => waitsOnReader(each, tasks.me)).length,
   );
 }
 

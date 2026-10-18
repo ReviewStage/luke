@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { useSettingsWrites } from "@luke/panel/settings/writes";
 import { EXPERIMENTS, HOST_CAPABILITY, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
@@ -25,7 +26,6 @@ import { UpdatesSection } from "./updates";
 import { ShortcutSection } from "./voice-keys";
 import { VoiceSection } from "./voice-page";
 import { shownWorkspace, WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
-import { useSettingsWrites } from "./writes";
 
 /**
  * The settings tab, as the grouped controls that draw it. A preference write

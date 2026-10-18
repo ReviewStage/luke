@@ -4,7 +4,13 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { useMenu } from "../menu/menu.js";
-import { NAV_COUNT_SHOWN, NAV_CURRENT, NAV_ITEM_VARIANT, NavItem } from "./nav-item.js";
+import {
+  NAV_COUNT_SHOWN,
+  NAV_CURRENT,
+  NAV_ITEM_VARIANT,
+  NavItem,
+  NavItemLink,
+} from "./nav-item.js";
 
 /**
  * nav-item.test.ts -- a nav item is a button named by its words, its count
@@ -13,7 +19,9 @@ import { NAV_COUNT_SHOWN, NAV_CURRENT, NAV_ITEM_VARIANT, NavItem } from "./nav-i
  * its group stands open and folds it on a press; a menu's trigger says the
  * menu it drops and whether it stands; an unavailable item refuses its
  * press; a hint's words describe the item they hang from; and one that
- * keeps focus leaves it on the field that held it.
+ * keeps focus leaves it on the field that held it. A nav item link is a
+ * link to its address, named by its words or its label, announced as the
+ * page where it is shown, and handing its press to its caller.
  */
 
 const roots: Root[] = [];
@@ -191,4 +199,41 @@ test("a row that keeps focus leaves it on the field that held it under a pointer
   );
 
   expect([pressed, document.activeElement]).toEqual([false, field]);
+});
+
+test("a link goes to its address, named by its words, and announced as the page where it is shown", () => {
+  const container = mount(
+    createElement(NavItemLink, {
+      href: "/admin/users",
+      icon: createElement("svg"),
+      current: NAV_CURRENT.PAGE,
+      children: "Users",
+    }),
+  );
+  const link = container.querySelector("a");
+
+  expect(link?.getAttribute("href")).toBe("/admin/users");
+  expect(link?.textContent).toBe("Users");
+  expect(link?.getAttribute("aria-current")).toBe("page");
+});
+
+test("a link's label names it where its words are not drawn whole, and its press reaches its caller", () => {
+  const pressed: string[] = [];
+  const container = mount(
+    createElement(NavItemLink, {
+      href: "/admin/animations",
+      "aria-label": "Animations",
+      onClick: (event) => {
+        event.preventDefault();
+        pressed.push(event.currentTarget.getAttribute("href") ?? "");
+      },
+      children: null,
+    }),
+  );
+  const link = container.querySelector("a");
+  act(() => link?.click());
+
+  expect(link?.getAttribute("aria-label")).toBe("Animations");
+  expect(link?.hasAttribute("aria-current")).toBe(false);
+  expect(pressed).toEqual(["/admin/animations"]);
 });

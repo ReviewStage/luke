@@ -11,8 +11,8 @@
     text-decoration: none;
     overflow-wrap: anywhere;
     transition:
-      color var(--duration-hover) ease,
-      text-decoration-color var(--duration-hover) ease;
+      color var(--luke-duration-hover) ease,
+      text-decoration-color var(--luke-duration-hover) ease;
   }
 
   a.luke-text-link {
@@ -72,7 +72,7 @@
     margin-inline-start: 0.12em;
     opacity: 0.55;
     vertical-align: -0.02em;
-    transition: opacity var(--duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) ease;
   }
 
   .luke-text-link:is(:hover, :focus-visible) .luke-text-link-out {

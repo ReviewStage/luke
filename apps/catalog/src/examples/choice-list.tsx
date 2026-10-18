@@ -1,7 +1,10 @@
 import {
   Avatar,
+  CHOICE_FLOW,
   CHOICE_LOOK,
   CHOICE_SELECT,
+  CHOICE_TONE,
+  type ChoiceFlow,
   ChoiceList,
   type ChoiceLook,
   type ChoiceOption,
@@ -14,7 +17,7 @@ import { CatalogSection } from "../section";
 /**
  * choice-list.tsx -- a pick-one list with a recommended option and an
  * unavailable one, a pick-several list, both marked with their radios or
- * checkboxes and numbered, rows with a mark before their words, an
+ * checkboxes and numbered, a yes and a no across, toned, pills, rows with a mark before their words, an
  * unavailable list, a settled record of what was picked, and a
  * narrow column of long words.
  */
@@ -39,6 +42,11 @@ const CHANNELS: readonly ChoiceOption<string>[] = [
   { value: "email", label: "Email", detail: "To the account's own address." },
   { value: "slack", label: "Slack", detail: "To #alerts." },
   { value: "pager", label: "Pager", detail: "Wakes whoever is on call." },
+];
+
+const DECISIONS: readonly ChoiceOption<string>[] = [
+  { value: "approve", label: "Approve", tone: CHOICE_TONE.COMPLETE },
+  { value: "decline", label: "Decline", tone: CHOICE_TONE.DANGER },
 ];
 
 const WORKSPACES: readonly ChoiceOption<string>[] = [
@@ -76,6 +84,7 @@ function Held({
   disabled = false,
   look,
   numbered,
+  flow,
 }: {
   options: readonly ChoiceOption<string>[];
   start: readonly string[];
@@ -84,6 +93,7 @@ function Held({
   disabled?: boolean;
   look?: ChoiceLook;
   numbered?: boolean;
+  flow?: ChoiceFlow;
 }): React.JSX.Element {
   const [value, setValue] = useState(start);
   return (
@@ -94,6 +104,7 @@ function Held({
       select={select}
       look={look}
       numbered={numbered}
+      flow={flow}
       clearable
       disabled={disabled}
       onChange={setValue}
@@ -130,6 +141,28 @@ function ChoiceLists(): React.JSX.Element {
           select={CHOICE_SELECT.MANY}
           look={CHOICE_LOOK.MARKED}
           numbered
+        />
+      </CatalogSection>
+      <CatalogSection id="choice-list-across" title="Across, toned">
+        <Held
+          legend="Decision"
+          options={DECISIONS}
+          start={["approve"]}
+          look={CHOICE_LOOK.MARKED}
+          flow={CHOICE_FLOW.ACROSS}
+          numbered
+        />
+      </CatalogSection>
+      <CatalogSection id="choice-list-pill" title="Pills">
+        <Held
+          legend="Effort"
+          options={[
+            { value: "medium", label: "medium" },
+            { value: "high", label: "high" },
+            { value: "xhigh", label: "xhigh" },
+          ]}
+          start={["high"]}
+          look={CHOICE_LOOK.PILL}
         />
       </CatalogSection>
       <CatalogSection id="choice-list-mark" title="With a mark">

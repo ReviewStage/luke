@@ -590,10 +590,11 @@ export type RepositoryCallFailure = (typeof REPOSITORY_CALL_FAILURES)[number];
 
 const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILURES);
 
-/** Why a start answered no plan: a repository call's reasons, or the Linear issue it was to start from could not be read. */
+/** Why a start answered no plan: a repository call's reasons, the Linear issue it was to start from could not be read, or the workspace's own issue it was to start from is none of the workspace's. */
 const START_CALL_FAILURES = [
   ...REPOSITORY_CALL_FAILURES,
   TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
+  TASK_CALL_FAILURE.NOT_FOUND,
 ] as const;
 
 export type StartCallFailure = (typeof START_CALL_FAILURES)[number];
