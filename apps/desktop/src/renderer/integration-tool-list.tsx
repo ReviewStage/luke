@@ -21,6 +21,7 @@ import {
   List,
   ListRow,
   type ListRowHint,
+  ScrollArea,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -312,38 +313,35 @@ export function IntegrationToolDetail({
           <code className="integration-tool-detail-name">{tool.name}</code>
         ) : null}
       </header>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: the page's one scroller, whose keys scroll it as any focused scroller's do. */}
-      <div
-        ref={bodyRef}
-        className="integration-tool-detail-body"
-        tabIndex={-1}
-        onKeyDown={onBodyKeyDown}
-      >
-        {hints.length > 0 ? (
-          <ul
-            className="integration-tool-hints"
-            aria-label={`What ${server}'s server says of this tool`}
-          >
-            {hints.map((hint) => (
-              <li key={hint}>
-                <Badge tone={hintTone(hint)}>{toolHintWords(hint, server)}</Badge>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {tool.description === "" ? (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-            No description.
-          </Text>
-        ) : (
-          <MarkdownMessage
-            words={tool.description}
-            className="integration-tool-description-whole"
-            found={tokens}
-          />
-        )}
-        <Parameters tool={tool} />
-      </div>
+      {/* The page's one scroller, focused by script so its keys scroll it as any focused scroller's do. */}
+      <ScrollArea ref={bodyRef} tabIndex={-1} onKeyDown={onBodyKeyDown}>
+        <div className="integration-tool-detail-body">
+          {hints.length > 0 ? (
+            <ul
+              className="integration-tool-hints"
+              aria-label={`What ${server}'s server says of this tool`}
+            >
+              {hints.map((hint) => (
+                <li key={hint}>
+                  <Badge tone={hintTone(hint)}>{toolHintWords(hint, server)}</Badge>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {tool.description === "" ? (
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+              No description.
+            </Text>
+          ) : (
+            <MarkdownMessage
+              words={tool.description}
+              className="integration-tool-description-whole"
+              found={tokens}
+            />
+          )}
+          <Parameters tool={tool} />
+        </div>
+      </ScrollArea>
     </article>
   );
 }

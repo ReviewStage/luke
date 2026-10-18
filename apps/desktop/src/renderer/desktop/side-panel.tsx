@@ -34,6 +34,8 @@ import {
   ErrorState,
   ExpandIcon,
   IconButton,
+  SCROLL_SIZE,
+  ScrollArea,
   SidePanelIcon,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -913,18 +915,20 @@ function PanelTabs({
  */
 function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Element {
   return (
-    <div className="side-panel-no-tabs">
-      <div className="side-panel-no-tabs-line">
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          No tabs open
-        </Text>
+    <ScrollArea size={SCROLL_SIZE.CONTENT}>
+      <div className="side-panel-no-tabs">
+        <div className="side-panel-no-tabs-line">
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            No tabs open
+          </Text>
+        </div>
+        <MenuRowList
+          label="Open a tab"
+          rows={entries.map((entry) => entry.row)}
+          onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
+        />
       </div>
-      <MenuRowList
-        label="Open a tab"
-        rows={entries.map((entry) => entry.row)}
-        onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
-      />
-    </div>
+    </ScrollArea>
   );
 }
 

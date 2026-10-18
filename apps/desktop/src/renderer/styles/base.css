@@ -122,7 +122,8 @@
 
   /* The darkest fill, opaque, for what nothing behind may show through. */
   --surface-fill: #000;
-  --scroll-fade: 26px;
+  /* The depth `@luke/ui`'s `ScrollArea` fades by, so the two fades agree. */
+  --scroll-fade: var(--luke-scroll-fade);
   /* How far a label cut short fades out at its end, in place of an ellipsis. */
   --label-fade: 20px;
 }

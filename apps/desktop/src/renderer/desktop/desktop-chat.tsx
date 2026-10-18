@@ -2,7 +2,14 @@ import { CHANNEL_KIND } from "@luke/features/chat-wire";
 import { SpinnerRegion } from "@luke/panel/spinner";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
-import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, NAV_CURRENT, NavItem } from "@luke/ui";
+import {
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  NAV_CURRENT,
+  NavItem,
+  ScrollArea,
+} from "@luke/ui";
 import {
   CHAT_PLACE,
   type ChatPlace,
@@ -130,29 +137,31 @@ export function DesktopChat({
             <h1 className="desktop-toolbar-title">Chat</h1>
           </div>
         </header>
-        <div className="chat-rail-scroll">
-          <ul className="sidebar-tasks">
-            <li>
-              <NavItem
-                icon={<AtSignIcon />}
-                current={view.place.kind === CHAT_PLACE.FOR_YOU ? NAV_CURRENT.PAGE : undefined}
-                unread={rail.forYou > 0}
-                count={{ value: rail.forYou, noun: UNREAD }}
-                onClick={() => view.onChoose(FOR_YOU)}
-              >
-                For you
-              </NavItem>
-            </li>
-          </ul>
-          <h2 className="chat-rail-heading">Channels</h2>
-          <ul className="sidebar-tasks">{rail.channels.map(row)}</ul>
-          {rail.direct.length === 0 ? null : (
-            <>
-              <h2 className="chat-rail-heading">Direct messages</h2>
-              <ul className="sidebar-tasks">{rail.direct.map(row)}</ul>
-            </>
-          )}
-        </div>
+        <ScrollArea>
+          <div className="chat-rail-body">
+            <ul className="sidebar-tasks">
+              <li>
+                <NavItem
+                  icon={<AtSignIcon />}
+                  current={view.place.kind === CHAT_PLACE.FOR_YOU ? NAV_CURRENT.PAGE : undefined}
+                  unread={rail.forYou > 0}
+                  count={{ value: rail.forYou, noun: UNREAD }}
+                  onClick={() => view.onChoose(FOR_YOU)}
+                >
+                  For you
+                </NavItem>
+              </li>
+            </ul>
+            <h2 className="chat-rail-heading">Channels</h2>
+            <ul className="sidebar-tasks">{rail.channels.map(row)}</ul>
+            {rail.direct.length === 0 ? null : (
+              <>
+                <h2 className="chat-rail-heading">Direct messages</h2>
+                <ul className="sidebar-tasks">{rail.direct.map(row)}</ul>
+              </>
+            )}
+          </div>
+        </ScrollArea>
       </nav>
       <ChatPane
         chat={chat}

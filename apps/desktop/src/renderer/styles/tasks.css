@@ -4634,12 +4634,9 @@ ol.transcript-list {
   flex: 1;
 }
 
+/* The shells' rows, inside the `ScrollArea` that scrolls them. */
 .terminal-shells-rows {
-  min-height: 0;
-  flex: 1;
   padding: var(--luke-space-4);
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 
 .terminal-shells-none {
@@ -4934,10 +4931,13 @@ ol.transcript-list {
 /* A tool's page, in the server page's place: its body as tall as the list
    and the field above it together, at most, so stepping in and back keeps
    the popover's size where the list is full, and never grows past the
-   room the window leaves. */
-.agent-servers-tool-page .integration-tool-detail-body {
-  height: clamp(200px, 100vh - 280px, 440px);
+   room the window leaves. The page is a grid so the body's `ScrollArea`
+   fills that row under the head. */
+.agent-servers-tool-page .integration-tool-detail {
+  display: grid;
   flex: none;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto clamp(200px, 100vh - 280px, 440px);
 }
 
 /* The context ring beside the MCP button: the window's one icon button
