@@ -9,6 +9,7 @@ import { createPatch } from "diff";
 import { test } from "vitest";
 import { DIFF_SELECTION_SIDE } from "../diff-view/contract.js";
 import {
+  blobShaOf,
   commentLines,
   commentLinesLabel,
   filterFiles,
@@ -425,4 +426,15 @@ test("a text after that is not the one the patch was made against is not turned 
     undefined,
     "the file is shorter than its hunks",
   );
+});
+
+test("a file whose lines end in a carriage return is turned back with its line endings as they were", () => {
+  const before = "a\r\nb\r\nc\r\nd\r\ne\r\n";
+  const after = "a\r\nb\r\nC\r\nd\r\ne\r\n";
+  const patch = "@@ -1,5 +1,5 @@\n a\r\n b\r\n-c\r\n+C\r\n d\r\n e\r";
+  assert.deepEqual(textsOf(changed("src/a.ts", { patch }), after), { before, after });
+});
+
+test("a file's contents are named as git names a blob, which GitHub names a changed file's contents by", async () => {
+  assert.equal(await blobShaOf("hello\n"), "ce013625030ba8dba906f756967f9e9ca394464a");
 });

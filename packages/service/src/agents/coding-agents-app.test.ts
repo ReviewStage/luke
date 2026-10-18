@@ -2606,6 +2606,53 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
   );
 
   it.effect(
+    "each changed file names the git object its contents after are, which a read of it whole is checked against; a removed file names none",
+    () =>
+      Effect.gen(function* () {
+        const headed = publishedPullRequestDrafted(() => false, LINE_HEAD);
+        const blob = "b".repeat(40);
+        const listed: RepositoryScript = (sent) =>
+          new URL(sent.url).pathname.endsWith(`/pulls/${PUBLISHED.number}/files`)
+            ? Response.json([
+                {
+                  filename: "src/seats.ts",
+                  status: "modified",
+                  additions: 1,
+                  deletions: 1,
+                  changes: 2,
+                  patch: "@@ -1 +1 @@\n-a\n+b",
+                  sha: blob,
+                },
+                {
+                  filename: "src/gone.ts",
+                  status: "removed",
+                  additions: 0,
+                  deletions: 1,
+                  changes: 1,
+                  patch: "@@ -1 +0,0 @@\n-a",
+                  sha: "0".repeat(40),
+                },
+              ])
+            : headed(sent);
+        const { owner, agent, ask } = yield* published({ repository: listed });
+
+        const changes = readAnswer(
+          codingAgentChangesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_CHANGES, owner, { id: agent.id })),
+        );
+
+        assert.deepEqual(
+          changes.pullRequest?.files.map((file) => [file.path, file.blobSha]),
+          [
+            ["src/seats.ts", blob],
+            ["src/gone.ts", undefined],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
     "a teammate reads which files they viewed on GitHub, every page of them, and marks and unmarks one, each on their own GitHub token",
     () =>
       Effect.gen(function* () {

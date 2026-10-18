@@ -26,6 +26,7 @@ import {
 } from "@luke/panel/diff-view/contract";
 import { SpinnerRegion } from "@luke/panel/spinner";
 import {
+  blobShaOf,
   CHANGES_WORDS,
   changedFolders,
   changeMarks,
@@ -712,8 +713,8 @@ function useFileTexts(
         raw: true,
         ref: headSha,
       }).then(
-        (answer) => {
-          const texts = "text" in answer ? textsOf(file, answer.text.text) : undefined;
+        async (answer) => {
+          const texts = "text" in answer ? await checkedTextsOf(file, answer.text.text) : undefined;
           if (texts !== undefined) return texts;
           const why =
             "text" in answer
@@ -739,6 +740,21 @@ function useFileTexts(
     [read, refused],
   );
   return { expandable: offered, read, refused };
+}
+
+/**
+ * A file's texts from its text after, where that text is the very
+ * contents GitHub listed the file's patch against: the object it names
+ * (`blobSha`), where the service named one, since a push between the
+ * service's reads could leave a text whose hunks match its patch but whose
+ * lines between them do not; and its hunks at their places (`textsOf`).
+ */
+async function checkedTextsOf(
+  file: CodingAgentChangedFile,
+  after: string,
+): Promise<DiffFileTexts | undefined> {
+  if (file.blobSha !== undefined && (await blobShaOf(after)) !== file.blobSha) return undefined;
+  return textsOf(file, after);
 }
 
 /** No file's gaps refused. */

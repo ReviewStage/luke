@@ -671,6 +671,68 @@ function linesOf(text: string): {
   };
 }
 
+/** A hunk of a patch as written: where it starts and how many lines it holds on each side, and its lines, each with its mark. */
+interface RawHunk {
+  readonly oldStart: number;
+  readonly oldLines: number;
+  readonly newStart: number;
+  readonly newLines: number;
+  readonly lines: readonly string[];
+}
+
+/** A hunk's header with its counts: where it starts on each side, and how many lines, one where a count is left out. */
+const HUNK_COUNTS = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/u;
+
+/**
+ * A patch's hunks as written, each line split at its newline alone, so a
+ * line ending in a carriage return keeps it, as the file's own text does;
+ * none for a patch that does not read as hunks.
+ */
+function rawHunks(patch: string): readonly RawHunk[] | undefined {
+  const hunks: {
+    oldStart: number;
+    oldLines: number;
+    newStart: number;
+    newLines: number;
+    lines: string[];
+  }[] = [];
+  for (const line of patch.split("\n")) {
+    const header = HUNK_COUNTS.exec(line);
+    if (header !== null) {
+      const [, oldStart = "", oldLines = "1", newStart = "", newLines = "1"] = header;
+      hunks.push({
+        oldStart: Number(oldStart),
+        oldLines: Number(oldLines),
+        newStart: Number(newStart),
+        newLines: Number(newLines),
+        lines: [],
+      });
+      continue;
+    }
+    const hunk = hunks.at(-1);
+    if (hunk === undefined) return line === "" ? hunks : undefined;
+    // Note that a line of a hunk always starts with its mark, so an empty one is the patch's end.
+    if (line === "") continue;
+    hunk.lines.push(line);
+  }
+  return hunks;
+}
+
+/**
+ * The name git gives a file's contents, its blob: the SHA-1 of its header
+ * and its bytes, which GitHub names each changed file's contents after by
+ * (`CodingAgentChangedFile.blobSha`).
+ */
+export async function blobShaOf(text: string): Promise<string> {
+  const bytes = new TextEncoder().encode(text);
+  const header = new TextEncoder().encode(`blob ${bytes.length}\0`);
+  const whole = new Uint8Array(header.length + bytes.length);
+  whole.set(header);
+  whole.set(bytes, header.length);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", whole));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 /** Whether a file's lines between its hunks can be drawn: a file changed in place or moved with changes, whose patch is drawn, and that is no secret file. */
 export function expandable(file: CodingAgentChangedFile): boolean {
   const changedInPlace =
@@ -692,12 +754,8 @@ export function expandable(file: CodingAgentChangedFile): boolean {
 export function textsOf(file: CodingAgentChangedFile, after: string): DiffFileTexts | undefined {
   const patch = file.patch;
   if (!expandable(file) || patch === null) return undefined;
-  let hunks: ReturnType<typeof parsePatch>[number]["hunks"];
-  try {
-    hunks = parsePatch(patch)[0]?.hunks ?? [];
-  } catch {
-    return undefined;
-  }
+  const hunks = rawHunks(patch);
+  if (hunks === undefined) return undefined;
   const { lines, endsInNewline } = linesOf(after);
   const before: string[] = [];
   let at = 0;

@@ -27,6 +27,7 @@ import { appBridge } from "@luke/panel/app-bridge";
 import { useAppCommand, useAppKeymap } from "@luke/panel/app-commands";
 import type { DiffListProps, DiffViewModule } from "@luke/panel/diff-view/contract";
 import type { FileTreeModule } from "@luke/panel/file-tree/contract";
+import { blobShaOf } from "@luke/panel/tasks/changes-model";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import { handSettings } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -1549,4 +1550,26 @@ test("a gap's arrow under the pointer hangs its hint: the next twenty lines of a
   };
   assert.equal(hintOver(true), "Show 20 more lines\u21e7-click for all");
   assert.equal(hintOver(false), "Show these lines");
+});
+
+test("a file read whole that is not the contents GitHub listed its patch against opens no gap, though its hunks match", async () => {
+  commits = { headSha: "a".repeat(40) };
+  const listedAs = await blobShaOf(HEAD_TEXT);
+  // The same hunks, with a line far from them changed by a later push.
+  const pushed = HEAD_TEXT.replace("10", "ten");
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH, blobSha: listedAs }),
+    changed("src/moved.ts", { patch: HEAD_PATCH, blobSha: listedAs }),
+  ];
+  answerFileReads((path) => ({
+    text: {
+      path,
+      repository: "acme/relay",
+      branch: "a".repeat(40),
+      text: path === "src/seats.ts" ? HEAD_TEXT : pushed,
+    },
+  }));
+  const readTexts = (await drawTab()).readTexts ?? assert.fail("the list reads files whole");
+  assert.deepEqual(await readTexts("src/seats.ts"), { before: BASE_TEXT, after: HEAD_TEXT });
+  assert.equal(await readTexts("src/moved.ts"), undefined);
 });
