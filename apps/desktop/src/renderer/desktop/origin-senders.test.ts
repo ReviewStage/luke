@@ -211,7 +211,7 @@ test("a worker's tab opens on its task sent by the agent that delegated it, whos
   });
 
   const panel = container.querySelector(".desktop-side-panel") ?? container;
-  const parent = senderLine(panel).querySelector<HTMLButtonElement>(".actor-ref");
+  const parent = senderLine(panel).querySelector<HTMLButtonElement>("[data-actor-ref]");
   assert.equal(words(parent), "Invite expiry job");
   assert.equal(parent?.dataset.kind, "agent");
   act(() => parent?.click());

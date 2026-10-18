@@ -1426,10 +1426,10 @@ export function runStartAgent(
         return agentToolRejected(making.failure);
       }
       const made = making?.success;
-      const planId = landing?.success ?? made?.id ?? named ?? ownTask;
-      if (planId === null) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK);
+      const taskId = landing?.success ?? made?.id ?? named ?? ownTask;
+      if (taskId === null) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK);
       const started = yield* startCodingAgent(Effect.succeed(eve), userId, {
-        taskId: planId,
+        taskId: taskId,
         idempotencyKey: call.clientKey,
         choice,
         prompt,
@@ -1696,20 +1696,20 @@ export function runListTasks(
         return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       }
       const ownTask = callerTask(caller);
-      const plans = yield* listTasks(callerUserId(caller));
-      const matching = plans.filter(
-        (plan) =>
-          plan.workspaceId === workspace.value &&
-          (words === undefined || plan.name.toLowerCase().includes(words)),
+      const listed = yield* listTasks(callerUserId(caller));
+      const matching = listed.filter(
+        (task) =>
+          task.workspaceId === workspace.value &&
+          (words === undefined || task.name.toLowerCase().includes(words)),
       );
       const step = yield* workspaceStepOf(callerUserId(caller), workspace.value);
-      const tasks = matching.slice(offset, offset + TASKS_LIST_LIMIT).map((plan) => ({
-        id: plan.id,
-        name: plan.name,
-        repository: plan.repository ?? null,
-        startedBy: plan.createdBy?.name ?? null,
-        isYourTask: plan.id === ownTask,
-        mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: plan.id }, plan.name, step),
+      const tasks = matching.slice(offset, offset + TASKS_LIST_LIMIT).map((task) => ({
+        id: task.id,
+        name: task.name,
+        repository: task.repository ?? null,
+        startedBy: task.createdBy?.name ?? null,
+        isYourTask: task.id === ownTask,
+        mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
       }));
       const next = offset + TASKS_LIST_LIMIT;
       return {

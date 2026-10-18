@@ -261,18 +261,19 @@ function ShortcutRow({
       actions={actions}
       anchor={anchor}
       row={{
-        label: (
-          <>
-            {title}
-            {/* A stored chord is a changed value on the other rows' terms; the
-                flag that shows Reset is the flag that earns the mark. */}
-            {chosen ? <ChangedMark /> : null}
-            {/* The same mark the Voice page wears, because it is the same
-                missing key: the chord is still shown and still changeable, the
-                mark only says pressing it does nothing yet. */}
-            {attention ? <AttentionMark note={attention} /> : null}
-          </>
-        ),
+        label: title,
+        adornment:
+          chosen || attention ? (
+            <>
+              {/* A stored chord is a changed value on the other rows' terms; the
+                  flag that shows Reset is the flag that earns the mark. */}
+              {chosen ? <ChangedMark /> : null}
+              {/* The same mark the Voice page wears, because it is the same
+                  missing key: the chord is still shown and still changeable, the
+                  mark only says pressing it does nothing yet. */}
+              {attention ? <AttentionMark note={attention} /> : null}
+            </>
+          ) : null,
         // What a chord may be stands under the key's own detail while a
         // recording listens, and a refusal takes the row's error line.
         description:

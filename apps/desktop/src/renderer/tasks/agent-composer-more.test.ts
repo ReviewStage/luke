@@ -96,7 +96,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** An agent's box with everything its foot can carry: a pull request, its changes, a model, and a step's context. */
+/** An agent's box with everything its foot can carry: a pull request, a model, and a step's context. */
 function Box({ status }: { status: CodingAgentStatus }): ReactNode {
   const composer = useAgentComposer({
     agentId: "agent-1",
@@ -114,7 +114,7 @@ function Box({ status }: { status: CodingAgentStatus }): ReactNode {
     models: MODELS,
     context: CONTEXT,
     published: PUBLISHED,
-    doors: { openGitHub: ignore, copy: ignore, openChanges: ignore },
+    doors: { openGitHub: ignore, copy: ignore },
   });
 }
 
@@ -144,13 +144,7 @@ test("at 220px wide, while a turn runs, the ⋯ offers every press it hid", asyn
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
   );
-  assert.deepEqual(offered, [
-    "Attach files",
-    "Show changes",
-    "MCP servers",
-    "62% of context used",
-    "Dictate",
-  ]);
+  assert.deepEqual(offered, ["Attach files", "MCP servers", "62% of context used", "Dictate"]);
 });
 
 test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so the ⋯ offers no Attach files", async () => {
@@ -159,7 +153,7 @@ test("the ⋯ offers only what it hid: at 320px the + still stands beside it, so
   const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
     (item) => item.textContent,
   );
-  assert.deepEqual(offered, ["Show changes", "MCP servers", "62% of context used", "Dictate"]);
+  assert.deepEqual(offered, ["MCP servers", "62% of context used", "Dictate"]);
 });
 
 test("MCP servers chosen from the ⋯ opens the servers popover its hidden press would have, and Escape hands the keyboard back to the ⋯", async () => {
@@ -193,11 +187,11 @@ test("the ⋯'s menu closes once the card changes width, as a panel dragged narr
       .filter((item) => item.closest("[inert]") === null)
       .map((item) => item.textContent);
   act(() => box.press("More").click());
-  assert.deepEqual(offered(), ["Show changes", "MCP servers", "62% of context used", "Dictate"]);
+  assert.deepEqual(offered(), ["MCP servers", "62% of context used", "Dictate"]);
 
   // Laid out again at the same width, as a scroll would, it stays.
   act(() => relayout());
-  assert.equal(offered().length, 4);
+  assert.equal(offered().length, 3);
 
   width.mockReturnValue(DOMRect.fromRect({ width: CARD.NARROWEST }));
   act(() => relayout());

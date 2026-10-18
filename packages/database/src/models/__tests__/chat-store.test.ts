@@ -112,10 +112,10 @@ const openTask = (userId: string, organizationId: string, name = "Billing export
     (made) => made.id,
   );
 
-const openAgent = (userId: string, planId: string) =>
+const openAgent = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     const started = yield* createCodingAgent(userId, {
-      taskId: planId,
+      taskId: taskId,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
@@ -140,10 +140,10 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
         for (const teammate of [namesake, luke, numbered, nameless]) {
           yield* joinWorkspace(workspace, teammate);
         }
-        const plan = yield* openTask(owner, workspace);
+        const task = yield* openTask(owner, workspace);
         const otherTask = yield* openTask(owner, workspace, "Invites");
-        const first = yield* openAgent(owner, plan);
-        const second = yield* openAgent(owner, plan);
+        const first = yield* openAgent(owner, task);
+        const second = yield* openAgent(owner, task);
         const mint = (subject: Parameters<typeof ensureMember>[2]) =>
           Effect.map(ensureMember(owner, workspace, subject), Option.getOrThrow);
 
@@ -169,8 +169,8 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
           people.map((row) => row.handle),
           ["ada-lovelace", "ada-lovelace-2", "luke-2", "agent-1-2", "member"],
         );
-        const lukes = yield* Effect.forEach([plan, otherTask], (planId) =>
-          mint({ kind: MEMBER_KIND.LUKE, planId }),
+        const lukes = yield* Effect.forEach([task, otherTask], (taskId) =>
+          mint({ kind: MEMBER_KIND.LUKE, planId: taskId }),
         );
         assert.deepEqual(
           lukes.map((row) => row.handle),
@@ -196,12 +196,12 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
         const general = yield* openTask(owner, workspace, "General");
         const unnamed = yield* openTask(owner, workspace, "✨");
 
-        const channel = (planId: string) =>
-          Effect.map(ensureTaskChannel(owner, planId), Option.getOrThrow);
+        const channel = (taskId: string) =>
+          Effect.map(ensureTaskChannel(owner, taskId), Option.getOrThrow);
         const first = yield* channel(billing);
         assert.equal((yield* channel(billing)).id, first.id);
-        const names = yield* Effect.forEach([billing, again, general, unnamed], (planId) =>
-          Effect.map(channel(planId), (row) => [row.kind, row.name, row.planId]),
+        const names = yield* Effect.forEach([billing, again, general, unnamed], (taskId) =>
+          Effect.map(channel(taskId), (row) => [row.kind, row.name, row.planId]),
         );
         assert.deepEqual(names, [
           [CHANNEL_KIND.PLAN, "billing-export", billing],
@@ -226,11 +226,11 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
         const workspace = yield* openWorkspace(owner);
         const elsewhere = yield* openWorkspace(owner);
         yield* joinWorkspace(workspace, teammate);
-        const plan = yield* openTask(owner, workspace);
+        const task = yield* openTask(owner, workspace);
         const agent = Option.getOrThrow(
           yield* ensureMember(owner, workspace, {
             kind: MEMBER_KIND.AGENT,
-            agentId: yield* openAgent(owner, plan),
+            agentId: yield* openAgent(owner, task),
           }),
         );
         const person = Option.getOrThrow(
@@ -287,16 +287,16 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
         const stranger = yield* openAccount();
         const workspace = yield* openWorkspace(owner);
         const second = yield* openWorkspace(stranger);
-        const plan = yield* openTask(owner, workspace);
-        const agentId = yield* openAgent(owner, plan);
+        const task = yield* openTask(owner, workspace);
+        const agentId = yield* openAgent(owner, task);
         const person = Option.getOrThrow(
           yield* ensureMember(owner, workspace, { kind: MEMBER_KIND.HUMAN, userId: owner }),
         );
-        yield* ensureTaskChannel(owner, plan);
+        yield* ensureTaskChannel(owner, task);
 
         assert.deepEqual(yield* roster(stranger, workspace), []);
         assert.deepEqual(yield* channelsOf(stranger, workspace), []);
-        assert.deepEqual(yield* ensureTaskChannel(stranger, plan), Option.none());
+        assert.deepEqual(yield* ensureTaskChannel(stranger, task), Option.none());
         assert.deepEqual(yield* ensureGeneral(stranger, workspace), Option.none());
         assert.deepEqual(
           yield* ensureMember(stranger, workspace, { kind: MEMBER_KIND.HUMAN, userId: stranger }),
@@ -324,11 +324,11 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
     Effect.gen(function* () {
       const owner = yield* openAccount();
       const workspace = yield* openWorkspace(owner);
-      const plan = yield* openTask(owner, workspace);
+      const task = yield* openTask(owner, workspace);
       const agent = Option.getOrThrow(
         yield* ensureMember(owner, workspace, {
           kind: MEMBER_KIND.AGENT,
-          agentId: yield* openAgent(owner, plan),
+          agentId: yield* openAgent(owner, task),
         }),
       );
       assert.equal(yield* leave(owner, workspace, agent.id), true);
@@ -390,13 +390,13 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount("Ada Lovelace");
         const workspace = yield* openWorkspace(owner);
-        const plan = yield* openTask(owner, workspace);
+        const task = yield* openTask(owner, workspace);
         const channel = () =>
-          Effect.map(ensureTaskChannel(owner, plan), (row) => Option.getOrThrow(row).archivedAt);
+          Effect.map(ensureTaskChannel(owner, task), (row) => Option.getOrThrow(row).archivedAt);
         assert.equal(yield* channel(), null);
-        yield* updateTask(owner, plan, { archived: true });
+        yield* updateTask(owner, task, { archived: true });
         assert.notEqual(yield* channel(), null);
-        yield* updateTask(owner, plan, { archived: false });
+        yield* updateTask(owner, task, { archived: false });
         assert.equal(yield* channel(), null);
 
         const shelved = yield* openTask(owner, workspace, "Old export");
@@ -410,16 +410,16 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
     Effect.gen(function* () {
       const owner = yield* openAccount("Ada Lovelace");
       const workspace = yield* openWorkspace(owner);
-      const plan = yield* openTask(owner, workspace);
+      const task = yield* openTask(owner, workspace);
       const mint = (subject: Parameters<typeof ensureMember>[2]) =>
         Effect.map(ensureMember(owner, workspace, subject), Option.getOrThrow);
       const ada = yield* mint({ kind: MEMBER_KIND.HUMAN, userId: owner });
       const agent = yield* mint({
         kind: MEMBER_KIND.AGENT,
-        agentId: yield* openAgent(owner, plan),
+        agentId: yield* openAgent(owner, task),
       });
       assert.ok(Option.isSome(yield* findOrMakeDm(owner, workspace, ada.id, agent.id)));
-      const gone = yield* mint({ kind: MEMBER_KIND.AGENT, agentId: yield* openAgent(owner, plan) });
+      const gone = yield* mint({ kind: MEMBER_KIND.AGENT, agentId: yield* openAgent(owner, task) });
       yield* leave(owner, workspace, gone.id);
       assert.deepEqual(yield* findOrMakeDm(owner, workspace, ada.id, gone.id), Option.none());
       assert.deepEqual(yield* findOrMakeDm(owner, workspace, gone.id, ada.id), Option.none());
@@ -439,14 +439,14 @@ const openRoom = Effect.gen(function* () {
   const teammate = yield* openAccount("Grace Hopper");
   const workspace = yield* openWorkspace(owner);
   yield* joinWorkspace(workspace, teammate);
-  const plan = yield* openTask(owner, workspace);
+  const task = yield* openTask(owner, workspace);
   const mint = (subject: Parameters<typeof ensureMember>[2]) =>
     Effect.map(ensureMember(owner, workspace, subject), Option.getOrThrow);
   const ada = yield* mint({ kind: MEMBER_KIND.HUMAN, userId: owner });
   const grace = yield* mint({ kind: MEMBER_KIND.HUMAN, userId: teammate });
-  const first = yield* mint({ kind: MEMBER_KIND.AGENT, agentId: yield* openAgent(owner, plan) });
-  const second = yield* mint({ kind: MEMBER_KIND.AGENT, agentId: yield* openAgent(owner, plan) });
-  const channel = Option.getOrThrow(yield* ensureTaskChannel(owner, plan));
+  const first = yield* mint({ kind: MEMBER_KIND.AGENT, agentId: yield* openAgent(owner, task) });
+  const second = yield* mint({ kind: MEMBER_KIND.AGENT, agentId: yield* openAgent(owner, task) });
+  const channel = Option.getOrThrow(yield* ensureTaskChannel(owner, task));
   /** A post by the member given, into the channel or thread given, as the account given. */
   const post = (
     author: ChatMemberRow,
@@ -463,7 +463,19 @@ const openRoom = Effect.gen(function* () {
     });
   const posted = (...args: Parameters<typeof post>) =>
     Effect.map(post(...args), (result) => Result.getOrThrow(result).message);
-  return { owner, teammate, workspace, plan, ada, grace, first, second, channel, post, posted };
+  return {
+    owner,
+    teammate,
+    workspace,
+    plan: task,
+    ada,
+    grace,
+    first,
+    second,
+    channel,
+    post,
+    posted,
+  };
 });
 
 /** The words of each message, in order. */

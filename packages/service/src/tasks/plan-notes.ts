@@ -297,12 +297,12 @@ export function saveNotes(
     );
   const saved = Effect.map(savedUnderLock(binding, writer, take), (result): PlanSaveResult => {
     if (result.status !== PLAN_SAVE_STATUS.SAVED) return result;
-    const { task: plan } = result;
+    const { task } = result;
     return {
       status: PLAN_SAVE_STATUS.SAVED,
-      document: plan.document,
-      sectionEdits: plan.sectionEdits ?? [],
-      savedAt: plan.updatedAt,
+      document: task.document,
+      sectionEdits: task.sectionEdits ?? [],
+      savedAt: task.updatedAt,
       moved: result.moved,
     };
   });

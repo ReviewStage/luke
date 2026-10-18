@@ -168,6 +168,30 @@
     white-space: nowrap;
   }
 
+  /* Metadata on the title's line ends it, the title giving way first, and
+     the description runs the whole width under both; the row's marks stand
+     level with the title's line rather than the row's middle. */
+  .luke-list-row[data-meta="title"] > .luke-list-row-main {
+    align-items: flex-start;
+  }
+
+  .luke-list-row[data-meta="title"] .luke-list-row-leading {
+    height: var(--luke-type-label-leading);
+    align-items: center;
+  }
+
+  .luke-list-row-head {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    min-width: 0;
+  }
+
+  .luke-list-row-head > .luke-list-row-title {
+    flex: 1;
+    min-width: 0;
+  }
+
   .luke-list-row-actions {
     display: flex;
     flex: none;

@@ -1,7 +1,9 @@
 /* settings-section.css -- a settings group: its heading a short step above
    the card, and the card's edge, corner, and ground, with a hairline between
    each row and the next. The rows' own padding is theirs
-   (`settings-row.css`); the room between sections is the page's. */
+   (`settings-row.css`); the room between sections is the page's. A line
+   in the rows' place stands at a row's height and inset, in a
+   description's muted words. */
 
 @layer components {
   .luke-settings-section {
@@ -29,5 +31,26 @@
 
   .luke-settings-section-card > * + * {
     border-top: 1px solid var(--luke-color-border);
+  }
+
+  .luke-settings-line {
+    display: flex;
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: var(--luke-settings-row-min-height);
+    align-items: center;
+    gap: var(--luke-control-gap);
+    margin: 0;
+    padding: var(--luke-settings-row-block) var(--luke-settings-row-inline);
+    color: var(--luke-color-text-subtle);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-regular);
+    overflow-wrap: anywhere;
+  }
+
+  .luke-settings-line > .luke-spinner-region {
+    flex: 1;
   }
 }
