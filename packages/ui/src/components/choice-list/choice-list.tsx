@@ -203,8 +203,7 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     const step = STEP_KEYS.get(event.key);
     if (step === undefined || open.length === 0 || disabled) return;
     event.preventDefault();
-    // Note that the step counts from the focused row, because a cleared
-    // choice leaves the keyboard on a row that no longer holds the value.
+    // Note that the step counts from the focused row, because clearing a pick leaves focus on an unchecked row.
     const radios = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
     const focused = event.target instanceof HTMLButtonElement ? radios.indexOf(event.target) : -1;
     const from = open.findIndex((option) => option === options[focused]);
