@@ -1,9 +1,8 @@
-import { FAILURE_REASON } from "@luke/features/failure-remedy";
+import { FAILURE_REASON, remedyLabel, retriesBesideRemedy } from "@luke/features/failure-remedy";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { PlayIcon, SplitButton } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, PlayIcon, SplitButton } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
-import { FailureNote } from "../failure-note";
 import { choiceLabel } from "../tasks/coding-agent-model";
 import { ModelMenu, settledChoice } from "../tasks/model-menu";
 import { useRepositoryRemedy } from "../tasks/repository-remedy";
@@ -106,17 +105,32 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
     start.reason ??
     (models !== undefined && chosen !== undefined ? choiceLabel(chosen, models) : undefined);
 
+  const note = start.note;
+  const remedyWords = note === undefined ? undefined : remedyLabel(note);
+  const remedy = note === undefined ? undefined : repositoryRemedy(note, () => press());
   return (
     <div className="start-agent">
-      {start.note !== undefined ? (
+      {note !== undefined ? (
         // Start itself is the retry of a plain refusal; a repository's remedy keeps Retry
         // beside it where it is finished elsewhere, and a move presses Start again by itself.
-        <FailureNote
-          failure={start.note}
-          className="error-message"
-          onRetry={start.note.reason === FAILURE_REASON.OTHER ? undefined : () => press()}
-          onRemedy={repositoryRemedy(start.note, () => press())}
-        />
+        <div className="start-agent-note">
+          <ErrorState
+            placement={ERROR_STATE_PLACEMENT.TOOLBAR}
+            remedy={
+              remedyWords === undefined || remedy === undefined
+                ? undefined
+                : { label: remedyWords, onClick: remedy }
+            }
+            onRetry={
+              note.reason !== FAILURE_REASON.OTHER &&
+              (remedyWords === undefined || retriesBesideRemedy(note))
+                ? () => press()
+                : undefined
+            }
+          >
+            {note.text}
+          </ErrorState>
+        </div>
       ) : null}
       <span className="start-agent-split" onClickCapture={pressed}>
         <SplitButton

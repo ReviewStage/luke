@@ -2013,17 +2013,9 @@ ul.actor-stack {
   height: 13px;
 }
 
-/* A failure's line (`failure-note.tsx`): its words, then the press that
-   mends it inside a hairline, since it is the act the line is there for,
-   with Cancel or Retry quiet beside it. The press keeps the words' size and
-   goes onto the next line, whole, where the line has no room for it. */
-.failure-note {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-space-4) var(--luke-space-8);
-}
-
+/* A remedy pressed from a line of its own rather than a failure's (a
+   failure's is `@luke/ui`'s `ErrorState`): inside a hairline, at the words'
+   size, since it is the act the line is there for. */
 .failure-note-remedy {
   height: 24px;
   padding: 0 var(--luke-space-8);
@@ -7010,6 +7002,15 @@ body:has(.app-stage[data-capture="true"])
   display: flex;
   align-items: center;
   gap: var(--luke-control-gap);
+}
+
+/* A refused start stands left of the button on the toolbar's one line, as
+   wide as its sentence and presses want and at most half the toolbar, so
+   the tabs keep the rest and the sentence gives way first. */
+.start-agent-note {
+  display: flex;
+  min-width: 0;
+  max-width: 50cqi;
 }
 
 /* The split button's box, which hears its presses as they pass. */
