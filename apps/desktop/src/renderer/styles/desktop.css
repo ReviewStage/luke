@@ -581,13 +581,16 @@ body,
 
 /* View options wears a dot while the view leaves tasks out, so a filtered
    list never passes for the whole of it: drawn by the box around the
-   button, over its corner. */
-.sidebar-view-options {
+   button, over its corner. The Issues page's View options wears the same
+   while its filter leaves issues out. */
+.sidebar-view-options,
+.issues-view-options {
   position: relative;
   display: inline-flex;
 }
 
-.sidebar-view-options[data-filtered="true"]::after {
+.sidebar-view-options[data-filtered="true"]::after,
+.issues-view-options[data-filtered="true"]::after {
   position: absolute;
   top: var(--luke-space-4);
   right: var(--luke-space-4);
