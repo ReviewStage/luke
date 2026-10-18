@@ -372,17 +372,35 @@ async function settle(): Promise<void> {
   });
 }
 
+/** The automations' rows, top to bottom. */
+function automationRows(page: HTMLElement): Element[] {
+  return [...page.querySelectorAll(".automation-group li")];
+}
+
+/** The runs' rows in the Runs panel, newest first. */
+function runRows(page: HTMLElement | Element | null | undefined): Element[] {
+  const panel = page?.matches("aside[aria-label='Runs']")
+    ? page
+    : page?.querySelector("aside[aria-label='Runs']");
+  return [...(panel?.querySelectorAll("li") ?? [])];
+}
+
 /** Each row's name and owner, top to bottom. */
 function rows(page: HTMLElement): string[][] {
-  return [...page.querySelectorAll(".automation-row")].map((row) => [
+  return automationRows(page).map((row) => [
     row.querySelector(".automation-row-name")?.textContent ?? "",
     row.querySelector(".automation-owner-name")?.textContent ?? "",
   ]);
 }
 
+/** Whether a row says `words` among its own. */
+function says(row: Element, words: string): boolean {
+  return (row.textContent ?? "").includes(words);
+}
+
 /** The row of the automation named. */
 function rowOf(page: HTMLElement, name: string): Element {
-  const row = [...page.querySelectorAll(".automation-row")].find(
+  const row = automationRows(page).find(
     (each) => each.querySelector(".automation-row-name")?.textContent === name,
   );
   assert.ok(row, `no row for ${name}`);
@@ -447,12 +465,7 @@ test("an older switch's answer landing after a newer one's draws nothing over it
   await settle();
   listHeld = true;
   const press = () =>
-    act(() =>
-      page
-        .querySelector(".automation-row")
-        ?.querySelector<HTMLButtonElement>("[role=switch]")
-        ?.click(),
-    );
+    act(() => automationRows(page)[0]?.querySelector<HTMLButtonElement>("[role=switch]")?.click());
 
   press();
   press();
@@ -810,9 +823,7 @@ test("a row opens its automation's page, under crumbs naming it, with what it wa
   await settle();
 
   act(() =>
-    rowOf(page, "Nightly flaky-test sweep")
-      .querySelector<HTMLButtonElement>(".automation-row-open")
-      ?.click(),
+    rowOf(page, "Nightly flaky-test sweep").querySelector<HTMLButtonElement>("button")?.click(),
   );
   await settle();
 
@@ -1647,9 +1658,9 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
   ]);
 });
 
-/** What each glyph inside `within` draws, in order: GitHub's mark, or the lucide icon's name. */
-function glyphs(within: Element | null, rows: string): string[] {
-  return [...(within?.querySelectorAll(rows) ?? [])].map((row) => {
+/** What each row's glyph draws, in order: GitHub's mark, or the lucide icon's name. */
+function glyphs(rows: readonly Element[]): string[] {
+  return rows.map((row) => {
     if (row.querySelector(".provider-mark") !== null) return "github";
     const icon = row.querySelector(".state-glyph svg");
     const named = [...(icon?.classList ?? [])].find(
@@ -1674,7 +1685,7 @@ test("each run and each automation wears what fires it: a schedule's clock, GitH
   ];
   const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
-  assert.deepEqual(glyphs(list, ".automation-row"), ["clock", "github", "webhook"]);
+  assert.deepEqual(glyphs(automationRows(list)), ["clock", "github", "webhook"]);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -1700,12 +1711,7 @@ test("each run and each automation wears what fires it: a schedule's clock, GitH
   ];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
-  assert.deepEqual(glyphs(page.querySelector("aside[aria-label='Runs']"), ".automation-run"), [
-    "clock",
-    "github",
-    "webhook",
-    "play",
-  ]);
+  assert.deepEqual(glyphs(runRows(page)), ["clock", "github", "webhook", "play"]);
 });
 
 test("an automation's runs stand on its page's right, newest first, a run that started an agent opening it", async () => {
@@ -1732,21 +1738,16 @@ test("an automation's runs stand on its page's right, newest first, a run that s
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
 
-  const panel = page.querySelector("aside[aria-label='Runs']");
-  assert.deepEqual(
-    [...(panel?.querySelectorAll(".automation-run") ?? [])].map((row) => [
-      row.querySelector(".automation-row-name")?.textContent,
-      row.querySelector(".automation-row-detail")?.textContent,
-    ]),
-    [
-      ["Fix the flaky test", "Working"],
-      ["Scheduled run", "Its creator is no longer in the workspace."],
-    ],
+  const [started, refused] = runRows(page);
+  assert.match(started?.textContent ?? "", /^Fix the flaky testWorking/u);
+  assert.match(
+    refused?.textContent ?? "",
+    /^Scheduled runIts creator is no longer in the workspace\./u,
   );
-  act(() => panel?.querySelector<HTMLButtonElement>("button.automation-run")?.click());
+  act(() => started?.querySelector("button")?.click());
   assert.deepEqual(agentsOpened, [CI_DIGEST.id]);
   assert.equal(
-    panel?.querySelectorAll("button.automation-run").length,
+    runRows(page).filter((row) => row.querySelector("button") !== null).length,
     1,
     "a run that started no agent is no press",
   );
@@ -1765,10 +1766,7 @@ test("Run now starts a run under a key of its own, and the run stands first once
   await settle();
 
   assert.deepEqual(runsAsked, [SWEEP.id]);
-  assert.equal(
-    page.querySelector("aside[aria-label='Runs'] .automation-row-name")?.textContent,
-    "Run now",
-  );
+  assert.match(runRows(page)[0]?.textContent ?? "", /^Run now/u);
 });
 
 test("a Run now the service refuses says why under the name, and a new automation has no Run now", async () => {
@@ -1808,7 +1806,7 @@ test("opening a run's agent with unsaved changes asks first, and Leave opens it"
   await settle();
   type(page.querySelector("input[aria-label='Automation name']"), "Sweep");
 
-  act(() => page.querySelector<HTMLButtonElement>("button.automation-run")?.click());
+  act(() => runRows(page)[0]?.querySelector("button")?.click());
   await settle();
   assert.deepEqual(agentsOpened, []);
   act(() => button("Leave").click());
@@ -1866,9 +1864,11 @@ test("a GitHub automation's row says its trigger as one sentence, naming the rep
   const page = mount();
   await settle();
 
-  assert.equal(
-    rowOf(page, "Code review").querySelector(".automation-row-detail")?.textContent,
-    "When a pull request by people is opened, marked ready, or pushed to in acme/ledger",
+  assert.ok(
+    says(
+      rowOf(page, "Code review"),
+      "When a pull request by people is opened, marked ready, or pushed to in acme/ledger",
+    ),
   );
 });
 
@@ -1903,9 +1903,11 @@ test("a new automation set to a GitHub event takes its settings as switches in t
   });
   act(() => button("Automations").click());
   await settle();
-  assert.equal(
-    rowOf(page, "Code review").querySelector(".automation-row-detail")?.textContent,
-    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
+  assert.ok(
+    says(
+      rowOf(page, "Code review"),
+      "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
+    ),
   );
 });
 
@@ -2065,11 +2067,7 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
 
   act(() => button("Automations").click());
   await settle();
-  act(() =>
-    rowOf(page, "Fix Sentry alerts")
-      .querySelector<HTMLButtonElement>(".automation-row-open")
-      ?.click(),
-  );
+  act(() => rowOf(page, "Fix Sentry alerts").querySelector<HTMLButtonElement>("button")?.click());
   await settle();
   assert.equal(page.querySelector("input[aria-label='Secret']"), null, "never shown again");
   assert.ok(!(page.ownerDocument.body.innerHTML ?? "").includes(ROTATED_SECRET));
@@ -2102,7 +2100,7 @@ test("an automation's ⋯ in its editor, its row's right-click in the list, and 
   await settle();
   act(() => button("Automation actions").click());
   await act(async () => menuItem("Copy link").click());
-  const run = page.querySelector<HTMLElement>(".automation-run");
+  const run = runRows(page)[0]?.querySelector("button");
   assert.ok(run, "the run is listed");
   act(() => {
     run.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
@@ -2112,7 +2110,7 @@ test("an automation's ⋯ in its editor, its row's right-click in the list, and 
   await settle();
   act(() => {
     rowOf(page, SWEEP.name)
-      .querySelector(".automation-row-open")
+      .querySelector("button")
       ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
   });
   await act(async () => menuItem("Copy link").click());
@@ -2123,6 +2121,34 @@ test("an automation's ⋯ in its editor, its row's right-click in the list, and 
     `${automationLink}/run/6a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d`,
     automationLink,
   ]);
+});
+
+test("a right-click on an automation's switch opens no menu, and Escape from its row's menu hands focus back to the row", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  const openMenus = () => document.querySelectorAll('[role="menu"]:not([data-leaving])').length;
+  const row = rowOf(page, SWEEP.name);
+
+  act(() => {
+    button(`Turn off ${SWEEP.name}`).dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    );
+  });
+  assert.equal(openMenus(), 0, "the switch's right-click is its own");
+
+  const press = row.querySelector("button");
+  assert.ok(press, "the row is a press");
+  act(() =>
+    press.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })),
+  );
+  assert.equal(openMenus(), 1);
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  await settle();
+  assert.equal(document.activeElement, press);
 });
 
 test("a link to a run shows the Runs panel a reader folded, its run marked current, a fold after it stands, and the link opened again shows it again", async () => {
@@ -2150,7 +2176,7 @@ test("a link to a run shows the Runs panel a reader folded, its run marked curre
     runId: "2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
   });
   await settle();
-  const current = page.querySelector(".automation-run")?.getAttribute("aria-current");
+  const current = runRows(page)[0]?.querySelector("[aria-current]")?.getAttribute("aria-current");
   act(() => button("Hide runs").click());
   const folded = page.querySelector("aside[aria-label='Runs']");
   act(() =>
@@ -2196,7 +2222,9 @@ test("a link to a run opens its automation's editor with that run marked current
   await settle();
 
   assert.deepEqual(
-    [...page.querySelectorAll(".automation-run")].map((row) => row.getAttribute("aria-current")),
+    runRows(page).map(
+      (row) => row.querySelector("[aria-current]")?.getAttribute("aria-current") ?? null,
+    ),
     [null, "true"],
   );
 });

@@ -46,7 +46,7 @@ class ExchangeCannotStand extends Data.TaggedError("ExchangeCannotStand")<{
 
 const EXCHANGE_CANNOT_STAND_MESSAGE = "the exchange could not stand on the session's sideband";
 
-const TASK_GONE_MESSAGE = "the plan the session is bound to no longer stands";
+const TASK_GONE_MESSAGE = "the task the session is bound to no longer stands";
 
 /**
  * The conversation a call lands in: its task's, opened and attached now
