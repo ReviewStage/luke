@@ -321,6 +321,11 @@ body {
   width: 200px;
 }
 
+/* A toolbar's room, wider than its presses and short of its whole sentence. */
+.catalog-error-toolbar {
+  width: 400px;
+}
+
 /* A list's foot that is itself its press, as an app draws one around
    `RetryRowLabel`: a row in the caption's type, lit on hover. */
 .catalog-retry-row {

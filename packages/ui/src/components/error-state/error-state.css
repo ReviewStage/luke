@@ -51,10 +51,16 @@
   }
 
   /* The presses stand together at the row's end, on its first line or,
-     wrapped, under the words. */
+     wrapped, under the words. Never wider than the row: presses that do not
+     fit beside each other wrap, and a remedy longer than the row is cut
+     short with an ellipsis, its words still its name. */
   .luke-error-state-actions {
     display: flex;
-    flex: none;
+    min-width: 0;
+    max-width: 100%;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: var(--luke-control-gap);
     margin-inline-start: auto;
   }
@@ -82,6 +88,8 @@
   }
 
   .luke-error-state[data-placement="toolbar"] > .luke-error-state-actions {
+    flex: none;
+    flex-wrap: nowrap;
     margin-inline-start: 0;
   }
 
