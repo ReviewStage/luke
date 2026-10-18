@@ -43,6 +43,7 @@ import {
   Badge,
   Button,
   CopyIcon,
+  DisclosureChevron,
   EmptyState,
   ErrorState,
   IconButton,
@@ -81,7 +82,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useId, useState } from "react";
-import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
+import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
@@ -894,7 +895,9 @@ function ThreadCard({
           {labels.map((label) => (
             <Badge key={label}>{label}</Badge>
           ))}
-          <FoldChevron />
+          <span className="pull-request-thread-turn">
+            <DisclosureChevron />
+          </span>
         </FoldSummary>
         <FoldBody>
           {preview === undefined ? null : (
@@ -990,7 +993,9 @@ function InlineThread({
           <span className="pull-request-quiet">
             {PULL_REQUEST_WORDS.commentCount(thread.comments.length + thread.more)}
           </span>
-          <FoldChevron />
+          <span className="pull-request-thread-turn">
+            <DisclosureChevron />
+          </span>
         </FoldSummary>
         <FoldBody>
           <ThreadComments thread={thread} now={now} picture={picture} />

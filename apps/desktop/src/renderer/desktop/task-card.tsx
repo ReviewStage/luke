@@ -27,7 +27,6 @@ import { PullRequestMark } from "../tasks/pull-request-mark";
 import { RelativeTime } from "../tasks/relative-time";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { Tooltip } from "../tooltip";
 import { strandedHome } from "./move-task-dialog";
 import { WorkspaceRef } from "./workspace-ref";
 
@@ -365,36 +364,5 @@ export function taskCardOf(
       onOpenGitHub={tasks.repositories.openGitHub}
       onShowAgent={(agentId) => tasks.onShowAgent(task.id, agentId)}
     />
-  );
-}
-
-/**
- * A task named in place: what it is drawn as, its document glyph and its
- * name as the place sets them, as one button that hangs the task's card
- * while the pointer rests on it and opens the task on a press, as
- * `AgentRef` names an agent. Note that the Inbox list's task heading, whose
- * press folds it, and ⌘K's task rows, whose card's buttons the modal
- * palette would leave unpressable, name the task without one.
- */
-export function TaskRef({
-  task,
-  card,
-  onOpen,
-  className,
-  children,
-}: {
-  task: Pick<TaskSummary, "name">;
-  /** The task's card (`planCardOf`). */
-  card: React.ReactNode;
-  onOpen: () => void;
-  className?: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <Tooltip label={task.name} card={card}>
-      <button type="button" className={className} data-task-ref="" onClick={onOpen}>
-        {children}
-      </button>
-    </Tooltip>
   );
 }

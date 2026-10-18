@@ -133,22 +133,24 @@ function CountsNote({
 }): React.JSX.Element | null {
   if (comments === undefined && commits === undefined) return null;
   return (
-    <p className="luke-hover-card-note card-counts">
-      {comments === undefined ? null : (
-        <span className="card-count">
-          <MessageSquareIcon aria-hidden="true" />
-          {comments}
-          <span className="visually-hidden">{comments === 1 ? " comment" : " comments"}</span>
-        </span>
-      )}
-      {commits === undefined ? null : (
-        <span className="card-count">
-          <GitCommitHorizontalIcon aria-hidden="true" />
-          {commits}
-          <span className="visually-hidden">{commits === 1 ? " commit" : " commits"}</span>
-        </span>
-      )}
-    </p>
+    <HoverCardNote>
+      <span className="card-counts">
+        {comments === undefined ? null : (
+          <span className="card-count">
+            <MessageSquareIcon aria-hidden="true" />
+            {comments}
+            <span className="visually-hidden">{comments === 1 ? " comment" : " comments"}</span>
+          </span>
+        )}
+        {commits === undefined ? null : (
+          <span className="card-count">
+            <GitCommitHorizontalIcon aria-hidden="true" />
+            {commits}
+            <span className="visually-hidden">{commits === 1 ? " commit" : " commits"}</span>
+          </span>
+        )}
+      </span>
+    </HoverCardNote>
   );
 }
 

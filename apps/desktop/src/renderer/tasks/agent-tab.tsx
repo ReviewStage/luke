@@ -24,6 +24,7 @@ import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
 import {
   BUTTON_VARIANT,
   Button,
+  DisclosureChevron,
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -53,7 +54,7 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
-import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
+import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold";
 import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
@@ -697,7 +698,7 @@ function OriginBody({ body }: { body: string }): React.JSX.Element {
   return (
     <Fold className="agent-origin-body">
       <FoldSummary className="agent-origin-body-line">
-        <FoldChevron />
+        <DisclosureChevron />
         <WebhookIcon aria-hidden="true" />
         {WEBHOOK_BODY_LABEL}
       </FoldSummary>

@@ -1,9 +1,9 @@
+import { DisclosureChevron } from "@luke/ui";
 import type { ReactNode } from "react";
 import {
   Fold,
   FoldBody,
   type FoldBodyProps,
-  FoldChevron,
   type FoldProps,
   FoldSummary,
   type FoldSummaryProps,
@@ -47,7 +47,7 @@ export type TaskHeaderProps = Omit<FoldSummaryProps, "className">;
 export function PlanHeader({ children, ...props }: TaskHeaderProps): ReactNode {
   return (
     <FoldSummary className="plan-card-head" {...props}>
-      <FoldChevron />
+      <DisclosureChevron />
       {children}
     </FoldSummary>
   );
