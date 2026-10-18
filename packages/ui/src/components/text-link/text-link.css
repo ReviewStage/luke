@@ -1,0 +1,117 @@
+/* text-link.css -- TextLink: the quiet and underlined looks, a type role
+   where one is set, a control's height where the link stands alone, and the
+   ↗ an external link wears. The keyboard's ring is the app's reset's, as it
+   is for every control. */
+
+@layer components {
+  .luke-text-link {
+    /* A hairline corner, so the keyboard's ring hugs the words. */
+    border-radius: 2px;
+    color: var(--luke-color-text-muted);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+    transition:
+      color var(--duration-hover) ease,
+      text-decoration-color var(--duration-hover) ease;
+  }
+
+  a.luke-text-link {
+    cursor: pointer;
+  }
+
+  /* In an editor a link is words being written, so it keeps the caret's cursor. */
+  [contenteditable] a.luke-text-link {
+    cursor: text;
+  }
+
+  a.luke-text-link:hover,
+  .luke-text-link[aria-current] {
+    color: var(--luke-color-text);
+  }
+
+  .luke-text-link[data-look="underlined"] {
+    color: inherit;
+    text-decoration-line: underline;
+    text-decoration-color: color-mix(in srgb, currentColor 32%, transparent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.24em;
+  }
+
+  .luke-text-link[data-look="underlined"]:is(:hover, :focus-visible) {
+    color: inherit;
+    text-decoration-color: currentColor;
+  }
+
+  .luke-text-link[data-look="heading"] {
+    color: var(--luke-color-text);
+  }
+
+  a.luke-text-link[data-look="heading"]:hover {
+    color: var(--luke-color-accent-text);
+  }
+
+  .luke-text-link[data-font="sans"] {
+    font-family: var(--luke-font-sans);
+  }
+
+  .luke-text-link[data-font="mono"] {
+    font-family: var(--luke-font-mono);
+  }
+
+  .luke-text-link[data-height="control"] {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--luke-control-height);
+  }
+
+  /* The ↗ follows the words' size, faint until the link lights. */
+  .luke-text-link-out {
+    display: inline-block;
+    width: 0.78em;
+    height: 0.78em;
+    margin-inline-start: 0.12em;
+    opacity: 0.55;
+    vertical-align: -0.02em;
+    transition: opacity var(--duration-hover) ease;
+  }
+
+  .luke-text-link:is(:hover, :focus-visible) .luke-text-link-out {
+    opacity: 1;
+  }
+
+  .luke-text-link[data-variant="body"] {
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    font-weight: var(--luke-weight-regular);
+  }
+
+  .luke-text-link[data-variant="label"] {
+    font-size: var(--luke-type-label-size);
+    line-height: var(--luke-type-label-leading);
+    font-weight: var(--luke-weight-medium);
+  }
+
+  .luke-text-link[data-variant="caption"] {
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-regular);
+  }
+
+  .luke-text-link[data-variant="section"] {
+    font-size: var(--luke-type-section-size);
+    line-height: var(--luke-type-section-leading);
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  .luke-text-link[data-variant="dialog"] {
+    font-size: var(--luke-type-dialog-size);
+    line-height: var(--luke-type-dialog-leading);
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  .luke-text-link[data-variant="title"] {
+    font-size: var(--luke-type-title-size);
+    line-height: var(--luke-type-title-leading);
+    font-weight: var(--luke-weight-bold);
+  }
+}

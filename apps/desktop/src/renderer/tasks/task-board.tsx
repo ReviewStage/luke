@@ -3,22 +3,19 @@ import { admittedElements } from "@luke/features/board-scene";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { ACT_KIND, type ActPayload } from "@luke/host/acts";
+import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { Fragment, useEffect, useRef } from "react";
-import { actRequest } from "../act";
-import { bundleAtom } from "../bundle-loader";
+import { askAct } from "../act";
+import { BOARD_LOAD_FAILED, useSideBundles } from "../bundle-loader";
 import { rendererRuntime } from "../renderer-runtime";
 import { SpinnerRegion } from "../spinner";
 import { useAppState } from "../use-app-state";
-import {
-  WHITEBOARD_ASSET,
-  type WhiteboardHandle,
-  type WhiteboardModule,
-} from "../whiteboard/contract";
+import type { WhiteboardHandle, WhiteboardModule } from "../whiteboard/contract";
 
 /**
- * task-board.tsx -- the open plan's whiteboard in the Plans tab: Excalidraw's bundle loaded once, mounted over the board main holds, and its scene saved.
+ * task-board.tsx -- the open task's whiteboard in the Tasks tab: Excalidraw's bundle loaded once, mounted over the board main holds, and its scene saved.
  *
  * The board is drawn by the whiteboard bundle (`../whiteboard/`), which this
  * page loads the first time a board is shown and keeps for the window's
@@ -28,16 +25,16 @@ import {
  * pauses, whole, the last write winning.
  *
  * A save that is the first to hold a new drawing of Luke's carries the scene
- * drawn as a PNG beside it, which is what the planning model looks at
+ * drawn as a PNG beside it, which is what the brain looks at
  * (`look_at_board`). Note that "first" is read off the board main last
  * handed over: until a save holding the drawing lands, main's board still
  * names the drawing before it, so a save that interrupts the first one still
- * carries the image. While the planning model's pending call is a look, the
+ * carries the image. While the brain's pending call is a look, the
  * canvas saves the scene it holds with its image as well, so a look at a
  * board Luke did not just draw on still finds one.
  *
- * An archived plan's board is view-only: it shows, and nothing on it is
- * drawn or saved until the plan is brought back, which mounts the canvas
+ * An archived task's board is view-only: it shows, and nothing on it is
+ * drawn or saved until the task is brought back, which mounts the canvas
  * afresh as an editable one.
  *
  * The board's root is left out of the screen recording (`ph-no-capture`),
@@ -48,17 +45,7 @@ import {
 /** How long the developer's drawing rests before it is saved. */
 const SAVE_PAUSE = Duration.millis(800);
 
-/** Where the board stands while its bundle loads or fails to. */
-const BOARD_LOAD_FAILED = "The board could not be opened.";
-
-/** The whiteboard bundle, loaded once per window (`../bundle-loader.ts`). */
-const whiteboardModuleAtom = bundleAtom(
-  { script: WHITEBOARD_ASSET.SCRIPT, stylesheet: WHITEBOARD_ASSET.STYLESHEET },
-  () => window.lukeWhiteboard,
-  BOARD_LOAD_FAILED,
-);
-
-/** One save the canvas asked for: the plan, its scene, the number of Luke's drawing the scene holds, and whether to send the scene's image. */
+/** One save the canvas asked for: the task, its scene, the number of Luke's drawing the scene holds, and whether to send the scene's image. */
 interface BoardSave {
   readonly taskId: string;
   readonly elements: readonly object[];
@@ -85,13 +72,13 @@ const boardSaveAtom = rendererRuntime.fn((save: BoardSave) =>
       : undefined;
     const payload = image === undefined ? scene : { ...scene, image };
     yield* Effect.tryPromise({
-      try: () => window.luke.act(actRequest(ACT_KIND.TASKS_BOARD_SAVE, payload)),
+      try: () => askAct(ACT_KIND.TASKS_BOARD_SAVE, payload),
       catch: (error) => error,
     });
   }),
 );
 
-/** The canvas, once its bundle has loaded: mounted for one plan, and handed each board main holds. */
+/** The canvas, once its bundle has loaded: mounted for one task, and handed each board main holds. */
 function BoardCanvas({
   module,
   taskId,
@@ -148,7 +135,7 @@ function BoardCanvas({
 }
 
 /**
- * The board page: the canvas over the open plan's board, or the state that
+ * The board page: the canvas over the open task's board, or the state that
  * stands in its place while the board or its bundle is still on the way.
  */
 export function TaskBoard({
@@ -158,14 +145,16 @@ export function TaskBoard({
 }: {
   taskId: string;
   board: Board | undefined;
-  /** Whether the board only shows, as an archived plan's does. */
+  /** Whether the board only shows, as an archived task's does. */
   viewOnly?: boolean;
 }): React.JSX.Element {
-  const loaded = useAtomValue(whiteboardModuleAtom);
+  const loaded = useAtomValue(useSideBundles().whiteboard);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   return (
     <section className="task-board ph-no-capture" aria-label="Whiteboard">
-      {AsyncResult.isFailure(loaded) ? <p role="alert">{BOARD_LOAD_FAILED}</p> : null}
+      {AsyncResult.isFailure(loaded) ? (
+        <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED}>{BOARD_LOAD_FAILED}</ErrorState>
+      ) : null}
       {module !== undefined && board !== undefined ? (
         // Keyed by whether it only shows as well, so an Unarchive mounts an editable canvas.
         <Fragment key={String(viewOnly)}>

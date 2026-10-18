@@ -1,41 +1,41 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { EllipsisIcon } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, IconButton, useMenu } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { appPlatform } from "../app-platform";
 import { AutomationDirectory } from "../automation-directory";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { FindScope } from "../find-in-tab";
 import { usePageWorkspace } from "../links-at-hand";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { ReadFailure } from "../read-failure";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { agentTabLabel } from "../tasks/coding-agent-model";
-import {
-  PlanMentions,
-  type PlanMentionsValue,
-  planlessMentions,
-  useMentionAgentsReader,
-} from "../tasks/plan-mentions";
 import { SkillFiles } from "../tasks/skill-chip";
+import {
+  TaskMentions,
+  type TaskMentionsValue,
+  tasklessMentions,
+  useMentionAgentsReader,
+} from "../tasks/task-mentions";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { useCodingAgents } from "../tasks/use-coding-agents";
 import { WordsWorkspace } from "../tasks/use-link-standing";
+import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link";
 import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { useExperiment } from "../use-app-state";
-import { ActionMenu, useActionMenu } from "./action-menu";
+import { ActionMenu } from "./action-menu";
 import { AgentPane } from "./main-tabs";
 import {
   COLUMN,
@@ -52,8 +52,8 @@ import { useTabViews } from "./strip-tabs";
  * desktop-agent-page.tsx -- one agent's page: an agent an automation started with no plan, drawn in the plan's place as the task column draws an agent's tab.
  *
  * An agent an automation's run starts belongs to the workspace rather than
- * to a plan, so there is no plan's column for its tab to stand in. Its page
- * stands where the plan would, beside the sidebar, as the Inbox does, and
+ * to a task, so there is no task's column for its tab to stand in. Its page
+ * stands where the task would, beside the sidebar, as the Inbox does, and
  * draws the task column's own agent pane (`main-tabs.tsx`'s `AgentPane`):
  * its transcript, its composer, its model and servers, and what it
  * published, at the document's reading width, each through the same
@@ -61,7 +61,7 @@ import { useTabViews } from "./strip-tabs";
  * its id (`use-coding-agents.ts`'s `agentId`). ⌘F finds in it as in a
  * plan's column. An `@` in its box offers its repository's files, its
  * skills, and the servers, read through its workspace since no plan names
- * them (`planlessMentions`); a skill a message names is its chip, which
+ * them (`tasklessMentions`); a skill a message names is its chip, which
  * opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
  * File tab reads a repository no plan names; and a dictation listens for its repository and
  * its title. A row of its inbox calls opens the window's Inbox, since the
@@ -84,7 +84,7 @@ import { useTabViews } from "./strip-tabs";
 /** What the page says where the agent could not be read. */
 const NOT_READ = "This agent could not be read.";
 
-/** Nothing to do, for the doors a plan's column opens and this page does not have. */
+/** Nothing to do, for the doors a task's column opens and this page does not have. */
 const nothing = (): void => undefined;
 
 /** No tab arrived anything: arrivals are a plan's. */
@@ -107,20 +107,13 @@ function AgentPageActions({
   agent: { readonly id: string; readonly planId: string | null };
   shown: boolean;
 }): React.JSX.Element | null {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const copyLink = useCopyLinkItem()(agentPlace(agent));
   if (copyLink === undefined) return null;
   return (
     <>
       <Tooltip label={ACTIONS_LABEL}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={ACTIONS_LABEL}
-          {...menu.trigger()}
-        >
-          <EllipsisIcon />
-        </button>
+        <IconButton icon={<EllipsisIcon />} label={ACTIONS_LABEL} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
@@ -139,10 +132,10 @@ function AgentMentions({
   value,
   children,
 }: {
-  value: PlanMentionsValue | undefined;
+  value: TaskMentionsValue | undefined;
   children: React.ReactNode;
 }): React.ReactNode {
-  return value === undefined ? children : <PlanMentions value={value}>{children}</PlanMentions>;
+  return value === undefined ? children : <TaskMentions value={value}>{children}</TaskMentions>;
 }
 
 /**
@@ -181,7 +174,7 @@ export function DesktopAgentPage({
   agentId: string;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AGENT_PAGE, tasks.agentView.onClose);
-  const { act, tell } = useAct();
+  const { act } = useAct();
   const views = useTabViews();
   const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
@@ -208,9 +201,9 @@ export function DesktopAgentPage({
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
   useTaskAgentsFollow(tasks, agentId, agent);
-  // Note that the models come from the open plan's agents where this page has not read them, so
+  // Note that the models come from the open task's agents where this page has not read them, so
   // the agent is named alike in both; and that an archived agent, which takes no message, is
-  // brought back by its own Unarchive, there being no plan to bring back with it.
+  // brought back by its own Unarchive, there being no task to bring back with it.
   const { onArchive } = agents;
   const toast = useToast();
   // An Unarchive refused says why, as any other refusal of the agent's does.
@@ -276,6 +269,8 @@ export function DesktopAgentPage({
     showPullRequest(sidePanel, control, changed, PULL_REQUEST_VIEW.FILES);
   const openPullRequest = (published: string) =>
     showPullRequest(sidePanel, control, published, PULL_REQUEST_VIEW.CONVERSATION);
+  // A link in the agent's words to the pull request it opened opens that same tab rather than GitHub, as on a task.
+  const openHere = openPullRequestsHere(control, openPullRequest);
   const shown = tasks.shown && !sidePanel.fullScreen;
   const cards = taskCards({
     agents: control,
@@ -297,13 +292,13 @@ export function DesktopAgentPage({
     if (agentRepository === undefined) return;
     const place = { workspace: listed?.slug ?? workspaceId ?? "", repository: agentRepository };
     const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
-    tell(ACT_KIND.GITHUB_OPEN, { url });
+    appPlatform().openGitHub(url);
   };
   // What an `@` offers once the read named the agent's workspace and repository, which its files are read through.
   const mentions =
     workspaceId === undefined || agentRepository === undefined
       ? undefined
-      : planlessMentions(
+      : tasklessMentions(
           { workspace: listed?.slug ?? workspaceId, workspaceId, repository: agentRepository },
           tasks.onShowMention,
           readMentionAgents,
@@ -329,9 +324,9 @@ export function DesktopAgentPage({
         {agents.listMissing ? (
           <NotFound thing={NOT_FOUND_THING.AGENT} />
         ) : agents.listFailed ? (
-          <div className="agent-page-note">
-            <ReadFailure line={NOT_READ} onRetry={agents.onRetryList} />
-          </div>
+          <ErrorState onRetry={agents.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {NOT_READ}
+          </ErrorState>
         ) : (
           <Spinner label="Loading agent" size={SPINNER_SIZE.INLINE} />
         )}
@@ -351,54 +346,64 @@ export function DesktopAgentPage({
           >
             <SkillFiles source={control.readSkills} onOpen={openSkill}>
               <AgentMentions value={mentions}>
-                <div ref={onArea} className="desktop-task" data-panel-open={String(sidePanel.open)}>
-                  {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
-                  <section className="agent-page" aria-label="Agent" hidden={sidePanel.fullScreen}>
-                    {toolbar}
-                    <FindScope
-                      className="desktop-task-column"
-                      active={tasks.shown && !sideFocused}
-                      subject={tab}
+                <OpenHereProvider value={openHere}>
+                  <div
+                    ref={onArea}
+                    className="desktop-task"
+                    data-panel-open={String(sidePanel.open)}
+                  >
+                    {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
+                    <section
+                      className="agent-page"
+                      aria-label="Agent"
+                      hidden={sidePanel.fullScreen}
                     >
-                      <AgentPane
-                        label={agentTabLabel(agent, control.models)}
-                        tabbed={false}
-                        tab={tab}
+                      {toolbar}
+                      <FindScope
+                        className="desktop-task-column"
+                        active={tasks.shown && !sideFocused}
+                        subject={tab}
+                      >
+                        <AgentPane
+                          label={agentTabLabel(agent, control.models)}
+                          tabbed={false}
+                          tab={tab}
+                          agents={control}
+                          shown={shown}
+                          views={views}
+                          onOpenDelegation={openDelegation}
+                          onOpenChanges={openChanges}
+                          onOpenPullRequest={openPullRequest}
+                          onOpenTarget={openTarget}
+                          cards={cards}
+                        />
+                      </FindScope>
+                    </section>
+                    {drawing.panel ? (
+                      <SidePanel
+                        {...drawing}
+                        panel={drawing.panel}
+                        unread={NO_UNREAD}
+                        holder={SIDE_PANEL_HOLDER.AGENT}
+                        planId={agentId}
+                        repository={agentRepository ?? null}
+                        board={undefined}
+                        shownCode={undefined}
+                        pages={undefined}
+                        transcript={NO_CALLS}
+                        work={work}
                         agents={control}
-                        shown={shown}
+                        openAgents={openAgents}
+                        shownAgent={shown ? agentId : undefined}
                         views={views}
-                        onOpenDelegation={openDelegation}
-                        onOpenChanges={openChanges}
-                        onOpenPullRequest={openPullRequest}
+                        shown={tasks.shown}
+                        focused={sideFocused}
                         onOpenTarget={openTarget}
                         cards={cards}
                       />
-                    </FindScope>
-                  </section>
-                  {drawing.panel ? (
-                    <SidePanel
-                      {...drawing}
-                      panel={drawing.panel}
-                      unread={NO_UNREAD}
-                      holder={SIDE_PANEL_HOLDER.AGENT}
-                      planId={agentId}
-                      repository={agentRepository ?? null}
-                      board={undefined}
-                      shownCode={undefined}
-                      pages={undefined}
-                      transcript={NO_CALLS}
-                      work={work}
-                      agents={control}
-                      openAgents={openAgents}
-                      shownAgent={shown ? agentId : undefined}
-                      views={views}
-                      shown={tasks.shown}
-                      focused={sideFocused}
-                      onOpenTarget={openTarget}
-                      cards={cards}
-                    />
-                  ) : null}
-                </div>
+                    ) : null}
+                  </div>
+                </OpenHereProvider>
               </AgentMentions>
             </SkillFiles>
           </AutomationDirectory>

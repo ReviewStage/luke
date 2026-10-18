@@ -11,11 +11,11 @@ import {
   type SandboxState,
   type TerminalSummary,
 } from "@luke/features/terminal-wire";
+import { noNetwork } from "@luke/wire/testing";
 import { Clock, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { openGithubUser } from "../testing/github-app-fake.js";
-import { noNetwork } from "../testing/no-network.js";
 import { AGENT_TERMINALS_PATH, agentTerminalsApp } from "./agent-terminals-app.js";
 import { AgentSandbox, type AgentSandboxService, SHELL_REFUSAL } from "./terminal/agent-sandbox.js";
 import { SandboxUnavailable } from "./vercel-sandbox-api.js";
@@ -27,7 +27,7 @@ import { SandboxUnavailable } from "./vercel-sandbox-api.js";
  * agent is gone, and a list answers the sandbox's shells and where it
  * stands; a shell is refused in a stopped sandbox, and only the resume path
  * wakes one; and a sandbox that did not answer is the upstream's
- * failure, apart from the service's own. Synthetic accounts, plans, and sessions throughout.
+ * failure, apart from the service's own. Synthetic accounts, tasks, and sessions throughout.
  */
 
 const ORIGIN = "https://luke.test";
@@ -69,7 +69,7 @@ function scriptedSandbox(state: SandboxState) {
   return { layer: Layer.succeed(AgentSandbox, service), service, asked };
 }
 
-/** An account with an agent on a plan, its session claimed, as a started agent stands. */
+/** An account with an agent on a task, its session claimed, as a started agent stands. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openGithubUser();
   const task = yield* startTask(userId, { name: "Terminal tab", repository: "acme/relay" });

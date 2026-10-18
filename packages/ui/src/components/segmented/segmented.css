@@ -24,7 +24,7 @@
     border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
     /* Note that a segment draws the keyboard's ring inside itself, because
        its trough leaves it no room for one outside. */
-    outline-offset: calc(-1 * var(--focus-ring-width, 2px));
+    outline-offset: calc(-1 * var(--luke-focus-ring-width));
     background: none;
     color: var(--luke-color-text-muted);
     font-family: var(--luke-font-sans);

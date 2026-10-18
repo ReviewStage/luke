@@ -1,5 +1,6 @@
 import type { TaskSummary } from "@luke/features/task-wire";
-import { ArchiveIcon } from "@luke/ui";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { ArchiveIcon, CHIP_LOOK, Chip, ChipName, IconButton, useMenu } from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
 import { TASK_GROUPING, TASK_ORDER } from "@luke/ui/task-list-model";
 import {
@@ -11,15 +12,13 @@ import {
   SlidersHorizontalIcon,
   UserIcon,
   UsersIcon,
-  XIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, type MenuEntry, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import type { CountNoun } from "./sidebar-group-header";
 import type { TaskListViewControl } from "./task-list-view";
 
@@ -79,7 +78,7 @@ export function SidebarSectionHead({
             <span className="sidebar-section-head-count">
               {count}
               {noun === undefined ? null : (
-                <span className="visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
+                <span className="luke-visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
               )}
             </span>
           ) : null}
@@ -239,22 +238,20 @@ export function TaskViewOptions({
   /** Whether the view leaves any task out, which the button's dot says. */
   filtered: boolean;
 }): React.JSX.Element {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const reader = useMemberDirectory();
   return (
     <>
-      <Tooltip label={VIEW_OPTIONS}>
-        <button
-          type="button"
-          className="icon-button sidebar-view-options"
-          aria-label={VIEW_OPTIONS}
-          aria-description={filtered ? "Filtered" : undefined}
-          data-filtered={filtered ? "true" : undefined}
-          {...menu.trigger()}
-        >
-          <SlidersHorizontalIcon className="icon-button-glyph" />
-        </button>
-      </Tooltip>
+      <span className="sidebar-view-options" data-filtered={filtered ? "true" : undefined}>
+        <Tooltip label={VIEW_OPTIONS}>
+          <IconButton
+            icon={<SlidersHorizontalIcon />}
+            label={VIEW_OPTIONS}
+            aria-description={filtered ? "Filtered" : undefined}
+            {...menu.trigger()}
+          />
+        </Tooltip>
+      </span>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={VIEW_OPTIONS}
@@ -267,7 +264,7 @@ export function TaskViewOptions({
   );
 }
 
-/** One chip under the Tasks head: what it says, led by a glyph, and its × that lifts it. */
+/** One chip under the Tasks head: `@luke/ui`'s removable filter, what it says led by a glyph, and its × that lifts it. */
 function ViewChip({
   glyph,
   words,
@@ -276,20 +273,15 @@ function ViewChip({
 }: {
   glyph: React.JSX.Element;
   words: string;
-  /** What the × does, said in its hint and to a screen reader. */
+  /** What the × does, said to a screen reader. */
   lift: string;
   onLift: () => void;
 }): React.JSX.Element {
   return (
-    <span className="sidebar-view-chip">
+    <Chip look={CHIP_LOOK.FILTER} removeLabel={lift} onRemove={onLift}>
       {glyph}
-      <span className="sidebar-view-chip-words">{words}</span>
-      <Tooltip label={lift}>
-        <button type="button" aria-label={lift} onClick={onLift}>
-          <XIcon />
-        </button>
-      </Tooltip>
-    </span>
+      <ChipName>{words}</ChipName>
+    </Chip>
   );
 }
 

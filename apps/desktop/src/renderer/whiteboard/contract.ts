@@ -5,8 +5,8 @@ import type { Board } from "@luke/features/board-wire";
  *
  * Excalidraw is too large for the bundle every window parses, so it ships as
  * a bundle of its own (`whiteboard.js`, built from `./index.tsx`) that the
- * Plans tab loads the first time a board is shown. That bundle sets one
- * global, `window.lukeWhiteboard`, and this file is the whole of what the two
+ * Tasks tab loads the first time a board is shown. That bundle exports one
+ * module, `whiteboard`, and this file is the whole of what the two
  * share: no Excalidraw type crosses, only the board's own wire shape, and
  * nothing here imports a value, so the whiteboard bundle carries none of the
  * panel's libraries.
@@ -26,7 +26,7 @@ import type { Board } from "@luke/features/board-wire";
 export interface WhiteboardProps {
   /** The board the canvas opens on. */
   readonly board: Board;
-  /** Whether the canvas only shows the board, as an archived plan's does: nothing on it is drawn, moved, or saved. */
+  /** Whether the canvas only shows the board, as an archived task's does: nothing on it is drawn, moved, or saved. */
   readonly viewOnly: boolean;
   /** The scene changed: every element as Excalidraw holds it, and the number of Luke's drawing it holds. */
   readonly onScene: (elements: readonly object[], appliedDrawing: number) => void;
@@ -42,28 +42,16 @@ export interface WhiteboardHandle {
   readonly unmount: () => void;
 }
 
-/** What the whiteboard bundle sets on `window` once it has loaded. */
+/** What the whiteboard bundle's entry exports, which the panel imports the first time it is needed (`../bundle-loader.ts`). */
 export interface WhiteboardModule {
   readonly mount: (host: HTMLElement, props: WhiteboardProps) => WhiteboardHandle;
   /**
    * A scene the canvas reported, drawn whole as a PNG in the canvas's own
-   * theme, base64, for the planning model to look at; nothing where it could
+   * theme, base64, for the brain to look at; nothing where it could
    * not be drawn. Drawn off the document, and never a rejection.
    */
   readonly render: (elements: readonly object[]) => Promise<string | undefined>;
 }
-
-declare global {
-  interface Window {
-    lukeWhiteboard?: WhiteboardModule;
-  }
-}
-
-/** The files the whiteboard bundle is, beside `index.html`. */
-export const WHITEBOARD_ASSET = {
-  SCRIPT: "whiteboard.js",
-  STYLESHEET: "whiteboard.css",
-} as const;
 
 /** The scene's identity for saving: its element count and the sum of their versions. */
 export function sceneSignature(elements: readonly { readonly version: number }[]): string {

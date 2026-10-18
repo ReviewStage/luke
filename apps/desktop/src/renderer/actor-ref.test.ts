@@ -160,7 +160,7 @@ function cardOf(actor: Actor): Element {
     named.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   return (
-    document.querySelector('.tooltip-card [data-actor-card="github"]') ??
+    document.querySelector('.luke-tooltip-card [data-actor-card="github"]') ??
     assert.fail("a card hangs")
   );
 }
@@ -200,21 +200,24 @@ test("someone on GitHub stands by their avatar, a person on a circle with their 
 
 test("someone on GitHub hangs a card saying who they are there and that a person is no member here, an App's bot that it is an app, and opens nothing", () => {
   const person = cardOf({ kind: ACTOR_KIND.GITHUB, login: "octocat", bot: false });
-  assert.equal(person.querySelector(".card-name")?.textContent, "@octocat");
-  assert.equal(person.querySelector(".card-sub")?.textContent, "GitHub user");
-  assert.equal(person.querySelector(".card-corner")?.textContent, "Not in this workspace");
+  assert.equal(person.querySelector(".luke-hover-card-name")?.textContent, "@octocat");
+  assert.equal(person.querySelector(".luke-hover-card-sub")?.textContent, "GitHub user");
+  assert.equal(
+    person.querySelector(".luke-hover-card-corner")?.textContent,
+    "Not in this workspace",
+  );
   assert.equal(document.querySelector('.actor-ref[data-kind="github"]')?.tagName, "SPAN");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   const bot = cardOf({ kind: ACTOR_KIND.GITHUB, login: "devin-ai-integration[bot]", bot: true });
   assert.equal(
-    bot.querySelector(".card-name .actor-card-name")?.firstChild?.textContent,
+    bot.querySelector(".luke-hover-card-name .actor-card-name")?.firstChild?.textContent,
     "devin-ai-integration",
   );
-  assert.equal(bot.querySelector(".card-name .actor-bot")?.textContent, "bot");
-  assert.equal(bot.querySelector(".card-sub")?.textContent, "GitHub app");
-  assert.equal(bot.querySelector(".card-corner"), null);
+  assert.equal(bot.querySelector(".luke-hover-card-name .actor-bot")?.textContent, "bot");
+  assert.equal(bot.querySelector(".luke-hover-card-sub")?.textContent, "GitHub app");
+  assert.equal(bot.querySelector(".luke-hover-card-corner"), null);
   assert.equal(document.querySelector(".actor-ref-name")?.textContent, "devin-ai-integration");
 });
 
@@ -291,7 +294,7 @@ test("an App's bot on GitHub stands by its App's avatar and wears a quiet bot ba
       ?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const row =
-    document.querySelector('.tooltip-card [data-actor-card="more"] .actor-more-row') ??
+    document.querySelector('.luke-tooltip-card [data-actor-card="more"] .actor-more-row') ??
     assert.fail("the count's card names the rest");
   assert.equal(
     row.textContent,

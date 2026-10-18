@@ -1,124 +1,24 @@
-/* The window's hover hints and the shortcuts it prints beside a control.
+/* The window's own part of its hover hints (`@luke/ui`'s `TooltipPill` and
+   `TooltipCard`, drawn by `tooltip.tsx`), and the shortcuts it prints beside
+   a control. */
 
-   A hint is a small dark pill, light on dark, naming the control and then its
-   chord in muted glyphs; it has no arrow, because it always hangs centred on
-   the control it names. It is hidden for the one layout pass that measures
-   where it fits, then fades in from just short of its size once the pointer
-   has rested `--hint-delay`, or at once while the window is warm: its
-   opacity over `--duration-quick`, its growth on the spring. Reduced
-   motion keeps the wait, which is not motion, and drops the fade with the
-   tokens. A pill takes no presses: it never stands between the pointer and
-   the control beside it. A card is a surface the pointer crosses onto, so it
-   takes the pointer once it is placed, and its words can be selected; it is
-   hidden, not only clear, while it waits, so nothing under a card not yet
-   shown loses the pointer to it. */
-
-.tooltip {
-  position: fixed;
-  z-index: var(--z-tooltip);
-  top: 0;
-  left: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--glyph-gap);
-  padding: var(--space-4) var(--row-inset);
-  border: 1px solid var(--tooltip-edge);
-  border-radius: 7px;
-  background: var(--tooltip-fill);
-  box-shadow: 0 4px 14px var(--shadow);
-  color: var(--tooltip-text);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 16px;
-  white-space: nowrap;
-  pointer-events: none;
-  animation:
-    tooltip-fade var(--duration-quick) var(--motion-exit) var(--hint-delay) both,
-    tooltip-grow var(--duration-fast) var(--spring-fast) var(--hint-delay) both;
+/* A hint is never part of the window's drag region, wherever it hangs. */
+.luke-tooltip {
   -webkit-app-region: no-drag;
 }
 
-/* A hint held inside the window however long its words: a web address
-   (`text-link.tsx`) may be wider than the window, and breaks where it must
-   rather than running past the edge. Note that a hint narrower than the
-   window never wraps, because its place keeps its whole width inside it. */
-.tooltip:not(.tooltip-card) {
-  max-width: calc(100vw - 12px); /* off-scale: twice tooltip.tsx's TOOLTIP_MARGIN */
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.tooltip[data-instant="true"] {
-  animation-delay: 0s;
-}
-
-/* A capture run zeroes the motion tokens on its stage, which a pill drawn
+/* A capture run zeroes the motion tokens on its stage, which a hint drawn
    at the body's end does not stand under, so it is held still here too. */
-body:has(.app-stage[data-capture="true"]) .tooltip {
+body:has(.app-stage[data-capture="true"]) .luke-tooltip {
   --duration-quick: 0s;
   --duration-fast: 0s;
   --duration-exit: 0s;
   --hint-delay: 0s;
 }
 
-/* Taken down once seen, it fades over `--duration-exit` (desktop.css's
-   `popup-leave`), held drawn and inert until it has; taken down while it
-   still waited, it was never seen, and plays nothing. */
-.tooltip[data-leaving="seen"] {
-  pointer-events: none;
-  animation: popup-leave var(--duration-exit) var(--motion-exit) forwards;
-  transition: none;
-}
-
-.tooltip[data-leaving="unseen"] {
-  visibility: hidden;
-  animation: none;
-}
-
-.tooltip-card {
-  pointer-events: auto;
-  cursor: default;
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.tooltip[data-placed="false"] {
-  visibility: hidden;
-}
-
-/* Grown from the edge facing the control, so it reads as hung from it. */
-.tooltip[data-side="below"] {
-  transform-origin: top center;
-}
-
-.tooltip[data-side="above"] {
-  transform-origin: bottom center;
-}
-
-.tooltip[data-side="end"] {
-  transform-origin: top left;
-}
-
-.tooltip[data-side="start"] {
-  transform-origin: top right;
-}
-
-@keyframes tooltip-fade {
-  from {
-    visibility: hidden;
-    opacity: 0;
-  }
-}
-
-@keyframes tooltip-grow {
-  from {
-    transform: scale(0.96);
-  }
-}
-
 /* The pill's chord, muted against its own dark fill rather than the window's. */
-.tooltip .shortcut {
-  --shortcut-ink: var(--tooltip-chord);
+.luke-tooltip .shortcut {
+  --shortcut-ink: var(--luke-color-tooltip-chord);
 }
 
 /* A row's own shortcut at its right end, shown while the row is hovered or

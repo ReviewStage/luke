@@ -1,0 +1,53 @@
+/* skeleton.css -- the loading blocks. A line is the words' height centred
+   in their line, so a column of blocks sits where the lines will; a control
+   is a control's box; a circle is a person's mark; a block fills its
+   container, whose box is the size of what it stands for. Only opacity moves, in
+   step across every block, and the loop answers `--loop-motion`. */
+
+@layer components {
+  .luke-skeleton {
+    display: block;
+    width: var(--luke-skeleton-width, 100%);
+    max-width: 100%;
+    height: 0.8em;
+    margin: calc((1lh - 0.8em) / 2) 0;
+    border-radius: 4px;
+    background: var(--luke-color-fill-strong);
+    /* An endless loop with no end to wait for, so its duration is a literal;
+       it holds still on --loop-motion with every other. */
+    animation: luke-skeleton-pulse 1500ms ease-in-out infinite;
+    animation-play-state: var(--loop-motion, running);
+  }
+
+  .luke-skeleton[data-shape="control"] {
+    height: var(--luke-control-height);
+    margin: 0;
+    border-radius: var(--luke-control-radius);
+  }
+
+  .luke-skeleton[data-shape="circle"] {
+    width: var(--luke-skeleton-width, var(--luke-control-height));
+    height: auto;
+    margin: 0;
+    aspect-ratio: 1;
+    border-radius: var(--luke-radius-full);
+  }
+
+  .luke-skeleton[data-shape="block"] {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    border-radius: var(--luke-control-radius);
+  }
+
+  @keyframes luke-skeleton-pulse {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+
+    50% {
+      opacity: 1;
+    }
+  }
+}

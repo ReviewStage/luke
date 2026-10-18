@@ -7,8 +7,8 @@ import { adoptShadowStyles } from "./inline-styles";
 /**
  * index.ts -- the diff bundle: a patch drawn by Pierre's diffs as every diff setting says, in the panel's colours.
  *
- * Built on its own as `diff-view.js` (`scripts/build.mjs`), an ES module
- * split into chunks, and loaded by the first diff shown, so the bundle every
+ * An entry of the renderer's build (`scripts/build.mjs`), imported by the
+ * first diff shown (`../bundle-loader.ts`), so the bundle every
  * window parses never carries Pierre or Shiki; each language's grammar and
  * each syntax theme is a chunk of its own, fetched the first time it is
  * drawn. Shiki colours the code in the theme chosen for each appearance,
@@ -42,11 +42,11 @@ import { adoptShadowStyles } from "./inline-styles";
 
 /** Each font's stack, ending in the window's own code type should the Mac lack it. */
 const FONT_STACK = {
-  [DIFF_FONT.SF_MONO]: "var(--font-mono)",
-  [DIFF_FONT.MENLO]: "Menlo, var(--font-mono)",
-  [DIFF_FONT.MONACO]: "Monaco, var(--font-mono)",
-  [DIFF_FONT.COURIER_NEW]: '"Courier New", var(--font-mono)',
-  [DIFF_FONT.ANDALE_MONO]: '"Andale Mono", var(--font-mono)',
+  [DIFF_FONT.SF_MONO]: "var(--luke-font-mono)",
+  [DIFF_FONT.MENLO]: "Menlo, var(--luke-font-mono)",
+  [DIFF_FONT.MONACO]: "Monaco, var(--luke-font-mono)",
+  [DIFF_FONT.COURIER_NEW]: '"Courier New", var(--luke-font-mono)',
+  [DIFF_FONT.ANDALE_MONO]: '"Andale Mono", var(--luke-font-mono)',
 } as const satisfies Record<DiffLook["font"], string>;
 
 /** Each line height as a ratio of the type's size, so a line grows with its type; the File tab's 1.6 at normal. */
@@ -185,6 +185,4 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
   };
 }
 
-const module: DiffViewModule = { mount };
-
-window.lukeDiffView = module;
+export const diffView: DiffViewModule = { mount };

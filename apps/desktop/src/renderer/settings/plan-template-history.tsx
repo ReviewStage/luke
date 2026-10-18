@@ -2,8 +2,8 @@ import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR, type PlanRevisionLine } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useEffect, useMemo, useRef } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import type { CallCardInput } from "../call/call-card";
@@ -102,7 +102,7 @@ export function TemplateVersionHistory({
   const { act } = useAct();
   const toast = useToast();
   const steps = useStepOverTemplate(history, onExit);
-  // The history's reads name a plan, and the template is the account's one, so the id they carry is no one's.
+  // The history's reads name a task, and the template is the account's one, so the id they carry is no one's.
   const source = useMemo(
     (): PlanHistorySource => ({
       readPage: (_template, before) =>

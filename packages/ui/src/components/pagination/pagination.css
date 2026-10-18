@@ -1,0 +1,57 @@
+/* pagination.css -- a Pagination's row: small square steps in the caption's
+   figures, lit under the pointer, the current page held in a ruled box, and
+   a step with nowhere to go dimmed in its place. */
+
+@layer components {
+  .luke-pagination {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-space-4);
+  }
+
+  /* Without numbers the two steps stand at either end of the row. */
+  .luke-pagination:not([data-numbered="true"]) {
+    justify-content: space-between;
+    gap: var(--luke-space-16);
+  }
+
+  /* Note that every item is as tall as the caption's line and its inset
+     either side, and at least as wide, with an edge whether or not it draws
+     one, so the held page's ruled box takes no more room than a link. */
+  .luke-pagination-item {
+    display: inline-flex;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    min-width: calc(var(--luke-type-caption-leading) + 2 * var(--luke-space-6));
+    height: calc(var(--luke-type-caption-leading) + 2 * var(--luke-space-6));
+    padding-inline: var(--luke-space-8);
+    border: 1px solid transparent;
+    border-radius: var(--luke-control-radius);
+    color: var(--luke-color-text-muted);
+    font-family: var(--luke-font-mono);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    text-decoration: none;
+    white-space: nowrap;
+    transition:
+      background-color var(--duration-hover) ease,
+      color var(--duration-hover) ease;
+  }
+
+  a.luke-pagination-item:hover {
+    background: var(--luke-color-fill-hover);
+    color: var(--luke-color-text);
+  }
+
+  .luke-pagination-item[aria-current="page"] {
+    border-color: var(--luke-color-border);
+    background: var(--luke-color-fill-hover);
+    color: var(--luke-color-text);
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  .luke-pagination-item[data-idle="true"] {
+    opacity: 0.4;
+  }
+}

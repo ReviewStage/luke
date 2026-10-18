@@ -3,14 +3,19 @@
  *
  * A command is offered by the control it belongs to, for as long as that
  * control is on screen and able: the sidebar toggle offers the sidebar's
- * chord, the open plan's toolbar its Copy and Delete. So whether a chord
+ * chord, the open task's toolbar its Copy and Delete. So whether a chord
  * answers is whether its control is there to answer it, and a chord nothing
  * offers is left to whatever else wants it. A menu-bar item reaches the same
  * offer, which is why the menu needs no state of its own.
+ *
+ * An overlay that holds the keyboard, a dialog's card or the command palette,
+ * holds off the menu bar's Back and Forward while it stands, as it holds off
+ * their chords, so a click on the menu or a mouse's back button (which a
+ * swipe hands the window the same way) leaves the page behind it alone.
  */
 
-import { useEffect, useLayoutEffect, useRef } from "react";
 import {
+  APP_COMMAND,
   APP_SHORTCUTS,
   type AppCommand,
   commandForKey,
@@ -18,12 +23,28 @@ import {
   type KeyedCommand,
   shortcutEditsText,
   shortcutLayered,
-} from "#shared/shortcuts";
+} from "@luke/settings/shortcuts";
+import { useEffect, useLayoutEffect, useRef } from "react";
+import { appPlatform } from "./app-platform";
 
 type CommandRun = { current: () => void };
 
 /** The offers standing for each command, the latest last: a remount's offer replaces the one it follows. */
 const offers = new Map<AppCommand, CommandRun[]>();
+
+/** The menu bar's commands an overlay standing holds off: the ones that would move the page behind it. */
+const HELD_UNDER_OVERLAY: ReadonlySet<AppCommand> = new Set([
+  APP_COMMAND.BACK,
+  APP_COMMAND.FORWARD,
+]);
+
+/** How many overlays holding the keyboard stand now that are no dialog: the command palette, while open. */
+let overlaysStanding = 0;
+
+/** Whether an overlay holds the keyboard now: a dialog's card, which every dialog marks modal, or an overlay held by {@link useOverlayHold}. */
+function overlayStands(): boolean {
+  return overlaysStanding > 0 || document.querySelector('[aria-modal="true"]') !== null;
+}
 
 /** The commands the keymap answers: every one but those whose key is the window's layered Escape. */
 const KEYED: readonly KeyedCommand[] = KEYED_COMMANDS.filter(
@@ -76,6 +97,17 @@ export function useAppCommand(command: AppCommand, run: (() => void) | undefined
   }, [command, offered]);
 }
 
+/** Holds off the menu bar's Back and Forward while `standing`: an overlay's that is no dialog, for as long as it holds the keyboard. */
+export function useOverlayHold(standing: boolean): void {
+  useEffect(() => {
+    if (!standing) return;
+    overlaysStanding += 1;
+    return () => {
+      overlaysStanding -= 1;
+    };
+  }, [standing]);
+}
+
 /**
  * The keymap, answering only while `enabled`: the window's content has the
  * keyboard, not a sheet over it. A chord is claimed only when an offer
@@ -106,7 +138,8 @@ export function useAppKeymap(enabled: boolean): void {
 export function useMenuCommands(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
-    return window.luke.onMenuCommand((command) => {
+    return appPlatform().onMenuCommand((command) => {
+      if (HELD_UNDER_OVERLAY.has(command) && overlayStands()) return;
       runAppCommand(command);
     });
   }, [enabled]);

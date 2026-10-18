@@ -1,4 +1,3 @@
-import { extname } from "node:path";
 import type { ShownCode, TaskFileWindow } from "@luke/features/task-wire";
 import type { CodeToken, TaskCode, TaskFileShown } from "@luke/features/tasks-view";
 import langBash from "@shikijs/langs/bash";
@@ -28,10 +27,10 @@ import { createHighlighterCoreSync, type HighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 
 /**
- * task-code.ts -- the code on screen during a planning call, coloured: the lines the service read from the plan's repository, as the window draws them.
+ * task-code.ts -- the code on screen during a task's call, coloured: the lines the service read from the task's repository, as the window draws them.
  *
- * Luke names code by place through the planning model's `show_code`, and the
- * service reads the lines from the planning session's checkout and sends
+ * Luke names code by place through the brain's `show_code`, and the
+ * service reads the lines from the brain session's checkout and sends
  * them whole (`ShownCode`); nothing is read from this Mac's disk. What is
  * done here is the colouring, which runs in this process rather than in the
  * window, because the window's content policy refuses WebAssembly and its
@@ -81,7 +80,7 @@ const LANGUAGE_BY_EXTENSION: ReadonlyMap<string, string> = new Map([
  * at with this many of the file on either side, or, for a file shown from
  * its top, its head. Note that the rest of the window is left here rather
  * than in the window, because colouring is what costs and the view
- * carrying every code shown on a plan is told to the window whole.
+ * carrying every code shown on a task is told to the window whole.
  */
 const CODE_EXCERPT_LINES = {
   CONTEXT: 3,
@@ -173,9 +172,16 @@ function colouredLines(language: string | undefined, lines: readonly string[]): 
   return tokens.slice(0, lines.length).map((line) => compactLine(line, foreground));
 }
 
-/** The language a file is coloured as, by its extension. */
+/**
+ * The language a file is coloured as, by its extension: what follows the last
+ * dot of its name, where that dot does not open the name. Note that the name is
+ * read after the last `/`, because a path the service sends is a repository's
+ * POSIX path, and a dot in a directory is no extension.
+ */
 function languageOfPath(path: string): string | undefined {
-  return LANGUAGE_BY_EXTENSION.get(extname(path).toLowerCase());
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? LANGUAGE_BY_EXTENSION.get(name.slice(dot).toLowerCase()) : undefined;
 }
 
 /**

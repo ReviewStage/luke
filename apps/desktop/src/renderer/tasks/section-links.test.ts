@@ -8,18 +8,21 @@ import {
   mentionMarkdown,
 } from "@luke/features/mention-link";
 import type { Task } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { DOCUMENT_TASK } from "#testing/document-task";
+import { onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { PlanBody, type SectionLinks } from "./plan-body";
 
 /**
- * A plan's sections' links on its own page: a mention of a section drawn as
+ * A task's sections' links on its own page: a mention of a section drawn as
  * the chip that opens it, one of a heading the plan no longer holds struck
- * through and opening the plan at its top, a section's ⋯ copying its link,
- * the title's ⋯ copying the plan's, an ask to show a section scrolling the document to it, and nothing a
+ * through and opening the task at its top, a section's ⋯ copying its link,
+ * the title's ⋯ copying the task's, an ask to show a section scrolling the document to it, and nothing a
  * mention names riding on an attribute. Mentions are read in the form
  * written before the link was settled as well as the settled one.
  * Synthetic plan.
@@ -27,7 +30,7 @@ import { PlanBody, type SectionLinks } from "./plan-body";
 
 const TASK_ID = DOCUMENT_TASK.id;
 
-/** The slug of the workspace the plan's links are written under. */
+/** The slug of the workspace the task's links are written under. */
 const WORKSPACE = "acme";
 
 const PLACE = { workspace: WORKSPACE, repository: "acme/relay" } as const;
@@ -51,26 +54,17 @@ const TASK: Task = {
 };
 
 /** A section's ⋯, as against the title's beside it. */
-const SECTION_MORE = '.plan-unit-more[aria-label="Section actions"]';
+const SECTION_MORE = '.plan-unit-more button[aria-label="Section actions"]';
 
 const roots: Root[] = [];
 const copied: string[] = [];
 
 beforeEach(() => {
   copied.length = 0;
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind !== ACT_KIND.WINDOW_COPY_TEXT) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-        }
-        copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
-    },
+  fakeAppBridge({
+    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
 });
 
 afterEach(() => {
@@ -79,7 +73,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The plan's page drawn with its sections' links, the mentions it was asked to open kept. */
+/** The task's page drawn with its sections' links, the mentions it was asked to open kept. */
 function drawn(links: Partial<SectionLinks> = {}) {
   const opened: Mention[] = [];
   const container = document.createElement("div");
@@ -130,7 +124,7 @@ test("a section's ⋯ copies the section's link, its bare address, as a teammate
   const rollout = [...container.querySelectorAll<HTMLElement>(".plan-unit-attributed")].find(
     (unit) => unit.textContent?.startsWith("Rollout"),
   );
-  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more");
+  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more button");
   assert.ok(more, "the Rollout section has a ⋯");
   act(() => more.click());
   const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
@@ -242,7 +236,7 @@ test("a section whose heading is formatted is copied as a link that is drawn as 
   ]);
 });
 
-/** The plan's page drawn editable, as a plan's own page is. */
+/** The task's page drawn editable, as a task's own page is, its editor's bundle not yet landed so that an editor opened is its host alone. */
 function drawnEditable(): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -250,12 +244,15 @@ function drawnEditable(): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(PlanBody, {
-        task: TASK,
-        live: false,
-        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-        sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
-      }),
+      onSideBundles(
+        unlandedBundles(),
+        createElement(PlanBody, {
+          task: TASK,
+          live: false,
+          onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+          sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
+        }),
+      ),
     ),
   );
   return container;
@@ -266,7 +263,7 @@ test("copying a section's link from its ⋯ opens no editor, as a click into its
   const rollout = [...container.querySelectorAll<HTMLElement>(".plan-unit-attributed")].find(
     (unit) => unit.textContent?.startsWith("Rollout"),
   );
-  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more");
+  const more = rollout?.querySelector<HTMLButtonElement>(".plan-unit-more button");
   assert.ok(more);
 
   act(() => more.click());
@@ -289,7 +286,7 @@ test("copying a section's link from its ⋯ opens no editor, as a click into its
 test("only the ⋯ beside the document's one Tab stop is a Tab stop", () => {
   const container = drawnEditable();
 
-  const stops = [...container.querySelectorAll<HTMLElement>(".plan-unit-more")].filter(
+  const stops = [...container.querySelectorAll<HTMLElement>(".plan-unit-more button")].filter(
     (more) => more.tabIndex === 0,
   );
 
@@ -363,17 +360,20 @@ test("a mention of a file as its page on GitHub opens its tab, at the lines it p
     },
   };
   const opened: [string, MentionLines | undefined][] = [];
+  const onGitHub: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, openGitHub: (url) => onGitHub.push(url) });
   const container = drawnFiles((path, lines) => opened.push([path, lines]), task);
 
   act(() => chipNamed(container, "session-store.ts").click());
   act(() => chipNamed(container, "session-store.ts:3").click());
-  // Another repository's file is no file of the plan's, but GitHub's own page, which opens no tab.
+  // Another repository's file is no file of the task's, but GitHub's own page, which opens there rather than in a tab.
   act(() => chipNamed(container, "other.ts").click());
 
   assert.deepEqual(opened, [
     ["apps/web/session-store.ts", undefined],
     ["apps/web/session-store.ts", { commit: "0123456", startLine: 3, endLine: 5 }],
   ]);
+  assert.deepEqual(onGitHub, ["https://github.com/acme/other/blob/HEAD/other.ts"]);
 });
 
 test("a heading the plan bears twice: a mention of the second opens the second, and each ⋯ copies its own", async () => {
@@ -464,7 +464,7 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
   assert.equal(container.querySelector(".plan-document-editor"), null);
 });
 
-/** The plan's page drawn as a plan's own page is, its title renamed and its versions opened, each kept. */
+/** The task's page drawn as a task's own page is, its title renamed and its versions opened, each kept. */
 function drawnTitled() {
   const renamed: string[] = [];
   const histories: (number | undefined)[] = [];

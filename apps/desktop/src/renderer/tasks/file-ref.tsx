@@ -1,7 +1,7 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
+import { HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
 import { fileFolder, fileName, fileRefText, lineRangeText } from "@luke/voice/code-pane-model";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { Tooltip } from "../tooltip";
 import { shownWhereRead } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
@@ -9,9 +9,9 @@ import { FileTypeIcon } from "./file-type-icon";
 /**
  * file-ref.tsx -- a file named anywhere in the window: its look as a row wears it, the card its tab hangs, and its mark, path, and lines as the one button that hangs that card and opens its tab.
  *
- * A file of the plan's repository is named in many places beside its own
+ * A file of the task's repository is named in many places beside its own
  * tab: a code card's head, an inbox item's code, the side panel's "+", the
- * plan's summary, ⌘K, and a `show_code` row in a transcript. Each wears
+ * task's summary, ⌘K, and a `show_code` row in a transcript. Each wears
  * the file's type icon, as the file tree draws it (`file-type-icon.tsx`),
  * before its name, says its lines one way (`lineRangeText`), and hangs the
  * file's tab's own card while the pointer rests on it: the file's whole
@@ -40,7 +40,7 @@ export function fileLook(path: string): FileLook {
   };
 }
 
-/** Where a file is read: the plan's repository, none before one is chosen, and the commit a tab is pinned to, none for the default branch's head. */
+/** Where a file is read: the task's repository, none before one is chosen, and the commit a tab is pinned to, none for the default branch's head. */
 export interface FileRead {
   readonly repository: string | null;
   readonly commit: string | undefined;
@@ -68,7 +68,7 @@ export function newestFileNote(
 
 /**
  * A file's card, its tab's and every place naming it, drawn from the parts
- * every hover card is (`hover-card.tsx`): the file's type icon and its
+ * every hover card is (`@luke/ui`'s `HoverCard`): the file's type icon and its
  * whole path, its repository under the path where the place names one, and
  * under them Luke's note on its lines, where the place knows one.
  */
@@ -84,8 +84,8 @@ export function FileCard({
 }): React.JSX.Element {
   return (
     <HoverCard data-tab-card="" data-file-card="">
-      <CardHead glyph={<FileTypeIcon name={fileName(path)} />} name={path} sub={repository} />
-      {note === undefined ? null : <CardNote>{note}</CardNote>}
+      <HoverCardHead glyph={<FileTypeIcon name={fileName(path)} />} name={path} sub={repository} />
+      {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
     </HoverCard>
   );
 }

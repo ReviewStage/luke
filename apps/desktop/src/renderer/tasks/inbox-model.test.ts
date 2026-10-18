@@ -217,6 +217,19 @@ test("an approval, a task, and an item asking nothing are answered by their pres
   });
 });
 
+test("files attached alone answer an item in the developer's own words, and travel apart from the answer", () => {
+  const files = [{ name: "trace.txt", mediaType: "text/plain", data: btoa("boom\n") }] as const;
+  assert.deepEqual(
+    inboxReply(item({ id: "question" }), { ...EMPTY_INBOX_DRAFT, attachments: files }),
+    {
+      reply: INBOX_REPLY.ANSWERED,
+    },
+  );
+  assert.deepEqual(inboxReply(QUEUE, { ...EMPTY_INBOX_DRAFT, attachments: files }), {
+    reply: INBOX_REPLY.ANSWERED,
+  });
+});
+
 test("a settled item says what its answerer did: the developer's pick, a form's values a line each, and their note, or the agent taking it back and why; an open one is not settled", () => {
   assert.equal(settlementOf(QUEUE), undefined);
   assert.deepEqual(
@@ -228,7 +241,7 @@ test("a settled item says what its answerer did: the developer's pick, a form's 
         answer: { reply: INBOX_REPLY.CHOSE, choices: ["Redis", "Postgres"], note: "Fine." },
       }),
     ),
-    { by: SETTLED_BY.DEVELOPER, did: "chose Redis, Postgres", words: "Fine." },
+    { by: SETTLED_BY.DEVELOPER, did: "chose Redis, Postgres", note: "Fine." },
   );
   assert.deepEqual(
     settlementOf(
@@ -248,7 +261,7 @@ test("a settled item says what its answerer did: the developer's pick, a form's 
     {
       by: SETTLED_BY.DEVELOPER,
       did: "filled it in",
-      words: "Port: 587\nVerify certificate: yes",
+      values: "Port: 587\nVerify certificate: yes",
     },
   );
   assert.deepEqual(
@@ -317,7 +330,7 @@ test("a settled choice keeps every option the agent offered with the developer's
   );
 });
 
-/** A plan of the account's, holding inbox items. */
+/** A task of the account's, holding inbox items. */
 function task(id: string, name: string): TaskSummary {
   return {
     id,
@@ -343,7 +356,7 @@ const TASKS = [
   { holder: taskHolder(INVITES), items: [item({ id: "expiry", updatedAt: 40 })] },
 ];
 
-/** Each group of a list as its plan's name, or its person's, You for the reader's own, and its items' ids, or the one run's ids. */
+/** Each group of a list as its task's name, or its person's, You for the reader's own, and its items' ids, or the one run's ids. */
 function drawn(view: InboxListView): readonly (string | readonly [string, readonly string[]])[] {
   if (view.grouping === INBOX_GROUPING.TASK) {
     return view.groups.map(
@@ -646,7 +659,7 @@ test("a code block near the file's top reads from its first line, a file that en
   );
 });
 
-/** An item of an agent with no plan as main's read lists it. */
+/** An item of an agent with no task as main's read lists it. */
 function waitingTaskless(
   agentId: string,
   patch: Partial<AppInboxTasklessItem> = {},

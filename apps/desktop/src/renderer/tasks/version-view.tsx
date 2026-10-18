@@ -1,20 +1,24 @@
-import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { MarkdownMessage } from "../markdown-message";
 import {
+  BUTTON_VARIANT,
+  Button,
   ConfirmDialog,
   DIALOG_TONE,
   type DialogConfirm,
   type DialogQuestion,
+  ErrorState,
+  Skeleton,
+  SkeletonRegion,
   useConfirmDialog,
-} from "../settings/confirm-dialog";
-import { Skeleton, SkeletonRegion } from "../skeleton";
+} from "@luke/ui";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { MarkdownMessage } from "../markdown-message";
 import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast";
 import { Tooltip } from "../tooltip";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model";
-import { type MentionedTask, useMentionLink } from "./plan-mentions";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
+import { type MentionedTask, useMentionLink } from "./task-mentions";
 import { dayAndTimeText, momentText } from "./task-time";
-import { PlanTitle } from "./task-title";
+import { TaskTitle } from "./task-title";
 import { useOpenLink } from "./use-open-link";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 
@@ -25,7 +29,7 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * the way Google Docs shows a version in the page rather than in its narrow
  * list. Its bar names when the version was saved and offers Restore this
  * version, which the newest version, the plan as it stands, holds unavailable
- * with a hint saying why: `aria-disabled` rather than `disabled`, since a
+ * with a hint saying why: unavailable but still focusable, since a
  * disabled button takes no pointer and no focus, so its hint could never
  * show. The version is drawn whole against the version before it, which
  * shows what that revision changed: words written in wear the accent and
@@ -36,7 +40,7 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * A version is drawn under the plan's name, as
  * the plan's own tab draws it. The first version has nothing before it, so
  * it is drawn with nothing marked. A section opened from its revision's
- * list is drawn alone, without the plan's name over it, marked as the whole
+ * list is drawn alone, without the task's name over it, marked as the whole
  * version marks it, and a version still being read stands as
  * quiet blocks in the page's shape (`skeleton.tsx`). Restoring asks first,
  * in the window's dialog with the accent rather than red, since a restore is
@@ -84,7 +88,7 @@ const CHANGE_CLASS = {
   [VERSION_CHANGE.CHANGED]: " version-changed",
 } as const;
 
-/** The version's text under the plan's name, each unit drawn as it stands against what it is compared with. */
+/** The version's text under the task's name, each unit drawn as it stands against what it is compared with. */
 function VersionBody({
   diff,
   title,
@@ -102,7 +106,7 @@ function VersionBody({
   const picture = usePlanPictureDrawer();
   return (
     <div className="plan-body">
-      {title === undefined || section !== undefined ? null : <PlanTitle name={title} />}
+      {title === undefined || section !== undefined ? null : <TaskTitle name={title} />}
       {units.map((unit, at) => (
         <MarkdownMessage
           // A unit's heading may stand twice, struck and written again, so its place keys it.
@@ -124,17 +128,21 @@ function VersionBody({
 /** The version's page as quiet blocks while it is read: headings over their lines, in the body's own type. */
 export function VersionSkeleton(): React.JSX.Element {
   return (
-    <SkeletonRegion label="Reading the version…" className="plan-body">
-      {PAGE_SKELETON.map((section) => (
-        <div key={section.heading} className="version-skeleton-section">
-          <Skeleton width={section.heading} className="version-skeleton-heading" />
-          {section.lines.map((width, at) => (
-            // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
-            <Skeleton key={at} width={width} />
-          ))}
-        </div>
-      ))}
-    </SkeletonRegion>
+    <div className="plan-body">
+      <SkeletonRegion label="Reading the version…">
+        {PAGE_SKELETON.map((section) => (
+          <div key={section.heading} className="version-skeleton-section">
+            <div className="version-skeleton-heading">
+              <Skeleton width={section.heading} />
+            </div>
+            {section.lines.map((width, at) => (
+              // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
+              <Skeleton key={at} width={width} />
+            ))}
+          </div>
+        ))}
+      </SkeletonRegion>
+    </div>
   );
 }
 
@@ -154,9 +162,9 @@ function VersionContent({
   if (read.kind === HISTORY_READ.READING) return <VersionSkeleton />;
   if (read.kind === HISTORY_READ.FAILED) {
     return (
-      <p className="version-note" role="alert">
-        The version could not be read.
-      </p>
+      <div className="version-note">
+        <ErrorState>The version could not be read.</ErrorState>
+      </div>
     );
   }
   const diff = versionDiff(read.previous, read.document);
@@ -253,15 +261,15 @@ export function VersionView({
   viewing: ViewedVersion;
   /** The restore's question, held by the history around the page (`useVersionRestore`). */
   restore: DialogConfirm;
-  /** Whether the version may be restored: not while the plan is archived. */
+  /** Whether the version may be restored: not while the task is archived. */
   restorable?: boolean;
-  /** The plan's name, which every version is drawn under. */
+  /** The task's name, which every version is drawn under. */
   title?: string | undefined;
   /** What the versions are of, as the restore's question names it. */
   noun?: string;
-  /** The one unit of the version to draw, alone and without the plan's title, as a section opened from its revision's list; the whole version without one. */
+  /** The one unit of the version to draw, alone and without the task's title, as a section opened from its revision's list; the whole version without one. */
   section?: number | undefined;
-  /** The plan the versions are of, which their mentions are read against; none for the account's template. */
+  /** The task the versions are of, which their mentions are read against; none for the account's template. */
   task?: MentionedTask | undefined;
 }): React.JSX.Element {
   const { line } = viewing;
@@ -280,14 +288,14 @@ export function VersionView({
         {restorable ? (
           <div className="desktop-toolbar-actions">
             <Tooltip label={viewing.current ? CURRENT_HINT : undefined}>
-              <button
-                type="button"
-                className="primary-button"
-                aria-disabled={viewing.current ? "true" : undefined}
-                onClick={viewing.current ? undefined : restore.ask}
+              <Button
+                variant={BUTTON_VARIANT.PRIMARY}
+                disabled={viewing.current}
+                focusableWhenDisabled
+                onClick={restore.ask}
               >
                 Restore this version
-              </button>
+              </Button>
             </Tooltip>
           </div>
         ) : null}

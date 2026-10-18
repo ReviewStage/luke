@@ -8,7 +8,9 @@
           "enum": [
             "image/png",
             "image/jpeg",
-            "image/webp"
+            "image/webp",
+            "application/pdf",
+            "text/plain"
           ]
         },
         "base64": {

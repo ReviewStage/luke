@@ -40,13 +40,13 @@ import type { BrainTurnTrigger } from "./turn.js";
 export const BRAIN_RUN_EVENT = {
   /** The run began a step slow enough to be worth telling the developer about; fired once per run. */
   SLOW_STEP: "slow_step",
-  /** A planning run queued one question for the voice to put to the developer when it reaches it; told as the call is journaled, before the run ends. */
+  /** A brain run queued one question for the voice to put to the developer when it reaches it; told as the call is journaled, before the run ends. */
   QUESTION_QUEUED: "question_queued",
-  /** A planning run took back a question it queued that an answer made moot, by its words; told as the call is journaled. */
+  /** A brain run took back a question it queued that an answer made moot, by its words; told as the call is journaled. */
   QUESTION_WITHDRAWN: "question_withdrawn",
-  /** A planning run put code of the plan's repository on the developer's screen, with its lines; told once the call has read them, before the run ends. */
+  /** A brain run put code of the task's repository on the developer's screen, with its lines; told once the call has read them, before the run ends. */
   CODE_SHOWN: "code_shown",
-  /** A planning run asked to end the call, the developer having said they are done; told once per run, as the call is journaled. */
+  /** A brain run asked to end the call, the developer having said they are done; told once per run, as the call is journaled. */
   CALL_ENDING: "call_ending",
   /** Every write the run has dispatched by now has its result journaled, so the sentences after it describe nothing still uncertain; a run that has only read tells it at its first words. */
   ACTIONS_SETTLED: "actions_settled",
@@ -74,7 +74,7 @@ export const BRAIN_RUN_EVENT = {
   TURN_ENDED: "turn_ended",
 } as const;
 
-/** The kinds of step that count as slow: a whole transcript read, a write the provider carries, or a planning call's look into its repository. */
+/** The kinds of step that count as slow: a whole transcript read, a write the provider carries, or a task call's look into its repository. */
 export const SLOW_STEP_KIND = {
   TRANSCRIPT_READ: "transcript_read",
   PROVIDER_WRITE: "provider_write",

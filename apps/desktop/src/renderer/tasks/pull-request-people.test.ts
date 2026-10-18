@@ -17,6 +17,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { MemberDirectory } from "../member-directory";
@@ -86,17 +87,13 @@ const PULL_REQUEST = {
 let root: Root | undefined;
 
 beforeEach(() => {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act) =>
-        Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: [CHARLES] }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." },
-        ),
-    },
+  fakeAppBridge({
+    act: (request: Act) =>
+      Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: [CHARLES] }
+          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." },
+      ),
   });
 });
 
@@ -186,7 +183,7 @@ test("the Changes tab says who opened the pull request, its reviewers by where e
     "Luke's own App's bot is an App's bot on GitHub, as any other is",
   );
   hover(opener);
-  const opened = document.querySelector('.tooltip-card [data-actor-card="github"]');
+  const opened = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');
   assert.match(opened?.textContent ?? "", /luke-agent.*GitHub app/u);
 
   const reviewers =
@@ -207,7 +204,7 @@ test("the Changes tab says who opened the pull request, its reviewers by where e
     ],
   );
   hover(faces[1] ?? assert.fail("octocat's face"));
-  const card = document.querySelector('.tooltip-card [data-actor-card="github"]');
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');
   assert.match(card?.textContent ?? "", /@octocat.*GitHub user.*Not in this workspace/u);
 
   const commits =
@@ -326,7 +323,7 @@ test("reviewers past the pile's last face are counted, and the count hangs a car
   assert.equal(more.getAttribute("aria-label"), "reviewer5 · Changes requested");
   hover(more);
   const rest = [
-    ...document.querySelectorAll('.tooltip-card [data-actor-card="more"] .actor-more-row'),
+    ...document.querySelectorAll('.luke-tooltip-card [data-actor-card="more"] .actor-more-row'),
   ];
   assert.deepEqual(
     rest.map((row) => [
@@ -355,7 +352,9 @@ test("the count's card naming many reviewers scrolls within itself and stands, a
     card.querySelector('[aria-label="Reviewers"] .actor-stack-more') ??
       assert.fail("the rest are counted"),
   );
-  const list = document.querySelector('.tooltip-card [data-actor-card="more"] .actor-more-list');
+  const list = document.querySelector(
+    '.luke-tooltip-card [data-actor-card="more"] .actor-more-list',
+  );
   assert.equal(list?.children.length, 45);
   act(() => {
     list?.dispatchEvent(new Event("scroll"));
@@ -368,7 +367,7 @@ test("the count's card naming many reviewers scrolls within itself and stands, a
     document.dispatchEvent(new Event("scroll"));
   });
   assert.equal(
-    document.querySelector('.tooltip-card:not([data-leaving]) [data-actor-card="more"]'),
+    document.querySelector('.luke-tooltip-card:not([data-leaving]) [data-actor-card="more"]'),
     null,
     "the window scrolling takes it down",
   );
@@ -399,14 +398,18 @@ test("the count's card hung from a Changes card that itself hangs over its tab s
   );
   hover(tab.querySelector("button") ?? assert.fail("the tab stands"));
   hover(
-    document.querySelector('.tooltip-card [aria-label="Reviewers"] .actor-stack-more') ??
+    document.querySelector('.luke-tooltip-card [aria-label="Reviewers"] .actor-stack-more') ??
       assert.fail("the Changes card counts the rest"),
   );
-  const list = document.querySelector('.tooltip-card [data-actor-card="more"] .actor-more-list');
+  const list = document.querySelector(
+    '.luke-tooltip-card [data-actor-card="more"] .actor-more-list',
+  );
   assert.ok(list, "the count's card hangs over the Changes card");
   act(() => {
     list.dispatchEvent(new Event("scroll"));
   });
-  assert.ok(document.querySelector('.tooltip-card:not([data-leaving]) [data-actor-card="more"]'));
-  assert.ok(document.querySelector(".tooltip-card:not([data-leaving]) [data-tab-card]"));
+  assert.ok(
+    document.querySelector('.luke-tooltip-card:not([data-leaving]) [data-actor-card="more"]'),
+  );
+  assert.ok(document.querySelector(".luke-tooltip-card:not([data-leaving]) [data-tab-card]"));
 });

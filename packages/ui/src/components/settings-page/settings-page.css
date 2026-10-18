@@ -1,0 +1,71 @@
+/* settings-page.css -- a settings page: a column at its measure, inset from
+   the page's edges, scrolling inside them, with the title's line above the
+   sections and a section's gap between each and the next. The sections'
+   own heading and card are theirs (`settings-section.css`). */
+
+@layer components {
+  /* Note that the page is its own container, and its inset is its column's,
+     because the contract's 480px is the width the page's content stands in,
+     inside the scroll bar's gutter, and a container query reads its
+     container's content box. The scroll bar takes its room
+     on every page, so the column never slides when one page scrolls and the
+     next does not. */
+  .luke-settings-page {
+    --luke-settings-page-measure: var(--luke-settings-measure);
+    container: luke-settings-page / inline-size;
+    box-sizing: border-box;
+    block-size: 100%;
+    min-block-size: 0;
+    min-width: 0;
+    overflow-x: clip;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    /* A control a search lands on scrolls to the inset's line, not the edge. */
+    scroll-padding-block: var(--luke-page-inset);
+  }
+
+  .luke-settings-page-column {
+    box-sizing: content-box;
+    max-width: var(--luke-settings-page-measure);
+    margin: 0 auto;
+    padding: var(--luke-page-inset);
+  }
+
+  /* The title and the page's actions on one line, the actions dropping
+     below the title when both do not fit. */
+  .luke-settings-page-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--luke-control-gap);
+    margin-bottom: var(--luke-space-24);
+  }
+
+  .luke-settings-page-head > .luke-text {
+    min-width: 0;
+  }
+
+  .luke-settings-page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--luke-control-gap);
+  }
+
+  .luke-settings-page-sections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-settings-section-gap);
+    min-width: 0;
+  }
+
+  /* A container query cannot read a custom property, so the contract's
+     width is written here (`tokens/profiles.css`). */
+  @container luke-settings-page (max-width: 479px) {
+    .luke-settings-page-column {
+      padding: var(--luke-page-inset-narrow);
+    }
+  }
+}

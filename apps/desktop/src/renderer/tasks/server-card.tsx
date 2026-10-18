@@ -2,7 +2,7 @@ import type { IntegrationTool } from "@luke/features/integration-health";
 import { byName } from "@luke/features/integration-tool-model";
 import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import { moreText } from "@luke/features/task-agents-model";
-import { ProviderMark } from "@luke/ui";
+import { HoverCard, HoverCardNote, HoverCardRule, ProviderMark, SwitchMark } from "@luke/ui";
 import {
   SERVER_HANDED,
   SERVER_ROW,
@@ -11,10 +11,8 @@ import {
   serverMentionNote,
 } from "@luke/ui/agent-servers-model";
 import { createContext, type ReactNode, useContext } from "react";
-import { CardNote, CardRule, HoverCard } from "../hover-card";
 import { useIntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolList } from "../integration-tool-list";
-import { Switch } from "../switch";
 import { ServerRowWords, useServerRows } from "./agent-servers";
 
 /**
@@ -148,16 +146,16 @@ export function ServerCard({
         <ServerRowWords row={row} />
         {place !== undefined && row.kind === SERVER_ROW.SWITCH ? (
           <span className="agent-servers-end">
-            <Switch checked={row.on} />
+            <SwitchMark checked={row.on} />
           </span>
         ) : null}
       </div>
-      {note === undefined ? null : <CardNote>{note}</CardNote>}
+      {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
       {tools.length === 0 ? null : (
         <>
-          <CardRule />
+          <HoverCardRule />
           <IntegrationToolList server={row.name} tools={tools} tokens={[]} current={undefined} />
-          {more === undefined ? null : <CardNote>{more}</CardNote>}
+          {more === undefined ? null : <HoverCardNote>{more}</HoverCardNote>}
         </>
       )}
     </HoverCard>

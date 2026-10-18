@@ -123,6 +123,103 @@
             "action"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "submit-review"
+              ]
+            },
+            "event": {
+              "type": "string",
+              "enum": [
+                "comment",
+                "approve",
+                "request-changes"
+              ]
+            },
+            "body": {
+              "type": "string",
+              "maxLength": 65536
+            }
+          },
+          "required": [
+            "action",
+            "event",
+            "body"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "reply-to-thread"
+              ]
+            },
+            "threadId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "body": {
+              "type": "string",
+              "maxLength": 65536
+            }
+          },
+          "required": [
+            "action",
+            "threadId",
+            "body"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "resolve-thread"
+              ]
+            },
+            "threadId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "required": [
+            "action",
+            "threadId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "unresolve-thread"
+              ]
+            },
+            "threadId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "required": [
+            "action",
+            "threadId"
+          ],
+          "additionalProperties": false
         }
       ]
     }

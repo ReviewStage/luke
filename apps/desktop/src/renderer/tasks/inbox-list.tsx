@@ -1,7 +1,17 @@
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { DocumentIcon } from "@luke/ui";
+import {
+  DocumentIcon,
+  EmptyState,
+  IconButton,
+  LIST_ROW_CURRENT,
+  ListRow,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
+  useMenu,
+} from "@luke/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -17,11 +27,11 @@ import {
   SlidersHorizontalIcon,
   UsersIcon,
 } from "lucide-react";
-import { useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { useAutomation } from "../automation-directory";
 import { useCopyLinkItem } from "../copy-link-item";
-import { ActionMenu, type MenuAction, useActionMenu } from "../desktop/action-menu";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
 import {
   INBOX_LIST_WIDTH,
@@ -32,11 +42,15 @@ import {
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
-import { EmptyState } from "../empty-state";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
-import { INBOX_COLUMNS, type InboxColumnsShown } from "./inbox-columns";
+import {
+  INBOX_COLUMNS,
+  type InboxColumnsShown,
+  type InboxRowPresses,
+  needsYouButton,
+} from "./inbox-columns";
 import {
   holderKey,
   holderName,
@@ -57,16 +71,16 @@ import { useMinute } from "./task-time";
 import { cardTitle } from "./tool-call-model";
 
 /**
- * inbox-list.tsx -- the Inbox's list of items: one row each, under its plan's group header or in one run, with what the list shows and how at its head.
+ * inbox-list.tsx -- the Inbox's list of items: one row each, under its task's group header or in one run, with what the list shows and how at its head.
  *
  * The list is drawn from the sidebar's own pieces, on the Inbox's own ground, so it reads as the
- * sidebar does. A plan's items stand under the sidebar's own group header
- * (`sidebar-group-header.tsx`), the plan's glyph giving way to its chevron
+ * sidebar does. A task's items stand under the sidebar's own group header
+ * (`sidebar-group-header.tsx`), the task's glyph giving way to its chevron
  * under the pointer, a press folding the group, and each fold kept across
  * launches as a sidebar group's is; an automation's agents stand under its
  * clock tile, which hangs its card. An item is a sidebar row: the tile of
- * the agent that posted it (`actor-ref.tsx`), as the plan's summary or
- * main's read of an agent with no plan names the agent, its title, and how
+ * the agent that posted it (`actor-ref.tsx`), as the task's summary or
+ * main's read of an agent with no task names the agent, its title, and how
  * long ago it last changed, and before its time the face of the teammate
  * whose agent asks it, as the sidebar marks a teammate's task, the reader's
  * own wearing none; a press chooses it, for the pane beside the
@@ -79,9 +93,9 @@ import { cardTitle } from "./tool-call-model";
  * filtered or not; a teammate's open item waits on the teammate, in the
  * body's weight with a hollow dot in the blue's place, and any member may
  * still answer it; an answered one is settled, in the body's weight with
- * no dot. Only an item waiting on the developer wears the dot: a plan or a
+ * no dot. Only an item waiting on the developer wears the dot: a task or a
  * tab with something unseen on it is unread, not waiting, and wears the
- * weight alone. A folded plan
+ * weight alone. A folded task
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers two
  * buttons: Needs you, pressed while the list holds only what needs the
@@ -110,6 +124,18 @@ const ITEM_ACTIONS = "Inbox item actions";
 
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
+
+/** What the list's placeholder rows say to a reader while its items are first read. */
+const READING_ITEMS = "Reading your inbox…";
+
+/** How wide each placeholder row's title stands, as a share of its line, so the rows read as titles of their own. */
+const SKELETON_TITLES = ["68%", "52%", "74%", "46%", "60%"] as const;
+
+/** How wide a placeholder row's time stands, as wide as a short "2h". */
+const SKELETON_TIME = "20px";
+
+/** How wide a placeholder row's mark stands, an agent's tile at its inline size (`.actor-mark`). */
+const SKELETON_MARK = "16px";
 
 /** What a press on Needs you does, as its tooltip says: list only what needs the developer, or everything again. */
 const NEEDS_YOU_PRESS = {
@@ -151,7 +177,7 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
   return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
 }
 
-/** The agent that posted an item as its holder names it: the plan's summary's line, or main's line for an agent with no plan; none where neither holds it. */
+/** The agent that posted an item as its holder names it: the task's summary's line, or main's line for an agent with no task; none where neither holds it. */
 function itemSubject(
   holder: InboxHolder,
   agentId: string,
@@ -202,12 +228,13 @@ export function ItemMark({
 }
 
 /**
- * One item as a sidebar row: the agent's mark, the title, and how long ago it
+ * One item as a `ListRow`: the agent's mark, the title, and how long ago it
  * changed, a teammate's face before the time where the item is theirs and
- * `face` allows it; one that needs the developer in the unread weight with a
- * dot past its time, and a teammate's open one a hollow dot. The home page's
- * Needs you names the item's plan after its title, in `context`, since its
- * rows stand under no plan's header, as a person's group does. Its right-click offers
+ * `face` allows it; one that needs the developer unread, with a dot past its
+ * time, and a teammate's open one a hollow dot. The title hangs in the
+ * window's pill, since a narrow list cuts it short. The home page's Inbox
+ * names the item's plan at the row's end, in `context`, since its rows stand
+ * under no plan's header, as a person's group does. Its right-click offers
  * Copy link, the item's link under the task or the agent that holds it, where
  * the list hands down a workspace to write it under.
  */
@@ -219,6 +246,7 @@ export function InboxItemRow({
   readerId,
   context,
   face = true,
+  ref,
   onChoose,
 }: {
   listed: InboxListed;
@@ -230,6 +258,8 @@ export function InboxItemRow({
   context?: string;
   /** Whether a teammate's item wears their face, which a person's group header says instead. */
   face?: boolean;
+  /** Handed the row's press, by which the list finds the row of an item. */
+  ref?: React.RefCallback<HTMLElement> | undefined;
   onChoose: (listed: InboxListed) => void;
 }): React.JSX.Element {
   const { holder, item } = listed;
@@ -241,61 +271,57 @@ export function InboxItemRow({
     ? undefined
     : personActor(item.startedBy, directory.members, reader, directory.former);
   const waitsOnTeammate = starter !== undefined && item.status === INBOX_STATUS.OPEN;
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()(
     holder.kind === INBOX_HOLDER.TASK
       ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.task.id, itemId: item.id }
       : { kind: LINK_PLACE.INBOX_ITEM, agentId: item.agentId, itemId: item.id },
   );
+  const press = useRef<HTMLElement | null>(null);
+  const hold = useCallback(
+    (element: HTMLElement | null) => {
+      press.current = element;
+      ref?.(element);
+    },
+    [ref],
+  );
   return (
-    <li className="sidebar-task-item inbox-row">
-      <Tooltip label={title}>
-        <button
-          type="button"
-          className="sidebar-task"
-          aria-current={chosen ? "page" : undefined}
-          data-unread={String(needsYou)}
-          data-item-id={item.id}
-          onClick={() => onChoose(listed)}
-          onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
-        >
-          <span className="sidebar-task-line">
-            <span className="inbox-row-mark">
-              <ItemMark
-                holder={holder}
-                agentId={item.agentId}
-                models={models}
-                readerId={readerId}
-              />
-            </span>
-            <span className="sidebar-task-name">{title}</span>
-            {context === undefined ? null : <span className="home-row-context">{context}</span>}
-            {starter === undefined || !face ? (
-              <RelativeTime
-                className="sidebar-task-time"
-                at={item.updatedAt}
-                now={now}
-                hint={false}
-              />
-            ) : (
-              // Note that the face stands in the time's own box, as a sidebar row's does, so it sits beside the time rather than the title.
-              <span className="sidebar-task-time">
-                <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
-                <RelativeTime at={item.updatedAt} now={now} hint={false} />
-              </span>
-            )}
-            {needsYou ? (
-              <span className="inbox-row-dot">
-                <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
-              </span>
-            ) : waitsOnTeammate ? (
-              <span className="inbox-row-dot" data-hollow="true">
-                <span className="visually-hidden">{waitingOn(starter)}</span>
-              </span>
-            ) : null}
+    <>
+      <ListRow
+        ref={hold}
+        leading={
+          <span className="inbox-row-mark">
+            <ItemMark holder={holder} agentId={item.agentId} models={models} readerId={readerId} />
           </span>
-        </button>
-      </Tooltip>
+        }
+        title={title}
+        meta={
+          <span className="home-row-meta">
+            {context === undefined ? null : <span className="home-row-context">{context}</span>}
+            {starter === undefined || !face ? null : (
+              <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
+            )}
+            <RelativeTime at={item.updatedAt} now={now} hint={false} />
+            {/* Note that the dot's place stands on every row, so the times line up whether a row wears one or not. */}
+            <span className="inbox-row-dot-place">
+              {needsYou ? (
+                <span className="inbox-row-dot">
+                  <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+                </span>
+              ) : waitsOnTeammate ? (
+                <span className="inbox-row-dot" data-hollow="true">
+                  <span className="visually-hidden">{waitingOn(starter)}</span>
+                </span>
+              ) : null}
+            </span>
+          </span>
+        }
+        current={chosen ? LIST_ROW_CURRENT.PAGE : undefined}
+        unread={needsYou}
+        hint={{ Hint: Tooltip, label: title }}
+        onPress={() => onChoose(listed)}
+        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu(press)}
+      />
       {menu.drawn === undefined || copyLink === undefined ? null : (
         <ActionMenu
           label={ITEM_ACTIONS}
@@ -304,12 +330,12 @@ export function InboxItemRow({
           onClose={menu.close}
         />
       )}
-    </li>
+    </>
   );
 }
 
 /**
- * A holder's group header: a plan's document glyph and name; an
+ * A holder's group header: a task's document glyph and name; an
  * automation's clock tile, wearing how its last run went and hanging its
  * card where the window reads the automation; and the Factory's glyph, the
  * sidebar's row listing every agent, for the agents no automation names,
@@ -407,7 +433,7 @@ function ViewOptions({
   grouping: InboxGrouping;
   onGrouping: (grouping: InboxGrouping) => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const choices: MenuAction[] = [
     {
       label: "Group by task",
@@ -431,9 +457,7 @@ function ViewOptions({
   return (
     <>
       <Tooltip label={VIEW_OPTIONS}>
-        <button type="button" className="icon-button" aria-label={VIEW_OPTIONS} {...menu.trigger()}>
-          <SlidersHorizontalIcon className="icon-button-glyph" />
-        </button>
+        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
@@ -459,19 +483,17 @@ function NeedsYouOnly({
 }): React.JSX.Element {
   return (
     <Tooltip label={waitingOnly ? NEEDS_YOU_PRESS.ALL : NEEDS_YOU_PRESS.ONLY}>
-      <button
-        type="button"
-        className="icon-button inbox-needs-you-only"
-        aria-label={NEEDS_YOU.LABEL}
-        aria-pressed={waitingOnly}
-        data-waiting={String(waiting)}
+      <IconButton
+        icon={
+          <InboxIcon className="inbox-needs-you-glyph" data-waiting={String(waiting)}>
+            {/* Note that the dot's place and size are desktop.css's, beside the cut it stands in. */}
+            {waiting ? <circle className="inbox-needs-you-dot" /> : null}
+          </InboxIcon>
+        }
+        label={NEEDS_YOU.LABEL}
+        pressed={waitingOnly}
         onClick={() => onWaitingOnly(!waitingOnly)}
-      >
-        <InboxIcon className="icon-button-glyph">
-          {/* Note that the dot's place and size are desktop.css's, beside the cut it stands in. */}
-          {waiting ? <circle className="inbox-needs-you-dot" /> : null}
-        </InboxIcon>
-      </button>
+      />
     </Tooltip>
   );
 }
@@ -489,21 +511,39 @@ export function NeedsYouEmpty({
     <EmptyState
       icon={<InboxIcon />}
       title={NEEDS_YOU.NONE}
-      action={
-        <button
-          type="button"
-          className="toolbar-button"
-          onClick={() => {
-            onList();
-            needsYou.onWaitingOnly(false);
-          }}
-        >
-          {NEEDS_YOU_PRESS.ALL}
-        </button>
-      }
+      action={{
+        label: NEEDS_YOU_PRESS.ALL,
+        onClick: () => {
+          onList();
+          needsYou.onWaitingOnly(false);
+        },
+      }}
     >
       {NEEDS_YOU.ANSWERED}
     </EmptyState>
+  );
+}
+
+/**
+ * The list while its items are first read: rows in an item's own row, a
+ * block where its agent's tile, its title, and its time will stand, so the
+ * items land where the blocks stood rather than a lone ring in the list's
+ * corner. The rows open nothing and the region says what is being read.
+ */
+export function InboxListSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label={READING_ITEMS}>
+      <ul className="sidebar-tasks">
+        {SKELETON_TITLES.map((width) => (
+          <ListRow
+            key={width}
+            leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />}
+            title={<Skeleton width={width} />}
+            meta={<Skeleton width={SKELETON_TIME} />}
+          />
+        ))}
+      </ul>
+    </SkeletonRegion>
   );
 }
 
@@ -565,24 +605,22 @@ interface RowFocus {
  * out. Note that a removed row fires no blur, so the row last focused is
  * remembered and looked for after every render.
  */
-function useRowFocusKept(): RowFocus {
+function useRowFocusKept(rows: InboxRowPresses): RowFocus {
   const ref = useRef<HTMLElement | null>(null);
   const focusedRow = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
     const list = ref.current;
     const row = focusedRow.current;
     if (list === null || row === undefined || list.hidden) return;
-    const rows = list.querySelectorAll<HTMLElement>("[data-item-id]");
-    if ([...rows].some((each) => each.dataset.itemId === row)) return;
+    if (rows.find(row) !== undefined) return;
     focusedRow.current = undefined;
     if (document.activeElement !== null && document.activeElement !== document.body) return;
-    list.querySelector<HTMLElement>(".inbox-needs-you-only")?.focus();
+    needsYouButton(list)?.focus();
   });
   return {
     ref,
     onFocus: (event) => {
-      focusedRow.current =
-        event.target instanceof HTMLElement ? event.target.dataset.itemId : undefined;
+      focusedRow.current = rows.itemOf(event.target);
     },
     onBlur: () => {
       focusedRow.current = undefined;
@@ -590,7 +628,7 @@ function useRowFocusKept(): RowFocus {
   };
 }
 
-/** The list: its head where it has one, then each plan's or each person's group of rows, or every row in one run, or a line where nothing is listed. */
+/** The list: its head where it has one, then each task's or each person's group of rows, or every row in one run, or a line where nothing is listed. */
 export function InboxList({
   view,
   chosen,
@@ -599,6 +637,7 @@ export function InboxList({
   models,
   readerId,
   columns,
+  rows,
   onChoose,
 }: {
   view: InboxListView;
@@ -609,15 +648,17 @@ export function InboxList({
   /** The signed-in account's id, whose own agents' cards name no starter, where a teammate's name theirs. */
   readerId: string | undefined;
   head: InboxListHead;
-  /** What stands under the rows: the list's empty line, a spinner, or a read that did not answer. */
+  /** What stands under the rows: the list's empty line, placeholder rows while it is read, or a read that did not answer. */
   note: React.ReactNode;
   /** Which of the Inbox's columns stand. */
   columns: InboxColumnsShown;
+  /** Where each row's press is kept, by the item it opens. */
+  rows: InboxRowPresses;
   onChoose: (listed: InboxListed) => void;
 }): React.JSX.Element {
   const now = useMinute();
   const { width, onResize } = useInboxListWidth();
-  const rowFocus = useRowFocusKept();
+  const rowFocus = useRowFocusKept(rows);
   const edge = useResizableEdge({
     side: EDGE_SIDE.RIGHT,
     width,
@@ -635,6 +676,7 @@ export function InboxList({
       models={models}
       readerId={readerId}
       face={!byPerson}
+      ref={rows.hold(listed.item.id)}
       {...(byPerson ? { context: holderName(listed.holder) } : undefined)}
       onChoose={onChoose}
     />

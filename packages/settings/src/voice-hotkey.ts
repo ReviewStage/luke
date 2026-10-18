@@ -1,5 +1,5 @@
 /**
- * The three keys Luke registers with the system rather than with a window, so
+ * The two keys Luke registers with the system rather than with a window, so
  * each answers from whatever app is frontmost — which is also why a chord is
  * chosen carefully: a global shortcut takes its key away from every other app
  * on the machine. Which chords, and why those: `docs/DESIGN.md`.
@@ -23,7 +23,7 @@ export const DEFAULT_VOICE_HOTKEYS: readonly string[] = ["Alt+Space"];
 export const VOICE_HOTKEY_NONE = "none";
 
 /**
- * The one rule all three Luke keys follow: a deleted key offers nothing, a
+ * The one rule both Luke keys follow: a deleted key offers nothing, a
  * chosen chord goes first because it is what the user asked for, the defaults
  * stand behind a choice and never behind a removal, and a chord a
  * higher-ranked key already holds is left out, because two Luke keys competing
@@ -147,7 +147,7 @@ export function parseVoiceHotkey(value: string): string | undefined {
 
 /**
  * The talk chords to try, in order. Nothing is taken: the talk key ranks
- * highest, so the other two are what give way.
+ * highest, so the stop key is what gives way.
  */
 export function voiceHotkeyCandidates(chosen: string | undefined): readonly string[] {
   return hotkeyCandidates(chosen, DEFAULT_VOICE_HOTKEYS, []);

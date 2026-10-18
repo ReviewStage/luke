@@ -2,18 +2,17 @@ import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { DocumentIcon } from "@luke/ui";
+import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
 import { HashIcon, InboxIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { AutomationCard, actorCard } from "../actor-ref";
 import { AutomationDirectory, useAutomation } from "../automation-directory";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory";
 import { useAppState, useExperiment } from "../use-app-state";
 import { useMentionedReader } from "./mentioned-agent-card";
 import { PageCard } from "./page-card";
-import { usePlanMentions } from "./plan-mentions";
 import { RelativeTime } from "./relative-time";
+import { useTaskMentions } from "./task-mentions";
 import { useMinute } from "./task-time";
 
 /**
@@ -73,7 +72,7 @@ const WAITING_WORDS = "Waiting for an answer";
  * neither, or no heading spells the anchor.
  */
 function useSectionHeading(taskId: string, anchor: string): string | undefined {
-  const page = usePlanMentions();
+  const page = useTaskMentions();
   const opened = useAppState()?.tasks?.document.task;
   const text =
     page?.taskId === taskId
@@ -244,12 +243,12 @@ export function InboxItemChipCard({
   if (item === undefined) return fallback;
   return (
     <HoverCard data-inbox-item-card="">
-      <CardHead
+      <HoverCardHead
         glyph={<InboxIcon aria-hidden="true" />}
         name={item.title}
         corner={<RelativeTime at={item.postedAt} now={now} hint={false} />}
       />
-      <CardNote>{WAITING_WORDS}</CardNote>
+      <HoverCardNote>{WAITING_WORDS}</HoverCardNote>
     </HoverCard>
   );
 }

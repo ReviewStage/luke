@@ -12,9 +12,10 @@
    that a media query would need. The site writes each theme as a block of
    its own, because it is read by browsers older than `light-dark()`.
 
-   A colour belongs here when a shared component draws with it. One that only
-   one surface spends (a terminal's sixteen inks, a file icon's, a workspace
-   tile's hue) stays in that app's stylesheet. */
+   A colour belongs here when a shared component draws with it or the
+   window's own frame does (its sidebar, its wells). One that only one surface
+   spends (a terminal's sixteen inks, a file icon's) stays in that app's
+   stylesheet. */
 
 [data-luke-theme="dark"] {
   color-scheme: dark;
@@ -44,6 +45,8 @@
   --luke-color-text-body: light-dark(rgba(0, 0, 0, 0.8), rgba(255, 255, 255, 0.86));
   /* The text at full strength, for the one control drawn in it. */
   --luke-color-ink: light-dark(#000, #fff);
+  /* Words on a fill of the text's own ink, which read in the ground's colour. */
+  --luke-color-ink-inverse: var(--luke-color-ground);
   --luke-color-accent-text: light-dark(#0a72a8, #5cd5ff);
 
   --luke-color-ground: light-dark(#fcfcfc, #0c0c0e);
@@ -53,6 +56,13 @@
      dark, where lighter is nearer, and white in the light, where a shadow
      says it instead. */
   --luke-color-overlay: light-dark(#fff, #111114);
+  /* The sidebar's column: a step darker than the ground in the light, and the
+     overlay's step above it in the dark. Its words at rest sit a step under
+     the text, so the open, hovered, and unread rows stand out by going up. */
+  --luke-color-sidebar: light-dark(#f3f3f4, #111114);
+  --luke-color-sidebar-ink: light-dark(rgba(0, 0, 0, 0.68), rgba(255, 255, 255, 0.7));
+  /* A sunk ground, a step off the window's: a code block's, a strip's, a well's. */
+  --luke-color-well: light-dark(#f8f8f9, #0f0f12);
   --luke-color-fill-hover: light-dark(rgba(0, 0, 0, 0.035), rgba(255, 255, 255, 0.05));
   --luke-color-fill-strong: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.09));
   --luke-color-fill-selected: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.2));
@@ -79,6 +89,10 @@
   --luke-color-danger-fill: #d4373a;
   --luke-color-on-danger: #fff;
   --luke-color-attention: light-dark(#a65400, #ffa049);
+  /* The attention ink deepened into a fill white words hold on, in the dark
+     as in the light, where the ink is deep already. */
+  --luke-color-attention-fill: light-dark(#a65400, #c4620c);
+  --luke-color-on-attention: #fff;
   --luke-color-complete: light-dark(#18794e, #6fdca4);
   /* A state's ink as the ground of a pill that carries it. */
   --luke-color-attention-tint: color-mix(in srgb, var(--luke-color-attention) 14%, transparent);
@@ -103,6 +117,19 @@
   --luke-shadow-switch-thumb:
     0 1px 2px light-dark(rgba(0, 0, 0, 0.25), transparent),
     0 0 0 0.5px light-dark(rgba(0, 0, 0, 0.08), transparent);
+
+  /* A person's disc (`avatar.tsx`) and a workspace's tile: six muted hues
+     read off an id, each holding its white letter at AA on either ground. */
+  --luke-color-identity-1: light-dark(#4a5fc0, #4f63b8);
+  --luke-color-identity-2: light-dark(#23766f, #2b7f78);
+  --luke-color-identity-3: light-dark(#94631a, #9a6a1e);
+  --luke-color-identity-4: light-dark(#a8435f, #a24a63);
+  --luke-color-identity-5: light-dark(#6a4fbd, #6c55b3);
+  --luke-color-identity-6: light-dark(#3f7434, #477a3a);
+  --luke-color-on-identity: #fff;
+
+  /* A chart's one series: a mark that holds 3:1 on either ground. */
+  --luke-color-chart-1: #2f9bd8;
 }
 
 /* The site's light ground is shadcn/ui's stock light theme warmed off pure
@@ -115,11 +142,15 @@
   --luke-color-text-subtle: oklch(0.556 0 0);
   --luke-color-text-body: oklch(0.145 0 0);
   --luke-color-ink: #000;
+  --luke-color-ink-inverse: var(--luke-color-ground);
   --luke-color-accent-text: #0d6e80;
 
   --luke-color-ground: #fbfbfa;
   --luke-color-surface: oklch(1 0 0);
   --luke-color-overlay: oklch(1 0 0);
+  --luke-color-sidebar: #f3f3f4;
+  --luke-color-sidebar-ink: rgba(0, 0, 0, 0.68);
+  --luke-color-well: oklch(0.97 0 0);
   /* The site had one fill, its muted ground; a control's states need a
      step each past it, the desktop's light steps, so a chosen segment or a
      pressed button reads apart from one merely hovered. */
@@ -147,6 +178,8 @@
   --luke-color-danger-fill: #d4373a;
   --luke-color-on-danger: #fff;
   --luke-color-attention: #9a5300;
+  --luke-color-attention-fill: #9a5300;
+  --luke-color-on-attention: #fff;
   --luke-color-complete: #0f7a4e;
   --luke-color-attention-tint: #fdf0e2;
   --luke-color-complete-tint: #e6f5ed;
@@ -166,6 +199,19 @@
   --luke-color-shadow: rgba(0, 0, 0, 0.12);
   --luke-color-shadow-deep: rgba(0, 0, 0, 0.2);
   --luke-shadow-switch-thumb: 0 1px 2px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+
+  /* A person's disc (`avatar.tsx`): six muted hues read off their id, each
+     holding its white letter at AA on the light ground. */
+  --luke-color-identity-1: #4a5fc0;
+  --luke-color-identity-2: #23766f;
+  --luke-color-identity-3: #94631a;
+  --luke-color-identity-4: #a8435f;
+  --luke-color-identity-5: #6a4fbd;
+  --luke-color-identity-6: #3f7434;
+  --luke-color-on-identity: #fff;
+
+  /* A chart's one series: a mark that holds 3:1 on either ground. */
+  --luke-color-chart-1: #2f9bd8;
 }
 
 /* The admin dashboard's and the OAuth cards' dark ground, the product's state
@@ -176,12 +222,16 @@
   --luke-color-text-subtle: rgba(255, 255, 255, 0.56);
   --luke-color-text-body: rgba(255, 255, 255, 0.92);
   --luke-color-ink: #fff;
+  --luke-color-ink-inverse: var(--luke-color-ground);
   --luke-color-accent-text: #0d6e80;
 
   --luke-color-ground: #08090b;
   /* A step above the page (1.06:1) lets a card read before its border does. */
   --luke-color-surface: #101114;
   --luke-color-overlay: #101114;
+  --luke-color-sidebar: #101114;
+  --luke-color-sidebar-ink: rgba(255, 255, 255, 0.7);
+  --luke-color-well: #0c0d10;
   --luke-color-fill-hover: rgba(255, 255, 255, 0.05);
   --luke-color-fill-strong: rgba(255, 255, 255, 0.09);
   --luke-color-fill-selected: rgba(255, 255, 255, 0.2);
@@ -204,6 +254,8 @@
   --luke-color-danger-fill: #d4373a;
   --luke-color-on-danger: #fff;
   --luke-color-attention: #ffa049;
+  --luke-color-attention-fill: #c4620c;
+  --luke-color-on-attention: #fff;
   --luke-color-complete: #6fdca4;
   --luke-color-attention-tint: rgba(255, 160, 73, 0.14);
   --luke-color-complete-tint: rgba(111, 220, 164, 0.14);
@@ -223,4 +275,19 @@
   --luke-color-shadow: rgba(0, 0, 0, 0.5);
   --luke-color-shadow-deep: rgba(0, 0, 0, 0.6);
   --luke-shadow-switch-thumb: none;
+
+  /* A person's disc (`avatar.tsx`): six muted hues read off their id, each
+     holding its white letter at AA on the dark ground. */
+  --luke-color-identity-1: #4f63b8;
+  --luke-color-identity-2: #2b7f78;
+  --luke-color-identity-3: #9a6a1e;
+  --luke-color-identity-4: #a24a63;
+  --luke-color-identity-5: #6c55b3;
+  --luke-color-identity-6: #477a3a;
+  --luke-color-on-identity: #fff;
+
+  /* The admin dashboard's chart series. The accent cyan sits too light for a
+     mark on the dark card, so the slot is a darker step of the same hue
+     family, validated against the card at #101114 (6.1:1, ≥ 3:1). */
+  --luke-color-chart-1: #2f9bd8;
 }

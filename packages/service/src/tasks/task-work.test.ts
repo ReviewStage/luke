@@ -57,7 +57,7 @@ import { taskWorkOf } from "./task-work.js";
 import { readTaskCode, readTaskWork } from "./task-work-store.js";
 
 /**
- * One planning turn's work as the Work tab is sent it, over the real
+ * One brain turn's work as the Work tab is sent it, over the real
  * migrations on PGlite: eve's events relayed through the store writer as the
  * hosted brain relays them, and the work projected from the turn row and its
  * journal as they stand. Synthetic throughout: no real repository, page, or
@@ -186,7 +186,7 @@ function shownAt(path: string, line: string) {
   };
 }
 
-/** A plan of a new account, with the conversation its planning model runs in. */
+/** A task of a new account, with the conversation its brain runs in. */
 async function taskConversation(): Promise<
   ConversationTarget & { taskId: string; workspaceId: string }
 > {
@@ -203,7 +203,7 @@ async function taskConversation(): Promise<
 }
 
 /**
- * Stamps a played turn as asked and started at `at`, so the turns of a plan
+ * Stamps a played turn as asked and started at `at`, so the turns of a task
  * read in the order they were asked; the row's own queue stamp is the
  * database's clock, which a test does not hold.
  */
@@ -487,6 +487,29 @@ test("a turn carries its own journal as the agent tab reads one, and each worker
   assert.equal(failed?.state, TASK_WORK_STATE.FAILED);
 });
 
+test("a worker call a retried step abandoned stops standing as running once eve runs the step again, while its turn still runs", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  await play(opening(FIRST_EVE_TURN), standing);
+  // The relay's state as the step began, which is what eve hands its retry.
+  const stepInput = standing.state.get();
+  await play(
+    callingStep(FIRST_EVE_TURN, 0, [
+      { toolName: BRAIN_DELEGATE_TOOL.name, input: { task: "Compare the two queue libraries." } },
+    ]),
+    standing,
+  );
+  const retry = { ...standing, state: memoryRelayState(stepInput) };
+  await play(answeringStep(FIRST_EVE_TURN, 0, "I'll compare them myself.").slice(0, -1), retry);
+
+  const work = await worked(target, standing);
+  assert.equal(work.state, TASK_WORK_STATE.RUNNING);
+  assert.deepEqual(
+    work.workers?.map((worker) => [worker.callId, worker.state]),
+    [["call-0-0", TASK_WORK_STATE.DONE]],
+  );
+});
+
 test("a turn's journal keeps its newest parts and says older ones were left out, every string in a call cut to the bound with the call's shape kept", async () => {
   const target = await conversation();
   const standing = standingFor(target);
@@ -537,7 +560,7 @@ test("a turn's journal leaves out what the Mac is not sent: a page's HTML, which
 const SPOKEN_CALL = "3f6a1c2e-8b4d-4e7f-9a1b-5c2d3e4f6a7b";
 
 /**
- * A spoken ask on the plan's conversation, as the voice leaves it: the ask
+ * A spoken ask on the task's conversation, as the voice leaves it: the ask
  * under its delegation's id, made at `at` on the call, dispatched into the
  * standing's eve session, and the developer's lines the delegation was
  * about, written and attached to it. Answers the delegation's id, which eve
@@ -655,7 +678,7 @@ test("the developer's first ask of a call, steered into the turn the call's expl
   );
 });
 
-/** The turn and last words of each message a planner page carries, as the Call tab places and reads them. */
+/** The turn and last words of each message a brain page carries, as the Call tab places and reads them. */
 function turnsOf(page: BrainPage) {
   return page.messages.map((message) => {
     const last = message.parts.at(-1);
@@ -782,7 +805,7 @@ test("a planner page says where each worker its turns delegated to stands, read 
 
   const running = await database.run(brainTurnsPage(target, undefined));
   assert.deepEqual(statusOf(running), [[callId, CODING_AGENT_STATUS.RUNNING]]);
-  // The turn that started the worker has answered, but the planner still works while its worker does.
+  // The turn that started the worker has answered, but the brain still works while its worker does.
   assert.equal(running.status, CODING_AGENT_STATUS.RUNNING);
 
   await play(answeringStep(FIRST_EVE_TURN, 1, "Both let an admin revoke."), childStanding);

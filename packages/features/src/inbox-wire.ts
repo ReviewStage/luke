@@ -1,12 +1,18 @@
 import { isWireBoolean, isWireNumber, isWireString } from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
-import { CODING_AGENT_ATTACHMENT_TYPE, CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
+import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  CODING_AGENT_BOUNDS,
+  type CodingAgentAttachment,
+  codingAgentMessageRequestSchema,
+  hasWordsOrFiles,
+} from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import { CODE_PATH_MAX_CHARS, codeLineSchema, commitShaSchema } from "./task-wire.js";
 
 /**
- * inbox-wire.ts -- the developer's inbox: what a plan's coding agents need of the developer, posted by the agents and answered on the desktop.
+ * inbox-wire.ts -- the developer's inbox: what a task's coding agents need of the developer, posted by the agents and answered on the desktop.
  *
  * An item is one thing an agent cannot do or decide alone, kept on the
  * service as a row of its own rather than in the agent's transcript, so it
@@ -35,11 +41,26 @@ import { CODE_PATH_MAX_CHARS, codeLineSchema, commitShaSchema } from "./task-wir
  * the agent reads it the next time it reads its inbox. Every item carries
  * a revision the agent's every change moves on, and an answer names the
  * revision it answers, so an answer to an item the agent has since changed
- * is refused rather than taken for the item as it now stands.
+ * is refused rather than taken for the item as it now stands. An answer may
+ * carry files, as a message to an agent may: they reach the agent with the
+ * answer, and the service keeps them beside the item as its answer files,
+ * which the item names by attachment, file name, and type until the answer
+ * is taken back or the agent posts the item again.
+ *
+ * Beside its one answer, an item holds a thread: messages a member of its
+ * workspace or its agent adds at any point, open or settled, each in
+ * Markdown with the files it carried, read oldest first. A message changes
+ * neither the item's status, nor its answer, nor its revision, and moves
+ * the instant the item last changed, so the item comes to the top of the
+ * inbox. A member's message reaches the agent as one of the developer's
+ * messages, under its own lead, as an answer does, and wakes an agent that
+ * stopped as a message typed in its tab does. The thread outlives a post
+ * under the item's key, which changes what the item asks and not what was
+ * said about it.
  *
  * The agent posts, closes, and reads its items through the tools named
  * below, whose inputs are declared here so the model is shown, eve holds,
- * and the desktop draws one shape. A plan's inbox is read past a cursor the
+ * and the desktop draws one shape. A task's inbox is read past a cursor the
  * service hands back, held open while nothing changed, as a transcript is.
  * Every request refuses a key it does not name; an answer ignores one a
  * newer service added. The item a desktop reads carries the version of
@@ -98,7 +119,7 @@ export const INBOX_BOUNDS = {
   MAX_REASON_CHARS: 600,
   /** The most items one agent keeps open at once: what a person works through, never a log. */
   MAX_OPEN_PER_AGENT: 20,
-  /** The most settled items a read of a plan's inbox carries beside every open one, the latest changed first. */
+  /** The most settled items a read of a task's inbox carries beside every open one, the latest changed first. */
   MAX_ITEMS_READ: 200,
   /** The most settled items an agent's inbox tool answers with beside every open one: enough to hear what was answered lately. */
   MAX_SETTLED_TOLD: 20,
@@ -106,6 +127,12 @@ export const INBOX_BOUNDS = {
   MAX_CURSOR_CHARS: 64,
   /** The most characters an answer's key may spell; a UUID is the usual. */
   MAX_CLIENT_KEY_CHARS: 128,
+  /** The most characters a message on an item's thread may spell: a Markdown block's bound, whoever writes it. */
+  MAX_MESSAGE_CHARS: 8_000,
+  /** The most messages an item read carries, the latest ones, oldest first among them: a thread read at a glance, never a log. */
+  MAX_MESSAGES_READ: 50,
+  /** The most pictures the agent's message on a thread may carry, each held to the image bound. */
+  MAX_REPLY_IMAGES: 4,
 } as const;
 
 /** The tools an agent keeps its items with, by the names their tool parts carry in its transcript. */
@@ -116,6 +143,8 @@ export const INBOX_TOOL = {
   CLOSE: "close_inbox_item",
   /** Reads the agent's items as they stand, answers and all. */
   READ: "read_inbox",
+  /** Writes the agent's message on one of its items' threads, by key. */
+  REPLY: "reply_inbox",
 } as const;
 
 /** The blocks an item's context is made of. */
@@ -268,6 +297,9 @@ const WORD_BLOCKS = [
   }),
 ] as const;
 
+/** One word block as a person writes it from the window: Markdown, a link, or lines of code, never a picture. */
+export const inboxWordBlockSchema = EffectSchema.Union(WORD_BLOCKS);
+
 /** What an image block says of its picture: the words that stand for it where it cannot be seen. */
 const imageWords = { alt: filledText(INBOX_BOUNDS.MAX_ALT_CHARS) };
 
@@ -403,6 +435,24 @@ export const inboxCloseInputSchema = EffectSchema.Struct({
   reason: filledText(INBOX_BOUNDS.MAX_REASON_CHARS),
 });
 
+/**
+ * What a reply's tool part carries as its input: the key of one of the
+ * agent's own items, its words in Markdown, and the pictures it shows, each
+ * by the path of its file in the agent's sandbox, as an image block names
+ * one; words or pictures or both, which the tool holds it to.
+ */
+export const inboxReplyInputSchema = EffectSchema.Struct({
+  key: inboxKeySchema,
+  text: boundedText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
+  images: EffectSchema.optionalKey(
+    EffectSchema.Array(
+      EffectSchema.Struct({ path: filledText(INBOX_BOUNDS.MAX_PATH_CHARS) }),
+    ).check(EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_REPLY_IMAGES)),
+  ),
+});
+
+export type InboxReplyInput = typeof inboxReplyInputSchema.Type;
+
 /** What a read's tool part carries as its input: nothing, since an agent reads its own items alone. */
 export const inboxReadInputSchema = EffectSchema.Struct({});
 
@@ -477,6 +527,52 @@ export const inboxReadResponseSchema = EffectSchema.Union([
 
 export type InboxReadResponse = typeof inboxReadResponseSchema.Type;
 
+/**
+ * One file the developer's answer carried, as an item names it: the
+ * attachment the service keeps it as, which the desktop fetches under the
+ * account, its own name, and the media type it travelled as. Note that the
+ * type is read as words rather than one of the types a message carries,
+ * because a newer service that takes one more type must not leave a
+ * desktop behind it unable to read the whole inbox.
+ */
+export const inboxAnswerFileSchema = EffectSchema.Struct({
+  attachmentId: wireUuidSchema,
+  name: EffectSchema.String,
+  mediaType: EffectSchema.String,
+});
+
+type InboxAnswerFile = typeof inboxAnswerFileSchema.Type;
+
+/** Who wrote a message on an item's thread: a member of the item's workspace, or the item's own agent. */
+export const INBOX_MESSAGE_AUTHOR = {
+  MEMBER: "member",
+  AGENT: "agent",
+} as const;
+
+export type InboxMessageAuthor = (typeof INBOX_MESSAGE_AUTHOR)[keyof typeof INBOX_MESSAGE_AUTHOR];
+
+/**
+ * One message on an item's thread as an item read carries it: who wrote it,
+ * the member by id and name where a member did, and none for a member whose
+ * account is gone or for the agent, which is the item's own; the words as
+ * Markdown, written as they were sent, so a mention in them stands as its
+ * link; the files it carried, named as an answer's are and fetched by the
+ * same attachment path; and when it was written.
+ */
+export const inboxMessageSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  author: EffectSchema.Literals(Object.values(INBOX_MESSAGE_AUTHOR)),
+  /** The member who wrote it, on a member's message whose account still stands. */
+  member: EffectSchema.optionalKey(memberRefSchema),
+  /** The words in Markdown; empty where the files carry the message alone. */
+  text: EffectSchema.String,
+  /** The files it carried, in the order they were attached; absent where it carried none. */
+  files: EffectSchema.optionalKey(EffectSchema.Array(inboxAnswerFileSchema)),
+  createdAt: countedNumber,
+});
+
+export type InboxMessage = typeof inboxMessageSchema.Type;
+
 /** One item as the desktop reads it. */
 export const inboxItemSchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -499,8 +595,10 @@ export const inboxItemSchema = EffectSchema.Struct({
   startedBy: EffectSchema.optionalKey(memberRefSchema),
   /** The developer's answer, on an answered item. */
   answer: EffectSchema.optionalKey(inboxReplySchema),
+  /** The files the answer carried, in the order they were attached; absent where it carried none. */
+  answerFiles: EffectSchema.optionalKey(EffectSchema.Array(inboxAnswerFileSchema)),
   /**
-   * The member who answered, on an answered item, any member of the plan's
+   * The member who answered, on an answered item, any member of the task's
    * workspace; absent for an answer nobody can be named for, and from a
    * service before answerers were kept. The window says "You" only where it
    * is the signed-in account.
@@ -508,9 +606,17 @@ export const inboxItemSchema = EffectSchema.Struct({
   answeredBy: EffectSchema.optionalKey(memberRefSchema),
   /** Why the agent took the item back, on a closed one. */
   closedReason: EffectSchema.optionalKey(EffectSchema.String),
+  /** The item's thread, oldest first, the latest `MAX_MESSAGES_READ` of it; absent where nobody wrote one. */
+  messages: EffectSchema.optionalKey(EffectSchema.Array(inboxMessageSchema)),
   /** When the agent first posted the item under its key. */
   postedAt: countedNumber,
-  /** When the item last changed, by the agent or the developer. */
+  /**
+   * When the item was last answered or closed, on a settled item; absent on
+   * an open one, and from a service before it was kept, which a reader takes
+   * as `updatedAt`. A message on the thread never moves it.
+   */
+  settledAt: EffectSchema.optionalKey(countedNumber),
+  /** When the item last changed, by the agent or the developer, a message on its thread included. */
   updatedAt: countedNumber,
 });
 
@@ -522,7 +628,7 @@ export const INBOX_CURSOR_START = "0";
 /** Where a reader of an inbox stands, as the service last handed it back. */
 export const inboxCursorSchema = filledText(INBOX_BOUNDS.MAX_CURSOR_CHARS);
 
-/** A plan's inbox as it stands: every item its agents posted, the latest changed first, and the cursor to read on from. */
+/** A task's inbox as it stands: every item its agents posted, the latest changed first, and the cursor to read on from. */
 export const inboxAnswerSchema = EffectSchema.Struct({
   items: EffectSchema.Array(inboxItemSchema),
   cursor: EffectSchema.String,
@@ -530,10 +636,15 @@ export const inboxAnswerSchema = EffectSchema.Struct({
 
 export type InboxAnswer = typeof inboxAnswerSchema.Type;
 
-/** An answer to one item: the revision it answers, the answer, and a key the client made, so an answer sent again after a lost reply is taken once. */
+/**
+ * An answer to one item: the revision it answers, the answer, the files the
+ * developer attached, bounded as a message's to an agent are, and a key the
+ * client made, so an answer sent again after a lost reply is taken once.
+ */
 export const inboxAnswerRequestSchema = EffectSchema.Struct({
   revision: countedNumber,
   ...inboxReplySchema.fields,
+  attachments: codingAgentMessageRequestSchema.fields.attachments,
   clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
 });
 
@@ -547,6 +658,38 @@ export const inboxAnsweredSchema = EffectSchema.Struct({
 
 /** How the developer's answer opens, in the message that hands it to the agent. */
 export const INBOX_ANSWER_LEAD = "Inbox answer";
+
+/**
+ * A member's message on an item's thread: the words in Markdown, trimmed and
+ * bounded, the files they attached, bounded as a message's to an agent are,
+ * words or files or both and never neither, and a key the client made, so
+ * a message sent again after a lost reply is written once.
+ */
+export const inboxMessageRequestSchema = EffectSchema.Struct({
+  text: EffectSchema.Trim.check(EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_MESSAGE_CHARS)),
+  attachments: codingAgentMessageRequestSchema.fields.attachments,
+  clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
+}).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
+
+export type InboxMessageRequest = typeof inboxMessageRequestSchema.Type;
+
+/** What a member's message comes back as: the item as it then stands, its thread with the message on it. */
+export const inboxMessagedSchema = EffectSchema.Struct({ item: inboxItemSchema });
+
+/** How a member's message on an item's thread opens, in the message that hands it to the agent. */
+export const INBOX_MESSAGE_LEAD = "Inbox message";
+
+/**
+ * The message a member's message on an item's thread reaches the agent as:
+ * a first line naming the item by its key and title, as an answer's does,
+ * then the member's words as they wrote them, so what they mention reads as
+ * it was written.
+ */
+export function inboxThreadMessage(item: Pick<InboxItem, "key" | "title">, text: string): string {
+  const title = item.title.replace(/\s+/gu, " ").trim();
+  const header = `${INBOX_MESSAGE_LEAD} on "${title}" (key ${item.key}):`;
+  return text.trim() === "" ? header : `${header}\n\n${text.trim()}`;
+}
 
 /** Whether a response read off the wire is one this build knows, which its type decides. */
 export function knownResponse(response: InboxReadResponse): response is InboxResponse {
@@ -591,16 +734,24 @@ function replyWords(reply: InboxReply): string {
   }
 }
 
+/** The files an answer carries, by count alone: those sent with it, or those an item names as its answer's. */
+type AnswerFiles = readonly (CodingAgentAttachment | InboxAnswerFile)[];
+
 /**
  * Whether an answer reaches the agent as one of the developer's messages:
  * every answer to an item that asks to be heard back, and any other carrying
- * words the developer typed, since words are written to be read; a bare
- * press on an item that asks nothing back, Done or Got it, is kept for the
- * agent to read in its own time. The service hands an answer off by it, and
- * the window says where an answer went and reads the agent again by it.
+ * words the developer typed or a file they attached, since either is handed
+ * over to be read; a bare press on an item that asks nothing back, Done or
+ * Got it, is kept for the agent to read in its own time. The service hands
+ * an answer off by it, and the window says where an answer went and reads
+ * the agent again by it.
  */
-export function inboxAnswerHeard(item: Pick<InboxItem, "needsReply">, reply: InboxReply): boolean {
-  return item.needsReply || (reply.note ?? "").trim() !== "";
+export function inboxAnswerHeard(
+  item: Pick<InboxItem, "needsReply">,
+  reply: InboxReply,
+  files: AnswerFiles = [],
+): boolean {
+  return item.needsReply || (reply.note ?? "").trim() !== "" || files.length > 0;
 }
 
 /**
@@ -675,12 +826,14 @@ function choiceRefusal(
 /**
  * Why an answer does not fit its item, or nothing where it does: the
  * response takes the reply, a pick names offered options, a form's values
- * fill it, and words stand where the answer is the developer's own. A
- * response this build does not know takes nothing.
+ * fill it, and words or files stand where the answer is the developer's
+ * own, as a message to an agent may be files alone. A response this build
+ * does not know takes nothing.
  */
 export function inboxReplyRefusal(
   item: Pick<InboxItem, "response">,
   reply: InboxReply,
+  files: AnswerFiles = [],
 ): string | undefined {
   const response = item.response;
   if (!knownResponse(response)) return "The item asks something this Luke does not know.";
@@ -692,8 +845,12 @@ export function inboxReplyRefusal(
   if (reply.reply === INBOX_REPLY.SUBMITTED && response.type === INBOX_RESPONSE.FORM) {
     return formRefusal(response, reply.values);
   }
-  if (reply.reply === INBOX_REPLY.ANSWERED && (reply.note ?? "").trim() === "") {
-    return "An answer in the developer's own words needs words.";
+  if (
+    reply.reply === INBOX_REPLY.ANSWERED &&
+    (reply.note ?? "").trim() === "" &&
+    files.length === 0
+  ) {
+    return "An answer in the developer's own words needs words or a file.";
   }
   return undefined;
 }

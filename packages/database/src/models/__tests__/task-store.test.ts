@@ -8,7 +8,7 @@ import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { taskPin } from "../../schemas/plan-pin.js";
+import { taskPin } from "../../schemas/task-pin.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import { createTask, deleteTask, listTasks, readTask, updateTask } from "../task-store.js";
 
@@ -22,7 +22,7 @@ import { createTask, deleteTask, listTasks, readTask, updateTask } from "../task
  * Synthetic accounts, workspaces, and plans throughout.
  */
 
-const SHARED_PLAN = { name: "Teammate invitations" };
+const SHARED_TASK = { name: "Teammate invitations" };
 
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
@@ -37,7 +37,7 @@ const openSharedTask = Effect.gen(function* () {
   const charles = yield* openAccount;
   const workspace = yield* openWorkspace(dean);
   yield* joinWorkspace(workspace, charles);
-  const { id: taskId } = yield* createTask(dean, { ...SHARED_PLAN, organizationId: workspace });
+  const { id: taskId } = yield* createTask(dean, { ...SHARED_TASK, organizationId: workspace });
   return { dean, charles, taskId };
 });
 

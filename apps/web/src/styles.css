@@ -7,9 +7,8 @@
 
 @import "tailwindcss";
 
-/* The shared tokens: `@luke/ui`'s scale, the web profile's roles, its light
-   and dark palettes, and this site's old names for them, keyed on each page
-   root's `data-luke-profile="web"` and `data-luke-theme` (the HTML entry
+/* The shared tokens: `@luke/ui`'s scale, the web profile's roles, and its
+   light and dark palettes, keyed on each page root's `data-luke-profile="web"` and `data-luke-theme` (the HTML entry
    points). */
 @import "@luke/ui/tokens.css";
 /* The shared components' own rules, in Tailwind's `components` layer, over
@@ -28,34 +27,32 @@
 
 /* Only the tokens the page actually draws with. shadcn/ui's contract is a
    superset — popover, secondary, destructive, sidebar — and a token nothing
-   reads is drift waiting to happen. Every value is a shared token's, under the
-   name the plain-CSS blocks further down read too, and merely aliased here, so
-   they read the same vocabulary the utilities do. The chart slots stay out of this block for the
+   reads is drift waiting to happen. Every value is a shared role's, the one the
+   plain-CSS blocks further down read too, and merely aliased here, so the
+   utilities and those blocks draw the same vocabulary. The chart slots stay out of this block for the
    same reason: the admin dashboard's chart configs read `--chart-*` directly,
    and no utility class does. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-accent-ink: var(--accent-ink);
-  --color-attention: var(--attention);
-  --color-attention-tint: var(--attention-tint);
-  --color-complete: var(--complete);
-  --color-complete-tint: var(--complete-tint);
-  --color-border: var(--border);
-  --color-ring: var(--ring);
+  --color-background: var(--luke-color-ground);
+  --color-foreground: var(--luke-color-text);
+  --color-card: var(--luke-color-surface);
+  --color-muted: var(--luke-color-fill-hover);
+  --color-muted-foreground: var(--luke-color-text-muted);
+  --color-primary: var(--luke-color-accent);
+  --color-primary-foreground: var(--luke-color-on-accent);
+  --color-accent-ink: var(--luke-color-accent-text);
+  --color-attention: var(--luke-color-attention);
+  --color-complete: var(--luke-color-complete);
+  --color-border: var(--luke-color-border);
+  --color-ring: var(--luke-color-focus-ring);
 
-  --radius-sm: calc(var(--radius) - 2px);
-  --radius-md: var(--radius);
-  --radius-lg: calc(var(--radius) + 4px);
+  --radius-sm: var(--luke-radius-6);
+  --radius-md: var(--luke-control-radius);
+  --radius-lg: var(--luke-radius-14);
 
-  --font-sans: var(--font-page);
-  --font-mono: var(--font-code);
-  --font-brand: var(--font-wordmark);
+  --font-sans: var(--luke-font-sans);
+  --font-mono: var(--luke-font-mono);
+  --font-brand: var(--luke-font-display);
 }
 
 /* A line that waits a moment before it fades in, as the Open in Luke page's
@@ -81,21 +78,10 @@
 :root {
   /* The page's palette, its fonts, its 4px space scale, and its corner are
      the web profile's in `@luke/ui` (`tokens/palettes.css`, `profiles.css`),
-     read here by the names this sheet always used (`--background`,
-     `--muted-foreground`, `--space-5`, `--radius`, …) through its aliases
-     (`tokens/legacy.css`). A page is light unless its root asks for the dark
+     read here as its `--luke-*` roles. A page is light unless its root asks for the dark
      theme the admin dashboard and the OAuth cards are drawn in. */
   font-optical-sizing: auto;
   font-synthesis: none;
-}
-
-/* The admin dashboard's chart series, declared here because that page is
-   the one chart surface and it is drawn in the dark theme. The accent cyan
-   itself sits too light for a mark on the dark card, so the slot is a darker
-   step of the same hue family, validated against the card at #101114 (6.1:1,
-   ≥ 3:1). */
-[data-luke-theme="dark"] {
-  --chart-1: #2f9bd8;
 }
 
 /* An integration whose brand publishes its one-colour mark in named inks
@@ -118,70 +104,19 @@
 
 @layer base {
   html {
-    font-family: var(--font-page);
-  }
-
-  /* Two places deliberately draw wider than the measure — the full-bleed
-     hairline and the demo video — and both size themselves in `vw`, which
-     counts a classic scrollbar's gutter that `100%` does not. Left alone that
-     gutter is a horizontal scrollbar on every page anywhere scrollbars take
-     space, which is everywhere the visitor is not on a Mac.
-
-     It has to be `clip` and not `hidden`: `hidden` makes a scroll container,
-     which script and keyboard can scroll even without bars, where `clip`
-     merely crops. `overflow-y` is left alone, which a `clip` on the other
-     axis permits, so the page still scrolls down.
-
-     And it has to name both elements. The root's overflow propagates to the
-     viewport and the root itself is then drawn as `visible`, so `html` alone
-     clips nothing; `body` alone is likewise skipped while the root carries a
-     value. Only the pair actually holds. */
-  html,
-  body {
-    overflow-x: clip;
+    font-family: var(--luke-font-sans);
   }
 
   body {
-    background: var(--background);
-    color: var(--foreground);
-    line-height: 1.6;
+    background: var(--luke-color-ground);
+    color: var(--luke-color-text);
+    line-height: var(--luke-type-reading-leading);
     -webkit-font-smoothing: antialiased;
   }
 
   :focus-visible {
-    outline: 2px solid var(--ring);
+    outline: 2px solid var(--luke-color-focus-ring);
     outline-offset: 3px;
-  }
-}
-
-/* The column every page shares. Narrow and left-aligned: the references this
-   page is drawn against run 625–720px, and a measure that wide reads as a
-   document rather than as a poster. */
-@utility shell {
-  width: 100%;
-  max-width: 700px;
-  margin-inline: auto;
-  padding-inline: var(--space-5);
-
-  @media (width < 520px) {
-    padding-inline: var(--space-4);
-  }
-}
-
-/* A full-bleed rule that escapes the column it is written in, so a section
-   break reads across the whole page rather than stopping at the measure. */
-@utility hairline {
-  position: relative;
-
-  &::before {
-    position: absolute;
-    top: calc(var(--space-5) * -1);
-    left: 50%;
-    width: 100vw;
-    height: 1px;
-    background: var(--border);
-    content: "";
-    transform: translateX(-50%);
   }
 }
 
@@ -193,15 +128,9 @@
    Plain CSS rather than utilities because the markup is generated: each page
    parses its repository markdown at build time and hands the result to
    `dangerouslySetInnerHTML`, so there is no call site to write a class on.
-   `.document` carries only the typography — the privacy page wraps it in the
-   column below, and the changelog seats it beside each release's rail.
+   `.document` carries only the typography — the privacy page lays it in each
+   of its sections, and the changelog seats it beside each release's rail.
    ------------------------------------------------------------------------- */
-
-.document-column {
-  max-width: 640px;
-  margin: 0 auto;
-  padding: var(--space-8) 0 var(--space-9);
-}
 
 /* The changelog aligns a release's first line with the version rail beside
    it, so a heading's breathing room must come between elements, not above
@@ -211,7 +140,7 @@
 }
 
 .document h1 {
-  margin: 0 0 var(--space-6);
+  margin: 0 0 var(--luke-space-32);
   font-size: 2rem;
   font-weight: 650;
   letter-spacing: -0.02em;
@@ -219,35 +148,35 @@
 }
 
 .document h2 {
-  margin: var(--space-8) 0 var(--space-4);
+  margin: var(--luke-space-64) 0 var(--luke-space-16);
   font-size: 1.125rem;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
 
 .document h3 {
-  margin: var(--space-6) 0 var(--space-3);
+  margin: var(--luke-space-32) 0 var(--luke-space-12);
   font-size: 1rem;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
 
 .document p {
-  margin: 0 0 var(--space-4);
-  color: var(--muted-foreground);
+  margin: 0 0 var(--luke-space-16);
+  color: var(--luke-color-text-muted);
 }
 
 /* Tailwind's preflight strips list markers from every `ul`. The generated
    document has real lists in it, so they come back here. */
 .document ul {
-  margin: 0 0 var(--space-4);
-  padding-left: var(--space-5);
-  color: var(--muted-foreground);
+  margin: 0 0 var(--luke-space-16);
+  padding-left: var(--luke-space-24);
+  color: var(--luke-color-text-muted);
   list-style: disc;
 }
 
 .document li {
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--luke-space-8);
 }
 
 .document li:last-child {
@@ -255,11 +184,11 @@
 }
 
 .document strong {
-  color: var(--foreground);
+  color: var(--luke-color-text);
 }
 
 .document a {
-  color: var(--accent-ink);
+  color: var(--luke-color-accent-text);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -267,7 +196,7 @@
 /* A pull-request reference is a technical token, and mono is what the page
    reserves for those. */
 .document a[href*="/pull/"] {
-  font-family: var(--font-code);
+  font-family: var(--luke-font-mono);
   font-size: 0.8em;
 }
 
@@ -287,8 +216,8 @@
   max-width: 100%;
   height: auto;
   max-height: calc(100cqi * 1591 / 2400);
-  margin: var(--space-5) auto;
-  border: 1px solid var(--border);
+  margin: var(--luke-space-24) auto;
+  border: 1px solid var(--luke-color-border);
   border-radius: var(--radius-lg);
 }
 
@@ -299,8 +228,8 @@
 .document code {
   padding: 0.15em 0.4em;
   border-radius: var(--radius-sm);
-  background: var(--muted);
-  font-family: var(--font-code);
+  background: var(--luke-color-fill-hover);
+  font-family: var(--luke-font-mono);
   font-size: 0.9em;
 }
 
@@ -316,11 +245,11 @@
 .document kbd {
   display: inline-block;
   padding: 0.1em 0.45em;
-  border: 1px solid var(--border);
+  border: 1px solid var(--luke-color-border);
   border-bottom-width: 2px;
   border-radius: var(--radius-sm);
-  background: var(--card);
-  font-family: var(--font-code);
+  background: var(--luke-color-surface);
+  font-family: var(--luke-font-mono);
   font-size: 0.8em;
   line-height: 1;
   vertical-align: 0.18em;

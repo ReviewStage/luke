@@ -5,11 +5,13 @@ import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-a
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { tasksControl } from "#testing/tasks-control";
@@ -53,6 +55,7 @@ const roots: Root[] = [];
 beforeEach(() => {
   openedAgents = [];
   copied = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   pinsAsked = [];
   window.localStorage.clear();
   window.sessionStorage.clear();
@@ -64,22 +67,13 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onMenuCommand: () => () => undefined,
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) {
-          copied.push(request.payload.words);
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-        }
-        return Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-        );
-      },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      return Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+      );
     },
   });
 });
@@ -215,7 +209,7 @@ function mountSidebar(
 
 /** The words each standing menu item says, its glyph left out. */
 function itemLabel(item: HTMLElement): string {
-  return (item.querySelector(".task-menu-label") ?? item).textContent?.trim() ?? "";
+  return (item.querySelector(".luke-menu-item-label") ?? item).textContent?.trim() ?? "";
 }
 
 /** The menu item that says `label`, in whichever menu stands. */
@@ -285,7 +279,7 @@ test("a shared workspace's tasks group by repository until View options groups t
   act(() => {
     row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  assert.match(document.querySelector(".tooltip-card")?.textContent ?? "", /acme\/console/);
+  assert.match(document.querySelector(".luke-tooltip-card")?.textContent ?? "", /acme\/console/);
 });
 
 test("grouped by none, the tasks run in one list, each row naming its repository and a teammate's wearing their face", () => {
@@ -368,12 +362,12 @@ async function mountRead(
 
 /** The chip under the Tasks head, if one stands. */
 function chip(sidebar: HTMLElement): HTMLElement | null {
-  return sidebar.querySelector(".sidebar-view-chip");
+  return sidebar.querySelector<HTMLElement>(".sidebar-view-chips > *");
 }
 
 /** What the chip under the Tasks head says, its face left out. */
 function chipWords(sidebar: HTMLElement): string | undefined {
-  return chip(sidebar)?.querySelector(".sidebar-view-chip-words")?.textContent ?? undefined;
+  return chip(sidebar)?.querySelector(".luke-chip-name")?.textContent ?? undefined;
 }
 
 test("Created by › Me lists only your tasks, wearing no faces, says so in a chip and a dot, and the chip's × lists everyone's again", async () => {
@@ -386,7 +380,7 @@ test("Created by › Me lists only your tasks, wearing no faces, says so in a ch
   ]);
   assert.equal(chipWords(sidebar), "Created by me");
   const options = sidebar.querySelector('button[aria-label="View options"]');
-  assert.equal(options?.getAttribute("data-filtered"), "true");
+  assert.equal(options?.getAttribute("aria-description"), "Filtered");
   const pinned = sidebar.querySelector('nav[aria-label="Pinned"]');
   assert.deepEqual(
     [...(pinned?.querySelectorAll(".sidebar-task-name") ?? [])].map((name) => name.textContent),
@@ -398,7 +392,7 @@ test("Created by › Me lists only your tasks, wearing no faces, says so in a ch
   assert.ok(clear, "the chip offers its ×");
   act(() => clear.click());
   assert.equal(chip(sidebar), null);
-  assert.equal(options?.getAttribute("data-filtered"), null);
+  assert.equal(options?.getAttribute("aria-description"), null);
   assert.equal(taskRows(sidebar).length, 3);
 });
 
@@ -503,7 +497,7 @@ test("the archived tasks stand in no group at the list's foot, and View options 
   assert.equal(sidebar.querySelector('nav[aria-label="Pinned"]'), null, "the pins stand aside");
   assert.equal(chipWords(sidebar), "Archived");
   const options = sidebar.querySelector('button[aria-label="View options"]');
-  assert.equal(options?.getAttribute("data-filtered"), "true");
+  assert.equal(options?.getAttribute("aria-description"), "Filtered");
 
   const back = chip(sidebar)?.querySelector("button");
   assert.ok(back, "the chip offers its ×");

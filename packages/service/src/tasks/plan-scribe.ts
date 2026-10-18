@@ -37,7 +37,7 @@ import { DEVELOPER_FIELDS_MARKER, SCRIBE_INSTRUCTIONS } from "../agents/brain-ho
 import { PLAN_SAVE_STATUS, saveNotes } from "./plan-notes.js";
 
 /**
- * plan-scribe.ts -- a planning call's notetaker: it listens to the call and writes the plan while Luke and the developer talk.
+ * plan-scribe.ts -- a task call's notetaker: it listens to the call and writes the plan while Luke and the developer talk.
  *
  * GPT-Live's own guidance for side work is to react to the transcript as it
  * arrives, on a small model, while speech goes on; this is that for the plan.
@@ -54,7 +54,7 @@ import { PLAN_SAVE_STATUS, saveNotes } from "./plan-notes.js";
  * the next run with the plan as it then stands.
  * While the model writes, the notes so far go to the device as a draft of the
  * plan (`textNotesInProgress`), each draft differing from the last only where the
- * newest note lands, so the Plans tab types each note in as it is taken. It is the plan's only writer and its
+ * newest note lands, so the Tasks tab types each note in as it is taken. It is the plan's only writer and its
  * runs never overlap, one fiber reading the debounced stream in turn, so no
  * save races another. A run that fails, is refused, or saves nothing moves no
  * cursor, and the next run is handed those lines again. The scribe decides

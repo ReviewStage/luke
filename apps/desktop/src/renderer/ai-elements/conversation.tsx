@@ -1,4 +1,4 @@
-import { cn } from "@luke/ui";
+import { cn, IconButton } from "@luke/ui";
 import { ArrowDownIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -109,7 +109,7 @@ export function Conversation({ className, children, ...props }: ConversationProp
   };
   return (
     <ConversationContext.Provider value={scroll}>
-      <div className={cn("relative flex min-h-0 flex-1 flex-col", className)} {...props}>
+      <div className={cn("conversation", className)} {...props}>
         {children}
       </div>
     </ConversationContext.Provider>
@@ -129,7 +129,7 @@ export function ConversationContent({
     <div
       ref={list}
       role="log"
-      className={cn("min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pt-1 pb-5", className)}
+      className={cn("conversation-log", className)}
       onScroll={onScroll}
       {...props}
     >
@@ -138,64 +138,34 @@ export function ConversationContent({
   );
 }
 
-export type ConversationEmptyStateProps = ComponentProps<"div"> & {
-  title?: string;
-  description?: string;
-  icon?: ReactNode;
-};
-
-/** What the log says instead of messages: a title and a line, or whatever the caller draws. */
+/** What the log says instead of messages: a wait, or the line the caller draws, on a wider measure where `wide` says so. */
 export function ConversationEmptyState({
-  className,
-  title = "No messages yet",
-  description = "",
-  icon,
+  wide = false,
   children,
-  ...props
-}: ConversationEmptyStateProps): ReactNode {
+}: {
+  wide?: boolean;
+  children: ReactNode;
+}): ReactNode {
   return (
-    <div
-      className={cn(
-        "m-auto flex max-w-[280px] flex-col items-center justify-center gap-3 p-6 text-center text-[12.5px] leading-normal text-muted-foreground",
-        className,
-      )}
-      {...props}
-    >
-      {children ?? (
-        <>
-          {icon !== undefined ? <div className="text-muted-foreground">{icon}</div> : null}
-          <div className="space-y-1">
-            <h3 className="m-0 font-medium text-foreground">{title}</h3>
-            {description !== "" ? <p className="m-0">{description}</p> : null}
-          </div>
-        </>
-      )}
-    </div>
+    <div className={cn("conversation-empty", wide && "conversation-empty-wide")}>{children}</div>
   );
 }
 
-export type ConversationScrollButtonProps = ComponentProps<"button">;
-
 /**
  * The way back to the newest line, shown while the reader has scrolled away
- * from it: the window's icon button, floating over the lines on a ground of
- * its own (`.conversation-scroll` in desktop.css).
+ * from it: the shared icon button, floating over the lines on a ground of
+ * its own (`.conversation-scroll` in tasks.css).
  */
-export function ConversationScrollButton({
-  className,
-  ...props
-}: ConversationScrollButtonProps): ReactNode {
+export function ConversationScrollButton(): ReactNode {
   const { isAtBottom, scrollToBottom } = useConversation();
   if (isAtBottom) return null;
   return (
-    <button
-      type="button"
-      aria-label="Scroll to the newest line"
-      className={cn("icon-button conversation-scroll", className)}
-      onClick={scrollToBottom}
-      {...props}
-    >
-      <ArrowDownIcon aria-hidden="true" />
-    </button>
+    <div className="conversation-scroll">
+      <IconButton
+        label="Scroll to the newest line"
+        icon={<ArrowDownIcon aria-hidden="true" />}
+        onClick={scrollToBottom}
+      />
+    </div>
   );
 }

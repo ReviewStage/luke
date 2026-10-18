@@ -18,9 +18,10 @@ import {
   taskInboxStamps,
 } from "../../inbox/inbox-store.js";
 import { CODER } from "./bounds.js";
+import { chatWaitingEntries, chatWaitingStamps } from "./chat-waiting.js";
 
 /**
- * inbox-page.ts -- a plan's inbox as the desktop reads it, and what waits across the account: each held open while nothing changed since the reader's cursor.
+ * inbox-page.ts -- a task's inbox as the desktop reads it, and what waits across the account: each held open while nothing changed since the reader's cursor.
  *
  * The cursor is a digest of where every item stands (`http/held-read.ts`),
  * so a post, a close, an answer, and a new item each move it, and a reader
@@ -33,19 +34,22 @@ import { CODER } from "./bounds.js";
  * asks again.
  *
  * The account's read is the same hold over the account's open items, the
- * desktop's one read that stands whichever plan is open: it is what says an
- * item landed while the developer was elsewhere. It names every plan holding
+ * desktop's one read that stands whichever task is open: it is what says an
+ * item landed while the developer was elsewhere. It names every task holding
  * an item too, settled ones included, read once per answer rather than on
- * each look: a plan's list moves with its open items, since every item
+ * each look: a task's list moves with its open items, since every item
  * opens before it settles, and what moves it alone, such as an archive, is
  * answered at the hold's end at the latest. Note that it looks every
  * `ACCOUNT_INBOX_POLL` rather than `MESSAGES_POLL`, because a desktop holds
  * it for as long as it is signed in rather than while a tab is on screen.
- * The open items of agents with no plan, and the automations holding them,
- * ride beside the plans' under keys of their own, and move the same cursor.
+ * The open items of agents with no task, and the automations holding them,
+ * ride beside the tasks' under keys of their own, and move the same cursor.
  * So does the newest run of each of the account's own automations that
  * failed to start in the last `FAILED_RUN_WINDOW`, which is no item, but
- * is what its owner is told of whichever plan is open.
+ * is what its owner is told of whichever plan is open, and so does what
+ * waits on the account in chat (`chat-waiting.ts`): its stamps are digested
+ * with the items', so an ask or a notice landing wakes the held read as an
+ * item does.
  */
 
 /** How far back a run that failed to start is still carried to its automation's owner. */
@@ -97,7 +101,7 @@ export function agentInboxPast(
   );
 }
 
-/** The plan's inbox as it stands, held while its cursor is still the reader's. */
+/** The task's inbox as it stands, held while its cursor is still the reader's. */
 export function taskInboxPast(
   userId: string,
   taskId: string,
@@ -107,6 +111,16 @@ export function taskInboxPast(
     Effect.andThen(taskInboxItems(userId, taskId)),
     Effect.map((items) => ({ items, cursor: cursorOf(items) })),
   );
+}
+
+/** Where everything that waits on the account stands: its open items, its planless agents' among them, its automations' failed runs, and what waits in chat. */
+function accountStamps(userId: string): InboxStoreEffect<readonly InboxCursorStamp[]> {
+  return Effect.gen(function* () {
+    const items = yield* accountWaitingStamps(userId);
+    const runs = failedRunStamps(yield* failedRunsOf(userId));
+    const chat = yield* chatWaitingStamps(userId);
+    return [...items, ...runs, ...chat];
+  });
 }
 
 /**
@@ -121,20 +135,19 @@ export function accountInboxPast(
 ): InboxStoreEffect<AccountInboxAnswer> {
   const read = Effect.gen(function* () {
     const readAt = yield* Clock.currentTimeMillis;
+    // Note that the cursor is read before what it stands for, so a change landing between them wakes the reader again rather than being lost.
+    const cursor = cursorOf(yield* accountStamps(userId));
     const rows = yield* accountWaitingItems(userId);
     const tasks = yield* accountInboxTasks(userId);
     const tasklessRows = yield* accountTasklessItems(userId);
     const automations = yield* accountInboxAutomations(userId);
     const failedRuns = yield* failedRunsOf(userId);
+    const chat = yield* chatWaitingEntries(userId);
     const items = rows.map(({ status: _status, ...entry }) => entry);
     const planless = tasklessRows.map(({ status: _status, ...entry }) => entry);
-    const cursor = cursorOf([...rows, ...tasklessRows, ...failedRunStamps(failedRuns)]);
-    return { items, plans: tasks, planless, automations, failedRuns, cursor, readAt };
+    return { items, plans: tasks, planless, automations, failedRuns, chat, cursor, readAt };
   });
-  const stamps = Effect.zipWith(
-    accountWaitingStamps(userId),
-    Effect.map(failedRunsOf(userId), failedRunStamps),
-    (items, runs) => [...items, ...runs],
+  return heldUntilMoved(accountStamps(userId), after, CODER.ACCOUNT_INBOX_POLL).pipe(
+    Effect.andThen(read),
   );
-  return heldUntilMoved(stamps, after, CODER.ACCOUNT_INBOX_POLL).pipe(Effect.andThen(read));
 }

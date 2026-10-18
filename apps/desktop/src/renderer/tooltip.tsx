@@ -39,10 +39,23 @@
  * Its words are text like any other, so the session recording masks them
  * with the rest; nothing of it rides an attribute, and a card is left out
  * of the recording whole.
+ *
+ * The pill and the card are drawn, and placed, by `@luke/ui`'s `TooltipPill`
+ * and `TooltipCard`; what is the window's own is here: when one shows and
+ * goes, the warm spell, a card's linger on the window's runtime, and the
+ * stack of cards hung over one another.
  */
 
 import { useAtomSet } from "@effect/atom-react";
 import { MOTION_DELAY_MS } from "@luke/brand";
+import {
+  APP_SHORTCUTS,
+  type KeyedCommand,
+  type ShortcutChord,
+  shortcutAria,
+} from "@luke/settings/shortcuts";
+import { TOOLTIP_LEAVING, TooltipCard, type TooltipLeaving, TooltipPill } from "@luke/ui";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
@@ -56,24 +69,11 @@ import {
   useCallback,
   useEffect,
   useId,
-  useLayoutEffect,
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
-import {
-  APP_SHORTCUTS,
-  type KeyedCommand,
-  type ShortcutChord,
-  shortcutAria,
-} from "#shared/shortcuts";
 import { rendererRuntime } from "./renderer-runtime";
 import { Shortcut } from "./shortcut";
-import { useDisclosure } from "./use-disclosure";
-
-/** The gap between a control and its pill, and the pill's least distance from the window's edge, in CSS pixels. */
-const TOOLTIP_GAP = 6;
-const TOOLTIP_MARGIN = 6;
 
 /**
  * How long after one pill goes the next shows at once. Note that it is the
@@ -89,21 +89,6 @@ const WARM_MS = MOTION_DELAY_MS.HINT;
  * and GitHub's hover cards wait.
  */
 const CARD_LINGER = Duration.millis(180);
-
-/** What a card holds that a press chooses, which takes the card down. */
-const CARD_CHOICE = "button, a[href]";
-
-/** Which side of its control a pill hangs on. */
-const TOOLTIP_SIDE = {
-  BELOW: "below",
-  ABOVE: "above",
-  /** Beside the control, past its end: a card a list row hangs, so it covers none of the rows under it. */
-  END: "end",
-  /** Beside the control, before its start: a row's card where the window ends past the row, as the plan's summary at its right edge hangs one. */
-  START: "start",
-} as const;
-
-type TooltipSide = (typeof TOOLTIP_SIDE)[keyof typeof TOOLTIP_SIDE];
 
 /** Until when a newly rested-on control shows its pill at once: the window's one warm spell. */
 let warmUntil = 0;
@@ -178,58 +163,6 @@ interface Drawn {
   label: string;
 }
 
-/** How a pill is on its way out: fading, having been seen, or at once, having never been. */
-const PILL_LEAVING = {
-  SEEN: "seen",
-  UNSEEN: "unseen",
-} as const;
-
-type PillLeaving = (typeof PILL_LEAVING)[keyof typeof PILL_LEAVING];
-
-interface PillPlace {
-  left: number;
-  top: number;
-  side: TooltipSide;
-}
-
-function clampTo(value: number, size: number, room: number): number {
-  return Math.max(TOOLTIP_MARGIN, Math.min(value, room - size - TOOLTIP_MARGIN));
-}
-
-/**
- * Where a pill of this size goes for its control: below it, or above where
- * the window ends; centred on it, or from its start for a card. A card hung
- * beside its control stands past the control's end, level with its top and
- * held inside the window, or before its start where the window ends past
- * the control, as a menu turns at the screen's edge, so it never covers the
- * control it describes.
- */
-function pillPlace(
-  shown: Shown,
-  width: number,
-  height: number,
-  card: { readonly beside: boolean } | undefined,
-): PillPlace {
-  const anchor = shown.anchor.getBoundingClientRect();
-  if (card?.beside === true) {
-    const top = clampTo(anchor.top, height, window.innerHeight);
-    const past = anchor.right + TOOLTIP_GAP;
-    const before = anchor.left - TOOLTIP_GAP - width;
-    if (past + width > window.innerWidth - TOOLTIP_MARGIN && before >= TOOLTIP_MARGIN) {
-      return { left: before, top, side: TOOLTIP_SIDE.START };
-    }
-    return { left: clampTo(past, width, window.innerWidth), top, side: TOOLTIP_SIDE.END };
-  }
-  const below = anchor.bottom + TOOLTIP_GAP;
-  const fits = below + height <= window.innerHeight - TOOLTIP_MARGIN;
-  const left = card === undefined ? anchor.left + anchor.width / 2 - width / 2 : anchor.left;
-  return {
-    left: clampTo(left, width, window.innerWidth),
-    top: fits ? below : anchor.top - TOOLTIP_GAP - height,
-    side: fits ? TOOLTIP_SIDE.BELOW : TOOLTIP_SIDE.ABOVE,
-  };
-}
-
 /** The chord as `aria-keyshortcuts` spells it, for a control that shows its shortcut without a tooltip. */
 export function commandKeyshortcuts(command: KeyedCommand): string {
   return shortcutAria(APP_SHORTCUTS[command].chord);
@@ -240,105 +173,51 @@ function visible(shown: Shown): boolean {
   return shown.instant || performance.now() - shown.since >= MOTION_DELAY_MS.HINT;
 }
 
-/** The pill itself, or the card in its place, measured before it is painted so it is drawn once and where it fits. */
-function TooltipPill({
+/** The pill as it was last shown, or the card in its place, with the chord the pill prints. */
+function Hint({
   id,
-  shown,
-  label,
+  drawn,
   chord,
   card,
   cardBeside,
   leaving,
-  ref: hold,
+  hold,
   onCard,
   onCardPress,
   onCardChoice,
 }: {
   id: string;
-  shown: Shown;
-  label: string;
+  drawn: Drawn;
   chord: ShortcutChord | undefined;
   card: ReactNode;
   cardBeside: boolean;
-  /** How it is on its way out, while it is: inert, and fading or already hidden. */
-  leaving: PillLeaving | undefined;
-  /** Hands its element to the hold that draws it through its exit. */
-  ref: (element: HTMLElement | null) => void;
-  /** The pointer arriving on the card, or leaving it. */
+  leaving: TooltipLeaving | undefined;
+  hold: (element: HTMLElement | null) => void;
   onCard: (over: boolean) => void;
-  /** A press begun on the card. */
   onCardPress: () => void;
-  /** One of the card's buttons or links chosen. */
   onCardChoice: () => void;
 }): React.JSX.Element {
-  const element = useRef<HTMLDivElement | null>(null);
-  const drawn = useCallback(
-    (node: HTMLDivElement | null) => {
-      element.current = node;
-      hold(node);
-    },
-    [hold],
-  );
-  const [at, setAt] = useState<PillPlace | undefined>(undefined);
-  const carded = card !== undefined;
-
-  useLayoutEffect(() => {
-    const drawn = element.current;
-    if (drawn === null) return;
-    // Note that its layout size is read rather than its box, because the box
-    // is still scaled short by the fade it waits to play.
-    const placed = carded ? { beside: cardBeside } : undefined;
-    const measure = () => setAt(pillPlace(shown, drawn.offsetWidth, drawn.offsetHeight, placed));
-    measure();
-    // Note that it is placed again whenever it resizes, because a card grows
-    // as a read it made lands, and must stay inside the window as it does.
-    const observer = new ResizeObserver(measure);
-    observer.observe(drawn);
-    return () => observer.disconnect();
-  }, [shown, label, carded, cardBeside]);
-
-  return createPortal(
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the click is a card's own button's or link's, bubbled up, which its keys press as well.
-    <div
-      ref={drawn}
-      id={id}
-      role="tooltip"
-      className={carded ? "tooltip tooltip-card ph-no-capture" : "tooltip"}
-      data-placed={String(at !== undefined)}
-      data-side={at?.side ?? TOOLTIP_SIDE.BELOW}
-      data-instant={String(shown.instant)}
-      data-leaving={leaving}
-      inert={leaving !== undefined}
-      style={at === undefined ? undefined : { left: at.left, top: at.top }}
-      onPointerEnter={carded ? () => onCard(true) : undefined}
-      onPointerLeave={carded ? () => onCard(false) : undefined}
-      // Note that a card's presses go no further than the card, because the
-      // portal still bubbles them through the tree it was drawn from, and a
-      // card hung from a mark inside a row's button would otherwise press
-      // the row, or take itself down through its own control's press.
-      onPointerDown={
-        carded
-          ? (event) => {
-              event.stopPropagation();
-              onCardPress();
-            }
-          : undefined
-      }
-      onClick={
-        carded
-          ? (event) => {
-              event.stopPropagation();
-              if (event.target instanceof Element && event.target.closest(CARD_CHOICE) !== null) {
-                onCardChoice();
-              }
-            }
-          : undefined
-      }
-    >
-      {carded ? card : label}
-      {chord === undefined || carded ? null : <Shortcut chord={chord} />}
-    </div>,
-    document.body,
+  const { anchor, instant } = drawn.shown;
+  const placed = { id, anchor, instant, leaving, ref: hold };
+  if (card !== undefined) {
+    return (
+      <TooltipCard
+        {...placed}
+        beside={cardBeside}
+        onHover={onCard}
+        onPress={onCardPress}
+        onChoice={onCardChoice}
+      >
+        {card}
+      </TooltipCard>
+    );
+  }
+  return (
+    <TooltipPill
+      {...placed}
+      label={drawn.label}
+      shortcut={chord === undefined ? undefined : <Shortcut chord={chord} />}
+    />
   );
 }
 
@@ -575,15 +454,16 @@ export function Tooltip({
     <>
       {anchor}
       {!pill.mounted || drawn === undefined ? null : (
-        <TooltipPill
+        <Hint
           id={id}
-          shown={drawn.shown}
-          label={drawn.label}
+          drawn={drawn}
           chord={chord}
           card={card}
           cardBeside={cardBeside}
-          leaving={pill.leaving ? (seen ? PILL_LEAVING.SEEN : PILL_LEAVING.UNSEEN) : undefined}
-          ref={drawPill}
+          leaving={
+            pill.leaving ? (seen ? TOOLTIP_LEAVING.SEEN : TOOLTIP_LEAVING.UNSEEN) : undefined
+          }
+          hold={drawPill}
           onCard={onCard}
           onCardPress={onCardPress}
           onCardChoice={hide}

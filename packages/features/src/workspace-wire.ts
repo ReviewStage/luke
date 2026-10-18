@@ -27,7 +27,7 @@ import { workspaceIdSchema } from "./task-wire.js";
  * suspended or removed one is not. `githubInstallations` is every one, and
  * absent from a service from before there could be several; `github` is
  * the first still active, else the first, or null, as a desktop from
- * before them reads it. A workspace's id is the one a plan's summary names, `task-wire.ts`'s
+ * before them reads it. A workspace's id is the one a task's summary names, `task-wire.ts`'s
  * `workspaceIdSchema`.
  *
  * A member of a workspace reads its members; an owner or an admin renames
@@ -41,7 +41,7 @@ import { workspaceIdSchema } from "./task-wire.js";
  * A workspace's slug is the first step of a Luke link's path
  * (`https://tryluke.dev/<slug>/plan/<id>`, `mention-link.ts`), so no workspace
  * takes one Luke's own pages stand under: `RESERVED_WORKSPACE_SLUGS`. The
- * slug only reads well; a link is found by the plan's id alone, so a slug
+ * slug only reads well; a link is found by the task's id alone, so a slug
  * spelled differently later breaks no link written under the old one.
  *
  * A workspace may show a photo an owner or admin uploaded, served to its
@@ -220,7 +220,7 @@ export const workspaceSchema = EffectSchema.Struct({
   /**
    * The first step of the workspace's links' paths, unique among workspaces;
    * absent from a service before slugs travelled, which the desktop reads
-   * past, since a link is found by its plan's id alone.
+   * past, since a link is found by its task's id alone.
    */
   slug: EffectSchema.optionalKey(EffectSchema.String),
   role: EffectSchema.Literals(Object.values(WORKSPACE_ROLE)),

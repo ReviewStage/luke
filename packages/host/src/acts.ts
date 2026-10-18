@@ -19,11 +19,14 @@ import {
 import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
+  type CodingAgentChatAnswerView,
+  type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxMessagedView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -37,6 +40,10 @@ import {
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChangesAnswerViewSchema,
+  codingAgentChatAnswerViewSchema,
+  codingAgentChatParamsSchema,
+  codingAgentChatPostParamsSchema,
+  codingAgentChatWriteAnswerViewSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDefaultWriteParamsSchema,
@@ -47,6 +54,8 @@ import {
   codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxAttachmentViewSchema,
+  codingAgentInboxMessagedViewSchema,
+  codingAgentInboxMessageParamsSchema,
   codingAgentInboxParamsSchema,
   codingAgentListAnswerViewSchema,
   codingAgentListParamsSchema,
@@ -88,6 +97,11 @@ import {
   providerKeysAnswerViewSchema,
 } from "@luke/features/coding-agent-view";
 import {
+  type FactoryWorldView,
+  factoryWorldParamsSchema,
+  factoryWorldViewSchema,
+} from "@luke/features/factory-world-view";
+import {
   type FeedbackResult,
   type FeedbackSubmission,
   feedbackSubmission,
@@ -128,16 +142,15 @@ import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
   type CodeLines,
   codeLinesSchema,
-  type PlanningPullRequest,
-  planningPullRequestParamsSchema,
-  planningPullRequestSchema,
   type TasksEditAnswer,
   type TasksFileAnswer,
   type TasksIssue,
   type TasksMoveAnswer,
   type TasksPageSourceAnswer,
+  type TasksPagesAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
+  type TasksPullRequest,
   type TasksRepositoriesAnswer,
   type TasksRevisionAnswer,
   type TasksRevisionsAnswer,
@@ -160,12 +173,16 @@ import {
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
   tasksPageSourceAnswerSchema,
+  tasksPagesAnswerSchema,
+  tasksPagesParamsSchema,
   tasksPictureAnswerSchema,
   tasksPictureKeepAnswerSchema,
   tasksPictureKeepParamsSchema,
   tasksPictureParamsSchema,
   tasksPinParamsSchema,
   tasksPinRepositoryParamsSchema,
+  tasksPullRequestParamsSchema,
+  tasksPullRequestSchema,
   tasksRenameParamsSchema,
   tasksRepositoriesAnswerSchema,
   tasksRepositoriesParamsSchema,
@@ -194,6 +211,7 @@ import {
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceTransferParamsSchema,
+  tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
@@ -304,11 +322,11 @@ export const ACT_KIND = {
   UPDATE_OPEN_RELEASE: "update.openRelease",
   UPDATE_OPEN_CHANGELOG: "update.openChangelog",
   /**
-   * The panel's Plans tab asking the host: the plan list and the active
-   * document read as the tab shows, one plan made the active one, the open
-   * plan left, a plan started on a repository, and a plan renamed, given its
+   * The panel's Tasks tab asking the host: the task list and the active
+   * document read as the tab shows, one task made the active one, the open
+   * task left, a task started on a repository, and a task renamed, given its
    * repository, pinned or unpinned, archived or brought back, or deleted. The view arrives on the document rather than as
-   * an answer. The one write of a plan's document from here is the
+   * an answer. The one write of a task's document from here is the
    * developer's edit of a field, `TASKS_EDIT`, which answers whether it
    * saved, conflicted with what Luke wrote meanwhile, or failed.
    */
@@ -321,14 +339,16 @@ export const ACT_KIND = {
   TASKS_PIN: "tasks.pin",
   /** A repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
+  /** One change to the sidebar's sections, kept on the account; answers whether the service took it. */
+  TASKS_WRITE_SECTION: "tasks.writeSection",
   TASKS_ARCHIVE: "tasks.archive",
   /** The repository chip's read: the repositories the account reaches through the Luke GitHub App, as the service answers them now. */
   TASKS_REPOSITORIES: "tasks.repositories",
-  /** A plan given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
+  /** A task given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
   TASKS_SET_REPOSITORY: "tasks.setRepository",
-  /** A plan moved on the service to another of the account's workspaces, its owner's alone; answers the workspace it now belongs to, or why it stands where it was. */
+  /** A task moved on the service to another of the account's workspaces, its owner's alone; answers the workspace it now belongs to, or why it stands where it was. */
   TASKS_MOVE: "tasks.move",
-  /** The developer's edit of the open plan's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
+  /** The developer's edit of the open task's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
   TASKS_EDIT: "tasks.edit",
   /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
   GITHUB_OPEN: "github.open",
@@ -338,24 +358,24 @@ export const ACT_KIND = {
   GITHUB_CONNECT: "github.connect",
   /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
   GITHUB_DISCONNECT: "github.disconnect",
-  /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
+  /** The Tasks tab's microphone button: a call about the task the panel has open, opened, or its microphone toggled. */
   TASKS_TALK: "tasks.talk",
-  /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
+  /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   TASKS_BOARD_SAVE: "tasks.boardSave",
-  /** The Work tab scrolled back to its oldest turn: the open plan's page of work before it, read from the service; the view arrives on the document. */
+  /** The Work tab scrolled back to its oldest turn: the open task's page of work before it, read from the service; the view arrives on the document. */
   TASKS_WORK_EARLIER: "tasks.workEarlier",
-  /** The Call tab scrolled back to its oldest turn: the open plan's page of conversation before it, read from the service; the view arrives on the document. */
+  /** The Call tab scrolled back to its oldest turn: the open task's page of conversation before it, read from the service; the view arrives on the document. */
   TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
-  /** One page of a plan's conversation, or a planning worker's under the call that started it, held open by the service while it runs; answered to the tab, never on the document. */
+  /** One page of a task's conversation, or a brain worker's under the call that started it, held open by the service while it runs; answered to the tab, never on the document. */
   TASKS_MESSAGES: "tasks.messages",
-  /** A File tab's window of a file of the open plan's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
+  /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
   TASKS_FILE: "tasks.file",
-  /** A File tab's tree listing one folder of the open plan's repository, read from GitHub through the service; answered to the tree, never on the document. */
+  /** A File tab's tree listing one folder of the open task's repository, read from GitHub through the service; answered to the tree, never on the document. */
   TASKS_TREE: "tasks.tree",
-  /** The skills a developer may choose of a plan's repository, read from GitHub through the service; answered to the asker, never on the document. */
-  TASKS_SKILLS: "planning.skills",
+  /** The skills a developer may choose of a task's repository, read from GitHub through the service; answered to the asker, never on the document. */
+  TASKS_SKILLS: "tasks.skills",
   /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
-  TASKS_PULL_REQUEST: "planning.pullRequest",
+  TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
   TASKS_ISSUE: "tasks.issue",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
@@ -367,11 +387,13 @@ export const ACT_KIND = {
   /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
   /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
-  TASKS_PAGE_SOURCE: "planning.pageSource",
+  TASKS_PAGE_SOURCE: "tasks.pageSource",
+  /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
+  TASKS_PAGES: "tasks.pages",
   /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
-  TASKS_PICTURE_READ: "planning.pictureRead",
+  TASKS_PICTURE_READ: "tasks.pictureRead",
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
-  TASKS_PICTURE_KEEP: "planning.pictureKeep",
+  TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /**
    * The account's workspaces: one made under a name, answered as made, which
    * the account owns; one renamed by its owners and admins, answered under
@@ -409,8 +431,8 @@ export const ACT_KIND = {
   WORKSPACE_PHOTO_READ: "workspace.photoRead",
   WORKSPACE_PHOTO_SET: "workspace.photoSet",
   /**
-   * A plan's coding agents, asked of the service: the models one may run
-   * on, the account's default among them read and written, the plan's
+   * A task's coding agents, asked of the service: the models one may run
+   * on, the account's default among them read and written, the task's
    * agents with their status, one started under the press's own key, one's
    * transcript past a cursor (held open by the service while the agent
    * runs), one sent a message naming how it reaches a turn under way, one
@@ -435,7 +457,7 @@ export const ACT_KIND = {
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   CODING_AGENTS_PIN: "codingAgents.pin",
   /**
-   * Which agent's tab the panel shows, or none, and which plan's Inbox tab,
+   * Which agent's tab the panel shows, or none, and which task's Inbox tab,
    * or none: what main's notification of an agent's end or of an inbox item
    * is held back by, and what clears an agent's tab's unseen dot.
    */
@@ -468,6 +490,8 @@ export const ACT_KIND = {
   ISSUES_READ: "issues.read",
   ISSUES_CREATE: "issues.create",
   ISSUES_CHANGE: "issues.change",
+  /** A workspace's Factory world, read whole as it stands now, for the Factory page's worlds. */
+  FACTORY_WORLD: "factory.world",
   /**
    * Settings › API keys: the account's own provider keys read as hints and
    * statuses, one saved, one removed. The save's payload is the one place a
@@ -478,7 +502,7 @@ export const ACT_KIND = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /**
-   * Settings › Plan template: the Markdown the account's new plans start
+   * Settings › Plan template: the Markdown the account's new tasks start
    * from, read as the page opens, and kept as the developer pauses or reset
    * to the default with null. Each answers the template as the service then
    * keeps it. Its version history reads a page of revisions and one
@@ -496,7 +520,7 @@ export const ACT_KIND = {
    */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
   /**
-   * The plan's inbox of what its coding agents need of the developer: read
+   * The task's inbox of what its coding agents need of the developer: read
    * past a cursor (held open by the service while nothing changed), and one
    * item answered against the revision the panel drew, under the panel's own
    * key. The window holds what it draws; nothing here does.
@@ -504,6 +528,8 @@ export const ACT_KIND = {
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
+  CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   CODING_AGENTS_PICTURE: "codingAgents.picture",
@@ -532,9 +558,17 @@ export const ACT_KIND = {
   MAC_REPOSITORY_SET: "macRepositories.set",
   MAC_TERMINAL_OPEN: "macTerminal.open",
   MAC_TERMINAL_CLOSE: "macTerminal.close",
+  /**
+   * The workspace's chat: read past a cursor (held open by the service
+   * while nothing moved), and written to as the account's own member, a
+   * post, an answer to an ask, a resolve, or how far it has read. The
+   * window holds what it draws; nothing here does.
+   */
+  CODING_AGENTS_CHAT: "codingAgents.chat",
+  CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
   VOICE_COMMAND: "voice.command",
-  /** The call card's way back: Luke's window brought forward on the call's own plan. */
-  CALL_SHOW_TASK: "call.showPlan",
+  /** The call card's way back: Luke's window brought forward on the call's own task. */
+  CALL_SHOW_TASK: "call.showTask",
   /** The panel's word on Luke's avatar: starting, live on its first frame, or ended and why. Taken from the panel alone. */
   AVATAR_REPORT: "avatar.report",
   /** The video tile's Video off, Video on, and Restart video: Luke's avatar asked for on the standing call, or taken down. Taken from the panel and the floating call window, which draw the tile, alone. */
@@ -706,11 +740,22 @@ function exactTextAllowingEmpty(max: number): EffectSchema.Codec<string, string>
 }
 
 /**
- * An identifier that has to match the one it names elsewhere — a plan or an
+ * An identifier that has to match the one it names elsewhere — a task or an
  * account — so its ends are admitted as written rather than trimmed into a
  * value the host would not hold.
  */
 const exactId = exactText(512);
+
+/**
+ * The Chat the panel has on screen: a workspace's whole Chat, where the
+ * plan is none, or one task's Chat tab, which shows only its plan's channel.
+ */
+const chatShownSchema = EffectSchema.Struct({
+  workspaceId: exactId,
+  planId: EffectSchema.NullOr(exactId),
+});
+
+export type ChatShown = typeof chatShownSchema.Type;
 
 /**
  * The longest fenced block a transcript asks main to colour. Note that a
@@ -732,7 +777,7 @@ const savedFileName = exactText(255).check(EffectSchema.isPattern(/^[^/\\]+$/u))
 /** The longest language name a fence may give for its block to be coloured. */
 export const FENCE_LANGUAGE_MAX_CHARS = 32;
 
-/** The one host the browser is sent to from a plan: a repository's page, or the App's installation page. */
+/** The one host the browser is sent to from a task: a repository's page, or the App's installation page. */
 const GITHUB_ADDRESS = /^https:\/\/github\.com\//u;
 
 /** An address on GitHub, and nowhere else: what a repository link, the installation link, or Luke's own issues open. */
@@ -913,6 +958,11 @@ export const ACT = {
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not pin that repository on this system.",
   },
+  [ACT_KIND.TASKS_WRITE_SECTION]: {
+    payload: actSchema(tasksWriteSectionParamsSchema),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not change that section on this system.",
+  },
   [ACT_KIND.TASKS_ARCHIVE]: {
     payload: actSchema(tasksArchiveParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
@@ -1062,8 +1112,8 @@ export const ACT = {
     refusal: "Could not read this repository's skills on this system.",
   },
   [ACT_KIND.TASKS_PULL_REQUEST]: {
-    payload: actSchema(planningPullRequestParamsSchema),
-    result: wireResult<PlanningPullRequest>(isReadable(planningPullRequestSchema)),
+    payload: actSchema(tasksPullRequestParamsSchema),
+    result: wireResult<TasksPullRequest>(isReadable(tasksPullRequestSchema)),
     refusal: "Could not read that pull request on this system.",
   },
   [ACT_KIND.TASKS_ISSUE]: {
@@ -1108,6 +1158,11 @@ export const ACT = {
     payload: actSchema(tasksPageParamsSchema),
     result: wireResult<TasksPageSourceAnswer>(isReadable(tasksPageSourceAnswerSchema)),
     refusal: "Could not read that page's source on this system.",
+  },
+  [ACT_KIND.TASKS_PAGES]: {
+    payload: actSchema(tasksPagesParamsSchema),
+    result: wireResult<TasksPagesAnswer>(isReadable(tasksPagesAnswerSchema)),
+    refusal: "Could not read that plan's pages on this system.",
   },
   [ACT_KIND.TASKS_WORK_EARLIER]: press("Could not read that task's earlier work on this system."),
   [ACT_KIND.TASKS_CONVERSATION_EARLIER]: press(
@@ -1226,6 +1281,8 @@ export const ACT = {
     payload: record({
       agentId: EffectSchema.NullOr(exactId),
       inboxTaskId: EffectSchema.NullOr(exactId),
+      /** The Chat on screen: a workspace's whole Chat, the plan none, or a task's Chat tab on its plan's channel; none where no Chat is. */
+      chatShown: EffectSchema.optionalKey(EffectSchema.NullOr(chatShownSchema)),
     }),
     result: answersNothing,
     refusal: "Could not note which agent is shown on this system.",
@@ -1337,6 +1394,11 @@ export const ACT = {
     result: wireResult<IssueView>(isReadable(issueViewSchema)),
     refusal: "Could not change the issue on this system.",
   },
+  [ACT_KIND.FACTORY_WORLD]: {
+    payload: actSchema(factoryWorldParamsSchema),
+    result: wireResult<FactoryWorldView>(isReadable(factoryWorldViewSchema)),
+    refusal: "Could not read the workspace's world on this system.",
+  },
   [ACT_KIND.PROVIDER_KEYS_READ]: {
     payload: noPayload,
     result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
@@ -1404,6 +1466,13 @@ export const ACT = {
       isReadable(codingAgentInboxAnsweredViewSchema),
     ),
     refusal: "Could not answer the inbox item on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: {
+    payload: actSchema(codingAgentInboxMessageParamsSchema),
+    result: wireResult<CodingAgentInboxMessagedView>(
+      isReadable(codingAgentInboxMessagedViewSchema),
+    ),
+    refusal: "Could not send the message on this system.",
   },
   [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: {
     payload: actSchema(codingAgentInboxAttachmentParamsSchema),
@@ -1474,6 +1543,18 @@ export const ACT = {
     result: answersNothing,
     refusal: "Could not close that shell.",
   },
+  [ACT_KIND.CODING_AGENTS_CHAT]: {
+    payload: actSchema(codingAgentChatParamsSchema),
+    result: wireResult<CodingAgentChatAnswerView>(isReadable(codingAgentChatAnswerViewSchema)),
+    refusal: "Could not read the workspace's chat on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_CHAT_POST]: {
+    payload: actSchema(codingAgentChatPostParamsSchema),
+    result: wireResult<CodingAgentChatWriteAnswerView>(
+      isReadable(codingAgentChatWriteAnswerViewSchema),
+    ),
+    refusal: "Could not write to the workspace's chat on this system.",
+  },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({
       command: EffectSchema.Literals(Object.values(VOICE_COMMAND)),
@@ -1542,7 +1623,7 @@ export const ACT = {
     refusal: "Could not turn the video on or off on this system.",
   },
   [ACT_KIND.WINDOW_COPY_TEXT]: {
-    // A plan's whole document and a File tab's whole file are copied
+    // A task's whole document and a File tab's whole file are copied
     // through this act, so it admits the longer of the two the service
     // holds, and an empty document copies as the empty text it is.
     payload: record({

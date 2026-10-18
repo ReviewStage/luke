@@ -6,22 +6,22 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
 import {
   SETTINGS_PAGE_GROUP,
-  SETTINGS_PAGE_GROUPS,
   SETTINGS_VIEW,
   type SettingsPageGroup,
   type SettingsView,
 } from "@luke/settings/settings-views";
-import { BackIcon } from "@luke/ui";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
+import { BackIcon, SettingsPage, useMenu } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
-import { APP_COMMAND, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { appPlatform } from "../app-platform";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import type { NavigationHistory } from "../navigation-history";
 import { AttentionMark } from "../settings/marks";
-import { settingsGroupHeadingOf, settingsPageOf } from "../settings/pages";
+import { settingsGroupHeadingOf, settingsPageOf, shownSettingsPageGroups } from "../settings/pages";
 import { TemplateVersionHistory } from "../settings/plan-template-history";
 import { PlanTemplatePage } from "../settings/plan-template-page";
 import { pageResetControl } from "../settings/reset";
@@ -43,7 +43,7 @@ import {
 } from "../settings-search";
 import { Shortcut } from "../shortcut";
 import { commandKeyshortcuts } from "../tooltip";
-import { ActionMenu, useActionMenu } from "./action-menu";
+import { ActionMenu } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 import { WorkspaceTile } from "./workspace-tile";
@@ -64,7 +64,7 @@ function SettingsPageRow({
   onOpen: () => void;
 }): React.JSX.Element {
   const page = settingsPageOf(view);
-  const menu = useActionMenu(true);
+  const menu = useMenu(true);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.SETTINGS, page: view });
   return (
     <li>
@@ -112,12 +112,12 @@ function GroupHeading({
 
 /**
  * Settings as a desktop app lays them out: the sidebar turns into the list of
- * pages, with the way back to plans at its head and the search above the
+ * pages, with the way back to tasks at its head and the search above the
  * list, and the chosen page stands beside it under its own title. The pages
  * are the panel's own, drawn by `SettingsPanel`, and this list is the one
  * index of them, the Voice row wearing its attention mark. It groups them
  * under three headings, as Linear and Notion group theirs: the workspace the
- * plans' sidebar lists, by its tile and name, over its Members and GitHub;
+ * tasks' sidebar lists, by its tile and name, over its Members and GitHub;
  * Account, over what is the account's whichever workspace is listed; and
  * This Mac. Settings opens on Profile, Account's first page, with the caret
  * in the search. The page has
@@ -140,7 +140,7 @@ function GroupHeading({
  * for, and turning to another page clears it. Command-F lands in the page's
  * field while it shows, and in the sidebar's otherwise.
  *
- * The list is as wide as the plans' sidebar and resizes it from its own edge,
+ * The list is as wide as the tasks' sidebar and resizes it from its own edge,
  * but never folds: a drag past the least width holds there, because Settings
  * has no other way back to its pages. Back and forward stand at the right of
  * its title-bar row, where the sidebar keeps them, and Back at the list's
@@ -157,7 +157,7 @@ export function DesktopSettings({
   sidebar: SidebarCollapse;
   history: NavigationHistory;
   settings: SettingsPanelProps;
-  /** The call card, at the page list's foot, as the plans' sidebar draws it above its account row. */
+  /** The call card, at the page list's foot, as the tasks' sidebar draws it above its account row. */
   call: CallCardInput | undefined;
   /** Leaves Settings for wherever it was opened from. */
   onExit: () => void;
@@ -175,7 +175,7 @@ export function DesktopSettings({
   // Note that the template's version history answers Escape itself, back to the template, so Settings does not then.
   useAppCommand(APP_COMMAND.EXIT_SETTINGS, templateHistory ? undefined : onExit);
   const shown = settingsPageOf(settings.view);
-  // The workspace the plans' sidebar lists, which heads the first group and is the one the Workspace page shows.
+  // The workspace the tasks' sidebar lists, which heads the first group and is the one the Workspace page shows.
   const listed =
     settings.account.status === ACCOUNT_STATUS.SIGNED_IN && settings.workspace
       ? shownWorkspace(settings.workspace)
@@ -189,7 +189,7 @@ export function DesktopSettings({
   const search =
     rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
   const open = (view: SettingsView) => {
-    window.luke.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
+    appPlatform().recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SETTINGS_VIEW_OPEN, {
       settings_view: SETTINGS_VIEW_COUNTED_AS[view],
     });
     settings.onViewChange(view);
@@ -272,7 +272,7 @@ export function DesktopSettings({
             {search ? (
               <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
             ) : (
-              SETTINGS_PAGE_GROUPS.map(({ group, pages }) => (
+              shownSettingsPageGroups(settings.capabilities).map(({ group, pages }) => (
                 <section key={group} className="settings-nav-group">
                   <GroupHeading group={group} listed={listed} />
                   <ul>
@@ -308,16 +308,12 @@ export function DesktopSettings({
         <section className="settings-page" aria-label={title}>
           <div className="desktop-drag-strip" />
           {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
-          <div key={settings.view} className="settings-page-scroll scroll-fade-top">
-            <header className="settings-page-head">
-              <h1 className="settings-page-title">{title}</h1>
-              {reset}
-            </header>
+          <SettingsPage key={settings.view} title={title} actions={reset}>
             <SettingsPanel
               {...settings}
               integrationsFilter={{ query: integrationsQuery, onQueryChange: setIntegrationsQuery }}
             />
-          </div>
+          </SettingsPage>
         </section>
       )}
     </div>

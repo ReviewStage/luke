@@ -1,0 +1,225 @@
+/* menu.css -- a drop-down menu hung at a point in the window (`menu.tsx`)
+   and its submenus: one surface over everything, its rows one fixed
+   height, a long menu scrolling down within the window and never sideways.
+   Words wider than the menu, a long email or name, end in an ellipsis
+   inside their row. Note that the entrance animates a transform, which
+   makes the surface the containing block of every fixed box inside it, so
+   a submenu, a second surface beside the first, is drawn at the body and
+   never inside it. */
+
+@layer components {
+  .luke-menu {
+    position: fixed;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    min-width: 196px;
+    max-width: 280px;
+    max-height: calc(100vh - 2 * var(--luke-space-8));
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: var(--luke-menu-inset);
+    border: 1px solid var(--luke-color-border-strong);
+    border-radius: var(--luke-menu-radius);
+    background: var(--luke-color-overlay);
+    box-shadow: var(--luke-menu-shadow);
+    animation:
+      luke-menu-arrive var(--duration-quick, 0s) var(--motion-exit, ease) both,
+      luke-menu-drop var(--duration-fast, 0s) var(--spring-fast, ease) both;
+  }
+
+  /* Hidden for the one layout pass that measures where it fits. */
+  .luke-menu[data-placed="false"] {
+    visibility: hidden;
+  }
+
+  /* Closed, it fades out while its owner holds it drawn and inert. Note
+     that the hold waits on every motion the element runs, so the exit is
+     the one motion it has. */
+  .luke-menu[data-leaving="true"] {
+    pointer-events: none;
+    animation: luke-menu-leave var(--duration-exit, 0s) var(--motion-exit, ease) forwards;
+    transition: none;
+  }
+
+  /* One row: its glyph slot, its words, and at its end a muted hint and
+     the end slot. A row is one fixed height and flexes in no column it
+     stands in. */
+  .luke-menu-item {
+    display: flex;
+    flex: none;
+    width: 100%;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    height: var(--luke-menu-row-height);
+    margin: 0;
+    padding: 0 var(--luke-space-8);
+    border: 0;
+    border-radius: var(--luke-menu-row-radius);
+    background: none;
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-body-size);
+    font-weight: var(--luke-weight-regular);
+    text-align: left;
+    white-space: nowrap;
+    cursor: default;
+  }
+
+  /* The row a menu is on is filled, never ringed: focus moves with the
+     pointer and the arrows alike, so both light a row, and a submenu's
+     item stays lit while its submenu stands beside it. */
+  .luke-menu-item:is(:hover, :focus-visible),
+  .luke-menu-item[data-open="true"] {
+    outline: none; /* no ring: the row's fill marks it */
+    background: var(--luke-color-fill-strong);
+  }
+
+  .luke-menu-item[data-danger="true"] {
+    color: var(--luke-color-danger-text);
+  }
+
+  .luke-menu-item[data-danger="true"]:is(:hover, :focus-visible) {
+    background: color-mix(in srgb, var(--luke-color-danger) 16%, transparent);
+  }
+
+  /* A row that cannot be chosen now is dimmed with its mark and lit by
+     nothing. */
+  .luke-menu-item:disabled {
+    background: none;
+    opacity: 0.4;
+  }
+
+  /* An item with a second line under its label grows to hold both. */
+  .luke-menu-item[data-detail="true"] {
+    height: auto;
+    min-height: var(--luke-menu-row-height);
+    padding-block: var(--luke-space-4);
+  }
+
+  /* The glyph slot: a mark in a glyph's column, muted beside the words, and
+     red with them on an act that cannot be taken back. It is drawn whether
+     or not the item has a mark, so the labels start in one line down the
+     menu. */
+  .luke-menu-item-glyph {
+    display: inline-flex;
+    width: var(--luke-menu-glyph);
+    height: var(--luke-menu-glyph);
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-menu-item[data-danger="true"] .luke-menu-item-glyph {
+    color: inherit;
+  }
+
+  /* A glyph with no size of its own fills the slot it is in. */
+  .luke-menu-item-glyph svg,
+  .luke-menu-item-end > svg {
+    width: var(--luke-menu-glyph);
+    height: var(--luke-menu-glyph);
+    flex: 0 0 auto;
+  }
+
+  .luke-menu-item-label {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .luke-menu-item-copy {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--luke-space-2);
+  }
+
+  .luke-menu-item-copy > .luke-menu-item-label {
+    flex: none;
+  }
+
+  .luke-menu-item-detail {
+    overflow: hidden;
+    color: var(--luke-color-text-muted);
+    font-size: 11.5px;
+    text-overflow: ellipsis;
+  }
+
+  /* A row's shortcut at its end, the way a system menu prints a chord. */
+  .luke-menu-item-hint {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    margin-left: auto;
+    padding-left: var(--luke-space-16);
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    white-space: nowrap;
+  }
+
+  /* The end slot is one glyph wide, so a name ends where every other does;
+     the check is the text's own colour, a choice rather than a state, and
+     a chevron is quieter. */
+  .luke-menu-item-end {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: var(--luke-menu-glyph);
+    height: var(--luke-menu-glyph);
+    margin-left: auto;
+    color: var(--luke-color-text-subtle);
+  }
+
+  .luke-menu-item[role="menuitemcheckbox"] .luke-menu-item-end {
+    color: var(--luke-color-text);
+  }
+
+  .luke-menu-item-end > svg.settings-chevron {
+    width: 14px;
+    height: 14px;
+  }
+
+  .luke-menu-rule {
+    height: 1px;
+    margin: var(--luke-menu-inset) var(--luke-space-8);
+    border: 0;
+    background: var(--luke-color-border);
+  }
+
+  /* Whose menu it is over its items, and who made what it is about under
+     them, each pressed by nothing. */
+  .luke-menu-heading,
+  .luke-menu-footer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-2);
+    padding: var(--luke-space-4) var(--luke-space-8);
+    font-size: var(--luke-type-caption-size);
+  }
+
+  .luke-menu-footer {
+    color: var(--luke-color-text-subtle);
+  }
+
+  @keyframes luke-menu-arrive {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-menu-drop {
+    from {
+      transform: translateY(calc(-1 * var(--luke-space-4)));
+    }
+  }
+
+  @keyframes luke-menu-leave {
+    to {
+      opacity: 0;
+    }
+  }
+}

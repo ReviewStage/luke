@@ -1,6 +1,7 @@
 import type { ProductSettingValue } from "@luke/features/analytics";
 import type { UnparsedWireValue } from "@luke/wire";
 import type { AppSettingId, DescribedSetting } from "@luke/wire/app-settings";
+import type { HostCapability } from "./capabilities.js";
 import type { ExperimentChoices } from "./experiments.js";
 import type { RuntimeStatus } from "./status.js";
 
@@ -12,7 +13,7 @@ export const SETTINGS_PAGE = {
   APPEARANCE: "appearance",
   /** The window's own shortcuts, listed to be found rather than changed. */
   SHORTCUTS: "shortcuts",
-  /** The Markdown the account's new plans start from, which is the account's on the service rather than a stored setting. */
+  /** The Markdown the account's new tasks start from, which is the account's on the service rather than a stored setting. */
   PLAN_TEMPLATE: "plan-template",
   /**
    * The coding agents' default model and effort and the account's own provider API keys, which are the account's on
@@ -115,13 +116,15 @@ export interface SettingsVisibility {
   voiceControlsDrawn: boolean;
   /** Whether the Account section stands. */
   accountDrawn: boolean;
+  /** What the platform offers, which a platform feature's row stands on. */
+  capabilities: readonly HostCapability[];
 }
 
 /** One option a row's control draws: the token it stores by, the words it shows, and the picture beside them where it has one. */
 export interface SettingOption {
   value: string;
   label: string;
-  /** The address of a small picture drawn ahead of the words, such as an avatar's face. */
+  /** The address of its picture, such as an avatar's face. A set whose every option has one is chosen from the pictures. */
   picture?: string;
 }
 

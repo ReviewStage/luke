@@ -1,0 +1,132 @@
+/* tooltip.css -- a hover hint: a small dark pill, light on dark, naming a
+   control and then its chord in muted ink, or a light card in its place.
+
+   A pill has no arrow, because it always hangs centred on the control it
+   names. A hint is hidden for the one layout pass that measures where it
+   fits, then fades in from just short of its size once the pointer has
+   rested `--hint-delay`, or at once while it is `instant`: its opacity over
+   `--duration-quick`, its growth on the spring. Reduced motion keeps the
+   wait, which is not motion, and drops the fade with the tokens. A pill
+   takes no presses. A card is a surface the pointer crosses onto, so it
+   takes the pointer once it is placed, and its words can be selected; it is
+   hidden, not only clear, while it waits, so nothing under a card not yet
+   shown loses the pointer to it. */
+
+@layer components {
+  .luke-tooltip {
+    position: fixed;
+    z-index: var(--luke-z-tooltip);
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    padding: var(--luke-space-4) var(--luke-space-8);
+    border: 1px solid var(--luke-color-tooltip-edge);
+    border-radius: 7px; /* off-scale: the pill's own corner, as it was drawn before it was shared */
+    background: var(--luke-color-tooltip);
+    box-shadow: 0 4px 14px var(--luke-color-shadow);
+    color: var(--luke-color-tooltip-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-caption-size);
+    font-weight: var(--luke-weight-medium);
+    line-height: var(--luke-type-caption-leading);
+    /* A hint held inside the window however long its words: a web address
+       may be wider than the window, and breaks where it must rather than
+       running past the edge. Note that a hint narrower than the window never
+       wraps, because its place keeps its whole width inside it. */
+    max-width: calc(100vw - 12px); /* off-scale: twice tooltip.tsx's TOOLTIP_MARGIN */
+    overflow-wrap: anywhere;
+    pointer-events: none;
+    animation:
+      luke-tooltip-fade var(--duration-quick, 0s) var(--motion-exit, ease) var(--hint-delay, 0s)
+      both,
+      luke-tooltip-grow var(--duration-fast, 0s) var(--spring-fast, ease) var(--hint-delay, 0s) both;
+  }
+
+  .luke-tooltip[data-instant="true"] {
+    animation-delay: 0s;
+  }
+
+  /* Taken down once seen, it fades over `--duration-exit`, held drawn and
+     inert until it has; taken down while it still waited, it was never seen,
+     and plays nothing. */
+  .luke-tooltip[data-leaving="seen"] {
+    pointer-events: none;
+    animation: luke-tooltip-leave var(--duration-exit, 0s) var(--motion-exit, ease) forwards;
+    transition: none;
+  }
+
+  .luke-tooltip[data-leaving="unseen"] {
+    visibility: hidden;
+    animation: none;
+  }
+
+  .luke-tooltip[data-placed="false"] {
+    visibility: hidden;
+  }
+
+  /* Grown from the edge facing the control, so it reads as hung from it. */
+  .luke-tooltip[data-side="below"] {
+    transform-origin: top center;
+  }
+
+  .luke-tooltip[data-side="above"] {
+    transform-origin: bottom center;
+  }
+
+  .luke-tooltip[data-side="end"] {
+    transform-origin: top left;
+  }
+
+  .luke-tooltip[data-side="start"] {
+    transform-origin: top right;
+  }
+
+  /* A card, as a browser's tab hover card hangs: a small panel of the
+     window's own, light in the light, hung from the control's start. Its
+     words stand as far in from its sides as a menu's do, so a row it lists
+     washes off its edge as a menu item does. */
+  .luke-tooltip-card {
+    width: 280px;
+    max-width: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--luke-space-4);
+    padding: var(--luke-space-6) calc(var(--luke-menu-inset) + var(--luke-space-8));
+    border-color: var(--luke-color-border-strong);
+    border-radius: var(--luke-menu-radius);
+    background: var(--luke-color-overlay);
+    box-shadow: var(--luke-menu-shadow);
+    color: var(--luke-color-text);
+    font-weight: var(--luke-weight-regular);
+    overflow-wrap: normal;
+    pointer-events: auto;
+    cursor: default;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  .luke-tooltip-card[data-side="below"] {
+    transform-origin: top left;
+  }
+
+  @keyframes luke-tooltip-fade {
+    from {
+      visibility: hidden;
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-tooltip-grow {
+    from {
+      transform: scale(0.96);
+    }
+  }
+
+  @keyframes luke-tooltip-leave {
+    to {
+      opacity: 0;
+    }
+  }
+}

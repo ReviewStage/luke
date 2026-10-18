@@ -2,12 +2,15 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
   readCodingAgent,
+  readCodingAgentPublished,
   recordCodingAgentPublished,
 } from "@luke/database/models/coding-agent-store";
+import type { StoredPullRequest } from "@luke/database/schemas/coding-agent";
 import type {
   CodingAgentPullRequest,
   CodingAgentPullRequestAnswer,
 } from "@luke/features/coding-agent-wire";
+import { type PullRequestArea, pullRequestAreasOf } from "@luke/features/pull-request-area";
 import { Cache, Data, Duration, Effect, Exit, type Layer, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -20,6 +23,7 @@ import {
   checkSummaryOf,
   type GitHubPullRequest,
   type PullRequestReadFailure,
+  pullRequestFiles,
   pullRequestOfBranch,
 } from "../../github/pull-requests.js";
 import { agentWorkspace } from "../../github/workspace-repository.js";
@@ -36,16 +40,23 @@ import { CODER } from "./bounds.js";
  * (`coder-host/host.ts`'s `recordBranch`), and this module reads the row.
  * A row with no branch, as before the first turn ends in the sandbox or
  * where the checkout stood detached, published nothing, and GitHub is not
- * asked. GitHub then says what stands, once the installation of the plan's
+ * asked. GitHub then says what stands, once the installation of the task's
  * workspace is confirmed to reach the repository as a Start confirms it,
  * on a token minted for that one repository with pull requests read: a row
  * still on the repository's default branch, as an agent that only read
  * leaves it, published nothing either; otherwise the newest pull request
  * from the branch, else whether the branch was pushed at all, with the
  * pull request's head's checks. Every answer read is written on the
- * agent's row as well, the pull request or none, which is what the plan
+ * agent's row as well, the pull request or none, which is what the task
  * list reads, so the sidebar says what the last read found without asking
- * GitHub itself. The answer is kept per
+ * GitHub itself. The row keeps beside it the head it was read at, when it
+ * merged, and its lines by directory, folded from its changed files
+ * (`@luke/features/pull-request-area`); the files cost a read of their
+ * own, so they are read again only where the pull request, its head,
+ * where it stands, or its size moved since the row's, or the row keeps
+ * none, and a check's delivery, which moves none of them, reads only the
+ * checks; a failed read of them leaves the pull request read and the
+ * areas for the next refresh. The answer is kept per
  * agent for `CODER.PUBLISHED_TTL` so a tab reading it beside every page of
  * a held transcript asks GitHub a few times a minute at most, under a key
  * that says whether the agent had ended, so the first read after a turn
@@ -53,7 +64,7 @@ import { CODER } from "./bounds.js";
  * that failed is kept for no time, so the next ask tries again.
  */
 
-/** The installation of the plan's workspace no longer reaches the agent's repository, so nothing of it is read. */
+/** The installation of the task's workspace no longer reaches the agent's repository, so nothing of it is read. */
 class RepositoryNotReachable extends Data.TaggedError("RepositoryNotReachable")<{
   readonly repository: string;
 }> {}
@@ -63,36 +74,115 @@ type PublishedReadFailure = StoreFailure | GitHubWorkspaceReadFailure | Reposito
 
 type PublishedServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
-/** The wire's pull request from GitHub's, with its head's checks read beside it. */
+/** What one read found: the answer the wire carries, and the pull request as the agent's row keeps it, null where none was found. */
+interface Published {
+  readonly answer: CodingAgentPullRequestAnswer;
+  readonly stored: StoredPullRequest | null;
+}
+
+/**
+ * Whether the files the row's areas were folded from may have moved since:
+ * another pull request, another head, a move of where it stands, or another
+ * size. Note that the size is compared too, because the files are counted
+ * against the base, which can move, or be retargeted, under a head that
+ * stays.
+ */
+function filesMoved(kept: StoredPullRequest, found: GitHubPullRequest): boolean {
+  return (
+    kept.number !== found.number ||
+    kept.headSha !== found.headSha ||
+    kept.state !== found.state ||
+    kept.additions !== found.additions ||
+    kept.deletions !== found.deletions ||
+    kept.changedFiles !== found.changedFiles
+  );
+}
+
+/**
+ * The pull request's lines by directory: the row's own where it keeps them
+ * and its files cannot have moved, else folded from its files read afresh.
+ * Note that the files are read within `pullRequestFiles`' bound, so a pull
+ * request past it is placed by the files it reads, while its own size stays
+ * GitHub's whole count. A read of the files that failed answers none rather
+ * than failing the pull request beside it, and the row then keeps no areas,
+ * so the next refresh reads them again.
+ */
+function areasOf(
+  token: Redacted.Redacted,
+  agent: CodingAgent,
+  found: GitHubPullRequest,
+  kept: StoredPullRequest | null,
+): Effect.Effect<readonly PullRequestArea[] | undefined, never, HttpClient.HttpClient> {
+  if (kept?.areas !== undefined && !filesMoved(kept, found)) return Effect.succeed(kept.areas);
+  return pullRequestFiles(token, agent.repository, found).pipe(
+    Effect.map(({ files }) =>
+      pullRequestAreasOf(
+        files.map(({ path, additions, deletions }) => ({ path, additions, deletions })),
+      ),
+    ),
+    // The kind alone: nothing of the repository or the token rides the line.
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning("a pull request's files could not be read; its areas wait", {
+          failure: failure._tag,
+        }),
+        undefined,
+      ),
+    ),
+  );
+}
+
+/** The wire's pull request from GitHub's, with its head's checks read beside it, and the row's with its areas beside that. */
 function withChecks(
   token: Redacted.Redacted,
   agent: CodingAgent,
   found: GitHubPullRequest,
-): Effect.Effect<CodingAgentPullRequestAnswer, PullRequestReadFailure, HttpClient.HttpClient> {
-  return Effect.map(checkSummaryOf(token, agent.repository, found.headSha), (checks) => {
-    const pullRequest: CodingAgentPullRequest = {
-      number: found.number,
-      title: found.title,
-      url: found.url,
-      state: found.state,
-      checks,
-      additions: found.additions,
-      deletions: found.deletions,
-      changedFiles: found.changedFiles,
-    };
-    return { repository: agent.repository, branch: found.headRef, pullRequest };
-  });
+  kept: StoredPullRequest | null,
+): Effect.Effect<Published, PullRequestReadFailure, HttpClient.HttpClient> {
+  return Effect.map(
+    Effect.all(
+      [checkSummaryOf(token, agent.repository, found.headSha), areasOf(token, agent, found, kept)],
+      {
+        concurrency: "unbounded",
+      },
+    ),
+    ([checks, areas]) => {
+      const pullRequest: CodingAgentPullRequest = {
+        number: found.number,
+        title: found.title,
+        url: found.url,
+        state: found.state,
+        checks,
+        additions: found.additions,
+        deletions: found.deletions,
+        changedFiles: found.changedFiles,
+      };
+      const stored: StoredPullRequest = {
+        ...pullRequest,
+        headSha: found.headSha,
+        ...(found.mergedAt === undefined ? undefined : { mergedAt: found.mergedAt }),
+        ...(areas === undefined ? undefined : { areas }),
+      };
+      return {
+        answer: { repository: agent.repository, branch: found.headRef, pullRequest },
+        stored,
+      };
+    },
+  );
 }
 
 /** Nothing published: neither a branch GitHub holds nor a pull request. */
-function nothing(agent: CodingAgent): CodingAgentPullRequestAnswer {
-  return { repository: agent.repository, branch: null, pullRequest: null };
+function nothing(agent: CodingAgent): Published {
+  return {
+    answer: { repository: agent.repository, branch: null, pullRequest: null },
+    stored: null,
+  };
 }
 
 /**
  * A token that reads the agent's pull requests, minted for its one
- * repository on the installation of its plan's workspace, as the account
- * asking reaches the plan; refused as out of reach where either no longer
+ * repository on the installation of its task's workspace, as the account
+ * asking reaches the task; refused as out of reach where either no longer
  * stands.
  */
 export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -118,7 +208,7 @@ export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function*
 const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: CodingAgent,
-): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
+): Effect.fn.Return<Published, PublishedReadFailure, PublishedServices> {
   // No branch on the row, no publication: no turn has ended in the sandbox, or its checkout stood detached.
   if (agent.branch === null) return nothing(agent);
   const reached = yield* agentPullRequestReach(userId, agent);
@@ -126,10 +216,16 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (agent.branch === reached.repository.defaultBranch) return nothing(agent);
   const { token } = reached;
   const ofBranch = yield* pullRequestOfBranch(token, agent.repository, agent.branch);
-  if (Option.isSome(ofBranch)) return yield* withChecks(token, agent, ofBranch.value);
+  if (Option.isSome(ofBranch)) {
+    const kept = yield* readCodingAgentPublished(userId, agent.id);
+    return yield* withChecks(token, agent, ofBranch.value, kept);
+  }
   const pushed = yield* branchStands(token, agent.repository, agent.branch);
   return pushed
-    ? { repository: agent.repository, branch: agent.branch, pullRequest: null }
+    ? {
+        answer: { repository: agent.repository, branch: agent.branch, pullRequest: null },
+        stored: null,
+      }
     : nothing(agent);
 });
 
@@ -143,8 +239,8 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
   userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
-  const answer = yield* publishedOnGitHub(userId, agent);
-  yield* recordCodingAgentPublished(userId, agent.id, answer.pullRequest);
+  const { answer, stored } = yield* publishedOnGitHub(userId, agent);
+  yield* recordCodingAgentPublished(userId, agent.id, stored);
   return answer;
 });
 

@@ -1,10 +1,9 @@
-import { CheckIcon, ChevronRightIcon, SearchIcon } from "@luke/ui";
-import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { APP_SHORTCUTS, type KeyedCommand } from "#shared/shortcuts";
+import { APP_SHORTCUTS, type KeyedCommand } from "@luke/settings/shortcuts";
+import { CheckIcon, ChevronRightIcon, SearchIcon, SwitchMark, useComboboxField } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Shortcut } from "./shortcut";
-import { Switch } from "./switch";
 import { Tooltip } from "./tooltip";
-import { useClipped } from "./use-clipped";
 
 /**
  * searchable-menu.tsx -- the one picker menu the repository chip, the Start button, and the side panel's "+" drop, and Settings' menus may.
@@ -33,7 +32,9 @@ import { useClipped } from "./use-clipped";
  * crosses to it. Home and End take the highlight to the first and the
  * last row that may be picked. Focus never moves to a row, so the field
  * names the highlighted one to assistive technology by
- * `aria-activedescendant`, each row holding a stable id of its own. A
+ * `aria-activedescendant`, each row holding an id of its place. The keys
+ * are `@luke/ui`'s `useComboboxField`, the one `Combobox` reads, so keys an
+ * input method is composing with move and pick nothing here either. A
  * list too short to search is drawn with no field, the list itself
  * holding focus, naming the highlight, and reading the same keys. The owner says
  * what to list, what to say in the list's place while there is nothing to
@@ -153,31 +154,6 @@ function matchingRows<Row extends MenuRow>(rows: readonly Row[], query: string):
   });
 }
 
-/** The keys that move the highlight. */
-const STEP_KEYS: ReadonlySet<string> = new Set(["ArrowDown", "ArrowUp", "Home", "End"]);
-
-/**
- * Where a key takes the highlight: the arrows a step on, wrapping at either
- * end, and on past any row that cannot be pressed; from nowhere, to the
- * first or the last; Home and End to the first or the last that can be.
- * Where no row can be, the highlight stays.
- */
-function stepped(
-  at: number,
-  count: number,
-  key: string,
-  skipped: (index: number) => boolean = () => false,
-): number {
-  if (count === 0) return 0;
-  const down = key === "ArrowDown" || key === "Home";
-  const edge = key === "Home" || key === "End";
-  let next = at < 0 || edge ? (down ? 0 : count - 1) : (at + (down ? 1 : -1) + count) % count;
-  for (let steps = 1; steps < count && skipped(next); steps += 1) {
-    next = (next + (down ? 1 : -1) + count) % count;
-  }
-  return skipped(next) ? at : next;
-}
-
 /** Where no row is highlighted: nothing matches and the arrows have not moved on to a pinned row. */
 const NOWHERE = -1;
 
@@ -198,20 +174,6 @@ function highlightOver(input: {
   if (moved !== undefined && !input.blocked(moved)) return moved;
   if (input.chosen >= 0) return input.chosen;
   return input.first;
-}
-
-/** The highlighted row of an open submenu, which a reader is told of before the pinned row it opened from. */
-const SUBMENU_HIGHLIGHT = '.task-compose-submenu [aria-selected="true"]';
-
-/** The highlighted option of the list itself. */
-const OPTION_HIGHLIGHT = '[aria-selected="true"]';
-
-/** The one highlighted row of the list or the pinned rows under it. */
-const MENU_HIGHLIGHT = '.task-compose-menu-list [aria-selected="true"], [data-highlighted="true"]';
-
-/** Hands a row drawn in a loop, where no hook may be called, a stable id of its own. */
-function WithId(props: { children: (id: string) => React.JSX.Element }): React.JSX.Element {
-  return props.children(useId());
 }
 
 /** What a row prints before its end slot: why it cannot be picked, its shortcut, or nothing. */
@@ -387,16 +349,6 @@ export function SearchableMenu(props: {
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  // The menu's element is its own and also its owner's, whose hold waits on its exit.
-  const hold = props.ref;
-  const drawn = useCallback(
-    (node: HTMLDivElement | null) => {
-      menu.current = node;
-      hold?.(node);
-    },
-    [hold],
-  );
   const searching = props.placeholder !== undefined;
 
   // The field takes focus as the menu opens, and keeps it; with no field, the
@@ -404,22 +356,6 @@ export function SearchableMenu(props: {
   useEffect(() => {
     if (!leaving) (field.current ?? list.current)?.focus();
   }, [leaving]);
-
-  // Note that the field, or the list where there is none, names the
-  // highlighted row after every render, because focus stays there and a
-  // reader would otherwise hear nothing as the arrows move. The field may
-  // name a pinned or a submenu row, since it controls those too; the list
-  // names only its own options, which are all it holds.
-  useLayoutEffect(() => {
-    const keys = field.current ?? list.current;
-    const row =
-      field.current === null
-        ? list.current?.querySelector(OPTION_HIGHLIGHT)
-        : (menu.current?.querySelector(SUBMENU_HIGHLIGHT) ??
-          menu.current?.querySelector(MENU_HIGHLIGHT));
-    if (row?.id) keys?.setAttribute("aria-activedescendant", row.id);
-    else keys?.removeAttribute("aria-activedescendant");
-  });
 
   // The row the arrows reach is brought into the bounded list's view.
   useEffect(() => {
@@ -457,54 +393,6 @@ export function SearchableMenu(props: {
     else row.onPress?.();
   };
 
-  const onKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      if (open !== undefined) setSubmenu(undefined);
-      else props.onClose();
-      return;
-    }
-    if (event.key === "ArrowLeft" && open !== undefined) {
-      event.preventDefault();
-      setSubmenu(undefined);
-      return;
-    }
-    if (event.key === "ArrowRight" && branch !== undefined && open === undefined) {
-      event.preventDefault();
-      openSubmenu();
-      return;
-    }
-    // Enter on a button in the foot is that button's own press; from the field
-    // or the list it picks the highlighted row, and goes no further either way,
-    // so a form around the menu never takes it as its own submit.
-    if (
-      event.key === "Enter" &&
-      (event.target === field.current || event.target === list.current)
-    ) {
-      event.preventDefault();
-      if (open !== undefined) {
-        const row = open.rows[subAt];
-        if (row !== undefined) open.onPick(row.id);
-        return;
-      }
-      const row = at >= 0 ? matches[at] : undefined;
-      const pinned = footAt >= 0 ? foot[footAt] : undefined;
-      if (row !== undefined) {
-        if (row.disabled === undefined) onPick(row.id);
-      } else if (pinned !== undefined) pressFoot(pinned);
-      return;
-    }
-    if (!STEP_KEYS.has(event.key)) return;
-    event.preventDefault();
-    (field.current ?? list.current)?.focus();
-    if (open !== undefined) {
-      setSubmenu({ moved: stepped(subAt, open.rows.length, event.key) });
-      return;
-    }
-    // A row that cannot be picked is passed over, and never a dead stop.
-    setHighlight(stepped(at, matches.length + foot.length, event.key, blocked));
-  };
-
   // What the field controls, as the space-separated list of ids ARIA reads:
   // the list, the pinned rows, and a submenu while one is open, so every row
   // it may name stands in a popup it controls.
@@ -514,13 +402,83 @@ export function SearchableMenu(props: {
     ...(footed ? [footId] : []),
     ...(open === undefined ? [] : [submenuId]),
   ];
+  // Every row's id is its place: an option's in the list, a pinned row's
+  // under it, an option's in the open submenu.
+  const optionId = (index: number) => `${listId}-option-${index}`;
+  const footRowId = (index: number) => `${footId}-row-${index}`;
+  const subOptionId = (index: number) => `${submenuId}-option-${index}`;
+  // Note that the field, or the list where there is none, names the
+  // highlighted row, because focus stays there and a reader would otherwise
+  // hear nothing as the arrows move. The field may name a submenu or a
+  // pinned row, since it controls those too; the list names only its own
+  // options, which are all it holds.
+  const listActive = at >= 0 && at < matches.length ? optionId(at) : undefined;
+  const footActive = footAt >= 0 && footAt < foot.length ? footRowId(footAt) : undefined;
+  const subActive = open !== undefined && subAt >= 0 ? subOptionId(subAt) : undefined;
+
+  // What Enter picks: the highlighted row of an open submenu, else the
+  // highlighted match where it may be picked, else the pinned row's press.
+  const pick = (index: number) => {
+    if (open !== undefined) {
+      const row = open.rows[index];
+      if (row !== undefined) open.onPick(row.id);
+      return;
+    }
+    const row = index >= 0 ? matches[index] : undefined;
+    const pinned = index >= matches.length ? foot[index - matches.length] : undefined;
+    if (row !== undefined) {
+      if (row.disabled === undefined) onPick(row.id);
+    } else if (pinned !== undefined) pressFoot(pinned);
+  };
+  const steered = open === undefined ? at : subAt;
+  // The list always stands, so the keys always steer it: the submenu's rows
+  // while one is open, else the matches and on through the pinned rows, a
+  // row that cannot be picked passed over and never a dead stop. An Enter
+  // held with Command picks as a bare one does.
+  const keys = useComboboxField({
+    open: true,
+    active: steered,
+    count: open === undefined ? matches.length + foot.length : open.rows.length,
+    skipped: open === undefined ? blocked : undefined,
+    controls: controlled.join(" "),
+    activeId: subActive ?? listActive ?? footActive,
+    onActiveChange: (index) => {
+      (field.current ?? list.current)?.focus();
+      if (open === undefined) setHighlight(index);
+      else setSubmenu({ moved: index });
+    },
+    onChoose: pick,
+    onEnter: () => pick(steered),
+    onEscape: () => {
+      if (open !== undefined) setSubmenu(undefined);
+      else props.onClose();
+    },
+    onKey: (event) => {
+      if (event.key === "ArrowLeft" && open !== undefined) {
+        event.preventDefault();
+        setSubmenu(undefined);
+      } else if (event.key === "ArrowRight" && branch !== undefined && open === undefined) {
+        event.preventDefault();
+        openSubmenu();
+      }
+    },
+  });
+  // Enter on a button in the foot is that button's own press; from the field
+  // or the list it picks the highlighted row, and goes no further either way,
+  // so a form around the menu never takes it as its own submit.
+  const onKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Enter" && event.target !== field.current && event.target !== list.current)
+      return;
+    keys.onKeyDown(event);
+  };
+
   const root =
     props.className === undefined
       ? "menu-surface searchable-menu"
       : `menu-surface searchable-menu ${props.className}`;
   return (
     <div
-      ref={drawn}
+      ref={props.ref}
       id={props.id}
       className={root}
       role="dialog"
@@ -536,12 +494,8 @@ export function SearchableMenu(props: {
           <input
             ref={field}
             type="text"
-            role="combobox"
+            {...keys.field}
             aria-label={props.placeholder}
-            aria-expanded="true"
-            aria-controls={controlled.join(" ")}
-            aria-autocomplete="list"
-            autoComplete="off"
             spellCheck={false}
             placeholder={props.placeholder}
             value={query}
@@ -564,39 +518,37 @@ export function SearchableMenu(props: {
         className="task-compose-menu-list"
         role="listbox"
         aria-label={props.label}
+        aria-activedescendant={searching ? undefined : listActive}
         tabIndex={searching ? undefined : -1}
         onMouseDown={(event) => event.preventDefault()}
       >
         {sectionsOf(matches).map((section) => {
           const options = section.rows.map(({ row, index }) => (
-            <WithId key={row.id}>
-              {(id) => (
-                <button
-                  id={id}
-                  type="button"
-                  role="option"
-                  tabIndex={-1}
-                  className="menu-item"
-                  aria-selected={index === at}
-                  aria-disabled={row.disabled === undefined ? undefined : "true"}
-                  aria-current={row.id === value ? "true" : undefined}
-                  onMouseMove={() => {
-                    if (row.disabled === undefined) moveTo(index);
-                  }}
-                  onClick={() => {
-                    if (row.disabled === undefined) onPick(row.id);
-                  }}
-                >
-                  <RowBody
-                    icon={row.icon}
-                    label={row.label}
-                    detail={row.detail}
-                    hint={<RowHint row={row} />}
-                    end={row.id === value ? <CheckIcon /> : null}
-                  />
-                </button>
-              )}
-            </WithId>
+            <button
+              key={row.id}
+              id={optionId(index)}
+              type="button"
+              role="option"
+              tabIndex={-1}
+              className="menu-item"
+              aria-selected={index === at}
+              aria-disabled={row.disabled === undefined ? undefined : "true"}
+              aria-current={row.id === value ? "true" : undefined}
+              onMouseMove={() => {
+                if (row.disabled === undefined) moveTo(index);
+              }}
+              onClick={() => {
+                if (row.disabled === undefined) onPick(row.id);
+              }}
+            >
+              <RowBody
+                icon={row.icon}
+                label={row.label}
+                detail={row.detail}
+                hint={<RowHint row={row} />}
+                end={row.id === value ? <CheckIcon /> : null}
+              />
+            </button>
           ));
           const first = section.rows[0]?.row.id;
           return section.heading === undefined ? (
@@ -618,108 +570,101 @@ export function SearchableMenu(props: {
       </div>
       {footed ? (
         <div id={footId} className="task-compose-menu-foot">
-          {foot.map((row, index) => (
-            <WithId key={row.id}>
-              {(id) => {
-                // What every pinned row's button shares; a switch row adds its role on top.
-                const shared = {
-                  id,
-                  type: "button",
-                  tabIndex: -1,
-                  className: "menu-item",
-                  "aria-disabled": row.disabled === undefined ? undefined : "true",
-                  "data-highlighted": index === footAt ? "true" : undefined,
-                  onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
-                  onMouseMove: () => {
-                    if (row.disabled !== undefined) return;
-                    if (index === footAt && (open !== undefined || row.submenu === undefined))
-                      return;
-                    setHighlight(matches.length + index);
-                    if (row.submenu === undefined) setSubmenu(undefined);
-                    else openSubmenu();
-                  },
-                  onClick: () => pressFoot(row),
-                } as const;
-                const button =
-                  row.toggle === undefined ? (
-                    <button
-                      {...shared}
-                      data-submenu={row.submenu === undefined ? undefined : "true"}
-                      aria-haspopup={row.submenu === undefined ? undefined : "listbox"}
-                      aria-expanded={
-                        row.submenu === undefined
-                          ? undefined
-                          : index === footAt && open !== undefined
-                      }
-                    >
-                      <RowBody
-                        icon={row.icon}
-                        label={row.label}
-                        detail={row.detail}
-                        end={row.submenu === undefined ? row.mark : <ChevronRightIcon />}
-                      />
-                    </button>
-                  ) : (
-                    <button {...shared} role="switch" aria-checked={row.toggle.on}>
-                      <RowGlyph icon={row.icon} />
-                      <span className="task-compose-menu-name">{row.label}</span>
-                      <Switch checked={row.toggle.on} className="task-compose-menu-switch" />
-                    </button>
-                  );
-                return (
-                  <div className="task-compose-menu-branch">
-                    {row.disabled === undefined ? (
-                      button
-                    ) : (
-                      <Tooltip label={row.disabled}>{button}</Tooltip>
-                    )}
-                    {index === footAt && open !== undefined ? (
-                      <div
-                        ref={panel}
-                        id={submenuId}
-                        className="menu-surface task-compose-submenu"
-                        role="listbox"
-                        aria-label={open.label}
-                        data-side={place.side}
-                        data-stand={place.stand}
-                        onMouseDown={(event) => event.preventDefault()}
+          {foot.map((row, index) => {
+            const id = footRowId(index);
+            // What every pinned row's button shares; a switch row adds its role on top.
+            const shared = {
+              id,
+              type: "button",
+              tabIndex: -1,
+              className: "menu-item",
+              "aria-disabled": row.disabled === undefined ? undefined : "true",
+              "data-highlighted": index === footAt ? "true" : undefined,
+              onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
+              onMouseMove: () => {
+                if (row.disabled !== undefined) return;
+                if (index === footAt && (open !== undefined || row.submenu === undefined)) return;
+                setHighlight(matches.length + index);
+                if (row.submenu === undefined) setSubmenu(undefined);
+                else openSubmenu();
+              },
+              onClick: () => pressFoot(row),
+            } as const;
+            const button =
+              row.toggle === undefined ? (
+                <button
+                  {...shared}
+                  data-submenu={row.submenu === undefined ? undefined : "true"}
+                  aria-haspopup={row.submenu === undefined ? undefined : "listbox"}
+                  aria-expanded={
+                    row.submenu === undefined ? undefined : index === footAt && open !== undefined
+                  }
+                >
+                  <RowBody
+                    icon={row.icon}
+                    label={row.label}
+                    detail={row.detail}
+                    end={row.submenu === undefined ? row.mark : <ChevronRightIcon />}
+                  />
+                </button>
+              ) : (
+                <button {...shared} role="switch" aria-checked={row.toggle.on}>
+                  <RowGlyph icon={row.icon} />
+                  <span className="task-compose-menu-name">{row.label}</span>
+                  <span className="task-compose-menu-switch">
+                    <SwitchMark checked={row.toggle.on} />
+                  </span>
+                </button>
+              );
+            return (
+              <div key={row.id} className="task-compose-menu-branch">
+                {row.disabled === undefined ? (
+                  button
+                ) : (
+                  <Tooltip label={row.disabled}>{button}</Tooltip>
+                )}
+                {index === footAt && open !== undefined ? (
+                  <div
+                    ref={panel}
+                    id={submenuId}
+                    className="menu-surface task-compose-submenu"
+                    role="listbox"
+                    aria-label={open.label}
+                    data-side={place.side}
+                    data-stand={place.stand}
+                    onMouseDown={(event) => event.preventDefault()}
+                  >
+                    {open.rows.map((sub, subIndex) => (
+                      <button
+                        key={sub.id}
+                        id={subOptionId(subIndex)}
+                        type="button"
+                        role="option"
+                        tabIndex={-1}
+                        className="menu-item"
+                        aria-selected={subIndex === subAt}
+                        aria-current={sub.id === open.value ? "true" : undefined}
+                        onMouseMove={() => setSubmenu({ moved: subIndex })}
+                        onClick={() => open.onPick(sub.id)}
                       >
-                        {open.rows.map((sub, subIndex) => (
-                          <WithId key={sub.id}>
-                            {(subId) => (
-                              <button
-                                id={subId}
-                                type="button"
-                                role="option"
-                                tabIndex={-1}
-                                className="menu-item"
-                                aria-selected={subIndex === subAt}
-                                aria-current={sub.id === open.value ? "true" : undefined}
-                                onMouseMove={() => setSubmenu({ moved: subIndex })}
-                                onClick={() => open.onPick(sub.id)}
-                              >
-                                <RowBody
-                                  icon={sub.icon}
-                                  label={sub.label}
-                                  detail={sub.detail}
-                                  end={sub.id === open.value ? <CheckIcon /> : null}
-                                />
-                              </button>
-                            )}
-                          </WithId>
-                        ))}
-                        {open.note === undefined ? null : (
-                          <p className="task-compose-menu-foot-note" data-submenu-note="">
-                            {open.note}
-                          </p>
-                        )}
-                      </div>
-                    ) : null}
+                        <RowBody
+                          icon={sub.icon}
+                          label={sub.label}
+                          detail={sub.detail}
+                          end={sub.id === open.value ? <CheckIcon /> : null}
+                        />
+                      </button>
+                    ))}
+                    {open.note === undefined ? null : (
+                      <p className="task-compose-menu-foot-note" data-submenu-note="">
+                        {open.note}
+                      </p>
+                    )}
                   </div>
-                );
-              }}
-            </WithId>
-          ))}
+                ) : null}
+              </div>
+            );
+          })}
           {props.footNote === undefined ? null : (
             <p className="task-compose-menu-foot-note" data-foot-note="">
               {props.footNote}

@@ -10,6 +10,8 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { lineWords } from "#testing/actor-line";
+import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { newestToastSays } from "#testing/toast";
@@ -57,17 +59,17 @@ const SHARED_TASK: Task = {
   lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by: DEAN, at: 120_000, duringCall: false },
 };
 
-/** What the plan actions asked of the tab, by the plan each named. */
+/** What the task actions asked of the tab, by the task each named. */
 interface Asked {
   opened: string[];
-  /** Each plan whose page Open on GitHub asked for. */
+  /** Each task whose page Open on GitHub asked for. */
   openedOnGitHub: string[];
-  /** Each plan whose chip Change repository… asked open. */
+  /** Each task whose chip Change repository… asked open. */
   changed: string[];
   deleted: string[];
-  /** Each rename asked, as the plan and the name it was given. */
+  /** Each rename asked, as the task and the name it was given. */
   renamed: string[][];
-  /** Each pin or archive asked, as the plan and what was asked of it. */
+  /** Each pin or archive asked, as the task and what was asked of it. */
   marked: [string, TaskMark][];
 }
 
@@ -85,7 +87,7 @@ beforeEach(installScrollIntoView);
 
 afterEach(unmountAll);
 
-/** The open plan's tab, every per-plan press recorded; `PLAN` is open and `OTHER` beside it in the list. */
+/** The open task's tab, every per-task press recorded; `PLAN` is open and `OTHER` beside it in the list. */
 function openTab(
   repositories: Readonly<Record<string, string>> = {},
   deletes: () => Promise<ActionResult> = () =>
@@ -257,7 +259,7 @@ test("the plan's name reaches the recording only as masked text, never in an att
   const { tasks } = openTab();
   openMenu(mountToolbar(tasks));
   choose("Permanently delete");
-  const drawn = dialog()?.closest(".confirm-dialog-backdrop");
+  const drawn = dialog()?.parentElement;
   assert.ok(drawn);
   for (const element of [drawn, ...drawn.querySelectorAll("*")]) {
     for (const attribute of element.attributes) {
@@ -266,7 +268,7 @@ test("the plan's name reaches the recording only as masked text, never in an att
   }
 });
 
-/** The open plan's tab on `tab`, `SHARED_PLAN` open as `me` reads it and `OTHER` beside it in the list. */
+/** The open task's tab on `tab`, `SHARED_PLAN` open as `me` reads it and `OTHER` beside it in the list. */
 function sharedTab(me: string, tab: MainTab = MAIN_TAB.PLAN): TasksControl {
   const base = tasksControl();
   return tasksControl({
@@ -281,7 +283,7 @@ function sharedTab(me: string, tab: MainTab = MAIN_TAB.PLAN): TasksControl {
 
 /** The lines under the open menu's items, each with its time left off. */
 function menuFooter(): string[] {
-  const notes = document.querySelectorAll('[role="menu"] .task-menu-footer p');
+  const notes = document.querySelectorAll('[role="menu"] .luke-menu-footer p');
   return [...notes].map((note) => (lineWords(note) ?? "").replace(/ · .*$/u, ""));
 }
 
@@ -289,7 +291,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   openMenu(mountToolbar(sharedTab(DEAN.userId)));
   assert.deepEqual(menuFooter(), ["Created by Charles Pan", "Last edited by you"]);
   // Each person stands on their face, their letter until a picture is read.
-  const faces = document.querySelectorAll('[role="menu"] .task-menu-footer .actor-mark');
+  const faces = document.querySelectorAll('[role="menu"] .luke-menu-footer .actor-mark');
   assert.deepEqual(
     [...faces].map((face) => [face.getAttribute("data-kind"), face.textContent]),
     [
@@ -297,7 +299,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
       ["person", "D"],
     ],
   );
-  const times = document.querySelectorAll('[role="menu"] .task-menu-footer time');
+  const times = document.querySelectorAll('[role="menu"] .luke-menu-footer time');
   assert.deepEqual(
     [...times].map((time) => time.getAttribute("datetime")),
     [new Date(60_000).toISOString(), new Date(120_000).toISOString()],
@@ -308,7 +310,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   assert.deepEqual(menuFooter(), ["Created by you", "Last edited by Dean Stratakos"]);
   unmountAll();
 
-  // A plan the window has not opened, from a service that named no creator, says only when it was saved.
+  // A task the window has not opened, from a service that named no creator, says only when it was saved.
   const { asked } = openTab();
   rightClick(mountSidebarTask(sharedTab(DEAN.userId), OTHER, asked), 40, 60);
   assert.deepEqual(menuFooter(), ["Created by someone", "Last edited"]);
@@ -383,7 +385,7 @@ const STAGE: Workspace = {
   memberCount: 6,
 };
 
-/** Dean's plan in his own workspace on a repository only Stage's GitHub reaches: stranded there. */
+/** Dean's task in his own workspace on a repository only Stage's GitHub reaches: stranded there. */
 const STRANDED: TaskSummary = {
   ...OTHER,
   repository: "acme-corp/relay",
@@ -445,19 +447,10 @@ test("no sidebar plan wears the attention mark where its own workspace reaches i
 /** Main's clipboard, keeping each copy the window asks of it. */
 function installClipboard(): string[] {
   const copied: string[] = [];
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind !== ACT_KIND.WINDOW_COPY_TEXT) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-        }
-        copied.push(request.payload.words);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
-    },
+  fakeAppBridge({
+    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   return copied;
 }
 
@@ -577,23 +570,20 @@ test("a task's card says you of the reader's own task outside a member directory
 
 /** The bridge answering the members read with `members`, each a member of the workspace. */
 function installMembers(members: readonly { userId: string; name: string }[] | undefined): void {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      ...window.luke,
-      act: (request: Act): Promise<ActOutcome> =>
-        Promise.resolve(
-          request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined
-            ? {
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: members.map((member) => ({
-                  ...member,
-                  email: `${member.userId}@example.com`,
-                  role: WORKSPACE_ROLE.MEMBER,
-                })),
-              }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." },
-        ),
-    },
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act): Promise<ActOutcome> =>
+      Promise.resolve(
+        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: members.map((member) => ({
+                ...member,
+                email: `${member.userId}@example.com`,
+                role: WORKSPACE_ROLE.MEMBER,
+              })),
+            }
+          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." },
+      ),
   });
 }

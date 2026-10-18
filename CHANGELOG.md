@@ -68,18 +68,29 @@ the date its release was published.
 
 ### A Pull request tab for every agent
 
-An agent's pull request opens in a tab of its own. Its Overview loads piece
-by piece and shows the review threads, each previewed with its diff. Files
-changed draws the diff unified or split. Bot badges and the repository's
-screenshots show as they do on GitHub. A review or a comment on the pull
-request reaches the agent with what it says.
+An agent's pull request opens in a tab of its own, a fixed header over
+Conversation, Checks, and Files changed. Conversation loads piece by piece,
+previews each review thread with its diff, and can hide bots and resolved
+threads. Checks run live, show their App, fold, and list the pull request's
+deployments. Files changed draws the diff unified or split, with every diff
+setting in a popover. Reply on, resolve, and unresolve a thread, submit a
+review, or change the pull request as yourself. A review or a comment on the
+pull request reaches the agent with what it says.
 ([#3030](https://github.com/ReviewStage/luke/pull/3030),
 [#3116](https://github.com/ReviewStage/luke/pull/3116),
 [#3206](https://github.com/ReviewStage/luke/pull/3206),
 [#3221](https://github.com/ReviewStage/luke/pull/3221),
 [#3229](https://github.com/ReviewStage/luke/pull/3229),
 [#3233](https://github.com/ReviewStage/luke/pull/3233),
-[#3239](https://github.com/ReviewStage/luke/pull/3239))
+[#3238](https://github.com/ReviewStage/luke/pull/3238),
+[#3239](https://github.com/ReviewStage/luke/pull/3239),
+[#3250](https://github.com/ReviewStage/luke/pull/3250),
+[#3258](https://github.com/ReviewStage/luke/pull/3258),
+[#3261](https://github.com/ReviewStage/luke/pull/3261),
+[#3272](https://github.com/ReviewStage/luke/pull/3272),
+[#3275](https://github.com/ReviewStage/luke/pull/3275),
+[#3292](https://github.com/ReviewStage/luke/pull/3292),
+[#3308](https://github.com/ReviewStage/luke/pull/3308))
 
 ### Cards on every chip
 
@@ -101,9 +112,12 @@ issue's card names its assignee.
 ### Issues
 
 Turn on Settings › Experimental › Issues to track your workspace's issues in
-Luke. The Issues page opens as a board with one column for each status. Make
-an issue from a small composer, and change its title, status, priority, and
-Markdown description in place.
+Luke. The Issues page is a board with one column for each status, read as a
+workflow and scrolled sideways, or a list, whichever you chose last. File an
+issue from a small composer or a column's head, and change its title, status,
+priority, and Markdown description in place. An issue's page says who filed it
+and when, and every card and row has an actions menu, with a Luke link to copy
+or open.
 ([#3105](https://github.com/ReviewStage/luke/pull/3105),
 [#3112](https://github.com/ReviewStage/luke/pull/3112),
 [#3128](https://github.com/ReviewStage/luke/pull/3128),
@@ -113,7 +127,13 @@ Markdown description in place.
 [#3147](https://github.com/ReviewStage/luke/pull/3147),
 [#3168](https://github.com/ReviewStage/luke/pull/3168),
 [#3173](https://github.com/ReviewStage/luke/pull/3173),
-[#3187](https://github.com/ReviewStage/luke/pull/3187))
+[#3187](https://github.com/ReviewStage/luke/pull/3187),
+[#3254](https://github.com/ReviewStage/luke/pull/3254),
+[#3273](https://github.com/ReviewStage/luke/pull/3273),
+[#3277](https://github.com/ReviewStage/luke/pull/3277),
+[#3288](https://github.com/ReviewStage/luke/pull/3288),
+[#3290](https://github.com/ReviewStage/luke/pull/3290),
+[#3293](https://github.com/ReviewStage/luke/pull/3293))
 
 ### Improvements
 
@@ -135,8 +155,18 @@ Markdown description in place.
   ([#3205](https://github.com/ReviewStage/luke/pull/3205))
 - Drag the sidebar's pins into the order you want
   ([#3131](https://github.com/ReviewStage/luke/pull/3131))
-- New task opens its dialog at once, and its name field matches Linear issues
-  ([#3149](https://github.com/ReviewStage/luke/pull/3149))
+- New task opens its dialog at once, its name field matches Linear issues,
+  and its issue picker searches Linear
+  ([#3149](https://github.com/ReviewStage/luke/pull/3149),
+  [#3300](https://github.com/ReviewStage/luke/pull/3300))
+- Go back and forward with a mouse's side buttons under Logi Options+
+  ([#3316](https://github.com/ReviewStage/luke/pull/3316))
+- Coding agents read another agent with `read_agent`, and have the `gh stack`
+  extension in their sandbox
+  ([#3291](https://github.com/ReviewStage/luke/pull/3291),
+  [#3296](https://github.com/ReviewStage/luke/pull/3296))
+- A coding agent's model is sent only its newest pictures
+  ([#3253](https://github.com/ReviewStage/luke/pull/3253))
 - A new task opens with the side panel hidden, closing the last tab shuts the
   panel, and Show panel opens the tab you last closed
   ([#3123](https://github.com/ReviewStage/luke/pull/3123),

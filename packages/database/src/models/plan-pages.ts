@@ -11,8 +11,8 @@ import { and, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, queryBuilder } from "../core/query.js";
-import { task } from "../schemas/plan.js";
 import { planPageVersion } from "../schemas/plan-page.js";
+import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import { reachableTask, taskReachableBy } from "./workspace-store.js";
@@ -20,12 +20,12 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
 /**
  * plan-pages.ts -- a plan's pages: write a page or its next version as who showed it, list the plan's pages, and read one version, by its plan or by the page's id alone.
  *
- * A write is a page's next version, taken under the plan row's own lock, so
- * two writes of one page never take one number and a plan deleted meanwhile
+ * A write is a page's next version, taken under the task row's own lock, so
+ * two writes of one page never take one number and a task deleted meanwhile
  * reads as gone rather than written back into being. Every statement names
- * the account beside the plan and gates on its membership of the plan's
+ * the account beside the task and gates on its membership of the task's
  * workspace, so a member reads and writes the pages a teammate wrote, and a
- * plan of a workspace the account is not in reads and writes as no plan,
+ * task of a workspace the account is not in reads and writes as no task,
  * exactly as in `task-store.ts`. A write is read against
  * the wire's own bounds before it touches a row, so nothing is stored that
  * the desktop could not read back. Pages written in the same millisecond
@@ -50,7 +50,7 @@ const PAGE_LINE_COLUMNS = {
   shownBy: planPageVersion.shownBy,
 };
 
-/** The plan's id under its row's lock until the transaction ends; nothing where the account reaches no such plan. */
+/** The task's id under its row's lock until the transaction ends; nothing where the account reaches no such task. */
 const lockTask = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: Schema.Struct({ id: Schema.String }),
@@ -180,7 +180,7 @@ function lineOf(row: typeof PageLineRowSchema.Type): PageLine {
 /**
  * Writes the page's next version, or a new page's first where the write
  * names none, as shown by `shownBy`; the page as it now stands. Nothing where
- * the account reaches no such plan, or the plan no such page, and a schema
+ * the account reaches no such task, or the task no such page, and a schema
  * failure, with nothing written, for a write past the wire's bounds.
  */
 export function writePage(
@@ -217,12 +217,12 @@ export function writePage(
   );
 }
 
-/** The plan's pages, each by its newest version, the most recently written first; none where the account reaches no such plan. */
+/** The plan's pages, each by its newest version, the most recently written first; none where the account reaches no such task. */
 export function listPages(userId: string, taskId: string): TaskStoreEffect<readonly PageLine[]> {
   return Effect.map(findPageLines({ userId, taskId }), (rows) => rows.map(lineOf));
 }
 
-/** One version of one page of the plan, with its HTML; nothing where the account reaches no such plan, page, or version. */
+/** One version of one page of the plan, with its HTML; nothing where the account reaches no such task, page, or version. */
 export function readPageVersion(
   userId: string,
   taskId: string,

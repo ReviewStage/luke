@@ -29,8 +29,9 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import {
-  installEditorBundle,
+  editorBundleLanded,
   installEditorLayout,
   pressInComposer,
   typeInComposer,
@@ -40,7 +41,7 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentTab } from "./agent-tab";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**
@@ -90,8 +91,8 @@ const ignore = () => undefined;
 
 const roots: Root[] = [];
 
-// Set before any box renders, since the box reads the editor bundle once per window.
-installEditorBundle();
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 // A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -100,12 +101,8 @@ beforeEach(() => {
   linear = INTEGRATION_STATUS.CONNECTED;
   installScrollIntoView();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: ignore,
-      act: (request: Act): Promise<ActOutcome> => Promise.resolve(answer(request)),
-    },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => Promise.resolve(answer(request)),
   });
 });
 
@@ -113,7 +110,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   window.localStorage.clear();
-  Reflect.deleteProperty(window, "luke");
+  fakeAppBridge({});
 });
 
 /** What the main process answers the panel: where the integrations stand and Linear's tools; nothing else here. */
@@ -191,7 +188,7 @@ const TRANSCRIPT: readonly CodingAgentMessage[] = [
 ];
 
 /** A plan's page, which an agent's box takes mentions on. */
-const PAGE: PlanMentionsValue = {
+const PAGE: TaskMentionsValue = {
   taskId: TASK_ID,
   taskName: "Backlog",
   workspace: PLACE.workspace,
@@ -213,7 +210,7 @@ async function drawn(node: ReactNode): Promise<HTMLElement> {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(AtomRegistry.make(), createElement(PlanMentions, { value: PAGE, children: node })),
+      onRegistry(AtomRegistry.make(), createElement(TaskMentions, { value: PAGE, children: node })),
     ),
   );
   await settle();
@@ -259,19 +256,19 @@ async function cardOf(chip: Element | null | undefined) {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   await settle();
-  const card = [...document.querySelectorAll(".tooltip-card > [data-server-card]")].at(-1);
+  const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
   assert.ok(card, "the chip hangs the server's card");
   const drawnSwitch = card.querySelector<HTMLElement>(".luke-switch");
   const look = {
     name: card.querySelector(".task-compose-menu-name")?.textContent,
     count: card.querySelector(".agent-servers-count")?.textContent,
     on: drawnSwitch === null ? undefined : drawnSwitch.dataset.checked,
-    note: card.querySelector(".agent-servers-row + .card-note")?.textContent,
+    note: card.querySelector(".agent-servers-row + .luke-hover-card-note")?.textContent,
     tools: [...card.querySelectorAll(".integration-tool")].map((tool) => [
       tool.querySelector(".integration-tool-title")?.textContent,
       tool.querySelector(".integration-tool-description")?.textContent,
     ]),
-    more: card.querySelector(".integration-tool-list ~ .card-note")?.textContent,
+    more: card.querySelector(".integration-tool-list ~ .luke-hover-card-note")?.textContent,
     presses: card.querySelectorAll("button, [role=switch]").length,
   };
   act(() => {
