@@ -2069,7 +2069,7 @@ test("Files changed draws each review thread under its line, its comments throug
     url: `${PAGE}#pullrequestreview-9`,
     threads: [thread()],
   } as const;
-  const changes: CodingAgentsControl["readChanges"] = () =>
+  const readChanges: CodingAgentsControl["readChanges"] = () =>
     Promise.resolve({
       pullRequest: {
         url: PAGE,
@@ -2096,7 +2096,7 @@ test("Files changed draws each review thread under its line, its comments throug
           Promise.resolve({ pullRequest: { ...CONVERSATION, conversation: [review] } }),
       },
       PULL_REQUEST_STATE.OPEN,
-      changes,
+      readChanges,
     ),
   );
   await act(async () => option(tab, "Files changed").click());
@@ -2126,4 +2126,54 @@ test("Files changed draws each review thread under its line, its comments throug
   assert.equal(note.querySelector("details")?.open, true, "a current thread stands open");
   await minimize();
   assert.equal(note.querySelector("details")?.open, false, "minimized, the thread stands folded");
+});
+
+test("a review thread on its line in Files changed is replied on and resolved from under its comments, as in the Conversation", async () => {
+  const flagged = thread({ id: "PRRT_flag" });
+  const readChanges: CodingAgentsControl["readChanges"] = () =>
+    Promise.resolve({
+      pullRequest: {
+        url: PAGE,
+        truncated: false,
+        files: [
+          {
+            path: "src/invite.ts",
+            previousPath: null,
+            status: CHANGED_FILE_STATUS.MODIFIED,
+            additions: 2,
+            deletions: 1,
+            omitted: null,
+            patch: flagged.diffHunk.replace("@@ -8,6 +8,7 @@", "@@ -8,5 +8,6 @@"),
+          },
+        ],
+      },
+    });
+  const tab = await draw(
+    controlAnswering(
+      { conversation: () => Promise.resolve({ pullRequest: reviewWith([flagged]) }) },
+      PULL_REQUEST_STATE.OPEN,
+      readChanges,
+    ),
+  );
+  await act(async () => option(tab, "Files changed").click());
+  await settle();
+  const note =
+    previews
+      .find((each) => each.annotations?.some((one) => one.line === 13))
+      ?.renderAnnotation?.(`${PAGE}#discussion_r1`) ??
+    assert.fail("the thread is drawn on its line");
+
+  writeReply(note, "Renamed.");
+  act(() => threadPress(note, "Reply").click());
+  await settle();
+  act(() => threadPress(note, "Resolve conversation").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      { action: PULL_REQUEST_ACTION.REPLY_TO_THREAD, threadId: "PRRT_flag", body: "Renamed." },
+    ],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.RESOLVE_THREAD, threadId: "PRRT_flag" }],
+  ]);
 });

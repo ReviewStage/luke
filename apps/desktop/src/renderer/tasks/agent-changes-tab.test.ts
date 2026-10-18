@@ -9,9 +9,6 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
-import type { AppSettingsView } from "@luke/settings/wire";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
