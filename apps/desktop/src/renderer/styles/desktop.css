@@ -7113,6 +7113,18 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: 0;
 }
 
+/* Where the card is too narrow for one row, as in a narrow window zoomed
+   in, the foot wraps: its chips and its presses each stand on a line of
+   their own, the presses kept at the right. */
+.new-task-composer :is(.prompt-input-footer, .prompt-input-tools) {
+  flex-wrap: wrap;
+  row-gap: var(--luke-space-8);
+}
+
+.new-task-composer .agent-composer-actions {
+  margin-left: auto;
+}
+
 /* The foot's short chips stand whole, so the repository's name is what
    gives way, ellipsized, where the card is narrow. */
 :is(
