@@ -38,9 +38,9 @@ import { Tooltip } from "../tooltip";
  * and on one narrower than 300px the repository and every folder do, the
  * file alone after it; the "…" names what it stands for in its pill and
  * hangs the tree the last of them would. Each crumb says at which of the
- * bar's widths it is drawn (`@luke/ui`'s `Breadcrumbs`, read off the bar's
- * `luke-breadcrumb-bar` container), so both "…" are drawn, and the
- * stylesheet shows the one the bar's width asks for.
+ * bar's widths it is drawn (`@luke/ui`'s `Breadcrumbs`, read off the
+ * `BreadcrumbBar` the bar holds its row in, `file-view.tsx`), so both "…"
+ * are drawn, and the stylesheet shows the one the bar's width asks for.
  */
 
 /** What the "…" crumb is called, before the folders it stands for. */

@@ -1,11 +1,22 @@
 /* breadcrumbs.css -- a path's crumbs in a row, the chevrons between them
    plain. A bar's path narrows crumb by crumb, cut short at their ends,
    clipped past the keyboard's ring on a crumb, and gives way at the widths
-   of the bar holding it, a container named `luke-breadcrumb-bar`; a
+   of the `BreadcrumbBar` holding it; a
    toolbar's heading keeps its way back whole and cuts the page's name
    short. */
 
 @layer components {
+  /* Note that the row's gap is the bar's own, inherited, because the bar it
+     fills is what spaces its controls, and two bars space theirs apart. */
+  .luke-breadcrumb-bar {
+    container: luke-breadcrumb-bar / inline-size;
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: inherit;
+  }
+
   .luke-breadcrumbs {
     position: relative;
     min-width: 0;

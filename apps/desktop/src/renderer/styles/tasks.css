@@ -1025,7 +1025,6 @@ button.file-ref:hover .file-ref-path {
    height of a tab's bar whatever it holds, words alone or nothing yet, its
    words in the caption's type. */
 .file-view-bar {
-  container: luke-breadcrumb-bar / inline-size;
   display: flex;
   min-width: 0;
   min-height: var(--secondary-bar-height);

@@ -282,9 +282,8 @@ body {
 }
 
 /* A bar a path gives way in, at its wide, narrow, and narrowest widths
-   (`Breadcrumbs`' `shownAt`). */
+   (`Breadcrumbs`' `shownAt`, read off the `BreadcrumbBar` it holds). */
 .catalog-crumb-bar {
-  container: luke-breadcrumb-bar / inline-size;
   display: flex;
   width: 600px;
   max-width: 100%;

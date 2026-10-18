@@ -20,9 +20,9 @@ import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding
  *
  * A path may give way on a narrow bar in the stylesheet alone, so nothing
  * here measures: each crumb says at which of the bar's widths it is drawn
- * (`shownAt`), read off the nearest container named `luke-breadcrumb-bar`,
- * which the bar holding the path declares. A crumb may stand for others a
- * narrow bar leaves out, as a "…" naming them in its hint does.
+ * (`shownAt`), read off the `BreadcrumbBar` holding the path, the row of
+ * the bar it stands in. A crumb may stand for others a narrow bar leaves
+ * out, as a "…" naming them in its hint does.
  */
 
 /** The two looks a path is drawn in. */
@@ -37,8 +37,9 @@ export type BreadcrumbsVariant = (typeof BREADCRUMBS_VARIANT)[keyof typeof BREAD
 
 /**
  * At which of its bar's widths a crumb is drawn: wide is 520px and up,
- * narrow 300px to 519px, narrowest under 300px. A path in no such bar is
- * drawn as a wide bar draws it.
+ * narrow 300px to 519px, narrowest under 300px, the width of the
+ * `BreadcrumbBar` holding the path. A path in none is drawn as a wide bar
+ * draws it.
  */
 export const BREADCRUMB_SHOWN = {
   ALWAYS: "always",
@@ -211,4 +212,14 @@ export function Breadcrumbs({
       </ol>
     </nav>
   );
+}
+
+/**
+ * A bar's row holding a path among the bar's other controls, whose width is
+ * what the path's crumbs fold by (`shownAt`). It fills the bar it stands in
+ * and lays its children in a row, centred, spaced as the bar spaces its
+ * own, so the bar keeps its padding, its height, and its gap.
+ */
+export function BreadcrumbBar({ children }: { children: ReactNode }): React.JSX.Element {
+  return <div className="luke-breadcrumb-bar">{children}</div>;
 }

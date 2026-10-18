@@ -2,6 +2,7 @@ import {
   BREADCRUMB_POPUP,
   BREADCRUMB_SHOWN,
   BREADCRUMBS_VARIANT,
+  BreadcrumbBar,
   Breadcrumbs,
   type Crumb,
   FolderIcon,
@@ -51,7 +52,11 @@ function FilePath(): React.JSX.Element {
     { label: "src", shownAt: BREADCRUMB_SHOWN.WIDE_OR_NARROW, ...pressed(3) },
     { label: FILE, current: true, ...pressed(4) },
   ];
-  return <Breadcrumbs label="Path" crumbs={crumbs} />;
+  return (
+    <BreadcrumbBar>
+      <Breadcrumbs label="Path" crumbs={crumbs} />
+    </BreadcrumbBar>
+  );
 }
 
 function BreadcrumbsExample(): React.JSX.Element {
@@ -72,14 +77,16 @@ function BreadcrumbsExample(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="breadcrumbs-long" title="Long names cut short">
         <div className="catalog-crumb-bar catalog-crumb-bar-narrow">
-          <Breadcrumbs
-            label="Path"
-            crumbs={[
-              { label: "an-organisation-with-a-long-name/a-repository-named-at-length" },
-              { label: "a-folder-whose-name-runs-on" },
-              { label: "a-file-whose-name-runs-on-past-its-bar.ts", current: true },
-            ]}
-          />
+          <BreadcrumbBar>
+            <Breadcrumbs
+              label="Path"
+              crumbs={[
+                { label: "an-organisation-with-a-long-name/a-repository-named-at-length" },
+                { label: "a-folder-whose-name-runs-on" },
+                { label: "a-file-whose-name-runs-on-past-its-bar.ts", current: true },
+              ]}
+            />
+          </BreadcrumbBar>
         </div>
       </CatalogSection>
       <CatalogSection id="breadcrumbs-title" title="A toolbar's heading, drawn and folded">
