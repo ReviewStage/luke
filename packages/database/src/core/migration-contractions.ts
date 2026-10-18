@@ -80,8 +80,9 @@ const CONTRACT_MARKER = /^[ \t]*--[ \t]*contract:[ \t]*\S/imu;
 export const CONTRACTION_ADVICE =
   "rename the field in code and keep the database name (Drizzle maps a property to any column, " +
   'as in `taskId: text("plan_id")`), or expand, migrate, contract: add the new name beside the old, ' +
-  "ship code that uses only the new one, and drop the old one in a later migration at least 25 hours " +
-  "after that code reached production; mark that migration `-- contract: <why old readers have drained>` " +
+  "write both until no run still reads the old one, and drop it in a later migration at least 25 hours " +
+  "after the code that stopped writing it reached production; mark that migration " +
+  "`-- contract: <why old readers have drained>` " +
   '(the db-migrations skill\'s "Expand, migrate, contract")';
 
 /** One statement that renames or drops what the deployment still serving may read. */

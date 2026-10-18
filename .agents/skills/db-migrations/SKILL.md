@@ -48,18 +48,22 @@ Classify every database change into one of these three rollout paths before gene
 
 A migration must never break the previous deployment's code. Every build runs `pnpm db:migrate` against the one shared database (`vercel.json`'s web `buildCommand`), while the deployment before it is still serving, and a coding agent's run (any Vercel Workflow run) keeps executing on the deployment it started on for up to 25 hours. So for a day after a build, code that still spells the old names runs against the schema the newest build already migrated. On Oct 17, `20261017014941_rename_plan_to_task` renamed `plan` to `task` in place, and every agent still on older code died at its next step with `relation "plan" does not exist`.
 
-Change a name or shape that old code reads in three steps, each in its own deployment:
+Change a name or shape that old code reads in steps, each in its own deployment. Each step waits until every run pinned to a deployment from before the previous step has drained, which is 25 hours after that step reached production. Keep the old name current for as long as anything may still read it, not just present:
 
-1. **Expand.** Add the new table or column beside the old one, or keep the old name readable through a view. Where both must stay current, write to both.
-2. **Migrate.** Ship code that reads and writes only the new name. Backfill the new column with a script ("Data backfill" below), not in the migration.
-3. **Contract.** Rename or drop the old thing in a later migration, at least 25 hours after the code that stopped using it reached production, once the runs pinned to older deployments have drained. Mark that migration with the reason, on a line of its own:
+1. **Expand.** Add the new table or column beside the old one. Ship code that writes both and still reads the old one. Backfill the new column with a script ("Data backfill" below), not in the migration, once the writers that knew only the old name have drained.
+2. **Migrate.** Ship code that reads the new name and still writes both, because runs on the expand deployment still read the old one.
+3. **Stop writing the old name.** Once the expand deployment's runs have drained, ship code that reads and writes only the new name.
+4. **Contract.** Drop the old thing in a later migration, at least 25 hours after the code that stopped writing it reached production, since runs pinned to the deployment before it still write the old name. Mark that migration with the reason, on a line of its own:
 
    ```sql
    -- contract: nothing has read "plan_id" since #3700 reached production on Oct 18, over 25 hours ago
    ALTER TABLE "task" DROP COLUMN IF EXISTS "plan_id";
    ```
 
-For a rename that is only about what the code calls it, skip all three: rename the property and keep the column, since Drizzle maps a property to any column name (`taskId: text("plan_id")`).
+Two shortcuts skip the steps:
+
+- When only the code's name for a column changes, rename the property and keep the column, since Drizzle maps a property to any column name (`taskId: text("plan_id")`).
+- For a table rename, rename the table and create a view under the old name in the same migration: Postgres lets old code read and write a single-table view as if it were the table, so nothing has to be kept in step. Mark that migration `-- contract: "plan" stays readable and writable as a view` and drop the view in a later contract step.
 
 The same holds for any change that narrows what old code may do:
 
