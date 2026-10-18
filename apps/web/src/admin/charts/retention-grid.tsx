@@ -19,7 +19,7 @@ const RETENTION_TEXT_FLIP_SHARE = 0.75;
 function retentionCellStyle(share: number): React.CSSProperties {
   const fill = Math.max(RETENTION_FILL_FLOOR_PERCENT, Math.round(share * 100));
   return {
-    backgroundColor: `color-mix(in oklab, var(--chart-1) ${fill}%, transparent)`,
+    backgroundColor: `color-mix(in oklab, var(--luke-color-chart-1) ${fill}%, transparent)`,
     color:
       share >= RETENTION_TEXT_FLIP_SHARE ? "var(--luke-color-ground)" : "var(--luke-color-text)",
   };

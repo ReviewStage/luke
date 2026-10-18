@@ -4,20 +4,6 @@
    weight. */
 
 :root {
-  /* A workspace's tile (`workspace-tile.tsx`): six muted hues, each holding
-     its white letter at AA, the only colour a workspace wears. */
-  --workspace-hue-1: #4f63b8;
-  --workspace-hue-2: #2b7f78;
-  --workspace-hue-3: #9a6a1e;
-  --workspace-hue-4: #a24a63;
-  --workspace-hue-5: #6c55b3;
-  --workspace-hue-6: #477a3a;
-  --workspace-tile-ink: #fff;
-  /* The attention mark's disc (`attention-mark.tsx`): the attention orange
-     deepened until its white exclamation holds on it, in the dark as in the
-     light, where the orange is deep already. */
-  --attention-mark-ground: #c4620c;
-  --attention-mark-ink: #fff;
   /* The veil over a picture set's last tile that counts the pictures past
      it (`.picture-set-more`), the same in either appearance, since it lies
      over a picture rather than the window. */
@@ -29,12 +15,6 @@
      shows through it. */
   --actor-tile: #2a2a30;
   --actor-tile-ink: rgba(255, 255, 255, 0.92);
-  --desktop-sidebar: #111114;
-  /* A sidebar row's words at rest, a step under the primary ink and clear of
-     the time's tertiary, so the open, hovered, and unread rows stand out by
-     going up to the primary. */
-  --sidebar-ink: rgba(255, 255, 255, 0.7);
-  --desktop-well: #0f0f12;
   /* A top row and its hairline, its middle level with the traffic lights'. */
   --desktop-bar-height: calc(2 * var(--traffic-lights-middle) + 1px);
   /* A tab's own bar under a tab strip and its hairline: a control's height
@@ -45,9 +25,12 @@
   /* The call bar's own row, which the passing notices stand clear of. */
   --call-row-height: 36px;
   /* The spacing scale, one control's box, corner, and glyph, the gaps
-     between controls and sections, a page's inset, and a menu's rows are the
-     desktop profile's roles in `@luke/ui` (`tokens/profiles.css`), read here
-     by their own names (`--luke-space-8`, `--luke-control-height`, …). Every
+     between controls, list items, and sections, a page's inset and measure, a
+     menu's rows, glyph, and shadow, the keyboard's ring, the floating layers,
+     and the window's sidebar, well, and workspace hues are the desktop
+     profile's roles in `@luke/ui` (`tokens/profiles.css`, `palettes.css`),
+     read here by their own names (`--luke-space-8`, `--luke-control-height`,
+     `--luke-color-identity-1`, …). Every
      padding, margin, and gap in the window is one of those steps or a name
      below built from them (docs/DESIGN.md). */
   /* A column's edge to the rows and controls it holds: the sidebar's rows, a
@@ -59,15 +42,6 @@
      puts them; words drawn on no row (a page's title, the transcript, the
      code's path) start there too, so a column reads down one edge. */
   --content-inset: calc(var(--column-inset) + var(--row-inset));
-  /* Between two items of a list. */
-  --list-gap: var(--luke-space-2);
-  /* Every menu and popover draws from one set: the --luke-color-overlay ground
-     inside a --luke-color-border-strong edge, this corner and shadow, and its items
-     this inset from its edge, each row this tall and its glyph this big. The
-     corner is a row's own and the inset together, so a highlighted row
-     follows the menu's curve wherever it meets it. */
-  --menu-glyph: 16px;
-  --menu-shadow: 0 12px 32px var(--luke-color-shadow);
   /* The sidebar's default width (`SIDEBAR_WIDTH.DEFAULT`), and its width as
      drawn, which the app stage carries once the developer has dragged it. */
   --sidebar-width-default: 264px;
@@ -106,8 +80,6 @@
     var(--luke-control-height) +
     var(--luke-control-gap)
   );
-  /* The measure a document is read at: about seventy characters of body text. */
-  --reading-width: 720px;
   /* The measure code is read at, a step wider than words', so a hundred
      columns stand beside their line numbers without wrapping. */
   --code-reading-width: 840px;
@@ -117,15 +89,9 @@
   --find-match: rgba(255, 214, 10, 0.3);
   --find-current: #ff9f0a;
   --find-current-text: #000;
-  /* The layers that float over the whole window, each drawn at the root of
-     the document: a menu, then a dialog and a hint on one layer, whichever
-     was drawn later on top, then the passing notice over everything. Nothing inside the window's stage reaches
-     them, since the stage is one stacking context under them all; inside it,
-     the whiteboard is a stacking context of its own (`tasks.css`). */
-  --z-menu: 20;
-  --z-dialog: 30;
-  --z-tooltip: 30;
-  --z-toast: 31;
+  /* The floating layers are `--luke-z-*`. Nothing inside the window's stage
+     reaches them, since the stage is one stacking context under them all;
+     inside it, the whiteboard is a stacking context of its own (`tasks.css`). */
 }
 
 /* In full screen macOS hides the traffic lights, so the title bar's buttons
@@ -143,17 +109,7 @@
    (`DESKTOP_WINDOW.BACKGROUND`). */
 @media (prefers-color-scheme: light) {
   :root {
-    --desktop-sidebar: #f3f3f4;
-    --sidebar-ink: rgba(0, 0, 0, 0.68);
-    --desktop-well: #f8f8f9;
     --find-match: rgba(255, 204, 0, 0.42);
-    --attention-mark-ground: #a65400;
-    --workspace-hue-1: #4a5fc0;
-    --workspace-hue-2: #23766f;
-    --workspace-hue-3: #94631a;
-    --workspace-hue-4: #a8435f;
-    --workspace-hue-5: #6a4fbd;
-    --workspace-hue-6: #3f7434;
     --actor-tile: #e8e8ec;
     --actor-tile-ink: rgba(0, 0, 0, 0.82);
   }
@@ -280,7 +236,7 @@ body,
 .desktop-shell[data-sidebar-overlay="peek"] .desktop-sidebar,
 .desktop-shell[data-sidebar-overlay="open"] .desktop-sidebar {
   z-index: 2;
-  box-shadow: var(--menu-shadow);
+  box-shadow: var(--luke-menu-shadow);
   opacity: 1;
   transform: none;
 }
@@ -336,7 +292,7 @@ body,
 .desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-collapsed="true"]:has(.desktop-main > .chat-view)
   .title-bar-controls:not([data-edge]) {
-  --title-bar-ground: var(--desktop-sidebar);
+  --title-bar-ground: var(--luke-color-sidebar);
 }
 
 .desktop-shell[data-sidebar-collapsed="true"][data-sidebar-overlay="closed"]:has(
@@ -344,7 +300,7 @@ body,
   )
   .title-bar-controls:not([data-edge]),
 .desktop-shell:has(.side-panel) .title-bar-controls[data-edge="end"] {
-  --title-bar-ground: var(--desktop-well);
+  --title-bar-ground: var(--luke-color-well);
 }
 
 .title-bar-controls[data-edge="end"] {
@@ -361,7 +317,7 @@ body,
    the column's own ground. At the column's least width they still end short
    of the sidebar toggle's cluster. */
 .title-bar-controls[data-edge="column"] {
-  --title-bar-ground: var(--desktop-sidebar);
+  --title-bar-ground: var(--luke-color-sidebar);
   right: var(--column-inset);
   left: auto;
 }
@@ -372,7 +328,7 @@ body,
   flex-direction: column;
   padding: 0 var(--column-inset) var(--column-inset);
   border-right: 1px solid var(--luke-color-border);
-  background: var(--desktop-sidebar);
+  background: var(--luke-color-sidebar);
 }
 
 .sidebar-identity {
@@ -419,11 +375,11 @@ body,
   align-items: center;
   gap: var(--luke-icon-gap);
   height: var(--luke-control-height);
-  margin: 0 0 var(--list-gap);
+  margin: 0 0 var(--luke-list-gap);
   padding: 0 var(--row-inset);
   border-radius: var(--luke-control-radius);
   background: none;
-  color: var(--sidebar-ink);
+  color: var(--luke-color-sidebar-ink);
   font-size: var(--luke-type-body-size);
   transition:
     background-color var(--duration-hover) ease,
@@ -513,12 +469,12 @@ body,
    the surface it sits on. */
 .workspace-tile {
   display: inline-grid;
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: 0 0 auto;
   place-items: center;
   border-radius: 4px;
-  color: var(--workspace-tile-ink);
+  color: var(--luke-color-on-identity);
   font-size: 10px;
   font-weight: var(--luke-weight-semibold);
   line-height: 1;
@@ -545,27 +501,27 @@ body,
 }
 
 .workspace-tile[data-hue="1"] {
-  background: var(--workspace-hue-1);
+  background: var(--luke-color-identity-1);
 }
 
 .workspace-tile[data-hue="2"] {
-  background: var(--workspace-hue-2);
+  background: var(--luke-color-identity-2);
 }
 
 .workspace-tile[data-hue="3"] {
-  background: var(--workspace-hue-3);
+  background: var(--luke-color-identity-3);
 }
 
 .workspace-tile[data-hue="4"] {
-  background: var(--workspace-hue-4);
+  background: var(--luke-color-identity-4);
 }
 
 .workspace-tile[data-hue="5"] {
-  background: var(--workspace-hue-5);
+  background: var(--luke-color-identity-5);
 }
 
 .workspace-tile[data-hue="6"] {
-  background: var(--workspace-hue-6);
+  background: var(--luke-color-identity-6);
 }
 
 /* In a line of words, the tile keeps to the line's height. */
@@ -724,8 +680,8 @@ body,
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  margin: calc(-1 * var(--focus-ring-reach));
-  padding: var(--focus-ring-reach);
+  margin: calc(-1 * var(--luke-focus-ring-reach));
+  padding: var(--luke-focus-ring-reach);
   overflow-y: auto;
 }
 
@@ -880,19 +836,19 @@ button.sidebar-section-head-name:hover {
 .sidebar-skeleton {
   display: flex;
   flex-direction: column;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
 }
 
 .sidebar-skeleton-row {
   padding: var(--luke-space-6) var(--row-inset);
   font-size: var(--luke-type-body-size);
-  line-height: var(--sidebar-row-line);
+  line-height: var(--luke-type-label-leading);
 }
 
 .sidebar-tasks {
   display: flex;
   flex-direction: column;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -911,14 +867,10 @@ button.sidebar-section-head-name:hover {
 }
 
 /* In the sidebar a row is a control's height, as New plan's is, its line set
-   rather than left to the font, so every row of the column stands as tall
-   whatever the font measures. */
-.desktop-sidebar {
-  --sidebar-row-line: var(--luke-type-label-leading);
-}
-
+   to the label's leading rather than left to the font, so every row of the
+   column stands as tall whatever the font measures. */
 .desktop-sidebar .sidebar-task-item {
-  line-height: var(--sidebar-row-line);
+  line-height: var(--luke-type-label-leading);
 }
 
 /* Note that the row's height is set rather than grown from its padding,
@@ -936,7 +888,7 @@ button.sidebar-section-head-name:hover {
 }
 
 .desktop-sidebar .sidebar-task-marks {
-  top: calc((var(--luke-control-height) - var(--sidebar-row-line)) / 2);
+  top: calc((var(--luke-control-height) - var(--luke-type-label-leading)) / 2);
 }
 
 /* A plan's row fills while the pointer is anywhere on its item, its own
@@ -1331,7 +1283,7 @@ ul.actor-stack {
 }
 
 .desktop-sidebar :is(.sidebar-task-name, .sidebar-pinned-tab-name) {
-  color: var(--sidebar-ink);
+  color: var(--luke-color-sidebar-ink);
   transition: color var(--duration-hover) ease;
 }
 
@@ -1560,7 +1512,7 @@ ul.actor-stack {
   border-radius: var(--luke-control-radius);
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--desktop-sidebar);
+    var(--luke-color-sidebar);
   box-shadow: 0 4px 12px var(--luke-color-shadow);
   transition: none;
 }
@@ -1590,7 +1542,7 @@ ul.actor-stack {
   display: flex;
   align-items: center;
   gap: var(--luke-space-2);
-  margin-bottom: var(--list-gap);
+  margin-bottom: var(--luke-list-gap);
   padding-right: var(--luke-space-4);
   border-radius: var(--luke-control-radius);
   transition: background-color var(--duration-hover) ease;
@@ -1625,8 +1577,8 @@ ul.actor-stack {
 
 /* A header in the sidebar stands as tall as the rows under it. */
 .desktop-sidebar .sidebar-repository-toggle {
-  padding-block: calc((var(--luke-control-height) - var(--sidebar-row-line)) / 2);
-  line-height: var(--sidebar-row-line);
+  padding-block: calc((var(--luke-control-height) - var(--luke-type-label-leading)) / 2);
+  line-height: var(--luke-type-label-leading);
 }
 
 .sidebar-repository-header:hover .sidebar-repository-toggle {
@@ -1641,8 +1593,8 @@ ul.actor-stack {
    as a plan row's ring takes in its Pin and Archive. */
 :root[data-keyboard="true"]
 .sidebar-repository-header:has(> .sidebar-repository-toggle:focus-visible) {
-  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: var(--focus-ring-offset);
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+  outline-offset: var(--luke-focus-ring-offset);
 }
 
 .sidebar-repository-name {
@@ -1722,7 +1674,7 @@ ul.actor-stack {
   border-radius: var(--luke-radius-8);
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--desktop-sidebar);
+    var(--luke-color-sidebar);
   box-shadow: 0 4px 12px var(--luke-color-shadow);
   transition: none;
 }
@@ -2598,7 +2550,7 @@ ul.actor-stack {
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-menu-radius);
   background: var(--luke-color-overlay);
-  box-shadow: var(--menu-shadow);
+  box-shadow: var(--luke-menu-shadow);
   animation:
     popup-fade var(--duration-quick) var(--motion-exit) both,
     menu-drop var(--duration-fast) var(--spring-fast) both;
@@ -2679,8 +2631,8 @@ ul.actor-stack {
    line down the menu. */
 .menu-item-glyph {
   display: inline-flex;
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -2696,8 +2648,8 @@ ul.actor-stack {
 .menu-item > :is(svg, .repository-picture),
 .menu-item-glyph :is(svg, .repository-picture),
 .menu-item-end > svg {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -2719,8 +2671,8 @@ ul.actor-stack {
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   margin-left: auto;
   color: var(--luke-color-text-subtle);
 }
@@ -2730,8 +2682,8 @@ ul.actor-stack {
 }
 
 .menu-item-end .credential-check {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   color: var(--luke-color-text);
 }
 
@@ -2757,17 +2709,17 @@ ul.actor-stack {
    text's colour rather than the state palette's, a chevron, and a
    repository's picture in the glyph slot. */
 .luke-menu {
-  z-index: var(--z-menu);
+  z-index: var(--luke-z-menu);
   -webkit-app-region: no-drag;
 }
 
 .luke-menu[data-layer="dialog"] {
-  z-index: calc(var(--z-dialog) + 1);
+  z-index: calc(var(--luke-z-dialog) + 1);
 }
 
 .luke-menu-item-glyph .repository-picture {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -2789,7 +2741,7 @@ ul.actor-stack {
   flex-wrap: wrap;
   margin: 0;
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-room);
+  overflow-clip-margin: var(--luke-focus-ring-room);
 }
 
 .account-menu-name,
@@ -2852,8 +2804,8 @@ ul.actor-stack {
   flex: none;
   place-items: center;
   border-radius: 50%;
-  background: var(--attention-mark-ground);
-  color: var(--attention-mark-ink);
+  background: var(--luke-color-attention-fill);
+  color: var(--luke-color-on-attention);
 }
 
 .attention-mark svg {
@@ -2971,12 +2923,12 @@ ul.actor-stack {
 .document-banner {
   --banner-gap: var(--luke-space-12);
   box-sizing: border-box;
-  width: min(var(--reading-width), calc(100% - 2 * var(--luke-page-inset)));
+  width: min(var(--luke-page-measure), calc(100% - 2 * var(--luke-page-inset)));
   margin: var(--luke-space-16) auto 0;
   padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) var(--luke-space-16);
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-radius-14);
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
 }
 
 .document-banner-glyph {
@@ -3018,7 +2970,7 @@ ul.actor-stack {
    Inbox's pane is laid out the same way, its thread and box at that measure. */
 .desktop-agent,
 .desktop-inbox {
-  --reading-room: calc((100% - var(--reading-width)) / 2);
+  --reading-room: calc((100% - var(--luke-page-measure)) / 2);
   position: relative;
   display: flex;
   min-height: 0;
@@ -3256,7 +3208,7 @@ ul.actor-stack {
 .desktop-document .plan-edit-note,
 .desktop-document .plan-changed-note,
 .desktop-document .version-note {
-  max-width: var(--reading-width);
+  max-width: var(--luke-page-measure);
   margin-right: auto;
   margin-left: auto;
 }
@@ -3312,14 +3264,14 @@ ul.actor-stack {
   padding: var(--luke-space-12) calc(var(--luke-page-inset) + var(--summary-room))
     var(--luke-space-12) var(--luke-page-inset);
   border-top: 1px solid var(--luke-color-border);
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
 }
 
 .desktop-call-bar::before {
   top: -1px;
   bottom: 0;
   border-top: 1px solid var(--luke-color-border);
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
 }
 
 /* The live captions stand just above the call bar, centred on its row, so
@@ -3368,7 +3320,7 @@ ul.actor-stack {
 .call-bar {
   container: call-bar / inline-size;
   display: flex;
-  max-width: var(--reading-width);
+  max-width: var(--luke-page-measure);
   min-height: var(--call-row-height);
   flex-wrap: wrap;
   align-items: center;
@@ -3608,8 +3560,8 @@ ul.actor-stack {
 /* The glyph is sized here, as every glyph is by what it sits in: an SVG
    with no size of its own fills the row it is in. */
 .task-compose-menu-search svg {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -4485,7 +4437,7 @@ button.integration-tool-head:hover,
   flex-direction: column;
   gap: var(--luke-space-8);
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-room);
+  overflow-clip-margin: var(--luke-focus-ring-room);
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
   line-height: 1.625;
@@ -4565,7 +4517,7 @@ button.integration-tool-head:hover,
    by the strip's gap and the breadcrumbs' chevron, and a crumb under the
    pointer's press takes the chosen tab's fill, where a tab pressed lands. */
 .inbox-crumbs ol {
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
 }
 
 /* Note that the agent's crumb gives way as the task's does, because the
@@ -5241,7 +5193,7 @@ button.integration-tool-head:hover,
 }
 
 .automation-group {
-  max-width: var(--reading-width);
+  max-width: var(--luke-page-measure);
   margin-inline: auto;
 }
 
@@ -5255,7 +5207,7 @@ button.integration-tool-head:hover,
 .automation-suggestions {
   display: flex;
   width: 100%;
-  max-width: var(--reading-width);
+  max-width: var(--luke-page-measure);
   flex-direction: column;
   gap: var(--luke-space-8);
   margin-inline: auto;
@@ -5377,8 +5329,8 @@ button.integration-tool-head:hover,
 }
 
 :root[data-keyboard="true"] .automation-suggestion:focus-visible {
-  outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: calc(var(--focus-ring-width) / -2);
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+  outline-offset: calc(var(--luke-focus-ring-width) / -2);
 }
 
 .automation-suggestion:disabled {
@@ -5441,7 +5393,7 @@ button.integration-tool-head:hover,
   align-items: center;
   gap: var(--luke-space-4);
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-reach);
+  overflow-clip-margin: var(--luke-focus-ring-reach);
   color: var(--luke-color-text-muted);
 }
 
@@ -5497,7 +5449,7 @@ button.integration-tool-head:hover,
 
 .automation-editor {
   display: flex;
-  max-width: var(--reading-width);
+  max-width: var(--luke-page-measure);
   flex-direction: column;
   margin-inline: auto;
   gap: var(--luke-space-12);
@@ -5537,8 +5489,8 @@ button.integration-tool-head:hover,
 }
 
 .automation-servers > .provider-mark {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
 }
 
 /* A picker here grows from a Settings picker's width to name its whole
@@ -5652,7 +5604,7 @@ button.integration-tool-head:hover,
   min-height: 0;
   flex-direction: column;
   border-right: 1px solid var(--luke-color-border);
-  background: var(--desktop-sidebar);
+  background: var(--luke-color-sidebar);
 }
 
 /* While the sidebar is folded the rail is the window's first column, so its
@@ -6038,7 +5990,7 @@ button.integration-tool-head:hover,
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-10);
-  background: var(--desktop-sidebar);
+  background: var(--luke-color-sidebar);
 }
 
 .chat-ask-presses {
@@ -6127,7 +6079,7 @@ button.integration-tool-head:hover,
   flex-direction: column;
   padding: 0 var(--column-inset) var(--column-inset);
   border-right: 1px solid var(--luke-color-border);
-  background: var(--desktop-sidebar);
+  background: var(--luke-color-sidebar);
 }
 
 .settings-pages-back,
@@ -6225,7 +6177,7 @@ button.integration-tool-head:hover,
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-menu-radius);
   background: var(--luke-color-overlay);
-  box-shadow: var(--menu-shadow);
+  box-shadow: var(--luke-menu-shadow);
   animation:
     popup-fade var(--duration-quick) var(--motion-exit) both,
     menu-drop var(--duration-fast) var(--spring-fast) both;
@@ -6275,7 +6227,7 @@ button.integration-tool-head:hover,
 .settings-pages ul {
   display: flex;
   flex-direction: column;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -6319,7 +6271,7 @@ button.integration-tool-head:hover,
 }
 
 .template-document :is(.plan-body, .plan-edit-note) {
-  max-width: var(--settings-width);
+  max-width: var(--luke-settings-measure);
 }
 
 .task-page-head {
@@ -6352,14 +6304,6 @@ button.integration-tool-head:hover,
   width: auto;
   margin: var(--luke-space-16) 0 0;
   scroll-margin-top: calc(var(--luke-space-32) + 3 * var(--luke-control-height));
-}
-
-/* The measure a Settings page's head and rows read at, and a row's height,
-   which an automation's page, drawn as a Settings page, takes its rows' from. */
-.settings-page,
-.automation-editor {
-  --settings-width: 640px;
-  --settings-row-height: 52px;
 }
 
 /* A Settings page has no top bar: the page names itself at the head of its
@@ -6418,7 +6362,7 @@ button.integration-tool-head:hover,
 .version-list {
   display: flex;
   flex-direction: column;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -6552,7 +6496,7 @@ button.integration-tool-head:hover,
   flex: 1;
   grid-template-columns: 100% 100%;
   grid-template-rows: minmax(0, 1fr);
-  margin-inline: calc(-1 * var(--focus-ring-reach));
+  margin-inline: calc(-1 * var(--luke-focus-ring-reach));
   overflow-x: clip;
 }
 
@@ -6563,7 +6507,7 @@ button.integration-tool-head:hover,
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  padding-inline: var(--focus-ring-reach);
+  padding-inline: var(--luke-focus-ring-reach);
   transition: transform var(--duration-pane) var(--motion-pane);
 }
 
@@ -6830,7 +6774,7 @@ button.integration-tool-head:hover,
 .task-summary[data-mode="rail"],
 .task-summary[data-mode="rail"] > .task-summary-rows {
   align-items: center;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
 }
 
 .task-summary[data-mode="rail"] {
@@ -6917,7 +6861,7 @@ button.integration-tool-head:hover,
   z-index: 1;
   /* Held off the scroller's edge by the keyboard ring's reach, so its ring
      stands whole once the column is scrolled under it. */
-  top: var(--focus-ring-reach);
+  top: var(--luke-focus-ring-reach);
   flex: none;
   align-self: flex-end;
   margin-bottom: calc(-1 * (var(--luke-control-height) + var(--luke-section-gap)));
@@ -6944,7 +6888,7 @@ button.integration-tool-head:hover,
   mask-image: var(--scroll-fade-mask), linear-gradient(#000, #000);
   mask-position:
     0 0,
-    right var(--column-inset) top var(--focus-ring-reach);
+    right var(--column-inset) top var(--luke-focus-ring-reach);
   mask-size:
     100% 100%,
     var(--luke-control-height) var(--luke-control-height);
@@ -6976,7 +6920,7 @@ button.integration-tool-head:hover,
 .task-summary-rows {
   display: flex;
   flex-direction: column;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -7063,7 +7007,7 @@ button.integration-tool-head:hover,
    and Archive style, shown while the row is hovered or reached from the
    keyboard. */
 .task-summary-archived {
-  margin-top: var(--list-gap);
+  margin-top: var(--luke-list-gap);
 }
 
 .task-summary-archived-agent {
@@ -7114,7 +7058,7 @@ button.integration-tool-head:hover,
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--luke-color-border);
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
 }
 
 /* Full screen, the panel covers the document as well as its own room. */
@@ -7208,7 +7152,7 @@ button.integration-tool-head:hover,
   min-width: 0;
   flex: 1 1 auto;
   align-items: center;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
 }
 
 /* The "+" and the menu it drops, which hangs under it from its left edge,
@@ -7277,7 +7221,7 @@ button.integration-tool-head:hover,
   /* What the panel leaves either side of a column at each measure, read
      where it is spent: a percentage there is of the box's frame, which is
      the panel's width. */
-  --reading-room: calc((100% - var(--reading-width)) / 2);
+  --reading-room: calc((100% - var(--luke-page-measure)) / 2);
   --code-reading-room: calc((100% - var(--code-reading-width)) / 2);
   position: relative;
   /* The container every tab answers its width from (`@container
@@ -7343,14 +7287,19 @@ button.integration-tool-head:hover,
   --tab-widest: 200px;
   /* What the strip's fades and the pinned tab paint over the tabs passing
      beneath them: the side panel's well, or the column's ground. */
-  --strip-ground: var(--desktop-well);
+  --strip-ground: var(--luke-color-well);
   position: relative;
   display: flex;
   min-width: 0;
   flex: 0 1
-    calc(var(--tab-count, 1) * (var(--tab-widest) + var(--list-gap)) + 2 * var(--focus-ring-reach));
+    calc(
+      var(--tab-count, 1) *
+      (var(--tab-widest) + var(--luke-list-gap)) +
+      2 *
+      var(--luke-focus-ring-reach)
+    );
   align-items: center;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-behavior: var(--scroll-glide);
@@ -7358,8 +7307,8 @@ button.integration-tool-head:hover,
   /* Room above and below the tabs, given back to the row, for the shadow
      under a tab being dragged, which the strip's scrolling would clip, and
      at either end for the keyboard's ring on the first tab and the last. */
-  margin: calc(-1 * var(--luke-space-8)) calc(-1 * var(--focus-ring-reach));
-  padding: var(--luke-space-8) var(--focus-ring-reach);
+  margin: calc(-1 * var(--luke-space-8)) calc(-1 * var(--luke-focus-ring-reach));
+  padding: var(--luke-space-8) var(--luke-focus-ring-reach);
 }
 
 .main-tabs .tab-strip {
@@ -7385,16 +7334,16 @@ button.integration-tool-head:hover,
 }
 
 .tab-strip::before {
-  left: calc(-1 * var(--focus-ring-reach));
-  margin-right: calc(-1 * var(--scroll-fade) - var(--list-gap));
+  left: calc(-1 * var(--luke-focus-ring-reach));
+  margin-right: calc(-1 * var(--scroll-fade) - var(--luke-list-gap));
   background: linear-gradient(to right, var(--strip-ground), transparent);
   animation-name: strip-fade-in;
   animation-range: 0 var(--scroll-fade);
 }
 
 .tab-strip::after {
-  right: calc(-1 * var(--focus-ring-reach));
-  margin-left: calc(-1 * var(--scroll-fade) - var(--list-gap));
+  right: calc(-1 * var(--luke-focus-ring-reach));
+  margin-left: calc(-1 * var(--scroll-fade) - var(--luke-list-gap));
   background: linear-gradient(to left, var(--strip-ground), transparent);
   animation-name: strip-fade-out;
   animation-range: calc(100% - var(--scroll-fade)) 100%;
@@ -7484,8 +7433,8 @@ button.integration-tool-head:hover,
 .tab-strip .tab[data-selected="true"] {
   position: sticky;
   z-index: 2;
-  right: calc(-1 * var(--focus-ring-reach));
-  left: calc(-1 * var(--focus-ring-reach));
+  right: calc(-1 * var(--luke-focus-ring-reach));
+  left: calc(-1 * var(--luke-focus-ring-reach));
   min-width: 0;
   flex-grow: 0;
   flex-shrink: 0;
@@ -7575,7 +7524,7 @@ button.integration-tool-head:hover,
   z-index: 1;
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--desktop-well);
+    var(--luke-color-well);
   box-shadow: 0 4px 12px var(--luke-color-shadow);
   color: var(--luke-color-text);
   transition:
@@ -7866,7 +7815,7 @@ button.integration-tool-head:hover,
 .main-tabs {
   display: flex;
   align-items: center;
-  gap: var(--list-gap);
+  gap: var(--luke-list-gap);
 }
 
 /* The one slot a column's bar keeps for the ⋯ that acts on its chosen tab:
@@ -7957,7 +7906,7 @@ button.integration-tool-head:hover,
    the pointer both move, so a hover draws nothing of its own. */
 .command-palette-backdrop {
   position: fixed;
-  z-index: var(--z-dialog);
+  z-index: var(--luke-z-dialog);
   inset: 0;
   background: var(--luke-color-scrim);
   animation: confirm-dialog-dim var(--duration-quick) ease-out;
@@ -7966,7 +7915,7 @@ button.integration-tool-head:hover,
 
 .command-palette {
   position: fixed;
-  z-index: var(--z-dialog);
+  z-index: var(--luke-z-dialog);
   top: 18vh;
   left: 50%;
   display: flex;
@@ -8009,8 +7958,8 @@ button.integration-tool-head:hover,
 }
 
 .command-palette-search svg {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: 0 0 auto;
 }
 
@@ -8568,7 +8517,7 @@ button.integration-tool-head:hover,
   padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
   color: var(--luke-color-text);
   font: inherit;
   font-size: var(--luke-type-body-size);
@@ -8632,8 +8581,8 @@ button.integration-tool-head:hover,
   display: grid;
   min-height: 0;
   gap: var(--luke-space-2);
-  margin: calc(-1 * var(--focus-ring-reach));
-  padding: var(--focus-ring-reach);
+  margin: calc(-1 * var(--luke-focus-ring-reach));
+  padding: var(--luke-focus-ring-reach);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -8709,7 +8658,7 @@ button.integration-tool-head:hover,
    can dismiss. */
 .toast-stack {
   position: fixed;
-  z-index: var(--z-toast);
+  z-index: var(--luke-z-toast);
   right: var(--luke-space-16);
   bottom: var(--luke-space-16);
   width: min(340px, calc(100vw - 2 * var(--luke-space-16)));
@@ -8908,15 +8857,15 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
    label starts on one edge. */
 .task-card-glyph {
   display: inline-flex;
-  width: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
   flex: none;
   justify-content: center;
-  --state-glyph-size: var(--menu-glyph);
+  --state-glyph-size: var(--luke-menu-glyph);
 }
 
 .task-card-glyph > svg {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
 }
 
 .task-card-detail .task-card-glyph > :is(.repository-picture, .provider-mark) {
@@ -8941,7 +8890,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   display: flex;
   height: 22px;
   align-items: center;
-  padding-left: calc(var(--menu-glyph) + var(--luke-icon-gap));
+  padding-left: calc(var(--luke-menu-glyph) + var(--luke-icon-gap));
 }
 
 /* A run's figures under its card's rule (`turn-card.tsx`), a turn's tokens
