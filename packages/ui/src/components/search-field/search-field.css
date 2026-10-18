@@ -24,11 +24,6 @@
     transition: border-color var(--duration-hover) ease;
   }
 
-  .luke-search-field:has(.luke-search-field-input:focus-visible) {
-    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: calc(var(--luke-focus-ring-width) / -2);
-  }
-
   .luke-search-field > svg {
     width: var(--luke-control-icon);
     height: var(--luke-control-icon);

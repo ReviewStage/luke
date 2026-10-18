@@ -333,7 +333,7 @@
      no element given a tabindex is left to the engine's own ring.
      `:focus-visible` alone guesses wrong in a window Luke focuses for itself
      and rings a button after a plain press, so until the keyboard has
-     actually moved focus (`keyboard-modality.ts`) nothing but a field rings.
+     actually moved focus (`keyboard-modality.ts`) nothing rings.
      In the base layer, so a sheet's own rule for a control still wins: a
      menu row marks its focus with a fill, and says so where it is drawn. */
   :is(
@@ -388,21 +388,14 @@
     scroll-margin: var(--luke-focus-ring-reach);
   }
 
-  :root:not([data-keyboard="true"])
-    :focus-visible:not(textarea, [contenteditable], input:not([type="checkbox"])) {
+  :root:not([data-keyboard="true"]) :focus-visible {
     outline: none; /* no ring: a press moved focus, not the keyboard */
   }
 
-  /* A field holding the caret wears the same ring however the caret got
-     there, centred on its own edge the way a macOS text field takes the
-     keyboard. A field that sits borderless in a well of its own, a search's
-     or a composer's, rings the well instead (`.field-well`), except a
-     menu's own filter hanging from a chip inside the well, which holds the
-     caret without ringing the composer around it. */
-  :is(textarea, [contenteditable], input:not([type="checkbox"])):focus-visible,
-  .field-well:has(:is(textarea, [contenteditable], input):not(.menu-surface *):focus-visible) {
-    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: calc(var(--luke-focus-ring-width) / -2);
+  /* A field holding the caret wears no ring, however the caret got there:
+     the caret and the field's own ground say where typing goes. */
+  :is(textarea, [contenteditable], input:not([type="checkbox"])):focus-visible {
+    outline: none; /* no ring: the caret marks the field */
   }
 }
 

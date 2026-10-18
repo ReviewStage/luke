@@ -451,7 +451,7 @@ export function Tab({
           {tab}
         </Tooltip>
       ) : (
-        <span className="tab-button field-well" data-editing="true">
+        <span className="tab-button" data-editing="true">
           {glyph}
           {editor}
         </span>
