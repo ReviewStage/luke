@@ -220,9 +220,7 @@ export function TextField({
       value={props.value ?? ""}
       onChange={(event) => {
         if (props.type !== TEXT_FIELD_TYPE.NUMBER) return props.onChange(event.target.value);
-        // Note that the browser reads nothing from what is not yet a number (a
-        // lone minus, a trailing point), as it does from nothing; React leaves
-        // such text standing, because it compares a number field's value loosely.
+        // Note that a half-typed number reads as nothing, and React leaves its text standing, as it compares loosely.
         const typed = event.target.valueAsNumber;
         props.onChange(Number.isFinite(typed) ? typed : undefined);
       }}
