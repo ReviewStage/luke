@@ -220,7 +220,7 @@ test("a compact row mark is found by its label, pressed, and right-clicked, and 
 });
 
 /** Draws a form holding `submit`, and answers how many times the form was sent. */
-function mountForm(submit: React.ReactElement): { container: HTMLElement; sent: () => number } {
+function mountForm(submit: React.ReactElement) {
   let sent = 0;
   const container = mount(
     createElement(
