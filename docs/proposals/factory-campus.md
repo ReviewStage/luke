@@ -66,6 +66,9 @@ illustrative details the gate needs are:
 
 | On the campus | Read from | Kind |
 | --- | --- | --- |
+| A district | one zone of the repository with something in it, or "Not in code yet" | data |
+| Which district a building stands in | the task's primary zone | data |
+| A pink outline and belts, while a task is open | the districts that depend on the task's zone, fainter by distance | derived |
 | A building | one listed task | data |
 | Which plot, and so which silhouette | the task's place in `createdAt` order | derived each draw, never stored. The silhouette is art direction and means nothing. |
 | Lit windows and smoke | amber: an agent building; dim amber: stuck; red: a failed agent; orange: an open Inbox item; green: this Mac's call; a few soft lights: nothing happening; smoke: an agent running | data |
@@ -116,6 +119,53 @@ failed agent, the call, an agent running. A name that would overlap one
 already on screen is left off and answers a hover instead, and in a town past
 twelve tasks a quiet building gets no name at all. Names are refitted when the
 zoom settles.
+
+## Districts: code areas with tasks inside
+
+The default layout now draws the repository's zones (its packages and
+directories, `zones` in the world snapshot) as districts, and each task's
+building stands in the district of its primary zone: where its pull requests
+changed the most lines, as main's `agent-reading.ts` finds it. A planned
+issue's blueprint stands in the district it is placed on (`zonePaths`). Work
+that has touched no code yet (a task on a call, a task with no pull request
+anywhere, the empty plot, an issue placed nowhere) has a district of its own
+near the gate, "Not in code yet". The header's Layout switch goes back to the
+plain town.
+
+- **A district is as big as what stands in it**, laid out as near square as
+  its plots allow, and the districts are packed into a square below the gate.
+  The streets are the gaps between them. Only districts with something in them
+  are drawn. Nothing about the layout is stored.
+- **A district's name** is painted on the street below its nearest corner, in
+  the code font, so it never sits on a building.
+- **Hovering a district** says what it depends on and how many districts
+  depend on it.
+- **The blast radius**, as main's worlds light it: opening a task outlines its
+  district in `--signal-blast` pink, and every district that depends on it in
+  dashed pink, fainter with each step, with a belt from one to the other. The
+  pane names the district and how many depend on it.
+
+The sample's eight zones are illustrative (desktop, web, `@luke/ui`,
+`@luke/service`, `@luke/features`, `@luke/database`, `@luke/wire`,
+`@luke/brand`), with dependencies as this repository's are roughly shaped.
+
+### Does it cook the Mac?
+
+No more than the town, and a little less in a big one. The districts add one
+ground shape and one label each (eight here, at most 200 by the snapshot's
+bound), and the blast radius is a separate small layer redrawn only when a
+task opens. Same worst case as above, every agent running, each case on a
+fresh page (headless Chromium, software rendering):
+
+| Tasks | Town: elements / redraw / fps, fitted · zoomed | Districts: elements / redraw / fps, fitted · zoomed |
+| --- | --- | --- |
+| 7 | 800 / 8 ms / 61 · 60 | 776 / 11 ms / 61 · 61 |
+| 30 | 2,369 / 19 ms / 60 · 61 | 1,397 / 16 ms / 61 · 61 |
+| 300 | 12,153 / 137 ms / 50 · 47 | 10,923 / 76 ms / 51 · 55 |
+
+Opening a task, blast radius included, takes 5 to 15 ms in either layout.
+Switching sizes, opening and closing tasks, and zooming repeatedly on one page
+left no animations, nodes or loops behind.
 
 ## What it takes from main's Factory
 
@@ -284,11 +334,13 @@ Further ideas, not built:
 
 ## Limitations
 
-- **Buildings are tasks, not zones.** Main's worlds draw the repository's
-  packages and directories as buildings and place agents in the zones they
-  touch, which also gives them a blast radius. The campus draws tasks, so it
-  has no blast radius and no defect wreckage (main's monitor slot is empty
-  for now in any case).
+- **One district a task.** A task whose pull requests touch several zones
+  stands in the one with the most lines; main's worlds can show an agent's
+  work spread across zones. There is no defect wreckage (main's monitor slot
+  is empty for now in any case).
+- **Many small districts.** A workspace whose tasks touch many zones gets many
+  one-building districts; grouping small zones under their parent directory
+  would be the next step.
 - **Some PR states have no spot.** Draft and closed pull requests show only
   in the pane; a draft's task shows as stuck.
 - **Adding a column reflows the newer plots.** A real view would add columns

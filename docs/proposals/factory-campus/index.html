@@ -56,6 +56,7 @@
   --signal-shipped: #15924a;
   --signal-defect: #dc3e42;
   --signal-selection: #0891b2;
+  --signal-blast: #d6409f;
 }
 :root, :root[data-theme="dark"] {
   color-scheme: dark;
@@ -174,6 +175,7 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
 }
 .show-chip[data-tone="illustrative"] { color: var(--state-attention); border-color: currentColor; }
 .show-head .spacer { flex: 1; }
+.show-head > * { white-space: nowrap; }
 .sim-label { color: var(--page-ink); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .sim-label span { color: var(--text-tertiary); font-weight: 500; }
 .segmented {
@@ -366,6 +368,7 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
 .tag { pointer-events: none; transition: opacity var(--duration-quick) ease; }
 .tag rect { fill: var(--label-ground); stroke: var(--hairline-strong); }
 .tag text { font-size: 12px; font-weight: 500; fill: var(--text-primary); }
+.district-tag text { font-family: var(--font-mono); font-size: 11px; font-weight: 600; fill: var(--text-secondary); }
 .tag[data-dim] { opacity: 0.3; }
 .tag[data-hide] { opacity: 0; }
 .agent-tag text { font-size: 7px; font-weight: 600; fill: var(--text-primary); }
@@ -570,8 +573,7 @@ svg.working-mark { display: block; width: 12px; height: 12px; flex: none; fill: 
 </head>
 <body>
 <header class="show-head">
-  <strong>Factory · campus of buildings</strong>
-  <span class="show-chip">Design exploration</span>
+  <strong>Factory campus</strong>
   <span class="show-chip" data-tone="illustrative">Illustrative data · nothing is live</span>
   <span class="spacer"></span>
   <span class="sim-label">Tasks</span>
@@ -582,6 +584,11 @@ svg.working-mark { display: block; width: 12px; height: 12px; flex: none; fill: 
     <button type="button" data-town="lots">30</button>
     <button type="button" data-town="huge">100</button>
     <button type="button" data-town="giant">300</button>
+  </div>
+  <span class="sim-label">Layout</span>
+  <div class="segmented" id="layout-choice">
+    <button type="button" data-layout="districts" aria-pressed="true">Districts</button>
+    <button type="button" data-layout="town" aria-pressed="false">Town</button>
   </div>
   <span class="sim-label">Events <span id="sim-step"></span></span>
   <div class="segmented">
@@ -641,6 +648,7 @@ svg.working-mark { display: block; width: 12px; height: 12px; flex: none; fill: 
           </defs>
           <g id="camera">
             <g id="layer-ground"></g>
+            <g id="layer-blast"></g>
             <g id="layer-plots"></g>
             <g id="layer-shadows"></g>
             <g id="layer-routes"></g>
@@ -801,14 +809,38 @@ const SAMPLE_TASKS = [
     prList: [],
   },
 ];
+/* The repository's zones, as the world snapshot carries them (`zones`): its packages and directories, each naming the zones it depends on. */
+const ZONES = [
+  { path: "apps/desktop", label: "desktop", dependsOn: ["packages/ui", "packages/features", "packages/brand"] },
+  { path: "apps/web", label: "web", dependsOn: ["packages/service", "packages/ui", "packages/features"] },
+  { path: "packages/ui", label: "@luke/ui", dependsOn: ["packages/features", "packages/brand"] },
+  { path: "packages/service", label: "@luke/service", dependsOn: ["packages/features", "packages/database"] },
+  { path: "packages/features", label: "@luke/features", dependsOn: ["packages/wire"] },
+  { path: "packages/database", label: "@luke/database", dependsOn: ["packages/wire"] },
+  { path: "packages/wire", label: "@luke/wire", dependsOn: [] },
+  { path: "packages/brand", label: "@luke/brand", dependsOn: [] },
+];
+const zoneByPath = Object.fromEntries(ZONES.map((z) => [z.path, z]));
+/* Each task's primary zone, as main's agent reading finds it: where its pull requests (or its agents' other work) changed the most lines. A task that has touched no code yet has none. */
+const TASK_ZONE = { switching: "apps/desktop", empty: "packages/ui", reconnect: "packages/service", search: "packages/service", shortcuts: "apps/desktop", invite: "apps/web", "dark-mode": "packages/ui" };
+/* What depends on a zone, and how far: the blast radius main's worlds light for a selected agent. */
+function blastOf(path) {
+  const dist = new Map([[path, 0]]);
+  const queue = [path];
+  while (queue.length) {
+    const at = queue.shift();
+    for (const z of ZONES) if (z.dependsOn.includes(at) && !dist.has(z.path)) { dist.set(z.path, dist.get(at) + 1); queue.push(z.path); }
+  }
+  return dist;
+}
 /* When each merged pull request merged, as the world snapshot carries it (`mergedAt`). */
 const MERGED_AT = { 3071: NOW - 2 * HOUR, 3064: NOW - 2 * DAY, 3059: NOW - 4 * DAY, 3052: NOW - 8 * DAY, 3068: NOW - 26 * HOUR };
 for (const t of SAMPLE_TASKS) for (const pr of t.prList) if (MERGED_AT[pr.number]) pr.mergedAt = MERGED_AT[pr.number];
 /* Linear issues planned, as the world snapshot carries them (`planned`): not yet a task. */
 const SAMPLE_PLANNED = [
-  { identifier: "LUKE-214", title: "Dark mode toggle", state: "Todo", priority: 2 },
-  { identifier: "LUKE-221", title: "Faster cold start", state: "Todo", priority: 1 },
-  { identifier: "LUKE-219", title: "Offline drafts", state: "Backlog", priority: 3 },
+  { identifier: "LUKE-214", title: "Dark mode toggle", state: "Todo", priority: 2, zonePaths: ["packages/ui"] },
+  { identifier: "LUKE-221", title: "Faster cold start", state: "Todo", priority: 1, zonePaths: ["apps/desktop"] },
+  { identifier: "LUKE-219", title: "Offline drafts", state: "Backlog", priority: 3, zonePaths: [] },
 ];
 const PLANNED = JSON.parse(JSON.stringify(SAMPLE_PLANNED));
 /* The window the shipped lot looks back over (`shippedSince`): the last seven days. */
@@ -840,6 +872,7 @@ function moreTasks(count) {
       const checks = merged ? CHECKS.PASSING : [CHECKS.PASSING, CHECKS.PENDING, CHECKS.FAILING][Math.floor(rnd() * 3)];
       prs.push(Object.assign(PRL(2900 + i * 4 + j, `${name}${j ? ` (${j + 1})` : ""}`, merged ? PR.MERGED : PR.OPEN, checks, 20 + Math.floor(rnd() * 360), 4 + Math.floor(rnd() * 120)), merged ? { mergedAt: Math.min(NOW - HOUR, createdAt + (j + 2) * DAY) } : {}));
     }
+    if (rnd() > 0.12) TASK_ZONE[id] = ZONES[Math.floor(rnd() * ZONES.length)].path;
     list.push({ id, name, repository: "ReviewStage/luke", createdAt, agentList: agents, prList: prs });
   }
   return list;
@@ -1123,12 +1156,8 @@ const SLOTS = [
   /* A sawtooth works with silos and a stack. */
   { plot: [0.6, 10.9, 8, 4.4], hollow: { x: 1.2, y: 11.5, w: 5, d: 3.2, h: 1.2, mat: "wall" },
     parts: (lit) => {
-      const list = [{ box: { x: 1.2, y: 11.5, w: 5, d: 3.2, z: 0, h: 1.2 }, mat: "wall", win: { rows: 1, per: 1.6, ...lit, seed: 5 }, role: "shell" }];
-      /* Each tooth slopes up toward the viewer and ends in a glazed face, as a sawtooth roof's north lights do. */
-      for (let i = 0; i < 4; i++) {
-        list.push({ box: { x: 1.2 + i * 1.25, y: 11.5, w: 1.25, d: 3.2, z: 1.2, hs: [0, 0.75, 0.75, 0] }, mat: "roof", role: "upper" });
-        list.push({ box: { x: 2.43 + i * 1.25, y: 11.6, w: 0.02, d: 2.9, z: 1.27, h: 0.42 }, mat: "glass", win: { rows: 1, per: 1.4, ...lit, band: true, seed: 31 + i }, role: "upper" });
-      }
+      const list = [{ box: { x: 1.2, y: 11.5, w: 5, d: 3.2, z: 0, h: 1.2 }, mat: "wall", win: { rows: 1, per: 1.6, ...lit, seed: 5 }, stripe: lit.lit, role: "shell" }];
+      for (let i = 0; i < 4; i++) list.push({ box: { x: 1.2 + i * 1.25, y: 11.5, w: 1.25, d: 3.2, z: 1.2, hs: [0.75, 0, 0, 0.75] }, mat: "roof", role: "upper" });
       list.push({ cyl: [7.1, 12.1, 0.55, 0, 2.2, "metal"], bands: [0.33, 0.66], role: "keep", solid: true });
       list.push({ cyl: [7.1, 13.6, 0.55, 0, 2.2, "metal"], bands: [0.33, 0.66], role: "keep", solid: true });
       list.push({ cyl: [5.6, 12.1, 0.22, 1.2, 1.9, "wall2"], bands: [0.85], role: "upper" });
@@ -1212,17 +1241,18 @@ function slotAt(i) {
 const MAX_BLUEPRINTS = 6;
 const shownPlanned = () => Math.min(PLANNED.length, MAX_BLUEPRINTS);
 const reserved = () => TASKS.length + 1 + shownPlanned();
-const extraRows = () => Math.max(0, Math.ceil((reserved() - SLOTS.length) / (PAIRS * 2)));
+const extraRows = () => (layoutMode === "districts" ? 0 : Math.max(0, Math.ceil((reserved() - SLOTS.length) / (PAIRS * 2))));
 /* Within one draw, the layout is worked out once and shared. */
 let memo = null;
 function placed() {
   if (memo?.placed) return memo.placed;
-  const list = TASKS.slice().sort((a, b) => a.createdAt - b.createdAt).map((task, i) => ({ task, slot: slotAt(i) }));
+  const list = TASKS.slice().sort((a, b) => a.createdAt - b.createdAt).map((task, i) => ({ task, slot: layoutMode === "districts" ? districtSlots.get(`task:${task.id}`) : slotAt(i) }));
   if (memo) memo.placed = list;
   return list;
 }
 /* The town's depth: as far as its last plot (and the next, empty one), never shallower than the gate and the lot. */
 function measureTown() {
+  if (layoutMode === "districts") { layoutDistricts(); return; }
   PAIRS = choosePairs(Math.max(0, reserved() - SLOTS.length));
   NX = extraRows() ? Math.max(N, PAIRS * PAIR_STEP - 1.1) : N;
   let bottom = LOT.y + LOT.d + 0.6;
@@ -1230,6 +1260,57 @@ function measureTown() {
   NY = Math.max(13.4, Math.ceil(bottom * 2) / 2);
 }
 const slotOf = (id) => placed().find((p) => p.task.id === id)?.slot;
+
+/* Districts: the repository's zones as districts of the town, each task's
+   building in the district of its primary zone, a planned issue's blueprint in
+   the district it is placed on, and a district of its own near the gate for
+   work that has touched no code yet. A district is as large as what stands in
+   it, the districts are packed into a square below the gate, and its streets
+   are the gaps between them. All of it is worked out on each draw. */
+let layoutMode = "districts";
+const D_TOP = 13.8, D_STREET = 1.2, D_HEAD = 0.9, D_PAD = 0.3;
+let DISTRICTS = [];
+const districtSlots = new Map();
+const zoneOf = (t) => (TASK_ZONE[t.id] && zoneByPath[TASK_ZONE[t.id]] ? TASK_ZONE[t.id] : "");
+function layoutDistricts() {
+  const groups = new Map([["", []]]);
+  for (const z of ZONES) groups.set(z.path, []);
+  for (const t of TASKS.slice().sort((a, b) => a.createdAt - b.createdAt)) groups.get(zoneOf(t)).push(`task:${t.id}`);
+  groups.get("").push("new");
+  PLANNED.slice(0, shownPlanned()).forEach((issue) => {
+    const z = issue.zonePaths?.find((q) => zoneByPath[q]) ?? "";
+    groups.get(z).push(`planned:${issue.identifier}`);
+  });
+  const list = [...groups].filter(([, items]) => items.length).map(([path, items]) => {
+    /* As near square as its plots allow, so a big district is a block rather than a strip. */
+    const cols = Math.max(1, Math.ceil(Math.sqrt((items.length * CELL_D) / CELL_W)));
+    const rows = Math.ceil(items.length / cols);
+    return { path, items, cols, w: cols * CELL_W + 2 * D_PAD, d: rows * CELL_D + D_HEAD + D_PAD };
+  });
+  const area = list.reduce((a, g) => a + (g.w + D_STREET) * (g.d + D_STREET), 0);
+  const width = Math.max(26, Math.sqrt(area) * 1.15);
+  let x = 0, y = D_TOP, rowD = 0;
+  districtSlots.clear();
+  let k = 0;
+  for (const g of list) {
+    if (x > 0 && x + g.w > width) { x = 0; y += rowD + D_STREET; rowD = 0; }
+    g.x = x; g.y = y;
+    g.items.forEach((key, i) => {
+      const base = SLOTS[EXTRA[k++ % EXTRA.length]];
+      const cx = x + D_PAD + (i % g.cols) * CELL_W + (CELL_W - base.plot[2]) / 2;
+      const cy = y + D_HEAD + Math.floor(i / g.cols) * CELL_D + (CELL_D - base.plot[3]) / 2;
+      districtSlots.set(key, shifted(base, cx - base.plot[0], cy - base.plot[1]));
+    });
+    x += g.w + D_STREET;
+    rowD = Math.max(rowD, g.d);
+  }
+  DISTRICTS = list;
+  NX = Math.max(N, ...list.map((g) => g.x + g.w));
+  NY = Math.max(D_TOP + 1, ...list.map((g) => g.y + g.d)) + 0.4;
+}
+/* Where the empty plot and a blueprint stand, in either layout. */
+const newPlotSlot = () => (layoutMode === "districts" ? districtSlots.get("new") : slotAt(TASKS.length));
+const blueprintSlot = (issue, k) => (layoutMode === "districts" ? districtSlots.get(`planned:${issue.identifier}`) : slotAt(TASKS.length + 1 + k));
 
 /* The merge gate's yard, three lanes by checks, ready nearest the gate; the gate on the avenue; the shipped lot past it. */
 const YARD = { x: 12, y: 5.2, w: 6.6, d: 3.7 };
@@ -1501,8 +1582,25 @@ function litFor(task) {
   return { lit: C().idle, ratio: 0.16, opacity: theme === "dark" ? 0.32 : 0.45 };
 }
 
+function districtGround(c) {
+  /* The core band above (the gate, its yard, the lot), then the districts on a paved ground whose gaps are the streets. */
+  let s = boxSVG({ x: 0, y: 0, w: N, d: D_TOP - 0.2, z: -0.6, h: 0.6 }, "slab", { topFill: c.grass });
+  s += boxSVG({ x: 0, y: D_TOP - 0.2, w: NX, d: NY - D_TOP + 0.2, z: -0.6, h: 0.6 }, "slab", { topFill: c.road });
+  s += boxSVG({ x: N, y: LOT.y - 0.3, w: LOT.x + LOT.w - N + 0.3, d: LOT.d + 0.6, z: -0.6, h: 0.6 }, "slab", { topFill: c.lot });
+  s += flat(0, 9, N, 2, c.road, 0.01) + flat(9, 9, 2, D_TOP - 9, c.road, 0.01) + flat(N, 9, LOT.x - N + 0.2, 2, c.road, 0.01);
+  for (let i = 0.4; i < N; i += 1.2) if (i < 8.6 || i > 11.4) s += flat(i, 9.96, 0.6, 0.08, c.line, 0.02);
+  s += flat(9, 9, 2, 2, theme === "dark" ? "#24252c" : "#e2e3e8", 0.015);
+  for (const g of DISTRICTS) {
+    const hue = g.path ? `var(--workspace-hue-${(ZONES.findIndex((z) => z.path === g.path) % 6) + 1})` : "var(--text-tertiary)";
+    const corners = [PR_(g.x, g.y, 0.01), PR_(g.x + g.w, g.y, 0.01), PR_(g.x + g.w, g.y + g.d, 0.01), PR_(g.x, g.y + g.d, 0.01)];
+    const name = g.path ? `${zoneByPath[g.path].label} district` : "Not in code yet";
+    s += `<g class="district" data-zone="${g.path}" data-card="zone:${g.path || "-"}"><title>${name}</title>${poly(corners, c.grass)}${poly(corners, hue, `fill-opacity="${theme === "dark" ? 0.07 : 0.06}" stroke="${hue}" stroke-opacity="0.5" stroke-width="1.2"`)}</g>`;
+  }
+  return s;
+}
 function renderGround() {
   const c = C();
+  if (layoutMode === "districts") { $("layer-ground").innerHTML = districtGround(c) + yardGround(c); return; }
   let s = boxSVG({ x: 0, y: 0, w: N, d: Math.min(NY, 20), z: -0.6, h: 0.6 }, "slab", { topFill: c.grass });
   if (NY > 20) s += boxSVG({ x: 0, y: 20, w: NX, d: NY - 20, z: -0.6, h: 0.6 }, "slab", { topFill: c.grass });
   s += boxSVG({ x: N, y: LOT.y - 0.3, w: LOT.x + LOT.w - N + 0.3, d: LOT.d + 0.6, z: -0.6, h: 0.6 }, "slab", { topFill: c.lot });
@@ -1518,11 +1616,15 @@ function renderGround() {
   s += flat(9, 9, 2, 2, theme === "dark" ? "#24252c" : "#e2e3e8", 0.015);
   const [px, py] = PR_(10, 10, 0);
   s += `<ellipse cx="${px}" cy="${py}" rx="${0.55 * DX * Math.SQRT2}" ry="${0.55 * DY * Math.SQRT2}" fill="${theme === "dark" ? "#2d2f38" : "#d6d8df"}"/>`;
+  $("layer-ground").innerHTML = s + yardGround(c);
+}
+function yardGround(c) {
+  let s = "";
   /* The gate's yard: paved, its three lanes marked only at their heads. */
   s += flat(YARD.x, YARD.y, YARD.w, YARD.d, theme === "dark" ? "#1c1d23" : "#e9eaee", 0.012);
   for (const lane of LANES) s += flat(YARD.x + 0.15, lane.y + LANE_D - 0.04, YARD.w - 0.3, 0.04, c.line, 0.02);
   s += flat(LOT.x + 0.1, LOT.y + 0.1, LOT.w - 0.2, LOT.d - 0.2, theme === "dark" ? "#1f1d27" : "#ebe8f2", 0.012);
-  $("layer-ground").innerHTML = s;
+  return s;
 }
 
 function renderPlots() {
@@ -1541,7 +1643,7 @@ function renderPlots() {
     }
   }
   {
-  const [x, y, w, d] = slotAt(TASKS.length).plot;
+  const [x, y, w, d] = newPlotSlot().plot;
   const edge = [PR_(x, y, 0.03), PR_(x + w, y, 0.03), PR_(x + w, y + d, 0.03), PR_(x, y + d, 0.03)];
   const [mx, my] = PR_(x + w / 2, y + d / 2, 0.03);
   s += `<g class="new-plot" id="new-plot" tabindex="0" role="button" aria-label="New task"><polygon points="${pts(edge)}" fill="transparent"/><polygon class="plot-dash" points="${pts(edge)}"/>` +
@@ -1777,12 +1879,19 @@ function buildingSVG(task, slot) {
     const svg = p.box ? boxSVG(p.box, p.mat, { win: p.win, stripe: p.stripe }) : cylSVG(...p.cyl, { bands: p.bands });
     const z = p.box ? p.box.z || 0 : p.cyl[3];
     const [cx, cy] = p.box ? [p.box.x + p.box.w / 2, p.box.y + p.box.d / 2] : [p.cyl[0], p.cyl[1]];
-    items.push({ z, depth: depthOf(cx, cy), svg, role: p.role });
+    items.push({ z, depth: depthOf(cx, cy), svg, role: p.role, solid: !!p.solid });
   }
+  /* What stands on its own beside the building (the silos) is drawn before the building or after it, by which side of it the viewer sees it on, not among its floors and roof. */
+  const hb = slot.hollow;
+  const middle = depthOf(hb.x + hb.w / 2, hb.y + hb.d / 2);
+  const beside = items.filter((it) => it.solid);
+  const behind = beside.filter((it) => it.depth < middle).map((it) => `<g class="keep">${it.svg}</g>`).join("");
+  const before = beside.filter((it) => it.depth >= middle).map((it) => `<g class="keep">${it.svg}</g>`).join("");
+  items.splice(0, items.length, ...items.filter((it) => !it.solid));
   const crane = underway(task) && slot.crane;
   if (crane) items.push({ z: 0, depth: depthOf(...slot.crane.at), svg: "", role: "crane" });
   items.sort((p, q) => p.z - q.z || p.depth - q.depth);
-  let body = "";
+  let body = behind;
   let cutDone = false;
   for (const it of items) {
     /* The inside is drawn only for the open building: a hundred hidden interiors would cost more than the town. */
@@ -1791,7 +1900,7 @@ function buildingSVG(task, slot) {
     body += `<g class="${it.role === "shell" ? "shell" : it.role === "upper" ? "upper" : "keep"}">${it.svg}</g>`;
   }
   if (underway(task)) body += `<g class="upper L-building">${scaffoldSVG(slot.hollow)}</g>`;
-  return `<g class="lift">${body}${roofSignals(task, slot)}</g>`;
+  return `<g class="lift">${body}${before}${roofSignals(task, slot)}</g>`;
 }
 
 
@@ -1903,10 +2012,11 @@ function renderObjects() {
   }
   for (const c of cratePositions()) if (c.where !== "door" || inView(c.x, c.y)) list.push({ depth: depthOf(c.x, c.y) + (c.z || 0) * 0.5, svg: crateSVG(c) });
   const used = placed().map((p) => p.slot.plot);
-  for (let i = TASKS.length; i < reserved(); i++) used.push(slotAt(i).plot);
+  used.push(newPlotSlot().plot);
+  PLANNED.slice(0, shownPlanned()).forEach((issue, k) => { used.push(blueprintSlot(issue, k).plot); });
   /* Planned issues stand as blueprints on the plots after the empty one. */
   PLANNED.slice(0, shownPlanned()).forEach((issue, k) => {
-    const slot = slotAt(TASKS.length + 1 + k);
+    const slot = blueprintSlot(issue, k);
     const [x, y, w, d] = slot.plot;
     if (inView(x + w / 2, y + d / 2)) list.push({ depth: depthOf(x + w / 2, y + d / 2), svg: blueprintSVG(issue, slot) });
   });
@@ -1935,7 +2045,11 @@ function statusLine(t) {
 }
 
 /* Names: one line, the state's dot, over each roof. */
-function tagSVG(id, x, y, text, tone) {
+function tagSVG(id, x, y, text, tone, district) {
+  if (district) {
+    /* A district's name is painted on its ground: quieter than a building's chip. */
+    return `<g class="tag district-tag" data-tag="${id}" data-anchor="${x.toFixed(1)},${y.toFixed(1)}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})"><text x="0" y="16" text-anchor="middle">${text}</text></g>`;
+  }
   const width = textWidth(text, 12, 500) + (tone ? 26 : 14);
   return `<g class="tag" data-tag="${id}" data-anchor="${x.toFixed(1)},${y.toFixed(1)}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})">` +
     `<rect x="${-width / 2}" y="-25" width="${width}" height="19" rx="5"/>` +
@@ -1963,6 +2077,12 @@ function renderTags() {
   const [lx, ly] = PR_(LOT.x + LOT.w / 2, LOT.y + LOT.d, -0.2);
   if (fits(gx, gy, "Merge gate")) s += tagSVG("gate", gx, gy, "Merge gate", null);
   if (fits(lx, ly + 34 / cam.s, "Shipped")) s += tagSVG("shipped", lx, ly + 34 / cam.s, "Shipped", "--signal-shipped");
+  if (layoutMode === "districts") for (const g of DISTRICTS) {
+    /* Painted on the street below the district's nearest corner, where no building stands. */
+    const [dx, dy] = PR_(g.x + g.w, g.y + g.d, 0);
+    const text = g.path ? zoneByPath[g.path].label : "Not in code yet";
+    if (inView(g.x + g.w, g.y + g.d) && fits(dx, dy + 44 / cam.s, text)) s += tagSVG(`zone:${g.path}`, dx, dy, text, null, true);
+  }
   const cands = [];
   for (const { task, slot } of placed()) {
     const [rx, ry, rz] = slot.roof;
@@ -2110,7 +2230,31 @@ function zoomBy(f, cx, cy) {
 /* ------------------------------------------------------------------------
    Details: a click flies to what was clicked. Nothing changes the work.
    ------------------------------------------------------------------------ */
+/* The blast radius, as main's worlds light it: the open task's district in full, and every district that depends on it, fainter by distance, with a belt to each. */
+function renderBlast() {
+  const layer = $("layer-blast");
+  const t = layoutMode === "districts" && byId[openId];
+  const zone = t && zoneOf(t);
+  if (!zone) { layer.innerHTML = ""; return; }
+  const col = css("--signal-blast");
+  const dist = blastOf(zone);
+  const at = (path) => DISTRICTS.find((g) => g.path === path);
+  let s = "";
+  const home = at(zone);
+  for (const [path, d] of dist) {
+    const g = at(path);
+    if (!g) continue;
+    const corners = [PR_(g.x, g.y, 0.02), PR_(g.x + g.w, g.y, 0.02), PR_(g.x + g.w, g.y + g.d, 0.02), PR_(g.x, g.y + g.d, 0.02)];
+    s += poly(corners, col, `fill-opacity="${d === 0 ? 0.16 : 0.1 / d}" stroke="${col}" stroke-width="${d === 0 ? 2.4 : 1.6}" stroke-opacity="${d === 0 ? 1 : 0.85 / d}" ${d === 0 ? "" : 'stroke-dasharray="6 4"'} vector-effect="non-scaling-stroke"`);
+    if (d > 0 && home) {
+      const a = PR_(home.x + home.w / 2, home.y + home.d / 2, 0.05), b = PR_(g.x + g.w / 2, g.y + g.d / 2, 0.05);
+      s += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${col}" stroke-width="2" stroke-dasharray="3 5" stroke-opacity="${0.8 / d}" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+    }
+  }
+  layer.innerHTML = s;
+}
 function syncMarks() {
+  renderBlast();
   for (const p of document.querySelectorAll(".plot")) {
     const id = p.dataset.plot;
     p.toggleAttribute("data-hover", hoverTask === id);
@@ -2204,7 +2348,10 @@ function renderInspector() {
     const t = byId[openId];
     if (!t) return;
     setTab("factory", t.name);
-    h += `<p class="panel-sub" ${n()}>${t.repository}</p>`;
+    const zone = zoneOf(t);
+    const reach = zone ? blastOf(zone).size - 1 : 0;
+    h += `<p class="panel-sub" ${n()}>${t.repository}${zone ? ` · ${zone}` : ""}</p>`;
+    if (zone && layoutMode === "districts") h += `<div class="summary-row" ${n()}><span class="summary-glyph" style="color:var(--signal-blast)">${glyph("blocks")}</span><span class="label">${zoneByPath[zone].label}${reach ? ` · ${reach} district${reach === 1 ? " depends" : "s depend"} on it` : ""}</span></div>`;
     if (t.id === callTaskId) h += `<div class="summary-row call-row" ${n()}><span class="summary-glyph">${glyph("mic")}</span><span class="label">On this Mac's call</span><span class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div>`;
     for (const item of inboxFor(t)) {
       const asker = t.agentList.find((a) => a.id === item.agentId);
@@ -2346,6 +2493,15 @@ function cardFor(key) {
   if (kind === "shipped") {
     const ship = merged();
     return `<div class="card">${cardHead(glyph("merge"), "Shipped", "A sample, not an all-time total", lines({ additions: ship.reduce((a, p) => a + p.additions, 0), deletions: ship.reduce((a, p) => a + p.deletions, 0) }))}<p class="card-note">${ship.length} merged pull requests in the Factory's task list.</p></div>`;
+  }
+  if (kind === "zone") {
+    const g = DISTRICTS.find((q) => q.path === (id === "-" ? "" : id));
+    if (!g) return "";
+    const tasks = g.items.filter((q) => q.startsWith("task:")).length;
+    if (!g.path) return `<div class="card">${cardHead(glyph("factory"), "Not in code yet", "", `${tasks} task${tasks === 1 ? "" : "s"}`)}<p class="card-note">Tasks that have touched no code yet, and planned issues placed on none.</p></div>`;
+    const z = zoneByPath[g.path];
+    const dependents = blastOf(g.path).size - 1;
+    return `<div class="card">${cardHead(glyph("blocks"), z.label, g.path, `${tasks} task${tasks === 1 ? "" : "s"}`)}<p class="card-note">Depends on ${z.dependsOn.map((q) => zoneByPath[q].label).join(", ") || "nothing here"}. ${dependents} district${dependents === 1 ? " depends" : "s depend"} on it.</p></div>`;
   }
   if (kind === "planned") {
     const issue = PLANNED.find((i) => i.identifier === id);
@@ -2583,6 +2739,13 @@ function setTown(size) {
   schedule(STEP_MS);
 }
 for (const b of document.querySelectorAll("[data-town]")) b.addEventListener("click", () => setTown(b.dataset.town));
+for (const b of document.querySelectorAll("[data-layout]")) b.addEventListener("click", () => {
+  layoutMode = b.dataset.layout;
+  for (const x of document.querySelectorAll("[data-layout]")) x.setAttribute("aria-pressed", String(x === b));
+  closeDetails(false);
+  refreshAll();
+  fitCampus(false);
+});
 $("sim-toggle").addEventListener("click", () => { sim.on = !sim.on; renderSimStatus(); if (sim.on) schedule(600); else clearTimeout(sim.timer); });
 $("sim-restart").addEventListener("click", () => { resetWork(); schedule(1200); });
 renderSimStatus();
