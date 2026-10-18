@@ -141,6 +141,9 @@ const SKELETON_ROWS = [
 /** How wide a placeholder row's time stands, as wide as a short "2h". */
 const SKELETON_TIME = "20px";
 
+/** How wide a placeholder row's context stands, as wide as a short plan's name in a row's caption type. */
+const SKELETON_CONTEXT = "7em";
+
 /** How wide a placeholder row's mark stands, an agent's tile at its inline size (`.actor-mark`). */
 const SKELETON_MARK = "16px";
 
@@ -534,19 +537,39 @@ export function NeedsYouEmpty({
  * block where its agent's tile, its title, its time, and the line under
  * them will stand, so the
  * items land where the blocks stood rather than a lone ring in the list's
- * corner. The rows open nothing and the region says what is being read.
+ * corner. The rows open nothing and the region says what is being read. A
+ * list whose rows name what each item is about, as Home's do, asks for a
+ * block before each time where that name will stand, and a short list asks
+ * for fewer rows than the five a whole Inbox stands.
  */
-export function InboxListSkeleton(): React.JSX.Element {
+export function InboxListSkeleton({
+  rows = SKELETON_ROWS.length,
+  context = false,
+}: {
+  /** How many placeholder rows stand, at most five. */
+  rows?: number;
+  /** Whether each row holds a block for its context before its time, as an item row given a `context` draws it. */
+  context?: boolean;
+}): React.JSX.Element {
   return (
     <SkeletonRegion label={READING_ITEMS}>
       <ul className="sidebar-tasks">
-        {SKELETON_ROWS.map(({ title, preview }) => (
+        {SKELETON_ROWS.slice(0, rows).map(({ title, preview }) => (
           <ListRow
             key={title}
             leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />}
             title={<Skeleton width={title} />}
             description={<Skeleton width={preview} />}
-            meta={<Skeleton width={SKELETON_TIME} />}
+            meta={
+              context ? (
+                <span className="home-row-meta">
+                  <Skeleton width={SKELETON_CONTEXT} />
+                  <Skeleton width={SKELETON_TIME} />
+                </span>
+              ) : (
+                <Skeleton width={SKELETON_TIME} />
+              )
+            }
             metaAt={LIST_ROW_META.TITLE}
           />
         ))}
