@@ -160,6 +160,15 @@ import type { AgentModelControl } from "./use-agent-model";
  * ⋯ takes in is the stylesheet's, which it offers as it opens, read off the
  * foot itself; a popover it opens hangs at the foot's right, where its own
  * hidden press stood.
+ *
+ * New task's composer is this same box over a start rather than a message
+ * (`new-task-composer.tsx`): its owner names what the box asks for and
+ * calls its round button (`wording`), lays its Linear issue over the words
+ * (`above`), stands its repository and Linear chips after the "+" (`tools`)
+ * and its Plan toggle before the model chip (`actions`), holds Start while
+ * it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
+ * says what Escape does (`onLeave`), and offers no MCP servers, so the
+ * box draws no servers' button.
  */
 
 /** What the box's note says while the editor bundle could not be loaded. */
@@ -170,6 +179,13 @@ const PLACEHOLDER = {
   FIRST: "Ask to make changes",
   FOLLOW_UP: "Send a follow up",
 } as const;
+
+/** What a box other than an agent's own asks for, calls its field, and calls its round button. */
+export interface ComposerWords {
+  readonly placeholder: string;
+  readonly label: string;
+  readonly send: string;
+}
 
 /** The buttons' names, which are their tooltips too. */
 const BUTTON = {
@@ -319,6 +335,14 @@ export function AgentComposer({
   replyDoor,
   sendsEmpty = false,
   closedRemedy,
+  wording,
+  above,
+  tools,
+  actions,
+  sendable = true,
+  onKey,
+  onLeave,
+  focusedByOwner = false,
 }: {
   /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
   agentId?: string | undefined;
@@ -331,8 +355,8 @@ export function AgentComposer({
   readModels: () => void;
   /** What the agent has cost, said at the chip's menu's foot; nothing before a turn settled. */
   usage: CodingAgentUsage | undefined;
-  /** The MCP servers the agent is handed and their switches. */
-  servers: AgentServersControl;
+  /** The MCP servers the agent is handed and their switches; none where the box offers none, as New task's does. */
+  servers: AgentServersControl | undefined;
   /** What the agent's model's context holds, which the ring draws; nothing before a step ended, which draws no ring. */
   context?: CodingAgentContext | undefined;
   /** What the agent was handed, which names the brief's part of the context. */
@@ -354,6 +378,22 @@ export function AgentComposer({
   sendsEmpty?: boolean;
   /** What mends a box closed for good, drawn after its note: Continue in new agent (`continue-agent.tsx`); none where nothing does. */
   closedRemedy?: ReactNode;
+  /** What the box asks for, calls its field, and calls its round button, where its owner says other than an agent's box does, as New task's does. */
+  wording?: ComposerWords | undefined;
+  /** What stands over the words inside the card, before the files attached: New task's Linear issue. */
+  above?: ReactNode;
+  /** What stands after the "+" at the foot's left: New task's repository and Linear chips. */
+  tools?: ReactNode;
+  /** What stands first among the foot's right-hand presses, before the model chip: New task's Plan toggle. */
+  actions?: ReactNode;
+  /** Whether the round button may send at all, beside the words: New task's is held while Agent mode has no repository. */
+  sendable?: boolean;
+  /** A key pressed in the field that neither its lists nor dictation took; answers whether it took it. */
+  onKey?: ((event: KeyboardEvent) => boolean) | undefined;
+  /** What Escape in the field does where no list or dictation takes it; the field gives up the caret where none is given. */
+  onLeave?: (() => void) | undefined;
+  /** Whether the owner hands the field focus where it stands as the box first draws, as a dialog's card does, so the field takes it itself only where its editor lands later. */
+  focusedByOwner?: boolean;
 }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const card = useRef<HTMLDivElement>(null);
@@ -384,6 +424,8 @@ export function AgentComposer({
   const showsStop = empty && stoppable && !composer.sending;
   const bundle = useAtomValue(useSideBundles().planEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
+  // Whether the editor stood as the box first drew, which an owner that focuses the field focuses.
+  const [mountedFirst] = useState(module !== undefined);
   const statuses = useIntegrationStatuses();
   const grant = useIntegrationGrant(statuses);
   // A reconnect that could not begin says so in the note, as Settings' row does.
@@ -399,7 +441,7 @@ export function AgentComposer({
   const lapsed = lapsedServer({
     statusOf: statuses.statusOf,
     accountsOf: statuses.accountsOf,
-    disabled: servers.disabled,
+    disabled: servers?.disabled ?? [],
   });
   const unloaded = AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined;
   const words =
@@ -440,7 +482,10 @@ export function AgentComposer({
   // Note that a remedy finished where Luke cannot watch keeps Retry beside it, since the same send goes once it is done.
   const remedyWords = note === undefined ? undefined : remedyLabel(note);
   // Note that a closed box asks for nothing, since it takes nothing.
-  const placeholder = closed ? "" : followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
+  const placeholder = closed
+    ? ""
+    : (wording?.placeholder ?? (followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST));
+  const sendLabel = wording?.send ?? BUTTON.SEND;
 
   // Note that a held box gives up the caret, because a field that takes no
   // words, and a Send disabled under the press, can hold none; a send made
@@ -488,11 +533,12 @@ export function AgentComposer({
     servers: {
       statuses,
       place: {
-        disabled: servers.disabled,
+        disabled: servers?.disabled ?? [],
         handed: stoppable ? SERVER_HANDED.STEERS : SERVER_HANDED.OPENS,
       },
     },
     onNote: setRefusal,
+    onLeave,
   });
   const { dictation, dictating } = pickers;
   // A file's lines picked in a File tab on the page (⌥⌘K) are laid in here, where the caret stands.
@@ -527,10 +573,18 @@ export function AgentComposer({
         onSelect: () => picker.current?.click(),
       },
     },
-    {
-      press: OVERFLOW_PRESS.SERVERS,
-      action: { label: "MCP servers", icon: <McpIcon />, onSelect: () => setServersOpen(true) },
-    },
+    ...(servers === undefined
+      ? []
+      : [
+          {
+            press: OVERFLOW_PRESS.SERVERS,
+            action: {
+              label: "MCP servers",
+              icon: <McpIcon />,
+              onSelect: () => setServersOpen(true),
+            },
+          },
+        ]),
     ...(context === undefined
       ? []
       : [
@@ -595,6 +649,7 @@ export function AgentComposer({
           composer.send();
         }}
       >
+        {above}
         <AttachedFileChips
           files={attachmentChips(composer.attachments)}
           onRemove={
@@ -613,7 +668,7 @@ export function AgentComposer({
           draft={composer.draft}
           setDraft={composer.setDraft}
           placeholder={placeholder}
-          label="Message to the agent"
+          label={wording?.label ?? "Message to the agent"}
           input={
             held
               ? COMPOSER_INPUT.DISABLED
@@ -622,7 +677,9 @@ export function AgentComposer({
                 : COMPOSER_INPUT.EDITABLE
           }
           maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
+          takesFocus={!(focusedByOwner && mountedFirst)}
           {...pickers.field}
+          onKey={(event) => pickers.field.onKey(event) || onKey?.(event) === true}
           onEnter={() => {
             if (room.current !== null) submitPromptInput(room.current);
           }}
@@ -668,8 +725,10 @@ export function AgentComposer({
                   doors={doors}
                   narrow={folds(FOLD_WIDTH.PUBLISHED)}
                 />
+                {tools}
               </PromptInputTools>
               <div className="agent-composer-actions">
+                {actions}
                 {model === undefined ? null : (
                   <AgentModelChip
                     model={model}
@@ -679,12 +738,14 @@ export function AgentComposer({
                     narrow={folds(FOLD_WIDTH.MODEL)}
                   />
                 )}
-                <AgentServersButton
-                  servers={servers}
-                  statuses={statuses}
-                  open={serversOpen}
-                  onOpenChange={handBack(setServersOpen)}
-                />
+                {servers === undefined ? null : (
+                  <AgentServersButton
+                    servers={servers}
+                    statuses={statuses}
+                    open={serversOpen}
+                    onOpenChange={handBack(setServersOpen)}
+                  />
+                )}
                 <AgentContextRing
                   context={context}
                   brief={brief}
@@ -704,11 +765,11 @@ export function AgentComposer({
                     />
                   </Tooltip>
                 ) : (
-                  <Tooltip label={BUTTON.SEND}>
+                  <Tooltip label={sendLabel}>
                     <PromptInputSubmit
-                      label={BUTTON.SEND}
+                      label={sendLabel}
                       status={composer.sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-                      disabled={held || empty || reading > 0}
+                      disabled={held || empty || !sendable || reading > 0}
                     />
                   </Tooltip>
                 )}

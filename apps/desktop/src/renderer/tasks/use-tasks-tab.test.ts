@@ -2538,3 +2538,89 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
     );
   });
 });
+
+test("New task's Agent mode starts the task without planning and opens it on a draft agent holding the prompt, files, and model, marked to send itself", async () => {
+  const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
+    },
+  );
+  act(() => tab.control().onNewTask());
+  let note: string | undefined = "unanswered";
+  await act(async () => {
+    note = await tab.control().newTask.start(
+      "",
+      "acme/web",
+      undefined,
+      false,
+      {},
+      {
+        prompt: "Make the sidebar keep its folds.",
+        attachments: [],
+        choice,
+      },
+    );
+  });
+  tab.stand({
+    tasks: {
+      ...OPEN,
+      activeTaskId: OTHER_TASK_ID,
+      document: {
+        status: TASKS_READ.READY,
+        task: { ...TASK, id: OTHER_TASK_ID, name: "Untitled", repository: "acme/web" },
+      },
+    },
+  });
+  await settle();
+
+  const draft = tab.control().agents.draft;
+  assert.equal(note, undefined);
+  assert.equal(tab.control().newTask.open, false, "the dialog closes");
+  assert.deepEqual(
+    tab.payloads
+      .filter((asked) => asked.kind === ACT_KIND.TASKS_START)
+      .map((asked) => Option.getOrUndefined(readPlanningNamed(asked.payload))?.planning),
+    [false],
+  );
+  assert.ok(draft, "the new task holds a draft agent");
+  assert.deepEqual(
+    { prompt: draft.prompt, choice: draft.choice, sendsOnOpen: draft.sendsOnOpen },
+    { prompt: "Make the sidebar keep its folds.", choice, sendsOnOpen: true },
+  );
+  assert.deepEqual(tab.control().mainTabs.tab, { draft: draft.id }, "the task opens on its tab");
+  assert.equal(tab.control().agents.start.available, true, "the draft can send itself");
+});
+
+test("an agent's title first landing on a task still Untitled reads the tasks again, so the name it took shows; a titled task asks nothing", async () => {
+  const untitled: TasksView = {
+    ...OPEN,
+    document: { status: TASKS_READ.READY, task: { ...TASK, name: "Untitled" } },
+  };
+  const refreshes = (tab: ReturnType<typeof mount>) =>
+    tab.told.filter((kind) => kind === ACT_KIND.TASKS_REFRESH).length;
+  const tab = mount(
+    { shown: true, tasks: untitled },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+  const before = refreshes(tab);
+  act(() => tab.control().agents.onTitle(AGENT_ID, "Fix token refresh"));
+  await settle();
+  const landed = refreshes(tab) - before;
+  document.body.innerHTML = "";
+
+  const named = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+  const namedBefore = refreshes(named);
+  act(() => named.control().agents.onTitle(AGENT_ID, "Fix token refresh"));
+  await settle();
+
+  assert.equal(landed, 1);
+  assert.equal(refreshes(named) - namedBefore, 0);
+});

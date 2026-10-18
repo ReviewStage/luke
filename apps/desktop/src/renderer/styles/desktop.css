@@ -7265,9 +7265,8 @@ ul.actor-stack {
 }
 
 /* New task (`new-task-dialog.tsx`), inside the shared dialog's wide card:
-   its head, its name, and its foot led by the repository chip with the
-   answers at its end, in one column the screen recording leaves out
-   (`ph-no-capture`). */
+   its head and its composer card, in one column the screen recording leaves
+   out (`ph-no-capture`). */
 .new-task {
   display: flex;
   min-height: 0;
@@ -7275,8 +7274,7 @@ ul.actor-stack {
   gap: var(--luke-space-12);
 }
 
-/* New task's head: the title and its workspace chip, then the Plan switch
-   at the row's end. */
+/* New task's head: the title and its workspace chip. */
 .new-task-head {
   display: flex;
   min-width: 0;
@@ -7291,19 +7289,6 @@ ul.actor-stack {
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-6);
-}
-
-/* New task's Plan switch stands at the title's end with its word, the word
-   part of its label so a press on either turns it, leaving the foot's room
-   to the repository chip. */
-.new-task-planning {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: var(--luke-space-6);
-  margin-left: auto;
-  color: var(--luke-color-text-muted);
-  user-select: none;
 }
 
 /* A picker's menu here is as wide as its widest value, within a bound,
@@ -7327,31 +7312,57 @@ ul.actor-stack {
   flex-shrink: 1;
 }
 
-/* New task's foot: the repository chip at its start, the answers at its
-   end, a common width so a short verb is not a smaller target than Cancel. */
-.new-task-actions {
+/* New task's composer (`new-task-composer.tsx`): the agent box's own card
+   on the dialog's inset rather than a tab's foot, the reason Agent mode's
+   Start is held under it. */
+.new-task-composer {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
+.new-task-composer .agent-composer {
+  padding: 0;
+}
+
+/* The Linear issue picked, over the words inside the card: drawn as a
+   forked draft's chip is (`.draft-fork-chip`), its key, its title cut short,
+   its state, and the × at its end. */
+.new-task-issue {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--luke-dialog-action-gap);
+  gap: var(--luke-space-6);
+  margin: var(--luke-space-8) var(--luke-space-8) 0;
+  padding: 0 0 0 var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
 }
 
-.new-task-answers {
+.new-task-issue-key {
+  flex: none;
+  font-family: var(--luke-font-mono);
+}
+
+.new-task-issue-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--luke-color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-task-issue-state {
+  flex: none;
+  color: var(--luke-color-text-subtle);
+}
+
+.new-task-issue-drop {
   display: flex;
-  flex-shrink: 0;
-  gap: var(--luke-dialog-action-gap);
   margin-left: auto;
-}
-
-.new-task-answers > * {
-  min-width: var(--luke-dialog-action-width);
-}
-
-/* Create task's chord a glyph's gap after its word, muted against its own
-   fill rather than the card's. */
-.new-task-answers .shortcut {
-  --shortcut-ink: var(--luke-color-on-accent-muted);
-  margin-inline-start: var(--luke-icon-gap);
 }
 
 /* Move to workspace (`move-task-dialog.tsx`), inside the shared dialog's

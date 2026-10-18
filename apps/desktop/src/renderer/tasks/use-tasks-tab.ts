@@ -2,17 +2,19 @@ import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import type { AutomationPresetName } from "@luke/features/automation-code-review";
 import type { Board } from "@luke/features/board-wire";
 import { CHANNEL_KIND } from "@luke/features/chat-wire";
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import type { CodingAgentDefaultAnswer } from "@luke/features/coding-agent-view";
+import type { CodingAgentAttachment, TasklessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
+import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
-import type { CodeRef, Task } from "@luke/features/task-wire";
+import { type CodeRef, type Task, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import {
   TASK_CALL_FAILURE,
   TASKS_READ,
@@ -391,6 +393,13 @@ export interface NewTaskIssue {
   readonly title: string;
 }
 
+/** The coding agent New task's Agent mode starts on the task it started: its prompt, the files attached, and the model its chip named, none for the account's default. */
+export interface NewTaskAgent {
+  readonly prompt: string;
+  readonly attachments: readonly CodingAgentAttachment[];
+  readonly choice: ModelChoice | undefined;
+}
+
 /** What the press that opened New task chose: a repository (a repository group's +), or the issue the task starts from (an issue's Start task…). */
 export interface NewTaskPreset {
   readonly repository?: string;
@@ -649,14 +658,31 @@ export interface TasksControl {
     workspaceId: string | undefined;
     /** The repository chip's list for a workspace, as the dialog chooses which the task starts in. */
     repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
-    /** Starts the plan on the repository given, or none, in the workspace given, with its planning phase or without it, from the Linear issue given where one was picked, or from the workspace's own issue the dialog was opened on, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
+    /**
+     * Starts the plan on the repository given, or none, in the workspace
+     * given, with its planning phase or without it, from the Linear issue
+     * given where one was picked, or from the workspace's own issue the
+     * dialog was opened on, which closes the dialog and opens the plan, and,
+     * with an agent given, opens it on a draft agent's tab holding the
+     * agent's prompt, files, and model, which starts the agent at once;
+     * answers why the task did not start, or nothing once it has.
+     */
     start: (
       name: string,
       repository: string | null,
       workspaceId: string | undefined,
       planning: boolean,
       from?: { readonly linearIssueId?: string; readonly issueId?: string },
+      agent?: NewTaskAgent,
     ) => Promise<string | undefined>;
+    /** The models the composer's chip offers, as last read; nothing before the first read lands. */
+    models: readonly CatalogModel[] | undefined;
+    /** Reads the models now, for the chip's name and its menu opening. */
+    readModels: () => void;
+    /** Reads the account's default model, which the composer's chip starts on. */
+    readDefault: () => Promise<CodingAgentDefaultAnswer>;
+    /** Keeps the composer chip's pick as the account's default, as Start's menu does. */
+    writeDefault: (choice: ModelChoice) => Promise<CodingAgentDefaultAnswer>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
     /**
@@ -1333,6 +1359,28 @@ export function useTasksTab(input: {
     sidebarSeen.current = { taskId, ids: new Set(sidebarByLuke) };
     if (landed) tell(ACT_KIND.TASKS_REFRESH);
   }, [sidebarByLuke, viewed.activeTaskId, tell]);
+  // An Untitled task takes its first agent's title on the service, and the
+  // window hears no push for a task's row, so the tasks are read again as an
+  // agent of the open task first holds a title while it stands Untitled.
+  // Note that a list read already holding a title is no title landing, so a
+  // task opened on titled agents asks nothing.
+  const agentTitled =
+    agents.agents === undefined ? undefined : agents.agents.some((agent) => agent.title !== null);
+  const openName =
+    tasks.tasks.find((task) => task.id === viewed.activeTaskId)?.name ??
+    (openDocument?.id === viewed.activeTaskId ? openDocument?.name : undefined);
+  const untitled = openName === UNTITLED_TASK_NAME;
+  const titledSeen = useRef<{ taskId: string | undefined; titled: boolean | undefined }>({
+    taskId: undefined,
+    titled: undefined,
+  });
+  useEffect(() => {
+    const seen = titledSeen.current;
+    const taskId = viewed.activeTaskId;
+    const landed = seen.taskId === taskId && seen.titled === false && agentTitled === true;
+    titledSeen.current = { taskId, titled: agentTitled };
+    if (landed && untitled) tell(ACT_KIND.TASKS_REFRESH);
+  }, [agentTitled, untitled, viewed.activeTaskId, tell]);
   // A file's tab is held to the files Luke showed on the task the same way.
   const files = useMemo(
     () => shownFiles(viewed.shownCode ?? []).map((ref) => ref.path),
@@ -2248,13 +2296,17 @@ export function useTasksTab(input: {
   // which main leaves for this question to end or keep. A start without
   // planning opens no call, so it asks nothing about the one standing; it
   // names its planning only where it is off, so a request with planning is
-  // the one every service has read.
+  // the one every service has read. New task's Agent mode hands the task it
+  // started a draft agent holding the prompt, files, and model, and opens
+  // the task on that draft's tab, which starts the agent at once, so a
+  // refused agent leaves the words in that tab's box with why and Retry.
   const startTask = (
     name: string,
     repository: string | null,
     workspaceId: string | undefined,
     planning: boolean,
     from: { readonly linearIssueId?: string; readonly issueId?: string } = {},
+    agent?: NewTaskAgent,
   ): Promise<string | undefined> => {
     const panelWasOpen = sidePanel.open;
     sidePanel.onSetOpen(false);
@@ -2278,6 +2330,13 @@ export function useTasksTab(input: {
         if (planning && callingNow.current) {
           askOnOpen.current = answer.planId;
           setAskedFor(answer.planId);
+        }
+        // The agent starts from a draft the task is handed, its tab the one
+        // the task opens on, so a refusal leaves the words there with Retry.
+        if (agent !== undefined) {
+          const draftId = crypto.randomUUID();
+          agents.onHandDraft(answer.planId, { id: draftId, ...agent });
+          mainTabs.onShow(answer.planId, { draft: draftId });
         }
         return undefined;
       },
@@ -3026,6 +3085,10 @@ export function useTasksTab(input: {
       workspaceId: listedWorkspace?.id,
       repositoriesIn,
       start: startTask,
+      models: agents.models,
+      readModels: agents.readModels,
+      readDefault: agents.readDefault,
+      writeDefault: agents.writeDefault,
       onClose: () => setNewTaskAsk(undefined),
       linearIssuesIn,
     },

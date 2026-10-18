@@ -2,31 +2,68 @@
 
 import assert from "node:assert/strict";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
+import { Effect } from "effect";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
+import {
+  composerEditor,
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "#testing/composer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
 import { OpenSettingsProvider } from "../open-settings";
 import { NewTaskDialog } from "./new-task-dialog";
 import type { RepositoryChooser } from "./repository-chip";
-import type { NewTaskPreset } from "./use-tasks-tab";
+import type { NewTaskAgent, NewTaskPreset } from "./use-tasks-tab";
 
 /**
  * New task as the developer meets it: a card over the window holding the
- * task's name, the repository chip, Cancel, and Create task. Each test
+ * workspace it starts in and the composer, whose words start a coding agent
+ * in Agent mode, or the plan and a call with Luke in Plan mode, with the
+ * repository and Linear chips and the Plan toggle at its foot. Each test
  * stands the dialog in an owner that opens it and puts it away as the tab
  * does, so closing is read as the card leaving the window.
  */
 
 const roots: Root[] = [];
 
+/** The key New task keeps its mode under, which a test sets to stand the card in Plan mode. */
+const MODE_KEY = "luke.new-task-mode";
+
+/** The models the composer's chip offers: Opus, and its fast version. */
+const MODELS: readonly CatalogModel[] = [
+  {
+    id: "anthropic/claude-opus-5.5",
+    name: "Claude Opus 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+  },
+  {
+    id: "anthropic/claude-opus-5.5-fast",
+    name: "Claude Opus 5.5 (Fast)",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+  },
+];
+
+/** The account's default model, as the composer's chip reads it. */
+const DEFAULT_CHOICE: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" };
+
+// Landed before any card renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
   installScrollIntoView();
+  installEditorLayout();
   fakeAppBridge({
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
@@ -45,11 +82,16 @@ async function settle(): Promise<void> {
   });
 }
 
+/** The card stood in Plan mode, as New task keeps the mode it was left in. */
+function inPlanMode(): void {
+  window.localStorage.setItem(MODE_KEY, "plan");
+}
+
 /**
  * The dialog open in its owner, a start answered by `answer` and each
- * start's name and repository written down; `preset` is what the press
- * that opened it chose, a repository as a repository group's + does or an
- * issue as its Start task… does, `issues`
+ * start's name and repository written down, with the agent it asked for;
+ * `preset` is what the press that opened it chose, a repository as a
+ * repository group's + does or an issue as its Start task… does, `issues`
  * the workspace's Linear issues where it has Linear connected, and `finds`
  * what its Linear answers a search or an identifier with.
  */
@@ -63,6 +105,8 @@ async function mount(
   const starts: [string, string | null][] = [];
   const asks: LinearIssuesAsk[] = [];
   const planned: boolean[] = [];
+  const agents: (NewTaskAgent | undefined)[] = [];
+  const defaults: ModelChoice[] = [];
   const fromIssues: (string | undefined)[] = [];
   const fromWorkspaceIssues: (string | undefined)[] = [];
   const startedIn: (string | undefined)[] = [];
@@ -81,15 +125,23 @@ async function mount(
         open,
         preset,
         repositoriesIn: () => repositories,
+        models: MODELS,
+        readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
+        writeDefault: (choice: ModelChoice) => {
+          defaults.push(choice);
+          return Promise.resolve({ choice });
+        },
         start: (
           name: string,
           repository: string | null,
           workspaceId: string | undefined,
           planning: boolean,
           from?: { readonly linearIssueId?: string; readonly issueId?: string },
+          agent?: NewTaskAgent,
         ) => {
           starts.push([name, repository]);
           planned.push(planning);
+          agents.push(agent);
           fromIssues.push(from?.linearIssueId);
           fromWorkspaceIssues.push(from?.issueId);
           startedIn.push(workspaceId);
@@ -122,14 +174,10 @@ async function mount(
   act(() => root.render(createElement(Owner)));
   await settle();
   const dialog = () => document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
-  const field = () => {
-    const found = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
-    assert.ok(found, "the name field is drawn");
-    return found;
-  };
+  const field = (): HTMLElement => composerEditor(document);
   const button = (label: string) => {
-    const found = [...document.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
-      each.textContent?.startsWith(label),
+    const found = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (each) => each.getAttribute("aria-label") === label || each.textContent?.startsWith(label),
     );
     assert.ok(found, `${label} is drawn`);
     return found;
@@ -152,18 +200,22 @@ async function mount(
     startedIn,
     /** Whether each start asked for its planning phase. */
     planned,
+    /** The coding agent each start asked for, where it asked for one. */
+    agents,
+    /** Every model the chip kept as the account's default. */
+    defaults,
     /** Every Settings link the dialog's presses followed. */
     links,
     opener,
     dialog,
     field,
     button,
-    type: (words: string) => {
-      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      act(() => {
-        setValue?.call(field(), words);
-        field().dispatchEvent(new Event("input", { bubbles: true }));
-      });
+    /** Words typed into the composer at its caret. */
+    type: (words: string) => typeInComposer(document, words),
+    /** A key pressed in the composer's field. */
+    key: async (key: string, held: KeyboardEventInit = {}) => {
+      pressInComposer(document, key, held);
+      await settle();
     },
     press,
     /** Stands the dialog again over another chooser, as a workspace switch or the first workspaces read hands it. */
@@ -173,102 +225,179 @@ async function mount(
       await settle();
     },
     note: () => document.querySelector('[role="alert"]')?.textContent ?? undefined,
-    /** The card's controls in order, as a reader meets them. */
+    /** What the composer asks for while its box is empty. */
+    placeholder: () => document.querySelector(".agent-composer-placeholder")?.textContent,
+    /** The round Start button, by the name each mode gives it. */
+    startButton: () =>
+      document.querySelector<HTMLButtonElement>(
+        'button[aria-label="Start agent"], button[aria-label="Start planning"]',
+      ) ?? assert.fail("the round Start button stands"),
+    /** The card's buttons in order, as a reader meets them. */
     controls: () =>
-      [...(dialog()?.querySelectorAll("input, button") ?? [])].map(
-        (each) => each.getAttribute("aria-label") ?? each.textContent,
-      ),
+      [...(dialog()?.querySelectorAll("button") ?? [])]
+        .filter((each) => getComputedStyle(each).display !== "none")
+        .map((each) => each.getAttribute("aria-label") ?? each.textContent),
   };
 }
 
-test("the dialog holds the Plan switch, the name, then the repository chip leading Cancel and Create plan, with the name taking focus", async () => {
-  const card = await mount();
-  assert.deepEqual(card.controls(), [
-    "Plan with Luke",
-    "Task name",
-    "acme/web",
-    "Cancel",
-    "Create task⏎",
-  ]);
-  assert.equal(document.activeElement, card.field());
-  assert.equal(
-    card.dialog()?.textContent?.includes("Repository"),
-    false,
-    "the chip stands unlabelled",
+/** The Plan toggle, pressed where `planning` is. */
+function planToggle(): HTMLButtonElement {
+  return (
+    document.querySelector<HTMLButtonElement>('button[aria-label="Plan with Luke first"]') ??
+    assert.fail("the Plan toggle stands")
   );
-});
+}
 
-test("Return creates the plan under the name as typed, trimmed, about the repository last used", async () => {
+test("the card holds the composer with its words focused, the repository chip after the +, and the Plan toggle, the model chip on the account's default, and Start at its foot", async () => {
   const card = await mount();
-  card.type("  Dark mode toggle  ");
-  await card.press("Enter", card.field());
-  assert.deepEqual(card.starts, [["Dark mode toggle", "acme/web"]]);
+  const controls = card.controls();
+
+  assert.equal(document.activeElement, card.field());
+  assert.equal(card.placeholder(), "Describe the change for a coding agent…");
+  for (const each of ["Attach files", "acme/web", "Plan with Luke first", "Start agent"]) {
+    assert.ok(controls.includes(each), `${each} stands in the card`);
+  }
+  assert.ok(
+    controls.indexOf("acme/web") < controls.indexOf("Plan with Luke first"),
+    "the repository chip leads the foot",
+  );
+  assert.equal(
+    document.querySelector(".agent-model-chip")?.textContent?.includes("Opus"),
+    true,
+    "the model chip names the account's default",
+  );
+  assert.equal(planToggle().getAttribute("aria-pressed"), "false", "New task starts in Agent mode");
 });
 
-test("the name is optional: with none, or only whitespace, Return and Create task each start the plan unnamed", async () => {
-  const card = await mount("refused");
-  assert.equal(card.field().placeholder, "Task name (optional)");
-  assert.equal(card.button("Create task").disabled, false);
-  await card.press("Enter", card.field());
-  card.type("   ");
-  act(() => card.button("Create task").click());
-  await settle();
-  assert.deepEqual(card.starts, [
-    ["", "acme/web"],
-    ["", "acme/web"],
+test("Agent mode: Return starts the task without planning, Untitled, on the repository last used, and an agent on the words with the chip's model", async () => {
+  const card = await mount();
+  assert.equal(card.startButton().disabled, true, "an empty box starts nothing");
+  card.type("  Make the sidebar keep its folds.  ");
+  await card.key("Enter");
+
+  assert.deepEqual(card.starts, [["", "acme/web"]]);
+  assert.deepEqual(card.planned, [false]);
+  assert.deepEqual(card.agents, [
+    { prompt: "Make the sidebar keep its folds.", attachments: [], choice: DEFAULT_CHOICE },
   ]);
 });
 
-test("Plan starts on, a task started with it off starts without planning, and the next New task offers it as it was left", async () => {
-  const first = await mount();
-  const planSwitch = () => {
-    const found = document.querySelector<HTMLButtonElement>('[role="switch"]');
-    assert.ok(found, "the Plan switch is drawn");
-    return found;
+test("a model picked on the chip is kept as the account's default, and the agent starts on it", async () => {
+  const card = await mount();
+  const chip =
+    document.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
+    assert.fail("the model chip stands");
+  act(() => chip.click());
+  const fast =
+    document.querySelector<HTMLButtonElement>('[role="switch"]') ??
+    assert.fail("the menu offers Fast");
+  act(() => fast.click());
+  await settle();
+  card.type("Speed up the build");
+  await card.key("Enter");
+
+  const picked = card.defaults.at(-1);
+  assert.equal(picked?.model, "anthropic/claude-opus-5.5-fast");
+  assert.deepEqual(card.agents[0]?.choice, picked);
+});
+
+test("Shift+Return is a new line, and the agent is handed both lines", async () => {
+  const card = await mount();
+  card.type("Fix the refresh\nand add a test");
+  await card.key("Enter");
+
+  assert.deepEqual(card.starts.length, 1);
+  assert.equal(card.agents[0]?.prompt, "Fix the refresh\nand add a test");
+});
+
+test("Plan mode: Shift+Tab turns it on, the model chip stands down, and Start begins the plan and its call, named by the words' first line", async () => {
+  const card = await mount();
+  await card.key("Tab", { shiftKey: true });
+  const placeholder = card.placeholder();
+  const modelChip = document.querySelector(".agent-model-chip");
+  card.type("Rethink automations\nwhich agent they reuse");
+  await card.key("Enter");
+
+  assert.equal(planToggle().getAttribute("aria-pressed"), "true");
+  assert.equal(placeholder, "What should you and Luke plan? (optional)");
+  assert.equal(modelChip, null);
+  assert.deepEqual(card.starts, [["Rethink automations", "acme/web"]]);
+  assert.deepEqual(card.planned, [true]);
+  assert.deepEqual(card.agents, [undefined], "no agent is started");
+});
+
+test("Plan mode starts with nothing typed and with no repository, as today's blank plan", async () => {
+  inPlanMode();
+  const card = await mount(undefined, undefined, { recent: [] });
+  assert.equal(card.startButton().disabled, false);
+  act(() => card.startButton().click());
+  await settle();
+
+  assert.deepEqual(card.starts, [["", null]]);
+  assert.deepEqual(card.planned, [true]);
+});
+
+test("Agent mode with no repository holds Start and says why under the card, and turning on Plan lets it go", async () => {
+  const card = await mount(undefined, undefined, { recent: [] });
+  card.type("Write the migration");
+  await card.key("Enter");
+  const held = {
+    disabled: card.startButton().disabled,
+    why: card
+      .dialog()
+      ?.textContent?.includes(
+        "An agent needs a repository to work in. Choose one, or turn on Plan.",
+      ),
   };
-  assert.equal(planSwitch().getAttribute("aria-checked"), "true");
-  act(() => first.button("Create task").click());
+  act(() => planToggle().click());
   await settle();
-  const label = document.querySelector<HTMLLabelElement>(`label[for="${planSwitch().id}"]`);
-  assert.ok(label, "the switch has a visible label");
-  act(() => label.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-  assert.equal(planSwitch().getAttribute("aria-checked"), "false", "a press on its word turns it");
-  act(() => first.button("Create task").click());
-  await settle();
-  assert.deepEqual(first.planned, [true, false]);
+  const why = card.dialog()?.textContent?.includes("An agent needs a repository");
+  await card.key("Enter");
+
+  assert.deepEqual(held, { disabled: true, why: true });
+  assert.equal(why, false);
+  assert.deepEqual(card.starts, [["Write the migration", null]]);
+  assert.deepEqual(card.planned, [true]);
+});
+
+test("the mode is kept for the next New task, and Agent mode stands where only the old Plan switch's choice was kept", async () => {
+  window.localStorage.setItem("luke.new-task-planning", "true");
+  const first = await mount();
+  const firstMode = planToggle().getAttribute("aria-pressed");
+  act(() => planToggle().click());
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 
-  const next = await mount();
-  assert.equal(planSwitch().getAttribute("aria-checked"), "false");
-  await next.press("Enter", next.field());
-  assert.deepEqual(next.planned, [false]);
+  await mount();
+
+  assert.equal(firstMode, "false");
+  assert.equal(planToggle().getAttribute("aria-pressed"), "true");
+  assert.ok(first);
 });
 
-test("a repository group's + opens the dialog on its repository rather than the last used", async () => {
+test("Command-Return on an empty Agent-mode box starts a bare task: no planning and no agent", async () => {
+  const card = await mount(undefined, undefined, { recent: [] });
+  await card.key("Enter", { metaKey: true });
+
+  assert.deepEqual(card.starts, [["", null]]);
+  assert.deepEqual(card.planned, [false]);
+  assert.deepEqual(card.agents, [undefined]);
+});
+
+test("a repository group's + opens the card on its repository rather than the last used", async () => {
   const card = await mount(undefined, { repository: "acme/api" });
   card.type("Rate limits");
-  act(() => card.button("Create task").click());
-  await settle();
-  assert.deepEqual(card.starts, [["Rate limits", "acme/api"]]);
+  await card.key("Enter");
+  assert.deepEqual(card.starts, [["", "acme/api"]]);
 });
 
-test("Escape and Cancel each put the dialog away with nothing started, and focus goes back to what opened it", async () => {
-  const escaped = await mount();
-  escaped.type("Dark mode");
-  await escaped.press("Escape", escaped.field());
-  assert.equal(escaped.dialog(), null);
-  assert.equal(document.activeElement, escaped.opener);
-  assert.deepEqual(escaped.starts, []);
-  for (const root of roots.splice(0)) act(() => root.unmount());
-  document.body.innerHTML = "";
-
-  const cancelled = await mount();
-  cancelled.type("Dark mode");
-  act(() => cancelled.button("Cancel").click());
-  await settle();
-  assert.equal(cancelled.dialog(), null);
-  assert.deepEqual(cancelled.starts, []);
+test("Escape puts the card away with nothing started, and focus goes back to what opened it", async () => {
+  const card = await mount();
+  card.type("Dark mode");
+  await card.key("Escape");
+  assert.equal(card.dialog(), null);
+  assert.equal(document.activeElement, card.opener);
+  assert.deepEqual(card.starts, []);
 });
 
 test("Escape in the repository menu closes the menu and leaves the dialog standing", async () => {
@@ -284,16 +413,16 @@ test("Escape in the repository menu closes the menu and leaves the dialog standi
   assert.ok(card.dialog(), "the dialog still stands");
 });
 
-test("a refusal keeps the dialog and the name, says why under the field, and Create plan can be pressed again", async () => {
+test("a refusal keeps the card and the words, says why under it, and Retry starts again", async () => {
   const card = await mount("Luke can't reach acme/web.");
   card.type("Dark mode toggle");
-  act(() => card.button("Create task").click());
-  await settle();
-  assert.deepEqual(card.starts, [["Dark mode toggle", "acme/web"]]);
+  await card.key("Enter");
   assert.ok(card.dialog());
-  assert.equal(card.note(), "Luke can't reach acme/web.");
-  assert.equal(card.field().value, "Dark mode toggle");
-  assert.equal(card.button("Create task").disabled, false);
+  assert.match(card.note() ?? "", /Luke can't reach acme\/web\./u);
+  assert.equal(card.field().textContent, "Dark mode toggle");
+  act(() => card.button("Retry").click());
+  await settle();
+  assert.equal(card.starts.length, 2);
 });
 
 test("a workspace switch lets the pick go for the new workspace's recent repository", async () => {
@@ -308,9 +437,9 @@ test("a workspace switch lets the pick go for the new workspace's recent reposit
   dialog.type("Dark mode");
 
   await dialog.rechoose({ scope: "workspace-acme", recent: ["acme/relay"] });
-  await dialog.press("Enter", dialog.field());
+  await dialog.key("Enter");
 
-  assert.deepEqual(dialog.starts, [["Dark mode", "acme/relay"]]);
+  assert.deepEqual(dialog.starts, [["", "acme/relay"]]);
 });
 
 test("the workspace first resolving keeps a repository picked before the workspaces were read", async () => {
@@ -325,9 +454,9 @@ test("the workspace first resolving keeps a repository picked before the workspa
   dialog.type("Dark mode");
 
   await dialog.rechoose({ scope: "workspace-personal" });
-  await dialog.press("Enter", dialog.field());
+  await dialog.key("Enter");
 
-  assert.deepEqual(dialog.starts, [["Dark mode", "alice/private"]]);
+  assert.deepEqual(dialog.starts, [["", "alice/private"]]);
 });
 
 /** The lines the repository menu says in its rows' place. */
@@ -431,7 +560,8 @@ test("a member of a workspace whose GitHub was removed or suspended on GitHub is
   });
 });
 
-test("in a workspace with no GitHub connected, a repository its plans still name is neither offered nor chosen, the chip reads No repository, and Create starts the plan with none", async () => {
+test("in a workspace with no GitHub connected, a repository its plans still name is neither offered nor chosen, the chip reads No repository, and Plan mode starts the task with none", async () => {
+  inPlanMode();
   const dialog = await mount(undefined, undefined, {
     scope: "workspace-personal",
     workspaceName: "Dean Stratakos",
@@ -447,7 +577,7 @@ test("in a workspace with no GitHub connected, a repository its plans still name
     assert.fail("the chip's menu opens");
   await dialog.press("Escape", search);
   dialog.type("Tmp");
-  await dialog.press("Enter", dialog.field());
+  await dialog.key("Enter");
 
   assert.deepEqual(notes, ["Dean Stratakos has no GitHub connected yet."]);
   assert.equal(
@@ -477,21 +607,23 @@ test("a pick the workspace's GitHub turns out not to list is let go, while one i
         installationUrl: "https://github.com/apps/luke/installations/new",
       },
     });
+  inPlanMode();
   const unlisted = await mount(undefined, undefined, { read: listing });
   unlisted.type("Dark mode");
-  await unlisted.press("Enter", unlisted.field());
+  await unlisted.key("Enter");
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 
   const listed = await mount(undefined, { repository: "acme/api" }, { read: listing });
   listed.type("Rate limits");
-  await listed.press("Enter", listed.field());
+  await listed.key("Enter");
 
   assert.deepEqual(unlisted.starts, [["Dark mode", null]]);
   assert.deepEqual(listed.starts, [["Rate limits", "acme/api"]]);
 });
 
 test("the repository menu names each repository first and its owner after it, so two that share an owner tell apart, and finds one by its owner/name", async () => {
+  inPlanMode();
   const owner = "northwind-platform";
   const reached = (name: string) => ({
     owner,
@@ -536,7 +668,7 @@ test("the repository menu names each repository first and its owner after it, so
   });
   await dialog.press("Enter", search);
   dialog.type("Ledger");
-  await dialog.press("Enter", dialog.field());
+  await dialog.key("Enter");
 
   assert.deepEqual(dialog.starts, [["Ledger", `${owner}/billing-ledger-and-invoicing-pipeline`]]);
 });
@@ -628,20 +760,24 @@ const OLDER_ISSUE: LinearIssueSummary = {
   state: "Backlog",
 };
 
-test("with Linear connected, typing in the name lists no issues and searches no Linear: Return creates the task under the name as typed", async () => {
+/** The Linear issue laid over the words, as its chip reads, or nothing where none is. */
+function issueChip(): string | undefined {
+  return document.querySelector("[data-issue-chip]")?.textContent ?? undefined;
+}
+
+test("with Linear connected, typing in the box lists no issues and searches no Linear", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
     const card = await mount(undefined, undefined, {}, ISSUES);
     card.type("stack");
     await rest();
     const listed = document.querySelector('[role="listbox"]');
-    await card.press("Enter", card.field());
+    await card.key("Enter");
 
-    assert.equal(card.field().placeholder, "Task name (optional)");
     assert.equal(listed, null);
     assert.deepEqual(card.asks, []);
-    assert.deepEqual(card.starts, [["stack", "acme/web"]]);
     assert.deepEqual(card.fromIssues, [undefined]);
+    assert.equal(card.agents[0]?.prompt, "stack");
   } finally {
     vi.useRealTimers();
   }
@@ -654,24 +790,24 @@ test("the Linear chip stands after the repository chip only where the workspace 
   document.body.innerHTML = "";
   const plain = await mount();
 
-  assert.deepEqual(withLinear, [
-    "Plan with Luke",
-    "Task name",
-    "acme/web",
-    "Choose from Linear",
-    "Cancel",
-    "Create task⏎",
-  ]);
+  assert.equal(
+    withLinear.indexOf("Choose from Linear"),
+    withLinear.indexOf("acme/web") + 1,
+    "the Linear chip follows the repository chip",
+  );
   assert.equal(plain.controls().includes("Choose from Linear"), false);
 });
 
-test("the Linear chip lists the issues read as the card opened, the arrows move, and Return starts that issue's task at once on the card's repository", async () => {
+test("choosing an issue from the Linear chip lays it over the words as a chip and starts nothing; Return then starts an agent on a mention of it and the words, the task named by it and linked to it", async () => {
   const card = await mount(undefined, undefined, {}, ISSUES);
   const field = await openLinear();
   const listed = issueRows();
   await card.press("ArrowDown", field);
   const moved = issueRows().highlighted;
   await card.press("Enter", field);
+  const chosen = { chip: issueChip(), starts: card.starts.length };
+  card.type("Reproduce it first.");
+  await card.key("Enter");
 
   assert.deepEqual(listed, {
     rows: [
@@ -682,8 +818,44 @@ test("the Linear chip lists the issues read as the card opened, the arrows move,
     highlighted: "Restack the deploy queueENG-1 · Todo",
   });
   assert.equal(moved, "Add support for stacked PRsENG-2 · In Progress");
+  assert.deepEqual(chosen, { chip: "ENG-2Add support for stacked PRsIn Progress", starts: 0 });
   assert.deepEqual(card.starts, [["Add support for stacked PRs", "acme/web"]]);
+  assert.deepEqual(card.planned, [false]);
   assert.deepEqual(card.fromIssues, ["issue-2"]);
+  assert.equal(
+    card.agents[0]?.prompt,
+    "[@ENG-2 Add support for stacked PRs](https://linear.app/acme/issue/ENG-2)\n\nReproduce it first.",
+  );
+});
+
+test("an issue picked and Return with no words starts an agent on the issue alone; its × lets it go, and Plan mode hands it to Luke as before", async () => {
+  const card = await mount(undefined, undefined, {}, ISSUES);
+  await openLinear();
+  await card.press("Enter", linearSearch());
+  await card.key("Enter");
+  const dropped = await (async () => {
+    await openLinear();
+    await card.press("Enter", linearSearch());
+    act(() => card.button("Remove issue").click());
+    await settle();
+    return issueChip();
+  })();
+  await openLinear();
+  await card.press("Enter", linearSearch());
+  act(() => planToggle().click());
+  await settle();
+  act(() => card.startButton().click());
+  await settle();
+
+  assert.equal(
+    card.agents[0]?.prompt,
+    "[@ENG-1 Restack the deploy queue](https://linear.app/acme/issue/ENG-1)",
+  );
+  assert.equal(dropped, undefined);
+  assert.deepEqual(card.starts.at(-1), ["Restack the deploy queue", "acme/web"]);
+  assert.deepEqual(card.planned.at(-1), true);
+  assert.deepEqual(card.fromIssues.at(-1), "issue-1");
+  assert.equal(card.agents.at(-1), undefined);
 });
 
 test("typing in the Linear search narrows the issues at once, and once it rests Linear itself is searched, an issue it finds beyond those read standing after them", async () => {
@@ -719,7 +891,7 @@ test("typing in the Linear search narrows the issues at once, and once it rests 
   }
 });
 
-test("a link to an issue pasted in the Linear search asks Linear for that one issue, which is offered first and started by Return", async () => {
+test("a link to an issue pasted in the Linear search asks Linear for that one issue, which is offered first and chosen by Return", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
     const card = await mount(undefined, undefined, {}, ISSUES, (ask) =>
@@ -733,14 +905,14 @@ test("a link to an issue pasted in the Linear search asks Linear for that one is
 
     assert.deepEqual(card.asks, [{ identifier: "ENG-301" }]);
     assert.equal(listed.highlighted, "Queue jumps on retryENG-301 · Backlog");
-    assert.deepEqual(card.starts, [["Queue jumps on retry", "acme/web"]]);
-    assert.deepEqual(card.fromIssues, ["issue-301"]);
+    assert.equal(issueChip(), "ENG-301Queue jumps on retryBacklog");
+    assert.deepEqual(card.starts, []);
   } finally {
     vi.useRealTimers();
   }
 });
 
-test("Escape closes the Linear search and leaves the card with focus on the chip, and a second Escape puts the card away", async () => {
+test("Escape closes the Linear search and leaves the card with focus on the chip, and Escape from the words puts the card away", async () => {
   const card = await mount(undefined, undefined, {}, ISSUES);
   const field = await openLinear();
   await card.press("Escape", field);
@@ -749,16 +921,16 @@ test("Escape closes the Linear search and leaves the card with focus on the chip
     card: card.dialog() !== null,
     focus: document.activeElement?.getAttribute("aria-label"),
   };
-  await card.press("Escape", card.field());
+  await card.key("Escape");
 
   assert.deepEqual(afterFirst, { search: false, card: true, focus: "Choose from Linear" });
   assert.equal(card.dialog(), null);
   assert.deepEqual(card.starts, []);
 });
 
-test("Command-L from the name field opens the Linear search, and Escape hands focus back to the name", async () => {
+test("Command-L from the words opens the Linear search, and Escape hands focus back to the words", async () => {
   const card = await mount(undefined, undefined, {}, ISSUES);
-  await card.press("l", card.field(), { metaKey: true });
+  await card.key("l", { metaKey: true });
   const opened = document.activeElement === linearSearch();
   await card.press("Escape", linearSearch());
 
@@ -784,11 +956,11 @@ test("opened on one of the workspace's issues, the card says so, starts named by
   const card = await mount(undefined, { issue }, {}, [linear]);
 
   assert.match(card.dialog()?.querySelector("h2")?.textContent ?? "", /^New task from ACME-7\b/);
-  assert.equal(card.field().value, "Invites expire");
   assert.equal(document.querySelector(LINEAR_CHIP), null, "no Linear chip is offered");
-  await card.press("l", card.field(), { metaKey: true });
+  await card.key("l", { metaKey: true });
   assert.equal(document.querySelector(LINEAR_SEARCH), null, "Command-L opens nothing");
-  await card.press("Enter", card.field());
+  card.type("Make them last a week");
+  await card.key("Enter");
 
   assert.deepEqual(card.starts, [["Invites expire", "acme/web"]]);
   assert.deepEqual(card.fromWorkspaceIssues, ["issue-1"]);
