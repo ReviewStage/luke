@@ -281,6 +281,26 @@ body {
   white-space: nowrap;
 }
 
+/* A bar a path gives way in, at its wide, narrow, and narrowest widths
+   (`Breadcrumbs`' `shownAt`). */
+.catalog-crumb-bar {
+  container: luke-breadcrumb-bar / inline-size;
+  display: flex;
+  width: 600px;
+  max-width: 100%;
+  padding: var(--luke-space-4) var(--luke-space-6);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-crumb-bar-narrow {
+  width: 400px;
+}
+
+.catalog-crumb-bar-narrowest {
+  width: 240px;
+}
+
 /* A pane's room an empty state fills, tall enough to stand it above the middle. */
 .catalog-empty-room {
   display: flex;
