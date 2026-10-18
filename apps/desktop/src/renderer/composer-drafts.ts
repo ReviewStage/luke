@@ -1,6 +1,11 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
-import { type InboxFormValue, inboxFormValueSchema } from "@luke/features/inbox-wire";
+import {
+  INBOX_STATUS,
+  type InboxFormValue,
+  type InboxItem,
+  inboxFormValueSchema,
+} from "@luke/features/inbox-wire";
 import { Equal, Schema } from "effect";
 import { Atom } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
@@ -387,6 +392,30 @@ export function useNewAgentDraft(
 /** Whether a draft is an inbox card's. */
 function isInbox(kept: KeptDraft): kept is KeptDraft<InboxPlace> {
   return kept.place.kind === DRAFT_PLACE.INBOX;
+}
+
+/** Whether a kept draft is the one the item's card reads as it now stands: at its revision, an answer while it is open and a thread's message once it settled. */
+export function draftOfItem(
+  place: InboxPlace,
+  item: Pick<InboxItem, "id" | "revision" | "status">,
+): boolean {
+  return (
+    place.itemId === item.id &&
+    place.revision === item.revision &&
+    (place.thread === true) === (item.status !== INBOX_STATUS.OPEN)
+  );
+}
+
+/**
+ * Whether an inbox item holds a draft its card reads as it now stands, which
+ * its row marks with the pencil (`draft-mark.tsx`). Note that it answers a
+ * boolean, so a row draws again only as its draft comes or goes, never on
+ * each word typed.
+ */
+export function useInboxItemDrafted(item: Pick<InboxItem, "id" | "revision" | "status">): boolean {
+  return useAtomValue(draftsAtom, (drafts) =>
+    drafts.some((kept) => isInbox(kept) && draftOfItem(kept.place, item)),
+  );
 }
 
 /**

@@ -3,7 +3,11 @@ import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
-import { mergeMethodSchema, PULL_REQUEST_WRITE_BOUNDS } from "./pull-request-write-wire.js";
+import {
+  mergeMethodSchema,
+  PULL_REQUEST_WRITE_BOUNDS,
+  REACTION,
+} from "./pull-request-write-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -1045,20 +1049,6 @@ export const OVERVIEW_BOUNDS = {
   MAX_OPTIONS: 300,
 } as const;
 
-/** The reactions GitHub offers on a comment, in the order it draws them. */
-export const REACTION = {
-  THUMBS_UP: "thumbs_up",
-  THUMBS_DOWN: "thumbs_down",
-  LAUGH: "laugh",
-  HOORAY: "hooray",
-  CONFUSED: "confused",
-  HEART: "heart",
-  ROCKET: "rocket",
-  EYES: "eyes",
-} as const;
-
-export type Reaction = (typeof REACTION)[keyof typeof REACTION];
-
 /** The side of a diff a review thread's line counts on: the old file's, or the new file's. */
 export const DIFF_SIDE = {
   LEFT: "left",
@@ -1112,8 +1102,9 @@ export type PullRequestDeployment = typeof pullRequestDeploymentSchema.Type;
 /**
  * One reaction a comment wears, as GitHub draws it under the comment: which
  * it is, how many reacted with it, and, where the read names them, the first
- * of them up to the bound, in GitHub's order. A reaction nobody gave is not
- * carried.
+ * of them up to the bound, in GitHub's order; and whether the member reading
+ * gave it, as GitHub answers their own sign-in, absent where it was not read
+ * so. A reaction nobody gave is not carried.
  */
 const reactionGroupSchema = EffectSchema.Struct({
   content: EffectSchema.Literals(Object.values(REACTION)),
@@ -1123,7 +1114,13 @@ const reactionGroupSchema = EffectSchema.Struct({
       EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_REACTORS),
     ),
   ),
+  mine: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
+
+/** GitHub's GraphQL id of what wears reactions, which a reaction is added to or taken from by; absent where the read named none. */
+const reactionSubjectSchema = EffectSchema.optionalKey(
+  EffectSchema.String.check(EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_NAME_CHARS)),
+);
 
 export type ReactionGroup = typeof reactionGroupSchema.Type;
 
@@ -1136,7 +1133,7 @@ const reactionsSchema = EffectSchema.Array(reactionGroupSchema).check(
  * One comment of a review thread: who; their words whole, as GitHub renders
  * them (`bodyHTML`), or, where GitHub sent no rendering, null with their
  * words as markdown in `body`; when, in epoch milliseconds; its page; and
- * the reactions it wears.
+ * the reactions it wears, with what they are added to it by (`subject`).
  */
 const reviewThreadCommentSchema = EffectSchema.Struct({
   by: githubPersonSchema,
@@ -1145,6 +1142,7 @@ const reviewThreadCommentSchema = EffectSchema.Struct({
   at: countedNumber,
   url: EffectSchema.String,
   reactions: EffectSchema.optionalKey(reactionsSchema),
+  subject: reactionSubjectSchema,
 });
 
 const diffSideSchema = EffectSchema.Literals(Object.values(DIFF_SIDE));
@@ -1188,7 +1186,7 @@ export type ReviewThread = typeof reviewThreadSchema.Type;
  * words as markdown in `body`, empty otherwise; when, in epoch
  * milliseconds; its page; on a review, the threads on lines it started,
  * absent where it started none or from a service before them; and the
- * reactions it wears.
+ * reactions it wears, with what they are added to it by (`subject`).
  */
 const conversationEntrySchema = EffectSchema.Struct({
   kind: EffectSchema.Literals(Object.values(CONVERSATION_ENTRY)),
@@ -1204,6 +1202,7 @@ const conversationEntrySchema = EffectSchema.Struct({
     ),
   ),
   reactions: EffectSchema.optionalKey(reactionsSchema),
+  subject: reactionSubjectSchema,
 });
 
 export type ConversationEntry = typeof conversationEntrySchema.Type;
@@ -1376,6 +1375,7 @@ export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
       ),
       earlier: countedNumber,
       descriptionReactions: EffectSchema.optionalKey(reactionsSchema),
+      descriptionSubject: reactionSubjectSchema,
       pendingReview: EffectSchema.optionalKey(
         EffectSchema.NullOr(EffectSchema.Struct({ comments: countedNumber })),
       ),
@@ -1807,6 +1807,11 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
   ),
   usage: EffectSchema.optionalKey(codingAgentUsageSchema),
+  /**
+   * What the newest turn alone cost. No service sends it any more, since a
+   * price the window draws means the whole run's (`usage`); it stays an
+   * optional key so the answer's shape is the one older desktops read.
+   */
   turnUsage: EffectSchema.optionalKey(codingAgentUsageSchema),
   context: EffectSchema.optionalKey(codingAgentContextSchema),
 });

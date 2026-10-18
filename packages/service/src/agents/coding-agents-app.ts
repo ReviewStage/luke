@@ -88,6 +88,7 @@ import {
   type GitHubWriteFailure,
   mergePullRequest,
   pullRequestNodeId,
+  reactOnPullRequest,
   replyToReviewThread,
   setAutoMerge,
   setLabelled,
@@ -100,6 +101,7 @@ import {
   takeOutOfMergeQueue,
 } from "../github/pull-request-writes.js";
 import {
+  GRAPHQL_REACTION_OF,
   imageCommits,
   type PullRequestReadFailure,
   pullRequestByNumber,
@@ -110,6 +112,7 @@ import {
   pullRequestOverview,
   pullRequestReviewOptions,
   viewerPendingReviewOf,
+  viewerReactionsOf,
 } from "../github/pull-requests.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -456,7 +459,6 @@ function transcriptResponse(
     title,
     ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
     ...(page.usage === undefined ? undefined : { usage: page.usage }),
-    ...(page.turnUsage === undefined ? undefined : { turnUsage: page.turnUsage }),
     ...(page.context === undefined ? undefined : { context: page.context }),
   });
 }
@@ -1015,7 +1017,7 @@ const overviewPart = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
       }
     }),
   );
-  // Note that a part may carry what is the reader's own, such as the review they hold pending, which every hosted answer's `private, no-store` keeps from anyone else.
+  // Note that a part may carry what is the reader's own, such as the reactions they gave or the review they hold pending, which every hosted answer's `private, no-store` keeps from anyone else.
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest: part });
 });
 
@@ -1088,6 +1090,12 @@ const overviewChecksEndpoint = /* @__PURE__ */ Effect.fn("web/agentOverviewCheck
   },
 );
 
+/** Which reactions the member gave on the pull request, read on their own token; none where they hold none GitHub takes. */
+const memberReactions = (userId: string, repository: string, number: number) =>
+  Effect.flatMap(memberReadToken(userId), (token) =>
+    token === undefined ? Effect.succeed(undefined) : viewerReactionsOf(token, repository, number),
+  );
+
 /** The review the member holds pending on the pull request, read on their own token; none where they hold none, or no sign-in GitHub takes. */
 const memberPendingReview = (userId: string, repository: string, number: number) =>
   Effect.flatMap(memberReadToken(userId), (token) =>
@@ -1097,7 +1105,8 @@ const memberPendingReview = (userId: string, repository: string, number: number)
 /**
  * GET reads the agent's pull request's conversation: its comments, its
  * reviews and their threads, and where each reviewer stands by their
- * reviews, its people named against the workspace's members.
+ * reviews, its people named against the workspace's members; and, read
+ * beside it on the member's own token, which reactions are theirs.
  */
 const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
   "web/agentOverviewConversationEndpoint",
@@ -1106,8 +1115,14 @@ const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
     Effect.map(
       Effect.all(
         [
-          Effect.flatMap(pullRequestConversation(token, agent.repository, pullRequest), (read) =>
-            namedOverviewConversation(agent, pullRequest.number, read),
+          Effect.flatMap(
+            pullRequestConversation(
+              token,
+              agent.repository,
+              pullRequest,
+              memberReactions(userId, agent.repository, pullRequest.number),
+            ),
+            (read) => namedOverviewConversation(agent, pullRequest.number, read),
           ),
           memberPendingReview(userId, agent.repository, pullRequest.number),
         ],
@@ -1170,6 +1185,13 @@ function writeOf(
       );
     case PULL_REQUEST_ACTION.COMMENT:
       return commentOnPullRequest(token, id, request.body);
+    case PULL_REQUEST_ACTION.ADD_REACTION:
+    case PULL_REQUEST_ACTION.REMOVE_REACTION:
+      return reactOnPullRequest(token, id, {
+        subject: request.subject,
+        content: GRAPHQL_REACTION_OF[request.content],
+        add: request.action === PULL_REQUEST_ACTION.ADD_REACTION,
+      });
     case PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT: {
       const { action: _action, ...comment } = request;
       return addLineComment(token, id, comment);

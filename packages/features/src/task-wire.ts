@@ -311,6 +311,8 @@ export const taskPullRequestLineSchema = EffectSchema.Struct({
   deletions: countedNumber,
   /** Its page on GitHub, which the hover card opens; absent from a service before it was sent. */
   url: EffectSchema.optionalKey(EffectSchema.String),
+  /** The newest of the task's agents that opened it, whose Pull request tab a press on it opens; absent from a service before it was sent. */
+  agentId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 export type TaskPullRequestLine = typeof taskPullRequestLineSchema.Type;

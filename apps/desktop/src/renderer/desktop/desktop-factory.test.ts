@@ -14,6 +14,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
+import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
@@ -257,6 +258,31 @@ test("each plan stands in its station, and what waits on the developer leads the
   assert.equal(row(page, QUESTION).querySelector(working), null);
   // A row that opens GitHub says so after its words.
   assert.match(row(page, "#2505 ready to merge").textContent ?? "", /\(opens on GitHub\)/u);
+});
+
+test("a pull request whose agent the service names opens in that agent's Pull request tab on its plan, saying nothing of GitHub", () => {
+  const agentId = "a0000000-0000-4000-8000-000000000004";
+  const [line] = INVITES.agents?.pullRequests ?? [];
+  assert.ok(line);
+  const invites = task(4, "Workspace invites", HOUR, {
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: [{ ...line, agentId }],
+    },
+  });
+  const links: ReadLink[] = [];
+  const { page, opened } = mount([invites], { onOpenLink: (link) => links.push(link) });
+  const shipping = row(page, "#2505 ready to merge");
+  assert.doesNotMatch(shipping.textContent ?? "", /opens on GitHub/u);
+  act(() => shipping.click());
+  assert.deepEqual(
+    links.map((link) => link.place),
+    [{ kind: LINK_PLACE.CHANGES, planId: invites.id, agentId }],
+  );
+  assert.deepEqual(opened.github, []);
 });
 
 test("a question opens the Inbox on its item, an agent its page, a pull request ready to merge opens on GitHub, a plan opens itself, and Send feedback is about Factory", () => {
