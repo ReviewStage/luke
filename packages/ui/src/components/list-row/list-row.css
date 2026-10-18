@@ -89,6 +89,12 @@
     padding-inline-end: var(--luke-space-16);
   }
 
+  /* Note that a card's row rings inside its press, because the card's
+     corner clips whatever stands past its edge. */
+  .luke-list[data-variant="card"] .luke-list-row-main:focus-visible {
+    outline-offset: calc(-1 * var(--focus-ring-width, 2px));
+  }
+
   /* A compact row keeps its words and gives up some of the room around them. */
   .luke-list[data-density="compact"] .luke-list-row-main {
     padding: var(--luke-space-4) var(--luke-space-8);
