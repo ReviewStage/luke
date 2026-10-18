@@ -359,3 +359,23 @@
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
+
+/* A task and its pull requests, kept together on one line of the row
+   where they fit, as Factory keeps a task's pull requests beside it. */
+.issue-work-task {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+/* The newest pull request of the issue's tasks on its card, after its
+   priority: its mark and number in the card's quiet meta type. */
+.issue-card-pull-request {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-space-2);
+  color: var(--luke-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
