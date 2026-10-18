@@ -12,6 +12,7 @@
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { AppBridge } from "@luke/host/bridge";
+import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@luke/host/sentry-options";
 import { installAppBridge } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
@@ -46,10 +47,13 @@ export function mountWindow(surface: ReactNode): void {
 
   // Every window's tracing, as Sentry's Electron guide sets up a renderer;
   // the DSN, release, and environment are main's, which every renderer event
-  // goes through.
+  // goes through. Its reports reach main as requests of their own, which
+  // are never traced (`sentryTracesRequest`).
   Sentry.init({
-    integrations: [Sentry.browserTracingIntegration()],
-    tracesSampleRate: 1.0,
+    integrations: [
+      Sentry.browserTracingIntegration({ shouldCreateSpanForRequest: sentryTracesRequest }),
+    ],
+    tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: eventWithoutAccessTokens,
     beforeSendTransaction: transactionWithoutAccessTokens,

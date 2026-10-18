@@ -8,6 +8,7 @@ import {
 } from "@luke/host/app-identity";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import { buildCommit } from "@luke/host/build-commit";
+import { type SentryEnvironment, sentryEnvironment } from "@luke/host/sentry-options";
 import type { MenuBarChange } from "./app-menu";
 import type { DesktopConfig } from "./services/desktop-config";
 
@@ -43,8 +44,9 @@ export interface BootstrapDependencies {
    * before a child process it is to file a minidump for. The one ordering it
    * owes is the paths' — it writes its own state under Luke's `userData` — so
    * it runs immediately after they move and before anything else exists.
+   * It files reports under the environment of the Luke this process is.
    */
-  initializeCrashReporting: (runMode: RunMode) => void;
+  initializeCrashReporting: (runMode: RunMode, environment: SentryEnvironment) => void;
 }
 
 /** Reads one `--name value` argument. */
@@ -74,11 +76,11 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
       `LUKE_INSTANCE "${requested}" is not an instance name; running as the plain one`,
     );
   }
-  const appName = resolveAppName({
+  const identity = {
     packaged: app.isPackaged,
     developerIdSigned: buildCarriesDeveloperIdSigning(),
-    instance,
-  });
+  };
+  const appName = resolveAppName({ ...identity, instance });
   app.setName(appName);
   const stateRoot = path.join(app.getPath("appData"), appName);
   app.setPath("userData", stateRoot);
@@ -90,7 +92,7 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
   const fixtureMode = captureMode || fixtureName !== undefined;
   const profile = argumentValue(argv, "--profile") ?? RUN_PROFILE.IDLE;
   const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
-  dependencies.initializeCrashReporting(runMode);
+  dependencies.initializeCrashReporting(runMode, sentryEnvironment(identity));
 
   const commit = buildCommit();
 
