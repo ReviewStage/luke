@@ -5735,30 +5735,6 @@ ul.actor-stack {
   width: var(--summary-rail-width);
 }
 
-/* Needs you's glyph is the Inbox's own, wearing a dot in the rows'
-   attention orange at its top right while anything needs the developer,
-   filtered out or not, so the dot says there is something to answer and the pressed fill alone says the
-   filter is on. The stroke is cut back in a ring around the dot, as lucide's
-   own dotted glyphs are drawn. The dot stands in the glyph's 24-unit box,
-   the cut in the glyph's pixels at the same point, scaled by one unit. */
-.inbox-needs-you-dot {
-  cx: 19px;
-  cy: 5px;
-  r: 3.6px;
-  fill: var(--luke-color-attention-fill);
-  stroke: none;
-}
-
-.inbox-needs-you-glyph[data-waiting="true"] {
-  --needs-you-unit: calc(var(--luke-control-icon) / 24);
-  mask: radial-gradient(
-    circle at calc(19 * var(--needs-you-unit)) calc(5 * var(--needs-you-unit)),
-    #000 calc(3.7 * var(--needs-you-unit)),
-    transparent calc(3.7 * var(--needs-you-unit)) calc(5.6 * var(--needs-you-unit)),
-    #000 calc(5.6 * var(--needs-you-unit))
-  );
-}
-
 /* Expanded where it cannot be pinned, the whole summary stands in a card
    over the rail's own footprint, its top and right edges the rail's, or the
    column's where the column is too narrow for a rail (`SUMMARY_RAILED`), drawn

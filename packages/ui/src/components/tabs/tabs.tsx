@@ -12,7 +12,11 @@ import type { ReactNode } from "react";
  * its tabs need, a tab other than the selected one keeps its glyph and its
  * count, its name left to a reader who cannot see it. A row whose tabs
  * line up with a reading measure's words (`inset`) stands them inside it,
- * its hairline still running to the container's edges.
+ * its hairline still running to the container's edges, and one heading a
+ * narrow column stands them in from its edges as far as the column's own
+ * rows. A row in a narrow column that must name every tab (`density`)
+ * draws them compact: the caption's type, a tab's room around its words
+ * and between its name and its count taken in.
  */
 
 /** The keys that move along the row, and which way. */
@@ -25,9 +29,18 @@ const STEP_KEYS = new Map([
 export const TABS_INSET = {
   NONE: "none",
   READING: "reading",
+  COLUMN: "column",
 } as const;
 
 export type TabsInset = (typeof TABS_INSET)[keyof typeof TABS_INSET];
+
+/** How much room the row keeps around its tabs: a page's, or a narrow column's, which names them all in less. */
+export const TABS_DENSITY = {
+  REGULAR: "regular",
+  COMPACT: "compact",
+} as const;
+
+export type TabsDensity = (typeof TABS_DENSITY)[keyof typeof TABS_DENSITY];
 
 /** What a count says beside a tab's name, in the state palette or quiet. */
 export const TAB_COUNT_TONE = {
@@ -96,6 +109,7 @@ export function Tabs<Value extends string>({
   onChange,
   ids,
   inset = TABS_INSET.NONE,
+  density = TABS_DENSITY.REGULAR,
 }: {
   /** The row's accessible name. */
   label: string;
@@ -105,6 +119,7 @@ export function Tabs<Value extends string>({
   /** The id of each tab and of the panel it controls, by value. */
   ids: (value: Value) => TabIds;
   inset?: TabsInset | undefined;
+  density?: TabsDensity | undefined;
 }): React.JSX.Element {
   // An arrow shows the next view along and takes the keyboard to its tab; Home and End go to either end.
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -120,6 +135,7 @@ export function Tabs<Value extends string>({
     <div
       className="luke-tabs"
       data-inset={inset}
+      data-density={density}
       role="tablist"
       aria-label={label}
       onKeyDown={onKeyDown}

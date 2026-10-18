@@ -85,6 +85,12 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * keyboard, the metadata stepping aside as a sidebar row's time does for
  * Pin and Archive.
  *
+ * A row may lead its description with what it belongs to (`lead`), a
+ * thread's task, say, in a list grouped by something else: a small chip
+ * of a glyph and a name, cut short at a short name's width, the
+ * description's words following it on the same line, as a mail app tags a
+ * thread with its mailbox.
+ *
  * A row may be swiped right to one act (`swipe`), as a mail app's thread
  * is swiped to mark it read: a short swipe leaves it open on the act's
  * button, a long one does the act on release (`use-row-swipe.ts`). The
@@ -122,6 +128,12 @@ export interface ListRowSwipe {
   readonly label: string;
   readonly icon: ReactNode;
   readonly onAct: () => void;
+}
+
+/** What a row belongs to, as the chip before its description names it: its glyph and its name. */
+export interface ListRowLead {
+  readonly icon: ReactNode;
+  readonly label: string;
 }
 
 /** What a hint hands the press it wraps: when to show and go, and what it says of the press. */
@@ -214,6 +226,7 @@ export function ListRow({
   leading,
   title,
   description,
+  lead,
   meta,
   metaAt = LIST_ROW_META.MIDDLE,
   actions,
@@ -241,6 +254,8 @@ export function ListRow({
   /** What the row is, which its name opens with. */
   title: ReactNode;
   description?: ReactNode;
+  /** What the row belongs to, drawn as a chip of its glyph and its name before the description, on its line. */
+  lead?: ListRowLead | undefined;
   /** Metadata at the row's end, before its acts ("2h ago", "Owner"). */
   meta?: ReactNode;
   /** Where the metadata stands: at the row's middle, or at the end of the title's line. */
@@ -308,8 +323,18 @@ export function ListRow({
         ) : (
           heading
         )}
-        {said(description) ? (
-          <span className="luke-list-row-description">{description}</span>
+        {said(description) || lead !== undefined ? (
+          <span className="luke-list-row-description">
+            {lead === undefined ? null : (
+              <span className="luke-list-row-lead">
+                <span className="luke-list-row-lead-icon" aria-hidden="true">
+                  {lead.icon}
+                </span>
+                <span className="luke-list-row-lead-label">{lead.label}</span>
+              </span>
+            )}
+            {description}
+          </span>
         ) : null}
       </span>
       {metaAt === LIST_ROW_META.TITLE ? null : metadata}

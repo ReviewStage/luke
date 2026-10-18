@@ -5,6 +5,7 @@ import { useTasklessInboxItems } from "@luke/panel/tasks/use-taskless-inbox-item
 import { useCallback, useMemo } from "react";
 import {
   INBOX_GROUPING,
+  INBOX_SHOW,
   type InboxListed,
   inboxList,
   listedItems,
@@ -73,8 +74,8 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
   // Note that no reader is named, so every open item is kept as one that waits, whoever started its agent.
   const items = listedItems(
     inboxList(entries, {
-      grouping: INBOX_GROUPING.NEWEST,
-      waitingOnly: true,
+      grouping: INBOX_GROUPING.NONE,
+      show: INBOX_SHOW.NEEDS_YOU,
       chosen: undefined,
       readerId: undefined,
     }),

@@ -26,15 +26,17 @@ import { FIND_PAGE, PageFind } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
-import { InboxList, InboxListSkeleton, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
+import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list";
 import {
-  anyNeedsYou,
   anyUnread,
   firstChoice,
   INBOX_HOLDER,
+  INBOX_SHOW,
+  type InboxCounts,
   type InboxGroup,
   type InboxHolder,
   type InboxListed,
+  inboxCounts,
   inboxList,
   itemWorkspaceId,
   listedItems,
@@ -58,7 +60,7 @@ import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks"
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel";
 import { useTaskInbox } from "../tasks/use-task-inbox";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab";
-import { type InboxWaitingOnly, useInboxTaskFolds, useInboxViewChoices } from "./folded-groups";
+import { type InboxShowChoice, useInboxTaskFolds, useInboxViewChoices } from "./folded-groups";
 import {
   COLUMN,
   SIDE_PANEL_HOLDER,
@@ -80,8 +82,9 @@ import { taskCardOf } from "./task-card";
  * folders. The list (`inbox-list.tsx`) holds the items of each task of the
  * workspace the sidebar lists that main says holds one (the switcher counts
  * what waits in the others), needing the developer or settled, each task read whole
- * as main says it changed (`use-inbox-items.ts`), under its task or newest
- * first, all or only what needs them, as the developer last chose; Needs
+ * as main says it changed (`use-inbox-items.ts`), under its task, its
+ * person, or in one run, what needs them, what is unread, every open item,
+ * or everything, as the developer last chose; Needs
  * you is the Inbox's one name for an item not yet answered
  * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
  * same items. A press on a row chooses it, and the pane beside the
@@ -96,8 +99,8 @@ import { taskCardOf } from "./task-card";
  * pages, or one of its agents' pull requests (`inbox-panel-link.ts`). The
  * panel's toggle, its width, and its keys are a task's own, and ⌘F finds in
  * the panel while it holds the keys, as on a task. With nothing listed, it says so under the Inbox's
- * glyph (`@luke/ui`'s `EmptyState`); with Needs you leaving out every item, the list
- * says so and offers Show all, while the pane goes on showing the item
+ * glyph (`@luke/ui`'s `EmptyState`); with its tab leaving out every item, the list
+ * says so and offers the tab beside it, while the pane goes on showing the item
  * chosen, answered, though the list draws it no row. Escape never leaves it, a stray press
  * being no reason to lose the item being read; any row of the sidebar does, and so does Back. Too narrow for the list and the item
  * side by side, it shows one at a time (`inbox-columns.ts`): the chosen
@@ -125,13 +128,14 @@ function listedHoldings(
   return holdings.filter((holding) => listed.some((task) => task.id === holding.taskId));
 }
 
-/** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, Needs you's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
+/** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the tab's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
 function ListNote({
   failed,
   reading,
   empty,
   alone,
   filteredOut,
+  counts,
   onList,
   onRetry,
 }: {
@@ -140,9 +144,11 @@ function ListNote({
   empty: boolean;
   /** Whether the list stands alone, the Inbox too narrow for the pane beside it. */
   alone: boolean;
-  /** Needs you, where it leaves out every item the Inbox holds, for its empty state to turn off. */
-  filteredOut: InboxWaitingOnly | undefined;
-  /** Asks for the list, so Show all leaves it standing. */
+  /** The tab shown, where it leaves out every item the Inbox holds, for its empty state to show another. */
+  filteredOut: InboxShowChoice | undefined;
+  /** How many items each tab lists, for the empty state to offer one that lists something. */
+  counts: InboxCounts;
+  /** Asks for the list, so the tab its empty state shows leaves it standing. */
   onList: () => void;
   onRetry: () => void;
 }): React.JSX.Element | null {
@@ -155,7 +161,8 @@ function ListNote({
   }
   if (!empty) return null;
   if (reading) return <InboxListSkeleton />;
-  if (filteredOut !== undefined) return <NeedsYouEmpty needsYou={filteredOut} onList={onList} />;
+  if (filteredOut !== undefined)
+    return <ShowEmpty show={filteredOut} counts={counts} onList={onList} />;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
   if (alone) return <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>;
   return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
@@ -298,18 +305,19 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     },
   });
   const entries = marks.groups;
+  const counts = inboxCounts(entries, tasks.me);
   const filter = {
     grouping: choices.grouping,
-    waitingOnly: choices.waitingOnly,
+    show: choices.show,
     readerId: tasks.me,
   };
   // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
   const list = inboxList(entries, { ...filter, chosen: undefined });
   const steps = inboxList(entries, { ...filter, chosen: asked?.itemId });
   const chosen = listedItems(steps).find(({ item }) => item.id === asked?.itemId);
-  // Note that Needs you leaving out every item listed is said apart from an Inbox holding none.
+  // Note that a tab leaving out every item listed is said apart from an Inbox holding none.
   const filteredOut =
-    choices.waitingOnly &&
+    choices.show !== INBOX_SHOW.ALL &&
     listedItems(list).length === 0 &&
     entries.some(({ items }) => items.length > 0);
   // Note that a chosen item whose task or agent is listed but not read yet keeps its place, because
@@ -498,9 +506,9 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                   rows={columns.rows}
                   head={{
                     shown: tasks.shown,
-                    needsYou: choices,
+                    show: choices,
+                    counts,
                     view: { choices, folds },
-                    waiting: anyNeedsYou(entries, tasks.me),
                     readAll: {
                       unread: anyUnread(entries),
                       onMarkAll: () => marks.onMarkAll(entries.flatMap(({ items }) => items)),
@@ -515,6 +523,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                       empty={listedItems(list).length === 0}
                       alone={columns.shown === INBOX_COLUMNS.LIST}
                       filteredOut={filteredOut ? choices : undefined}
+                      counts={counts}
                       onList={columns.onList}
                       onRetry={onRetry}
                     />

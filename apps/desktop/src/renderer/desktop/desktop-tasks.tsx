@@ -40,12 +40,13 @@ import { AgentCard, agentSubject } from "../tasks/agent-ref";
 import { ArchivedBanner } from "../tasks/archived-task";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
-import { InboxList, InboxListSkeleton, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
+import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list";
 import {
-  anyNeedsYou,
   firstChoice,
   INBOX_GROUPING,
+  INBOX_SHOW,
   type InboxListed,
+  inboxCounts,
   inboxList,
   listedItems,
   NEEDS_YOU,
@@ -75,7 +76,7 @@ import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
 import { TaskChatTab } from "./desktop-chat";
 import { DesktopHome } from "./desktop-home";
-import { useTaskInboxWaitingOnly } from "./folded-groups";
+import { useTaskInboxShow } from "./folded-groups";
 import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
 import {
   COLUMN,
@@ -189,13 +190,13 @@ const NO_FOLDS = () => false;
 
 /**
  * The plan's own Inbox tab: its items newest first in the window's Inbox's
- * list, under the window's head with its Needs you alone, which keeps a
- * choice of its own (`folded-groups.ts`), and no groups since they are one
+ * list, under the window's head with its tabs alone, which keep a
+ * choice of their own (`folded-groups.ts`), and no groups since they are one
  * plan's, and the chosen item read beside them in the same pane, on the
  * plan's own held read. With nothing chosen, the first item listed that
  * waits stands chosen, else the newest; a plan whose read holds nothing
- * says so under the Inbox's glyph, and one whose items Needs you leaves out
- * says so in its list and offers Show all, the item chosen still shown
+ * says so under the Inbox's glyph, and one whose items its tab leaves out
+ * says so in its list and offers the tab beside it, the item chosen still shown
  * beside it. The pane's plan crumb chooses the plan's tab and its agent crumb
  * the agent's. Too narrow for both, it shows the chosen item, and the list
  * once its way back is taken, as the window's Inbox does
@@ -222,7 +223,7 @@ function TaskInboxTab({
 }): React.JSX.Element {
   const now = useMinute();
   const [asked, setAsked] = useState<string | undefined>(undefined);
-  const needsYou = useTaskInboxWaitingOnly();
+  const show = useTaskInboxShow();
   const { act } = useAct();
   const marks = useInboxReadMarks({
     act,
@@ -233,9 +234,10 @@ function TaskInboxTab({
   });
   const { groups } = marks;
   const items = groups.flatMap((group) => group.items);
+  const counts = inboxCounts(groups, tasks.me);
   const filter = {
-    grouping: INBOX_GROUPING.NEWEST,
-    waitingOnly: needsYou.waitingOnly,
+    grouping: INBOX_GROUPING.NONE,
+    show: show.show,
     readerId: tasks.me,
   };
   // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
@@ -245,8 +247,8 @@ function TaskInboxTab({
   const chosen = listedItems(steps).find(({ item }) => item.id === asked) ?? firstChoice(list);
   // Note that the item standing chosen is kept as asked, so the pane keeps it shown once it is answered, as the window's Inbox keeps its stand-in.
   if (chosen !== undefined && chosen.item.id !== asked) setAsked(chosen.item.id);
-  const filteredOut = needsYou.waitingOnly && listed.length === 0 && items.length > 0;
-  // Note that the way back counts every item, filtered out or not, since the list holds Needs you.
+  const filteredOut = show.show !== INBOX_SHOW.ALL && listed.length === 0 && items.length > 0;
+  // Note that the way back counts every item, filtered out or not, since the list holds the tabs.
   const columns = useInboxColumns(chosen?.item.id, items.length > 1);
   const shown = tasks.shown && !tasks.sidePanel.fullScreen;
   const choose = ({ item }: InboxListed) => setAsked(item.id);
@@ -295,9 +297,9 @@ function TaskInboxTab({
         rows={columns.rows}
         head={{
           shown,
-          needsYou,
+          show,
+          counts,
           view: undefined,
-          waiting: anyNeedsYou(groups, tasks.me),
         }}
         models={tasks.agents.models}
         readerId={tasks.me}
@@ -309,7 +311,7 @@ function TaskInboxTab({
               <ErrorState onRetry={inbox.onRetry}>The inbox could not be read.</ErrorState>
             </div>
           ) : inbox.read && filteredOut ? (
-            <NeedsYouEmpty needsYou={needsYou} onList={columns.onList} />
+            <ShowEmpty show={show} counts={counts} onList={columns.onList} />
           ) : inbox.read && listed.length === 0 && columns.shown !== INBOX_COLUMNS.BOTH ? (
             // Note that the list standing alone says what the hidden pane would, as the pane says it.
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
@@ -326,7 +328,7 @@ function TaskInboxTab({
         >
           {/* The empty pane keeps a bar the list's head's height, as the window's Inbox does. */}
           <header className="desktop-toolbar" />
-          {/* Note that the list says what Needs you left out, so the pane beside it stands bare. */}
+          {/* Note that the list says what its tab left out, so the pane beside it stands bare. */}
           {inbox.read && listed.length === 0 && !filteredOut ? (
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
           ) : null}
