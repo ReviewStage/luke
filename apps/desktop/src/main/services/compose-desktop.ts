@@ -1,3 +1,4 @@
+import { DesktopRelease, desktopRelease } from "@luke/features";
 import { AgentNoticeDoors, type AgentNotices } from "@luke/host/agent-notices";
 import {
   AppStateStore,
@@ -21,7 +22,7 @@ import { confirmingHold, type DesktopQuit } from "@luke/host/quit";
 import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
 import { HOST_CAPABILITY, NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
-import { Context, Effect, Layer } from "effect";
+import { Context, Deferred, Effect, Layer } from "effect";
 import { net } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
@@ -279,17 +280,35 @@ export function composeDesktop(
       if (config.runMode.sendsNetwork) {
         yield* linkNetworkWatch({ state, isOnline: () => net.isOnline() });
       }
+      const showSettings = () => {
+        windows.panels.focusExpanded();
+        windows.showSettings();
+      };
       const updates = yield* createUpdateServiceHost({
         config,
         recordProductEvent: telemetry.recordProductEvent,
         engine: updateEngine,
         beforeRestart: quit.teardown,
         state,
-        showSettings: () => {
-          windows.panels.focusExpanded();
-          windows.showSettings();
-        },
+        showSettings,
       });
+      // The service refusing this build as too old is answered once: Settings
+      // comes forward on the Updates row and a check begins, which fetches the
+      // release the row then offers to install. Every hosted call already
+      // stops at the refusal (`account-call.ts`), so nothing polls meanwhile.
+      const release = yield* DesktopRelease;
+      if (release !== undefined) {
+        yield* Effect.forkScoped(
+          Effect.andThen(
+            Deferred.await(release.updateRequired),
+            Effect.sync(() => {
+              config.report("The service refused this build as too old; checking for an update");
+              showSettings();
+              void updates.checkRequired();
+            }),
+          ),
+        );
+      }
 
       // The one edge no service could take as a constructor argument, because
       // it is a cycle the concerns genuinely have: the windows draw what the
@@ -324,5 +343,8 @@ export function composeDesktop(
     // takes its cipher as a seam, so it is constructed before the assembly
     // and begins before it.
     Layer.provideMerge(effectServiceLayer(keychain, config.report)),
+    // The build every hosted call names, and the refusal it latches, stand
+    // beneath everything so every call this launch makes carries them.
+    Layer.provideMerge(Layer.effect(DesktopRelease, desktopRelease(config.appVersion))),
   );
 }

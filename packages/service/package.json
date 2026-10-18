@@ -140,6 +140,7 @@
     "./github/repository-folder": "./src/github/repository-folder.js",
     "./github/repository-pins-app": "./src/github/repository-pins-app.js",
     "./github/workspace-repository": "./src/github/workspace-repository.js",
+    "./http/desktop-version-gate": "./src/http/desktop-version-gate.js",
     "./http/http": "./src/http/http.js",
     "./http/http-effect": "./src/http/http-effect.js",
     "./http/origin-guard": "./src/http/origin-guard.js",

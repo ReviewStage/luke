@@ -48,6 +48,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SANDBOX_STOPPED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.UPDATE_REQUIRED]: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -114,6 +115,8 @@ export const HOSTED_REFUSAL = {
   SANDBOX_STOPPED: { error: HOSTED_API_ERROR.SANDBOX_STOPPED },
   /** The workspace's Linear could not be read: none connected, its grant refused, or no such issue; nothing was written. */
   LINEAR_UNAVAILABLE: { error: HOSTED_API_ERROR.LINEAR_UNAVAILABLE },
+  /** The desktop build is older than the oldest the deployment answers (`desktop-version-gate.ts`); nothing was read or written. */
+  UPDATE_REQUIRED: { error: HOSTED_API_ERROR.UPDATE_REQUIRED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** The repository out of reach, with why, so the desktop can offer what mends it. */
