@@ -21,7 +21,7 @@ import { installScrollIntoView } from "#testing/scroll-into-view";
 import { runAppCommand } from "../app-commands";
 import { AgentComposer } from "./agent-composer";
 import { FileTab } from "./file-tab";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
 
 /**
@@ -65,7 +65,7 @@ async function settle(): Promise<void> {
   });
 }
 
-const PAGE: PlanMentionsValue = {
+const PAGE: TaskMentionsValue = {
   taskId: TASK_ID,
   taskName: "Invitations",
   workspace: "acme",
@@ -123,7 +123,7 @@ async function page({ box = true }: { box?: boolean } = {}) {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(PlanMentions, {
+      createElement(TaskMentions, {
         value: PAGE,
         children: [
           createElement(FileTab, {
@@ -187,7 +187,7 @@ test("lines selected in a File tab, ⌥⌘K, are a chip in the agent's box namin
   select(lineText(container, 2), 1, lineText(container, 3), 2);
   const ran = runAppCommand(APP_COMMAND.MENTION_LINES);
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".mention-chip")];
+  const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
   const card = cardOn(chips[0]);
   pressInComposer(container, "Enter");
   await settle();

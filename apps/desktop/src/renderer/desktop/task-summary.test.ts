@@ -166,7 +166,7 @@ function cardAgent(page: HTMLElement): HTMLButtonElement {
   assert.ok(row, "the pull request has a row");
   hover(row);
   const named = document.querySelector<HTMLButtonElement>(
-    '.luke-tooltip-card .luke-hover-card-sub button.actor-ref[data-kind="agent"]',
+    '.luke-tooltip-card .luke-hover-card-sub button[data-actor-ref][data-kind="agent"]',
   );
   assert.ok(named, "the Changes card names the agent");
   return named;
@@ -268,7 +268,7 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
 const NO_INBOX = { open: [], settled: [] };
 
 /** The plan's column as the shell lays it out: the toolbar's button over the summary, laid out by the column's own width. */
-function PlanColumn({ plans }: { plans: TasksControl }): React.JSX.Element {
+function TaskColumn({ plans }: { plans: TasksControl }): React.JSX.Element {
   const pin = useSummaryPin(true);
   const [column, setColumn] = useState<HTMLElement | null>(null);
   const layout = useSummaryLayout(pin, column, false, summaryHolds(plans, NO_INBOX));
@@ -296,7 +296,7 @@ function columnAt(width: number, plans: TasksControl = tasksControl()) {
   root = createRoot(page);
   const draw = (shown: TasksControl) =>
     act(() =>
-      root?.render(onRegistry(AtomRegistry.make(), createElement(PlanColumn, { plans: shown }))),
+      root?.render(onRegistry(AtomRegistry.make(), createElement(TaskColumn, { plans: shown }))),
     );
   draw(plans);
   return {

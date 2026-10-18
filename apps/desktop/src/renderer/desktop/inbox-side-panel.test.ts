@@ -65,7 +65,7 @@ const PLAN: TaskSummary = {
   updatedAt: 2,
   repository: "acme/relay",
 };
-const OTHER_PLAN = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+const OTHER_TASK = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
 const AGENT: CodingAgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
@@ -92,7 +92,7 @@ const WORDS = [
   `Opened [@relay#42](${PULL}).`,
   `See [@Invite funnel](https://tryluke.dev/acme/plan/${PLAN.id}/page/${FUNNEL.id}).`,
   "The change is in [@invites.ts](https://github.com/acme/relay/blob/HEAD/src/invites.ts).",
-  `Compare [@Old funnel](https://tryluke.dev/acme/plan/${OTHER_PLAN}/page/${FUNNEL.id}).`,
+  `Compare [@Old funnel](https://tryluke.dev/acme/plan/${OTHER_TASK}/page/${FUNNEL.id}).`,
 ].join(" ");
 
 const ITEM: InboxItem = {
@@ -222,8 +222,8 @@ async function settle(): Promise<void> {
 /** Presses the chip of the item's words that says the name given. */
 async function pressChip(container: HTMLElement, name: string): Promise<void> {
   const chip = [
-    ...container.querySelectorAll<HTMLButtonElement>("[data-inbox-markdown] .mention-chip"),
-  ].find((each) => each.querySelector(".mention-chip-label")?.textContent?.includes(name));
+    ...container.querySelectorAll<HTMLButtonElement>("[data-inbox-markdown] [data-mention-ref]"),
+  ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name));
   assert.ok(chip, `no chip says ${name}`);
   act(() => chip.click());
   await settle();
@@ -254,7 +254,7 @@ test("a pull request, a page, and a file the item names open as tabs of the pane
   await pressChip(container, "Old funnel");
   assert.deepEqual(
     left.links.map((link) => link.place),
-    [{ kind: "page", planId: OTHER_PLAN, pageId: FUNNEL.id }],
+    [{ kind: "page", planId: OTHER_TASK, pageId: FUNNEL.id }],
   );
   assert.equal(panelTabs(container)?.length, 3, "nothing of another plan opens in the panel");
 });

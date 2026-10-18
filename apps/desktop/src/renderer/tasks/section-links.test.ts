@@ -91,7 +91,7 @@ function drawn(links: Partial<SectionLinks> = {}) {
 }
 
 function chipNamed(container: HTMLElement, name: string): HTMLButtonElement {
-  const chip = [...container.querySelectorAll<HTMLButtonElement>(".mention-chip")].find(
+  const chip = [...container.querySelectorAll<HTMLButtonElement>("[data-mention-ref]")].find(
     (each) => each.textContent === name,
   );
   assert.ok(chip, `a chip named ${name}`);
@@ -194,7 +194,7 @@ test("off a plan's own page a mention stays its words", () => {
 
   act(() => root.render(createElement(PlanBody, { task: TASK, live: false })));
 
-  assert.equal(container.querySelector(".mention-chip"), null);
+  assert.equal(container.querySelector("[data-mention-ref]"), null);
   assert.equal(container.querySelector(".plan-unit-more"), null);
   assert.match(container.textContent ?? "", /Ship as @Rollout says/u);
 });
@@ -423,7 +423,7 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
 test("a folder's chip, and a file's where no file opens from here, hang their cards and open nothing", () => {
   const container = drawnFiles(undefined);
 
-  const chips = [...container.querySelectorAll<HTMLElement>(".mention-chip")];
+  const chips = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")];
 
   assert.deepEqual(
     chips.map((chip) => [chip.textContent, chip.tagName]),
@@ -454,7 +454,7 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
       }),
     ),
   );
-  const folder = [...container.querySelectorAll<HTMLElement>(".mention-chip")].find(
+  const folder = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].find(
     (chip) => chip.textContent === "auth/",
   );
   assert.ok(folder);

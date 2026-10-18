@@ -18,7 +18,7 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { MARKDOWN_MARK, MarkdownMessage } from "../markdown-message";
 import { notesBefore } from "./file-note";
 import { PlanBody } from "./plan-body";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 import { HISTORY_READ } from "./use-plan-history";
 import { VersionView } from "./version-view";
@@ -57,7 +57,7 @@ const PLAIN = [
   ["postgresql.org/docs/…/sql-createindex.html", true],
 ];
 
-const PAGE: PlanMentionsValue = {
+const PAGE: TaskMentionsValue = {
   taskId: TASK_ID,
   taskName: "Invitations",
   workspace: "acme",
@@ -110,7 +110,7 @@ function drawn(node: ReactNode): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(PlanMentions, { value: PAGE, children: node })));
+  act(() => root.render(createElement(TaskMentions, { value: PAGE, children: node })));
   return container;
 }
 
@@ -163,7 +163,7 @@ test("a transcript, the plan, a version, and a note draw a link they have no chi
 
   for (const surface of surfaces) {
     assert.deepEqual(plainLinks(surface), PLAIN);
-    assert.equal(surface.querySelectorAll(".mention-chip").length, 2);
+    assert.equal(surface.querySelectorAll("[data-mention-ref]").length, 2);
   }
 });
 

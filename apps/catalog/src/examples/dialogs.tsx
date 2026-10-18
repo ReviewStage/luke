@@ -31,13 +31,13 @@ import { CatalogSection } from "../section";
  * stay on screen.
  */
 
-/** A dialog that renames a plan, its field taking focus as it opens. */
+/** A dialog that renames a task, its field taking focus as it opens. */
 function RenameDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
   const [name, setName] = useState("Launch checklist");
   const field = useRef<HTMLInputElement | null>(null);
   return (
     <Dialog
-      title="Rename plan"
+      title="Rename task"
       initialFocus={field}
       onDismiss={onClose}
       actions={
@@ -84,7 +84,7 @@ function DeleteDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
     >
       <div className="catalog-dialog-scroll">
         <Text tone={TEXT_TONE.MUTED} id={bodyId}>
-          The plan, its tasks, and every agent’s transcript under it go for good. Anyone in the
+          The task, its plan, and every agent’s transcript under it go for good. Anyone in the
           workspace who opened it sees it gone the next time they look.
         </Text>
       </div>
@@ -183,8 +183,8 @@ function Dialogs(): React.JSX.Element {
   return (
     <CatalogSection id="dialog-states" title="Dialogs">
       <Inline>
-        <Opener label="Rename plan…" Body={RenameDialog} />
-        <Opener label="Delete plan…" Body={DeleteDialog} />
+        <Opener label="Rename task…" Body={RenameDialog} />
+        <Opener label="Delete task…" Body={DeleteDialog} />
         <Opener label="Send feedback…" Body={NoteDialog} />
         <Opener label="Open picture…" Body={PictureDialog} />
       </Inline>

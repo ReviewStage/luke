@@ -375,7 +375,7 @@ export function changesOffers(
 }
 
 /**
- * The Changes tab an agent's Changes chip opens: the one that stands for its
+ * The Pull request tab an agent's pull request chip opens: the one that stands for its
  * pull request (`changesAgentOf`), as `changesOffers` offers it, so the chip
  * and the "+" never stand two tabs on one pull request's files, whichever
  * agent's read landed first. `open` is the Changes tabs open on the task.
@@ -391,7 +391,7 @@ export function changesTabOf(
 /**
  * Opens an agent's Pull request tab, the one that stands for its pull
  * request (`changesTabOf`), on the view given: the conversation its pull
- * request's chip asks for, or the files its Changes chip does.
+ * request's chip asks for, or the files a link to its changes does.
  */
 export function showPullRequest(
   panel: Pick<SidePanelControl, "changes" | "onChoose" | "onPullRequestView">,

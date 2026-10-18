@@ -171,9 +171,9 @@ async function drawn(text: string, opened: LinkPlace[]): Promise<HTMLElement> {
 
 /** Each chip drawn: its kind and the name it says. */
 function chips(container: HTMLElement): [string | undefined, string | null][] {
-  return [...container.querySelectorAll<HTMLElement>(".mention-chip")].map((chip) => [
+  return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,
-    chip.querySelector(".mention-chip-label")?.textContent ?? null,
+    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
   ]);
 }
 
@@ -234,7 +234,7 @@ test("a press on a place's chip opens the place in the window", async () => {
     opened,
   );
 
-  for (const chip of container.querySelectorAll<HTMLButtonElement>("button.mention-chip")) {
+  for (const chip of container.querySelectorAll<HTMLButtonElement>("button[data-mention-ref]")) {
     act(() => chip.click());
   }
   assert.deepEqual(opened, [
@@ -245,9 +245,9 @@ test("a press on a place's chip opens the place in the window", async () => {
 
 test("an agent's chip the window knows no harness for has its name say whose it is", async () => {
   const container = await drawn(`${HOME}/plan/${PLAN}/agent/${UNNAMED_AGENT}`, []);
-  const chip = container.querySelector<HTMLElement>('.mention-chip[data-kind="agent"]');
+  const chip = container.querySelector<HTMLElement>('[data-mention-ref][data-kind="agent"]');
 
-  assert.equal(chip?.querySelector(".mention-chip-label")?.textContent, "Agent");
+  assert.equal(chip?.querySelector(".luke-inline-ref-label")?.textContent, "Agent");
 });
 
 test("an agent's chip the window holds wears its harness's mark, on another task's words or none, and the card it hangs wears it too", async () => {
@@ -256,11 +256,11 @@ test("an agent's chip the window holds wears its harness's mark, on another task
     [],
   );
   const agentChips = [
-    ...container.querySelectorAll<HTMLElement>('.mention-chip[data-kind="agent"]'),
+    ...container.querySelectorAll<HTMLElement>('[data-mention-ref][data-kind="agent"]'),
   ];
 
   const worn = agentChips.map((chip) => {
-    const onChip = chip.querySelector(".mention-chip-glyph .harness-mark") !== null;
+    const onChip = chip.querySelector(".luke-inline-ref-glyph .harness-mark") !== null;
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });

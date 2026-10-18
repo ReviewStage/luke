@@ -708,8 +708,8 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
     ),
   );
   const chip = (name: string) =>
-    [...container.querySelectorAll<HTMLButtonElement>(".desktop-document .mention-chip")].find(
-      (each) => each.querySelector(".mention-chip-label")?.textContent?.includes(name),
+    [...container.querySelectorAll<HTMLButtonElement>(".desktop-document [data-mention-ref]")].find(
+      (each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name),
     );
 
   const own = chip("relay#42");
@@ -789,7 +789,7 @@ async function chatTabMounted(ownChannel: boolean) {
 test("a task's Chat tab shows its task channel at reading size, its composer posting there, and says so where the task has no channel yet", async () => {
   handState(experimentsOn(EXPERIMENT.CHAT));
   const own = await chatTabMounted(true);
-  const tab = own.container.querySelector('section.desktop-plan-chat[aria-label="Chat"]');
+  const tab = own.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
   assert.ok(tab, "the task's Chat tab");
   assert.equal(tab.querySelector(".chat-head-title")?.textContent, "# teammate-invitations");
   assert.ok(tab.querySelector('textarea[aria-label="Message #teammate-invitations"]'));
@@ -799,7 +799,7 @@ test("a task's Chat tab shows its task channel at reading size, its composer pos
 
   const none = await chatTabMounted(false);
   assert.match(
-    none.container.querySelector("section.desktop-plan-chat")?.textContent ?? "",
+    none.container.querySelector("section.desktop-task-chat")?.textContent ?? "",
     /Nothing is posted in this task's channel yet\./u,
   );
   act(() => none.root.unmount());
@@ -809,7 +809,7 @@ test("a task's Chat tab shows its task channel at reading size, its composer pos
 test("with Chat off for the account, a Chat tab kept on the task's strip draws nothing", async () => {
   handState({});
   const off = await chatTabMounted(true);
-  assert.equal(off.container.querySelector("section.desktop-plan-chat"), null);
+  assert.equal(off.container.querySelector("section.desktop-task-chat"), null);
   act(() => off.root.unmount());
   off.container.remove();
 });

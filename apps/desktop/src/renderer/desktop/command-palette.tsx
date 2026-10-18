@@ -501,7 +501,7 @@ function agentRows(
     onPick: () => tasks.onShowAgent(taskId, entry.row.id),
   }));
   // Note that the plan's workers and Changes open in its panel, which an agent's page holds while it stands.
-  const subagents = holdsPlanPanel(tasks)
+  const subagents = holdsTaskPanel(tasks)
     ? panelEntries({
         panel: tasks.sidePanel,
         kinds: [],
@@ -601,7 +601,7 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
 }
 
 /** Whether the side panel is the open plan's, as it is but while an agent's page holds it (`use-plans-tab.ts`). */
-function holdsPlanPanel(tasks: TasksControl): boolean {
+function holdsTaskPanel(tasks: TasksControl): boolean {
   return tasks.agentView.agentId === undefined;
 }
 
@@ -640,7 +640,7 @@ function panelTabRows(
   tasks: TasksControl,
   show: (pick: () => void) => void,
 ): readonly PaletteRow[] {
-  if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsPlanPanel(tasks)) return [];
+  if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsTaskPanel(tasks)) return [];
   return SIDE_PANEL_TABS.map((tab) => {
     const look = tabLook({ kind: TAB_KIND.PANEL, tab });
     const label = `Show ${look.label.toLowerCase()}`;
@@ -685,7 +685,7 @@ function readMarkRows(
  * None while no plan is looked at, nor for an archived plan, which offers
  * no pin.
  */
-function planPinRows(
+function taskPinRows(
   tasks: TasksControl,
   reads: ReadMarks,
   choose: (run: () => void) => void,
@@ -1035,7 +1035,7 @@ export function CommandPalette({
       ? files
       : undefined;
   // Note that a task's files are searched only while its panel is the one standing, which an agent's page holds otherwise.
-  const filesOpen = holdsPlanPanel(plans) && taskId !== undefined && repository !== null;
+  const filesOpen = holdsTaskPanel(plans) && taskId !== undefined && repository !== null;
   const filesAsked = open && filesOpen && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
 
   // Note that the repository is read the first time its files are searched
@@ -1087,7 +1087,7 @@ export function CommandPalette({
         ...actionRows((command) => choose(() => runAppCommand(command))),
         ...panelTabRows(plans, onTasks),
         ...readMarkRows(plans, reads, choose),
-        ...planPinRows(plans, reads, choose),
+        ...taskPinRows(plans, reads, choose),
         ...agentPinRows(plans, choose),
       ],
     ],

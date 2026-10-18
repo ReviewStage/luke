@@ -189,7 +189,7 @@ export function DesktopChat({
 }
 
 /** What the plan's Chat tab says where its plan has no channel yet. */
-const NO_PLAN_CHANNEL = "Nothing is posted in this task's channel yet.";
+const NO_TASK_CHANNEL = "Nothing is posted in this task's channel yet.";
 
 /**
  * The plan's own Chat tab, in the plan's column: its channel of the
@@ -215,7 +215,7 @@ export function TaskChatTab({
   );
   if (read === undefined || channel === undefined) {
     return (
-      <section className="chat-stream plan-chat" aria-label="Chat">
+      <section className="chat-stream task-chat" aria-label="Chat">
         {view.failed ? (
           <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={view.onRetry}>
             {CHAT_FAILED}
@@ -223,7 +223,7 @@ export function TaskChatTab({
         ) : read === undefined && view.available ? (
           <Spinner label="Loading chat" size={SPINNER_SIZE.REGION} />
         ) : (
-          <EmptyState icon={<MessagesSquareIcon />}>{NO_PLAN_CHANNEL}</EmptyState>
+          <EmptyState icon={<MessagesSquareIcon />}>{NO_TASK_CHANNEL}</EmptyState>
         )}
       </section>
     );
