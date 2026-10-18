@@ -274,11 +274,14 @@ export function repositoryFailureNote(failure: RepositoryCallFailure): string {
 const LINEAR_START_FAILED_NOTE =
   "Linear is not connected to this workspace, or it stopped answering. An owner or admin can connect it.";
 
+/** What a start from one of the workspace's issues says when the issue is gone, or is another workspace's. */
+const ISSUE_START_FAILED_NOTE = "That issue is gone, or it belongs to another workspace.";
+
 /** The sentence the page shows for a start the service refused, by its reason. */
 export function startFailureNote(failure: StartCallFailure): string {
-  return failure === TASK_CALL_FAILURE.LINEAR_UNAVAILABLE
-    ? LINEAR_START_FAILED_NOTE
-    : repositoryFailureNote(failure);
+  if (failure === TASK_CALL_FAILURE.LINEAR_UNAVAILABLE) return LINEAR_START_FAILED_NOTE;
+  if (failure === TASK_CALL_FAILURE.NOT_FOUND) return ISSUE_START_FAILED_NOTE;
+  return repositoryFailureNote(failure);
 }
 
 /** What a task's name says, where it was edited, when the service refused the rename. */

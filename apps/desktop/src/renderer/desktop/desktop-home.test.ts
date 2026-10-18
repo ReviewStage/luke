@@ -449,6 +449,33 @@ test("an account with no plan yet is welcomed with New plan, and nothing the pag
   assert.doesNotMatch(page.textContent ?? "", /sidebar/iu);
 });
 
+test("an account with no plan yet whose only waiting question is a teammate's agent's with no plan is still welcomed, the question waiting on the teammate", async () => {
+  const { page } = mount({
+    me: "user-dean",
+    tasks: [],
+    listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] },
+    inbox: [],
+    inboxTasks: [],
+    inboxTaskless: [
+      {
+        id: QUARANTINE.id,
+        agentId: SWEEP_AGENT,
+        title: QUARANTINE.title,
+        postedAt: QUARANTINE.postedAt,
+        agentTitle: null,
+        agentModel: "anthropic/claude-opus-5.5",
+        automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+        automationName: "Nightly flake sweep",
+        repository: "acme/relay",
+        startedBy: CHARLES.userId,
+      },
+    ],
+  });
+  await settle();
+
+  assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
+});
+
 test("↑ and ↓ move the focus through the rows from the window, and leave a key pressed elsewhere alone", async () => {
   mount();
   await settle();
