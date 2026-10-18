@@ -1,5 +1,6 @@
 import {
   CastleIcon,
+  CloudSunIcon,
   FlaskConicalIcon,
   type LucideIcon,
   SatelliteIcon,
@@ -46,6 +47,12 @@ const FACTORY_WORLDS = [
     name: "Orbital Station",
     icon: SatelliteIcon,
     load: () => import("./worlds/station/index"),
+  },
+  {
+    key: "archipelago",
+    name: "Sky Archipelago",
+    icon: CloudSunIcon,
+    load: () => import("./worlds/archipelago/index"),
   },
   {
     key: "railway",
