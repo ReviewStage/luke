@@ -1797,11 +1797,13 @@ function repositoryRefusalWords(refusal: HostedRefusal): string {
 /** A repository confirmed as the menu's PATCH confirms one, through the workspace's installation, or the refusal's words; none clears it. */
 const reachedRepository = (workspaceId: string, repository: string | null) =>
   repository === null
-    ? Effect.succeed(Result.succeed<string | null, string>(null))
-    : Effect.map(Effect.result(workspaceRepository(workspaceId, repository)), (reached) =>
-        Result.isSuccess(reached)
-          ? Result.succeed<string | null, string>(reached.success.fullName)
-          : Result.fail(repositoryRefusalWords(reached.failure)),
+    ? Effect.succeed<Result.Result<string | null, string>>(Result.succeed(null))
+    : Effect.map(
+        Effect.result(workspaceRepository(workspaceId, repository)),
+        (reached): Result.Result<string | null, string> =>
+          Result.isSuccess(reached)
+            ? Result.succeed(reached.success.fullName)
+            : Result.fail(repositoryRefusalWords(reached.failure)),
       );
 
 /**
@@ -1853,7 +1855,9 @@ export function runUpdateTask(
         ...changes,
         ...(repository === undefined ? undefined : { repository: repository.success }),
       }).pipe(
-        Effect.map((task) => Result.succeed<Option.Option<StoredTask["task"]>, string>(task)),
+        Effect.map(
+          (task): Result.Result<Option.Option<StoredTask["task"]>, string> => Result.succeed(task),
+        ),
         Effect.catchTag("TaskArchived", () =>
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.ARCHIVED)),
         ),
