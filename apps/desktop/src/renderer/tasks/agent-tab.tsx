@@ -453,6 +453,20 @@ function ToolCallView({
   );
 }
 
+/** A call about an agent, naming it by the cards the window hands now, so a message kept as it was names the agent as its tab does today. */
+function AgentCallView({
+  part,
+  jobs,
+  doors,
+}: {
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+  jobs: WorkerJobs | undefined;
+  doors: DelegationDoors | undefined;
+}): ReactNode {
+  const cards = useLiveDoors(doors)?.cards;
+  return <ToolCallView part={part} jobs={jobs} cards={cards} />;
+}
+
 /** The workers their own session says still run. */
 function runningStandings(
   standings: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined,
@@ -729,8 +743,11 @@ function AgentPartView({
       }
       return toolCallView(part).kind === CALL_KIND.LOAD_SKILL ? (
         <LoadedSkillView part={part} />
+      ) : // A call about an agent names it by the cards the window hands now (`LiveDoors`).
+      calledAgent(part) === undefined ? (
+        <ToolCallView part={part} jobs={delegation?.jobs} />
       ) : (
-        <ToolCallView part={part} jobs={delegation?.jobs} cards={delegation?.cards} />
+        <AgentCallView part={part} jobs={delegation?.jobs} doors={delegation} />
       );
     }
     // A step boundary is the model's own pacing, and the parts keep one rhythm across it.
@@ -1352,6 +1369,11 @@ function useKept<T>(value: T, same: (a: T, b: T) => boolean): T {
   return kept.current;
 }
 
+/** Whether two lists hold the same ids in the same order. */
+function sameIds(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
 /** Whether two sets hold the same members. */
 function sameSet<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): boolean {
   if (a === b) return true;
@@ -1767,15 +1789,26 @@ function AgentTabView({
   // The presses the transcript's rows hand on are the same door from draw to draw, so a message kept as it was opens what the window opens now.
   const openSubagent = useSteady(onOpenSubagent);
   const openTarget = useSteady(onOpenTarget);
-  const origin = agentOrigin({
-    // An agent started from an automation's run opens on the run's prompt under the automation.
-    agent: replay === undefined ? agent : briefAgent(agent, replay.agents),
-    run,
-    task: cards?.task,
-    onOpenTask: onOpenTarget === undefined ? undefined : () => onOpenTarget(TASK_TARGET),
-    starter: starter === undefined ? undefined : starterActor,
-    openGitHub,
-  });
+  // An agent started from an automation's run opens on the run's prompt under the automation.
+  const briefed = replay === undefined ? agent : briefAgent(agent, replay.agents);
+  const { automationId, automationName, brief } = briefed;
+  const briefTask = cards?.task;
+  const originStarter = starter === undefined ? undefined : starterActor;
+  // The plan's card is drawn again only when who handed it, or what, changed, not with each page.
+  const origin = useMemo(
+    () =>
+      agentOrigin({
+        agent: briefed,
+        run,
+        task: briefTask,
+        onOpenTask: openTarget === undefined ? undefined : () => openTarget(TASK_TARGET),
+        starter: originStarter,
+        openGitHub,
+      }),
+    // Note that the agent is read for how it was briefed alone, which these name.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: the briefed agent's other fields draw nothing here
+    [automationId, automationName, brief, run, briefTask, openTarget, originStarter, openGitHub],
+  );
   return (
     <section
       ref={tab}
@@ -2012,13 +2045,16 @@ export function AgentTab({
     boxClosed: composer.closed !== undefined,
   });
   // How the messages are named moves only when the agent's place or the messages read do, not with each page.
-  const readIds = messages.map((message) => message.id).join("\n");
+  const readIds = useKept(
+    messages.map((message) => message.id),
+    sameIds,
+  );
   const planId = agent.planId;
   const messagePlace = useMemo(
     () =>
       agentMessagePlace(
         { id: agent.id, planId },
-        readIds === "" ? [] : readIds.split("\n").map((id) => ({ id })),
+        readIds.map((id) => ({ id })),
       ),
     [agent.id, planId, readIds],
   );

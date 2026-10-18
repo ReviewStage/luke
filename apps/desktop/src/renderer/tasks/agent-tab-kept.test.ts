@@ -80,6 +80,13 @@ const EARLIER: CodingAgentMessage = {
         status: "accepted",
       },
     ),
+    {
+      type: "tool-message_coding_agent",
+      toolCallId: "call-refused",
+      state: "output-error",
+      input: { agentId: "agent-7", text: "Rebase again" },
+      errorText: "The agent is busy.",
+    },
     tool("delegate", DELEGATE_CALL, { task: "Audit the retry paths" }, { status: "accepted" }),
     { type: "text", text: "Handed off." },
   ],
@@ -190,11 +197,15 @@ test("a message a page did not touch hangs the card the window hands now, and it
   const row = (callId: string) =>
     container.querySelector<HTMLElement>(`button[data-call-id="${callId}"]`);
   assert.equal(cardOn(row("call-message"))[0], "Invoice export");
+  const refused = () =>
+    container.querySelector<HTMLElement>('[data-call-id="call-refused"]')?.textContent ?? "";
+  assert.match(refused(), /Invoice export/u);
   const working = cardOn(row(DELEGATE_CALL))[1];
 
   // The window draws again with the other agent renamed, and no page has touched the earlier turn.
   act(() => draw("Invoice export, retried"));
   assert.equal(cardOn(row("call-message"))[0], "Invoice export, retried");
+  assert.match(refused(), /Invoice export, retried/u);
 
   // A page touches the newest turn alone, and says the worker has finished.
   await act(async () => {
