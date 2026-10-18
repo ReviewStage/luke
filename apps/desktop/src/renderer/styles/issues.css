@@ -97,8 +97,8 @@
 }
 
 /* Who filed the issue and when, and when it last changed, under its title:
-   the quiet words of the plan's own line over its document
-   (`.plan-edit-note`). Each phrase wraps whole onto the next line rather
+   the quiet words of the plan's own line under its title
+   (`.plan-byline`). Each phrase wraps whole onto the next line rather
    than leaving a name cut from its time. */
 .issue-byline {
   display: flex;
@@ -287,4 +287,39 @@
 /* A card's time ends its line, wherever the identifier and mark leave off. */
 .issue-board .sidebar-task-time {
   margin-left: auto;
+}
+
+/* The board while its issues are read (`IssueBoardSkeleton`): the reading
+   region and the box around it hold to the page's height as the board
+   does, so its columns stand as tall as the board's will. */
+.issue-board-reading,
+.issue-board-reading > [role="status"] {
+  display: flex;
+  min-width: min-content;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+}
+
+/* A placeholder column's name takes what its glyph's block leaves, as the
+   name does. */
+.issue-column-head > .luke-skeleton + .luke-text {
+  flex: 1;
+}
+
+/* A placeholder card stands a card's room: its identifier and time on a
+   caption's line over its title on the body's, at the card's own inset. */
+.issue-card-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-8) var(--row-inset);
+  font-size: var(--luke-type-body-size);
+}
+
+.issue-card-skeleton-line {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--luke-space-8);
+  font-size: var(--luke-type-caption-size);
 }

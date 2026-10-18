@@ -1,0 +1,142 @@
+/* prose.css -- written words read as a document: the rules the site's
+   generated documents and the window's Markdown share (`.luke-prose`), and
+   the site's document rhythm over them (`.luke-prose-document`). Every
+   measure a run of words sets is in `em`, so a rule reads at the window's
+   caption size and at the site's body size alike; a code span's tint is
+   `--luke-prose-tint`, which a surface whose ink is not the page's own, a
+   sent bubble's, mixes from its own colour. */
+
+@layer components {
+  /* The shared rules. Note that the window's Markdown draws its headings as
+     paragraphs of its own (`.markdown-heading`), so only a document's real
+     headings take these. */
+  .luke-prose :is(h1, h2, h3) {
+    font-weight: var(--luke-weight-semibold);
+    letter-spacing: -0.01em;
+  }
+
+  /* The user agent's markers, discs then circles down a nesting, which the
+     site's reset strips from every list. */
+  .luke-prose :is(ul, ol) {
+    padding-left: 1.5em;
+    list-style: revert;
+  }
+
+  .luke-prose code {
+    padding: 0.1em 0.4em;
+    border-radius: 0.4em;
+    background: var(--luke-prose-tint, var(--luke-color-fill-hover));
+    font-family: var(--luke-font-mono);
+    /* Mono runs wider than the words around it at equal size. */
+    font-size: 0.9em;
+  }
+
+  .luke-prose pre code {
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  /* A chord is drawn as the separate keys it is, one <kbd> per key with a
+     gap between caps. The heavier bottom edge is what reads as a keycap
+     rather than a code span. `line-height: 1` because an inline-block's
+     whole box, padding and borders included, sizes the line it sits on, and
+     at the inherited leading the cap would stretch its line taller than its
+     neighbours. The raise is measured, not chosen: on the baseline the cap's
+     box centres below the words' own, and `middle` still leaves it low. */
+  .luke-prose kbd {
+    display: inline-block;
+    padding: 0.1em 0.45em;
+    border: 1px solid var(--luke-color-border);
+    border-bottom-width: 2px;
+    border-radius: var(--luke-radius-6);
+    background: var(--luke-color-surface);
+    font-family: var(--luke-font-mono);
+    font-size: 0.8em;
+    line-height: 1;
+    vertical-align: 0.18em;
+  }
+
+  .luke-prose kbd + kbd {
+    margin-left: 0.3em;
+  }
+
+  /* The site's documents, the privacy policy and each changelog release,
+     are read start to finish, so they set more rhythm than the marketing
+     copy around them: a clear step between heading levels and generous room
+     after a paragraph. A document's first block opens flush, so a release's
+     first line stands level with the version rail beside it. */
+  .luke-prose-document > :first-child {
+    margin-top: 0;
+  }
+
+  .luke-prose-document h1 {
+    margin: 0 0 var(--luke-space-32);
+    font-size: var(--luke-type-title-size);
+    line-height: var(--luke-type-title-leading);
+    font-weight: var(--luke-weight-bold);
+    letter-spacing: -0.02em;
+  }
+
+  .luke-prose-document h2 {
+    margin: var(--luke-space-64) 0 var(--luke-space-16);
+    font-size: var(--luke-type-dialog-size);
+    line-height: var(--luke-type-dialog-leading);
+  }
+
+  .luke-prose-document h3 {
+    margin: var(--luke-space-32) 0 var(--luke-space-12);
+    font-size: var(--luke-type-section-size);
+    line-height: var(--luke-type-section-leading);
+  }
+
+  .luke-prose-document :is(p, ul, ol) {
+    margin: 0 0 var(--luke-space-16);
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-prose-document li + li {
+    margin-top: var(--luke-space-8);
+  }
+
+  .luke-prose-document strong {
+    color: var(--luke-color-text);
+  }
+
+  .luke-prose-document a {
+    color: var(--luke-color-accent-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* A pull-request reference is a technical token, and mono is what the
+     site reserves for those. */
+  .luke-prose-document a[href*="/pull/"] {
+    font-family: var(--luke-font-mono);
+    font-size: 0.8em;
+  }
+
+  /* A screenshot stands on the hairline card the rest of the site puts
+     artwork on. Every one stands as tall as a whole-window screenshot at
+     full measure (2400 by 1591), so a close-up cut from one is the same
+     height, only narrower, and centred in the column. Each is a link to its
+     own full-size file, and the cursor is what says so. */
+  .luke-prose-document:has(img) {
+    container-type: inline-size;
+  }
+
+  .luke-prose-document img {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    max-height: calc(100cqi * 1591 / 2400);
+    margin: var(--luke-space-24) auto;
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-radius-14);
+  }
+
+  .luke-prose-document a > img {
+    cursor: zoom-in;
+  }
+}

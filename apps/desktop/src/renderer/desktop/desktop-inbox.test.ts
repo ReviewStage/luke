@@ -170,6 +170,8 @@ let inboxes = new Map<string, readonly InboxItem[]>();
 let setHolding: (holding: readonly AppInboxTaskHolding[]) => void = () => undefined;
 /** Moves the account's list of tasks, as an archive on another Mac would. */
 let setTasks: (tasks: readonly TaskSummary[]) => void = () => undefined;
+/** Lands the account's first read of its task list, where a test mounted the Inbox before it. */
+let setListRead: (read: boolean) => void = () => undefined;
 /** Chooses an item from outside the list, as a notification's click does. */
 let chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
 /** Moves main's read of what waits on the agents with no task, as main does when an item opens or is answered. */
@@ -332,14 +334,18 @@ interface Asked {
   closed: number;
 }
 
-/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded. */
-function mount(firstTaskless: readonly AppInboxTasklessItem[] = []) {
+/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read. */
+function mount(firstTaskless: readonly AppInboxTasklessItem[] = [], { listUnread = false } = {}) {
   const asked: Asked = { shownTasks: [], shownAgents: [], shownAutomations: [], closed: 0 };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     chooseFromOutside = setChosen;
     const [holding, setHeld] = useState(HOLDING);
-    const [listed, setListed] = useState<readonly TaskSummary[]>([BILLING, INVITES]);
+    const [listed, setListed] = useState<readonly TaskSummary[]>(
+      listUnread ? [] : [BILLING, INVITES],
+    );
+    const [listRead, setRead] = useState(!listUnread);
+    setListRead = setRead;
     setHolding = setHeld;
     const [taskless, setWaiting] = useState(firstTaskless);
     setTaskless = setWaiting;
@@ -349,6 +355,7 @@ function mount(firstTaskless: readonly AppInboxTasklessItem[] = []) {
         me: READER.userId,
         workspace: listedWorkspace,
         tasks: listed,
+        listRead,
         inbox: [
           { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
           { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
@@ -519,14 +526,10 @@ test("a settled choice folds what its agent offered to one line saying who picke
   );
   act(() => offered.querySelector("summary")?.click());
   assert.deepEqual(
-    [...offered.querySelectorAll<HTMLElement>("li.inbox-option")].map((option) => [
-      option.dataset.picked,
-      option.querySelector(".inbox-option-label > :first-child")?.textContent,
-      wordsOf(option.querySelector(".inbox-picked")),
-    ]),
+    [...offered.querySelectorAll<HTMLElement>("li")].map((option) => wordsOf(option)),
     [
-      ["true", "Retry 3 times over an hour", "Your pick"],
-      ["false", "Retry once", null],
+      "Retry 3 times over an hourYour pickRecommendedBacks off 5, 15, then 40 minutes.",
+      "Retry once",
     ],
   );
   assert.equal(
@@ -550,17 +553,14 @@ test("a settled choice folds what its agent offered to one line saying who picke
   );
 });
 
-/** An item's options as a reader meets them: each label, then its Recommended badge's words where it wears one. */
-function optionHeads(page: HTMLElement, option: string): (string | null | undefined)[][] {
+/** An item's options as a reader meets them: each row's words, its label, its Recommended badge where it wears one, and its detail; `settled` reads what a settled item offered rather than what a waiting one asks. */
+function optionHeads(page: HTMLElement, settled = false): (string | null)[] {
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
-  return [...pane.querySelectorAll<HTMLElement>(option)].map((each) => {
-    const head = each.querySelector(".inbox-option-head")?.textContent ?? "";
-    return [
-      each.querySelector(".inbox-option-label > :first-child")?.textContent,
-      head.endsWith("Recommended") ? "Recommended" : null,
-    ];
-  });
+  const rows = settled
+    ? '[aria-label="What the agent offered"] li'
+    : '[role="radio"], [role="checkbox"]';
+  return [...pane.querySelectorAll<HTMLElement>(rows)].map((each) => wordsOf(each));
 }
 
 /** The shown item's subject as a reader meets it: its title, and where its line says it stands, with whether it wears the attention mark. */
@@ -636,9 +636,9 @@ test("a teammate's open item does not need you: its subject's line says it waits
 test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {
   const { page } = mount();
   await settle();
-  assert.deepEqual(optionHeads(page, "button.inbox-option"), [
-    ["Retry 3 times over an hour", "Recommended"],
-    ["Retry once", null],
+  assert.deepEqual(optionHeads(page), [
+    "Retry 3 times over an hourRecommendedBacks off 5, 15, then 40 minutes.",
+    "Retry once",
   ]);
 
   act(() => root?.unmount());
@@ -650,13 +650,10 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   inboxes.set(BILLING.id, [{ ...THRESHOLD, response }, RETRY]);
   const again = mount();
   await settle();
-  assert.deepEqual(optionHeads(again.page, "button.inbox-option"), [
-    ["Retry 3 times over an hour", null],
-    ["Retry once", null],
-  ]);
+  assert.deepEqual(optionHeads(again.page), ["Retry 3 times over an hour", "Retry once"]);
 });
 
-test("a settled choice whose pick is not the one recommended marks each apart: the pick by whose it was, and the recommended option by its badge, gone quiet", async () => {
+test("a settled choice whose pick is not the one recommended marks each apart: the pick by whose it was, and the recommended option by its badge", async () => {
   inboxes.set(BILLING.id, [
     THRESHOLD,
     { ...RETRY, answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] } },
@@ -667,16 +664,10 @@ test("a settled choice whose pick is not the one recommended marks each apart: t
   await settle();
   openOffered(page);
 
-  assert.deepEqual(optionHeads(page, "li.inbox-option"), [
-    ["Retry 3 times over an hour", "Recommended"],
-    ["Retry once", null],
+  assert.deepEqual(optionHeads(page, true), [
+    "Retry 3 times over an hourRecommendedBacks off 5, 15, then 40 minutes.",
+    "Retry onceYour pick",
   ]);
-  const picked = page.querySelector<HTMLElement>('li.inbox-option[data-picked="true"]');
-  assert.equal(
-    picked?.querySelector(".inbox-option-label > :first-child")?.textContent,
-    "Retry once",
-  );
-  assert.equal(wordsOf(picked?.querySelector(".inbox-picked")), "Your pick");
 });
 
 test("a teammate's answer names them by their disc and name, beside their pick and over what they chose, and their name hangs their card", async () => {
@@ -690,8 +681,14 @@ test("a teammate's answer names them by their disc and name, beside their pick a
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
   openOffered(pane);
-  const picked = pane.querySelector(".inbox-picked") ?? assert.fail("the pick is marked");
-  assert.equal(wordsOf(picked), "Charles Pan’s pick");
+  const picked =
+    [...pane.querySelectorAll('[aria-label="What the agent offered"] li')].find((option) =>
+      option.textContent?.includes("pick"),
+    ) ?? assert.fail("the pick is marked");
+  assert.equal(
+    wordsOf(picked),
+    "Retry 3 times over an hourCharles Pan’s pickRecommendedBacks off 5, 15, then 40 minutes.",
+  );
   assert.equal(picked.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
   assert.equal(
     pane.querySelector("details[data-inbox-offered] summary")?.textContent,
@@ -1228,6 +1225,58 @@ test("while its plans are first read, the list stands placeholder rows in its it
     "# Invites",
     "*Expire after 7 days?",
   ]);
+});
+
+test("an Inbox opened before the account's task list is read stands placeholder rows, and neither the list nor the pane says nothing needs you, whatever its width; once the list lands, its items stand", async () => {
+  const { page } = mount([], { listUnread: true });
+  await settle();
+  const list = page.querySelector<HTMLElement>(".inbox-tasks");
+  assert.ok(list, "the list is drawn");
+  assert.equal(
+    list.querySelector('[role="status"][aria-busy="true"]')?.textContent,
+    "Reading your inbox…",
+  );
+  assert.deepEqual(
+    [emptyStateIn(page, ".inbox-tasks"), emptyStateIn(page, ".inbox-view-items")],
+    [null, null],
+  );
+  assert.equal(page.querySelector(".sidebar-note"), null, "no line says nothing needs you");
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(emptyStateIn(page, ".inbox-tasks"), null);
+
+  layOut(page, 1200);
+  act(() => {
+    setTasks([BILLING, INVITES]);
+    setListRead(true);
+  });
+  await settle();
+  assert.equal(list.querySelector('[aria-busy="true"]'), null);
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "▸ *Alert at 80%?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+});
+
+test("an item a link names before the account's task list is read says no Not found, and shows once the list lands", async () => {
+  const { page } = mount([], { listUnread: true });
+  await settle();
+  act(() => chooseFromOutside({ taskId: INVITES.id, itemId: EXPIRY.id, opened: true }));
+  await settle();
+  assert.doesNotMatch(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+
+  act(() => {
+    setTasks([BILLING, INVITES]);
+    setListRead(true);
+  });
+  await settle();
+  assert.equal(
+    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
+    "Expire after 7 days?",
+  );
 });
 
 test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape does not leave the Inbox", async () => {
@@ -2634,6 +2683,23 @@ test("an item a link names under an agent that is not there, deleted or another'
 
   assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
   assert.equal(page.querySelector('.inbox-tasks [aria-current="page"]'), null);
+});
+
+test("an item a link names under an agent with no task that its own read does not hold is not found, though the account's task list is not read yet", async () => {
+  agentInboxes = new Map([[STRAY_AGENT, []]]);
+  pageAgents = new Map([[STRAY_AGENT, { ...AGENT, id: STRAY_AGENT, planId: null, title: "Bump" }]]);
+  const { page } = mount([], { listUnread: true });
+  await settle();
+  act(() =>
+    chooseFromOutside({
+      agentId: STRAY_AGENT,
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+
+  assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
 });
 
 test("an item a link names under a task with no agent and nothing in its Inbox is not found, and no other task's item is chosen", async () => {

@@ -16,9 +16,9 @@ import { pullRequestPillLabel } from "./coding-agent-model";
 /**
  * pull-request-mark.tsx -- a pull request's mark wherever the window draws one: GitHub's glyph for where it stands, in GitHub's colour for it, and red where its checks failed.
  *
- * A pull request is drawn on a sidebar task's row and its card, on its
- * agent's chip and the row a finished transcript ends on, and on its
- * Changes tab's card. Each draws this one mark, so a pull request reads
+ * A pull request is drawn on a sidebar task's row and its card, on the
+ * row pinned over its agent's box, and on its Changes tab's card. Each
+ * draws this one mark, so a pull request reads
  * the same in all of them: open in the success green, a draft in the
  * muted ink, merged in the merged purple, closed in the danger red, and
  * the danger red over any of them once its checks have failed, the one
@@ -46,8 +46,8 @@ export const PULL_REQUEST_TONE = {
 /** What a failed check run adds to the mark's words for a reader who cannot see its colour. */
 const CHECKS_FAILING_WORDS = ", checks failing";
 
-/** A pull request's words for a reader who cannot see its mark: its number, where it stands, and that its checks failed where they did; a control naming the pull request says the same. */
-export function pullRequestMarkLabel(
+/** A pull request's words for a reader who cannot see its mark: its number, where it stands, and that its checks failed where they did. */
+function pullRequestMarkLabel(
   pullRequest: Pick<CodingAgentPullRequest, "number" | "state" | "checks">,
 ): string {
   const failing = pullRequest.checks === CHECK_SUMMARY.FAILING;

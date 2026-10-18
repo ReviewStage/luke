@@ -2556,6 +2556,7 @@ ul.actor-stack {
 
 .desktop-agent [role="log"],
 .desktop-agent .agent-todos-dock,
+.desktop-agent .agent-published-dock,
 .desktop-agent .draft-fork-dock,
 .desktop-agent .agent-composer,
 .desktop-inbox .inbox-board,
@@ -4399,6 +4400,12 @@ button.integration-tool-head:hover,
   color: var(--luke-color-text-subtle);
 }
 
+/* A placeholder row while the list is read stands in a row's own box, as
+   `.sidebar-task` pads it, but is no control: nothing to press or reach. */
+.factory-skeleton-row {
+  padding: var(--luke-space-8) var(--row-inset);
+}
+
 @container factory (width < 960px) {
   .factory-line-up {
     flex-direction: column;
@@ -4446,10 +4453,15 @@ button.integration-tool-head:hover,
   flex: 1;
 }
 
+/* A column, so a wait or a failure standing in the scene's place fills the
+   stage and centres both ways; the scene and the chrome over it are
+   absolute, and the column moves none of them. */
 .factory-world-stage {
   position: relative;
+  display: flex;
   min-height: 0;
   flex: 1;
+  flex-direction: column;
   overflow: clip;
 }
 
@@ -5184,6 +5196,17 @@ button.integration-tool-head:hover,
   min-width: 0;
   min-height: 0;
   flex-direction: column;
+}
+
+/* A chat not read yet has no rail, so what stands in its place (a wait, a
+   failure, or no chat at all) takes the whole view rather than the rail's
+   column, and in a plan's Chat tab the whole column, centred in it. */
+.chat-view > .chat-stream:only-child {
+  grid-column: 1 / -1;
+}
+
+.task-chat {
+  flex: 1;
 }
 
 .chat-head {
@@ -6648,6 +6671,7 @@ button.integration-tool-head:hover,
    lines are read across all the width the developer gave the panel. */
 .side-panel-content [role="log"],
 .side-panel-content .agent-todos-dock,
+.side-panel-content .agent-published-dock,
 .side-panel-content .agent-composer {
   padding-inline: max(var(--luke-space-16), var(--reading-room));
 }
@@ -7887,11 +7911,10 @@ button.integration-tool-head:hover,
 }
 
 /* Move to workspace (`move-task-dialog.tsx`), inside the shared dialog's
-   card: the other workspaces as rows, a tile and two lines each, the chosen
-   one ringed and one that cannot take the task dimmed, then what the move
-   does in a well under them, and the answers at its foot. The rows are the
-   card's body, which scrolls where the window is too short for all of them,
-   padded by the ring's reach so a row's ring is never cut off. */
+   card: the other workspaces as `@luke/ui`'s ChoiceList, a tile and two
+   lines each, then what the move does in a well under them, and the answers
+   at its foot. The list is the card's body, which scrolls where the window
+   is too short for all of it. */
 .move-dialog {
   display: flex;
   min-height: 0;
@@ -7900,47 +7923,10 @@ button.integration-tool-head:hover,
 }
 
 .move-list {
-  display: grid;
   min-height: 0;
-  gap: var(--luke-space-2);
-  margin: calc(-1 * var(--luke-focus-ring-reach));
-  padding: var(--luke-focus-ring-reach);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-}
-
-.move-row {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-12);
-  padding: var(--luke-space-8);
-  border: 0;
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.move-row:hover:not(:disabled) {
-  background: var(--luke-color-fill-hover);
-}
-
-.move-row[aria-checked="true"] {
-  background: var(--luke-color-fill-strong);
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
-}
-
-.move-row:disabled {
-  opacity: 0.55;
-}
-
-.move-row .workspace-ref-name {
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-semibold);
 }
 
 .move-effects {

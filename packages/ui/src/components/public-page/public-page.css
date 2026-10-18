@@ -11,6 +11,7 @@
     --luke-public-page-start: var(--luke-space-48);
     --luke-public-page-end: var(--luke-space-64);
     --luke-public-page-rhythm: var(--luke-space-64);
+    --luke-public-page-ruled: var(--luke-space-48);
     container-type: inline-size;
     display: flex;
     flex-direction: column;
@@ -26,6 +27,7 @@
       --luke-public-page-start: var(--luke-space-32);
       --luke-public-page-end: var(--luke-space-40);
       --luke-public-page-rhythm: var(--luke-space-40);
+      --luke-public-page-ruled: var(--luke-space-40);
     }
   }
 
@@ -74,6 +76,18 @@
     margin-top: var(--luke-space-32);
   }
 
+  /* Ruled entries open under their first rule a step further down, so the
+     rule reads as the list's top edge rather than the intro's underline. */
+  .luke-public-page-intro + .luke-public-page-sections[data-sections="ruled"] {
+    margin-top: var(--luke-space-40);
+  }
+
+  /* The way back to the page this one stands beneath, a quiet link a
+     step above the title. */
+  .luke-public-page-back {
+    margin-bottom: var(--luke-space-16);
+  }
+
   .luke-public-page-title {
     margin: 0;
     font-size: var(--luke-type-title-size);
@@ -115,6 +129,41 @@
 
   .luke-public-section + .luke-public-section {
     margin-top: var(--luke-public-page-rhythm);
+  }
+
+  /* Ruled sections each open under a rule across the column and keep their
+     room inside it, so the rule stands midway between two entries; the last
+     one closes on its own room, with no rule under it. */
+  .luke-public-page-sections[data-sections="ruled"] > .luke-public-section {
+    margin-top: 0;
+    padding-block: var(--luke-public-page-ruled);
+    border-top: 1px solid var(--luke-color-border);
+  }
+
+  /* A picture or a recording bleeds past the column, up to the bleed and
+     never nearer an edge than the page's inset, centred on the page. */
+  .luke-public-media {
+    --luke-public-media-bleed: 960px;
+    margin-inline: calc(
+      50% -
+      min(var(--luke-public-media-bleed) / 2, 50cqw - var(--luke-page-inset))
+    );
+    overflow: hidden;
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-radius-14);
+    box-shadow:
+      0 20px 25px -5px var(--luke-color-shadow-soft),
+      0 8px 10px -6px var(--luke-color-shadow-soft);
+  }
+
+  * + .luke-public-media {
+    margin-top: var(--luke-space-48);
+  }
+
+  .luke-public-media > * {
+    display: block;
+    width: 100%;
+    height: auto;
   }
 
   .luke-public-section-title {

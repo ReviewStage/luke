@@ -100,7 +100,6 @@ import {
   placedMessages,
   providerOf,
   settledPlanEdits,
-  showsPublishedRow,
   teammateStarter,
   turnStretches,
   WORKING_PHASE_WORDS,
@@ -213,15 +212,16 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * keeps to its newest line while it is scrolled there. A link in the
  * transcript opens in the browser where it is a page on GitHub, which is
  * where the pull request the agent opened lives; every other address is
- * drawn and goes nowhere. A finished transcript ends on a row summing the
- * pull request up, with what the turn cost where the service priced it,
- * as the stopped or failed line carries it too. Every word here is the agent's or the plan's, so the
+ * drawn and goes nowhere. A finished turn's line says what it cost where
+ * the service priced it, as the stopped or failed line does too. Every word here is the agent's or the plan's, so the
  * root is left out of the screen recording (`ph-no-capture`) as a second
  * line behind the recording's text masking. Under the transcript stands
  * the composer (`agent-composer.tsx`), with no head above either: where
  * the agent stands is its tab's glyph and the transcript's own lines, what
  * it runs on is the model chip at the box's foot, and what it published
- * is the chip after it. A line the developer sends joins the transcript at
+ * is the pull request's row pinned over the box, under the docked to-do
+ * list, or the branch's chip at the box's foot before a pull request
+ * stands (`agent-published.tsx`). A line the developer sends joins the transcript at
  * once as theirs and is read back from the service's own row, and the
  * Stop is the composer's, the one the tab has. A worker's tab draws the
  * worker's transcript the same way, under the agent and the call that
@@ -543,6 +543,22 @@ function TodosDock({
         summary={todosSummary(docked.todos)}
         focus={todoFocus(docked.todos)}
       />
+    </div>
+  );
+}
+
+/** The agent's pull request, pinned over the box under the to-do list for as long as it stands, whether the agent works or has ended; nothing before one does. */
+function PublishedDock({
+  published,
+  doors,
+}: {
+  published: CodingAgentPullRequestAnswer | undefined;
+  doors: PublishedDoors;
+}): ReactNode {
+  if (published === undefined || published.pullRequest === null) return null;
+  return (
+    <div className="agent-published-dock">
+      <PublishedRow pullRequest={published.pullRequest} branch={published.branch} doors={doors} />
     </div>
   );
 }
@@ -1256,7 +1272,6 @@ function AgentTranscriptView({
   endReason = FAILURE_REASON.OTHER,
   onOpenApiKeys,
   onRetry,
-  footer,
   overComposer = false,
   earlierOmitted = false,
   briefTitle,
@@ -1289,8 +1304,6 @@ function AgentTranscriptView({
   /** Turns to the page holding the API keys, which an end line telling of a key refused offers. */
   onOpenApiKeys?: (() => void) | undefined;
   onRetry: () => void;
-  /** What ends the transcript once the agent has: the row summing its pull request up. */
-  footer?: ReactNode;
   /** Whether the composer stands right under the log, which the log's foot then fades into. */
   overComposer?: boolean;
   /** Whether older steps than these were left out, which a note says after the card. */
@@ -1400,7 +1413,6 @@ function AgentTranscriptView({
               {endTrail}
             </div>
           )}
-          {footer}
           {failed ? <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState> : null}
         </ConversationContent>
         <ConversationScrollButton />
@@ -1583,11 +1595,6 @@ function AgentTabView({
                 onOpenApiKeys={onOpenApiKeys}
                 endTrail={endTrail}
                 onRetry={transcript.onRetry}
-                footer={
-                  showsPublishedRow(agent.status, published) ? (
-                    <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
-                  ) : null
-                }
                 overComposer
               />
             </UndeliveredLines>
@@ -1596,6 +1603,7 @@ function AgentTabView({
       </MacOwnerProvider>
       <footer className="agent-tab-foot">
         <TodosDock messages={lines} working={working} />
+        <PublishedDock published={published} doors={doors} />
         {onUnarchive !== undefined ? (
           <ArchivedComposerNote
             onUnarchive={onUnarchive}
