@@ -86,6 +86,9 @@ const ROW_ACTIONS = "Automation actions";
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
 
+/** What the pages say where no workspace is listed because the workspaces could not be read. */
+const WORKSPACES_UNREAD_LINE = "The workspaces could not be read.";
+
 /** What an automation's placeholder page says to a reader while the list is first read. */
 const READING_AUTOMATION = "Reading the automation…";
 
@@ -387,7 +390,11 @@ function ListPage({
         </div>
       </header>
       <div className="automations-scroll scroll-fade-top">
-        {read === undefined ? (
+        {workspace === undefined && tasks.workspacesFailed ? (
+          <ErrorState onRetry={tasks.onRetryWorkspaces} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {WORKSPACES_UNREAD_LINE}
+          </ErrorState>
+        ) : read === undefined ? (
           <AutomationListSkeleton />
         ) : "failure" in read ? (
           <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
@@ -417,11 +424,13 @@ function ListPage({
   );
 }
 
-/** One automation's page whose list could not be read: said so, with Retry, rather than called gone. */
+/** One automation's page whose list, or the workspaces it is read in, could not be read: said so, with Retry, rather than called gone. */
 function UnreadPage({
+  line,
   onBack,
   onRetry,
 }: {
+  line: string;
   onBack: () => void;
   onRetry: () => void;
 }): React.JSX.Element {
@@ -437,7 +446,7 @@ function UnreadPage({
       </header>
       <div className="automations-scroll scroll-fade-top">
         <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-          {UNREAD_LINE}
+          {line}
         </ErrorState>
       </div>
     </section>
@@ -570,7 +579,8 @@ function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element
   const workspace = tasks.workspace;
   // Note that no list is asked for while no workspace is listed, which is
   // while the workspaces are still read, so the pages stand as quiet blocks
-  // until one is, rather than calling the list empty or an automation gone.
+  // until one is, rather than calling the list empty or an automation gone;
+  // a workspaces read that did not land says so instead.
   const automations = useAutomations(workspace?.id);
   // The automation the new page made, whose page is that same editor still, so what was typed while it was made stands.
   const [made, setMade] = useState<string | undefined>(undefined);
@@ -580,8 +590,13 @@ function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element
     return <ListPage tasks={tasks} automations={automations} />;
   }
   const { read, reload } = automations;
+  if (workspace === undefined && tasks.workspacesFailed) {
+    return (
+      <UnreadPage line={WORKSPACES_UNREAD_LINE} onBack={back} onRetry={tasks.onRetryWorkspaces} />
+    );
+  }
   if (read !== undefined && "failure" in read) {
-    return <UnreadPage onBack={back} onRetry={reload} />;
+    return <UnreadPage line={UNREAD_LINE} onBack={back} onRetry={reload} />;
   }
   const listedAutomations = read === undefined ? [] : read.automations;
   const opened =

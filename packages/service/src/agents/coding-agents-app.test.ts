@@ -2009,6 +2009,230 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
   );
 });
 
+/** One REST write as GitHub saw it: the bearer, the method, the path, and the body. */
+interface RestWrite {
+  readonly authorization: string | null;
+  readonly method: string;
+  readonly path: string;
+  readonly body: unknown;
+}
+
+/** The published pull request's repository, writing down every write to its requested reviewers or labels and answering it as `answer` says. */
+function peopleAndLabelsAnswering(
+  writes: RestWrite[],
+  answer: (write: RestWrite) => Response = () => Response.json({}, { status: 201 }),
+): RepositoryScript {
+  return (sent) => {
+    const path = decodeURIComponent(new URL(sent.url).pathname);
+    const reviewersOrLabels = /\/(requested_reviewers|labels)(\/|$)/u.test(path);
+    if (!reviewersOrLabels || sent.method === "GET") return publishedPullRequest(sent);
+    const write = {
+      authorization: sent.headers.get("authorization"),
+      method: sent.method,
+      path,
+      body: sent.body === "" ? undefined : JSON.parse(sent.body),
+    };
+    writes.push(write);
+    return answer(write);
+  };
+}
+
+/** A change naming a reviewer or a label, as the bearer given. */
+function changeAs(bearer: string, agentId: string, body: WireBoundaryInput): Request {
+  return request(AGENT_PULL_REQUEST_ACTION, bearer, { method: "POST", id: agentId, body });
+}
+
+it.layer(getTestDB())("asking reviews and labelling an agent's pull request", (it) => {
+  const published = (repository: RepositoryScript, otherToken = "ghu_teammate") =>
+    Effect.gen(function* () {
+      const opened = yield* openTask({ github: repository, otherToken });
+      yield* joinWorkspace(opened.task.workspaceId, opened.other);
+      const { agent } = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
+      yield* updateCodingAgentBranch(opened.owner, agent.id, PUBLISHED.branch);
+      return { ...opened, agent };
+    });
+
+  it.effect(
+    "a teammate asks a review of a team, asks one of a user no longer, puts a label on and takes one off, each a REST write on the teammate's own token",
+    () =>
+      Effect.gen(function* () {
+        const writes: RestWrite[] = [];
+        const { other, agent, ask } = yield* published(peopleAndLabelsAnswering(writes));
+        const pull = `/repos/${RELAY.owner}/${RELAY.name}/pulls/${PUBLISHED.number}`;
+        const issue = `/repos/${RELAY.owner}/${RELAY.name}/issues/${PUBLISHED.number}`;
+
+        const answers = [
+          yield* ask(
+            changeAs(other, agent.id, {
+              action: "request-review",
+              reviewer: { kind: "team", name: "reviewers" },
+            }),
+          ),
+          yield* ask(
+            changeAs(other, agent.id, {
+              action: "remove-review-request",
+              reviewer: { kind: "user", name: "priyan" },
+            }),
+          ),
+          yield* ask(changeAs(other, agent.id, { action: "add-label", label: "bug" })),
+          yield* ask(changeAs(other, agent.id, { action: "remove-label", label: "needs review" })),
+        ];
+
+        assert.ok(
+          answers.every((answered) => answered.status === HOSTED_HTTP_STATUS.OK),
+          "every change is answered",
+        );
+        assert.deepEqual(
+          answers.map((answered) => answered.body),
+          answers.map(() => ({ outcome: "done" })),
+        );
+        assert.deepEqual(
+          writes.map(({ method, path, body }) => ({ method, path, body })),
+          [
+            {
+              method: "POST",
+              path: `${pull}/requested_reviewers`,
+              body: { team_reviewers: ["reviewers"] },
+            },
+            {
+              method: "DELETE",
+              path: `${pull}/requested_reviewers`,
+              body: { reviewers: ["priyan"] },
+            },
+            { method: "POST", path: `${issue}/labels`, body: { labels: ["bug"] } },
+            { method: "DELETE", path: `${issue}/labels/needs review`, body: undefined },
+          ],
+        );
+        assert.ok(writes.every((write) => write.authorization === "Bearer ghu_teammate"));
+      }),
+  );
+
+  it.effect(
+    "a review GitHub will not ask is answered in its words, and a reviewer the wire does not name is refused before GitHub",
+    () =>
+      Effect.gen(function* () {
+        const writes: RestWrite[] = [];
+        const { other, agent, ask } = yield* published(
+          peopleAndLabelsAnswering(writes, () =>
+            Response.json(
+              { message: "Reviews may only be requested from collaborators." },
+              { status: 422 },
+            ),
+          ),
+        );
+
+        assert.deepEqual(
+          yield* ask(
+            changeAs(other, agent.id, {
+              action: "request-review",
+              reviewer: { kind: "user", name: "stranger" },
+            }),
+          ),
+          {
+            status: HOSTED_HTTP_STATUS.OK,
+            body: {
+              outcome: "refused",
+              words: "Reviews may only be requested from collaborators.",
+            },
+          },
+        );
+        assert.deepEqual(
+          yield* ask(
+            changeAs(other, agent.id, {
+              action: "request-review",
+              reviewer: { kind: "everyone", name: "all" },
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.equal(writes.length, 1);
+      }),
+  );
+});
+
+const AGENT_REVIEW_OPTIONS = "/api/agents/review-options";
+
+it.layer(getTestDB())("what the reviewer and label pickers offer", (it) => {
+  it.effect(
+    "the repository's labels, collaborators named against the workspace, and teams, read on the App's token; teams it may not read list none",
+    () =>
+      Effect.gen(function* () {
+        const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
+        const asked: SentToGitHub[] = [];
+        const { owner, task, ask } = yield* openTask({
+          github: (sent) => {
+            const path = new URL(sent.url).pathname;
+            if (path.startsWith(repository)) asked.push(sent);
+            switch (path) {
+              case `${repository}/labels`:
+                return Response.json([{ name: "bug", color: "d73a4a" }]);
+              case `${repository}/collaborators`:
+                return Response.json([
+                  {
+                    login: "priyan",
+                    id: 1002,
+                    type: "User",
+                    avatar_url: "https://avatars.githubusercontent.com/u/1002?v=4",
+                  },
+                ]);
+              case `${repository}/teams`:
+                return Response.json(
+                  { message: "Resource not accessible by integration" },
+                  { status: 403 },
+                );
+              default:
+                return publishedPullRequest(sent);
+            }
+          },
+        });
+        const { agent } = yield* startedAgent(owner, task.id, ask);
+
+        const answered = yield* ask(request(AGENT_REVIEW_OPTIONS, owner, { id: agent.id }));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            labels: [{ name: "bug", color: "d73a4a" }],
+            users: [
+              {
+                login: "priyan",
+                bot: false,
+                avatarUrl: "https://avatars.githubusercontent.com/u/1002?v=4",
+              },
+            ],
+            teams: [],
+          },
+        });
+        assert.ok(
+          asked.every((sent) => !sent.headers.get("authorization")?.includes("ghu_")),
+          "the repository is read on an installation token, never a member's",
+        );
+      }),
+  );
+
+  it.effect(
+    "a listing GitHub did not answer fails the read rather than offering an empty list, so the picker reads it again",
+    () =>
+      Effect.gen(function* () {
+        const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
+        const { owner, task, ask } = yield* openTask({
+          github: (sent) =>
+            new URL(sent.url).pathname === `${repository}/labels`
+              ? Response.json({ message: "Service unavailable" }, { status: 503 })
+              : new URL(sent.url).pathname.startsWith(`${repository}/`) &&
+                  !new URL(sent.url).pathname.startsWith(`${repository}/pulls`)
+                ? Response.json([])
+                : publishedPullRequest(sent),
+        });
+        const { agent } = yield* startedAgent(owner, task.id, ask);
+
+        const answered = yield* ask(request(AGENT_REVIEW_OPTIONS, owner, { id: agent.id }));
+
+        assert.notEqual(answered.status, HOSTED_HTTP_STATUS.OK);
+      }),
+  );
+});
+
 /** A message to the agent as the bearer given, with the body given. */
 function messageAs(bearer: string | undefined, agentId: string, body: WireBoundaryInput): Request {
   return request(AGENT_MESSAGES, bearer, { method: "POST", id: agentId, body });

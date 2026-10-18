@@ -2068,6 +2068,51 @@
   }
 }
 
+/* The labels and, at their end, the label picker (`pull-request-pickers.tsx`),
+   wrapping as one row under the title. */
+.pull-request-label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4);
+  margin: var(--luke-space-6) 0 var(--luke-space-2);
+  padding: 0 var(--row-inset);
+}
+
+.pull-request-label-row > .pull-request-labels {
+  margin: 0;
+  padding: 0;
+}
+
+/* The reviewers' faces and, beside them, the reviewer picker. */
+.pull-request-reviewers {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+/* A picker's press, as small as the words beside it. */
+.icon-button.pull-request-picker {
+  width: 22px;
+  height: 22px;
+  color: var(--luke-color-text-subtle);
+}
+
+.icon-button.pull-request-picker > svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* A label's colour, leading its item in the label picker. */
+.pull-request-label-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--luke-color-border);
+  border-radius: 999px;
+  background: var(--label-dot, transparent);
+}
+
 /* The reviewers' glyph, standing for the word in the header's one line. */
 .pull-request-reviewers-glyph {
   width: 14px;

@@ -213,11 +213,11 @@
     position: relative;
   }
 
-  .luke-list-row[data-actions="hover"] > .luke-list-row-main {
+  .luke-list-row[data-actions="hover"] .luke-list-row-main {
     padding-inline-end: var(--luke-space-12);
   }
 
-  .luke-list-row[data-actions="hover"] > .luke-list-row-actions {
+  .luke-list-row[data-actions="hover"] .luke-list-row-actions {
     position: absolute;
     inset-block: 0;
     inset-inline-end: 0;
@@ -226,17 +226,126 @@
     transition: opacity var(--duration-hover) ease;
   }
 
-  .luke-list-row[data-actions="hover"][data-meta="title"] > .luke-list-row-actions {
+  .luke-list-row[data-actions="hover"][data-meta="title"] .luke-list-row-actions {
     inset-block: var(--luke-space-8) auto;
     height: var(--luke-type-label-leading);
   }
 
-  .luke-list-row[data-actions="hover"]:is(:hover, :has(:focus-visible)) > .luke-list-row-actions {
+  .luke-list-row[data-actions="hover"]:is(:hover, :has(:focus-visible)) .luke-list-row-actions {
     opacity: 1;
     pointer-events: auto;
   }
 
   .luke-list-row[data-actions="hover"]:is(:hover, :has(:focus-visible)) .luke-list-row-meta {
     visibility: hidden;
+  }
+
+  /* A row swiped right to its one act (`use-row-swipe.ts`): its face slides
+     on its `transform` over the act's button in the accent, which a short
+     swipe leaves showing and a long one arms, brighter, its label riding
+     the face's edge. The face is drawn on the row's own ground, its fill
+     over it, so it hides the button wherever it stands; it settles on the
+     motion tokens, so reduced motion and a capture run hold it still, and
+     follows the pointer or the wheel with no lag while it moves. */
+  .luke-list-row[data-swipe] {
+    --luke-list-row-fill: transparent;
+
+    position: relative;
+    overflow: clip;
+    touch-action: pan-y;
+  }
+
+  .luke-list-row[data-swipe]:has(button.luke-list-row-main):hover:not([data-current="true"]) {
+    --luke-list-row-fill: var(--luke-color-fill-hover);
+
+    background: none;
+  }
+
+  .luke-list-row[data-swipe][data-current="true"] {
+    --luke-list-row-fill: var(--luke-color-fill-strong);
+
+    background: none;
+  }
+
+  .luke-list-row-slide {
+    position: relative;
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: var(--luke-control-gap);
+    min-width: 0;
+    border-radius: inherit;
+    background:
+      linear-gradient(var(--luke-list-row-fill), var(--luke-list-row-fill)),
+      var(--luke-list-row-ground, var(--luke-color-ground));
+    transform: translateX(var(--luke-list-row-swipe, 0px));
+    transition: transform var(--duration-fast) var(--spring-fast);
+  }
+
+  .luke-list-row[data-swipe="moving"] > .luke-list-row-slide {
+    transition: none;
+  }
+
+  .luke-list-row:not([data-actions="hover"]):has(> .luke-list-row-slide > .luke-list-row-actions)
+    > .luke-list-row-slide
+    > .luke-list-row-main {
+    padding-inline-end: 0;
+  }
+
+  /* The button stands hidden at rest, so its edge never shows round the
+     face's corners; it comes in at once as a swipe begins, and goes only
+     once the face has slid home over it. */
+  .luke-list-row-swipe {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--luke-color-accent);
+    opacity: 1;
+  }
+
+  .luke-list-row[data-swipe="rest"] > .luke-list-row-swipe {
+    opacity: 0;
+    transition: opacity 0s linear var(--duration-fast);
+  }
+
+  .luke-list-row[data-armed="true"] > .luke-list-row-swipe {
+    background: color-mix(in srgb, var(--luke-color-accent) 82%, var(--luke-color-on-accent));
+  }
+
+  .luke-list-row-swipe-act {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--luke-color-on-accent);
+    font: inherit;
+  }
+
+  .luke-list-row-swipe-label {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    display: flex;
+    width: 56px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--luke-space-2);
+    font-size: var(--luke-type-caption-size);
+    font-weight: var(--luke-weight-medium);
+    opacity: var(--luke-list-row-swipe-shown, 0);
+    transform: translateX(var(--luke-list-row-swipe-label, 0px));
+    transition: transform var(--duration-fast) var(--spring-fast);
+  }
+
+  .luke-list-row[data-swipe="moving"] .luke-list-row-swipe-label {
+    transition: none;
+  }
+
+  .luke-list-row-swipe-label > svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
   }
 }

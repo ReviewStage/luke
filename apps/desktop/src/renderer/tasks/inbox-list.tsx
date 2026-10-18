@@ -139,6 +139,9 @@ const ITEM_ACTIONS = "Inbox item actions";
 /** What an unread row says to a reader, its dot being drawn for the eye alone. */
 const UNREAD = "Unread";
 
+/** What a row's swipe button says it does: marks the item read, or unread. */
+const SWIPE_WORDS = { READ: "Read", UNREAD: "Unread" } as const;
+
 /** What the view's menu offers to clear every dot with. */
 const MARK_ALL_READ = "Mark all as read";
 
@@ -267,7 +270,9 @@ export function ItemMark({
  * a press over its time while the pointer rests on it or it holds the
  * keyboard, the time and its marks stepping aside, and the first item of
  * its right-click menu, which names the key that does the same to the
- * chosen item (`APP_COMMAND.TOGGLE_INBOX_ITEM_READ`). The home page's Inbox
+ * chosen item (`APP_COMMAND.TOGGLE_INBOX_ITEM_READ`); and a swipe right, a
+ * short one leaving the row open on a Read or Unread button, a long one
+ * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). The home page's Inbox
  * names the item's plan at the row's end, in `context`, since its rows stand
  * under no plan's header, as a person's group does. Its right-click offers
  * Copy link, the item's link under the task or the agent that holds it, where
@@ -392,6 +397,15 @@ export function InboxItemRow({
           )
         }
         actionsAt={LIST_ROW_ACTIONS.HOVER}
+        swipe={
+          onMark === undefined
+            ? undefined
+            : {
+                label: unread ? SWIPE_WORDS.READ : SWIPE_WORDS.UNREAD,
+                icon: unread ? <MailOpenIcon /> : <MailIcon />,
+                onAct: () => onMark(listed, !unread),
+              }
+        }
         current={chosen ? LIST_ROW_CURRENT.PAGE : undefined}
         unread={unread}
         hint={{ Hint: Tooltip, label: title }}

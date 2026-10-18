@@ -386,6 +386,7 @@ export function DesktopAgentPage({
                         repository={agentRepository ?? null}
                         board={undefined}
                         shownCode={undefined}
+                        codeFailed={undefined}
                         pages={undefined}
                         transcript={NO_CALLS}
                         work={work}

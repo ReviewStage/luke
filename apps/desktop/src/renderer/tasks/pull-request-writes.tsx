@@ -56,7 +56,8 @@ import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark";
  * stage-cli's is: its pencil opens a field over it, Enter or the check keeps
  * the words, and Escape or the cross keeps the title as it stood. The pill,
  * the title, and the line are drawn by whatever header the tab wears, so
- * they move with it.
+ * they move with it. The header's reviewer and label pickers send their
+ * changes through the same writes (`pull-request-pickers.tsx`).
  */
 
 /** What each change says on the menu, and while it is out. */
@@ -75,6 +76,10 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.CLOSE]: "Close pull request",
   [PULL_REQUEST_ACTION.REOPEN]: "Reopen pull request",
   [PULL_REQUEST_ACTION.EDIT_TITLE]: "Edit title",
+  [PULL_REQUEST_ACTION.REQUEST_REVIEW]: "Request review",
+  [PULL_REQUEST_ACTION.REMOVE_REVIEW_REQUEST]: "Remove review request",
+  [PULL_REQUEST_ACTION.ADD_LABEL]: "Add label",
+  [PULL_REQUEST_ACTION.REMOVE_LABEL]: "Remove label",
 } as const satisfies Record<PullRequestAction, string>;
 
 /** The word for where the pull request stands, which the pill says. */
