@@ -5,6 +5,7 @@ import type {
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import {
@@ -27,7 +28,6 @@ import {
 import { ModelLabel } from "./model-label";
 import { PullRequestMark } from "./pull-request-mark";
 import { RelativeTime } from "./relative-time";
-import { useMinute } from "./task-time";
 import { delegationView } from "./tool-call-model";
 import { type CopiedTranscript, LATEST_ACTIVITY, latestActivity } from "./transcript-copy";
 import { WorkingTime } from "./working-time";

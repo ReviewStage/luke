@@ -16,7 +16,14 @@ import {
 } from "@luke/features/mention-link";
 import { type KnownNames, placeChipLook } from "@luke/features/place-chip-model";
 import { planSections } from "@luke/features/plan-document";
+import {
+  type ChipWhere,
+  type LinkStanding,
+  useLinkStanding,
+  useWordsWorkspaceId,
+} from "@luke/panel/tasks/use-link-standing";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
+import { useAppState } from "@luke/panel/use-app-state";
 import {
   CallIcon,
   DocumentIcon,
@@ -48,7 +55,6 @@ import { InlineRef } from "../inline-ref";
 import type { LinkDrawer } from "../markdown-message";
 import { usePerson } from "../member-directory";
 import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
-import { useAppState } from "../use-app-state";
 import {
   AutomationChipCard,
   InboxItemChipCard,
@@ -69,12 +75,6 @@ import { PullRequestMark } from "./pull-request-mark";
 import { ServerCard } from "./server-card";
 import { AgentMark } from "./tab-look";
 import { useKnownNames } from "./use-known-names";
-import {
-  type ChipWhere,
-  type LinkStanding,
-  useLinkStanding,
-  useWordsWorkspaceId,
-} from "./use-link-standing";
 
 /**
  * mention-chip.tsx -- a mention drawn in words as its chip: its kind's glyph and its name, a button that opens what it names, hanging a card that says what that is, struck through where what it names is gone.

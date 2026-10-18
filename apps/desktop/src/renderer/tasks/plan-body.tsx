@@ -8,6 +8,7 @@ import {
 } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
+import { agoText, momentText, sinceText, useMinute } from "@luke/panel/tasks/task-time";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { Button, EllipsisIcon, IconButton, TextButton, useMenu } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
@@ -55,7 +56,6 @@ import {
   chaseView,
   type UnitView,
 } from "./task-reveal";
-import { agoText, momentText, sinceText, useMinute } from "./task-time";
 import { TaskTitle } from "./task-title";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks";

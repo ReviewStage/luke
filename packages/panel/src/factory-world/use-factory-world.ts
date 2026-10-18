@@ -3,9 +3,9 @@ import {
   type FactoryWorldView as FactoryWorldAnswer,
 } from "@luke/features/factory-world-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { useAct } from "@luke/panel/act";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useMinute } from "../tasks/task-time";
+import { useAct } from "../act.js";
+import { useMinute } from "../tasks/task-time.js";
 
 /**
  * use-factory-world.ts -- the world a Factory world draws: one workspace's snapshot, read as the world opens and again every few minutes while it is on screen.

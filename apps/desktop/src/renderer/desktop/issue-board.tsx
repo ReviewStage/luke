@@ -5,6 +5,7 @@ import {
   issueIdentifier,
 } from "@luke/features/issue-list-model";
 import { ISSUE_STATUS_ORDER, type Issue, type IssueStatus } from "@luke/features/issue-wire";
+import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import {
   IconButton,
   SKELETON_SHAPE,
@@ -22,7 +23,6 @@ import { RelativeTime } from "../tasks/relative-time";
 import { Tooltip } from "../tooltip";
 import { IssueActions } from "./issue-actions";
 import { PriorityMark, StatusGlyph } from "./issue-pickers";
-import type { IssueChange } from "./use-issues";
 import { useRowDrag } from "./use-row-drag";
 
 /**

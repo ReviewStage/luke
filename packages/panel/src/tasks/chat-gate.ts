@@ -1,6 +1,6 @@
 import { type AppStateSnapshot, RUN_PROFILE } from "@luke/host/app-state";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
-import { useAppState } from "../use-app-state";
+import { useAppState } from "../use-app-state.js";
 
 /**
  * chat-gate.ts -- whether the window offers Chat at all: the account's Chat experiment, or a fixture run staged on Chat.

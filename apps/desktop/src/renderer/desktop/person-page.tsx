@@ -2,6 +2,9 @@ import { automationOwner, automationTriggerText } from "@luke/features/automatio
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { useAutomations } from "@luke/panel/desktop/use-automations";
+import { useMinute } from "@luke/panel/tasks/task-time";
+import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -49,15 +52,12 @@ import { lineSubject } from "../tasks/agent-ref";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
 import { holderName, INBOX_HOLDER, type InboxListed } from "../tasks/inbox-model";
 import { RelativeTime } from "../tasks/relative-time";
-import { useMinute } from "../tasks/task-time";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems } from "../tasks/use-waiting-items";
 import { Tooltip } from "../tooltip";
-import { useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { RecentRow } from "./desktop-home";
 import { useArchivedView, useTaskListView } from "./task-list-view";
-import { useAutomations } from "./use-automations";
 
 /**
  * person-page.tsx -- one person's page in the listed workspace: who they are there, and what of theirs the window already holds.

@@ -22,6 +22,7 @@ import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { ACT_KIND, type ActPayload } from "@luke/host/acts";
 import type { ActHandle } from "@luke/panel/act";
+import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -33,7 +34,6 @@ import {
   useNewAgentDraft,
 } from "../composer-drafts";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
-import { useChatOn } from "./chat-gate";
 import {
   type AgentRun,
   ARCHIVE_NOT_READY,

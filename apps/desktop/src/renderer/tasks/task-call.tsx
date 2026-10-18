@@ -3,6 +3,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
+import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import {
   CallIcon,
   EmptyState,
@@ -39,7 +40,6 @@ import { usePerson } from "../member-directory";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
 import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
 import { CallCheckpoint, CallEnded } from "./call-card";
-import { useChatOn } from "./chat-gate";
 import { REVEAL_MARK, useRevealInLog } from "./reveal-in-log";
 import { TranscriptNote } from "./transcript-blocks";
 import {

@@ -47,6 +47,7 @@
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
@@ -100,7 +101,6 @@ import {
 } from "../settings-search";
 import { Shortcut } from "../shortcut";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
-import { useChatOn } from "../tasks/chat-gate";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref";
 import { refusalLine } from "../tasks/file-tab-model";

@@ -1,5 +1,5 @@
+import { agoText, momentText, sinceText } from "@luke/panel/tasks/task-time";
 import { Tooltip } from "../tooltip";
-import { agoText, momentText, sinceText } from "./task-time";
 
 /**
  * relative-time.tsx -- how long ago a moment was, as every row, card, and thread in the window draws it: a `<time>` in a row's few letters, the moment in full in the window's own tooltip.

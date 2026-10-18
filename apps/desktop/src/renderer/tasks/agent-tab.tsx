@@ -18,6 +18,8 @@ import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
 import {
   BUTTON_VARIANT,
@@ -74,7 +76,6 @@ import type { AgentServersControl } from "./agent-servers";
 import type { HeldTranscript } from "./agent-tab-card";
 import { ArchivedComposerNote } from "./archived-task";
 import { AttachedFileChips, messageFileChips } from "./attached-file-chips";
-import { useChatOn } from "./chat-gate";
 import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice";
 import {
   AGENT_PART,
@@ -134,7 +135,6 @@ import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
 import { useMentionDoors } from "./task-mentions";
-import { useMinute } from "./task-time";
 import {
   calledAgent,
   cardTitle,

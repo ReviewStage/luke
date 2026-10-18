@@ -1,6 +1,7 @@
 import { useAtom } from "@effect/atom-react";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import { CHIP_LOOK, CHIP_WIDTH, Chip, ChipName, ProviderMark } from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
@@ -8,7 +9,6 @@ import { useDisclosure } from "@luke/ui/use-disclosure";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useId, useRef, useState } from "react";
-import { rendererRuntime } from "../renderer-runtime";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { PICKER_ALIGN, usePickerPlacement } from "../settings/picker-row";
 import { Tooltip } from "../tooltip";
