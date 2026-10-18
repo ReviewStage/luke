@@ -12,7 +12,9 @@ import {
  * issue-list-model.ts -- a workspace's issues as a window draws them: grouped by where each stands, the most pressing first, each named by its workspace's prefix and its number.
  *
  * The list falls into its statuses in the wire's own order, the work under
- * way first, and leaves out a status no issue stands in. A board stands a
+ * way first, and leaves out a status no issue stands in; or, grouped by
+ * priority, into its priorities, the most pressing first, each listing the
+ * work under way first. A board stands a
  * column for every status in the order work moves through them, left to
  * right, so it reads as a line from the backlog to what settled. Inside a status an
  * urgent issue stands above a high one, and an unweighed one at the foot;
@@ -184,6 +186,61 @@ export function issueColumns(issues: readonly Issue[]): readonly IssueGroup[] {
 /** The issues grouped by status in the list's order, each group sorted, and no group empty. */
 export function issueGroups(issues: readonly Issue[]): readonly IssueGroup[] {
   return grouped(ISSUE_STATUS_ORDER, issues).filter((group) => group.issues.length > 0);
+}
+
+/** How the list groups its issues: under a heading for each status, as it first opens, or for each priority. */
+export const ISSUE_GROUPING = {
+  STATUS: "status",
+  PRIORITY: "priority",
+} as const;
+
+export type IssueGrouping = (typeof ISSUE_GROUPING)[keyof typeof ISSUE_GROUPING];
+
+/** One heading's issues as the list draws them: what the heading stands for, what it says, and its issues in order. */
+export interface IssueListGroup {
+  readonly key: IssueStatus | IssuePriority;
+  readonly words: string;
+  readonly issues: readonly Issue[];
+}
+
+/** The order the list's priority headings stand in: the most pressing first, an unweighed issue's last. */
+const PRIORITY_ORDER: readonly IssuePriority[] = Object.values(ISSUE_PRIORITY).toSorted(
+  (a, b) => ISSUE_PRIORITY_RANK[a] - ISSUE_PRIORITY_RANK[b],
+);
+
+/** Where a status stands in the list's order. */
+function statusRank(status: IssueStatus): number {
+  return ISSUE_STATUS_ORDER.indexOf(status);
+}
+
+/** The work under way first, as the list orders its statuses, and of one status the most recently changed first. */
+function byStanding(a: Issue, b: Issue): number {
+  const rank = statusRank(a.status) - statusRank(b.status);
+  return rank === 0 ? b.updatedAt - a.updatedAt : rank;
+}
+
+/**
+ * The list's headings by the grouping chosen, no heading empty: by status,
+ * the work under way first and the most pressing first inside each; or by
+ * priority, the most pressing first and an unweighed issue's last, and
+ * inside each the work under way first, the most recently changed first.
+ */
+export function issueListGroups(
+  issues: readonly Issue[],
+  grouping: IssueGrouping,
+): readonly IssueListGroup[] {
+  if (grouping === ISSUE_GROUPING.STATUS) {
+    return issueGroups(issues).map((group) => ({
+      key: group.status,
+      words: ISSUE_STATUS_WORDS[group.status],
+      issues: group.issues,
+    }));
+  }
+  return PRIORITY_ORDER.map((priority) => ({
+    key: priority,
+    words: ISSUE_PRIORITY_WORDS[priority],
+    issues: issues.filter((issue) => issue.priority === priority).toSorted(byStanding),
+  })).filter((group) => group.issues.length > 0);
 }
 
 /**

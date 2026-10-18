@@ -7,9 +7,9 @@ import {
 } from "@luke/features/issue-view";
 import type { Issue } from "@luke/features/issue-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { useAct } from "@luke/panel/act";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useMinute } from "../tasks/task-time";
+import { useAct } from "../act.js";
+import { useMinute } from "../tasks/task-time.js";
 
 /**
  * use-issues.ts -- the Issues pages' list and one issue: one workspace's issues, read when the pages open and each minute after, one issue read as its page opens, and the writes that file and change them.

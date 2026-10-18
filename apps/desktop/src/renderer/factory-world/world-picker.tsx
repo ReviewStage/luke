@@ -1,9 +1,9 @@
 import { useAtom } from "@effect/atom-react";
+import { useAppState, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { Select, type SelectOption } from "@luke/ui";
 import * as Atom from "effect/reactivity/Atom";
 import { Building2Icon, SquareKanbanIcon } from "lucide-react";
-import { useAppState, useExperiment } from "../use-app-state";
 import {
   FACTORY_BOARD,
   FACTORY_CAMPUS,

@@ -6,7 +6,9 @@
    them, the quiet one fainter, the way a toolbar's split button is drawn; a
    filled look parts them with a rule in its own ink. Under an element whose
    `--luke-fold` is `folded`, the main part is a square around its glyph,
-   its words drawn nowhere though a reader still has them. */
+   its words drawn nowhere though a reader still has them; under one whose
+   `--luke-fold` is `bare`, that square stands alone, at the control's own
+   corner, and the chevron is not drawn. */
 
 @layer components {
   .luke-split-button {
@@ -46,7 +48,8 @@
     border-inline-start-color: color-mix(in srgb, var(--luke-button-ink) 30%, transparent);
   }
 
-  @container style(--luke-fold: folded) {
+  /* biome-ignore lint/suspicious/noDuplicateCustomProperties: two values a query tests, not two declarations */
+  @container style(--luke-fold: folded) or style(--luke-fold: bare) {
     .luke-split-button > .luke-button:first-child {
       width: var(--luke-control-height);
       padding: 0;
@@ -62,6 +65,17 @@
       border: 0;
       clip-path: inset(50%);
       white-space: nowrap;
+    }
+  }
+
+  @container style(--luke-fold: bare) {
+    .luke-split-button > .luke-button:first-child {
+      border-inline-end-width: 1px;
+      border-radius: var(--luke-control-radius);
+    }
+
+    .luke-split-button > .luke-button:last-child {
+      display: none;
     }
   }
 }

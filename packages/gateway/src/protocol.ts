@@ -171,6 +171,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
   /** One change to an agent's pull request, made on GitHub by the service as the account on its own GitHub sign-in: how GitHub took it. */
   CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
+  /** Which of an agent's pull request's files the account marked viewed on GitHub, read by the service on its own GitHub sign-in. */
+  CODING_AGENTS_PULL_REQUEST_VIEWED: "codingAgents.pullRequestViewed",
   /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
   PROVIDER_KEYS_READ: "providerKeys.read",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */

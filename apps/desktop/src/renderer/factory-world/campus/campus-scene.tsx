@@ -1,5 +1,6 @@
 import { useAtom } from "@effect/atom-react";
 import type { TaskSummary } from "@luke/features/task-wire";
+import { dayText } from "@luke/panel/tasks/task-time";
 import { cssCustomProperties, Segmented } from "@luke/ui";
 import {
   type BuildingPiece,
@@ -77,7 +78,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { dayText } from "../../tasks/task-time";
 import type { StageSceneProps } from "../contract";
 import { PICK_KIND, type PickTarget, WORLD_LAYER, type WorldLayer } from "../world";
 

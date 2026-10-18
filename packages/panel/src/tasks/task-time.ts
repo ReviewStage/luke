@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { Clock, Duration, Schedule, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { rendererRuntime } from "../renderer-runtime";
+import { rendererRuntime } from "../renderer-runtime.js";
 
 /**
  * task-time.ts -- the window's one way of saying when: how long ago in a row's few letters or a line's words, a moment in full, a span, a call's day, and the minute that says it again.

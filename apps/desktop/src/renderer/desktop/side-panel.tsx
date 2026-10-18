@@ -15,6 +15,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
 import { PullRequestsOnGitHub } from "@luke/panel/tasks/use-open-link";
+import { useCapability } from "@luke/panel/use-app-state";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -130,7 +131,6 @@ import {
   workRowsOf,
 } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
-import { useCapability } from "../use-app-state";
 import { paneTiming } from "./pane-motion";
 import {
   type AddEntry,

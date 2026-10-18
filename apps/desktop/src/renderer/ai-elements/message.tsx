@@ -1,11 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
+import { markdownHtmlParserAtom } from "@luke/panel/markdown-html-parser";
 import { BUTTON_SIZE, cn, IconButton } from "@luke/ui";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import type { UIMessage } from "ai";
 import { AsyncResult } from "effect/reactivity";
 import { type ComponentProps, type HTMLAttributes, memo, type ReactNode } from "react";
 import { type Components, Streamdown } from "streamdown";
-import { markdownHtmlParserAtom } from "../markdown-html-parser";
 import { Tooltip } from "../tooltip";
 
 /**

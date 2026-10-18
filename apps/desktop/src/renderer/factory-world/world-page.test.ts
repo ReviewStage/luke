@@ -9,6 +9,7 @@ import {
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   areaOf,
@@ -37,7 +38,6 @@ import { bundleLanded, landedBundles, onSideBundles } from "#testing/side-bundle
 import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand, useAppCommand } from "../app-commands";
 import { type SideBundles, sideBundles, worldBundleAtom } from "../bundle-loader";
-import { rendererRuntime } from "../renderer-runtime";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import type { FactorySceneModule, FactorySceneProps, SceneHover } from "./contract";
 import type { WorldEntry } from "./registry";

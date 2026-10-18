@@ -1526,6 +1526,17 @@
   text-overflow: ellipsis;
 }
 
+/* A file's Viewed box, GitHub's own (viewed-files.ts), at the end of its
+   header's row. */
+.diff-list-viewed {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
 /* Why a file has no hunks to draw, in their place under its header in the
    list (diff-view/index.ts draws it across the file's width). */
 .diff-list-notice {
@@ -3816,7 +3827,7 @@ ol.transcript-list {
   animation: todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
 }
 
-[data-todos-dock][data-disclosure="opening"] > .luke-disclosure-body {
+[data-todos-dock][data-disclosure="opening"] > .todos-dock-body {
   animation:
     luke-disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
     todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
@@ -3830,7 +3841,7 @@ ol.transcript-list {
   animation: todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
 }
 
-[data-todos-dock][data-disclosure="closing"] > .luke-disclosure-body {
+[data-todos-dock][data-disclosure="closing"] > .todos-dock-body {
   animation:
     luke-disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
     todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;

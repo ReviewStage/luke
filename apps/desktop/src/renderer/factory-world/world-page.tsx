@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
+import { useFactoryWorld } from "@luke/panel/factory-world/use-factory-world";
 import { cssCustomProperties, EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { taskBlastRadiusOf } from "@luke/ui/factory-campus";
 import {
@@ -32,7 +33,6 @@ import type {
   StageSceneProps,
 } from "./contract";
 import type { WorldEntry } from "./registry";
-import { useFactoryWorld } from "./use-factory-world";
 import {
   PICK_KIND,
   type PickTarget,

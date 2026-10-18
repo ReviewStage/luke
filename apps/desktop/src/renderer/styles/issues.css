@@ -193,12 +193,14 @@
 
 /* A column's head: its status's glyph, its name, how many it holds, and its
    +, on its cards' inset. The name takes what the line leaves, cut short
-   rather than wrapped, so the count and the + end the line. */
+   rather than wrapped, so the count and the + end the line. Every head
+   stands the + button's height, one with no + and a placeholder's alike,
+   so no head moves as the board arrives. */
 .issue-column-head {
   display: flex;
   align-items: center;
   gap: var(--luke-icon-gap);
-  min-height: 24px;
+  min-height: var(--luke-control-height);
   margin: 0;
   padding: 0 var(--row-inset);
   font-variant-numeric: tabular-nums;
@@ -208,12 +210,14 @@
   flex: 1;
 }
 
-/* The + is a control's full size held to the head's height, so the head does
-   not grow, and reaches past the head's inset by its glyph's margin, so the
-   glyph ends on the edge the cards' times end on. */
-.issue-column-head > .luke-button {
-  margin-block: calc((24px - var(--luke-control-height)) / 2);
-  margin-right: calc((var(--luke-control-icon) - var(--luke-control-height)) / 2);
+/* A head ending on its + gives up the room around the +'s glyph at its end,
+   so the glyph ends on the edge the cards' times end on. */
+.issue-column-head:has(> .luke-button) {
+  padding-right: calc(
+    var(--row-inset) -
+    (var(--luke-control-height) - var(--luke-control-icon)) /
+    2
+  );
 }
 
 /* A column with no issue says so in one quiet line, as an idle station does. */
