@@ -255,21 +255,31 @@ function whereSaid(channel: ChatChannelRow, message: ChatMessageRow): string {
   return message.parentId === null ? room : `${room}, in a thread`;
 }
 
+/** What a paragraph break between a notice's parts takes of its bound. */
+const PARAGRAPH_BREAK = "\n\n";
+
 /**
  * The line a notice is: who said it where and at what place, the words,
- * what it asks where it asks, and how to answer. Bounded to a message's
- * own bound.
+ * what it asks where it asks, and how to answer. Bounded to a message's own
+ * bound by the words alone, so the head and the closing lines always stand
+ * whole: the agent always reads how to answer, and a window reading the
+ * notice back always finds its closing lines in their whole shape
+ * (`chatNoticeWords`).
  */
 function noticeText(from: ChatMemberRow, channel: ChatChannelRow, message: ChatMessageRow): string {
   const header = `${CHAT_NOTICE_LEAD} · @${from.handle} ${whereSaid(channel, message)} (m ${message.seq}):`;
+  const closings = [
+    ...(message.ask === null ? [] : [chatNoticeAsksLine(message.ask.response.type)]),
+    chatNoticeReplyLine(message.seq),
+  ];
+  const kept = [header, ...closings].join(PARAGRAPH_BREAK);
+  const room = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - kept.length - PARAGRAPH_BREAK.length;
   const words = message.blocks
     .map(blockWords)
     .filter((part) => part !== "")
-    .join("\n\n");
-  const asks = message.ask === null ? "" : chatNoticeAsksLine(message.ask.response.type);
-  const reply = chatNoticeReplyLine(message.seq);
-  const text = [header, words, asks, reply].filter((part) => part !== "").join("\n\n");
-  return text.slice(0, CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS);
+    .join(PARAGRAPH_BREAK)
+    .slice(0, Math.max(room, 0));
+  return [header, words, ...closings].filter((part) => part !== "").join(PARAGRAPH_BREAK);
 }
 
 /**

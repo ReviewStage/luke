@@ -106,6 +106,7 @@ import {
   CHAT_IMAGE_TYPE,
   CHAT_REPLY,
   chatAnswerSchema,
+  chatNoticeWords,
   chatWriteAnswerSchema,
   MEMBER_KIND,
   mentionedHandles,
@@ -5172,6 +5173,11 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
           chat_seq: sent.message.seq,
           from: "agent-1",
         });
+        // The window reads the notice back as the words posted alone, its head and closing lines its own.
+        const noticeLine = notice.message.parts.flatMap((part) =>
+          part.type === "text" ? [part.text] : [],
+        );
+        assert.deepEqual(noticeLine.map(chatNoticeWords), ["The invite table is mine."]);
         assert.deepEqual(
           (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
           // An agent's notice names it by its handle, and by its member's agent and the model that agent posted under.
