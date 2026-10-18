@@ -1,4 +1,4 @@
-import { ChevronRightIcon } from "@luke/ui";
+import { NAV_COUNT_SHOWN, NAV_ITEM_VARIANT, NavItem } from "@luke/ui";
 import type { ReactNode } from "react";
 import { Tooltip } from "../tooltip";
 
@@ -35,28 +35,6 @@ export interface CountNoun {
 }
 
 const TASK_NOUN: CountNoun = { one: "task", many: "tasks" };
-
-/**
- * A folded group's count of what it holds, shown after its name while the
- * header is hovered or reached from the keyboard, or at rest too where it
- * is steady, and read as "n tasks".
- */
-function FoldedCount({
-  count,
-  noun = TASK_NOUN,
-  steady = false,
-}: {
-  count: number;
-  noun?: CountNoun;
-  steady?: boolean;
-}): React.JSX.Element {
-  return (
-    <span className="sidebar-repository-count" data-steady={steady ? "true" : undefined}>
-      {count}
-      <span className="luke-visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
-    </span>
-  );
-}
 
 /** A group's header, its press folding and unfolding the group. */
 export function SidebarGroupHeader({
@@ -105,22 +83,24 @@ export function SidebarGroupHeader({
       onContextMenu={onContextMenu}
     >
       <Tooltip label={tooltip ?? (card === undefined ? undefined : name)} card={card}>
-        <button
-          type="button"
-          className="sidebar-repository-toggle"
-          aria-expanded={!folded}
+        <NavItem
+          variant={NAV_ITEM_VARIANT.HEAD}
+          icon={glyph}
+          expanded={!folded}
+          mark={trailing}
+          count={
+            counted
+              ? {
+                  value: count,
+                  noun: count === 1 ? noun.one : noun.many,
+                  shown: steady ? NAV_COUNT_SHOWN.ALWAYS : NAV_COUNT_SHOWN.ON_HOVER,
+                }
+              : undefined
+          }
           onClick={onToggle}
         >
-          {glyph === undefined || glyph === null ? null : (
-            <span className="sidebar-repository-glyph">
-              {glyph}
-              <ChevronRightIcon />
-            </span>
-          )}
-          <span className="sidebar-repository-name">{name}</span>
-          {trailing}
-          {counted ? <FoldedCount count={count} noun={noun} steady={steady} /> : null}
-        </button>
+          {name}
+        </NavItem>
       </Tooltip>
       {actions === undefined ? null : <span className="sidebar-repository-actions">{actions}</span>}
     </div>
