@@ -3817,9 +3817,9 @@ button.draft-fork-quote:hover {
   animation: todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
 }
 
-[data-todos-dock][data-disclosure="opening"] > .disclosure-body {
+[data-todos-dock][data-disclosure="opening"] > .luke-disclosure-body {
   animation:
-    disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
+    luke-disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
     todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
 }
 
@@ -3831,9 +3831,9 @@ button.draft-fork-quote:hover {
   animation: todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
 }
 
-[data-todos-dock][data-disclosure="closing"] > .disclosure-body {
+[data-todos-dock][data-disclosure="closing"] > .luke-disclosure-body {
   animation:
-    disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
+    luke-disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
     todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
 }
 

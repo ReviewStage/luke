@@ -21,7 +21,7 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
-import { cn, ProviderMark } from "@luke/ui";
+import { cn, Disclosure, DisclosureBody, DisclosureSummary, ProviderMark } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
@@ -1029,17 +1029,13 @@ function TurnFold({
   children: ReactNode;
 }): ReactNode {
   return (
-    <Fold className="text-[12.5px]" defaultOpen={open} data-turn-fold="">
-      <FoldSummary
-        className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-        aria-label={failed ? `${summary}, ${CALL_FAILED_WORDS}` : undefined}
-      >
-        <FoldChevron />
+    <Disclosure defaultOpen={open} data-turn-fold="">
+      <DisclosureSummary aria-label={failed ? `${summary}, ${CALL_FAILED_WORDS}` : undefined}>
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
         {failed ? <ToolStateMark state={TOOL_STATE.OUTPUT_ERROR} /> : null}
-      </FoldSummary>
-      <FoldBody className="ml-6 flex flex-col gap-1 pt-1">{children}</FoldBody>
-    </Fold>
+      </DisclosureSummary>
+      <DisclosureBody>{children}</DisclosureBody>
+    </Disclosure>
   );
 }
 

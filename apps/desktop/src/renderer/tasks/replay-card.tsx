@@ -3,13 +3,21 @@ import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-age
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import {
+  BUTTON_VARIANT,
+  Button,
+  DISCLOSURE_BODY,
+  Disclosure,
+  DisclosureBody,
+  DisclosureSummary,
+  Inline,
+} from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ActorRef } from "../actor-ref";
-import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Message, MessageContent } from "../ai-elements/message";
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/task";
 import { TOOL_BLOCK } from "../ai-elements/tool";
@@ -277,16 +285,15 @@ function StepRow({
  */
 function SummaryRow({ line, text }: { line: string; text: string }): React.JSX.Element {
   return (
-    <Fold className="text-[12.5px]" data-replay-summary="">
-      <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-        <FoldChevron />
-        <TextQuoteIcon className="size-4 shrink-0" aria-hidden="true" />
+    <Disclosure data-replay-summary="">
+      <DisclosureSummary>
+        <TextQuoteIcon aria-hidden="true" />
         {line}
-      </FoldSummary>
-      <FoldBody className="px-1 py-1">
+      </DisclosureSummary>
+      <DisclosureBody inset={DISCLOSURE_BODY.FLUSH}>
         <TranscriptWords text={text} />
-      </FoldBody>
-    </Fold>
+      </DisclosureBody>
+    </Disclosure>
   );
 }
 
@@ -317,15 +324,15 @@ function ReplaySteps({
   return (
     <div ref={list} tabIndex={-1} className="flex flex-col gap-3 outline-none" data-replay-steps="">
       {page.from === 0 ? null : (
-        <button
-          type="button"
-          className="m-0 flex h-7 cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent px-1 text-left text-[12.5px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          data-replay-earlier=""
-          onClick={drawMore}
-        >
-          <ChevronsUpIcon className="size-4 shrink-0" aria-hidden="true" />
-          {earlierStepsLine(page)}
-        </button>
+        <Inline>
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            icon={<ChevronsUpIcon aria-hidden="true" />}
+            onClick={drawMore}
+          >
+            {earlierStepsLine(page)}
+          </Button>
+        </Inline>
       )}
       {steps.slice(page.from).map((step, index) => (
         // Note that a step is keyed by its place among them all, because the replay never changes once handed, and a page landing above keeps the rows below as they were.

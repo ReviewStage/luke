@@ -12,6 +12,7 @@ import { COMBOBOX_EXAMPLE } from "./examples/combobox";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
+import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
 import { FOLDING_BUTTONS_EXAMPLE } from "./examples/folding-buttons";
@@ -65,6 +66,7 @@ export const EXAMPLES: readonly Example[] = [
   CONFIRM_DIALOGS_EXAMPLE,
   DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,
+  DISCLOSURES_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
   ERROR_STATES_EXAMPLE,
   FOLDING_BUTTONS_EXAMPLE,

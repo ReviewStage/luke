@@ -69,6 +69,9 @@
   --luke-dialog-action-gap: var(--luke-space-8);
   --luke-dialog-action-width: 80px;
 
+  /* A fold's summary row, a line of a transcript a little under a control. */
+  --luke-disclosure-row-height: 28px;
+
   --luke-menu-row-height: 32px;
   --luke-menu-row-radius: var(--luke-radius-6);
   --luke-menu-inset: var(--luke-space-4);
@@ -128,6 +131,9 @@
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);
   --luke-dialog-action-width: 80px;
+
+  /* A web fold's summary is a finger's target, its controls' height. */
+  --luke-disclosure-row-height: var(--luke-control-height);
 
   /* A web menu's rows are its controls' height, a finger's target. */
   --luke-menu-row-height: 44px;
