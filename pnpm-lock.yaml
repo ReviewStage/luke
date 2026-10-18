@@ -902,6 +902,9 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
+      '@pierre/diffs':
+        specifier: 1.5.2
+        version: 1.5.2(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)
       '@pierre/trees':
         specifier: 1.0.0-beta.6
         version: 1.0.0-beta.6(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)
