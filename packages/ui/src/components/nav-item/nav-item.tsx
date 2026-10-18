@@ -116,6 +116,8 @@ export type NavItemProps = HintProps & {
   ref?: Ref<HTMLButtonElement> | undefined;
   /** Its name, where the words drawn do not say the whole of it. */
   "aria-label"?: string | undefined;
+  /** The id of the words that say more of it, as an app's hint names its own. */
+  "aria-describedby"?: string | undefined;
 };
 
 /** A pointer's press that leaves the focus where it is. */
@@ -189,6 +191,7 @@ export function NavItem({
       ref={props.ref}
       disabled={props.disabled}
       aria-label={props["aria-label"]}
+      aria-describedby={props["aria-describedby"]}
       aria-current={current}
       aria-expanded={menu?.["aria-expanded"] ?? expanded}
       aria-haspopup={menu?.["aria-haspopup"]}

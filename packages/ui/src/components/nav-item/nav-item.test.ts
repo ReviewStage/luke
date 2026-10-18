@@ -12,7 +12,8 @@ import { NAV_COUNT_SHOWN, NAV_CURRENT, NAV_ITEM_VARIANT, NavItem } from "./nav-i
  * the page, a search's find as the location; a fold's head says whether
  * its group stands open and folds it on a press; a menu's trigger says the
  * menu it drops and whether it stands; an unavailable item refuses its
- * press; and one that keeps focus leaves it on the field that held it.
+ * press; a hint's words describe the item they hang from; and one that
+ * keeps focus leaves it on the field that held it.
  */
 
 const roots: Root[] = [];
@@ -153,6 +154,24 @@ test("a chord is named to a reader through the row, not read as its words", () =
 
   expect(row.getAttribute("aria-keyshortcuts")).toBe("Meta+N");
   expect(row.querySelector("[aria-hidden='true']")?.textContent).toBe("⌘N");
+});
+
+test("a hint's words describe the item they hang from", () => {
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement("span", { id: "hint" }, "acme/web, 4 open tasks"),
+      createElement(NavItem, {
+        variant: NAV_ITEM_VARIANT.HEAD,
+        "aria-describedby": "hint",
+        children: "acme/web",
+      }),
+    ),
+  );
+  const described = button(container).getAttribute("aria-describedby");
+
+  expect(document.getElementById(described ?? "")?.textContent).toBe("acme/web, 4 open tasks");
 });
 
 test("a row that keeps focus leaves it on the field that held it under a pointer's press", () => {
