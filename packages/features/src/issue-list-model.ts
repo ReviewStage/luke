@@ -35,7 +35,7 @@ const FALLBACK_PREFIX = "ISSUE";
 const MAX_PREFIX_CHARS = 4;
 
 /** How long a settled issue stays in sight after its last change while settled issues gone quiet are left out: a week. */
-export const SETTLED_QUIET_MS = 7 * 24 * 60 * 60 * 1000;
+const SETTLED_QUIET_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** The statuses an issue is settled in: done with, one way or the other. */
 const SETTLED: ReadonlySet<IssueStatus> = new Set([ISSUE_STATUS.DONE, ISSUE_STATUS.CANCELED]);
