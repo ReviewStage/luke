@@ -38,10 +38,10 @@ import {
   InlineEdit,
   type InlineEditEnd,
   ProviderMark,
-  SETTINGS_LINE_KIND,
   SearchField,
   SettingsLine,
   SettingsSection,
+  SettingsSectionsSkeleton,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -160,6 +160,9 @@ const PAGE_LINE = {
   NOT_OPENED: "Luke could not open your browser to sign in.",
   GITHUB_SIGN_IN: "Uses your GitHub sign-in",
 } as const;
+
+/** How many rows each section stands while the statuses are read: a few connected, more not. */
+const INTEGRATIONS_SKELETON = [2, 4] as const;
 
 /** What a row offers to mend its connection, on its button or in its ⋯. */
 const ROW_ACT = {
@@ -735,7 +738,13 @@ function IntegrationRows({ filter }: { filter: IntegrationsFilter }): React.JSX.
 
   const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
   if (!read && !statuses.readFailed) {
-    return <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>Loading the integrations</SettingsLine>;
+    return (
+      <SettingsSectionsSkeleton
+        label="Loading the integrations"
+        sections={INTEGRATIONS_SKELETON}
+        marked
+      />
+    );
   }
   const healthOf = (server: string) =>
     connectionHealth(integrationConnectionOf(server)?.provider ?? GITHUB, reads[server]);

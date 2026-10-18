@@ -6,7 +6,9 @@ import {
   SettingsLine,
   SettingsRow,
   type SettingsRowControl,
+  SettingsRowsSkeleton,
   SettingsSection,
+  SettingsSectionsSkeleton,
   Switch,
   TextArea,
 } from "@luke/ui";
@@ -20,7 +22,8 @@ import { CatalogSection } from "../section";
  * column narrower than the 380px a row's controls drop below its words
  * under, one with no card around a text area that draws its own frame, and
  * lines in the rows' place: a note before rows, a note alone, and a read
- * that failed with its Retry.
+ * that failed with its Retry; and placeholders while a read is out: rows in
+ * a card, marked and not, and whole sections.
  */
 
 /** A switch holding its own state, named `label` and described and failed by its row. */
@@ -123,6 +126,17 @@ function SettingsSections(): React.JSX.Element {
               <ErrorState onRetry={() => undefined}>The members could not be read.</ErrorState>
             </SettingsLine>
           </SettingsSection>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-section-reading" title="Placeholders while a read is out">
+        <div className="catalog-settings">
+          <SettingsSection title="API keys">
+            <SettingsRowsSkeleton label="Loading your keys" rows={2} />
+          </SettingsSection>
+          <SettingsSection title="Members">
+            <SettingsRowsSkeleton label="Loading the members" rows={3} marked />
+          </SettingsSection>
+          <SettingsSectionsSkeleton label="Loading the integrations" sections={[2, 3]} marked />
         </div>
       </CatalogSection>
     </>

@@ -11,13 +11,20 @@ import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-
 import {
   BUTTON_VARIANT,
   Button,
+  CARD_PADDING,
+  Card,
   ConfirmDialog,
   type DialogQuestion,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  GAP,
   IconButton,
   ResetIcon,
   SettingsPage,
+  Skeleton,
+  SkeletonRegion,
+  Stack,
+  TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -76,6 +83,7 @@ const PAGE_LINE = {
   NOTE_DETAIL: "Editing it doesn't change existing plans.",
   SIGNED_OUT: "Sign in to edit the template your new plans start from.",
   READ_FAILED: "The template could not be read.",
+  READING: "Loading your plan template",
   LEFT_UNSAVED: "Your plan template could not be saved.",
   RESET_FAILED: "The template could not be reset. Try again.",
 } as const;
@@ -88,6 +96,13 @@ const TEMPLATE_WORKSPACE_ID = "plan-template";
 
 /** What the title line's button that opens the template's version history says, as a task's menu item says it. */
 const HISTORY_LABEL = "Version history";
+
+/** How wide the placeholder's headings and the lines under each stand, as shares of their lines, a plan's sections in the body's type. */
+const TEMPLATE_SKELETON = [
+  { heading: "28%", lines: ["100%", "94%", "62%"] },
+  { heading: "36%", lines: ["100%", "88%", "96%", "48%"] },
+  { heading: "22%", lines: ["100%", "70%"] },
+] as const;
 
 /** Where the page stands with the service's template. */
 const TEMPLATE_READ = {
@@ -386,6 +401,41 @@ function TemplateDocument({
   );
 }
 
+/**
+ * The template while it is read, as quiet blocks under the page's name: the
+ * note's card, then headings over their lines in the body's own type, so the
+ * template lands where the blocks stood.
+ */
+function TemplateSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label={PAGE_LINE.READING}>
+      <Stack gap={GAP.SECTION}>
+        <Card padding={CARD_PADDING.SNUG}>
+          <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.DIV}>
+            <Skeleton width="54%" />
+          </Text>
+          <Text tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.DIV}>
+            <Skeleton width="42%" />
+          </Text>
+        </Card>
+        {TEMPLATE_SKELETON.map((section) => (
+          <Stack key={section.heading} gap={GAP.TIGHT}>
+            <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.DIV}>
+              <Skeleton width={section.heading} />
+            </Text>
+            <Text as={TEXT_ELEMENT.DIV}>
+              {section.lines.map((width, at) => (
+                // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
+                <Skeleton key={at} width={width} />
+              ))}
+            </Text>
+          </Stack>
+        ))}
+      </Stack>
+    </SkeletonRegion>
+  );
+}
+
 /** What stands in the document's place: no account, the read under way, or the read failed with its Retry. */
 function TemplateState({
   signedIn,
@@ -410,8 +460,12 @@ function TemplateState({
       </div>
     );
   }
-  // While the read is out the page is its name alone, where every page's stands, and the rest arrives whole.
-  return <SettingsPage title={TEMPLATE_TITLE}>{null}</SettingsPage>;
+  // While the read is out the page's name stands where every page's does, the template's blocks under it.
+  return (
+    <SettingsPage title={TEMPLATE_TITLE}>
+      <TemplateSkeleton />
+    </SettingsPage>
+  );
 }
 
 /**

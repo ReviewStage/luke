@@ -16,8 +16,8 @@ import {
   ConfirmDialog,
   ErrorState,
   PencilIcon,
-  SETTINGS_LINE_KIND,
   SettingsLine,
+  SettingsRowsSkeleton,
   SettingsSection,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
@@ -388,7 +388,7 @@ export function ApiKeysSection({
             </ErrorState>
           </SettingsLine>
         ) : (
-          <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>Loading your keys</SettingsLine>
+          <SettingsRowsSkeleton label="Loading your keys" rows={PROVIDERS.length} marked />
         )}
       </SettingsSection>
     </div>
