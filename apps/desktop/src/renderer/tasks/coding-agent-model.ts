@@ -1053,16 +1053,24 @@ export type AgentRun = Pick<CodingAgentSummary, "status" | "runStartedAt">;
  * The agents with one agent's run read from its own transcript page or an
  * answer about it, where that knows better than the list: its status, and
  * the start a working line counts from, which moves with each turn and is
- * none while a message awaits one.
+ * none while a message awaits one. Where the agent already stands so, the
+ * agents are answered as they were, so a page that moved nothing redraws
+ * nothing that reads them.
  */
 export function withAgentRun(
   agents: readonly CodingAgentSummary[],
   agentId: string,
   run: AgentRun,
 ): readonly CodingAgentSummary[] {
+  const standing = agents.find((agent) => agent.id === agentId);
+  if (
+    standing === undefined ||
+    (standing.status === run.status && standing.runStartedAt === run.runStartedAt)
+  ) {
+    return agents;
+  }
   return agents.map((agent) => {
     if (agent.id !== agentId) return agent;
-    if (agent.status === run.status && agent.runStartedAt === run.runStartedAt) return agent;
     const { runStartedAt: _was, ...held } = agent;
     return run.runStartedAt === undefined
       ? { ...held, status: run.status }

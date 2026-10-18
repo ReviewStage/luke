@@ -114,6 +114,36 @@ function fresh(agentId: string): Held {
   };
 }
 
+/**
+ * The map a page read, or the one held where the page read it alike: each
+ * page answers the agent's workers whole, mostly as they stood, and a map
+ * kept as it was asks nothing that reads it to be drawn again.
+ */
+function keptIfSame<V>(
+  held: ReadonlyMap<string, V>,
+  read: readonly (readonly [string, V])[],
+  same: (a: V, b: V) => boolean,
+): ReadonlyMap<string, V> {
+  const unchanged =
+    held.size === read.length &&
+    read.every(([key, value]) => {
+      const was = held.get(key);
+      return was !== undefined && same(was, value);
+    });
+  return unchanged ? held : new Map(read);
+}
+
+/** Whether two readings of a worker say it stands alike. */
+function sameStanding(a: CodingAgentSubagentStanding, b: CodingAgentSubagentStanding): boolean {
+  return (
+    a.callId === b.callId &&
+    a.status === b.status &&
+    a.model === b.model &&
+    a.effort === b.effort &&
+    a.startedAt === b.startedAt
+  );
+}
+
 export function useAgentTranscript(input: {
   agentId: string;
   /** The delegation call whose worker's transcript this is, where it is a worker's rather than the agent's own. */
@@ -179,14 +209,20 @@ export function useAgentTranscript(input: {
           caughtUp: answer.messages.length === 0,
           pages: was.pages + 1,
           pageTitle: answer.title ?? undefined,
-          subagentTitles: new Map(
+          subagentTitles: keptIfSame(
+            was.subagentTitles,
             (answer.subagentTitles ?? []).map((titled) => [titled.callId, titled.title]),
+            Object.is,
           ),
-          delegations: new Map(
+          delegations: keptIfSame(
+            was.delegations,
             (answer.delegations ?? []).map((started) => [started.callId, started.startedAt]),
+            Object.is,
           ),
-          subagents: new Map(
+          subagents: keptIfSame(
+            was.subagents,
             (answer.subagents ?? []).map((standing) => [standing.callId, standing]),
+            sameStanding,
           ),
         }));
         latest.current.onStatus(agentId, answer);
