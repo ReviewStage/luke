@@ -1717,9 +1717,9 @@
   margin: 0;
 }
 
-/* Who a Changes tab's pull request names, under its bar in a notice's
-   voice: who opened it, its reviewers, who authored its commits, each a
-   line of words around its faces (`pull-request-people.tsx`). */
+/* Who a pull request names, in a notice's voice: who opened it and its
+   reviewers, each a line of words around its faces
+   (`pull-request-people.tsx`). */
 .changes-people {
   display: flex;
   flex-wrap: wrap;
@@ -1802,12 +1802,6 @@
 .pull-request-tab .file-view-bar {
   gap: var(--luke-control-gap);
   padding-inline: var(--column-inset);
-}
-
-/* The files' strip of who the pull request names stands on no box, so its
-   words start at the content inset. */
-.pull-request-tab .changes-people {
-  padding-inline: var(--content-inset) var(--column-inset);
 }
 
 /* The tab shown fills the room under the header and the tabs, the others
@@ -2109,8 +2103,8 @@
   font-weight: var(--luke-weight-regular);
 }
 
-/* Who opened it and its reviewers, in the Changes tab's voice, standing on
-   the page rather than across it. */
+/* Who opened it and its reviewers, standing on the page rather than
+   across it. */
 .changes-people.pull-request-people {
   padding-block: var(--luke-space-6) 0;
   border-bottom: 0;

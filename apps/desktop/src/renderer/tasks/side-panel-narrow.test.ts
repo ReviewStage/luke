@@ -96,7 +96,6 @@ function drawChangesTab(): Promise<HTMLElement> {
             },
           ],
           reviewers: [],
-          commitAuthors: [],
           comments: [],
         },
       }),
