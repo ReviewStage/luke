@@ -9,7 +9,11 @@
  * meant to change the file in two places. Here the missing marker is
  * supplied, and the sections updating one file are joined into the first of
  * them, their hunks in the order written, which is how eve applies the hunks
- * of a single section. A section that moves its file, and an Add or a Delete
+ * of a single section. eve seeks each hunk only after the one before it, so
+ * they are joined only where every later section's first hunk finds no
+ * earlier place in the file than where the sections before it end: a later
+ * section aimed above an earlier one could otherwise land on a repeat of its
+ * lines further down. A section that moves its file, and an Add or a Delete
  * beside another section for the same file, are left as written: what those
  * mean together is a guess, so eve's refusal stands. Anything else is left
  * as written too, and eve's own parser says what is wrong with it.
@@ -39,11 +43,14 @@ interface Section {
   readonly body: string[];
 }
 
+/** A file's text by its path in the patch, or null where there is none. */
+export type ReadPatchFile = (path: string) => PromiseLike<string | null>;
+
 /** The patch given, its markers supplied and its updates of one file joined, where either is needed. */
-export function preparePatch(patchText: string): PreparedPatch {
+export async function preparePatch(patchText: string, read: ReadPatchFile): Promise<PreparedPatch> {
   const lines = patchText.replaceAll("\r\n", "\n").split("\n");
   const marked = withMarkers(lines);
-  const { lines: joinedLines, joined } = joiningUpdates(marked);
+  const { lines: joinedLines, joined } = await joiningUpdates(marked, read);
   if (marked === lines && joined.length === 0) return { text: patchText, joined };
   return { text: joinedLines.join("\n"), joined };
 }
@@ -72,13 +79,24 @@ function sectionPath(header: string): string | undefined {
   return (match[2] ?? "").trim().replaceAll("\\", "/");
 }
 
+/** Whether eve would take the path as one inside the checkout, so reading it here reads only what eve would. */
+function isPatchPath(path: string): boolean {
+  return (
+    path.length > 0 &&
+    !path.startsWith("/") &&
+    !path.includes("\0") &&
+    path.split("/").every((part) => part !== "" && part !== "." && part !== "..")
+  );
+}
+
 /**
  * The lines with every later `*** Update File:` section of a file joined
- * into its first, where none of them moves the file. A later section's
- * hunks follow the first's; one that opens without an `@@` line is given
- * one, since eve reads only a section's first hunk without it.
+ * into its first, where none of them moves the file and the sections are
+ * written top to bottom. A later section's hunks follow the first's; one
+ * that opens without an `@@` line is given one, since eve reads only a
+ * section's first hunk without it.
  */
-function joiningUpdates(lines: string[]): JoinedLines {
+async function joiningUpdates(lines: string[], read: ReadPatchFile): Promise<JoinedLines> {
   const first = lines.findIndex((line) => FILE_HEADER.test(line));
   if (first === -1) return { lines, joined: [] };
   const prefix = lines.slice(0, first);
@@ -98,29 +116,106 @@ function joiningUpdates(lines: string[]): JoinedLines {
   }
   const suffix = lines.slice(index);
 
+  const byPath = new Map<string, Section[]>();
   const moved = new Set<string>();
   for (const section of sections) {
     const path = sectionPath(section.header);
-    if (path !== undefined && section.body[0]?.startsWith(MOVE_TO) === true) moved.add(path);
+    if (path === undefined) continue;
+    if (section.body[0]?.startsWith(MOVE_TO) === true) moved.add(path);
+    byPath.set(path, [...(byPath.get(path) ?? []), section]);
   }
+  const joinable = new Set<string>();
+  for (const [path, updates] of byPath) {
+    if (updates.length < 2 || moved.has(path) || !isPatchPath(path)) continue;
+    const contents = await read(path);
+    if (contents !== null && inFileOrder(contents, updates)) joinable.add(path);
+  }
+  if (joinable.size === 0) return { lines, joined: [] };
+
   const firstOf = new Map<string, Section>();
   const kept: Section[] = [];
-  const joined = new Set<string>();
   for (const section of sections) {
     const path = sectionPath(section.header);
-    const into = path === undefined || moved.has(path) ? undefined : firstOf.get(path);
-    if (path === undefined || into === undefined) {
-      if (path !== undefined && !moved.has(path)) firstOf.set(path, section);
+    if (path === undefined || !joinable.has(path)) {
       kept.push(section);
+      continue;
+    }
+    const into = firstOf.get(path);
+    if (into === undefined) {
+      const copy = { header: section.header, body: [...section.body] };
+      firstOf.set(path, copy);
+      kept.push(copy);
       continue;
     }
     if (section.body[0]?.startsWith(CHUNK) !== true) into.body.push(CHUNK);
     into.body.push(...section.body);
-    joined.add(path);
   }
-  if (joined.size === 0) return { lines, joined: [] };
   return {
     lines: [...prefix, ...kept.flatMap((section) => [section.header, ...section.body]), ...suffix],
-    joined: [...joined],
+    joined: [...joinable],
   };
+}
+
+/** One hunk of a section, as eve seeks it: its `@@` context line, where it names one, and the lines it replaces. */
+interface Hunk {
+  readonly context: string | undefined;
+  readonly old: readonly string[];
+}
+
+/** A section's hunks as eve parses them, the first of which may open without an `@@` line. */
+function hunksOf(body: readonly string[]): Hunk[] {
+  const hunks: { context: string | undefined; old: string[] }[] = [];
+  for (const line of body) {
+    if (line.startsWith(CHUNK)) {
+      hunks.push({ context: line.slice(CHUNK.length).trim() || undefined, old: [] });
+      continue;
+    }
+    if (hunks.length === 0) hunks.push({ context: undefined, old: [] });
+    const hunk = hunks.at(-1);
+    if (hunk === undefined || line.startsWith("+") || line.startsWith("***")) continue;
+    // A blank line is context, as eve reads it; a context or removed line drops its one-character prefix.
+    hunk.old.push(line === "" ? "" : line.slice(1));
+  }
+  return hunks.map(({ context, old }) => ({
+    context,
+    // eve retries a hunk without its last line where that line is blank, so it is no anchor here.
+    old: old.at(-1) === "" ? old.slice(0, -1) : old,
+  }));
+}
+
+/** The first place at or after `from` where the lines stand in the file, compared without surrounding whitespace, or -1. */
+function seekFrom(file: readonly string[], lines: readonly string[], from: number): number {
+  if (lines.length === 0) return -1;
+  for (let at = from; at <= file.length - lines.length; at += 1) {
+    if (lines.every((line, offset) => file[at + offset]?.trim() === line.trim())) return at;
+  }
+  return -1;
+}
+
+/**
+ * Whether the sections, joined, seek what each was written for: every hunk
+ * is found where eve's forward cursor would look for it, and no later
+ * section's first hunk also stands above the place the sections before it
+ * end, where that section may have meant it.
+ */
+function inFileOrder(contents: string, updates: readonly Section[]): boolean {
+  const file = contents.replaceAll("\r\n", "\n").split("\n");
+  let cursor = 0;
+  for (const [order, section] of updates.entries()) {
+    for (const [place, hunk] of hunksOf(section.body).entries()) {
+      const anchor = hunk.context === undefined ? hunk.old : [hunk.context];
+      if (order > 0 && place === 0 && anchor.length > 0 && seekFrom(file, anchor, 0) < cursor)
+        return false;
+      if (hunk.context !== undefined) {
+        const at = seekFrom(file, [hunk.context], cursor);
+        if (at === -1) return false;
+        cursor = at + 1;
+      }
+      if (hunk.old.length === 0) continue;
+      const at = seekFrom(file, hunk.old, cursor);
+      if (at === -1) return false;
+      cursor = at + hunk.old.length;
+    }
+  }
+  return true;
 }

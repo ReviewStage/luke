@@ -141,6 +141,28 @@ test("apply_patch applies two Update sections of one file in the order written",
   assert.equal(readFileSync(join(checkout, "list.txt"), "utf8"), "ONE\ntwo\nthree\nFOUR\n");
 });
 
+test("apply_patch refuses Update sections of one file written bottom to top rather than edit a repeat of a line", async () => {
+  const { checkout, sandbox } = gitCheckout({ "list.txt": "same\nmiddle\nsame\n" });
+  const patch = applyPatchIn(checkout);
+  const patchText = [
+    "*** Begin Patch",
+    "*** Update File: list.txt",
+    "@@",
+    "-middle",
+    "+MIDDLE",
+    "*** Update File: list.txt",
+    "@@",
+    "-same",
+    "+SAME",
+    "*** End Patch",
+  ].join("\n");
+  await assert.rejects(
+    whole(patch.execute({ patchText }, context(sandbox))),
+    /overlapping file operations/,
+  );
+  assert.equal(readFileSync(join(checkout, "list.txt"), "utf8"), "same\nmiddle\nsame\n");
+});
+
 test("apply_patch applies a patch written without its Begin and End lines", async () => {
   const { checkout, sandbox } = gitCheckout({ "list.txt": "one\ntwo\n" });
   const patch = applyPatchIn(checkout);

@@ -184,7 +184,7 @@ function explainedPatchFailure(failure: Error, joined: readonly string[]): Error
   const notes: string[] = [];
   if (failure.message.includes("patch contains overlapping file operations:")) {
     notes.push(
-      "A file may stand in one section of a patch, except that several `*** Update File:` sections of one file are applied in order: give an added, deleted, or moved file no other section, and patch it again.",
+      "A file may stand in one section of a patch, except that several `*** Update File:` sections of one file written top to bottom are applied in order. Write each file's hunks top to bottom in one section, give an added, deleted, or moved file no other section, and patch it again.",
     );
   }
   if (
@@ -226,11 +226,13 @@ export function applyPatchIn(checkout: string) {
     approval: never(),
     label: { start: ({ root }: PatchInput) => `Patch ${fromCheckout(checkout, root)}` },
     execute: async ({ root, patchText }: PatchInput, ctx) => {
-      const prepared = preparePatch(patchText);
+      const repository = fromCheckout(checkout, root);
+      const sandbox = await ctx.getSandbox();
+      const prepared = await preparePatch(patchText, (path) =>
+        sandbox.readTextFile({ path: posix.join(repository, path) }),
+      );
       try {
-        return await whole(
-          applyPatch.execute({ root: fromCheckout(checkout, root), patchText: prepared.text }, ctx),
-        );
+        return await whole(applyPatch.execute({ root: repository, patchText: prepared.text }, ctx));
       } catch (failure) {
         throw failure instanceof Error ? explainedPatchFailure(failure, prepared.joined) : failure;
       }
