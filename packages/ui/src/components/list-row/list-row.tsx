@@ -42,7 +42,30 @@ import type {
  * (`hint`), as a Button's hint hangs: the app's own tooltip, handed the
  * words to raise and the press it wraps, whose pointer and focus handlers
  * land on the press itself.
+ *
+ * A list stands plain, its rows apart on the ground, each lit on its own;
+ * or as a card (`LIST_VARIANT.CARD`), its rows edge to edge on the card's
+ * ground with a hairline between each and the next, as a settings section's
+ * card holds its rows. A dense column, a narrow panel's history, sets its
+ * rows compact (`LIST_DENSITY.COMPACT`), a few pixels shorter and closer to
+ * their edges, the words unchanged.
  */
+
+/** How a list stands: its rows apart on the ground, or edge to edge in a card. */
+export const LIST_VARIANT = {
+  PLAIN: "plain",
+  CARD: "card",
+} as const;
+
+export type ListVariant = (typeof LIST_VARIANT)[keyof typeof LIST_VARIANT];
+
+/** How much room a list's rows keep around their words. */
+export const LIST_DENSITY = {
+  REGULAR: "regular",
+  COMPACT: "compact",
+} as const;
+
+export type ListDensity = (typeof LIST_DENSITY)[keyof typeof LIST_DENSITY];
 
 /** How the open row is current: the page shown beside the list, or the item chosen in its set. */
 export const LIST_ROW_CURRENT = {
@@ -77,13 +100,17 @@ function said(words: ReactNode): boolean {
 /** A list of `ListRow`s, named by `label` for a reader moving between lists. */
 export function List({
   label,
+  variant = LIST_VARIANT.PLAIN,
+  density = LIST_DENSITY.REGULAR,
   children,
 }: {
   label: string;
+  variant?: ListVariant;
+  density?: ListDensity;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <ul className="luke-list" aria-label={label}>
+    <ul className="luke-list" data-variant={variant} data-density={density} aria-label={label}>
       {children}
     </ul>
   );
