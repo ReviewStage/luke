@@ -78,7 +78,7 @@ export const HOSTED_SERVICE_PATH = {
   /** One agent's transcript under `?id=`, or one of its workers' under `&call=`, sealed for following over Neon Realtime (GET): what its pages are read from, or `not-found` or `unavailable`. */
   LIVE_AGENT_TRANSCRIPT: "/api/live/agent-transcript",
   /** One planning worker's transcript under `?id=` (the plan) and `&call=` (the call that started it), sealed for following over Neon Realtime (GET), as an agent's worker's is, or `not-found` or `unavailable`. */
-  LIVE_TASK_WORKER_TRANSCRIPT: "/api/live/plan-worker-transcript",
+  LIVE_TASK_WORKER_TRANSCRIPT: "/api/live/task-worker-transcript",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to

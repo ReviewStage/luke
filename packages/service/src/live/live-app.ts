@@ -61,7 +61,7 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  * yet, as a tab opened on its call is read before it is, so its statements
  * name the conversation the call will open rather than wait for it.
  *
- * `GET /api/live/plan-worker-transcript?id=&call=` answers a planning
+ * `GET /api/live/task-worker-transcript?id=&call=` answers a planning
  * worker's transcript the same way, after the plan is read as the account:
  * the child conversation of the plan's conversation the call's worker
  * writes in, under the plan's conversation. Before the planner's journal

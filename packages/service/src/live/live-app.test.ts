@@ -269,7 +269,7 @@ it.layer(getTestDB())("the live reads", (it) => {
         assert.ok(Option.isSome(opened));
         const unplanned = yield* startTask(owner, { name: "Billing" });
         const pathOf = (taskId: string) =>
-          `/api/live/plan-worker-transcript?id=${taskId}&call=call-0-0`;
+          `/api/live/task-worker-transcript?id=${taskId}&call=call-0-0`;
 
         const sealed = yield* ask({
           bearer: owner,
