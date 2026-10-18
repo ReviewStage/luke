@@ -11,6 +11,13 @@ import type { ReactNode } from "react";
  * role's size, leading, and weight are the profile's (`tokens/profiles.css`),
  * so the same words are the desktop's density in the window and the site's
  * on the web.
+ *
+ * A face and a truncation are the two things a caller may ask of the words
+ * beyond their role: the monospace face for a technical token (a version, a
+ * requirement, an identifier) rather than prose, and one line cut with an
+ * ellipsis where a row has no room for a second. A truncated element still
+ * holds every word, so what is read aloud is never cut; it truncates at its
+ * own box's edge, so it stands as a block or a flex item.
  */
 
 /** How words are set: body, a label, a caption, a section's or a dialog's heading, a page's title. */
@@ -34,6 +41,14 @@ export const TEXT_TONE = {
 
 export type TextTone = (typeof TEXT_TONE)[keyof typeof TEXT_TONE];
 
+/** The face words are set in: the profile's own, or its monospace one for a technical token. */
+export const TEXT_FONT = {
+  SANS: "sans",
+  MONO: "mono",
+} as const;
+
+export type TextFont = (typeof TEXT_FONT)[keyof typeof TEXT_FONT];
+
 /** The elements words may stand in, by what they are rather than how they look. */
 export const TEXT_ELEMENT = {
   P: "p",
@@ -54,18 +69,30 @@ export function Text({
   variant = TEXT_VARIANT.BODY,
   as: Element = TEXT_ELEMENT.P,
   tone = TEXT_TONE.DEFAULT,
+  font = TEXT_FONT.SANS,
+  truncate = false,
   id,
   children,
 }: {
   variant?: TextVariant;
   as?: TextElement;
   tone?: TextTone;
+  font?: TextFont;
+  /** Hold the words to one line, cut with an ellipsis where the box ends. */
+  truncate?: boolean;
   /** The id a control or a region names itself by (`aria-labelledby`, `aria-describedby`). */
   id?: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <Element className="luke-text" data-variant={variant} data-tone={tone} id={id}>
+    <Element
+      className="luke-text"
+      data-variant={variant}
+      data-tone={tone}
+      data-font={font}
+      data-truncate={truncate ? "" : undefined}
+      id={id}
+    >
       {children}
     </Element>
   );

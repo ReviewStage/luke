@@ -82,7 +82,7 @@
      keep their spacing. Note that the name stands at least a 16px mark's
      height, so a mark beside it stays centred on it. */
   .luke-inline-ref[data-look="wash"] {
-    gap: var(--luke-space-6);
+    gap: var(--luke-space-4);
     border-radius: var(--luke-radius-6);
   }
 

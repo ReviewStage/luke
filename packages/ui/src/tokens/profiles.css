@@ -60,6 +60,15 @@
 
   --luke-text-area-grow-max: 320px;
 
+  /* A card frames a group of content on a page: a dialog's corner, and an
+     inset a step wider than a field's gap, so what it holds stands clear of
+     its edge; the compact and snug insets are the block axis of a figure's
+     card and a one-line band's. */
+  --luke-card-radius: var(--luke-radius-14);
+  --luke-card-inset: var(--luke-space-20);
+  --luke-card-inset-compact: var(--luke-space-16);
+  --luke-card-inset-snug: var(--luke-space-12);
+
   /* How wide a pill naming something in prose stands, and one saying its standing too. */
   --luke-inline-ref-pill-width: 240px;
   --luke-inline-ref-pill-stated-width: 360px;
@@ -123,6 +132,11 @@
   --luke-settings-section-gap: var(--luke-section-gap);
 
   --luke-text-area-grow-max: 320px;
+
+  --luke-card-radius: var(--luke-radius-14);
+  --luke-card-inset: var(--luke-space-20);
+  --luke-card-inset-compact: var(--luke-space-16);
+  --luke-card-inset-snug: var(--luke-space-12);
 
   /* How wide a pill naming something in prose stands, and one saying its standing too. */
   --luke-inline-ref-pill-width: 240px;
