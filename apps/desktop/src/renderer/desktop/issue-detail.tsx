@@ -8,6 +8,9 @@ import {
   ConfirmDialog,
   EllipsisIcon,
   IconButton,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
@@ -41,6 +44,16 @@ import type { IssueChange } from "./use-issues";
  * Archiving asks first, and once it lands the page goes back to the list,
  * which no longer holds the issue.
  */
+
+/** How wide the placeholder title and the line under it stand, as shares of their lines. */
+const SKELETON_TITLE = "55%";
+const SKELETON_BYLINE = "40%";
+
+/** How wide the placeholder Status and Priority chips stand, as wide as a chip naming one. */
+const SKELETON_CHIPS = ["112px", "96px"] as const;
+
+/** How wide each placeholder line of the description stands, as a share of its line. */
+const SKELETON_DESCRIPTION = ["92%", "86%", "64%"] as const;
 
 /**
  * The toolbar's path, as the automation editor's: the Issues list a press
@@ -257,5 +270,43 @@ export function IssueDetail({
       </div>
       <ConfirmDialog confirm={archiving} question={archiveQuestion(identifier)} />
     </section>
+  );
+}
+
+/**
+ * One issue's page while its issue is first read, opened from a link or a
+ * notification before the list holds it: the page's own document, a block
+ * where the title will stand in its heading's type, one for the line under
+ * it, the two chips' boxes, and a few lines of description, so the issue
+ * lands where the blocks stood. The region says what is being read.
+ */
+export function IssueDetailSkeleton({ label }: { label: string }): React.JSX.Element {
+  return (
+    <div className="desktop-document">
+      <div className="plan-document-scroll scroll-fade">
+        <SkeletonRegion label={label}>
+          <div className="plan-body">
+            <div className="markdown task-title">
+              <div className="markdown-heading task-title-text" data-level="1">
+                <Skeleton width={SKELETON_TITLE} />
+              </div>
+            </div>
+            <div className="issue-byline">
+              <Skeleton width={SKELETON_BYLINE} />
+            </div>
+            <div className="issue-properties">
+              {SKELETON_CHIPS.map((width) => (
+                <Skeleton key={width} shape={SKELETON_SHAPE.CONTROL} width={width} />
+              ))}
+            </div>
+            <div>
+              {SKELETON_DESCRIPTION.map((width) => (
+                <Skeleton key={width} width={width} />
+              ))}
+            </div>
+          </div>
+        </SkeletonRegion>
+      </div>
+    </div>
   );
 }
