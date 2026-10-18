@@ -1,0 +1,93 @@
+/* provider-button.css -- a provider's button and its last-used pill: the
+   slot that holds the pair, the sign-in gate's own taller button, and the
+   pill hung on whichever button's corner it marks. A control-sized one is
+   the Button's, drawn by its own sheet. */
+
+@layer components {
+  /* Each button and its pill, the pill pinned to the button's top-right corner. */
+  .luke-provider-button-slot {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Forty pixels tall, the height a devtool's sign-in button stands at, on the
+     window's control corner. The primary one is filled, drawn in the text
+     colour the way a composer's send press is, and the other is the quiet
+     one beside it. */
+  .luke-provider-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--luke-icon-gap);
+    height: 40px;
+    margin: 0;
+    padding: 0 var(--luke-space-16);
+    border: 0;
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-fill-hover);
+    box-shadow: inset 0 0 0 1px var(--luke-color-border);
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-label-size);
+    font-weight: var(--luke-weight-semibold);
+    -webkit-app-region: no-drag;
+    transition:
+      background-color var(--duration-hover) ease,
+      opacity var(--duration-hover) ease;
+  }
+
+  .luke-provider-button:hover:not(:disabled) {
+    background: var(--luke-color-fill-strong);
+  }
+
+  .luke-provider-button[data-primary="true"] {
+    background: var(--luke-color-text);
+    box-shadow: none;
+    color: var(--luke-color-ground);
+  }
+
+  .luke-provider-button[data-primary="true"]:hover:not(:disabled) {
+    background: var(--luke-color-ink);
+  }
+
+  /* Held while a sign-in is out: the button waited on stays as it was, saying
+     so; the others step back, their pills with them. */
+  .luke-provider-button:disabled:not([aria-busy="true"]),
+  .luke-provider-button:disabled:not([aria-busy="true"]) + .luke-provider-button-last-used,
+  .luke-button:disabled + .luke-provider-button-last-used {
+    opacity: 0.4;
+  }
+
+  /* The provider's own mark, at the size its guidelines draw beside a label,
+     and the ring that stands in its place while its sign-in is waited on. */
+  .luke-provider-button :is(.provider-mark, .luke-provider-button-wait) {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+  }
+
+  /* "Last used": a small pill hung on the top-right corner of the button it
+     marks, overhanging it, the way a devtool's sign-in marks the way in taken
+     last. It wears the button's own ink at a tint, the tint laid over the
+     filled button's ground rather than over nothing, so the half that
+     overhangs the page is the same solid pill as the half over the button.
+     Its border is clear and only keeps the pill's box. It lets a press fall
+     through to the button. */
+  .luke-provider-button-last-used {
+    position: absolute;
+    top: -8px;
+    right: -6px;
+    padding: 0 var(--luke-space-6);
+    border: 1px solid transparent;
+    border-radius: var(--luke-radius-full);
+    background: color-mix(in srgb, var(--luke-color-ground) 16%, var(--luke-color-text));
+    color: color-mix(in srgb, var(--luke-color-ground) 72%, transparent);
+    font-size: 10.5px;
+    font-weight: 560;
+    line-height: 16px;
+    white-space: nowrap;
+    pointer-events: none;
+    transition: opacity var(--duration-hover) ease;
+  }
+}

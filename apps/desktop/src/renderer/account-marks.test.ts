@@ -51,11 +51,13 @@ test("the sign-in buttons and the account's line each draw the provider's one ma
       onCancel: () => undefined,
     }),
   );
-  const button = (provider: AccountProvider) =>
-    gate.querySelector(`button[data-provider="${provider}"]`);
+  const button = (name: string) =>
+    [...gate.querySelectorAll("button")].find(
+      (each) => each.textContent === `Continue with ${name}`,
+    );
 
-  assert.equal(markIn(button(ACCOUNT_PROVIDER.GOOGLE)), markOf(ACCOUNT_PROVIDER.GOOGLE));
-  assert.equal(markIn(button(ACCOUNT_PROVIDER.GITHUB)), markOf(ACCOUNT_PROVIDER.GITHUB));
+  assert.equal(markIn(button("Google")), markOf(ACCOUNT_PROVIDER.GOOGLE));
+  assert.equal(markIn(button("GitHub")), markOf(ACCOUNT_PROVIDER.GITHUB));
   for (const provider of [ACCOUNT_PROVIDER.GOOGLE, ACCOUNT_PROVIDER.GITHUB]) {
     assert.equal(markIn(accountLine(provider)), markOf(provider));
   }
