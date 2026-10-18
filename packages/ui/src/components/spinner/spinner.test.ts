@@ -4,12 +4,13 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { BusyLabel, Spinner, SpinnerRegion } from "./spinner.js";
+import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion, SpinnerRing } from "./spinner.js";
 
 /**
  * spinner.test.ts -- a wait is said to a reader from a status line that
  * stands before it shows, and a busy control says what it is doing beside
- * the words it keeps.
+ * the words it keeps, and a ring beside words that already say the wait
+ * says nothing more.
  */
 
 declare global {
@@ -57,4 +58,19 @@ test("a busy control keeps its words and says what it is doing; at rest it says 
     }),
   );
   assert.equal(idle.textContent, "Check for updates");
+});
+
+test("a ring drawn at a size beside words that say the wait adds nothing a reader hears", () => {
+  const line = render(
+    createElement(
+      "span",
+      null,
+      createElement(SpinnerRing, { size: SPINNER_SIZE.SMALL }),
+      "Waiting",
+    ),
+  );
+  assert.equal(line.querySelector('[role="status"]'), null);
+  const ring = line.firstElementChild?.firstElementChild ?? assert.fail("the ring");
+  assert.equal(ring.getAttribute("aria-hidden"), "true");
+  assert.equal(line.textContent, "Waiting");
 });

@@ -488,7 +488,7 @@ const invitationRows = (page: HTMLElement) =>
   );
 
 /** A pending invitation's address, its row's label. */
-const addressOf = (row: HTMLElement) => row.querySelector('[id$="label"] .settings-one-line');
+const addressOf = (row: HTMLElement) => row.querySelector('[id$="label"] .luke-one-line');
 
 /** The items of the ⋯ on `row`, or none where it draws no ⋯. */
 function rowActions(row: HTMLElement): string[] {
@@ -811,7 +811,7 @@ test("a member's address and an invited one, where the row cuts them short, are 
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   await invite(page, LONG, WORKSPACE_ROLE.MEMBER);
   const addresses = [
-    memberNamed(page, "Sam").querySelector("p .settings-one-line"),
+    memberNamed(page, "Sam").querySelector("p .luke-one-line"),
     addressOf(invitationRows(page)[0] ?? assert.fail("no pending invitation")),
   ].map((words) => words ?? assert.fail("an address is not drawn"));
 

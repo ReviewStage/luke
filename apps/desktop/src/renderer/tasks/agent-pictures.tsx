@@ -7,6 +7,7 @@ import {
 import type { FileChip } from "@luke/features/attachment-model";
 import type { KeptPicture } from "@luke/features/conversation-picture-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { ATTACHMENT_CHIP_STATE, AttachmentChip, type AttachmentChipState } from "@luke/ui";
 import {
   PICTURE_STATE,
   type PictureAnswer,
@@ -43,8 +44,10 @@ import { AttachmentViewer, type ViewerAction } from "./attachment-viewer";
  * in one row, each picture at its own shape, uncropped, and the row
  * stretched to the column so they share a height; a set of more stands as
  * thumbnails of one height that wrap, six of them, the sixth saying how many
- * more there are, the rest read all the same for the viewer. A call's pictures are the message box's chips under its
- * row, open or closed. A press on any opens the window's file viewer
+ * more there are, the rest read all the same for the viewer. A call's
+ * pictures are the message box's chips (`@luke/ui`'s `AttachmentChip`) under
+ * its row, open or closed: a thumbnail, the spinner while read, or the
+ * glyph where gone. A press on any opens the window's file viewer
  * walking the set, or the call's pictures, from it, with Add to plan
  * beside Download where the transcript is drawn on a plan's page. Everything here is
  * left out of the screen recording, as the tab around it is.
@@ -402,7 +405,14 @@ function sizeWords(bytes: number): string {
 /** What a chip says of a picture that was not kept. */
 const NOT_KEPT = "Not kept";
 
-/** One chip under a call's row: its picture, its place while read, or why it is not there. */
+/** Where a kept picture's chip stands as its read does. */
+const CHIP_STATE = {
+  [PICTURE_STATE.READING]: ATTACHMENT_CHIP_STATE.LOADING,
+  [PICTURE_STATE.READY]: ATTACHMENT_CHIP_STATE.READY,
+  [PICTURE_STATE.MISSING]: ATTACHMENT_CHIP_STATE.FAILED,
+} as const satisfies Record<PictureState["kind"], AttachmentChipState>;
+
+/** One chip under a call's row: its picture, its place while read, or that it is gone. */
 function CallChip({
   door,
   called,
@@ -413,30 +423,14 @@ function CallChip({
   onOpen: () => void;
 }): ReactNode {
   const state = usePicture(door.owner, called.picture.id, door.read);
-  if (state.kind !== PICTURE_STATE.READY) {
-    return (
-      <Tooltip label={called.name}>
-        <li className="attached-file call-picture" data-state={state.kind}>
-          <span className="attached-file-face">
-            <TileFace state={state} words={called.name} />
-          </span>
-        </li>
-      </Tooltip>
-    );
-  }
   return (
-    <Tooltip label={called.name}>
-      <li className="attached-file call-picture">
-        <button
-          type="button"
-          className="attached-file-face"
-          aria-label={`Open ${called.name}`}
-          onClick={onOpen}
-        >
-          <img src={state.url} alt={called.name} />
-        </button>
-      </li>
-    </Tooltip>
+    <AttachmentChip
+      name={called.name}
+      image={state.kind === PICTURE_STATE.READY ? state.url : undefined}
+      icon={<ImageOffIcon aria-hidden="true" />}
+      state={CHIP_STATE[state.kind]}
+      onOpen={onOpen}
+    />
   );
 }
 
@@ -477,19 +471,15 @@ export function CallPictures({
             onOpen={() => open(kept, each.picture.id)}
           />
         ) : (
-          <Tooltip
+          <AttachmentChip
             // Note that a picture's place among its call's is its identity: an answer never reorders.
             key={index}
-            label={`${each.name}: ${NOT_KEPT}, ${sizeWords(each.byteCount)}`}
-          >
-            <li className="attached-file call-picture" data-state={each.omitted}>
-              <span className="attached-file-face">
-                <ImageOffIcon aria-hidden="true" />
-                <span className="attached-file-name">{NOT_KEPT}</span>
-                <span className="attached-file-size">{sizeWords(each.byteCount)}</span>
-              </span>
-            </li>
-          </Tooltip>
+            name={each.name}
+            icon={<ImageOffIcon aria-hidden="true" />}
+            state={ATTACHMENT_CHIP_STATE.FAILED}
+            failure={NOT_KEPT}
+            detail={sizeWords(each.byteCount)}
+          />
         ),
       )}
       {viewer}

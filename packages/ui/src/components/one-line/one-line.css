@@ -1,0 +1,21 @@
+/* one-line.css -- words held to one line: an ellipsis where they are cut
+   short, or a fade over their last few pixels, as a browser's tab ends a
+   long title; only a line measured cut short fades, so a short one ends on
+   its last letter. */
+
+@layer components {
+  .luke-one-line {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .luke-one-line[data-end="ellipsis"] {
+    text-overflow: ellipsis;
+  }
+
+  .luke-one-line[data-end="fade"][data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
+  }
+}

@@ -1,4 +1,4 @@
-import { AttachmentChip, ImageIcon } from "@luke/ui";
+import { ATTACHMENT_CHIP_STATE, AttachmentChip, ImageIcon } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -7,7 +7,8 @@ import { CatalogSection } from "../section";
  * attachment-chips.tsx -- a row of files coming along with a message: a
  * picture's thumbnail, files drawn by name and size, one with nothing to
  * open, a long name cut short, and the way off each, unavailable while busy;
- * then the same chips in a narrow column.
+ * then the same chips in a narrow column, and a call's pictures still read,
+ * gone, and not kept.
  */
 
 /** A synthetic picture drawn in place, so the catalog renders offline. */
@@ -66,6 +67,23 @@ function AttachmentChips(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="attachment-chip-busy" title="While sending">
         <AttachmentRow busy />
+      </CatalogSection>
+      <CatalogSection id="attachment-chip-states" title="Still read, and failed">
+        <ul className="catalog-attachments" aria-label="Pictures the call answered">
+          <AttachmentChip name="dashboard.png" state={ATTACHMENT_CHIP_STATE.LOADING} />
+          <AttachmentChip
+            name="chart.png"
+            icon={<ImageIcon />}
+            state={ATTACHMENT_CHIP_STATE.FAILED}
+          />
+          <AttachmentChip
+            name="full-page.png"
+            icon={<ImageIcon />}
+            state={ATTACHMENT_CHIP_STATE.FAILED}
+            failure="Not kept"
+            detail="6.2 MB"
+          />
+        </ul>
       </CatalogSection>
       <CatalogSection id="attachment-chip-narrow" title="Narrow column, long names">
         <div className="catalog-narrow">

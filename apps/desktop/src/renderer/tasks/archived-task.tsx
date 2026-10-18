@@ -1,6 +1,14 @@
-import { ArchiveIcon, BUTTON_VARIANT, Button, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  ArchiveIcon,
+  BANNER_LOOK,
+  Banner,
+  BUTTON_VARIANT,
+  Button,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { useState } from "react";
-import { BANNER_LOOK, Banner } from "../banner";
 import type { ArchivedByReading } from "./coding-agent-model";
 
 /**
@@ -27,21 +35,19 @@ const ARCHIVED_TASK_COPY = {
 /** The banner across the top of an archived task's document, with Unarchive as its primary button. */
 export function ArchivedBanner({ onUnarchive }: { onUnarchive: () => void }): React.JSX.Element {
   return (
-    <Banner
-      look={BANNER_LOOK.CARD}
-      glyph={
-        <span className="document-banner-glyph" aria-hidden="true">
-          <ArchiveIcon />
-        </span>
-      }
-      actions={
-        <Button variant={BUTTON_VARIANT.PRIMARY} onClick={onUnarchive}>
-          {ARCHIVED_TASK_COPY.UNARCHIVE}
-        </Button>
-      }
-    >
-      <Text variant={TEXT_VARIANT.SECTION}>{ARCHIVED_TASK_COPY.TITLE}</Text>
-    </Banner>
+    <div className="document-banner">
+      <Banner
+        look={BANNER_LOOK.CARD}
+        glyph={<ArchiveIcon />}
+        actions={
+          <Button variant={BUTTON_VARIANT.PRIMARY} onClick={onUnarchive}>
+            {ARCHIVED_TASK_COPY.UNARCHIVE}
+          </Button>
+        }
+      >
+        <Text variant={TEXT_VARIANT.SECTION}>{ARCHIVED_TASK_COPY.TITLE}</Text>
+      </Banner>
+    </div>
   );
 }
 
@@ -69,33 +75,35 @@ export function ArchivedComposerNote({
     run().finally(() => setStopping(false));
   };
   return (
-    <Banner
-      look={BANNER_LOOK.COMPOSER}
-      glyph={<ArchiveIcon />}
-      actions={
-        <>
-          {stop === undefined ? null : (
-            <Button
-              busy={stopping}
-              busyLabel={ARCHIVED_TASK_COPY.STOPPING}
-              onClick={() => pressStop(stop)}
-            >
-              {ARCHIVED_TASK_COPY.STOP}
+    <div className="agent-composer">
+      <Banner
+        look={BANNER_LOOK.ROW}
+        glyph={<ArchiveIcon />}
+        actions={
+          <>
+            {stop === undefined ? null : (
+              <Button
+                busy={stopping}
+                busyLabel={ARCHIVED_TASK_COPY.STOPPING}
+                onClick={() => pressStop(stop)}
+              >
+                {ARCHIVED_TASK_COPY.STOP}
+              </Button>
+            )}
+            <Button variant={BUTTON_VARIANT.PRIMARY} onClick={onUnarchive}>
+              {ARCHIVED_TASK_COPY.UNARCHIVE}
             </Button>
-          )}
-          <Button variant={BUTTON_VARIANT.PRIMARY} onClick={onUnarchive}>
-            {ARCHIVED_TASK_COPY.UNARCHIVE}
-          </Button>
-        </>
-      }
-    >
-      {archivedBy === undefined ? null : (
-        <Text>
-          {archivedBy.words}
-          {archivedBy.reason === undefined ? null : `: ${archivedBy.reason}`}
-        </Text>
-      )}
-      <Text tone={TEXT_TONE.MUTED}>{ARCHIVED_TASK_COPY.COMPOSER}</Text>
-    </Banner>
+          </>
+        }
+      >
+        {archivedBy === undefined ? null : (
+          <Text>
+            {archivedBy.words}
+            {archivedBy.reason === undefined ? null : `: ${archivedBy.reason}`}
+          </Text>
+        )}
+        <Text tone={TEXT_TONE.MUTED}>{ARCHIVED_TASK_COPY.COMPOSER}</Text>
+      </Banner>
+    </div>
   );
 }

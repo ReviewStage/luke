@@ -54,7 +54,13 @@ import {
   type ShortcutChord,
   shortcutAria,
 } from "@luke/settings/shortcuts";
-import { TOOLTIP_LEAVING, TooltipCard, type TooltipLeaving, TooltipPill } from "@luke/ui";
+import {
+  type OneLineHint,
+  TOOLTIP_LEAVING,
+  TooltipCard,
+  type TooltipLeaving,
+  TooltipPill,
+} from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration, Effect } from "effect";
@@ -471,4 +477,15 @@ export function Tooltip({
       )}
     </>
   );
+}
+
+/**
+ * The hint over words held to one line (`@luke/ui`'s `OneLine`): the pill
+ * reading them whole while the line cuts them short, and none while it
+ * draws them whole, since a line drawn whole says nothing twice. The words
+ * ride the pill rather than a `title`, which session replay would carry
+ * unmasked.
+ */
+export function wholeWordsHint(words: string): OneLineHint {
+  return (line, clipped) => <Tooltip label={clipped ? words : undefined}>{line}</Tooltip>;
 }
