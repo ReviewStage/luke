@@ -1038,7 +1038,7 @@ async function storedStart(userId: string, started: WireRecord) {
   return Option.getOrThrow(await database.run(readCodingAgent(userId, started.agent.id)));
 }
 
-test("start_agent continues a teammate's agent that ended, on that agent's own task when none is named, handed its transcript and named after it; the same call run again answers the agent it made, and a second continue starts another, its answer naming the first", async () => {
+test("start_agent continues a teammate's agent that ended, on that agent's own task when none is named, handed its transcript and named after it; the same call run again answers the agent it made, and a second continue starts another, its answer, and that call's run again, naming the first", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   await database.run(fillCodingAgentTitle(teammates.userId, teammates.id, "Invoice export"));
@@ -1079,12 +1079,16 @@ test("start_agent continues a teammate's agent that ended, on that agent's own t
     openings + 1,
     "and opens a session of its own",
   );
-  assert.deepEqual(second.earlierContinuations, [
-    {
-      id: stored.id,
-      mention: `[@Invoice export (continued)](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${stored.id})`,
-    },
-  ]);
+  const first = {
+    id: stored.id,
+    mention: `[@Invoice export (continued)](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing}/agent/${stored.id})`,
+  };
+  assert.deepEqual(second.earlierContinuations, [first]);
+
+  const secondAgain = await call(CODER_TOOL.START_AGENT, { from }, "call-continue-again");
+  assert.ok(isRecord(secondAgain.agent), JSON.stringify(secondAgain));
+  assert.equal(secondAgain.agent.id, secondStored.id, "the call run again answers what it made");
+  assert.deepEqual(secondAgain.earlierContinuations, [first], "naming the first as it did");
 });
 
 test("start_agent forks an agent at one of its messages that read_agent names, while that agent still works, and leaves the agent going on", async () => {

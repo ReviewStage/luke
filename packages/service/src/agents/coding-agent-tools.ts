@@ -1111,10 +1111,21 @@ const startedBefore = (call: CodingAgentCall, newTask: boolean) =>
       taskId === null || name === undefined
         ? undefined
         : yield* newTaskReading(userId, workspace.value, taskId, name);
+    // A continue run again names the agents that continued its source before it, as its first answer did.
+    const from = agent.startedFrom;
+    const continuedBy =
+      from === null || from.messageId !== undefined || agent.taskId === null
+        ? []
+        : yield* earlierContinuationsOf(
+            { userId, workspaceId: workspace.value, taskId: agent.taskId },
+            from.agentId,
+            agent.id,
+          );
     return Option.some<WireRecord>({
       status: ACTION_RESULT_STATUS.ACCEPTED,
       agent: reading,
       ...(task === undefined ? undefined : { newTask: { ...task } }),
+      ...earlierContinuations(continuedBy, agent.id),
     });
   });
 
@@ -1293,6 +1304,35 @@ interface SourceLanding {
   readonly continuedBy: readonly EarlierContinuation[];
 }
 
+/**
+ * The agents that continued a source, oldest first, each by its id and its
+ * mention, up to the one named `upTo`, which is left out with every agent
+ * after it; all of them where none is named. A fork is no continuation.
+ */
+const earlierContinuationsOf = (
+  at: { readonly userId: string; readonly workspaceId: string; readonly taskId: string },
+  sourceId: string,
+  upTo?: string,
+) =>
+  Effect.gen(function* () {
+    const continuations = (yield* continuationsOf(at.userId, [sourceId])).get(sourceId) ?? [];
+    const whole = continuations.filter((each) => each.messageId === undefined);
+    const cut = whole.findIndex((each) => each.agentId === upTo);
+    const earlier = cut < 0 ? whole : whole.slice(0, cut);
+    if (earlier.length === 0) return [];
+    const step = yield* workspaceStepOf(at.userId, at.workspaceId);
+    return earlier.map(
+      (each): EarlierContinuation => ({
+        id: each.agentId,
+        mention: writtenMention(
+          { kind: MENTION_KIND.AGENT, taskId: at.taskId, agentId: each.agentId },
+          each.title ?? CONTINUATION_NAME,
+          step,
+        ),
+      }),
+    );
+  });
+
 /** The task a start from another agent lands on, the source's own, once the source is read and found fit to start from, with the agents that already continued it; or why it is not. */
 const sourceLanding = (
   caller: AgentCaller,
@@ -1323,23 +1363,9 @@ const sourceLanding = (
     if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
       return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_RUNNING);
     }
-    const userId = callerUserId(caller);
-    const continuations = (yield* continuationsOf(userId, [source.id])).get(source.id) ?? [];
-    const earlier = continuations.filter((each) => each.messageId === undefined);
     const taskId = source.taskId;
-    if (earlier.length === 0) return Result.succeed({ taskId, continuedBy: [] });
-    const step = yield* workspaceStepOf(userId, workspaceId);
-    const continuedBy = earlier.map(
-      (each): EarlierContinuation => ({
-        id: each.agentId,
-        mention: writtenMention(
-          { kind: MENTION_KIND.AGENT, taskId, agentId: each.agentId },
-          each.title ?? CONTINUATION_NAME,
-          step,
-        ),
-      }),
-    );
-    return Result.succeed({ taskId, continuedBy });
+    const at = { userId: callerUserId(caller), workspaceId, taskId };
+    return Result.succeed({ taskId, continuedBy: yield* earlierContinuationsOf(at, source.id) });
   });
 
 /** What a continue's answer adds where other agents already continued its source: those agents, oldest first, the one it started left out; nothing otherwise. */
