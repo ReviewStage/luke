@@ -201,6 +201,19 @@ function taskZoneOf(agent: FactoryAgent, context: AgentContext): string | null {
   return mostLinesFirst(lines)[0]?.[0] ?? null;
 }
 
+/**
+ * Whether a world draws an agent while some of the pipeline bar's layers are
+ * off: one at work under Building, and one that failed under Building or
+ * Defects too, since a failed agent wears the defect signal. Every world asks
+ * this one question, so a layer drawn alone shows only what it names.
+ */
+export function agentDrawnUnder(
+  agent: Pick<AgentView, "state">,
+  layers: { readonly building: boolean; readonly defects: boolean },
+): boolean {
+  return layers.building || (agent.state === AGENT_STATE.FAILED && layers.defects);
+}
+
 /** Reads one agent against the rest of the snapshot. */
 export function agentViewOf(agent: FactoryAgent, context: AgentContext): AgentView {
   const pullRequest = agent.pullRequest;

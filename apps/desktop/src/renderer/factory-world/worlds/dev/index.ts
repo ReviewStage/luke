@@ -1,5 +1,11 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
-import { AGENT_STATE, type AgentState, ZONE_LAYER, type ZoneLayer } from "@luke/ui/factory-world";
+import {
+  AGENT_STATE,
+  type AgentState,
+  agentDrawnUnder,
+  ZONE_LAYER,
+  type ZoneLayer,
+} from "@luke/ui/factory-world";
 import {
   AmbientLight,
   BoxGeometry,
@@ -150,7 +156,7 @@ export const world: WorldModule = {
         const drawn = view.agents.flatMap((agent) => {
           const zone =
             agent.primaryZone === null ? undefined : view.zoneByPath.get(agent.primaryZone);
-          const shown = layers.building || agent.state === AGENT_STATE.FAILED;
+          const shown = agentDrawnUnder(agent, layers);
           return zone === undefined || !shown ? [] : [{ agent, zone }];
         });
         agentTargets = drawn.map(({ agent }) => ({ kind: PICK_KIND.AGENT, id: agent.id }));

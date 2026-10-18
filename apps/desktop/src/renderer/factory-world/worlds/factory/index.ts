@@ -1,7 +1,7 @@
 import type { FactoryDefect, FactoryPlanned } from "@luke/features/factory-world-wire";
 import {
-  AGENT_STATE,
   type AgentView,
+  agentDrawnUnder,
   type FactoryWorldView,
   type ZoneEdge,
   type ZoneView,
@@ -144,9 +144,9 @@ function isChosen(state: WorldState, kind: PickKind, id: string): boolean {
   );
 }
 
-/** Whether an agent is drawn under `state`'s layers: those at work with building on, and a failed one always, as the test pattern draws them. */
+/** Whether an agent is drawn under `state`'s layers, as every world asks it (`agentDrawnUnder`). */
 function drawsAgent(state: WorldState, agent: AgentView): boolean {
-  return state.layers.building || agent.state === AGENT_STATE.FAILED;
+  return agentDrawnUnder(agent, state.layers);
 }
 
 /** Everything every apron holds under `state`, whatever its layers, so a switch never moves a road. */
