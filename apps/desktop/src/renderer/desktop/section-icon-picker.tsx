@@ -433,7 +433,7 @@ export function SectionIconPicker({
     setColor(next);
     if (icon?.kind === TASK_SECTION_ICON_KIND.GLYPH) onIcon(glyphIcon(icon.glyph, next));
   };
-  // Enter chooses the first thing found, as a press on it would.
+  // Enter, shifted or not, chooses the first thing found, as a press on it would.
   const chooseFirst = () => grid.current?.querySelector<HTMLButtonElement>("button")?.click();
   // Note that the search's own keys stop at Enter and Escape, so the arrow down into the grid is heard around it.
   const toGrid = (event: React.KeyboardEvent<HTMLElement>) => {
@@ -472,6 +472,7 @@ export function SectionIconPicker({
           onChange={setQuery}
           onClear={() => setQuery("")}
           onEnter={chooseFirst}
+          onShiftEnter={chooseFirst}
         />
       </search>
       {tab === ICON_TAB.ICONS ? <ColorChoices color={color} onColor={recolor} /> : null}
