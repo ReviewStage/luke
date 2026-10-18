@@ -1,0 +1,67 @@
+/* split-button.css -- a SplitButton: its two halves joined into one control,
+   the edge its look draws around both and between them, and its main
+   part's fold.
+
+   An outlined or quiet look draws a hairline around the halves and between
+   them, the quiet one fainter, the way a toolbar's split button is drawn; a
+   filled look parts them with a rule in its own ink. Under an element whose
+   `--luke-fold` is `folded`, the main part is a square around its glyph,
+   its words drawn nowhere though a reader still has them. */
+
+@layer components {
+  .luke-split-button {
+    --luke-split-edge: var(--luke-color-border);
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .luke-split-button:is([data-variant="outline"], [data-variant="danger-outline"]) {
+    --luke-split-edge: var(--luke-color-border-strong);
+  }
+
+  .luke-split-button:is([data-variant="primary"], [data-variant="danger"], [data-variant="ink"]) {
+    --luke-split-edge: transparent;
+  }
+
+  .luke-split-button > .luke-button[data-variant] {
+    --luke-button-edge: var(--luke-split-edge);
+  }
+
+  .luke-split-button > .luke-button:first-child {
+    border-inline-end-width: 0;
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+  }
+
+  .luke-split-button > .luke-button:last-child {
+    border-start-start-radius: 0;
+    border-end-start-radius: 0;
+  }
+
+  .luke-split-button:is([data-variant="primary"], [data-variant="danger"], [data-variant="ink"])
+    > .luke-button:last-child {
+    border-inline-start-color: color-mix(in srgb, var(--luke-button-ink) 30%, transparent);
+  }
+
+  @container style(--luke-fold: folded) {
+    .luke-split-button > .luke-button:first-child {
+      width: var(--luke-control-height);
+      padding: 0;
+    }
+
+    .luke-split-button > .luke-button:first-child .luke-button-words {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+}

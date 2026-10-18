@@ -181,7 +181,7 @@ function ContinuedIn({
 export function ContinuedTrail(doors: ContinuedDoors): React.JSX.Element {
   return (
     <p className="agent-continued" data-continued-trail="">
-      <ArrowRightIcon className="size-3.5 shrink-0" aria-hidden="true" />
+      <ArrowRightIcon aria-hidden="true" />
       <ContinuedIn {...doors} />
     </p>
   );
