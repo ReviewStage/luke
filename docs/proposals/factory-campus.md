@@ -28,31 +28,26 @@ click.
 
 ## The data it draws, and nothing more
 
-- **The plan list's `TaskSummary`:** name, repository, `createdAt`, and the
-  agents' summary:
-  - `total` and `working` counts;
-  - at most three named agents, each with model, effort, status and `at`;
-  - `pullRequestTotal`;
-  - at most three named pull requests, each with number, title, state,
-    one-word checks, additions and deletions.
+Main's Factory now reads a world snapshot for the workspace
+(`factory-world-wire.ts`, read through `@luke/ui/factory-world`): every agent
+with its status and its pull request, up to 100; the pull requests merged in
+a window, with `mergedAt`, up to 200; Linear issues planned, up to 50; and the
+repository's zones. The campus draws from that and from what the window
+already held:
+
+- **The plan list:** each task's name, repository and `createdAt`.
+- **The world snapshot:**
+  - every agent with its status and when it last moved;
+  - its pull request, with state, one-word checks, additions and deletions;
+  - the merged pull requests since `shippedSince`, with `mergedAt`;
+  - the planned Linear issues, with key, title, workflow state and priority.
 - **The Inbox's open items:** agent, title, `postedAt` and options.
 - **`callTaskId`.**
-- **Opening a task** also reads the task's whole agent list (the per-plan
-  agent list, `GET` a plan's agents) and each agent's published pull request.
 
-### What "summary" means
-
-The Factory, like the sidebar, reads the plan list. Each row of it is a
-`TaskSummary`, and its `agents` field is a *bounded* summary
-(`TASK_AGENTS_BOUNDS` in `task-wire.ts`, cut in the service's
-`task-agents.ts`): counts of every agent and of those working, but only three
-agents in full (working first, then newest) and only three pull requests
-(newest first). Anything past three stands only as a count. The overview draws
-from that row, so a task with five agents shows all five in its window light
-and counts but only three by name, and a fourth pull request shows as a dashed
-container at the task's door. Opening the task reads the whole lists, so the
-interior and the pane show everyone. In the page, `summarize()` derives the row
-from the whole lists exactly so.
+So the plan list's bounded summary (three agents and three pull requests a
+task, `TASK_AGENTS_BOUNDS`) no longer limits the scene: every agent's pull
+request stands in the yard, and the dashed "not named" containers are gone.
+The snapshot's own bounds (`FACTORY_WORLD_BOUNDS`) are what keep it finite.
 
 The sample is the shared comparison work, with the same seven tasks. The
 illustrative details the gate needs are:
@@ -61,34 +56,40 @@ illustrative details the gate needs are:
 - **Invite your teammates'** pull request has checks running.
 - **Fix reconnect handling's** pull request is ready.
 - **Keyboard shortcuts** has no pull request yet.
-- **Faster workspace switching** has five agents (three named) and four pull
-  requests (three named).
+- **Faster workspace switching** has five agents and four pull requests, one
+  merged eight days ago, outside the shipped window.
+- **Polish empty states** has a draft from three days ago, so it is stuck.
+- **Three Linear issues** are planned: LUKE-214 Dark mode toggle, LUKE-221
+  Faster cold start and LUKE-219 Offline drafts.
 
 ## What each thing means
 
 | On the campus | Read from | Kind |
 | --- | --- | --- |
 | A building | one listed task | data |
-| Which plot, and so which silhouette | the task's place in `createdAt` order on a fixed master plan | derived each draw, never stored. The silhouette is art direction and means nothing. |
-| Lit windows and smoke | blue: an agent running; orange: an open Inbox item; red: a failed agent; green: this Mac's call; a few soft lights: nothing happening; smoke: an agent running | data |
+| Which plot, and so which silhouette | the task's place in `createdAt` order | derived each draw, never stored. The silhouette is art direction and means nothing. |
+| Lit windows and smoke | amber: an agent building; dim amber: stuck; red: a failed agent; orange: an open Inbox item; green: this Mac's call; a few soft lights: nothing happening; smoke: an agent running | data |
 | A beacon | an open Inbox item | data |
+| A pause sign | stuck: nobody at work, and a draft or an open pull request nobody moved for a day | derived |
 | Rings | `callTaskId` | data |
-| A crane and scaffolding | an agent running and `pullRequestTotal` = 0 | derived |
-| A purple flag on a roof | every named pull request merged | derived |
-| A container | one named pull request; length is additions + deletions (linear, one tile per 150), the band its additions' and deletions' shares | data |
-| A dashed container at a door | `pullRequestTotal` minus the named ones: unknown, not zero, counted in no total | data |
+| A crane and scaffolding | an agent running and no pull request yet | derived |
+| A green flag on a roof | every pull request of the task merged | derived |
+| A blueprint on a plot | a planned Linear issue with no task yet | data |
+| A container | one open or merged pull request; length is additions + deletions (linear, one tile per 150), the band its additions' and deletions' shares | data |
 | The merge gate's yard | open pull requests in three lanes by `checks` (failing, running, ready nearest the gate), each lane lit at its head, placed by PR number | data. It is not GitHub's merge queue and implies no order. |
-| The gatehouse and its lowered barrier | merging happens on GitHub; there is no merge action | relationship |
-| The shipped lot past the gate | merged pull requests the summaries name | data, labelled as a sample, not all-time |
+| The gatehouse and its lowered barrier | merging happens on GitHub; there is no merge action here | relationship |
+| The shipped lot past the gate | pull requests merged since `shippedSince`, newest first | data, labelled with its window |
+| The pipeline bar | counts of planned issues, agents building, stuck tasks, merged pull requests in the window, and failed agents | data |
+| A cyan outline | what is selected or pointed at | view state |
 | A dashed route from a task to its containers, while either is pointed at or open | which task the pull request belongs to | relationship |
-| Inside a building, with the roof off | a desk per agent in `agents.total`, with no cap; dashed figures for agents not named | data |
+| Inside a building, with the roof off | an assembly line, a station per agent in the task's whole list | data |
 | Trees, lamps, roads, plaza | nothing | scenery |
 
 Exact numbers appear only on hover or selection:
 - `+a −d`, lines, checks and task in a crate's card;
 - the split bar and numbers in the inspector;
 - the gate's lanes;
-- the shipped total, `+517 −243` for four PRs.
+- the shipped total and its window.
 
 The toolbar names its two kinds of waiting separately ("1 question · 1 ready
 to merge"), and the Inbox badge counts Inbox items only.
@@ -116,49 +117,88 @@ already on screen is left off and answers a hover instead, and in a town past
 twelve tasks a quiet building gets no name at all. Names are refitted when the
 zoom settles.
 
+## What it takes from main's Factory
+
+Main's Factory tab now draws the repository as a choice of Three.js worlds
+(`apps/desktop/src/renderer/factory-world/`): its zones as buildings, its
+agents as workers, shipped work as lamps and trucks, planned issues as
+blueprints and defects as wreckage. The campus stays SVG, with tasks as its
+buildings, and takes:
+
+- **The signal palette** (`signal-palette.ts`), unchanged and the same in
+  either appearance: planned `#5b6cf0`, building `#b87100`, shipped
+  `#15924a`, defect `#dc3e42`, selection `#0891b2`. Lit windows are amber
+  while an agent builds and red when one failed; flags and the shipped lot
+  are green; what is selected is outlined cyan. A question keeps the app's
+  attention orange and its beacon, which no world signal covers.
+- **The pipeline bar** (`world-chrome.tsx`): Planned, Building, Stuck,
+  Shipped and Defects, each a count and a switch that hides its layer.
+- **The agent states** (`agent-reading.ts`): working, waiting, stuck, failed
+  and idle. Stuck is new here: nobody at work, and a draft, or an open pull
+  request nobody moved for a day. It shows as a pause sign on the roof and
+  dim amber windows.
+- **Shipped as a window.** The lot holds what merged since `shippedSince`
+  (seven days here), newest first, and says so.
+- **Planned issues as blueprints**, drawn in dashed planned-blue lines on the
+  plots after the empty one. When a task starts on one, its blueprint goes and
+  the task takes the next plot (the event script does this with LUKE-214).
+- **Its performance rules:** draw only when something changed, rest while
+  the page is hidden, and hold a still frame that says everything.
+
 ## Keeping it fast
 
-What grows is the number of tasks in the plan list, not the size of the
-codebase: the Factory draws tasks, their agents and their pull requests, and
-reads nothing of the code. Archived tasks are already left out of that list.
-The plan list is the one the sidebar already holds, so the overview fetches
-nothing; an opened task fetches its own agent list and pull requests, once.
+What grows is the number of tasks and agents, not the size of the codebase:
+the campus reads nothing of the code. The snapshot is bounded (100 agents, 200
+shipped, 50 planned), the plan list leaves archived tasks out, and the
+overview fetches nothing beyond what the window and the snapshot hold.
 
 Measured in headless Chromium with software rendering (a Mac with a GPU does
-better), the cost of a full redraw and the worst frame while the scene runs:
+better). The worst case: 300 tasks with every agent running, 505 at once.
 
-| Tasks | Before: elements / redraw / worst frame | Now: elements / redraw / worst frame |
-| --- | --- | --- |
-| 7 | 975 / 15 ms / 83 ms | 757 / 9 ms / 17 ms |
-| 30 | 3,034 / 38 ms / 267 ms | 2,266 / 29 ms / 50 ms |
-| 100 | 9,288 / 116 ms / 783 ms | 4,218 / 35 ms / 17 ms |
-| 300 | 28,708 / 305 ms / 2,067 ms | 12,795 / 109 ms / 50 ms |
+| Tasks | Agents running | Elements | Full redraw | Frames a second | Worst frame |
+| --- | --- | --- | --- | --- | --- |
+| 7 | 2 | 828 | 10 ms | 60 | 17 ms |
+| 30 | 43 | 2,414 | 26 ms | 60 | 17 ms |
+| 300, fitted | 505 | 12,072 | 105 ms | 54 | 17 ms |
+| 300, zoomed in | 505 | 8,781 | 90 ms | 53 | 17 ms |
 
-What the mockup now does:
+Before this round's fixes, 300 tasks zoomed in with everything running ran at
+7 frames a second. Probing one cost at a time found where it went:
 
-- **Interiors only when opened.** Every building used to carry its hidden
-  interior. Now only the open one does; it is drawn the moment the roof lifts.
-- **Level of detail.** When a tile is under 13 pixels across, a face's windows
-  become one lit band, nothing glows (a blur per window was the dearest thing
-  on the page), shadows are dropped and cranes stop turning.
-- **Culling.** In a town past twenty tasks, zoomed in, only what is on screen
-  and a margin round it is drawn. Panning or zooming past the margin redraws
-  when the camera settles.
-- **One layout per draw.** The plot order and container positions are worked
-  out once per draw and shared, rather than once per tree or per building.
+- **A blur filter on every lit window.** With anything moving, the whole
+  scene repainted every filter. Past twenty tasks a window now glows with a
+  soft stroke instead, and nothing carries a filter.
+- **Looping beacons and smoke.** The SVG is one paint layer, so one loop
+  repaints every building. A big town draws a still frame, as main's worlds do
+  under `still`: windows and signs say everything, nothing loops.
+- **Cranes rewritten every frame.** Rewriting one restyles the scene; a small
+  town turns at most four, a big town none.
+- **The sidebar's working marks.** Three hundred animated marks cost a third
+  of the frame on their own. Rows off the sidebar's screen now aren't
+  rendered (`content-visibility: auto`). The app's own sidebar would gain from
+  the same.
+
+And from before:
+
+- **Interiors only when opened.** Only the open building carries its
+  interior, drawn the moment the roof lifts.
+- **Level of detail.** When a tile is under 13 pixels across, windows become
+  one band a face and shadows go.
+- **Culling.** Zoomed in on a town past twenty tasks, only what is on screen
+  and a margin round it is drawn.
+- **The loop rests.** The animation loop runs only while a truck, forklift,
+  sparks or a small town's crane moves, and stops while the page is hidden.
 
 For a real view, beyond this:
 
 - **Redraw what changed.** Each event here redraws the whole scene (about
-  110 ms at 300 tasks). The app would redraw only the buildings an event
-  touched, keyed by task id, since the plan list already arrives as a diff.
+  100 ms at 300 tasks, in software). The app would redraw only the buildings
+  an event touched, keyed by task id.
 - **A back lot.** Tasks with nothing open and nothing recent could fold into
-  a compact back lot, so the town's size follows active work rather than
-  history.
-- **Canvas or WebGL past a few hundred.** SVG keeps every building a real
-  element for hover cards and the keyboard. Much past 300 tasks, drawing the
-  town on a canvas and keeping invisible hit targets (or a list) for access
-  would be the next step.
+  a compact back lot, so the town's size follows active work.
+- **Canvas past the bounds.** Well past 300 tasks, a canvas with invisible
+  hit targets for the keyboard would be the next step; main's worlds reach for
+  WebGL there.
 
 ## Inside a building
 
@@ -244,13 +284,13 @@ Further ideas, not built:
 
 ## Limitations
 
-- **Only the summary's PRs are placed.** The overview reads the bounded row,
-  so the lanes and the lot cover at most three pull requests a task. The rest
-  show as dashed containers at their task's door until the task is opened.
-- **Some PR states have no spot.** Draft, closed and no-checks pull requests
-  would show only in the inspector. The sample has none.
-- **A very large town gets long.** Thirty tasks already make the fitted view
-  small; past that, the camera would need to start zoomed in on the newest
-  rows, or quiet old tasks fold into a back lot.
+- **Buildings are tasks, not zones.** Main's worlds draw the repository's
+  packages and directories as buildings and place agents in the zones they
+  touch, which also gives them a blast radius. The campus draws tasks, so it
+  has no blast radius and no defect wreckage (main's monitor slot is empty
+  for now in any case).
+- **Some PR states have no spot.** Draft and closed pull requests show only
+  in the pane; a draft's task shows as stuck.
+- **Adding a column reflows the newer plots.** A real view would add columns
+  rarely, or only while the Factory isn't open.
 - **Labels can crowd in turned views.** They're placed for the default view.
-- **Shared space.** The studio and the block's crane stand close to the gate.

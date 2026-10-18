@@ -49,6 +49,14 @@
 }
 
 /* Dark, the default; data-theme on <html> takes a choice from the page's own switch. */
+:root {
+  /* The Factory's signal palette, as main's worlds draw it (signal-palette.ts): one colour a signal in every world and appearance. */
+  --signal-planned: #5b6cf0;
+  --signal-building: #b87100;
+  --signal-shipped: #15924a;
+  --signal-defect: #dc3e42;
+  --signal-selection: #0891b2;
+}
 :root, :root[data-theme="dark"] {
   color-scheme: dark;
   --state-working: #5cd5ff;
@@ -309,17 +317,23 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
 .bldg[data-open] .cut { opacity: 1; }
 .plot-edge, .crate-edge, .yard-edge { fill: none; stroke: var(--text-primary); stroke-width: 1.4; opacity: 0; transition: opacity var(--duration-hover) ease; vector-effect: non-scaling-stroke; }
 .plot[data-hover] .plot-edge, .crate:hover .crate-edge, .yard-hit:hover .yard-edge { opacity: 0.4; }
-.plot[data-open] .plot-edge, .crate[data-hot] .crate-edge, .yard-hit[data-open] .yard-edge { opacity: 0.7; }
+.plot[data-open] .plot-edge, .crate[data-hot] .crate-edge, .yard-hit[data-open] .yard-edge { opacity: 1; stroke: var(--signal-selection); stroke-width: 2; }
 .plot[data-focus] .plot-edge, .crate:focus-visible .crate-edge, .yard-hit:focus-visible .yard-edge { opacity: 1; stroke: var(--focus-ring); stroke-width: 2; }
-.new-plot { cursor: pointer; }
+.new-plot, .blueprint { cursor: pointer; }
+.blueprint:focus-visible { outline: none; } /* no ring: the blueprint's own lines take the ring's weight */
+.blueprint:hover, .blueprint:focus-visible { filter: brightness(1.35); }
 .new-plot .plot-dash { fill: none; stroke: var(--text-tertiary); stroke-width: 1.2; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
 .new-plot:hover .plot-dash { stroke: var(--text-primary); }
 .new-plot:focus-visible { outline: none; } /* no ring: the dashed edge takes the ring's colour and weight */
 .new-plot:focus-visible .plot-dash { stroke: var(--focus-ring); stroke-width: 2; }
 .route { fill: none; stroke-width: 1.6; stroke-dasharray: 4 3; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.scene[data-hide-planned] .L-planned, .scene[data-hide-building] .L-building, .scene[data-hide-stuck] .L-stuck, .scene[data-hide-shipped] .L-shipped, .scene[data-hide-defects] .L-defects { display: none; }
+/* The scene is one paint layer, so one looping beacon repaints every building. A big town draws a still frame that says everything a moving one would, as main's worlds do under `still`. */
+.scene[data-lod="far"] .loop, .scene[data-big] .loop { animation: none; }
+.scene[data-resting] .loop, .scene[data-resting] .working-mark-dot { animation-play-state: paused; }
 .win-lit { filter: url(#glow); }
 /* Far out, nothing glows: a blur per window is the dearest thing on the page. */
-.scene[data-lod="far"] [filter], .scene[data-lod="far"] .win-lit { filter: none; }
+.scene[data-lod="far"] [filter], .scene[data-lod="far"] .win-lit, .scene[data-big] [filter] { filter: none; }
 :root[data-theme="light"] .win-lit { filter: none; }
 
 /* Loops, only while something is happening. Each answers --loop-motion. */
@@ -358,6 +372,23 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
 .agent-tag rect { fill: var(--label-ground); stroke: var(--hairline-strong); }
 
 /* What floats over the stage: the map's controls and its key, a crate's card, a notice. */
+.pipeline {
+  position: absolute; left: var(--space-16); top: var(--space-16); z-index: 1;
+  display: flex; margin: 0; min-width: 0; padding: var(--space-4);
+  border: 1px solid var(--hairline-strong); border-radius: var(--menu-radius);
+  background: var(--surface-popover); box-shadow: 0 12px 32px var(--shadow);
+}
+.pipeline-buttons { display: flex; gap: var(--space-2); }
+.pipeline button {
+  display: inline-flex; align-items: center; gap: var(--space-6); height: 26px; padding: 0 var(--space-8);
+  border-radius: var(--menu-row-radius); color: var(--text-secondary); font-size: 12px; font-weight: 500;
+  transition: background-color var(--duration-hover) ease, color var(--duration-hover) ease, opacity var(--duration-hover) ease;
+}
+.pipeline button:hover { background: var(--raised-strong); color: var(--text-primary); }
+.pipeline button svg { width: 13px; height: 13px; color: var(--tone); }
+.pipeline button b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pipeline button[aria-pressed="false"] { opacity: 0.45; }
+.pipeline button[aria-pressed="false"] b { color: var(--text-secondary); }
 .map-controls {
   position: absolute; right: var(--space-16); top: var(--space-16);
   display: flex; flex-direction: column; gap: var(--space-2);
@@ -515,6 +546,8 @@ svg.working-mark { display: block; width: 12px; height: 12px; flex: none; fill: 
 .panel-total { display: flex; align-items: baseline; gap: var(--space-8); padding: 0 var(--row-inset); font-size: 13px; }
 .panel-total b { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 /* The sidebar's task rows (desktop.css .sidebar-plan). */
+/* A row off the sidebar's screen isn't rendered, so three hundred working marks cost what a screenful does. */
+.task-list > li { content-visibility: auto; contain-intrinsic-size: auto 30px; }
 .task-list { display: flex; flex-direction: column; gap: var(--list-gap); margin: 0; padding: 0; list-style: none; }
 .sidebar-plan { display: flex; width: 100%; height: 30px; align-items: center; padding: 0 var(--row-inset); border-radius: 9px; background: none; text-align: left; }
 .sidebar-plan:hover { background: var(--raised); }
@@ -615,6 +648,7 @@ svg.working-mark { display: block; width: 12px; height: 12px; flex: none; fill: 
             <g id="layer-tags"></g>
           </g>
         </svg>
+        <fieldset class="pipeline"><legend class="sr-only">Show on the campus</legend><span id="pipeline" class="pipeline-buttons"></span></fieldset>
         <section class="key" id="key" aria-label="Key" data-hidden></section>
         <div class="map-controls" role="toolbar" aria-label="Campus view">
           <button type="button" class="icon-button" id="zoom-in" aria-label="Zoom in" data-g="plus"></button>
@@ -670,6 +704,10 @@ const GLYPH = {
   check: '<path d="M20 6 9 17l-5-5"/>',
   mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>',
   question: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  "list-todo": '<rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
+  blocks: '<rect width="7" height="7" x="14" y="3" rx="1"/><path d="M10 21V8a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H3"/>',
+  bug: '<path d="m8 2 1.88 1.88"/><path d="M14.12 3.88 16 2"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"/><path d="M12 20v-9"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="M6 13H2"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M22 13h-4"/><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"/>',
+  pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
   "circle-alert": '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>',
   "pr-draft": '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M18 6V5"/><path d="M18 11v-1"/><line x1="6" x2="6" y1="9" y2="21"/>',
   "pr-closed": '<circle cx="6" cy="6" r="3"/><path d="M6 9v12"/><path d="m21 3-6 6"/><path d="m21 9-6-6"/><path d="M18 11.5V15"/><circle cx="18" cy="18" r="3"/>',
@@ -734,8 +772,8 @@ const SAMPLE_TASKS = [
   },
   {
     id: "empty", name: "Polish empty states", repository: "ReviewStage/luke", createdAt: NOW - 7 * DAY,
-    agentList: [A("em-1", "Polish empty states", "Opus", "high", AGENT.COMPLETED, NOW - 26 * HOUR)],
-    prList: [PRL(3068, "Polish empty states", PR.MERGED, CHECKS.PASSING, 156, 47)],
+    agentList: [A("em-1", "Polish empty states", "Opus", "high", AGENT.COMPLETED, NOW - 26 * HOUR), A("em-2", "Empty Inbox art", "Sonnet", "medium", AGENT.COMPLETED, NOW - 3 * DAY)],
+    prList: [PRL(3068, "Polish empty states", PR.MERGED, CHECKS.PASSING, 156, 47), PRL(3075, "Empty Inbox illustration", PR.DRAFT, CHECKS.PASSING, 64, 10)],
   },
   {
     id: "reconnect", name: "Fix reconnect handling", repository: "ReviewStage/luke", createdAt: NOW - 3 * DAY,
@@ -763,6 +801,19 @@ const SAMPLE_TASKS = [
     prList: [],
   },
 ];
+/* When each merged pull request merged, as the world snapshot carries it (`mergedAt`). */
+const MERGED_AT = { 3071: NOW - 2 * HOUR, 3064: NOW - 2 * DAY, 3059: NOW - 4 * DAY, 3052: NOW - 8 * DAY, 3068: NOW - 26 * HOUR };
+for (const t of SAMPLE_TASKS) for (const pr of t.prList) if (MERGED_AT[pr.number]) pr.mergedAt = MERGED_AT[pr.number];
+/* Linear issues planned, as the world snapshot carries them (`planned`): not yet a task. */
+const SAMPLE_PLANNED = [
+  { identifier: "LUKE-214", title: "Dark mode toggle", state: "Todo", priority: 2 },
+  { identifier: "LUKE-221", title: "Faster cold start", state: "Todo", priority: 1 },
+  { identifier: "LUKE-219", title: "Offline drafts", state: "Backlog", priority: 3 },
+];
+const PLANNED = JSON.parse(JSON.stringify(SAMPLE_PLANNED));
+/* The window the shipped lot looks back over (`shippedSince`): the last seven days. */
+const SHIPPED_SINCE = NOW - 7 * DAY;
+const sinceWords = () => new Date(SHIPPED_SINCE).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 /* More illustrative tasks, for seeing the town grow: made up from a seed, so the same each time. */
 const MORE_NAMES = ["Billing export", "Webhook signing", "Audit log", "Faster cold start", "Team avatars", "Retry failed webhooks", "Command palette search", "Onboarding checklist", "CSV import", "Rate limit banner", "Plan templates", "Offline mode", "Mention autocomplete", "Usage dashboard", "Slack digest", "Pin repositories", "Keyboard map", "Session timeouts", "Archive old plans", "Reviewer suggestions", "Diff word wrap", "Bulk archive", "Status page link", "Theme sync"];
 function moreTasks(count) {
@@ -787,7 +838,7 @@ function moreTasks(count) {
       const r = rnd();
       const merged = old || r < 0.3;
       const checks = merged ? CHECKS.PASSING : [CHECKS.PASSING, CHECKS.PENDING, CHECKS.FAILING][Math.floor(rnd() * 3)];
-      prs.push(PRL(2900 + i * 4 + j, `${name}${j ? ` (${j + 1})` : ""}`, merged ? PR.MERGED : PR.OPEN, checks, 20 + Math.floor(rnd() * 360), 4 + Math.floor(rnd() * 120)));
+      prs.push(Object.assign(PRL(2900 + i * 4 + j, `${name}${j ? ` (${j + 1})` : ""}`, merged ? PR.MERGED : PR.OPEN, checks, 20 + Math.floor(rnd() * 360), 4 + Math.floor(rnd() * 120)), merged ? { mergedAt: Math.min(NOW - HOUR, createdAt + (j + 2) * DAY) } : {}));
     }
     list.push({ id, name, repository: "ReviewStage/luke", createdAt, agentList: agents, prList: prs });
   }
@@ -822,30 +873,34 @@ const callTaskId = "factory-view";
 let byId = Object.fromEntries(TASKS.map((t) => [t.id, t]));
 const reindex = () => { byId = Object.fromEntries(TASKS.map((t) => [t.id, t])); };
 const inboxFor = (t) => INBOX.filter((i) => i.taskId === t.id);
-const allPRs = () => TASKS.flatMap((t) => t.pullRequests.named.map((p) => ({ ...p, taskId: t.id })));
+const allPRs = () => TASKS.flatMap((t) => t.prList.map((p) => ({ ...p, taskId: t.id })));
 const prByNumber = (n) => TASKS.flatMap((t) => t.prList).find((p) => p.number === n);
 const linesOf = (p) => p.additions + p.deletions;
 const awaiting = () => allPRs().filter((p) => p.state === PR.OPEN);
-const merged = () => allPRs().filter((p) => p.state === PR.MERGED);
+/* Shipped: merged within the window, as the world snapshot reads it, the newest merged first. */
+const merged = () => allPRs().filter((p) => p.state === PR.MERGED && (p.mergedAt ?? NOW) >= SHIPPED_SINCE).sort((a, b) => (b.mergedAt ?? NOW) - (a.mergedAt ?? NOW));
 const readyPRs = () => awaiting().filter((p) => p.checks === CHECKS.PASSING);
-const unnamedPRs = (t) => Math.max(0, t.pullRequests.total - t.pullRequests.named.length);
 const ago = (at) => { const d = NOW - at; if (d < MIN) return "now"; return d < HOUR ? `${Math.round(d / MIN)}m` : d < DAY ? `${Math.round(d / HOUR)}h` : d < 7 * DAY ? `${Math.round(d / DAY)}d` : `${Math.round(d / (7 * DAY))}w`; };
 
 /* What a task shows, read from the fields above. */
 const running = (t) => t.agents.working > 0;
 const asking = (t) => inboxFor(t).length > 0;
-const failed = (t) => t.agents.named.some((a) => a.status === AGENT.FAILED);
+const failed = (t) => t.agentList.some((a) => a.status === AGENT.FAILED);
 /* Going up: an agent at work and no pull request yet. */
-const underway = (t) => running(t) && t.pullRequests.total === 0;
+const underway = (t) => running(t) && t.prList.length === 0;
+/* Stuck, as main's agent reading has it: nobody at work, and a draft, or an open pull request nobody has moved for a day. */
+const lastMove = (t) => Math.max(t.createdAt, ...t.agentList.map((a) => a.at || 0));
+const stuck = (t) => !running(t) && !asking(t) && t.prList.some((p) => p.state === PR.DRAFT || (p.state === PR.OPEN && NOW - lastMove(t) > DAY));
 /* Shipped: every pull request it names is merged. */
-const shippedAll = (t) => t.pullRequests.named.length > 0 && t.pullRequests.named.every((p) => p.state === PR.MERGED);
+const shippedAll = (t) => t.prList.length > 0 && t.prList.every((p) => p.state === PR.MERGED);
 function taskTone(t) {
   if (asking(t)) return "--state-attention";
-  if (failed(t)) return "--danger";
+  if (failed(t)) return "--signal-defect";
   if (t.id === callTaskId) return "--voice-developer";
-  if (running(t)) return "--state-working";
-  if (t.pullRequests.named.some((p) => p.state === PR.OPEN && p.checks === CHECKS.PASSING)) return "--state-complete";
-  if (shippedAll(t)) return "--state-merged";
+  if (running(t)) return "--signal-building";
+  if (stuck(t)) return "--signal-building";
+  if (t.prList.some((p) => p.state === PR.OPEN && p.checks === CHECKS.PASSING)) return "--state-complete";
+  if (shippedAll(t)) return "--signal-shipped";
   return "--text-tertiary";
 }
 
@@ -972,7 +1027,9 @@ function windowsSVG(t, win) {
           ? [P(x1, y0 + u0, za), P(x1, y0 + u1, za), P(x1, y0 + u1, zb), P(x1, y0 + u0, zb)]
           : [P(x0 + u0, y1, za), P(x0 + u1, y1, za), P(x0 + u1, y1, zb), P(x0 + u0, y1, zb)];
         const on = win.lit && rnd() < (win.ratio ?? 0.8);
-        if (on) s += poly(q, win.lit, `class="win-lit" opacity="${win.opacity ?? (theme === "dark" ? 0.92 : 0.75)}"`);
+        /* A blur per window is what costs a busy town its frames, so past a small town a lit window glows by a soft stroke instead. */
+        if (on && TASKS.length > CULL_FROM) s += poly(q, win.lit, `stroke="${win.lit}" stroke-opacity="0.35" stroke-width="2.4" stroke-linejoin="round" opacity="${win.opacity ?? (theme === "dark" ? 0.92 : 0.75)}"`);
+        else if (on) s += poly(q, win.lit, `class="win-lit" opacity="${win.opacity ?? (theme === "dark" ? 0.92 : 0.75)}"`);
         else s += poly(q, win.band ? shade(C().glass, axis === "x" ? FX : FY) : C().unlit);
       }
     }
@@ -1066,8 +1123,12 @@ const SLOTS = [
   /* A sawtooth works with silos and a stack. */
   { plot: [0.6, 10.9, 8, 4.4], hollow: { x: 1.2, y: 11.5, w: 5, d: 3.2, h: 1.2, mat: "wall" },
     parts: (lit) => {
-      const list = [{ box: { x: 1.2, y: 11.5, w: 5, d: 3.2, z: 0, h: 1.2 }, mat: "wall", win: { rows: 1, per: 1.6, ...lit, seed: 5 }, stripe: lit.lit, role: "shell" }];
-      for (let i = 0; i < 4; i++) list.push({ box: { x: 1.2 + i * 1.25, y: 11.5, w: 1.25, d: 3.2, z: 1.2, hs: [0.75, 0, 0, 0.75] }, mat: "roof", role: "upper" });
+      const list = [{ box: { x: 1.2, y: 11.5, w: 5, d: 3.2, z: 0, h: 1.2 }, mat: "wall", win: { rows: 1, per: 1.6, ...lit, seed: 5 }, role: "shell" }];
+      /* Each tooth slopes up toward the viewer and ends in a glazed face, as a sawtooth roof's north lights do. */
+      for (let i = 0; i < 4; i++) {
+        list.push({ box: { x: 1.2 + i * 1.25, y: 11.5, w: 1.25, d: 3.2, z: 1.2, hs: [0, 0.75, 0.75, 0] }, mat: "roof", role: "upper" });
+        list.push({ box: { x: 2.43 + i * 1.25, y: 11.6, w: 0.02, d: 2.9, z: 1.27, h: 0.42 }, mat: "glass", win: { rows: 1, per: 1.4, ...lit, band: true, seed: 31 + i }, role: "upper" });
+      }
       list.push({ cyl: [7.1, 12.1, 0.55, 0, 2.2, "metal"], bands: [0.33, 0.66], role: "keep", solid: true });
       list.push({ cyl: [7.1, 13.6, 0.55, 0, 2.2, "metal"], bands: [0.33, 0.66], role: "keep", solid: true });
       list.push({ cyl: [5.6, 12.1, 0.22, 1.2, 1.9, "wall2"], bands: [0.85], role: "upper" });
@@ -1147,7 +1208,11 @@ function slotAt(i) {
   slotCache.set(key, slot);
   return slot;
 }
-const extraRows = () => Math.max(0, Math.ceil((TASKS.length + 1 - SLOTS.length) / (PAIRS * 2)));
+/* The plots the town keeps: one a task, the empty one for the next, and a blueprint each for the planned issues after it. */
+const MAX_BLUEPRINTS = 6;
+const shownPlanned = () => Math.min(PLANNED.length, MAX_BLUEPRINTS);
+const reserved = () => TASKS.length + 1 + shownPlanned();
+const extraRows = () => Math.max(0, Math.ceil((reserved() - SLOTS.length) / (PAIRS * 2)));
 /* Within one draw, the layout is worked out once and shared. */
 let memo = null;
 function placed() {
@@ -1158,10 +1223,10 @@ function placed() {
 }
 /* The town's depth: as far as its last plot (and the next, empty one), never shallower than the gate and the lot. */
 function measureTown() {
-  PAIRS = choosePairs(Math.max(0, TASKS.length + 1 - SLOTS.length));
+  PAIRS = choosePairs(Math.max(0, reserved() - SLOTS.length));
   NX = extraRows() ? Math.max(N, PAIRS * PAIR_STEP - 1.1) : N;
   let bottom = LOT.y + LOT.d + 0.6;
-  for (let i = 0; i <= TASKS.length; i++) { const pl = slotAt(i).plot; bottom = Math.max(bottom, pl[1] + pl[3] + 0.6); }
+  for (let i = 0; i < reserved(); i++) { const pl = slotAt(i).plot; bottom = Math.max(bottom, pl[1] + pl[3] + 0.6); }
   NY = Math.max(13.4, Math.ceil(bottom * 2) / 2);
 }
 const slotOf = (id) => placed().find((p) => p.task.id === id)?.slot;
@@ -1169,8 +1234,8 @@ const slotOf = (id) => placed().find((p) => p.task.id === id)?.slot;
 /* The merge gate's yard, three lanes by checks, ready nearest the gate; the gate on the avenue; the shipped lot past it. */
 const YARD = { x: 12, y: 5.2, w: 6.6, d: 3.7 };
 const LANES = [
-  { checks: CHECKS.FAILING, label: "Checks failing", tone: "--danger", y: 5.3 },
-  { checks: CHECKS.PENDING, label: "Checks running", tone: "--state-attention", y: 6.5 },
+  { checks: CHECKS.FAILING, label: "Checks failing", tone: "--signal-defect", y: 5.3 },
+  { checks: CHECKS.PENDING, label: "Checks running", tone: "--signal-building", y: 6.5 },
   { checks: CHECKS.PASSING, label: "Ready to merge", tone: "--state-complete", y: 7.7 },
 ];
 const LANE_D = 1.2;
@@ -1212,13 +1277,6 @@ function cratePositions() {
       x += size.w + 0.3;
     }
   }
-  for (const { task, slot } of placed()) {
-    for (let k = 0; k < unnamedPRs(task); k++) {
-      const [x, y, w, d] = slot.plot;
-      const size = sizeOf(null);
-      list.push({ unknown: true, taskId: task.id, k, x: x + w - 0.3 - size.w / 2 - k * (size.w + 0.2), y: y + d - 0.15 - size.d / 2, ...size, e: Math.max(size.w, size.d), z: 0, where: "door" });
-    }
-  }
   return list;
 }
 
@@ -1232,7 +1290,7 @@ const fresh = new Set();
 let gateOpen = false;
 const movers = [];
 const bursts = [];
-let SNAPSHOT = JSON.stringify({ TASKS, INBOX });
+let SNAPSHOT = JSON.stringify({ TASKS, INBOX, PLANNED });
 const ping = (id) => fresh.add(`ping:${id}`);
 function agentOf(id) { for (const t of TASKS) { const a = t.agentList.find((x) => x.id === id); if (a) return [t, a]; } return []; }
 function startAgent(taskId, id, model, effort, title) {
@@ -1276,19 +1334,22 @@ function startMerge(n, done) {
   movers.push({ n, kind: "truck", speed: 2.6, path: [[from.x, from.y], [from.x, road], [Math.max(to.x, N + 0.6), road], [to.x, road], [to.x, to.y]].filter((q, i, a) => i === 0 || Math.hypot(q[0] - a[i - 1][0], q[1] - a[i - 1][1]) > 0.01), seg: 0, t: 0, x: from.x, y: from.y, done: () => { p.moving = false; bursts.push({ x: to.x, y: to.y, at: performance.now() }); done(); } });
 }
 const EVENTS = [
-  { say: "Sonnet started", icon: "zap", tone: "--state-working", task: "shortcuts", run: () => startAgent("shortcuts", "ks-2", "Sonnet", "medium", "Shortcut settings page") },
+  { say: "Sonnet started", icon: "zap", tone: "--signal-building", task: "shortcuts", run: () => startAgent("shortcuts", "ks-2", "Sonnet", "medium", "Shortcut settings page") },
   { say: "Checks running again on #3088", icon: "pr", tone: "--state-attention", task: "search", run: () => setChecks(3088, CHECKS.PENDING) },
   { say: "Sonnet's turn ended", icon: "check", tone: "--text-tertiary", task: "search", run: () => endTurn("se-1") },
   { say: "Checks passed on #3088", icon: "check", tone: "--state-complete", task: "search", run: () => setChecks(3088, CHECKS.PASSING) },
-  { say: "#3081 merged", icon: "merge", tone: "--state-merged", task: "reconnect", wait: (done) => startMerge(3081, done) },
+  { say: "#3081 merged", icon: "merge", tone: "--signal-shipped", task: "reconnect", wait: (done) => startMerge(3081, done) },
   { say: "Opus archived", icon: "x", tone: "--text-tertiary", task: "reconnect", run: () => archive("rc-1") },
   { say: "New task", icon: "plus", tone: "--text-secondary", task: "dark-mode", run: () => {
     if (byId["dark-mode"]) return;
+    /* LUKE-214 was planned; a task on it takes the empty plot, and its blueprint goes. */
+    const k = PLANNED.findIndex((i) => i.identifier === "LUKE-214");
+    if (k >= 0) PLANNED.splice(k, 1);
     TASKS.push({ id: "dark-mode", name: "Dark mode toggle", repository: "ReviewStage/luke", createdAt: NOW + 1, agentList: [], prList: [] });
     summarize(TASKS[TASKS.length - 1]);
     reindex(); fresh.add("rise:dark-mode");
   } },
-  { say: "Opus started", icon: "zap", tone: "--state-working", task: "dark-mode", run: () => startAgent("dark-mode", "dm-1", "Opus", "high", "Theme tokens") },
+  { say: "Opus started", icon: "zap", tone: "--signal-building", task: "dark-mode", run: () => startAgent("dark-mode", "dm-1", "Opus", "high", "Theme tokens") },
   { say: "Opus asked a question", icon: "question", tone: "--state-attention", task: "shortcuts", run: () => {
     endTurn("ks-1");
     INBOX.push({ id: "ib-2", taskId: "shortcuts", agentId: "ks-1", title: "Should ⌘K open over a dialog?", postedAt: NOW, options: ["Yes", "No", "Only Search"] });
@@ -1300,7 +1361,7 @@ const EVENTS = [
     summarize(t);
     fresh.add("drop:3093"); ping("dark-mode");
   } },
-  { say: "#3088 merged", icon: "merge", tone: "--state-merged", task: "search", wait: (done) => startMerge(3088, done) },
+  { say: "#3088 merged", icon: "merge", tone: "--signal-shipped", task: "search", wait: (done) => startMerge(3088, done) },
   { say: "Sonnet's turn ended", icon: "check", tone: "--text-tertiary", task: "shortcuts", run: () => endTurn("ks-2") },
 ];
 const sim = { on: true, i: 0, timer: 0, busy: false };
@@ -1331,6 +1392,7 @@ function resetWork() {
   TASKS.splice(0, TASKS.length, ...snap.TASKS);
   summarizeAll();
   INBOX.splice(0, INBOX.length, ...snap.INBOX);
+  PLANNED.splice(0, PLANNED.length, ...snap.PLANNED);
   reindex();
   movers.length = 0; bursts.length = 0; sim.i = 0; sim.busy = false; gateOpen = false;
   if (openId && !byId[openId] && openId !== "gate" && openId !== "shipped") closeDetails(false);
@@ -1381,7 +1443,7 @@ function drawMovers() {
   const now = performance.now();
   for (const b of bursts) {
     const [px, py] = PR_(b.x, b.y, 0.6);
-    const cols = [css("--state-merged"), css("--state-complete"), css("--danger"), "#ffd9a0"];
+    const cols = [css("--signal-shipped"), css("--state-complete"), css("--danger"), "#ffd9a0"];
     for (let k = 0; k < 12; k++) {
       const a = (k / 12) * Math.PI * 2;
       s += `<circle class="spark" style="--dx:${(Math.cos(a) * 26).toFixed(1)}px;--dy:${(Math.sin(a) * 18 - 14).toFixed(1)}px;animation-delay:${((b.at - now) / 1000).toFixed(2)}s" cx="${px}" cy="${py}" r="2" fill="${cols[k % 4]}"/>`;
@@ -1431,9 +1493,10 @@ let focusTask = null;
 
 function litFor(task) {
   if (asking(task)) return { lit: css("--state-attention"), ratio: 0.85 };
-  if (failed(task)) return { lit: css("--danger"), ratio: 0.7 };
+  if (failed(task)) return { lit: css("--signal-defect"), ratio: 0.7 };
   if (task.id === callTaskId) return { lit: css("--voice-developer"), ratio: 0.95 };
-  if (running(task)) return { lit: css("--state-working"), ratio: 0.85 };
+  if (running(task)) return { lit: css("--signal-building"), ratio: 0.85 };
+  if (stuck(task)) return { lit: css("--signal-building"), ratio: 0.3, opacity: 0.55 };
   /* Nobody at work: a few windows left on, in no state's colour. */
   return { lit: C().idle, ratio: 0.16, opacity: theme === "dark" ? 0.32 : 0.45 };
 }
@@ -1472,7 +1535,7 @@ function renderPlots() {
     s += `<g class="plot" data-plot="${task.id}">${boxSVG({ x, y, w, d, z: 0, h: 0.1 }, "pad", { topFill: c.pad })}<polygon class="plot-edge" points="${pts(edge)}"/></g>`;
     /* Light spilling from a building where something is happening. */
     const tone = taskTone(task);
-    if (theme === "dark" && tone !== "--text-tertiary" && tone !== "--state-merged") {
+    if (theme === "dark" && lod === "near" && tone !== "--text-tertiary" && tone !== "--signal-shipped") {
       const [gx, gy] = PR_(slot.hollow.x + slot.hollow.w / 2, slot.hollow.y + slot.hollow.d / 2, 0.1);
       s += `<ellipse cx="${gx}" cy="${gy + 6}" rx="${(slot.hollow.w + slot.hollow.d) * DX * 0.62}" ry="${(slot.hollow.w + slot.hollow.d) * DY * 0.62}" fill="${css(tone)}" opacity="0.07" filter="url(#glow)"/>`;
     }
@@ -1659,14 +1722,21 @@ function roofSignals(task, slot) {
     s += `<circle cx="${px}" cy="${py}" r="3.2" fill="${col}" filter="url(#glow)"/>`;
     for (let i = 0; i < 3; i++) s += `<ellipse class="loop wave" style="animation-delay:${-i * 0.8}s" cx="${px}" cy="${py}" rx="26" ry="13" fill="none" stroke="${col}" stroke-width="1.6"/>`;
   } else if (failed(task)) {
-    s += `<circle class="loop pulse" cx="${px}" cy="${py}" r="5" fill="${css("--danger")}" filter="url(#glow)"/>`;
+    s += `<circle class="loop pulse L-defects" cx="${px}" cy="${py}" r="5" fill="${css("--signal-defect")}" filter="url(#glow)"/>`;
+  } else if (stuck(task)) {
+    /* Stuck: a pause sign on the roof, in the building signal's colour, and no smoke. */
+    const col = css("--signal-building");
+    s += `<g class="L-stuck"><line x1="${px}" y1="${py + 14}" x2="${px}" y2="${py}" stroke="${c.metal}" stroke-width="2"/><circle cx="${px}" cy="${py - 4}" r="8" fill="${col}"/><rect x="${px - 3.6}" y="${py - 8}" width="2.4" height="8" rx="0.6" fill="#fff"/><rect x="${px + 1.2}" y="${py - 8}" width="2.4" height="8" rx="0.6" fill="#fff"/></g>`;
   } else if (shippedAll(task) && !running(task)) {
-    const col = css("--state-merged");
-    s += `<line x1="${px}" y1="${py}" x2="${px}" y2="${py - 34}" stroke="${c.metal}" stroke-width="1.6"/><path class="loop flag" d="M${px},${py - 34} l18,4 l-18,6 Z" fill="${col}"/>`;
+    const col = css("--signal-shipped");
+    s += `<g class="L-shipped"><line x1="${px}" y1="${py}" x2="${px}" y2="${py - 34}" stroke="${c.metal}" stroke-width="1.6"/><path class="loop flag" d="M${px},${py - 34} l18,4 l-18,6 Z" fill="${col}"/></g>`;
   }
-  if (running(task) && slot.stack) {
+  /* Smoke is the dearest loop on the page: only so many stacks smoke at once, and none far out. */
+  const smokes = running(task) && slot.stack && lod === "near";
+  if (smokes && memo) memo.smoke = (memo.smoke || 0) + 1;
+  if (smokes && (!memo || memo.smoke <= SMOKE_MAX)) {
     const [sx, sy] = PR_(...slot.stack);
-    for (let i = 0; i < 5; i++) s += `<circle class="loop smoke" style="animation-delay:${-i * 0.96}s" cx="${sx}" cy="${sy}" r="5" fill="${c.smoke}" opacity="0"/>`;
+    for (let i = 0; i < 5; i++) s += `<circle class="loop smoke L-building" style="animation-delay:${-i * 0.96}s" cx="${sx}" cy="${sy}" r="5" fill="${c.smoke}" opacity="0"/>`;
   }
   return `<g class="fx-roof">${s}</g>`;
 }
@@ -1717,10 +1787,10 @@ function buildingSVG(task, slot) {
   for (const it of items) {
     /* The inside is drawn only for the open building: a hundred hidden interiors would cost more than the town. */
     if (it.role === "shell" && !cutDone) { body += `<g class="cut">${task.id === openId ? cutawaySVG(task, slot) : ""}</g>`; cutDone = true; }
-    if (it.role === "crane") { body += `<g class="upper" data-crane="${task.id}">${craneSVG(slot.crane)}</g>`; continue; }
+    if (it.role === "crane") { body += `<g class="upper L-building" data-crane="${task.id}">${craneSVG(slot.crane)}</g>`; continue; }
     body += `<g class="${it.role === "shell" ? "shell" : it.role === "upper" ? "upper" : "keep"}">${it.svg}</g>`;
   }
-  if (underway(task)) body += `<g class="upper">${scaffoldSVG(slot.hollow)}</g>`;
+  if (underway(task)) body += `<g class="upper L-building">${scaffoldSVG(slot.hollow)}</g>`;
   return `<g class="lift">${body}${roofSignals(task, slot)}</g>`;
 }
 
@@ -1737,7 +1807,7 @@ function crateSVG(c) {
     ? `Another pull request of ${byId[taskId].name}, past the three the Factory's list carries; open the task to see it`
     : `Pull request #${c.pr.number}, ${c.pr.title}: ${c.pr.additions} additions, ${c.pr.deletions} deletions`;
   const key = c.unknown ? `u-${taskId}-${c.k}` : String(c.pr.number);
-  return `<g class="crate" ${!c.unknown && fresh.has(`drop:${c.pr.number}`) ? 'data-fresh="drop"' : ""} data-crate="${key}" data-card="${c.unknown ? `unknown:${taskId}` : `pr:${c.pr.number}`}" data-task="${taskId}" data-where="${c.where}" tabindex="0" role="button" aria-label="${name}">${s}<polygon class="crate-edge" points="${pts(outline)}"/></g>`;
+  return `<g class="crate ${c.where === "shipped" ? "L-shipped" : "L-building"}" ${!c.unknown && fresh.has(`drop:${c.pr.number}`) ? 'data-fresh="drop"' : ""} data-crate="${key}" data-card="${c.unknown ? `unknown:${taskId}` : `pr:${c.pr.number}`}" data-task="${taskId}" data-where="${c.where}" tabindex="0" role="button" aria-label="${name}">${s}<polygon class="crate-edge" points="${pts(outline)}"/></g>`;
 }
 const DASHED = () => `stroke="${css("--text-tertiary")}" stroke-width="0.9" stroke-dasharray="2.5 2"`;
 function unknownMark(c) {
@@ -1797,9 +1867,30 @@ function gateSVG(open) {
   s += `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${c.barrier}" stroke-width="3" stroke-linecap="round"/><line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${css("--danger")}" stroke-width="3" stroke-dasharray="6 6"/>`;
   return s;
 }
+/* A planned issue: its plot pegged out and its building drawn in blueprint lines, in the planned signal's colour. */
+const PRIORITY_WORDS = { 0: "No priority", 1: "Urgent", 2: "High", 3: "Medium", 4: "Low" };
+function blueprintSVG(issue, slot) {
+  const col = css("--signal-planned");
+  const [x, y, w, d] = slot.plot;
+  const hb = slot.hollow;
+  const t = turnBox({ ...hb, z: 0, h: hb.h });
+  const { x0, x1, y0, y1 } = t;
+  const h = hb.h;
+  const line = `stroke="${col}" stroke-width="1.1" stroke-dasharray="4 3" stroke-linejoin="round"`;
+  const face = (q) => poly(q, col, `fill-opacity="${theme === "dark" ? 0.1 : 0.08}" ${line}`);
+  let s = poly([PR_(x, y, 0.03), PR_(x + w, y, 0.03), PR_(x + w, y + d, 0.03), PR_(x, y + d, 0.03)], "transparent", `stroke="${col}" stroke-opacity="0.55" stroke-width="1" stroke-dasharray="2 4"`);
+  /* The far edges, faint, then the faces the viewer sees. */
+  s += `<polyline points="${pts([P(x0, y1, 0), P(x0, y0, 0), P(x1, y0, 0)])}" fill="none" ${line} opacity="0.45"/>`;
+  s += `<line x1="${P(x0, y0, 0)[0]}" y1="${P(x0, y0, 0)[1]}" x2="${P(x0, y0, h)[0]}" y2="${P(x0, y0, h)[1]}" ${line} opacity="0.45"/>`;
+  s += face([P(x1, y0, 0), P(x1, y1, 0), P(x1, y1, h), P(x1, y0, h)]);
+  s += face([P(x0, y1, 0), P(x1, y1, 0), P(x1, y1, h), P(x0, y1, h)]);
+  s += face([P(x0, y0, h), P(x1, y0, h), P(x1, y1, h), P(x0, y1, h)]);
+  const name = `Planned: ${issue.identifier}, ${issue.title}`;
+  return `<g class="blueprint L-planned" data-issue="${issue.identifier}" data-card="planned:${issue.identifier}" tabindex="0" role="button" aria-label="${name}">${s}</g>`;
+}
 function lotFlagSVG() {
   const [px, py] = PR_(LOT.x + LOT.w - 0.4, LOT.y + 0.4, 0);
-  return `<line x1="${px}" y1="${py}" x2="${px}" y2="${py - 46}" stroke="${C().metal}" stroke-width="1.6"/><path class="loop flag" d="M${px},${py - 46} l20,4 l-20,7 Z" fill="${css("--state-merged")}"/>`;
+  return `<g class="L-shipped"><line x1="${px}" y1="${py}" x2="${px}" y2="${py - 46}" stroke="${C().metal}" stroke-width="1.6"/><path class="loop flag" d="M${px},${py - 46} l20,4 l-20,7 Z" fill="${css("--signal-shipped")}"/></g>`;
 }
 
 function renderObjects() {
@@ -1811,7 +1902,14 @@ function renderObjects() {
     list.push({ depth: depthOf(x + w / 2, y + d / 2), svg: `<g class="bldg" data-id="${task.id}" data-card="task:${task.id}" ${fresh.has(`rise:${task.id}`) ? 'data-fresh="rise"' : ""} tabindex="0" role="button" aria-label="${label}" ${openId === task.id ? "data-open" : ""}>${buildingSVG(task, slot)}</g>` });
   }
   for (const c of cratePositions()) if (c.where !== "door" || inView(c.x, c.y)) list.push({ depth: depthOf(c.x, c.y) + (c.z || 0) * 0.5, svg: crateSVG(c) });
-  const used = placed().map((p) => p.slot.plot).concat([slotAt(TASKS.length).plot]);
+  const used = placed().map((p) => p.slot.plot);
+  for (let i = TASKS.length; i < reserved(); i++) used.push(slotAt(i).plot);
+  /* Planned issues stand as blueprints on the plots after the empty one. */
+  PLANNED.slice(0, shownPlanned()).forEach((issue, k) => {
+    const slot = slotAt(TASKS.length + 1 + k);
+    const [x, y, w, d] = slot.plot;
+    if (inView(x + w / 2, y + d / 2)) list.push({ depth: depthOf(x + w / 2, y + d / 2), svg: blueprintSVG(issue, slot) });
+  });
   const clear = ([x, y]) => y < NY - 0.4 && !used.some(([px, py, pw, pd]) => x > px - 0.3 && x < px + pw + 0.3 && y > py - 0.3 && y < py + pd + 0.3);
   for (const [x, y] of TREES.filter(clear)) if (inView(x, y)) list.push({ depth: depthOf(x, y), svg: treeSVG(x, y) });
   for (const [x, y] of LAMPS.filter(clear)) if (inView(x, y)) list.push({ depth: depthOf(x, y), svg: lampSVG(x, y) });
@@ -1864,7 +1962,7 @@ function renderTags() {
   const [gx, gy] = PR_(GATEHOUSE.x + GATEHOUSE.w / 2, GATEHOUSE.y + GATEHOUSE.d / 2, 1.5);
   const [lx, ly] = PR_(LOT.x + LOT.w / 2, LOT.y + LOT.d, -0.2);
   if (fits(gx, gy, "Merge gate")) s += tagSVG("gate", gx, gy, "Merge gate", null);
-  if (fits(lx, ly + 34 / cam.s, "Shipped")) s += tagSVG("shipped", lx, ly + 34 / cam.s, "Shipped", "--state-merged");
+  if (fits(lx, ly + 34 / cam.s, "Shipped")) s += tagSVG("shipped", lx, ly + 34 / cam.s, "Shipped", "--signal-shipped");
   const cands = [];
   for (const { task, slot } of placed()) {
     const [rx, ry, rz] = slot.roof;
@@ -1905,6 +2003,10 @@ function renderRoutes() {
    (and a margin round it) is drawn at all. The camera settling redraws when
    either would change. A small town is always drawn whole. */
 const CULL_FROM = 20;
+/* The most stacks that smoke at once; the rest of a busy town is lit, not animated. */
+const SMOKE_MAX = 24;
+/* The most cranes that turn at once. */
+const CRANES_MAX = 4;
 let lod = "near";
 let view = null;
 let culled = 0;
@@ -1938,6 +2040,7 @@ function renderAll() {
   culled = 0;
   view = TASKS.length > CULL_FROM && camReady ? visibleRect(0.3) : null;
   $("scene").dataset.lod = lod;
+  $("scene").toggleAttribute("data-big", TASKS.length > CULL_FROM);
   gradients.clear();
   queueMicrotask(() => { for (const k of [...fresh]) if (k.startsWith("ping:")) fresh.delete(k); });
   for (const g of document.querySelectorAll("#scene defs linearGradient")) g.remove();
@@ -1945,6 +2048,7 @@ function renderAll() {
   memo = null;
   $("scene").dataset.culled = String(culled);
   syncMarks();
+  kick();
 }
 
 /* ------------------------------------------------------------------------
@@ -2090,13 +2194,12 @@ function renderInspector() {
     }
     h += `<p class="panel-foot" ${n()}>Open pull requests in the Factory's task list, grouped by their checks. Not GitHub's merge queue, and no order; merging happens on GitHub.</p>`;
   } else if (openId === "shipped") {
-    setTab("merge", "Shipped");
+    setTab("merge", `Shipped since ${sinceWords()}`);
     const ship = merged();
     const add = ship.reduce((a, p) => a + p.additions, 0), del = ship.reduce((a, p) => a + p.deletions, 0);
     h += `<div class="panel-total" ${n()}><b>${ship.length}</b><span>merged</span><span style="margin-left:auto">${lines({ additions: add, deletions: del })}</span></div>`;
     h += `<section class="section" ${n()}><p class="section-heading">Pull requests</p><div class="published-rows">${ship.map((p) => prRow(p, byId[p.taskId].name)).join("")}</div></section>`;
-    const unknown = TASKS.reduce((a, t) => a + unnamedPRs(t), 0);
-    h += `<p class="panel-foot" ${n()}>The merged pull requests the Factory's task list carries: up to three a task${unknown ? `, so ${unknown} more stand only in their tasks` : ""}. Not an all-time total.</p>`;
+    h += `<p class="panel-foot" ${n()}>Merged since ${sinceWords()}, the window the Factory looks back over. Not an all-time total.</p>`;
   } else {
     const t = byId[openId];
     if (!t) return;
@@ -2161,7 +2264,21 @@ function renderSidebar() {
     return `<li><button type="button" class="sidebar-plan task-row" data-id="${t.id}" data-card="task:${t.id}" data-card-side="end" aria-current="${openId === t.id}"><span class="sidebar-plan-line"><span class="sidebar-plan-name">${t.name}</span><span class="sidebar-plan-time">${mark}<time>${ago(taskTime(t))}</time></span></span></button></li>`;
   }).join("")}</ul>`;
 }
+/* The pipeline bar, as main's world chrome draws it: each count says how many and switches its layer on the campus. */
+const LAYERS = [
+  { key: "planned", label: "Planned", icon: "list-todo", tone: "--signal-planned", count: () => PLANNED.length },
+  { key: "building", label: "Building", icon: "blocks", tone: "--signal-building", count: () => TASKS.reduce((a, t) => a + t.agents.working, 0) },
+  { key: "stuck", label: "Stuck", icon: "pause", tone: "--signal-building", count: () => TASKS.filter(stuck).length },
+  { key: "shipped", label: "Shipped", icon: "merge", tone: "--signal-shipped", count: () => merged().length },
+  { key: "defects", label: "Defects", icon: "bug", tone: "--signal-defect", count: () => TASKS.reduce((a, t) => a + t.agentList.filter((x) => x.status === AGENT.FAILED).length, 0) },
+];
+const hiddenLayers = new Set();
+function renderPipeline() {
+  $("pipeline").innerHTML = LAYERS.map((l) => `<button type="button" data-layer="${l.key}" aria-pressed="${!hiddenLayers.has(l.key)}" style="--tone:var(${l.tone})">${glyph(l.icon)}${l.label}<b>${l.count()}</b></button>`).join("");
+  for (const l of LAYERS) $("scene").toggleAttribute(`data-hide-${l.key}`, hiddenLayers.has(l.key));
+}
 function renderCensus() {
+  renderPipeline();
   const q = INBOX.length, r = readyPRs().length;
   const btn = $("needs-you");
   btn.hidden = q + r === 0;
@@ -2172,15 +2289,18 @@ function renderCensus() {
 }
 function renderKey() {
   const k = (svg, html) => `<div class="key-row"><svg viewBox="-11 -9 22 18" aria-hidden="true">${svg}</svg><span>${html}</span></div>`;
-  const ok = css("--state-complete"), no = css("--danger"), work = css("--state-working"), ask = css("--state-attention");
+  const ok = css("--state-complete"), no = css("--danger"), ask = css("--state-attention");
+  const build = css("--signal-building"), ship = css("--signal-shipped"), plan = css("--signal-planned"), bad = css("--signal-defect");
   $("key").innerHTML =
-    k(`<rect x="-8" y="-6" width="5" height="5" rx="1" fill="${work}"/><rect x="-1" y="-6" width="5" height="5" rx="1" fill="${ask}"/>`, "<b>Windows</b> lit by what the task's agents are doing; smoke while one runs") +
+    k(`<rect x="-8" y="-6" width="5" height="5" rx="1" fill="${build}"/><rect x="-1" y="-6" width="5" height="5" rx="1" fill="${bad}"/>`, "<b>Windows</b>: amber while an agent builds, red when one failed; smoke while one runs") +
     k(`<circle r="4" fill="${ask}"/><circle r="8" fill="none" stroke="${ask}" stroke-width="1.5" opacity="0.6"/>`, "<b>Beacon</b>: a question in the Inbox") +
     k(`<ellipse rx="9" ry="4.5" fill="none" stroke="${css("--voice-developer")}" stroke-width="1.5"/>`, "<b>Rings</b>: on this Mac's call") +
-    k(`<line x1="0" y1="8" x2="0" y2="-7" stroke="#e0b42e" stroke-width="2"/><line x1="-8" y1="-7" x2="9" y2="-7" stroke="#e0b42e" stroke-width="2"/>`, "<b>Crane</b>: at work, no pull request yet") +
+    k(`<circle r="6" fill="${build}"/><rect x="-2.6" y="-3" width="1.8" height="6" fill="#fff"/><rect x="0.8" y="-3" width="1.8" height="6" fill="#fff"/>`, "<b>Pause sign</b>: stuck, a draft or an open pull request nobody moved for a day") +
+    k(`<line x1="0" y1="8" x2="0" y2="-7" stroke="#e0b42e" stroke-width="2"/><line x1="-8" y1="-7" x2="9" y2="-7" stroke="#e0b42e" stroke-width="2"/>`, "<b>Crane</b>: building, no pull request yet") +
+    k(`<rect x="-8" y="-6" width="16" height="12" fill="${plan}" fill-opacity="0.15" stroke="${plan}" stroke-dasharray="3 2"/>`, "<b>Blueprint</b>: a Linear issue planned, no task yet") +
     k(`<rect x="-10" y="-4" width="20" height="8" fill="${css("--text-tertiary")}"/><rect x="-10" y="-1" width="14" height="2" fill="${ok}"/><rect x="4" y="-1" width="6" height="2" fill="${no}"/>`, "<b>Container</b> per pull request: length is lines changed, linear (150 a tile); the band is its additions and deletions") +
-    k(`<rect x="-6" y="-6" width="12" height="12" fill="none" stroke="${css("--text-tertiary")}" stroke-dasharray="2.5 2"/>`, "<b>Dashed container</b> at a door: a pull request past the three a task carries in the list; open the task to see it") +
-    k(`<circle cx="-5" r="3" fill="${no}"/><circle cx="1" r="3" fill="${ask}"/><circle cx="7" r="3" fill="${ok}"/>`, "<b>Gate lanes</b>: checks failing, running, ready. Not a merge queue");
+    k(`<circle cx="-5" r="3" fill="${bad}"/><circle cx="1" r="3" fill="${build}"/><circle cx="7" r="3" fill="${ok}"/>`, "<b>Gate lanes</b>: checks failing, running, ready. Not a merge queue") +
+    k(`<line x1="-4" y1="8" x2="-4" y2="-8" stroke="${css("--text-secondary")}" stroke-width="1.5"/><path d="M-4,-8 l11,3 l-11,4 Z" fill="${ship}"/>`, "<b>Shipped lot and flags</b>: merged in the last seven days");
 }
 
 /* Hover cards, as tooltip.tsx hangs them: a card after the pointer rests
@@ -2226,6 +2346,11 @@ function cardFor(key) {
   if (kind === "shipped") {
     const ship = merged();
     return `<div class="card">${cardHead(glyph("merge"), "Shipped", "A sample, not an all-time total", lines({ additions: ship.reduce((a, p) => a + p.additions, 0), deletions: ship.reduce((a, p) => a + p.deletions, 0) }))}<p class="card-note">${ship.length} merged pull requests in the Factory's task list.</p></div>`;
+  }
+  if (kind === "planned") {
+    const issue = PLANNED.find((i) => i.identifier === id);
+    if (!issue) return "";
+    return `<div class="card">${cardHead(glyph("list-todo"), issue.title, `${issue.identifier} · Linear`, issue.state || "")}<p class="card-note">${PRIORITY_WORDS[issue.priority ?? 0]} · planned, no task yet. It becomes a building once a task starts on it.</p></div>`;
   }
   if (kind === "needs") {
     const rows = INBOX.map((i) => `<div class="card-line">${attentionMark()}<span>${i.title}</span><span class="end">${ago(i.postedAt)}</span></div>`).join("") +
@@ -2298,6 +2423,8 @@ function activate(target) {
   const yard = target.closest(".yard-hit");
   if (yard) { select(yard.dataset.yard); return true; }
   if (target.closest("#new-plot")) { toast("A new task takes the next plot", "plus"); return true; }
+  const bp = target.closest(".blueprint");
+  if (bp) { toast(`Opens ${bp.dataset.issue} in Linear`, "open"); return true; }
   return false;
 }
 scene.addEventListener("click", (e) => {
@@ -2326,6 +2453,12 @@ scene.addEventListener("keydown", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && openId) closeDetails(true);
   if (e.key === "r" && !e.metaKey && !e.target.closest("input, textarea")) turn();
+});
+$("pipeline").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-layer]");
+  if (!b) return;
+  if (hiddenLayers.has(b.dataset.layer)) hiddenLayers.delete(b.dataset.layer); else hiddenLayers.add(b.dataset.layer);
+  renderPipeline();
 });
 $("task-list").addEventListener("click", (e) => { const r = e.target.closest(".task-row"); if (r) select(r.dataset.id); });
 $("inspector").addEventListener("click", (e) => {
@@ -2393,17 +2526,33 @@ new ResizeObserver(() => {
 
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 let last = performance.now();
+let looping = false;
+/* As main's scene host does: the loop runs only while something moves (a truck, a forklift, sparks, a crane close in), and not at all while the page is hidden. */
+const busy = () => !document.hidden && (movers.length > 0 || bursts.length > 0 || (lod === "near" && !reduced.matches && TASKS.length <= CULL_FROM && !!document.querySelector("[data-crane]")));
+function kick() {
+  if (looping || !busy()) return;
+  looping = true;
+  last = performance.now();
+  requestAnimationFrame(frame);
+}
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   tickMovers(dt);
-  if (!reduced.matches && !document.hidden) {
-    if (lod === "far") { requestAnimationFrame(frame); return; }
+  if (lod === "near" && !reduced.matches) {
     craneAngle += dt * 0.18;
-    for (const cr of document.querySelectorAll("[data-crane]")) cr.innerHTML = craneSVG(slotOf(cr.dataset.crane).crane);
+    /* Only a few cranes turn at once; a busy town's others stand still, so a hundred building sites cost what four do. */
+    let turning = 0;
+    for (const cr of document.querySelectorAll("[data-crane]")) {
+      /* Rewriting a crane restyles the whole scene, so a big town's cranes stand still. */
+      if (++turning > (TASKS.length > CULL_FROM ? 0 : CRANES_MAX)) break;
+      cr.innerHTML = craneSVG(slotOf(cr.dataset.crane).crane);
+    }
   }
-  requestAnimationFrame(frame);
+  if (busy()) requestAnimationFrame(frame);
+  else looping = false;
 }
+document.addEventListener("visibilitychange", () => { $("scene").toggleAttribute("data-resting", document.hidden); kick(); });
 
 /* A link may name a frame; each value is matched to one of the page's own. */
 const params = new URLSearchParams(location.search);
@@ -2427,7 +2576,8 @@ function setTown(size) {
   TASKS.splice(0, TASKS.length, ...fresh);
   reindex();
   INBOX.splice(0, INBOX.length, ...JSON.parse(SAMPLE_INBOX).filter((i) => byId[i.taskId]));
-  SNAPSHOT = JSON.stringify({ TASKS, INBOX });
+  PLANNED.splice(0, PLANNED.length, ...JSON.parse(JSON.stringify(SAMPLE_PLANNED)));
+  SNAPSHOT = JSON.stringify({ TASKS, INBOX, PLANNED });
   resetWork();
   fitCampus(false);
   schedule(STEP_MS);
@@ -2437,7 +2587,7 @@ $("sim-toggle").addEventListener("click", () => { sim.on = !sim.on; renderSimSta
 $("sim-restart").addEventListener("click", () => { resetWork(); schedule(1200); });
 renderSimStatus();
 if (params.get("events") === "off") { sim.on = false; renderSimStatus(); } else schedule(2400);
-requestAnimationFrame(frame);
+kick();
 </script>
 </body>
 </html>
