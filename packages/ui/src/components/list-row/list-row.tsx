@@ -249,8 +249,8 @@ export function ListRow({
   actions?: ReactNode;
   /** When the acts stand: always, beside the row, or over its metadata's end while the row is hovered or holds the keyboard. */
   actionsAt?: ListRowActions;
-  /** What pressing the row does; a row without one is not a control. */
-  onPress?: (() => void) | undefined;
+  /** What pressing the row does, handed the press, whose modifiers it may read; a row without one is not a control. */
+  onPress?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   /** How the row is the one open now, drawn and announced as current; nothing where it is not. */
   current?: ListRowCurrent | undefined;
   /** Whether what the row stands for has not been seen, its title in the heavier weight. */

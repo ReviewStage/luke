@@ -39,6 +39,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform
 import { handState } from "#testing/app-state";
 import { layContainersAt } from "#testing/container-width";
 import { onRegistry } from "#testing/copy-feedback";
+import { playMotions } from "#testing/pane-motion";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
@@ -1265,50 +1266,6 @@ test("the Runs panel hides and shows by its toggle and by the side panel's chord
   assert.ok(again.querySelector("aside[aria-label='Runs']"), "⌥⌘B brings it back");
   window.localStorage.clear();
 });
-
-/** A motion the page played: the element it played on, its keyframes, and a way to have it finish. */
-interface Played {
-  element: Element;
-  keyframes: Keyframe[];
-  finish: () => void;
-}
-
-/** What the recording engine answers a motion with: no more of an Animation than the page reaches for. */
-interface RecordedMotion {
-  onfinish: (() => void) | null;
-  cancel: () => void;
-}
-
-/**
- * Gives the window the pane's motion tokens and an animation engine that
- * records what is played rather than playing it, since jsdom has neither;
- * answers what was played, and a way to take both away again.
- */
-function playMotions() {
-  const played: Played[] = [];
-  const root = document.documentElement.style;
-  root.setProperty("--duration-pane", "240ms");
-  root.setProperty("--motion-pane", "ease-out");
-  Object.defineProperty(Element.prototype, "animate", {
-    configurable: true,
-    value(this: Element, keyframes: Keyframe[]) {
-      const animation: RecordedMotion = {
-        onfinish: null,
-        cancel: () => undefined,
-      };
-      played.push({ element: this, keyframes, finish: () => animation.onfinish?.() });
-      return animation;
-    },
-  });
-  return {
-    played,
-    remove: () => {
-      root.removeProperty("--duration-pane");
-      root.removeProperty("--motion-pane");
-      Reflect.deleteProperty(Element.prototype, "animate");
-    },
-  };
-}
 
 test("the Runs panel slides out past the page's right edge as it is hidden, held drawn and out of reach until it has, and slides back in as it is shown", async () => {
   window.localStorage.clear();
