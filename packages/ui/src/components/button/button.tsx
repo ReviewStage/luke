@@ -307,13 +307,17 @@ function submitGlyph(state: SubmitState): React.JSX.Element {
   }
 }
 
-/** A glyph-alone button's glyph: its caller's own, or a submit's, which its state decides. */
+/**
+ * A glyph-alone button's glyph and size: its caller's own glyph at either
+ * size, or a submit's, which its state decides, always at the control's.
+ */
 type IconProps =
-  | { icon: ReactNode; submit?: undefined }
+  | { icon: ReactNode; submit?: undefined; size?: ButtonSize }
   | {
       icon?: undefined;
       /** Where the send it makes stands; it is round and wears its state's glyph. */
       submit: SubmitState;
+      size?: undefined;
     };
 
 /**
@@ -334,7 +338,6 @@ export function IconButton({
     label: string;
     /** Whether a toggle stands on, which it is drawn and announced as. */
     pressed?: boolean | undefined;
-    size?: ButtonSize;
   }): React.JSX.Element {
   const state = stateProps(
     submit === undefined ? props : { ...props, shape: BUTTON_SHAPE.ROUND },
