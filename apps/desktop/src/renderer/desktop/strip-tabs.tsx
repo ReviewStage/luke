@@ -227,9 +227,7 @@ function ToolbarTabActions({
   return createPortal(
     <>
       <Tooltip label={named}>
-        <button type="button" className="icon-button" aria-label={named} {...menu.trigger()}>
-          <EllipsisIcon />
-        </button>
+        <IconButton icon={<EllipsisIcon />} label={named} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu label={named} menu={menu.drawn} groups={groups} onClose={menu.close} />

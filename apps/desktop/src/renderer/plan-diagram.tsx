@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { Button } from "@luke/ui";
 import {
   DIAGRAM_APPEARANCE,
   DIAGRAM_DRAWING,
@@ -145,13 +146,9 @@ export function PlanDiagram({
       <div className="plan-diagram-head">
         <span>Diagram</span>
         {picture === undefined ? null : (
-          <button
-            type="button"
-            className="plan-diagram-toggle"
-            onClick={() => setShowingCode((was) => !was)}
-          >
+          <Button onClick={() => setShowingCode((was) => !was)}>
             {showingCode ? "Show diagram" : "Show code"}
-          </button>
+          </Button>
         )}
       </div>
       {drawingNow?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine /> : null}

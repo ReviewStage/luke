@@ -742,25 +742,25 @@ export const tasksSkillsAnswerSchema = EffectSchema.Union([
 export type TasksSkillsAnswer = typeof tasksSkillsAnswerSchema.Type;
 
 /** One pull request of a repository, as a link to it asks the host for it: the workspace whose installation reaches the repository, the repository, and the pull request's number. */
-export const planningPullRequestParamsSchema = EffectSchema.Struct({
+export const tasksPullRequestParamsSchema = EffectSchema.Struct({
   ...repositoryPlaceFields,
   number: githubPullRequestNumberSchema,
 });
 
-export type TasksPullRequestParams = typeof planningPullRequestParamsSchema.Type;
+export type TasksPullRequestParams = typeof tasksPullRequestParamsSchema.Type;
 
 /** The read of one pull request, as the window hears it: the pull request, null where there is none to draw, or that the service did not answer. */
-export const planningPullRequestAnswerSchema = EffectSchema.Union([
+export const tasksPullRequestAnswerSchema = EffectSchema.Union([
   githubRepositoryPullRequestAnswerSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
 ]);
 
-export type TasksPullRequestAnswer = typeof planningPullRequestAnswerSchema.Type;
+export type TasksPullRequestAnswer = typeof tasksPullRequestAnswerSchema.Type;
 
 /** The pull request as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
-export const planningPullRequestSchema = EffectSchema.NullOr(githubPullRequestSummarySchema);
+export const tasksPullRequestSchema = EffectSchema.NullOr(githubPullRequestSummarySchema);
 
-export type PlanningPullRequest = typeof planningPullRequestSchema.Type;
+export type TasksPullRequest = typeof tasksPullRequestSchema.Type;
 
 /** One issue of a repository, as a link to it asks the host for it: the workspace whose installation reaches the repository, the repository, and the issue's number. */
 export const tasksIssueParamsSchema = EffectSchema.Struct({

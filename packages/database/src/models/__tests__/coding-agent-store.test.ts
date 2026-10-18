@@ -44,7 +44,6 @@ import {
   listWorkspaceCodingAgents,
   listWorldCodingAgents,
   pinCodingAgent,
-  planNamesOf,
   readCodingAgent,
   readCodingAgentPublished,
   recordCodingAgentAuthor,
@@ -52,6 +51,7 @@ import {
   recordTurnFastRefused,
   renameCodingAgent,
   settleCodingAgentAuthor,
+  taskNamesOf,
   turnUsagesOf,
   unarchiveCodingAgentFrom,
   writeDelegation,
@@ -675,12 +675,12 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
           organizationId: workspace,
           name: "Teammate invitations",
         });
-        const archivedPlan = yield* createTask(starter, { organizationId: workspace, name: "Old" });
+        const archivedTask = yield* createTask(starter, { organizationId: workspace, name: "Old" });
         yield* Effect.flatMap(Database, (db) =>
           db
             .update(task)
             .set({ archivedAt: at(14) })
-            .where(eq(task.id, archivedPlan.id)),
+            .where(eq(task.id, archivedTask.id)),
         );
         const onTask = yield* tasklessAgent(teammate, workspace, {
           planId: invitations.id,
@@ -700,14 +700,14 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
           ids(yield* listWorkspaceCodingAgents(starter, workspace, { limit: 10 }))[0],
           onTask.agentId,
         );
-        const elsewherePlan = yield* createTask(outsider, {
+        const elsewhereTask = yield* createTask(outsider, {
           organizationId: elsewhere,
           name: "Elsewhere",
         });
-        const names = yield* planNamesOf(starter, [
+        const names = yield* taskNamesOf(starter, [
           invitations.id,
-          archivedPlan.id,
-          elsewherePlan.id,
+          archivedTask.id,
+          elsewhereTask.id,
           invitations.id,
         ]);
         assert.equal(names.size, 2, "a plan of a workspace the account is not in names nothing");
@@ -715,8 +715,8 @@ it.layer(getTestDB())("the coding-agent store's agents of a workspace", (it) => 
           name: "Teammate invitations",
           archived: false,
         });
-        assert.deepEqual(names.get(archivedPlan.id), { name: "Old", archived: true });
-        assert.equal((yield* planNamesOf(outsider, [invitations.id])).size, 0);
+        assert.deepEqual(names.get(archivedTask.id), { name: "Old", archived: true });
+        assert.equal((yield* taskNamesOf(outsider, [invitations.id])).size, 0);
         assert.deepEqual(
           yield* listWorkspaceCodingAgents(outsider, workspace, {
             includeArchived: true,

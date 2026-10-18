@@ -50,7 +50,7 @@ const openAccount = (name: string) =>
   });
 
 /** A plan with the text above, in a workspace the owner made and the teammate joined, and an account in neither. */
-const openSharedPlan = Effect.gen(function* () {
+const openSharedTask = Effect.gen(function* () {
   const owner = yield* openAccount("Dean Stratakos");
   const teammate = yield* openAccount("Charles Pan");
   const outsider = yield* openAccount("Someone Else");
@@ -105,7 +105,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
     "a thread a teammate started reads for every member, naming its writer, and as no plan for anyone else",
     () =>
       Effect.gen(function* () {
-        const { owner, teammate, outsider, taskId } = yield* openSharedPlan;
+        const { owner, teammate, outsider, taskId } = yield* openSharedTask;
 
         const started = threadOf(
           yield* startPlanCommentThread(
@@ -131,7 +131,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
             taskId,
             startOn(PLAN_TEXT, "teammate", "Hi"),
           )).status,
-          PLAN_COMMENT_OUTCOME.NO_PLAN,
+          PLAN_COMMENT_OUTCOME.NO_TASK,
         );
       }),
   );
@@ -140,7 +140,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
     "a thread started over words not yet saved lands on the same words in the saved text",
     () =>
       Effect.gen(function* () {
-        const { owner, taskId } = yield* openSharedPlan;
+        const { owner, taskId } = yield* openSharedTask;
         const unsaved = PLAN_TEXT.replace(
           "## Goal\n\n",
           "## Goal\n\nInvites replace the admin-only flow.\n\n",
@@ -160,7 +160,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
 
   it.effect("a thread sent again under its key is started once", () =>
     Effect.gen(function* () {
-      const { owner, taskId } = yield* openSharedPlan;
+      const { owner, taskId } = yield* openSharedTask;
       const request = startOn(PLAN_TEXT, "teammate", "Or a guest?");
 
       const first = threadOf(yield* startPlanCommentThread(member(owner), taskId, request));
@@ -173,7 +173,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
 
   it.effect("an anchor naming no words of the text it was measured in is refused", () =>
     Effect.gen(function* () {
-      const { owner, taskId } = yield* openSharedPlan;
+      const { owner, taskId } = yield* openSharedTask;
 
       const outcome = yield* startPlanCommentThread(member(owner), taskId, {
         ...startOn(PLAN_TEXT, "teammate", "Hm"),
@@ -191,7 +191,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
     "a save carries the anchor with its words, a save deleting them leaves the thread its quote, and the editor's undo anchors it again",
     () =>
       Effect.gen(function* () {
-        const { owner, taskId } = yield* openSharedPlan;
+        const { owner, taskId } = yield* openSharedTask;
         const words = "Admins can withdraw an invite from the members page.";
         const started = threadOf(
           yield* startPlanCommentThread(member(owner), taskId, startOn(PLAN_TEXT, words, "In v1?")),
@@ -235,7 +235,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
     "any member resolves and reopens a thread, each said in it, and only a comment's writer edits or deletes it",
     () =>
       Effect.gen(function* () {
-        const { owner, teammate, taskId } = yield* openSharedPlan;
+        const { owner, teammate, taskId } = yield* openSharedTask;
         const started = threadOf(
           yield* startPlanCommentThread(
             member(teammate),
@@ -303,7 +303,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
     "a heading renamed over an anchor that did not move names the thread's new section",
     () =>
       Effect.gen(function* () {
-        const { owner, taskId } = yield* openSharedPlan;
+        const { owner, taskId } = yield* openSharedTask;
         yield* startPlanCommentThread(
           member(owner),
           taskId,
@@ -323,7 +323,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
     "a reply under a key another thread was written under is refused, and the thread is unchanged",
     () =>
       Effect.gen(function* () {
-        const { owner, taskId } = yield* openSharedPlan;
+        const { owner, taskId } = yield* openSharedTask;
         const first = threadOf(
           yield* startPlanCommentThread(member(owner), taskId, startOn(PLAN_TEXT, "email", "One")),
         );
@@ -350,7 +350,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
     "resolving and reopening past the bound still settles the thread, and says no more lines of it",
     () =>
       Effect.gen(function* () {
-        const { owner, taskId } = yield* openSharedPlan;
+        const { owner, taskId } = yield* openSharedTask;
         const started = threadOf(
           yield* startPlanCommentThread(
             member(owner),
@@ -381,7 +381,7 @@ it.layer(getTestDB())("a plan's comment threads", (it) => {
 
   it.effect("deleting a thread's first comment, or the thread, deletes the thread", () =>
     Effect.gen(function* () {
-      const { owner, teammate, taskId } = yield* openSharedPlan;
+      const { owner, teammate, taskId } = yield* openSharedTask;
       const first = threadOf(
         yield* startPlanCommentThread(member(teammate), taskId, startOn(PLAN_TEXT, "email", "One")),
       );

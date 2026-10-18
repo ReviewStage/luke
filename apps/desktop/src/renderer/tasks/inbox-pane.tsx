@@ -32,12 +32,14 @@ import {
   ErrorState,
   FoldingButton,
   type FoldingButtonHint,
+  FormField,
   GAP,
   Stack,
   Switch,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextField,
 } from "@luke/ui";
 import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
@@ -533,8 +535,13 @@ function FieldName({ field }: { field: InboxField }): React.JSX.Element {
   );
 }
 
+/** What a field says under its control where it must be filled. */
+function requiredWords(field: InboxField): string | undefined {
+  return field.required === true ? "Required" : undefined;
+}
+
 /** One field of a form: the control Settings draws for its type, holding what the developer put in it. */
-function FormField({
+function InboxFormField({
   field,
   draft,
   disabled,
@@ -550,27 +557,42 @@ function FormField({
     onDraft(withValue(draft, field.label, next));
   switch (field.type) {
     case INBOX_FIELD.TEXT:
-    case INBOX_FIELD.NUMBER: {
-      const number = field.type === INBOX_FIELD.NUMBER;
       return (
-        <label className="inbox-field" data-inbox-field={field.type}>
-          <FieldName field={field} />
-          <input
-            className="settings-input inbox-field-input"
-            type={number ? "number" : "text"}
-            maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
-            value={value === undefined ? "" : String(value)}
-            disabled={disabled}
-            onChange={(event) => {
-              const typed = event.currentTarget.value;
-              if (typed === "") return set(undefined);
-              const parsed = event.currentTarget.valueAsNumber;
-              set(number ? (Number.isFinite(parsed) ? parsed : undefined) : typed);
-            }}
-          />
-        </label>
+        <div data-inbox-field={field.type}>
+          <FormField label={field.label} description={requiredWords(field)}>
+            {(control) => (
+              <TextField
+                field={control}
+                maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+                value={value === undefined ? "" : String(value)}
+                disabled={disabled}
+                onChange={(typed) => set(typed === "" ? undefined : typed)}
+              />
+            )}
+          </FormField>
+        </div>
       );
-    }
+    case INBOX_FIELD.NUMBER:
+      return (
+        <div data-inbox-field={field.type}>
+          <FormField label={field.label} description={requiredWords(field)}>
+            {(control) => (
+              <input
+                id={control.id}
+                aria-describedby={control["aria-describedby"]}
+                className="settings-input inbox-field-input"
+                type="number"
+                value={value === undefined ? "" : String(value)}
+                disabled={disabled}
+                onChange={(event) => {
+                  const parsed = event.currentTarget.valueAsNumber;
+                  set(Number.isFinite(parsed) ? parsed : undefined);
+                }}
+              />
+            )}
+          </FormField>
+        </div>
+      );
     case INBOX_FIELD.SELECT:
       return (
         <div className="settings-row settings-row-wrapping" data-inbox-field={field.type}>
@@ -611,7 +633,7 @@ export function FormFields({
   return (
     <Stack gap={GAP.CONTROL}>
       {form.fields.map((field) => (
-        <FormField
+        <InboxFormField
           key={field.label}
           field={field}
           draft={draft}
