@@ -8,6 +8,8 @@ import { Option, Schema } from "effect";
  * graduates, which is what makes every gate left behind fail to compile.
  */
 export const EXPERIMENT = {
+  /** A Browser tab in the side panel: a web page beside the plan, the Mac's own `localhost` among them. */
+  BROWSER: "browser",
   /** A workspace's chat: its people, coding agents, and Luke talking in channels and DMs. */
   CHAT: "chat",
   /** The read-only Talk → Build → Ship board beside the Inbox. */
@@ -43,6 +45,15 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
+  {
+    key: EXPERIMENT.BROWSER,
+    name: "Browser tab",
+    detail:
+      "Open a web page in a tab beside your plan, your own localhost included. Pages keep " +
+      "their own cookies, apart from Luke's.",
+    owner: "Dean",
+    since: "2026-10-16",
+  },
   {
     key: EXPERIMENT.SECTIONS,
     name: "Sections",

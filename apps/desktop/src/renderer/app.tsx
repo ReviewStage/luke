@@ -311,6 +311,13 @@ export function App(): React.JSX.Element {
     onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),
     leaveGuard,
   });
+  // A Browser tab left open as its experiment goes off closes, its page with
+  // it, on whatever plan and whatever the window shows, Settings included.
+  const browsing = useExperiment(EXPERIMENT.BROWSER);
+  const { onCloseBrowsers } = tasks.sidePanel;
+  useEffect(() => {
+    if (!browsing) onCloseBrowsers();
+  }, [browsing, onCloseBrowsers]);
   // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.
   const settingsWorkspace = useSettingsWorkspace({
     listedId: tasks.workspace?.id,

@@ -75,6 +75,7 @@ import {
 } from "@luke/ui/chat-model";
 import {
   isAgentTab,
+  isBrowserTab,
   isChangesTab,
   isDraftTab,
   isFileTab,
@@ -2742,6 +2743,8 @@ export function useTasksTab(input: {
     if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
     if (isMacTerminalTab(tab)) return drawsMacTerminal(tab, { taskAgents: agentIds });
+    // A Browser tab's page went with it, so there is nothing to open again.
+    if (isBrowserTab(tab)) return false;
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain);
