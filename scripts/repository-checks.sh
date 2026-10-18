@@ -582,6 +582,12 @@ if [[ -n "$node_reaching_effect" ]]; then
     exit 1
 fi
 
+# A deployment's migration runs while the deployment before it still serves
+# the old names, so a migration newer than the cutoff renames no table and no
+# column in place (`packages/database/src/core/migration-renames.ts`): the
+# Oct 17 plan-to-task rename broke the 26 turns then running.
+pnpm --silent --filter @luke/database check:renames
+
 # This is the one scan for secrets the repository runs (AGENTS.md's "Never"), and
 # a test fixture shaped like a provider's live credential is what GitHub's
 # secret scanning raises an alert on, which history keeps open once pushed. So
