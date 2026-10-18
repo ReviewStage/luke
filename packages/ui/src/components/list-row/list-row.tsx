@@ -83,7 +83,12 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), over
  * its metadata's end while the pointer rests on it or it holds the
  * keyboard, the metadata stepping aside as a sidebar row's time does for
- * Pin and Archive.
+ * Pin and Archive. Where its metadata stands at its middle, the acts take
+ * their own room as they come in, so the title is cut where they begin
+ * rather than running under them, and a title cut short there or at rest
+ * fades out over its last few pixels instead of ending in an ellipsis, as a
+ * browser's tab does, so the cut moving as the acts come and go reads as
+ * the fade sliding rather than the words cut again.
  *
  * A row may be swiped right to one act (`swipe`), as a mail app's thread
  * is swiped to mark it read: a short swipe leaves it open on the act's
@@ -171,15 +176,22 @@ function preventFocusMove(event: MouseEvent<HTMLElement>): void {
   event.preventDefault();
 }
 
-/** Tells `onTitleClipped` whether the title is cut short, measuring it only where someone asks. */
+/** A row's title as measured: the ref to hand it, none where nothing measures it, and whether it is cut short. */
+interface TitleClip {
+  readonly ref: RefCallback<HTMLElement> | undefined;
+  readonly clipped: boolean;
+}
+
+/** Whether the title is cut short, told to `onTitleClipped`, measured only where someone asks or the title fades. */
 function useTitleClipped(
   onTitleClipped: ((clipped: boolean) => void) | undefined,
-): RefCallback<HTMLElement> | undefined {
+  fades: boolean,
+): TitleClip {
   const [measured, clipped] = useClipped();
   useEffect(() => {
     onTitleClipped?.(clipped);
   }, [onTitleClipped, clipped]);
-  return onTitleClipped === undefined ? undefined : measured;
+  return { ref: onTitleClipped === undefined && !fades ? undefined : measured, clipped };
 }
 
 /** The act of a row that offers no swipe. */
@@ -285,9 +297,18 @@ export function ListRow({
   swipe?: ListRowSwipe | undefined;
 }): React.JSX.Element {
   const swiped = useRowSwipe(swipe?.label, swipe?.onAct ?? NO_ACT);
-  const titleRef = useTitleClipped(onTitleClipped);
+  // Note that the acts coming in cut the title back to where they begin, so
+  // it fades there rather than having its ellipsis jump as they come and go.
+  const fades =
+    actionsAt === LIST_ROW_ACTIONS.HOVER && metaAt === LIST_ROW_META.MIDDLE && said(actions);
+  const titleClip = useTitleClipped(onTitleClipped, fades);
   const heading = (
-    <span ref={titleRef} className="luke-list-row-title">
+    <span
+      ref={titleClip.ref}
+      className="luke-list-row-title"
+      data-end={fades ? "fade" : undefined}
+      data-overflow={fades ? String(titleClip.clipped) : undefined}
+    >
       {title}
     </span>
   );
