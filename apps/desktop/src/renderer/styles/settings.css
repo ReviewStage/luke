@@ -26,7 +26,7 @@
    ellipsize, and a mark that widened its text would push the truncation
    around as the query changed. */
 .search-match {
-  border-radius: 3px;
+  border-radius: var(--luke-radius-6);
   background: var(--luke-color-match);
   color: inherit;
 }
@@ -87,9 +87,9 @@
 
 .settings-copy strong {
   color: var(--luke-color-text);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.35;
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-label-leading);
 }
 
 /* The word a row wears while its value differs from the default, riding the
@@ -119,16 +119,16 @@
   border-radius: 50%;
   background: color-mix(in srgb, var(--luke-color-attention) 22%, transparent);
   color: var(--luke-color-attention);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-bold);
   line-height: 1;
 }
 
 .settings-copy small {
   margin: 0;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .settings-copy small a,
@@ -193,7 +193,7 @@
 
 .settings-picker[data-side="above"] .settings-picker-menu {
   top: auto;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + var(--luke-space-6));
 }
 
 .settings-picker .settings-picker-menu .task-compose-menu-list {
@@ -221,12 +221,12 @@
   opacity: 1;
 }
 
-/* A name and what is true of it, on one line: the same 7px the credential rows
+/* A name and what is true of it, on one line: the same gap the credential rows
    put between a provider's mark, its name, and its check. */
 .settings-name {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--luke-icon-gap);
 }
 
 /* The provider the account signed in with, its mark beside its name as the
@@ -251,19 +251,19 @@
 .link-icon:where(:not(.luke-button-face > *)) {
   width: 9px;
   height: 9px;
-  margin-left: 3px;
+  margin-left: var(--luke-space-4);
   vertical-align: -1px;
 }
 
 .settings-input {
   width: 100%;
-  padding: 9px 11px;
+  padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
-  border-radius: 10px;
+  border-radius: var(--luke-control-radius);
   background: var(--luke-color-input);
   color: var(--luke-color-text);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   letter-spacing: 0.4px;
   transition:
     border-color var(--duration-hover) ease,
@@ -381,10 +381,10 @@
   display: block;
   height: 24px;
   margin: -3px 0 -3px -9px;
-  padding: 0 8px;
+  padding: 0 var(--luke-space-8);
   border-radius: var(--luke-control-radius);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
   letter-spacing: 0;
 }
 
@@ -422,7 +422,7 @@
    muted words. */
 .leave-consequences {
   margin: 0;
-  padding-left: 18px;
+  padding-left: var(--luke-space-16);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-body-size);
   line-height: var(--luke-type-body-leading);
@@ -504,7 +504,7 @@
 .workspace-github-account-mark > .workspace-tile {
   width: 18px;
   height: 18px;
-  font-size: 11px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* Where a row's subject stands, under its name: connected with the dot a
@@ -557,10 +557,10 @@
 .integration-tools-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  margin: -1px -4px;
-  padding: 1px 4px;
-  border-radius: 4px;
+  gap: var(--luke-space-2);
+  margin: -1px calc(-1 * var(--luke-space-4));
+  padding: 1px var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
   background: none;
   color: inherit;
   font: inherit;

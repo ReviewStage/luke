@@ -41,7 +41,7 @@
   --focus-ring-reach: calc(var(--focus-ring-width) + var(--focus-ring-offset));
   --focus-ring-room: padding-box var(--focus-ring-reach);
   /* The caption strip's ground, opaque because the document scrolls on beneath it. */
-  --surface-caption: #16161b;
+  --surface-caption: var(--luke-color-overlay);
   /* The code on screen, in the ground and inks of the theme the host colours
      it with (`plan-code.ts`), and its lines pointed at in that theme's blue. */
   --code-ground: #0d1117;
@@ -153,7 +153,6 @@
 @media (prefers-color-scheme: light) {
   :root {
     --voice-developer: #17784a;
-    --surface-caption: #fff;
     --code-ground: #fff;
     --code-text: #1f2328;
     --code-line-number: rgba(31, 35, 40, 0.5);
@@ -529,7 +528,7 @@ body,
   display: inline-flex;
   height: 12px;
   align-items: center;
-  gap: 4px;
+  gap: var(--luke-space-4);
 }
 
 /* The dots keep the generated `success` cycle's beat — luke-success-2, 2s, the
@@ -632,15 +631,15 @@ body,
   position: absolute;
   z-index: 6;
   left: 50%;
-  padding: var(--luke-space-8) 14px 10px;
+  padding: var(--luke-space-8) var(--luke-space-12);
   border: 1px solid var(--luke-color-border);
-  border-radius: 12px;
+  border-radius: var(--luke-radius-14);
   /* Opaque, because the document scrolls on beneath it. */
   background: var(--surface-caption);
   box-shadow: 0 var(--luke-space-8) var(--luke-space-24) var(--luke-color-shadow-soft);
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 6px);
+  transform: translate(-50%, var(--luke-space-6));
   transition:
     opacity var(--duration-exit) var(--motion-exit),
     transform var(--duration-exit) var(--motion-exit);
@@ -676,7 +675,7 @@ body,
    lines leave through it. The fade rides a scroll timeline, so it stands only
    while the words overflow and a caption that fits is left whole. */
 .voice-caption-words {
-  max-height: 44px;
+  max-height: calc(2 * var(--luke-type-dialog-leading));
   overflow: hidden;
   animation: caption-overflow-fade linear both;
   animation-timeline: scroll(self block);
@@ -692,13 +691,13 @@ body,
   }
 }
 
-/* Mirrors the 44px above: two of these lines. */
+/* Mirrors the height above: two of these lines. */
 .voice-caption-text {
   display: block;
   color: var(--luke-color-text);
-  font-size: 15px;
+  font-size: var(--luke-type-dialog-size);
   font-weight: var(--luke-weight-medium);
-  line-height: 22px;
+  line-height: var(--luke-type-dialog-leading);
 }
 
 /* A voice failure borrows the strip in the `.error-message` red, because it
@@ -812,7 +811,7 @@ body,
 .error-message {
   margin: 0;
   color: var(--luke-color-danger-text);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The mark an agent at work wears (`working-mark.tsx`): two pixels and their
