@@ -118,7 +118,8 @@ function Links(): React.JSX.Element {
     href: `#${id}`,
     current: shown === id ? NAV_CURRENT.PAGE : undefined,
     onClick: (event: React.MouseEvent<HTMLAnchorElement>) => {
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+        return;
       event.preventDefault();
       setShown(id);
     },
