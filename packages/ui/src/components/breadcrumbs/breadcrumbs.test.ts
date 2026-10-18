@@ -5,7 +5,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FolderIcon } from "../../face/glyphs.js";
 import type { FoldingButtonHint } from "../folding-button/folding-button.js";
-import { BREADCRUMB_POPUP, BREADCRUMBS_VARIANT, Breadcrumbs, type Crumb } from "./breadcrumbs.js";
+import {
+  BREADCRUMB_POPUP,
+  BREADCRUMBS_VARIANT,
+  type BreadcrumbHint,
+  Breadcrumbs,
+  type Crumb,
+} from "./breadcrumbs.js";
 
 /**
  * breadcrumbs.test.ts -- a path is one landmark under its name holding its
@@ -13,7 +19,9 @@ import { BREADCRUMB_POPUP, BREADCRUMBS_VARIANT, Breadcrumbs, type Crumb } from "
  * crumb with no press is words and no button; a press is handed the crumb
  * pressed; a crumb that opens something says what and whether it stands
  * open; a crumb's own name stands over its words and its hint raises its
- * words; and a toolbar's way back is a button named by its words.
+ * words; a crumb's glyph is hidden from a reader, who hears its words, and
+ * its card hangs from the app's hint, a crumb with no press's included; and
+ * a toolbar's way back is a button named by its words.
  */
 
 declare global {
@@ -122,6 +130,39 @@ test("a crumb's own name stands over its words, and the app's hint raises its hi
   });
   expect(button(container, "Folders: packages/db").textContent).toBe("…");
   expect(hinted).toContain("packages/db");
+});
+
+test("a crumb's glyph is decoration, and the app's hint hangs its card, a crumb with no press's too", () => {
+  const Hint: BreadcrumbHint = ({ card, children }) =>
+    createElement(
+      "span",
+      null,
+      children,
+      card === undefined ? null : createElement("aside", null, card),
+    );
+  const container = draw({
+    label: "Path",
+    hint: Hint,
+    crumbs: [
+      {
+        label: "Nightly flake sweep",
+        glyph: createElement(FolderIcon),
+        hint: "Nightly flake sweep",
+        card: "Runs every night at 02:00",
+      },
+      {
+        label: "Quarantine the flaky test",
+        glyph: createElement(FolderIcon),
+        card: "Agent · Working",
+        onPress: () => undefined,
+      },
+    ],
+  });
+  const agent = button(container, "Quarantine the flaky test");
+  expect(agent.textContent).toBe("Quarantine the flaky test");
+  expect(agent.querySelector("svg")?.closest("[aria-hidden='true']")).not.toBeNull();
+  const cards = [...container.querySelectorAll("aside")].map((each) => each.textContent);
+  expect(cards).toEqual(["Runs every night at 02:00", "Agent · Working"]);
 });
 
 test("a toolbar's way back is a button named by its words, answering a press", () => {

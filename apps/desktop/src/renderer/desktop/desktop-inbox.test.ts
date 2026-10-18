@@ -780,11 +780,14 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
   );
   const [task, agent] = crumbs;
   assert.equal(
-    task?.querySelector(".tab-icon")?.innerHTML,
+    task?.querySelector('[aria-hidden="true"]')?.innerHTML,
     renderToStaticMarkup(createElement(DocumentIcon)),
     "the plan's crumb wears its tab's document glyph",
   );
-  assert.ok(agent?.querySelector(".tab-icon .state-glyph"), "the agent's crumb wears its mark");
+  assert.ok(
+    agent?.querySelector('[aria-hidden="true"] .state-glyph'),
+    "the agent's crumb wears its mark",
+  );
   assert.equal(page.querySelectorAll(".inbox-view-items .desktop-toolbar button").length, 2);
   act(() => crumbs[0]?.click());
   act(() => crumbs[1]?.click());
@@ -2458,8 +2461,10 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
 
   act(() => rowNamed(page, "Bump the Node image?").click());
   await settle();
-  const stray = page.querySelector<HTMLButtonElement>('nav[aria-label="Path"] button');
+  // Note that no automation stands behind its crumb, so the crumb is words, opening nothing.
+  const stray = page.querySelector<HTMLElement>('nav[aria-label="Path"] li');
   assert.equal(stray?.textContent, "Other agents");
+  assert.equal(stray?.querySelector("button"), null);
   assert.ok(
     stray?.querySelector(".lucide-clock") === null,
     "the crumb of the agents no automation names wears no automation's clock",

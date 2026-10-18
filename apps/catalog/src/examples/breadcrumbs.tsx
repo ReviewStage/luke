@@ -8,6 +8,7 @@ import {
   FolderIcon,
   GAP,
   Stack,
+  UserIcon,
 } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
@@ -16,8 +17,9 @@ import { CatalogSection } from "../section";
 /**
  * breadcrumbs.tsx -- a bar's path at a wide, a narrow, and the narrowest
  * width, its middle folders and then every folder standing as one "…",
- * each crumb's press marking it open; a long path cut short; and a
- * toolbar's heading, its way back then the page's name, folded and not.
+ * each crumb's press marking it open; a long path cut short; a path whose
+ * crumbs wear a glyph before their words; and a toolbar's heading, its way
+ * back then the page's name, folded and not.
  */
 
 const REPOSITORY = "acme/relay";
@@ -84,6 +86,19 @@ function BreadcrumbsExample(): React.JSX.Element {
                 { label: "an-organisation-with-a-long-name/a-repository-named-at-length" },
                 { label: "a-folder-whose-name-runs-on" },
                 { label: "a-file-whose-name-runs-on-past-its-bar.ts", current: true },
+              ]}
+            />
+          </BreadcrumbBar>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="breadcrumbs-glyphs" title="Crumbs wearing a glyph">
+        <div className="catalog-crumb-bar">
+          <BreadcrumbBar>
+            <Breadcrumbs
+              label="Path"
+              crumbs={[
+                { label: "Ship the invite flow", glyph: <FolderIcon />, onPress: () => undefined },
+                { label: "Fix the double invite", glyph: <UserIcon />, onPress: () => undefined },
               ]}
             />
           </BreadcrumbBar>

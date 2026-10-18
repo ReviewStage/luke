@@ -1,4 +1,13 @@
-import { ChevronDownIcon, FoldingButton, type FoldingButtonHint, WingFace } from "@luke/ui";
+import {
+  DISCLOSURE_BODY,
+  DisclosureBody,
+  DisclosureScope,
+  DisclosureSummary,
+  FoldingButton,
+  type FoldingButtonHint,
+  useDisclosureFold,
+  WingFace,
+} from "@luke/ui";
 import { lineRangeText } from "@luke/voice/code-pane-model";
 import { CodeXmlIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
@@ -22,7 +31,7 @@ import { useOpenLink } from "./use-open-link";
  * a narrow panel (`@container side-panel`) the age goes into the link's
  * pill and the link draws the Code tab's glyph alone, so the header's
  * parts never stand on one another. A
- * card folds to its header with its words cut to a line, and the tab
+ * card folds to its fold's line with its words cut to a line, and the tab
  * keeps which it folded (`use-side-panel.ts`). The words are text in the
  * tab's own lines, so a find over the tab finds them and the recording's
  * text masking covers them.
@@ -64,7 +73,12 @@ function useAgedHint(ago: string): FoldingButtonHint {
   );
 }
 
-/** One note's card: its header, which folds it, then Luke's words while it is open. */
+/**
+ * One note's card: its fold's line, which folds it, its age and its link
+ * beside that line, then Luke's words while it is open. The tab keeps which
+ * cards it folded, so the fold is the tab's (`useDisclosureFold`'s control),
+ * a press and a find's reveal alike telling it.
+ */
 function FileNoteCard({
   note,
   folded,
@@ -82,30 +96,36 @@ function FileNoteCard({
   const link = useMentionLink();
   const openLink = useOpenLink();
   const hint = useAgedHint(agoText(note.shownAt, now));
+  const { state, details } = useDisclosureFold(!folded, {
+    open: !folded,
+    onOpenChange: (open) => onFold(!open),
+  });
   return (
-    <aside
-      className="file-note"
-      aria-label={`${AUTHOR}'s note on ${lines.toLowerCase()}`}
-      data-folded={String(folded)}
-    >
-      <header className="file-note-header">
-        <button
-          type="button"
-          className="file-note-fold"
-          aria-expanded={!folded}
-          onClick={() => onFold(!folded)}
-        >
-          <ChevronDownIcon />
-          <span className="transcript-luke-mark" aria-hidden="true">
-            <WingFace />
-          </span>
-          <span className="file-note-author">{AUTHOR}</span>
-          {folded ? (
-            <span className="file-note-preview">{note.note}</span>
-          ) : (
-            <span className="file-note-lines">{lines}</span>
-          )}
-        </button>
+    <aside className="file-note" aria-label={`${AUTHOR}'s note on ${lines.toLowerCase()}`}>
+      <DisclosureScope state={state}>
+        <details {...details} className="file-note-fold">
+          <DisclosureSummary>
+            <span className="transcript-luke-mark" aria-hidden="true">
+              <WingFace />
+            </span>
+            <span className="file-note-author">{AUTHOR}</span>
+            {folded ? (
+              <span className="file-note-preview">{note.note}</span>
+            ) : (
+              <span className="file-note-lines">{lines}</span>
+            )}
+          </DisclosureSummary>
+          <DisclosureBody inset={DISCLOSURE_BODY.NONE}>
+            <MarkdownMessage
+              words={note.note}
+              className="file-note-words"
+              link={link}
+              openLink={openLink}
+            />
+          </DisclosureBody>
+        </details>
+      </DisclosureScope>
+      <div className="file-note-actions">
         <RelativeTime className="file-note-time" at={note.shownAt} now={now} />
         <FoldingButton
           label={SHOW_IN_CODE_LABEL}
@@ -113,15 +133,7 @@ function FileNoteCard({
           onClick={onShow}
           hint={hint}
         />
-      </header>
-      {folded ? null : (
-        <MarkdownMessage
-          words={note.note}
-          className="file-note-words"
-          link={link}
-          openLink={openLink}
-        />
-      )}
+      </div>
     </aside>
   );
 }

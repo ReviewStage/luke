@@ -1847,7 +1847,7 @@ ul.actor-stack {
 .luke-segment,
 .luke-nav-item,
 .desktop-toolbar-actions,
-.desktop-toolbar .file-breadcrumbs,
+.desktop-toolbar .inbox-crumbs,
 .sidebar-task {
   -webkit-app-region: no-drag;
 }
@@ -3794,25 +3794,12 @@ body:has(.app-stage[data-capture="true"])
   flex: none;
 }
 
-/* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
-   by the strip's gap and the breadcrumbs' chevron, and a crumb under the
-   pointer's press takes the chosen tab's fill, where a tab pressed lands. */
-.inbox-crumbs ol {
-  gap: var(--luke-list-gap);
-}
-
-/* Note that the agent's crumb gives way as the task's does, because the
-   breadcrumbs keep their last crumb whole, and the path's clip would cut it.
-   A crumb takes no tab's cap, since it shares no strip: it names its task or
-   its agent whole while the bar has room, and is cut only once it has not. */
-.inbox-crumbs li.inbox-crumb {
-  max-width: none;
-  flex-shrink: 1;
-}
-
-.inbox-crumb:active {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
+/* The pane's path (`@luke/ui`'s Breadcrumbs) takes what the bar's way back
+   and pager leave it, its crumbs giving way by their share. */
+.inbox-crumbs {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
 }
 
 /* A settled item's foot, over its box: the next item that needs the
@@ -3880,27 +3867,8 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* An item standing alone narrower than its bar's crumbs, the way back, and
-   the pager, drops the task's crumb, and the agent's keeps enough of its
-   name to read; its hover card names it whole. Narrower still the way back
-   draws its glyph alone, named still, beside the pager, and the crumbs take
-   a line of their own under them, where both fit again, sharing it. */
-@container inbox-item (width < 560px) {
-  .inbox-crumb:first-child,
-  .inbox-crumb:first-child + .file-breadcrumb-separator {
-    display: none;
-  }
-
-  .inbox-view-items .inbox-crumbs .tab {
-    min-width: calc(
-      var(--tab-start) +
-      var(--luke-control-icon) +
-      var(--tab-gap) +
-      8ch +
-      var(--tab-end)
-    );
-  }
-}
-
+   the pager draws its way back's glyph alone, named still, beside the
+   pager, and the crumbs take a line of their own under them. */
 @container inbox-item (width < 360px) {
   /* The way back folds to its glyph (`FoldingButton`). */
   .inbox-view-items > .desktop-toolbar {
@@ -3912,26 +3880,6 @@ body:has(.app-stage[data-capture="true"])
   .inbox-view-items > .desktop-toolbar > .inbox-crumbs {
     order: 1;
     flex-basis: 100%;
-  }
-
-  .inbox-crumb:first-child,
-  .inbox-crumb:first-child + .file-breadcrumb-separator {
-    display: flex;
-  }
-
-  /* The task's crumb gives way first, so the agent's keeps the more of its name. */
-  .inbox-crumbs li.inbox-crumb:first-child {
-    flex-shrink: 4;
-  }
-
-  .inbox-view-items .inbox-crumbs .tab {
-    min-width: calc(
-      var(--tab-start) +
-      var(--luke-control-icon) +
-      var(--tab-gap) +
-      3.5ch +
-      var(--tab-end)
-    );
   }
 }
 
@@ -5927,10 +5875,6 @@ body:has(.app-stage[data-capture="true"])
   transition: background-color var(--duration-hover) ease;
 }
 
-.task-summary-row:hover {
-  background: var(--luke-color-fill-hover);
-}
-
 .task-summary-glyph {
   display: flex;
   flex: none;
@@ -5955,12 +5899,6 @@ body:has(.app-stage[data-capture="true"])
   white-space: nowrap;
 }
 
-.task-summary-detail {
-  margin-left: var(--luke-space-6);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
 /* The Inbox row's count of what waits, at its end in the quiet count a
    folded sidebar group shows after its name. */
 .inbox-row-count {
@@ -5968,23 +5906,6 @@ body:has(.app-stage[data-capture="true"])
   color: var(--luke-color-text-subtle);
   font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
-}
-
-/* The files Luke showed, in rows the file tree's own (`tasks.css`): its
-   compact row's height, corner, and type size, and its 16px type icons. */
-.task-summary-rows[data-tree="true"] {
-  gap: 0;
-}
-
-.task-summary-rows[data-tree="true"] .task-summary-row {
-  height: 24px;
-  border-radius: var(--luke-radius-6);
-  font-size: var(--luke-type-caption-size);
-}
-
-.task-summary-rows[data-tree="true"] .task-summary-glyph svg {
-  width: 16px;
-  height: 16px;
 }
 
 /* The archived agents, folded under Archived at the foot of Coding agents
@@ -6781,17 +6702,7 @@ body:has(.app-stage[data-capture="true"])
 /* The plan's tab alone in its column takes the room the heading has rather
    than a most of its own, giving way to the toolbar's buttons as any tab
    gives way (`.tab-strip .tab`). Beside an agent's it is a tab like any
-   other. The Inbox pane's crumbs give way alike, within a tab's most. */
-.inbox-crumbs .tab {
-  min-width: calc(
-    var(--tab-start) +
-    var(--luke-control-icon) +
-    var(--tab-gap) +
-    3.5ch +
-    var(--tab-end)
-  );
-  flex: 0 1 auto;
-}
+   other. */
 
 .desktop-toolbar-heading .tab[data-quiet="true"] {
   max-width: 100%;

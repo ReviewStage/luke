@@ -17,6 +17,7 @@ import type { KnownNames } from "@luke/features/place-chip-model";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  DisclosureChevron,
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -47,7 +48,7 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
-import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
+import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold";
 import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
@@ -692,7 +693,7 @@ function OriginBody({ body }: { body: string }): React.JSX.Element {
   return (
     <Fold className="agent-origin-body">
       <FoldSummary className="agent-origin-body-line">
-        <FoldChevron />
+        <DisclosureChevron />
         <WebhookIcon aria-hidden="true" />
         {WEBHOOK_BODY_LABEL}
       </FoldSummary>

@@ -24,6 +24,7 @@ import {
 import {
   Disclosure,
   DisclosureBody,
+  DisclosureChevron,
   DisclosureSummary,
   INLINE_REF_LOOK,
   InlineRef,
@@ -86,7 +87,7 @@ import {
   type ExtraProps,
 } from "streamdown";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef } from "../actor-ref";
-import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
+import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
 import { Shimmer } from "../ai-elements/shimmer";
@@ -897,7 +898,9 @@ export function TranscriptTodosDock({
         <ListTodoIcon className="todos-dock-icon" aria-hidden="true" />
         <span className="todos-dock-summary">{summary}</span>
         {focus === undefined ? null : <span className="todos-dock-focus">{focus}</span>}
-        <FoldChevron className="todos-dock-chevron" />
+        <span className="todos-dock-chevron">
+          <DisclosureChevron />
+        </span>
       </FoldSummary>
       <FoldBody className="todos-dock-body">
         <TodoItems todos={todos} live />

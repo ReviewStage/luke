@@ -1124,58 +1124,6 @@
   white-space: nowrap;
 }
 
-/* A path drawn in the bar's breadcrumbs' own rows rather than `@luke/ui`'s
-   `Breadcrumbs`, as the Inbox pane's is: each crumb gives way, by its
-   share, down to its first letters and the ellipsis, clipped past the
-   keyboard's ring on a crumb, the last giving way last of all. */
-.file-breadcrumbs {
-  position: relative;
-  min-width: 0;
-  flex: 0 1 auto;
-  overflow: clip;
-  overflow-clip-margin: var(--luke-focus-ring-room);
-}
-
-.file-breadcrumbs ol {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.file-breadcrumbs li {
-  display: flex;
-  min-width: calc(2.5em + 12px);
-  flex: 0 9 auto;
-  align-items: center;
-}
-
-/* Note that the last crumb's share is a whole one, because shares summing
-   to less than one leave the rest of the overflow standing. */
-.file-breadcrumbs li:last-child {
-  flex-shrink: 1;
-}
-
-/* Note that a chevron standing as a crumb of its own, as the Inbox pane's
-   does, takes no crumb's floor, which would stand it a name's width wide. */
-.file-breadcrumbs .file-breadcrumb-separator {
-  min-width: 0;
-  flex-shrink: 0;
-}
-
-.file-breadcrumb-separator {
-  display: flex;
-  align-items: center;
-  color: var(--luke-color-text-subtle);
-}
-
-.file-breadcrumb-separator svg {
-  width: 12px;
-  height: 12px;
-}
-
 /* A crumb's tree, hung under the crumb over the window on a menu's surface
    (file-breadcrumbs.tsx). */
 .file-crumb-tree {
@@ -2474,11 +2422,9 @@
   background: var(--luke-color-fill-hover);
 }
 
-.pull-request-thread-head > svg {
-  width: 14px;
-  height: 14px;
+.pull-request-thread-turn {
+  display: flex;
   margin-left: auto;
-  color: var(--luke-color-text-subtle);
 }
 
 /* A long path is cut at its start rather than its end, so its file's name
@@ -2664,6 +2610,8 @@
    stands in a diff. Lines unwrapped scroll sideways under it while it
    keeps to the tab's width in view. */
 .file-note {
+  display: grid;
+  align-items: center;
   margin: var(--luke-space-6) var(--luke-space-12);
   overflow: hidden;
   border: 1px solid var(--luke-color-border-strong);
@@ -2672,6 +2620,7 @@
   color: var(--luke-color-text);
   font-family: var(--luke-font-sans);
   font-size: var(--luke-type-body-size);
+  grid-template-columns: minmax(0, 1fr) auto;
   line-height: var(--luke-type-body-leading);
 }
 
@@ -2680,54 +2629,37 @@
   left: var(--luke-space-12);
 }
 
-/* The note's words select with the lines around it; its header is the card's controls. */
-.file-note-header {
-  display: flex;
+/* The fold's line, its age and link beside it, then its words the card's
+   whole width under both: the fold's parts stand in the card's own grid. */
+.file-note-fold {
+  display: contents;
+}
+
+.file-note-fold > summary {
   min-width: 0;
+  margin: var(--luke-space-2);
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.file-note-fold::details-content {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+/* The note's words select with the lines around it; its line and what
+   stands beside it are the card's controls. */
+.file-note-actions {
+  display: flex;
   align-items: center;
   gap: var(--luke-space-6);
-  padding: var(--luke-space-2) var(--luke-space-8) var(--luke-space-2) var(--luke-space-2);
+  padding-right: var(--luke-space-8);
   font-size: var(--luke-type-caption-size);
+  grid-column: 2;
+  grid-row: 1;
   line-height: var(--luke-type-caption-leading);
   -webkit-user-select: none;
   user-select: none;
-}
-
-.file-note-fold {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: var(--luke-space-6);
-  padding: var(--luke-space-4);
-  overflow: hidden;
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-
-.file-note-fold:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-/* The note's card clips what it holds, so its fold's ring is drawn inside. */
-.file-note-fold:focus-visible {
-  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
-}
-
-.file-note-fold > svg:first-child {
-  width: 12px;
-  height: 12px;
-  flex: 0 0 auto;
-  color: var(--luke-color-text-subtle);
-  transition: transform var(--duration-quick) var(--motion-exit);
-}
-
-.file-note[data-folded="true"] .file-note-fold > svg:first-child {
-  transform: rotate(-90deg);
 }
 
 .file-note-author {
@@ -2767,7 +2699,7 @@
     display: none;
   }
 
-  .file-note-header {
+  .file-note-actions {
     --luke-fold: folded;
   }
 }
@@ -3702,6 +3634,7 @@ ol.transcript-list {
 }
 
 .todos-dock-chevron {
+  display: flex;
   margin-left: auto;
 }
 

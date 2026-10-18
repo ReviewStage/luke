@@ -25,10 +25,11 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BackIcon,
+  Breadcrumbs,
   CHOICE_SELECT,
-  ChevronRightIcon,
   ChoiceList,
   type ChoiceOption,
+  type Crumb,
   DISCLOSURE_BODY,
   Disclosure,
   DisclosureBody,
@@ -48,14 +49,12 @@ import {
 } from "@luke/ui";
 import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
-import { useClipped } from "@luke/ui/use-clipped";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref";
 import { AttentionMark } from "../attention-mark";
 import { useAutomation } from "../automation-directory";
-import { TaskRef } from "../desktop/task-card";
 import { useMemberDirectory, usePerson } from "../member-directory";
 import { PictureBlock } from "../picture-block";
 import { Segmented } from "../segmented";
@@ -103,7 +102,7 @@ import {
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
 import { RelativeTime } from "./relative-time";
 import { SentWords } from "./skill-chip";
-import { type KindLook, TAB_KIND, tabLook } from "./tab-look";
+import { TAB_KIND, tabLook } from "./tab-look";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { useMinute } from "./task-time";
 import { cardTitle } from "./tool-call-model";
@@ -1300,57 +1299,32 @@ export interface InboxPaneDoors {
 }
 
 /**
- * What a crumb of the pane's path draws, as a tab of the strip draws it:
- * its kind's glyph and its label in a tab's pill (`tab-look.tsx`), the
- * label fading where it is cut short, and the tab's hover fill, the chosen
- * tab's while it is pressed. It is no tab of a strip, so it takes no tab's
- * role.
- */
-function CrumbWords({ look }: { look: KindLook }): React.JSX.Element {
-  const [words, clipped] = useClipped();
-  return (
-    <>
-      <span className="tab-icon">{look.icon}</span>
-      <span ref={words} className="tab-label" data-overflow={String(clipped)}>
-        {look.label}
-      </span>
-    </>
-  );
-}
-
-/**
  * An automation's crumb, as its page's own look names it: its clock and its
  * name, hanging its card where the window reads it, and opening its page
  * where that can be opened.
  */
-function AutomationCrumb({
-  holder,
-  onOpen,
-}: {
-  holder: Extract<InboxHolder, { kind: typeof INBOX_HOLDER.AUTOMATION }>;
-  onOpen: (() => void) | undefined;
-}): React.JSX.Element {
-  const known = useAutomation(holder.automationId ?? undefined);
-  // Note that the agents no automation names stand under no automation, so their crumb wears the Factory's glyph, where every agent is listed, as their group's header does.
-  const icon = holder.automationId === null ? <FactoryIcon aria-hidden="true" /> : <ClockIcon />;
-  return (
-    <Tooltip
-      label={holder.name}
-      card={
-        known === undefined ? undefined : (
-          <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />
-        )
-      }
-    >
-      <button type="button" className="tab-button" disabled={onOpen === undefined} onClick={onOpen}>
-        <CrumbWords look={{ icon, label: holder.name }} />
-      </button>
-    </Tooltip>
-  );
+function useAutomationCrumb(
+  holder: InboxHolder,
+  onOpen: (() => void) | undefined,
+): Crumb | undefined {
+  const automationId = holder.kind === INBOX_HOLDER.AUTOMATION ? holder.automationId : null;
+  const known = useAutomation(automationId ?? undefined);
+  if (holder.kind !== INBOX_HOLDER.AUTOMATION) return undefined;
+  return {
+    label: holder.name,
+    // Note that the agents no automation names stand under no automation, so their crumb wears the Factory's glyph, where every agent is listed, as their group's header does.
+    glyph: holder.automationId === null ? <FactoryIcon /> : <ClockIcon />,
+    hint: holder.name,
+    card:
+      known === undefined ? undefined : (
+        <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />
+      ),
+    onPress: onOpen === undefined ? undefined : () => onOpen(),
+  };
 }
 
 /**
- * The pane's path, task › agent, each crumb drawn as its tab is in the
+ * The pane's path, task › agent, each crumb wearing its tab's glyph in the
  * task's column, the task's document glyph and the agent's mark: each opens
  * what it names, the task or the agent's tab, and hangs the card its
  * sidebar row or tab hangs, the task's crumb as every place naming the
@@ -1370,35 +1344,32 @@ function Crumbs({
   doors: InboxPaneDoors;
 }): React.JSX.Element {
   const { name, agent } = by.subject;
+  const automation = useAutomationCrumb(holder, doors.onOpenHolder);
+  const onOpenHolder = doors.onOpenHolder;
+  const task: Crumb | undefined =
+    holder.kind === INBOX_HOLDER.TASK
+      ? {
+          label: holder.task.name,
+          glyph: tabLook({ kind: TAB_KIND.PLAN, name: holder.task.name }).icon,
+          hint: holder.task.name,
+          card: doors.taskCard,
+          onPress: () => onOpenHolder?.(),
+        }
+      : undefined;
+  const crumbs: Crumb[] = [
+    task ?? automation,
+    {
+      label: name,
+      glyph: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
+      hint: name,
+      card: <AgentCard subject={by.subject} models={by.models} />,
+      onPress: () => by.onOpen(),
+    },
+  ].filter((crumb) => crumb !== undefined);
   return (
-    <nav className="file-breadcrumbs inbox-crumbs" aria-label="Path">
-      <ol>
-        <li className="tab inbox-crumb">
-          {holder.kind === INBOX_HOLDER.TASK ? (
-            <TaskRef
-              task={holder.task}
-              card={doors.taskCard}
-              onOpen={doors.onOpenHolder ?? (() => undefined)}
-              className="tab-button"
-            >
-              <CrumbWords look={tabLook({ kind: TAB_KIND.PLAN, name: holder.task.name })} />
-            </TaskRef>
-          ) : (
-            <AutomationCrumb holder={holder} onOpen={doors.onOpenHolder} />
-          )}
-        </li>
-        <li className="file-breadcrumb-separator" aria-hidden="true">
-          <ChevronRightIcon />
-        </li>
-        <li className="tab inbox-crumb">
-          <Tooltip label={name} card={<AgentCard subject={by.subject} models={by.models} />}>
-            <button type="button" className="tab-button" onClick={by.onOpen}>
-              <CrumbWords look={tabLook({ kind: TAB_KIND.AGENT, name, agent })} />
-            </button>
-          </Tooltip>
-        </li>
-      </ol>
-    </nav>
+    <div className="inbox-crumbs">
+      <Breadcrumbs label="Path" crumbs={crumbs} hint={Tooltip} />
+    </div>
   );
 }
 

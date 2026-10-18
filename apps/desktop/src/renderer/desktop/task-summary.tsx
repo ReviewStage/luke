@@ -10,7 +10,6 @@ import {
   useMenu,
 } from "@luke/ui";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { useClipped } from "@luke/ui/use-clipped";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
@@ -501,8 +500,7 @@ export function summaryHolds(tasks: TasksControl, inbox: InboxBoardView): boolea
  * apart, a file's folder, as its "+" row says it, after the label on its
  * line, then a failed agent's mark or the Inbox's count. A row with a card
  * hangs it on hover beside the row, before its start where the window ends
- * past it, as the sidebar's rows hang theirs. The files Luke showed keep the
- * file tree's own rows (`TreeRow`).
+ * past it, as the sidebar's rows hang theirs.
  */
 function SummaryRow({
   entry,
@@ -525,34 +523,6 @@ function SummaryRow({
         onContextMenu={onContextMenu}
       />
     </RowHintOptions>
-  );
-}
-
-/** A file's row, in the file tree's own: its type's glyph, its name, and its folder after it, faded at its end where it is cut short, its card hung on hover. */
-function TreeRow({ entry, onPick }: { entry: SummaryEntry; onPick: () => void }) {
-  const [words, clipped] = useClipped();
-  const row = (
-    <button type="button" className="task-summary-row" onClick={onPick}>
-      <span className="task-summary-glyph">{entry.row.icon}</span>
-      <span ref={words} className="task-summary-label" data-overflow={String(clipped)}>
-        {entry.row.label}
-        {entry.row.detail === undefined ? null : (
-          <span className="task-summary-detail">{entry.row.detail}</span>
-        )}
-      </span>
-      {entry.endMark}
-    </button>
-  );
-  return (
-    <li>
-      {entry.card === undefined ? (
-        row
-      ) : (
-        <Tooltip label={entry.row.label} card={entry.card} cardBeside>
-          {row}
-        </Tooltip>
-      )}
-    </li>
   );
 }
 
@@ -622,41 +592,26 @@ function SummaryList({
       {sections.map(({ heading, entries }) => (
         <div key={heading} className="task-summary-section">
           <p className="section-heading">{heading}</p>
-          {heading === ADD_SECTION.FILES ? (
-            <ul className="task-summary-rows" aria-label={heading} data-tree="true">
-              {entries.map((entry) => (
-                <TreeRow
+          <List label={heading} density={LIST_DENSITY.DENSE}>
+            {entries.map((entry) => {
+              const onPick = () => {
+                onPicked?.();
+                entry.onPick();
+              };
+              return entry.agent === undefined ? (
+                <SummaryRow key={entry.row.id} entry={entry} onPick={onPick} />
+              ) : (
+                <AgentSummaryRow
                   key={entry.row.id}
                   entry={entry}
-                  onPick={() => {
-                    onPicked?.();
-                    entry.onPick();
-                  }}
+                  agent={entry.agent}
+                  agents={agents}
+                  shown={shown}
+                  onPick={onPick}
                 />
-              ))}
-            </ul>
-          ) : (
-            <List label={heading} density={LIST_DENSITY.DENSE}>
-              {entries.map((entry) => {
-                const onPick = () => {
-                  onPicked?.();
-                  entry.onPick();
-                };
-                return entry.agent === undefined ? (
-                  <SummaryRow key={entry.row.id} entry={entry} onPick={onPick} />
-                ) : (
-                  <AgentSummaryRow
-                    key={entry.row.id}
-                    entry={entry}
-                    agent={entry.agent}
-                    agents={agents}
-                    shown={shown}
-                    onPick={onPick}
-                  />
-                );
-              })}
-            </List>
-          )}
+              );
+            })}
+          </List>
           {heading === AGENTS_SECTION ? <ArchivedAgents agents={agents} shown={shown} /> : null}
         </div>
       ))}

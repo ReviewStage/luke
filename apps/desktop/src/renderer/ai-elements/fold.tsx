@@ -1,12 +1,12 @@
 import {
   cn,
+  DISCLOSURE_BODY,
+  DisclosureBody,
   DisclosureScope,
-  useDisclosureBodyDrawn,
   useDisclosureFold,
   useDisclosureState,
   useDisclosureSummaryClick,
 } from "@luke/ui";
-import { ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, MouseEvent, ReactNode } from "react";
 
 /**
@@ -14,8 +14,9 @@ import type { ComponentProps, MouseEvent, ReactNode } from "react";
  *
  * The state, the motion, and the find's reveal are the package's
  * (`useDisclosureFold`); what is here is only where each part wears its
- * caller's classes. A fold that draws the quiet summary row is
- * `Disclosure` itself, not this.
+ * caller's classes; its chevron and its body are the package's own
+ * (`DisclosureChevron`, `DisclosureBody`). A fold that draws the quiet
+ * summary row is `Disclosure` itself, not this.
  */
 
 /** Note that the element's own `open` is not a prop: the state is this component's, and a fold meant to start open says `defaultOpen`. */
@@ -80,38 +81,18 @@ export function FoldSummary({
   );
 }
 
-/**
- * The chevron at a card's head, or a transcript fold's over the rows it
- * holds, turned down while the fold is open; a call's row wears none, its
- * own icon leading and the whole line the target. Note that it reads its own fold's state rather than the
- * `details` element's open state through a CSS group, because folds nest,
- * and an ancestor's open would turn every chevron inside it.
- */
-export function FoldChevron({ className }: { className?: string }): ReactNode {
-  const { open } = useDisclosureState();
-  return (
-    <ChevronRightIcon
-      aria-hidden="true"
-      className={cn(
-        "size-4 shrink-0 text-muted-foreground transition-transform",
-        open && "rotate-90",
-        className,
-      )}
-    />
-  );
-}
-
 /** Note that the body's element is the fold's own, to wait on its fade, so it takes no ref. */
 export type FoldBodyProps = Omit<ComponentProps<"div">, "ref">;
 
-/** What the fold holds, drawn only while it is open, on its way out, or a find is looking through it. */
-export function FoldBody({ className, children, ...props }: FoldBodyProps): ReactNode {
-  const { body, leaving } = useDisclosureState();
-  const drawn = useDisclosureBodyDrawn();
-  if (!drawn) return null;
+/**
+ * What the fold holds, drawn only while it is open, on its way out, or a
+ * find is looking through it: the fold's own body, set bare, holding the
+ * caller's skin.
+ */
+export function FoldBody({ children, ...props }: FoldBodyProps): ReactNode {
   return (
-    <div ref={body} className={cn("luke-disclosure-body", className)} inert={leaving} {...props}>
-      {children}
-    </div>
+    <DisclosureBody inset={DISCLOSURE_BODY.NONE}>
+      <div {...props}>{children}</div>
+    </DisclosureBody>
   );
 }
