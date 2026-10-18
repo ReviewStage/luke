@@ -1,6 +1,7 @@
+import { repositoryUnreachedSchema } from "@luke/features/repository-reach-wire";
 import { COMMON_ERROR_STATUS_MAP } from "@orpc/openapi";
 import { ORPCError } from "@orpc/server";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { HOSTED_REFUSAL, HOSTED_REFUSAL_STATUS, type HostedRefusal } from "../http/http-effect.js";
 import type { HostedContext } from "./base.js";
 
@@ -16,24 +17,25 @@ import type { HostedContext } from "./base.js";
  * `hostedRefusalResponse` answered.
  */
 
+/** Every slug a refusal may carry, which is every slug that has a status. */
+const HOSTED_REFUSAL_SLUGS = Object.values(HOSTED_REFUSAL).map((refusal) => refusal.error);
+
 /** oRPC's own code for an input that failed its schema, which the hosted vocabulary calls an invalid request. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
 
 /** The status each error code is answered with: oRPC's own codes as oRPC answers them, and every refusal as the hosted vocabulary does. */
 export const HOSTED_ERROR_STATUS = { ...COMMON_ERROR_STATUS_MAP, ...HOSTED_REFUSAL_STATUS };
 
-function isObject(value: unknown): value is object {
-  return typeof value === "object" && value !== null;
-}
+/** A refusal as the failure channel carries it: a slug that has a status, and the reason a repository is out of reach where it has one. */
+const isHostedRefusal = Schema.is(
+  Schema.Struct({
+    error: Schema.Literals(HOSTED_REFUSAL_SLUGS),
+    unreached: Schema.optionalKey(repositoryUnreachedSchema),
+  }),
+);
 
-function isHostedRefusal(failure: unknown): failure is HostedRefusal {
-  return (
-    isObject(failure) &&
-    "error" in failure &&
-    typeof failure.error === "string" &&
-    Object.hasOwn(HOSTED_REFUSAL_STATUS, failure.error)
-  );
-}
+/** The fields a declared error's data carries beside its slug. */
+const isRefusalFields = Schema.is(Schema.Record(Schema.String, Schema.Unknown));
 
 /** The refusal as the error the contract declares: its slug the code, everything beside it the data. */
 function refusalError(refusal: HostedRefusal): ORPCError<string, object> {
@@ -65,7 +67,9 @@ export const hostedRefusalWrap: NonNullable<HostedContext["effect/wrap"]> = <A, 
  */
 export function encodeHostedError(error: ORPCError<string, unknown>): object | null {
   if (Object.hasOwn(HOSTED_REFUSAL_STATUS, error.code)) {
-    return { error: error.code, ...(isObject(error.data) ? error.data : {}) };
+    return isRefusalFields(error.data)
+      ? { error: error.code, ...error.data }
+      : { error: error.code };
   }
   if (error.code === ORPC_BAD_REQUEST) return HOSTED_REFUSAL.INVALID_REQUEST;
   return null;

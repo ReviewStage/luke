@@ -127,13 +127,14 @@ const read = (response: Response) =>
 /** The same request answered by the oRPC router and by the old group. */
 const bothAnswer = (init: { path: string; method?: string; body?: string }) =>
   Effect.gen(function* () {
-    const request = () =>
-      new Request(new URL(init.path, ORIGIN), {
-        method: init.method ?? HTTP_METHOD.GET,
-        ...(init.body === undefined
-          ? {}
-          : { body: init.body, headers: { "content-type": "application/json" } }),
-      });
+    const request = () => {
+      const requestInit: RequestInit = { method: init.method ?? HTTP_METHOD.GET };
+      if (init.body !== undefined) {
+        requestInit.body = init.body;
+        requestInit.headers = { "content-type": "application/json" };
+      }
+      return new Request(new URL(init.path, ORIGIN), requestInit);
+    };
     // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
     const services = Context.empty() as Context.Context<WebServices>;
     const handle = hostedFetch(testRouter);
