@@ -742,10 +742,9 @@ function rowNamed(page: HTMLElement, name: string): Element {
 
 /** Each tool the page shows opened: its name and its badge, where it wears one. */
 function shownTools(page: HTMLElement) {
-  return [...page.querySelectorAll(".integration-tools-panel .integration-tool")].map((tool) => [
-    toolName(tool),
-    tool.querySelector(".luke-badge")?.textContent ?? undefined,
-  ]);
+  return [...page.querySelectorAll('.integration-tools-panel ul[aria-label$=" tools"] > li')].map(
+    (tool) => [toolName(tool), tool.querySelector(".luke-badge")?.textContent ?? undefined],
+  );
 }
 
 /** A tool's name as its row draws it: beside its title, or in the title's place where it has none. */
@@ -768,7 +767,11 @@ function openRow(page: HTMLElement, name: string): void {
 /** The tool an opened row holds, by the row its list draws current and the title of the page beside it. */
 function held(page: HTMLElement) {
   return [
-    toolName(page.querySelector('.integration-tools-panel .integration-tool[data-current="true"]')),
+    toolName(
+      page.querySelector(
+        '.integration-tools-panel ul[aria-label$=" tools"] > li:has([aria-current="true"])',
+      ),
+    ),
     page.querySelector(".integration-tools-panel .integration-tool-detail-title")?.textContent,
   ];
 }
@@ -957,12 +960,12 @@ test("an opened row holds its first tool, whose page stands beside the list, and
   assert.deepEqual(held(page), ["get_deployment", "get_deployment"]);
   // Note that in Settings a pressed tool takes the focus, as a button does, so the arrows reach it next.
   const pressStart = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-  page.querySelector(".integration-tool-head")?.dispatchEvent(pressStart);
+  page.querySelector('ul[aria-label$=" tools"] > li > button')?.dispatchEvent(pressStart);
   assert.equal(pressStart.defaultPrevented, false);
 
   act(() =>
     (
-      [...page.querySelectorAll<HTMLButtonElement>(".integration-tool-head")].find(
+      [...page.querySelectorAll<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')].find(
         (button) => toolName(button) === "list_projects",
       ) ?? assert.fail("list_projects has its row")
     ).click(),
@@ -985,10 +988,12 @@ test("the arrows, Home, and End move the tool an opened row holds, its page foll
   connectVercelAndLinear();
   const page = await mount();
   openRow(page, "Vercel");
-  act(() => page.querySelector<HTMLButtonElement>(".integration-tool-head")?.focus());
+  act(() =>
+    page.querySelector<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')?.focus(),
+  );
 
   assert.deepEqual(
-    [...page.querySelectorAll<HTMLButtonElement>(".integration-tool-head")].map(
+    [...page.querySelectorAll<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')].map(
       (button) => button.tabIndex,
     ),
     [0, -1, -1],
@@ -1007,7 +1012,7 @@ test("the arrows, Home, and End move the tool an opened row holds, its page foll
   keyAtFocus("ArrowUp");
   assert.deepEqual(held(page), ["get_deployment", "get_deployment"]);
   assert.deepEqual(
-    [...page.querySelectorAll<HTMLButtonElement>(".integration-tool-head")].map(
+    [...page.querySelectorAll<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')].map(
       (button) => button.tabIndex,
     ),
     [-1, 0, -1],
@@ -1024,7 +1029,9 @@ test("Return hands the focus to the held tool's page, and Escape or Left hands i
   };
   window.addEventListener("keydown", heard);
   try {
-    act(() => page.querySelector<HTMLButtonElement>(".integration-tool-head")?.focus());
+    act(() =>
+      page.querySelector<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')?.focus(),
+    );
     keyAtFocus("ArrowDown");
 
     for (const back of ["Escape", "ArrowLeft"]) {
@@ -1046,7 +1053,7 @@ test("a search that no longer finds the held tool hands its place to the first i
   openRow(page, "Vercel");
   act(() =>
     (
-      [...page.querySelectorAll<HTMLButtonElement>(".integration-tool-head")].find(
+      [...page.querySelectorAll<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')].find(
         (button) => toolName(button) === "list_projects",
       ) ?? assert.fail("list_projects has its row")
     ).click(),
@@ -1074,7 +1081,7 @@ test("a tool held opens its page at the top, wherever the last one was scrolled"
 
   act(() =>
     (
-      [...page.querySelectorAll<HTMLButtonElement>(".integration-tool-head")].find(
+      [...page.querySelectorAll<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button')].find(
         (button) => toolName(button) === "list_projects",
       ) ?? assert.fail("list_projects has its row")
     ).click(),
@@ -1107,7 +1114,7 @@ test("a tool its server says nothing of has a page that says so", async () => {
   const page = await mount();
   openRow(page, "Vercel");
 
-  assert.equal(page.querySelector(".integration-tool-description"), null);
+  assert.equal(page.querySelector(".luke-list-row-description"), null);
   assert.equal(page.querySelector(".integration-tool-detail-body")?.textContent, "No description.");
   assert.equal(page.querySelector(".integration-tool-hints"), null);
   assert.equal(page.querySelector(".integration-tool-parameters"), null);

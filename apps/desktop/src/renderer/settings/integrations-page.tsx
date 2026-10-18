@@ -325,7 +325,7 @@ function RowToolsPanel({
 }): React.JSX.Element {
   const shown = byName(tools.shown);
   const [held, setHeld] = useState<string | undefined>(undefined);
-  const rows = useRef(new Map<string, HTMLButtonElement>());
+  const rows = useRef(new Map<string, HTMLElement>());
   const body = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   // A tool the search no longer finds hands its place to the first that it does.
@@ -339,7 +339,7 @@ function RowToolsPanel({
     keepInView(list.current, row?.closest(".integration-tool") ?? null);
   };
 
-  const onRowKey = (event: React.KeyboardEvent<HTMLButtonElement>, tool: IntegrationTool) => {
+  const onRowKey = (event: React.KeyboardEvent<HTMLElement>, tool: IntegrationTool) => {
     const at = shown.indexOf(tool);
     const to = movedTo(event.key, at, shown.length);
     if (to !== undefined) {

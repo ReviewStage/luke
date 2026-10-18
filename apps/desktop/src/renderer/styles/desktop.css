@@ -3859,47 +3859,10 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* An integration's tools (`integration-tool-list.tsx`), in the MCP
-   popover's server page and in Settings › Integrations alike: one list, each
-   tool a press of one line, its title in the body's type with its name
-   after it in the code face, muted, and its badge (`@luke/ui`'s Badge), and
-   under them the first sentence of what it does in the caption's type. The name gives way first where
-   the row is narrow, then the title, never the badge. The row its owner
-   holds wears the menu's highlight, and its chevron, which says a press
-   opens it. */
-.integration-tool-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.integration-tool {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  border-radius: var(--luke-menu-row-radius);
-}
-
-.integration-tool-head {
-  position: relative;
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  flex-direction: column;
-  gap: 1px; /* off-scale */
-  padding: var(--luke-space-4) calc(var(--row-inset) + var(--luke-space-16)) var(--luke-space-4)
-    var(--row-inset);
-  border-radius: var(--luke-menu-row-radius);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-
-button.integration-tool-head:hover,
-.integration-tool[data-current="true"] > .integration-tool-head {
-  background: var(--luke-color-fill-strong);
-}
-
+   popover's server page and in Settings › Integrations alike: one list of
+   `@luke/ui`'s rows, each tool's title with its name after it in the code
+   face, muted, and its badge (`@luke/ui`'s Badge). The name gives way first
+   where the row is narrow, then the title, never the badge. */
 .integration-tool-name {
   display: flex;
   min-width: 0;
@@ -3910,9 +3873,6 @@ button.integration-tool-head:hover,
 .integration-tool-title {
   overflow: hidden;
   flex: 0 1 auto;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3929,7 +3889,8 @@ button.integration-tool-head:hover,
   min-width: 0;
   color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
-  font-size: 11px;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-regular);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3939,34 +3900,6 @@ button.integration-tool-head:hover,
 .integration-tool-name > .luke-badge {
   flex: none;
   align-self: center;
-}
-
-.integration-tool-description {
-  overflow: hidden;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.integration-tool-chevron {
-  position: absolute;
-  top: 50%;
-  right: var(--row-inset);
-  display: flex;
-  color: var(--luke-color-text-subtle);
-  opacity: 0;
-  transform: translateY(-50%);
-}
-
-.integration-tool-chevron svg {
-  width: 10px;
-  height: 10px;
-}
-
-.integration-tool[data-current="true"] .integration-tool-chevron {
-  opacity: 1;
 }
 
 /* A tool's page: its head at a server page's head's height over a hairline,
