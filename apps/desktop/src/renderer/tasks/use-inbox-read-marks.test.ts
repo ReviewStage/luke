@@ -11,11 +11,14 @@ import {
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { useSettledItems } from "@luke/panel/tasks/inbox-settling";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { type InboxGroup, isUnread, taskHolder } from "./inbox-model";
+import { isUnread } from "./inbox-model";
 import { type InboxReadMarks, useInboxReadMarks } from "./use-inbox-read-marks";
 
 /**
@@ -102,23 +105,24 @@ function marks(first: readonly InboxItem[]) {
       }),
   });
   let control: InboxReadMarks | undefined;
-  function Harness({ groups }: { groups: readonly InboxGroup[] }) {
+  let drawn: readonly InboxItem[] = [];
+  // The plan's held read, as the task's own Inbox draws it, the window's marks laid over it.
+  function Harness({ items }: { items: readonly InboxItem[] }) {
     const { act: send } = useAct();
     control = useInboxReadMarks({
       act: send,
       workspaceId: TASK.workspaceId,
-      groups,
       onMarkedAll: () => {
         rereads += 1;
       },
     });
+    drawn = useSettledItems(items);
     return null;
   }
   root = createRoot(document.createElement("div"));
+  const registry = AtomRegistry.make();
   const read = (items: readonly InboxItem[]) =>
-    act(() =>
-      root?.render(createElement(Harness, { groups: [{ holder: taskHolder(TASK), items }] })),
-    );
+    act(() => root?.render(onRegistry(registry, createElement(Harness, { items }))));
   read(first);
   const held = () => control ?? assert.fail("the hook stands");
   return {
@@ -126,8 +130,7 @@ function marks(first: readonly InboxItem[]) {
     read,
     rereads: () => rereads,
     /** Each item's dot as the hook draws it. */
-    dots: () =>
-      held().groups.flatMap(({ items }) => items.map((each) => [each.id, isUnread(each)])),
+    dots: () => drawn.map((each) => [each.id, isUnread(each)]),
     mark: (target: InboxItem, unread: boolean) => act(() => held().onMark(target, unread)),
     markAll: (items: readonly InboxItem[]) => act(() => held().onMarkAll(items)),
   };

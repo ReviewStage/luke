@@ -16,6 +16,7 @@ import {
   useInboxSettlingOwner,
   useSettledItems,
   useSettledWaiting,
+  withReadMark,
 } from "@luke/panel/tasks/inbox-settling";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -246,4 +247,50 @@ test("another account signed in to the window draws its reads as they hold them,
     if (sent !== undefined) probe.settler?.take(sent, { ...ASKED, status: INBOX_STATUS.ANSWERED });
   });
   assert.equal(probe.drawn[0]?.status, INBOX_STATUS.OPEN);
+});
+
+test("a read mark one account made never stands over the next account's reads in the same window", () => {
+  const registry = AtomRegistry.make();
+  const probe: Probe = { count: 0, drawn: [], settler: undefined };
+  const read = { ...ASKED, unread: false };
+  function Page({ account }: { account: string }) {
+    useInboxSettlingOwner({ id: account, email: `${account}@example.com` });
+    probe.drawn = useSettledItems([read]);
+    probe.settler = useInboxSettler();
+    return null;
+  }
+  root = createRoot(document.createElement("div"));
+  const signIn = (account: string) =>
+    act(() => root?.render(onRegistry(registry, createElement(Page, { account }))));
+  signIn("dana");
+  act(() => {
+    probe.settler?.mark(new Map([[read.id, { unread: true, updatedAt: read.updatedAt }]]));
+  });
+  assert.equal(probe.drawn[0]?.unread, true);
+  signIn("charles");
+  assert.equal(probe.drawn[0]?.unread, false);
+});
+
+test("a read mark the window made stands over the item as it was marked, and gives way to the reads once the item changes again, as a message landing may make it unread", () => {
+  const unread = { ...ASKED, id: "h1", unread: true, updatedAt: 2_000 };
+  const read = { ...ASKED, id: "h2", updatedAt: 2_000 };
+  const marks = new Map([
+    ["h1", { unread: false, updatedAt: 2_000 }],
+    ["h2", { unread: true, updatedAt: 2_000 }],
+  ]);
+  const unreadOf = (items: readonly InboxItem[], held: typeof marks) =>
+    items.map((each) => [each.id, withReadMark(each, held.get(each.id)).unread === true]);
+  assert.deepEqual(unreadOf([unread, read], marks), [
+    ["h1", false],
+    ["h2", true],
+  ]);
+  const changed = { ...unread, updatedAt: 3_000 };
+  assert.deepEqual(unreadOf([changed, read], marks), [
+    ["h1", true],
+    ["h2", true],
+  ]);
+  assert.deepEqual(unreadOf([unread, read], new Map()), [
+    ["h1", true],
+    ["h2", false],
+  ]);
 });

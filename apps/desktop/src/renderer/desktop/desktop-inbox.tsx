@@ -298,20 +298,16 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   const marks = useInboxReadMarks({
     act,
     workspaceId: tasks.workspace?.id,
-    groups: [
-      ...taskEntries,
-      ...tasklessGroups(
-        [...tasks.inboxTaskless, ...settledAgent],
-        tasklessRead,
-        tasks.workspace?.id,
-      ),
-    ],
     onMarkedAll: () => {
       rereadTasks();
       rereadTaskless();
     },
   });
-  const entries = marks.groups;
+  // Note that every read here draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
+  const entries: readonly InboxGroup[] = [
+    ...taskEntries,
+    ...tasklessGroups([...tasks.inboxTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
+  ];
   const counts = inboxCounts(entries, tasks.me, choices.whose);
   const filter = {
     grouping: choices.grouping,

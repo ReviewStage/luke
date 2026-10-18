@@ -4666,4 +4666,52 @@ test("sorted by waiting longest from the view's menu, the open items stand first
     "*Expire after 7 days?",
     "How is a failed email retried?",
   ]);
+test("an item marked read as it opened stays read once another plan's item is chosen, though the list's read of its plan, which a mark never moves, still holds it unread", async () => {
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, RETRY]);
+  // The plan's held read wakes on the mark, as the service wakes it, holding the item read.
+  const held = pending();
+  let asked = false;
+  heldRead = (taskId) => {
+    if (taskId !== BILLING.id || asked) return new Promise(() => undefined);
+    asked = true;
+    return held.promise;
+  };
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(readMarks, [`read:${THRESHOLD.id}`]);
+  assert.equal(unreadOf(page, "Alert at 80%?"), false);
+  await act(async () =>
+    held.settle({ items: [{ ...THRESHOLD, unread: false }, RETRY], cursor: "2" }),
+  );
+  await settle();
+  assert.equal(unreadOf(page, "Alert at 80%?"), false);
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  assert.equal(unreadOf(page, "Alert at 80%?"), false, "the list's older read brings no dot back");
+});
+
+test("a mark another window makes later on the same item stands once the plan's held read holds it, over the window's own earlier mark", async () => {
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, RETRY]);
+  // The plan's held reads land as the test says: its own mark heard, then another window's.
+  const reads: PendingRead[] = [pending(), pending()];
+  heldRead = (taskId) =>
+    taskId === BILLING.id
+      ? (reads.shift()?.promise ?? new Promise(() => undefined))
+      : new Promise(() => undefined);
+  const [own, other] = reads;
+  assert.ok(own !== undefined && other !== undefined);
+  const { page } = mount();
+  await settle();
+  assert.equal(unreadOf(page, "Alert at 80%?"), false);
+  await act(async () =>
+    own.settle({ items: [{ ...THRESHOLD, unread: false }, RETRY], cursor: "2" }),
+  );
+  await settle();
+  await act(async () =>
+    other.settle({ items: [{ ...THRESHOLD, unread: true }, RETRY], cursor: "3" }),
+  );
+  await settle();
+  assert.equal(unreadOf(page, "Alert at 80%?"), true);
 });

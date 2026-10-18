@@ -1146,38 +1146,6 @@ export function inboxCounts(
   };
 }
 
-/**
- * A read mark the window made that the reads may not hold yet: whether the
- * item now reads as unread, and when it last changed as it was marked.
- */
-export interface InboxReadMark {
-  readonly unread: boolean;
-  readonly updatedAt: number;
-}
-
-/**
- * The groups with the window's own read marks laid over what the reads
- * hold, so a dot flips the moment it is marked rather than when the
- * service's held read next answers. A mark stands only over the item as it
- * was marked: once the item changes again, a message landing on its thread
- * say, the reads' word on it stands, since that change may make it unread
- * again.
- */
-export function withReadMarks(
-  groups: readonly InboxGroup[],
-  marks: ReadonlyMap<string, InboxReadMark>,
-): readonly InboxGroup[] {
-  if (marks.size === 0) return groups;
-  return groups.map(({ holder, items }) => ({
-    holder,
-    items: items.map((item) => {
-      const mark = marks.get(item.id);
-      if (mark === undefined || mark.updatedAt !== item.updatedAt) return item;
-      return isUnread(item) === mark.unread ? item : { ...item, unread: mark.unread };
-    }),
-  }));
-}
-
 /** Whether any task's item is unread, listed or filtered out. */
 export function anyUnread(tasks: readonly InboxGroup[]): boolean {
   return tasks.some(({ items }) => items.some(isUnread));
