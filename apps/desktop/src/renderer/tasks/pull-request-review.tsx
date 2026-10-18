@@ -9,11 +9,17 @@ import {
   Button,
   ChoiceList,
   type ChoiceOption,
+  ConfirmDialog,
+  type DialogQuestion,
   POPOVER_ALIGN,
+  useConfirmDialog,
 } from "@luke/ui";
-import { MessageSquarePlusIcon } from "lucide-react";
+import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { PopoverPanel } from "../popover-panel";
+import type { PendingReview } from "./line-comment";
 import { MarkdownField } from "./markdown-field";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes";
 
@@ -45,7 +51,21 @@ const REVIEW_WORDS = {
   CANCEL: "Cancel",
   SUBMIT: "Submit review",
   SUBMITTING: "Submitting review",
+  DISCARD: "Discard",
+  /** What the panel says of the comments the member's pending review holds, which submitting publishes. */
+  pending: (count: number) =>
+    `${count} pending ${count === 1 ? "comment" : "comments"} will be published.`,
+  /** The Review press's name to a reader, with the pending comments it holds. */
+  openWith: (count: number) => `Review, ${count} pending ${count === 1 ? "comment" : "comments"}`,
 } as const;
+
+/** What Discard asks before it throws the member's pending review away. */
+const DISCARD_QUESTION: DialogQuestion = {
+  title: "Discard your pending review?",
+  body: "This deletes every pending comment you added to it. This can't be undone.",
+  verb: "Discard review",
+  running: "Discarding",
+};
 
 /** What the review may say, in the order GitHub's own review box offers it, and what each means. */
 const EVENT_OPTIONS = [
@@ -91,12 +111,17 @@ function ReviewPanel({
   id,
   draft,
   writes,
+  pending,
+  onDiscard,
   onClose,
   onLeave,
 }: {
   id: string;
   draft: ReviewDraft;
   writes: PullRequestWrites;
+  pending: PendingReview;
+  /** Asks to throw the pending review away; offered only while one is held. */
+  onDiscard: () => void;
   onClose: () => void;
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
@@ -119,7 +144,12 @@ function ReviewPanel({
       onLeave={onLeave}
       onKeyDown={onKey}
     >
-      <p className="pull-request-review-lead">{REVIEW_WORDS.LEAD}</p>
+      <p className="pull-request-review-lead">
+        {REVIEW_WORDS.LEAD}
+        {pending == null || pending.comments === 0
+          ? null
+          : ` ${REVIEW_WORDS.pending(pending.comments)}`}
+      </p>
       <MarkdownField
         label={REVIEW_WORDS.BODY}
         placeholder={placeholderOf(draft.event)}
@@ -139,6 +169,16 @@ function ReviewPanel({
       />
       <PullRequestWriteNote writes={writes} className="pull-request-review-note" />
       <div className="pull-request-review-foot">
+        {pending == null ? null : (
+          <Button
+            variant={BUTTON_VARIANT.DANGER_OUTLINE}
+            icon={<Trash2Icon aria-hidden="true" />}
+            disabled={sending}
+            onClick={onDiscard}
+          >
+            {REVIEW_WORDS.DISCARD}
+          </Button>
+        )}
         <Button onClick={onClose}>{REVIEW_WORDS.CANCEL}</Button>
         <Button
           variant={BUTTON_VARIANT.PRIMARY}
@@ -158,7 +198,14 @@ function ReviewPanel({
  * written for as long as the tab stands, so a panel closed by a stray
  * click opens again on the same words.
  */
-export function PullRequestReview({ writes }: { writes: PullRequestWrites }): React.JSX.Element {
+export function PullRequestReview({
+  writes,
+  pending,
+}: {
+  writes: PullRequestWrites;
+  /** The member's own pending review, which the panel publishes or discards. */
+  pending: PendingReview;
+}): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [event, setEvent] = useState<ReviewEvent>(REVIEW_EVENT.COMMENT);
   const [body, setBody] = useState("");
@@ -169,7 +216,18 @@ export function PullRequestReview({ writes }: { writes: PullRequestWrites }): Re
   // Note that a press outside closes it too, as a menu's does, because the
   // field keeps the focus through a press on words nothing can focus, so no
   // blur says it was left; a review on its way holds it open all the same.
-  const sending = writes.pending !== undefined;
+  // Note that the question stands, busy, until GitHub answers the discard, says its refusal in GitHub's words, and holds the panel open meanwhile as a review on its way does.
+  const discarding = useConfirmDialog({ subject: pending != null, surfaceOpen: open }, () =>
+    writes
+      .write({ action: PULL_REQUEST_ACTION.DISCARD_REVIEW })
+      .then(
+        (outcome): ActionResult =>
+          outcome.done
+            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+            : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
+      ),
+  );
+  const sending = writes.pending !== undefined || discarding.stage !== CONFIRM_STAGE.RESTING;
   useEffect(() => {
     if (!open || sending) return undefined;
     const pressed = (event: PointerEvent) => {
@@ -200,9 +258,19 @@ export function PullRequestReview({ writes }: { writes: PullRequestWrites }): Re
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
+        label={
+          pending == null || pending.comments === 0
+            ? undefined
+            : REVIEW_WORDS.openWith(pending.comments)
+        }
         onClick={() => setOpen(!open)}
       >
         {REVIEW_WORDS.OPEN}
+        {pending == null || pending.comments === 0 ? null : (
+          <span className="pull-request-review-count" aria-hidden="true">
+            {pending.comments}
+          </span>
+        )}
       </Button>
       {open ? (
         <AnchoredPopover align={POPOVER_ALIGN.END} width={PANEL_WIDTH}>
@@ -210,6 +278,8 @@ export function PullRequestReview({ writes }: { writes: PullRequestWrites }): Re
             id={panelId}
             draft={{ event, body, setEvent, setBody, submit }}
             writes={writes}
+            pending={pending}
+            onDiscard={discarding.ask}
             onClose={close}
             onLeave={(left) => {
               // Note that a review on its way holds the panel open, because the
@@ -222,6 +292,7 @@ export function PullRequestReview({ writes }: { writes: PullRequestWrites }): Re
           />
         </AnchoredPopover>
       ) : null}
+      <ConfirmDialog confirm={discarding} question={DISCARD_QUESTION} />
     </div>
   );
 }
