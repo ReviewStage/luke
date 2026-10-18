@@ -170,6 +170,8 @@ let inboxes = new Map<string, readonly InboxItem[]>();
 let setHolding: (holding: readonly AppInboxTaskHolding[]) => void = () => undefined;
 /** Moves the account's list of tasks, as an archive on another Mac would. */
 let setTasks: (tasks: readonly TaskSummary[]) => void = () => undefined;
+/** Lands the account's first read of its task list, where a test mounted the Inbox before it. */
+let setListRead: (read: boolean) => void = () => undefined;
 /** Chooses an item from outside the list, as a notification's click does. */
 let chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
 /** Moves main's read of what waits on the agents with no task, as main does when an item opens or is answered. */
@@ -332,14 +334,18 @@ interface Asked {
   closed: number;
 }
 
-/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded. */
-function mount(firstTaskless: readonly AppInboxTasklessItem[] = []) {
+/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read. */
+function mount(firstTaskless: readonly AppInboxTasklessItem[] = [], { listUnread = false } = {}) {
   const asked: Asked = { shownTasks: [], shownAgents: [], shownAutomations: [], closed: 0 };
   function Page() {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     chooseFromOutside = setChosen;
     const [holding, setHeld] = useState(HOLDING);
-    const [listed, setListed] = useState<readonly TaskSummary[]>([BILLING, INVITES]);
+    const [listed, setListed] = useState<readonly TaskSummary[]>(
+      listUnread ? [] : [BILLING, INVITES],
+    );
+    const [listRead, setRead] = useState(!listUnread);
+    setListRead = setRead;
     setHolding = setHeld;
     const [taskless, setWaiting] = useState(firstTaskless);
     setTaskless = setWaiting;
@@ -349,6 +355,7 @@ function mount(firstTaskless: readonly AppInboxTasklessItem[] = []) {
         me: READER.userId,
         workspace: listedWorkspace,
         tasks: listed,
+        listRead,
         inbox: [
           { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
           { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
@@ -1228,6 +1235,58 @@ test("while its plans are first read, the list stands placeholder rows in its it
     "# Invites",
     "*Expire after 7 days?",
   ]);
+});
+
+test("an Inbox opened before the account's task list is read stands placeholder rows, and neither the list nor the pane says nothing needs you, whatever its width; once the list lands, its items stand", async () => {
+  const { page } = mount([], { listUnread: true });
+  await settle();
+  const list = page.querySelector<HTMLElement>(".inbox-tasks");
+  assert.ok(list, "the list is drawn");
+  assert.equal(
+    list.querySelector('[role="status"][aria-busy="true"]')?.textContent,
+    "Reading your inbox…",
+  );
+  assert.deepEqual(
+    [emptyStateIn(page, ".inbox-tasks"), emptyStateIn(page, ".inbox-view-items")],
+    [null, null],
+  );
+  assert.equal(page.querySelector(".sidebar-note"), null, "no line says nothing needs you");
+  layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(emptyStateIn(page, ".inbox-tasks"), null);
+
+  layOut(page, 1200);
+  act(() => {
+    setTasks([BILLING, INVITES]);
+    setListRead(true);
+  });
+  await settle();
+  assert.equal(list.querySelector('[aria-busy="true"]'), null);
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "▸ *Alert at 80%?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+});
+
+test("an item a link names before the account's task list is read says no Not found, and shows once the list lands", async () => {
+  const { page } = mount([], { listUnread: true });
+  await settle();
+  act(() => chooseFromOutside({ taskId: INVITES.id, itemId: EXPIRY.id, opened: true }));
+  await settle();
+  assert.doesNotMatch(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
+
+  act(() => {
+    setTasks([BILLING, INVITES]);
+    setListRead(true);
+  });
+  await settle();
+  assert.equal(
+    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
+    "Expire after 7 days?",
+  );
 });
 
 test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape does not leave the Inbox", async () => {

@@ -310,7 +310,10 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
       !taskless.current.has(chosenAgentId) &&
       !live.read &&
       !agents.listMissing);
+  // Note that the holdings are filtered against the task list, so until it is read they hold nothing and prove nothing.
+  const listUnread = !tasks.listRead && !tasks.listFailed;
   const reading =
+    listUnread ||
     holdings.some((holding) => !read.items.has(holding.taskId)) ||
     tasks.inboxTaskless.some((each) => !taskless.items.has(each.agentId));
   // An item asked for by a link or a notification that no read holds once every read has landed is
@@ -323,7 +326,8 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
       : chosenAgentId !== undefined
         ? live.read || taskless.current.has(chosenAgentId) || holderEmpty
         : true;
-  const missing = asked?.opened === true && chosen === undefined && !chosenWaits && holderRead;
+  const missing =
+    asked?.opened === true && chosen === undefined && !chosenWaits && holderRead && !listUnread;
   // Note that an item a link or a notification asked for is never given way to, found or not, because the reader asked for that one.
   const standIn =
     chosen === undefined && !chosenWaits && !missing && asked?.opened !== true
