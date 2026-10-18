@@ -110,6 +110,10 @@
         "idempotencyKey"
       ],
       "additionalProperties": false
+    },
+    "brief": {
+      "type": "string",
+      "maxLength": 16000
     }
   },
   "required": [],

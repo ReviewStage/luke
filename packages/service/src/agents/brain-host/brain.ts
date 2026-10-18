@@ -308,16 +308,19 @@ Return the relevant facts and where the work stands now. Don't repeat the questi
 /**
  * The message a fresh call opens the brain's turn with, sent as the
  * session starts rather than at the developer's first words. It is general
- * on purpose, because nothing of the task has been said yet: the task's name
- * and saved document reach the model as standing context beside it. Note
+ * on purpose, because nothing of the task has been said yet: the task's name,
+ * the developer's brief, and saved document reach the model as standing context beside it. Note
  * that it asks for no question, because a question queued now would be
  * asked before the developer has said what they want.
  */
 export const BRAIN_EXPLORE_ASK =
-  "The call has just started, and the developer has not said what they want yet. " +
+  "The call has just started, and the developer has not spoken yet. " +
   "Start exploring the task's folder now, so you already know the code when they do: " +
   "what the project is, how it is laid out, how it is built and tested, and anything the " +
-  "task's name or the plan's saved document points to. Where the task was started from a Linear issue, " +
+  "task's name or the plan's saved document points to. Where the task carries the developer's brief, " +
+  "that brief is the developer's own description of the task, written as they started it: plan from it, " +
+  "and research the code it concerns before they speak. " +
+  "Where the task was started from a Linear issue, " +
   "that issue is the work to plan: research it on your own, reading more of it and what it " +
   "links to through the Linear connection where you need it, and explore the code it concerns. " +
   "The issue is context, not a request to change it: change nothing in Linear unless the " +
@@ -369,6 +372,7 @@ Transcripts can contain mistakes, unfinished phrases, and later corrections. Fol
 const TASK_MARKER = "[task]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
+const BRIEF_MARKER = "[the developer's brief for the task]";
 const LINEAR_ISSUE_MARKER = "[linear issue the task was started from]";
 const ISSUE_MARKER = "[workspace issue the task was started from]";
 const CHAT_SINCE_MARKER = "[chat since the last call]";
@@ -436,6 +440,12 @@ function developerFieldsText(stored: StoredTask): readonly string[] {
   ];
 }
 
+/** The developer's own words about the task as they started it, as a JSON string; nothing for a task started with none. */
+function briefText(stored: StoredTask): readonly string[] {
+  if (stored.brief === undefined) return [];
+  return [BRIEF_MARKER, JSON.stringify(stored.brief)];
+}
+
 /** The issue the plan was started from, as JSON, as it was read then; nothing for a plan started from none. */
 function linearIssueText(stored: StoredTask): readonly string[] {
   if (stored.linearIssue === undefined) return [];
@@ -463,7 +473,8 @@ function issueText(stored: StoredTask): readonly string[] {
 
 /**
  * What a planning turn is handed beside its instructions every turn: the
- * plan's name, the Linear issue and the workspace's own issue it was started from where it was, the saved
+ * plan's name, the developer's brief where they wrote one as they started it,
+ * the Linear issue and the workspace's own issue it was started from where it was, the saved
  * document as JSON, the newest saves coding agents
  * made on it (so Luke can raise what an agent asked or decided), what was
  * said in the chat since Luke last read it (`chat.ts`), the sections
@@ -484,6 +495,7 @@ export function brainStandingContext(
   return [
     heading,
     `Name: ${task.name}`,
+    ...briefText(stored),
     ...linearIssueText(stored),
     ...issueText(stored),
     DOCUMENT_MARKER,

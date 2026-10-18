@@ -269,6 +269,38 @@ it.layer(getTestDB())("a plan's starting text", (it) => {
   );
 });
 
+it.layer(getTestDB())("a plan's brief", (it) => {
+  it.effect(
+    "is read back as written, and a plan started with none, or a blank one, reads none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const organizationId = yield* openWorkspace(owner);
+        const briefed = yield* createTask(owner, {
+          organizationId,
+          brief: "  Let any member invite a teammate, not only admins.\n",
+        });
+        const unbriefed = yield* createTask(owner, { organizationId });
+        const blank = yield* createTask(owner, { organizationId, brief: "   " });
+        const unplanned = yield* createTask(owner, {
+          organizationId,
+          planning: false,
+          brief: "Fix the typo in the invite email.",
+        });
+
+        const briefOf = (taskId: string) =>
+          Effect.map(readTask(owner, taskId), (read) => Option.getOrUndefined(read)?.brief);
+        assert.equal(
+          yield* briefOf(briefed.id),
+          "Let any member invite a teammate, not only admins.",
+        );
+        assert.equal(yield* briefOf(unbriefed.id), undefined);
+        assert.equal(yield* briefOf(blank.id), undefined);
+        assert.equal(yield* briefOf(unplanned.id), "Fix the typo in the invite email.");
+      }),
+  );
+});
+
 /** An issue Dean files in the workspace, failing the test where it is not filed. */
 const fileIssue = (userId: string, organizationId: string, title: string) =>
   Effect.map(

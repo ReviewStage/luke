@@ -272,11 +272,15 @@ const FILE_QUERY = {
 /** The query naming one picture of the plan by its id. */
 const ATTACHMENT_QUERY = "attachment";
 
-/** A start or a change is a name and a repository's name at most, so a body past this is neither. */
+/** A change is a name and a repository's name at most, so a body past this is none. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
 
-/** A start is a change's few fields and, where it names one, an agent's Start beside them. */
-const MAXIMUM_TASK_START_BODY_BYTES = MAXIMUM_NAME_BODY_BYTES + MAXIMUM_START_BODY_BYTES;
+/** A brief at its bound with every character escaped. */
+const MAXIMUM_BRIEF_BYTES = TASK_BOUNDS.MAX_BRIEF_CHARS * 6;
+
+/** A start is a change's few fields, a brief where it names one, and an agent's Start beside them where it names one. */
+const MAXIMUM_TASK_START_BODY_BYTES =
+  MAXIMUM_NAME_BODY_BYTES + MAXIMUM_BRIEF_BYTES + MAXIMUM_START_BODY_BYTES;
 
 /** An edit is the plan's text twice, its base and its value, each at its bound with every character escaped. */
 const MAXIMUM_EDIT_BODY_BYTES = TASK_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
@@ -607,6 +611,7 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
       ...(issue === undefined ? undefined : { linearIssue: issue }),
       ...(issueId === undefined ? undefined : { issueId }),
       ...(planning === undefined ? undefined : { planning }),
+      ...(started.success.brief === undefined ? undefined : { brief: started.success.brief }),
     }),
   );
   const answer: TaskStartAnswer =
