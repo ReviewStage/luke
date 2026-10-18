@@ -23,7 +23,8 @@ import { ChevronRightIcon } from "../../face/glyphs.js";
  *   workspace's tile and who shares it, a row tall enough for a face.
  *
  * Its end holds, at rest, a `mark` (a failed run's glyph, a pin) and a
- * `count`, read with its noun ("3 waiting on you") and left out at none;
+ * `count`, read with its noun ("3 waiting on you") and left out at none,
+ * muted, or in the accent's blue where it counts what waits on the reader;
  * a fold's count can stand only while the head is hovered. Its `shortcut`,
  * the chord the app draws, stands there while it is hovered or has the
  * keyboard and takes the count's and the mark's place then, so showing it
@@ -67,12 +68,22 @@ export const NAV_COUNT_SHOWN = {
 
 export type NavCountShown = (typeof NAV_COUNT_SHOWN)[keyof typeof NAV_COUNT_SHOWN];
 
-/** A count at the item's end: its figure, what it counts as a reader hears it, and when it stands. */
+/** A count's ink: muted, as a group's tally, or the accent's blue, for what waits on the reader. */
+export const NAV_COUNT_TONE = {
+  MUTED: "muted",
+  ACCENT: "accent",
+} as const;
+
+export type NavCountTone = (typeof NAV_COUNT_TONE)[keyof typeof NAV_COUNT_TONE];
+
+/** A count at the item's end: its figure, what it counts as a reader hears it, when it stands, and its ink. */
 export interface NavCount {
   readonly value: number;
   /** Said after the figure to a reader, "waiting on you", "tasks"; the figure alone where absent. */
   readonly noun?: string | undefined;
   readonly shown?: NavCountShown | undefined;
+  /** Muted where absent. */
+  readonly tone?: NavCountTone | undefined;
 }
 
 /** What `useMenu().trigger()` hands the button its menu drops from. */
@@ -156,7 +167,11 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
     <span className="luke-nav-item-rest">
       {said(mark) ? <span className="luke-nav-item-mark">{mark}</span> : null}
       {counted ? (
-        <span className="luke-nav-item-count" data-shown={count.shown ?? NAV_COUNT_SHOWN.ALWAYS}>
+        <span
+          className="luke-nav-item-count"
+          data-shown={count.shown ?? NAV_COUNT_SHOWN.ALWAYS}
+          data-tone={count.tone ?? NAV_COUNT_TONE.MUTED}
+        >
           {count.value}
           {count.noun === undefined ? null : (
             <span className="luke-visually-hidden"> {count.noun}</span>

@@ -54,7 +54,10 @@ import { Tooltip } from "./tooltip";
  * field is its `SearchField`, the lists its `ComboboxList`, and the pinned
  * rows its `MenuItem`s, steered from the field. A
  * list too short to search is drawn with no field, the list itself
- * holding focus, naming the highlight, and reading the same keys. The owner says
+ * holding focus, naming the highlight, and reading the same keys. An owner
+ * that answers a search itself, such as one a service answers as the typing
+ * rests, hears each query as it is typed and hands the rows that answer it,
+ * which the menu lists as they come rather than filtering them. The owner says
  * what to list, what to say in the list's place while there is nothing to
  * list, and what a pick does; the menu decides nothing about either.
  * Its owner holds it drawn through its exit (`useDisclosure`), handing it
@@ -304,6 +307,8 @@ export function SearchableMenu(props: {
   note?: React.ReactNode;
   /** Said when a query matches nothing. */
   noMatch: string;
+  /** Present, the owner answers the search: it hears each query as typed, and the rows it hands are listed as they are, unfiltered. */
+  onSearch?: ((query: string) => void) | undefined;
   onPick: (id: string) => void;
   /** Escape was pressed: the owner closes the menu and hands focus back to its trigger. */
   onClose: () => void;
@@ -322,17 +327,26 @@ export function SearchableMenu(props: {
   const { rows, value, onPick } = props;
   const leaving = props.leaving === true;
   const [query, setQuery] = useState("");
-  const matches = matchingRows(rows, query);
+  // Note that rows an owner searched for are its answer to the query already, so the menu filters nothing.
+  const answered = props.onSearch !== undefined;
+  const matches = answered ? rows : matchingRows(rows, query);
   const foot = props.foot ?? [];
   // Until the arrows or the pointer move it, the highlight follows the chosen
   // row, which may arrive after the menu opened, so Enter keeps what stands.
-  const [highlight, setHighlight] = useState<number | undefined>(undefined);
+  // The row moved to is held by its id as well as its place, so rows an
+  // owner hands anew, such as a search answering after the arrows moved,
+  // keep the highlight on that row rather than on whatever took its place.
+  const [highlight, setHighlightAt] = useState<{ index: number; id: string | undefined }>();
+  const setHighlight = (index: number | undefined) =>
+    setHighlightAt(index === undefined ? undefined : { index, id: matches[index]?.id });
+  const movedRow =
+    highlight?.id === undefined ? -1 : matches.findIndex((row) => row.id === highlight.id);
   const chosen = matches.findIndex((row) => row.id === value);
   // A row that cannot be picked takes no highlight, from the arrows or from a moment ago.
   const blocked = (index: number) =>
     (matches[index] ?? foot[index - matches.length])?.disabled !== undefined;
   const at = highlightOver({
-    moved: highlight,
+    moved: movedRow >= 0 ? movedRow : highlight?.index,
     chosen,
     first: firstOpen(matches),
     count: matches.length + foot.length,
@@ -349,7 +363,7 @@ export function SearchableMenu(props: {
     setWasLeaving(leaving);
     if (!leaving) {
       setQuery("");
-      setHighlight(undefined);
+      setHighlightAt(undefined);
       setSubmenu(undefined);
     }
   }
@@ -520,9 +534,11 @@ export function SearchableMenu(props: {
           combobox={keys}
           onChange={(typed) => {
             setQuery(typed);
+            props.onSearch?.(typed);
             // The first match that may be picked takes the highlight; with
-            // none, nothing does, so Enter picks nothing.
-            const first = firstOpen(matchingRows(rows, typed));
+            // none, nothing does, so Enter picks nothing. The owner's own
+            // answer is not in yet, so its first row takes it as it comes.
+            const first = answered ? NOWHERE : firstOpen(matchingRows(rows, typed));
             moveTo(first === NOWHERE ? undefined : first);
           }}
         />

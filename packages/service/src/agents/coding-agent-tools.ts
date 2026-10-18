@@ -1564,7 +1564,7 @@ export function runStartAgent(
   const ownTask = callerTask(caller);
   if (eve === undefined)
     return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SERVICE));
-  // An agent a coding agent starts hears who started it, and its choice is no member's new default.
+  // An agent a coding agent starts hears who started it.
   const byAgent = caller.kind === AGENT_CALLER.AGENT;
   const note = byAgent ? startedByNote(caller.agent, asked.success.note) : asked.success.note;
   const userId = callerUserId(caller);
@@ -1605,7 +1605,7 @@ export function runStartAgent(
         branch: asked.success.branch,
         from,
         summaryModel: call.summaryModel,
-        ...(byAgent ? { rememberChoice: false, noteHeading: START_NOTE_HEADING.AGENT } : undefined),
+        ...(byAgent ? { noteHeading: START_NOTE_HEADING.AGENT } : undefined),
       }).pipe(Effect.result);
       // A new task stands only under the agent its own call made (see above).
       if (made !== undefined && (Result.isFailure(started) || !started.success.created)) {

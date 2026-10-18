@@ -50,7 +50,7 @@ import { Tooltip } from "../tooltip";
 import type { SceneHover } from "./contract";
 
 /**
- * world-chrome.tsx -- what every world shares over its scene, in the page's DOM: the pipeline bar whose counts switch the layers, the hover label, the card of what is selected, the time scrubber, and the way home.
+ * world-chrome.tsx -- what every world shares over its scene, in the page's DOM: the pipeline bar whose counts switch the layers, the hover label, the card of what is selected, and the way home.
  *
  * Every word here is DOM text, so session replay masks it as it masks the
  * rest of the panel; the scene beneath draws shapes alone. The colours a
@@ -93,9 +93,6 @@ const STATE_COLOR = {
 
 /** How many of a world's pull requests' lines fill the card's bar: past it, the bar is full. */
 const BAR_FULL_LINES = 5000;
-
-/** How many steps the scrubber's keys take across its window. */
-const SCRUBBER_STEPS = 200;
 
 function signalStyle(color: string) {
   return cssCustomProperties({ "--world-signal": color });
@@ -598,64 +595,5 @@ export function WorldCard({
         </div>
       )}
     </section>
-  );
-}
-
-/**
- * The time scrubber: a track over the window the snapshot looks back on,
- * each merge a tick in the shipped colour, and a thumb at the instant the
- * world is drawn as of; at its end, the world is drawn as it is now.
- */
-export function Scrubber({
-  live,
-  instant,
-  onInstant,
-}: {
-  /** The view as it is now, whose window and merges the track is drawn from. */
-  live: FactoryWorldView;
-  /** The instant drawn; nothing for now. */
-  instant: number | undefined;
-  onInstant: (instant: number | undefined) => void;
-}): React.JSX.Element {
-  const from = live.shippedSince;
-  const to = live.snapshotAt;
-  const span = Math.max(1, to - from);
-  const at = instant ?? to;
-  const words = instant === undefined ? "Now" : dayAndTimeText(instant);
-  return (
-    <div className="factory-world-scrubber">
-      <div className="factory-world-track">
-        <span className="factory-world-ticks" aria-hidden="true">
-          {live.timeline.map((merged) => (
-            <span
-              key={merged.url}
-              className="factory-world-tick"
-              style={cssCustomProperties({ "--at": (merged.mergedAt - from) / span })}
-            />
-          ))}
-        </span>
-        <input
-          type="range"
-          aria-label="Time"
-          aria-valuetext={words}
-          min={from}
-          max={to}
-          step={span / SCRUBBER_STEPS}
-          value={at}
-          onChange={(event) => {
-            const next = Number(event.currentTarget.value);
-            onInstant(next >= to ? undefined : next);
-          }}
-        />
-      </div>
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-        {words}
-      </Text>
-      {instant === undefined ? null : (
-        <Button variant={BUTTON_VARIANT.QUIET} onClick={() => onInstant(undefined)}>
-          Now
-        </Button>
-      )}
-    </div>
   );
 }

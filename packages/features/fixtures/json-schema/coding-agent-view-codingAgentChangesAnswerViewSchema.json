@@ -171,32 +171,6 @@
                   },
                   "maxItems": 50
                 },
-                "commitAuthors": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "login": {
-                        "type": "string"
-                      },
-                      "avatarUrl": {
-                        "type": "string"
-                      },
-                      "bot": {
-                        "type": "boolean"
-                      },
-                      "userId": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "login",
-                      "bot"
-                    ],
-                    "additionalProperties": false
-                  },
-                  "maxItems": 50
-                },
                 "comments": {
                   "type": "array",
                   "items": {

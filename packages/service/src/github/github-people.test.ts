@@ -51,12 +51,6 @@ const STRANGER = githubUser(1003, "octostranger", "https://evil.example.com/a.pn
 /** An App's bot GitHub draws by its App's logo, at its App's address. */
 const DEVIN_AVATAR = "https://avatars.githubusercontent.com/in/811515?v=4";
 const DEVIN = githubUser(1004, "devin-ai-integration[bot]", DEVIN_AVATAR);
-const PAIR = githubUser(1005, "pairdev");
-const RENOVATE = githubUser(
-  1006,
-  "renovate[bot]",
-  "https://avatars.githubusercontent.com/in/2740?v=4",
-);
 /** Luke's own App's bot, whose logo GitHub serves at the fixture App's id. */
 const LUKE_AVATAR = `https://avatars.githubusercontent.com/in/${GITHUB_FIXTURE.APP_ID}?v=4`;
 const LUKE = githubUser(GITHUB_FIXTURE_BOT.id, GITHUB_FIXTURE_BOT.login, LUKE_AVATAR);
@@ -70,16 +64,12 @@ function review(by: GitHubRecord, state: string, body: string, at: string) {
 function repository(answers: {
   readonly pull?: object;
   readonly reviews?: readonly object[] | Response;
-  readonly commits?: readonly object[];
 }): RepositoryScript {
   return (sent) => {
     const { pathname } = new URL(sent.url);
     if (pathname === PULL && answers.pull !== undefined) return Response.json(answers.pull);
     if (pathname === `${PULL}/reviews` && answers.reviews !== undefined) {
       return answers.reviews instanceof Response ? answers.reviews : Response.json(answers.reviews);
-    }
-    if (pathname === `${PULL}/commits` && answers.commits !== undefined) {
-      return Response.json(answers.commits);
     }
     return undefined;
   };
@@ -109,7 +99,7 @@ const peopleOf = (organizationId: string, script: RepositoryScript) =>
 
 it.layer(getTestDB())("who a pull request names", (it) => {
   it.effect(
-    "its opener, each reviewer by their newest decision and one asked again as asked, its commit authors once each, and its reviews that said something; Luke's bot and another App's are bots, and only a member of the agent's workspace is named by their Luke account",
+    "its opener, each reviewer by their newest decision and one asked again as asked, and its reviews that said something; Luke's bot and another App's are bots, and only a member of the agent's workspace is named by their Luke account",
     () =>
       Effect.gen(function* () {
         const charles = yield* linkedAccount(CHARLES.id);
@@ -130,7 +120,6 @@ it.layer(getTestDB())("who a pull request names", (it) => {
               review(DEVIN, "COMMENTED", "Found 1 potential issue.", "2026-10-15T11:20:00Z"),
               review(STRANGER, "PENDING", "A draft nobody sees.", "2026-10-15T11:30:00Z"),
             ],
-            commits: [{ author: LUKE }, { author: null }, { author: CHARLES }, { author: LUKE }],
           }),
         );
 
@@ -154,7 +143,6 @@ it.layer(getTestDB())("who a pull request names", (it) => {
           { by: asPriya, state: REVIEW_STATE.REQUESTED },
           { by: devin, state: REVIEW_STATE.COMMENTED },
         ]);
-        assert.deepEqual(people.commitAuthors, [luke, asCharles]);
         assert.deepEqual(people.comments, [
           {
             by: asCharles,
@@ -180,14 +168,14 @@ it.layer(getTestDB())("who a pull request names", (it) => {
         yield* joinWorkspace(workspace, priya);
         const joined = yield* peopleOf(
           workspace,
-          repository({ pull: { user: PRIYA, requested_reviewers: [] }, reviews: [], commits: [] }),
+          repository({ pull: { user: PRIYA, requested_reviewers: [] }, reviews: [] }),
         );
         assert.equal(joined.author?.userId, priya);
       }),
   );
 
   it.effect(
-    "every page of reviews and commits is read, so a reviewer stands by their newest decision and a later commit's author is named, and only the newest comments are kept past the bound",
+    "every page of reviews is read, so a reviewer stands by their newest decision, and only the newest comments are kept past the bound",
     () =>
       Effect.gen(function* () {
         const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
@@ -206,23 +194,12 @@ it.layer(getTestDB())("who a pull request names", (it) => {
                 : [review(CHARLES, "APPROVED", "Ship it.", "2026-10-15T10:00:00Z")],
             );
           }
-          if (pathname === `${PULL}/commits`) {
-            return Response.json(
-              pages(sent.url) === 1
-                ? Array.from({ length: 100 }, () => ({ author: LUKE }))
-                : [{ author: PRIYA }],
-            );
-          }
           return undefined;
         });
 
         assert.equal(
           people.reviewers?.find((reviewer) => reviewer.by.login === CHARLES.login)?.state,
           REVIEW_STATE.APPROVED,
-        );
-        assert.deepEqual(
-          people.commitAuthors?.map((author) => author.login),
-          [LUKE.login, PRIYA.login],
         );
         assert.equal(people.comments?.length, CHANGES_BOUNDS.MAX_PEOPLE);
         assert.equal(people.comments?.at(-1)?.excerpt, "Ship it.");
@@ -239,7 +216,6 @@ it.layer(getTestDB())("who a pull request names", (it) => {
           const { pathname, searchParams } = new URL(sent.url);
           const page = Number(searchParams.get("page") ?? 1);
           if (pathname === PULL) return Response.json({ user: LUKE });
-          if (pathname === `${PULL}/commits`) return Response.json([]);
           if (pathname !== `${PULL}/reviews`) return undefined;
           if (page === NEWEST_PAGE) {
             return Response.json([
@@ -263,80 +239,6 @@ it.layer(getTestDB())("who a pull request names", (it) => {
   );
 
   it.effect(
-    "a pull request a developer opened with Luke's agent names Luke's bot among the commit authors, as the co-author its commits' trailers name by its noreply address, by its App's logo; another App's bot co-authoring there, under any case, by the logo the read gives it elsewhere, past the reviewers' bound too, and by its robot where the read gives none; a person co-authoring there by the avatar GitHub serves for their id; and a co-author at any other address, or a trailer-shaped line in a commit's body, is left out",
-    () =>
-      Effect.gen(function* () {
-        const charles = yield* linkedAccount(CHARLES.id);
-        const workspace = yield* openWorkspace(charles);
-        const coAuthor = `Co-authored-by: ${LUKE.login} <${LUKE.id}+${LUKE.login}@users.noreply.github.com>`;
-
-        const people = yield* peopleOf(
-          workspace,
-          repository({
-            pull: { user: CHARLES, requested_reviewers: [] },
-            // Note that Devin reviews past the reviewers' bound, which still gives its co-authoring its logo.
-            reviews: [
-              ...Array.from({ length: CHANGES_BOUNDS.MAX_PEOPLE }, (_, at) =>
-                review(
-                  githubUser(2000 + at, `reviewer${at}`),
-                  "APPROVED",
-                  "",
-                  "2026-10-15T09:00:00Z",
-                ),
-              ),
-              review(DEVIN, "COMMENTED", "Found 1 potential issue.", "2026-10-15T10:00:00Z"),
-            ],
-            commits: [
-              { author: CHARLES, commit: { message: `Add invitations\n\n${coAuthor}` } },
-              {
-                author: CHARLES,
-                commit: { message: "Rename the flag\n\nCo-authored-by: Priya <priya@example.com>" },
-              },
-              {
-                author: CHARLES,
-                commit: {
-                  message: `Quote the trailer\n\nThe agent ends each commit on\n${coAuthor.replace(String(LUKE.id), "4242")}\nas its instructions say.\n\nSigned-off-by: Charles <charles@example.com>`,
-                },
-              },
-              { author: CHARLES, commit: { message: `Fix the test\n\n${coAuthor}\n` } },
-              {
-                author: CHARLES,
-                commit: {
-                  message: `Pair on the copy\n\nCo-authored-by: ${PAIR.login} <${PAIR.id}+${PAIR.login}@users.noreply.github.com>`,
-                },
-              },
-              {
-                author: CHARLES,
-                commit: {
-                  message: `Apply the review\n\nCo-authored-by: Devin <${DEVIN.id}+Devin-AI-Integration[bot]@users.noreply.github.com>\nCo-authored-by: Renovate <${RENOVATE.id}+${RENOVATE.login}@users.noreply.github.com>`,
-                },
-              },
-            ],
-          }),
-        );
-
-        const asCharles = {
-          login: CHARLES.login,
-          bot: false,
-          avatarUrl: CHARLES.avatar_url,
-          userId: charles,
-        };
-        assert.deepEqual(people.author, asCharles);
-        assert.deepEqual(people.commitAuthors, [
-          asCharles,
-          { login: LUKE.login, bot: true, avatarUrl: LUKE_AVATAR },
-          {
-            login: PAIR.login,
-            bot: false,
-            avatarUrl: "https://avatars.githubusercontent.com/u/1005?v=4",
-          },
-          { login: "Devin-AI-Integration[bot]", bot: true, avatarUrl: DEVIN_AVATAR },
-          { login: RENOVATE.login, bot: true },
-        ]);
-      }),
-  );
-
-  it.effect(
     "an avatar off GitHub's own avatar host is left out, and a review's words are cut at the bound",
     () =>
       Effect.gen(function* () {
@@ -346,7 +248,6 @@ it.layer(getTestDB())("who a pull request names", (it) => {
           repository({
             pull: { user: STRANGER },
             reviews: [review(STRANGER, "COMMENTED", "x".repeat(1_000), "2026-10-15T10:00:00Z")],
-            commits: [],
           }),
         );
 
@@ -365,13 +266,12 @@ it.layer(getTestDB())("who a pull request names", (it) => {
           repository({
             pull: { user: CHARLES },
             reviews: Response.json({ message: "Service Unavailable" }, { status: 503 }),
-            commits: [],
           }),
         );
         assert.deepEqual(unanswered, {});
 
         const gone = yield* peopleOf(workspace, repository({}));
-        assert.deepEqual(gone, { reviewers: [], commitAuthors: [], comments: [] });
+        assert.deepEqual(gone, { reviewers: [], comments: [] });
       }),
   );
 });

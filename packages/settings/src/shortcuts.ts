@@ -179,6 +179,8 @@ export const SHORTCUT_KEY = {
   J: { accelerator: "J", glyph: "J", key: "j", code: "KeyJ" },
   I: { accelerator: "I", glyph: "I", key: "i", code: "KeyI" },
   U: { accelerator: "U", glyph: "U", key: "u", code: "KeyU" },
+  // ⌘L is New task's own, opening its Linear chip from the name field; no app command holds it.
+  L: { accelerator: "L", glyph: "L", key: "l", code: "KeyL" },
   ZERO: { accelerator: "0", glyph: "0", key: "0", code: "Digit0" },
   // ⌘+ answers ⌘= as well, so zooming in never needs Shift, as in Chrome and
   // VS Code.
@@ -695,7 +697,7 @@ interface ShortcutKeyPress {
  * either character, Shift held or not, because which of the two needs Shift
  * is the keyboard layout's to say.
  */
-function shortcutMatches(chord: ShortcutChord, event: ShortcutKeyPress): boolean {
+export function shortcutMatches(chord: ShortcutChord, event: ShortcutKeyPress): boolean {
   if (event.metaKey === commandless(chord)) return false;
   if (event.ctrlKey !== (chord.control === true)) return false;
   const shiftFree = chord.key.unshifted !== undefined;

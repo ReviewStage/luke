@@ -1,5 +1,5 @@
 /**
- * automation-words.ts -- an automation's owner and next run in the few words every place naming it says them: the Automations list's row and an automation's card.
+ * automation-words.ts -- an automation's owner and next run in the few words every place naming it says them, the Automations list's row and an automation's card, and what the list says while it is read.
  */
 
 import { AUTOMATION_NEXT, automationNext } from "@luke/features/automation-list-model";
@@ -9,6 +9,9 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import { dayAndTimeText } from "../tasks/task-time.js";
+
+/** What the Automations list says to a reader while it is first read, on its page and in the frame standing while the page's code loads. */
+export const READING_AUTOMATIONS = "Reading your automations…";
 
 /** How near a next run is still named by its weekday alone: under a week, so no weekday stands for two days. */
 const WEEKDAY_REACH_MS = 6 * 24 * 60 * 60 * 1000;

@@ -275,6 +275,42 @@
     display: none;
   }
 
+  /* Compact, one of a row of small counts: a caption line's pill, in the
+     caption's type, its mark nearer its words. A compact filter stands
+     inside a hairline at rest, so the row reads as pills before one is
+     pressed, and pressed it is lit in the accent, as GitHub lights the
+     reader's own reaction. */
+  .luke-chip[data-size="compact"] {
+    gap: var(--luke-space-4);
+    height: var(--luke-space-20);
+    padding: 0 var(--luke-space-8);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-regular);
+  }
+
+  .luke-chip[data-look="filter"][data-size="compact"]:not([aria-pressed="true"]) {
+    border-color: var(--luke-color-border);
+  }
+
+  .luke-chip[data-look="filter"][data-size="compact"][aria-pressed="true"] {
+    border-color: color-mix(in srgb, var(--luke-color-focus-ring) 55%, transparent);
+    background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
+  }
+
+  /* Busy, a change it made is out, and it pulses until answered. */
+  .luke-chip[aria-busy="true"] {
+    animation: luke-chip-wait 1.2s ease-in-out infinite;
+    animation-play-state: var(--luke-loop-motion);
+    cursor: progress;
+  }
+
+  @keyframes luke-chip-wait {
+    50% {
+      opacity: 0.35;
+    }
+  }
+
   /* Unavailable, a chip fades to 45%: a disabled one whole, one that keeps
      the keyboard (`aria-disabled`, so a hint can say why) its fill and its
      words alone, so the app's ring around it is drawn at full strength. */

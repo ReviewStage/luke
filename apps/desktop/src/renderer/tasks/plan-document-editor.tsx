@@ -22,7 +22,7 @@ import {
   type EditorHost,
   type PlanEditing,
 } from "@luke/panel/tasks/use-plan-editing";
-import { Button } from "@luke/ui";
+import { Button, PROSE_CLASS } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -778,7 +778,7 @@ export function PlanDocumentEditor({
     placement: pending ?? editing.placement,
     focus: true,
     label: "Plan",
-    className: "markdown luke-prose plan-unit",
+    className: `markdown ${PROSE_CLASS} plan-unit`,
     onDraft: doors.onDraft,
     onFinish: (section) => once(() => doors.onFinish(section)),
     onLeaveUp: doors.onLeaveUp,

@@ -62,7 +62,7 @@ it.effect("a setting's value travels as the method's value field", () =>
 );
 
 it.effect(
-  "a plan's start carries the workspace it was started in, a start without planning says so, and one naming an agent carries it, to the host; a start naming none carries no such field",
+  "a plan's start carries the workspace it was started in, its brief, a start without planning says so, and one naming an agent carries it, to the host; a start naming none carries no such field",
   () =>
     Effect.gen(function* () {
       const { client, requests } = recordingClient();
@@ -77,6 +77,7 @@ it.effect(
       yield* operator.tasksStart({ name: "Teammate invitations" });
       yield* operator.tasksStart({ name: "Typo", planning: false });
       yield* operator.tasksStart({ repository: "acme/ledger", agent });
+      yield* operator.tasksStart({ brief: "Let any member invite a teammate." });
 
       assert.deepEqual(
         requests.map((request) => [request.method, request.params]),
@@ -88,6 +89,7 @@ it.effect(
           [GATEWAY_METHOD.TASKS_START, { name: "Teammate invitations" }],
           [GATEWAY_METHOD.TASKS_START, { name: "Typo", planning: false }],
           [GATEWAY_METHOD.TASKS_START, { repository: "acme/ledger", agent }],
+          [GATEWAY_METHOD.TASKS_START, { brief: "Let any member invite a teammate." }],
         ],
       );
     }),

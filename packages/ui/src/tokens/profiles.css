@@ -47,7 +47,9 @@
   --luke-type-dialog-leading: 20px;
   --luke-type-title-size: 22px;
   --luke-type-title-leading: 30px;
-  /* Long-form and code text read line after line, set looser than a control's words. */
+  /* Long-form text read line after line, a document's body, a step larger
+     than a control's words and set looser, as code is. */
+  --luke-type-reading-size: 15px;
   --luke-type-reading-leading: 1.6;
 
   --luke-settings-row-block: var(--luke-space-12);
@@ -166,7 +168,9 @@
   --luke-type-dialog-leading: 28px;
   --luke-type-title-size: 28px;
   --luke-type-title-leading: 36px;
-  /* Long-form and code text read line after line, set looser than a control's words. */
+  /* Long-form text read line after line, at the body's own size and set
+     looser, as code is. */
+  --luke-type-reading-size: var(--luke-type-body-size);
   --luke-type-reading-leading: 1.6;
 
   --luke-settings-row-block: var(--luke-space-12);

@@ -61,7 +61,7 @@ export function SkeletonRegion({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <div role="status" aria-busy="true">
+    <div className="luke-skeleton-region" role="status" aria-busy="true">
       <span className="luke-visually-hidden">{label}</span>
       {children}
     </div>

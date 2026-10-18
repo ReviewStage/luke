@@ -1,7 +1,7 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import type { Task } from "@luke/features/task-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
-import { AutomationListSkeleton } from "@luke/panel/desktop/automations-skeleton";
+import { READING_AUTOMATIONS } from "@luke/panel/desktop/automation-words";
 import { useColumnDock } from "@luke/panel/desktop/column-dock";
 import { useFloatDismiss } from "@luke/panel/desktop/hover-pane";
 import { PaneGlide } from "@luke/panel/desktop/pane-motion";
@@ -15,8 +15,11 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  COLLECTION_STATE,
+  CollectionPage,
   ComposeIcon,
   IconButton,
+  PAGE_FRAME,
   ScrollArea,
   SettingsPage,
   SettingsSectionsSkeleton,
@@ -101,17 +104,20 @@ function IssuesLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
 function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onExit);
   return (
-    <section className="automations-view" aria-label="Automations">
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">Automations</h1>
-          <ExperimentTag />
-        </div>
-      </header>
-      <div className="automations-scroll scroll-fade-top">
-        <AutomationListSkeleton />
-      </div>
-    </section>
+    <CollectionPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Automations"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">Automations</h1>
+            <ExperimentTag />
+          </div>
+        </header>
+      }
+      state={COLLECTION_STATE.LOADING}
+      loadingLabel={READING_AUTOMATIONS}
+    />
   );
 }
 
