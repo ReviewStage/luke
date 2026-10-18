@@ -38,6 +38,12 @@ const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
 const MAXIMUM_RESULT_BODY_BYTES = 256 * 1_024;
 
 export interface MacCommandsAppSeams {
+  /**
+   * The Mac's bearer alone, never a browser's session cookie
+   * (`auth/bearer.ts`'s `resolveHostedBearerUserId`): a held read claims
+   * every waiting command for the Mac that asks, and a result is the word
+   * of the Mac that ran its command, so no page may stand in for either.
+   */
   resolveUserId: UserIdResolver;
 }
 
