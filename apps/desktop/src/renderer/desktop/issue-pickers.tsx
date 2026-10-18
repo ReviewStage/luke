@@ -6,6 +6,7 @@ import {
   type IssuePriority,
   type IssueStatus,
 } from "@luke/features/issue-wire";
+import { CHIP_WIDTH } from "@luke/ui";
 import {
   CircleAlertIcon,
   CircleCheckIcon,
@@ -135,6 +136,7 @@ export function StatusMenu({
       rows={STATUS_ROWS}
       noMatch="No such status"
       align={PICKER_ALIGN.START}
+      width={CHIP_WIDTH.AUTO}
       disabled={disabled}
       onPick={(id) => {
         if (isStatus(id) && id !== status) onPick(id);
@@ -163,6 +165,7 @@ export function PriorityMenu({
       rows={PRIORITY_ROWS}
       noMatch="No such priority"
       align={PICKER_ALIGN.START}
+      width={CHIP_WIDTH.AUTO}
       disabled={disabled}
       onPick={(id) => {
         if (isPriority(id) && id !== priority) onPick(id);
