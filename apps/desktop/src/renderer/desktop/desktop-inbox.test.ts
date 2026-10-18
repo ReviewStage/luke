@@ -394,13 +394,16 @@ async function settle(): Promise<void> {
   });
 }
 
+/** A row's title, as its ListRow draws it. */
+const ROW_TITLE = ".luke-list-row-title";
+
 /**
  * What marks a row as needing the developer: `*` where it is drawn bold and
  * wears the dot read as "Needs you", nothing where it wears neither, and
  * `?` where it wears only one, so a half-drawn mark fails every listing.
  */
 function needsYouMark(row: HTMLElement): string {
-  const bold = row.dataset.unread === "true";
+  const bold = row.closest("li")?.dataset.unread === "true";
   const dot = row.querySelector(".inbox-row-dot")?.textContent === "Needs you";
   if (bold && dot) return "*";
   return bold || dot ? "?" : "";
@@ -416,15 +419,10 @@ function heardName(button: Element): string {
 function listed(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
-  return [
-    ...list.querySelectorAll(
-      ".sidebar-repository-header button[aria-expanded]:not([aria-haspopup]), .sidebar-task",
-    ),
-  ].map((node) => {
-    if (!(node instanceof HTMLElement) || !node.classList.contains("sidebar-task")) {
-      return `# ${heardName(node)}`;
-    }
-    const name = node.querySelector(".sidebar-task-name")?.textContent ?? "";
+  const fold = ".sidebar-repository-header button[aria-expanded]:not([aria-haspopup])";
+  return [...list.querySelectorAll(`${fold}, li > button`)].map((node) => {
+    if (node.matches(fold) || !(node instanceof HTMLButtonElement)) return `# ${heardName(node)}`;
+    const name = node.querySelector(ROW_TITLE)?.textContent ?? "";
     return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${name}`;
   });
 }
@@ -439,8 +437,8 @@ function wordsOf(element: Element | null | undefined): string | null {
 }
 
 function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
-  const row = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-task")].find(
-    (each) => each.querySelector(".sidebar-task-name")?.textContent === title,
+  const row = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks li > button")].find(
+    (each) => each.querySelector(ROW_TITLE)?.textContent === title,
   );
   assert.ok(row, `no row for ${title}`);
   return row;
@@ -2531,7 +2529,7 @@ test("a link to a settled item of an agent with no plan, none of whose items wai
 
   assert.doesNotMatch(page.textContent ?? "", /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .sidebar-task-name')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
     "Bump the Node image?",
   );
 });
@@ -2653,7 +2651,7 @@ test("a link to an item newer than its task's last read waits for the read of it
 
   assert.doesNotMatch(waiting, /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .sidebar-task-name')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
     "Page on-call too?",
   );
 });
@@ -2702,7 +2700,7 @@ test("a link to an agent's item newer than the agent's last read waits for the r
 
   assert.doesNotMatch(waiting, /Not found/u);
   assert.equal(
-    page.querySelector('.inbox-tasks [aria-current="page"] .sidebar-task-name')?.textContent,
+    page.querySelector('.inbox-tasks [aria-current="page"] .luke-list-row-title')?.textContent,
     "Retry the flaky job?",
   );
 });

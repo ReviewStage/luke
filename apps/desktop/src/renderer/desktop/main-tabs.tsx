@@ -35,7 +35,6 @@ import {
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
 import { MAIN_TAB, type MainTab, type MainTabsControl } from "../tasks/use-main-tabs";
 import type { ColumnPinnableTab, PinnedTab } from "../tasks/use-side-panel";
-import { Tooltip } from "../tooltip";
 import { useAgentArchive } from "./agent-archive";
 import type { TaskCards } from "./side-panel";
 import {
@@ -613,9 +612,7 @@ export function MainTabStrip({
           takes it out of reach, and as its glyph alone where the bar is
           short of room (desktop.css's `plan-toolbar`). */}
       {agents.listFailed && agents.agents === undefined ? (
-        <Tooltip label={RETRY_AGENTS}>
-          <RetryButton label={RETRY_AGENTS} onRetry={agents.onRetryList} />
-        </Tooltip>
+        <RetryButton label={RETRY_AGENTS} onRetry={agents.onRetryList} />
       ) : null}
       <AddTabButton
         label="Open a tab"

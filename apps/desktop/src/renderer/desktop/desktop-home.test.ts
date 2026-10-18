@@ -246,8 +246,8 @@ async function settle(): Promise<void> {
   });
 }
 
-/** A row's name: an Inbox row's, or a `ListRow`'s title. */
-const NAME = ".sidebar-task-name, .luke-list-row-title";
+/** A row's name: its `ListRow`'s title. */
+const NAME = ".luke-list-row-title";
 
 /** A section's rows as a reader scans them: each row's name, then its context. */
 function rows(page: HTMLElement, section: string): string[] {
