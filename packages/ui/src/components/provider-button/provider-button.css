@@ -33,8 +33,8 @@
     font-weight: var(--luke-weight-semibold);
     -webkit-app-region: no-drag;
     transition:
-      background-color var(--duration-hover) ease,
-      opacity var(--duration-hover) ease;
+      background-color var(--luke-duration-hover) ease,
+      opacity var(--luke-duration-hover) ease;
   }
 
   .luke-provider-button:hover:not(:disabled) {
@@ -88,6 +88,6 @@
     line-height: var(--luke-type-caption-leading);
     white-space: nowrap;
     pointer-events: none;
-    transition: opacity var(--duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) ease;
   }
 }

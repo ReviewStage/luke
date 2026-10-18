@@ -15,7 +15,7 @@
     place-items: center;
     padding: var(--luke-space-24);
     background: var(--luke-color-scrim);
-    animation: luke-dialog-fade var(--duration-quick, 0s) ease-out;
+    animation: luke-dialog-fade var(--luke-duration-quick) ease-out;
     -webkit-app-region: no-drag;
   }
 
@@ -34,9 +34,9 @@
     color: var(--luke-color-text);
     font-size: var(--luke-type-body-size);
     animation:
-      luke-dialog-fade var(--duration-quick, 0s) var(--motion-exit, ease-out),
-      luke-dialog-rise var(--duration-fast, 0s) var(--spring-fast, ease-out);
-    transition: box-shadow var(--duration-hover) ease;
+      luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit),
+      luke-dialog-rise var(--luke-duration-fast) var(--luke-spring-fast);
+    transition: box-shadow var(--luke-duration-hover) ease;
   }
 
   /* A note being written wraps, so its card stands wider, its parts a

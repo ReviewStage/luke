@@ -35,7 +35,7 @@
     line-height: var(--luke-type-body-leading);
     text-align: left;
     cursor: pointer;
-    transition: background-color var(--duration-hover, 0s) ease;
+    transition: background-color var(--luke-duration-hover) ease;
   }
 
   [data-luke-profile="desktop"] .luke-choice {
