@@ -773,7 +773,7 @@ function PlanDocument({
                             : {
                                 onEdit: (request) => tasks.edit(task.id, request),
                                 // The title renames as the chip's field does, so a refusal is said beside it.
-                                onRename: (name) => rename.end({ name, byKey: true }),
+                                onRename: (name) => rename.end(name),
                                 onDraftName: (name) => tasks.onDraftName(task.id, name),
                               })}
                           looks={looks}

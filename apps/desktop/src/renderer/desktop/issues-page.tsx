@@ -9,10 +9,15 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   Button,
+  COLLECTION_STATE,
+  CollectionPage,
+  type CollectionState,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
+  PAGE_FRAME,
+  PAGE_WIDTH,
   useMenu,
 } from "@luke/ui";
 import { Schema } from "effect";
@@ -84,6 +89,9 @@ const storedLayout = Schema.fromJsonString(Schema.Literals(Object.values(ISSUES_
 /** What the toolbar's layout menu is called. */
 const VIEW_OPTIONS = "View options";
 
+/** What the list's page is read as while its issues are. */
+const READING_LINE = "Reading issues";
+
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The issues could not be read.";
 
@@ -131,8 +139,21 @@ function keyboardLeftWith(issueId: string): boolean {
   );
 }
 
+/**
+ * What the list's page stands, by its read and its layout. Note that an
+ * empty board still stands its columns, each saying it holds none, so only
+ * the list says there are none yet; and that a board being read stands
+ * nothing, since the page's loading rows are a list's shape, not a board's.
+ */
+function listState(read: ReturnType<typeof useIssues>["read"], onBoard: boolean): CollectionState {
+  if (read === undefined) return onBoard ? COLLECTION_STATE.READY : COLLECTION_STATE.LOADING;
+  if ("failure" in read) return COLLECTION_STATE.ERROR;
+  return !onBoard && read.issues.length === 0 ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
+}
+
 /** The list's page: the listed workspace's issues by status, a new one a press away. */
 function ListPage({
+  root,
   plans,
   issues,
   focused,
@@ -142,6 +163,8 @@ function ListPage({
   onCompose,
   onComposeIn,
 }: {
+  /** What the arrows move through the rows of: the pages' own root. */
+  root: HTMLElement | null;
   plans: TasksControl;
   issues: ReturnType<typeof useIssues>;
   /** The issue whose card or row takes the keyboard as it is drawn. */
@@ -160,7 +183,6 @@ function ListPage({
   const now = useMinute();
   const workspace = plans.workspace;
   const { read, reload } = issues;
-  const [root, setRoot] = useState<HTMLElement | null>(null);
   const onBoard = layout === ISSUES_LAYOUT.BOARD;
   useRowKeys(root, plans.shown && !onBoard);
   useBoardKeys(root, plans.shown && onBoard);
@@ -177,68 +199,68 @@ function ListPage({
     });
   };
   const workspaceName = workspace?.name ?? "";
+  const listed = read !== undefined && "issues" in read ? read.issues : undefined;
   return (
-    <section ref={setRoot} className="automations-view" aria-label="Issues">
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">Issues</h1>
-          <ExperimentTag />
-        </div>
-        <div className="desktop-toolbar-actions">
-          <SendFeedbackButton experiment={EXPERIMENT.ISSUES} />
-          <ViewOptions shown={plans.shown} layout={layout} onLayout={onLayout} />
-          <Button
-            variant={BUTTON_VARIANT.OUTLINE}
-            icon={<PlusIcon />}
-            aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_ISSUE)}
-            disabled={onCompose === undefined}
-            onClick={onCompose}
-          >
-            New issue
-          </Button>
-        </div>
-      </header>
-      {/* The board scrolls sideways in its own scroller, each column scrolling its cards; a failure is said in the list's. */}
-      <div
-        className={
-          onBoard && read !== undefined && "issues" in read
-            ? "issue-board-scroll"
-            : "automations-scroll scroll-fade-top"
-        }
-      >
-        {read === undefined ? null : "failure" in read ? (
-          <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-            {UNREAD_LINE}
-          </ErrorState>
-        ) : onBoard ? (
-          <IssueBoard
-            issues={read.issues}
+    <CollectionPage
+      frame={PAGE_FRAME.TOOLBAR}
+      // Note that the board stands its columns across the room and scrolls sideways past it, each column scrolling its own cards.
+      width={onBoard ? PAGE_WIDTH.FULL : PAGE_WIDTH.MEASURE}
+      label="Issues"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">Issues</h1>
+            <ExperimentTag />
+          </div>
+          <div className="desktop-toolbar-actions">
+            <SendFeedbackButton experiment={EXPERIMENT.ISSUES} />
+            <ViewOptions shown={plans.shown} layout={layout} onLayout={onLayout} />
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              icon={<PlusIcon />}
+              aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_ISSUE)}
+              disabled={onCompose === undefined}
+              onClick={onCompose}
+            >
+              New issue
+            </Button>
+          </div>
+        </header>
+      }
+      state={listState(read, onBoard)}
+      loadingLabel={READING_LINE}
+      empty={<EmptyState icon={<ListTodoIcon />}>No issues yet</EmptyState>}
+      error={
+        <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {UNREAD_LINE}
+        </ErrorState>
+      }
+    >
+      {listed === undefined ? null : onBoard ? (
+        <IssueBoard
+          issues={listed}
+          workspaceName={workspaceName}
+          now={now}
+          focused={focused}
+          shown={plans.shown}
+          onOpen={open}
+          onCompose={onComposeIn}
+          onChange={change}
+        />
+      ) : (
+        <div className="issue-groups">
+          <IssueList
+            issues={listed}
             workspaceName={workspaceName}
             now={now}
             focused={focused}
             shown={plans.shown}
             onOpen={open}
-            onCompose={onComposeIn}
             onChange={change}
           />
-        ) : read.issues.length === 0 ? (
-          // Note that an empty board still stands its columns, each saying it holds none, so only the list says there are none yet.
-          <EmptyState icon={<ListTodoIcon />}>No issues yet</EmptyState>
-        ) : (
-          <div className="home-column issues-column">
-            <IssueList
-              issues={read.issues}
-              workspaceName={workspaceName}
-              now={now}
-              focused={focused}
-              shown={plans.shown}
-              onOpen={open}
-              onChange={change}
-            />
-          </div>
-        )}
-      </div>
-    </section>
+        </div>
+      )}
+    </CollectionPage>
   );
 }
 
@@ -391,7 +413,7 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
   const [layout, setLayout] = useState<IssuesLayout>(() =>
     readKept(LAYOUT_KEY, storedLayout, ISSUES_LAYOUT.BOARD),
   );
-  const pages = useRef<HTMLDivElement>(null);
+  const [pages, setPages] = useState<HTMLDivElement | null>(null);
   const listedNow = useRef(workspace?.id);
   listedNow.current = workspace?.id;
   /**
@@ -403,7 +425,7 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
   const compose = (status?: IssueStatus) => {
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && focused !== document.body) {
-      if (!pages.current?.contains(focused) || typedInto(focused)) return;
+      if (!pages?.contains(focused) || typedInto(focused)) return;
     }
     setComposing({ status });
   };
@@ -424,9 +446,10 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
     view.onOpen({ kind: ISSUES_PAGE.LIST });
   };
   return (
-    <div ref={pages} className="issues-pages">
+    <div ref={setPages} className="issues-pages">
       {place.kind === ISSUES_PAGE.LIST ? (
         <ListPage
+          root={pages}
           plans={plans}
           issues={issues}
           focused={cameFrom}
