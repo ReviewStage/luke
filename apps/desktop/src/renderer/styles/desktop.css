@@ -2317,24 +2317,20 @@ ul.actor-stack {
 }
 
 @container plan-toolbar (max-width: 480px) {
-  .start-agent .start-agent-word {
-    display: none;
-  }
-
-  .start-agent .start-agent-main {
-    width: var(--luke-control-height);
-    padding: 0;
+  .start-agent {
+    --luke-fold: folded;
   }
 }
 
 @container plan-toolbar (max-width: 320px) {
-  .start-agent .start-agent-chevron,
+  .start-agent .luke-split-button > .luke-button:last-child,
   .main-tabs .retry-word {
     display: none;
   }
 
-  .start-agent .start-agent-main {
-    border-radius: calc(var(--luke-control-radius) - 1px);
+  .start-agent .luke-split-button > .luke-button:first-child {
+    border-inline-end-width: 1px;
+    border-radius: var(--luke-control-radius);
   }
 }
 
@@ -8197,13 +8193,7 @@ button.integration-tool-head:hover,
 
 /* Start ------------------------------------------------------------------ */
 
-/* The toolbar's Start: a split button whose main part starts an agent on
-   the account's default and whose chevron drops the model menu. The
-   labelled button and the icon button above, joined into one pill by a
-   hairline around both and between them, the way a split button is drawn
-   in every toolbar; each half keeps its own hover. Unavailable, both halves
-   say so (`aria-disabled`) and fade as a disabled button does while they
-   keep answering the pointer, so the hover can say why. */
+/* The toolbar's Start, a shared SplitButton, and the note beside it. */
 .start-agent {
   position: relative;
   display: flex;
@@ -8211,21 +8201,9 @@ button.integration-tool-head:hover,
   gap: var(--luke-control-gap);
 }
 
+/* The split button's box, which hears its presses as they pass. */
 .start-agent-split {
   display: flex;
-  align-items: center;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  -webkit-app-region: no-drag;
-}
-
-.start-agent-main {
-  border-radius: calc(var(--luke-control-radius) - 1px) 0 0 calc(var(--luke-control-radius) - 1px);
-}
-
-.start-agent-chevron {
-  border-left: 1px solid var(--luke-color-border);
-  border-radius: 0 calc(var(--luke-control-radius) - 1px) calc(var(--luke-control-radius) - 1px) 0;
 }
 
 /* The model menu hangs under the chevron, to the toolbar's right edge. */
