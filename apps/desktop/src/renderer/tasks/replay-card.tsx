@@ -413,7 +413,7 @@ export function ReplayCard({
   replay,
   sentAt,
   place,
-  planId,
+  planId: taskId,
 }: {
   replay: Replay;
   /** When the agent's first message was sent, named after who started it; none where the transcript does not know. */
@@ -447,17 +447,17 @@ export function ReplayCard({
         ? undefined
         : () =>
             openPlace(
-              planId === undefined
+              taskId === undefined
                 ? { kind: LINK_PLACE.AGENT, agentId }
-                : { kind: LINK_PLACE.AGENT, planId, agentId },
+                : { kind: LINK_PLACE.AGENT, planId: taskId, agentId },
             );
   const onOpenTranscript =
     messageId !== undefined && openPlace !== undefined
       ? () =>
           openPlace(
-            planId === undefined
+            taskId === undefined
               ? { kind: LINK_PLACE.MESSAGE, agentId, messageId }
-              : { kind: LINK_PLACE.MESSAGE, planId, agentId, messageId },
+              : { kind: LINK_PLACE.MESSAGE, planId: taskId, agentId, messageId },
           )
       : openSource;
   const left = leftOutLine(replay);

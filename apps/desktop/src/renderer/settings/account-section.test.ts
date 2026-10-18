@@ -55,7 +55,7 @@ function sharedFace(account: SignedIn): Element | null {
 test("an account with no picture is its letter on its hue, the face the sidebar and the member list draw", () => {
   const face = profileFace(ADA);
 
-  assert.equal(face?.querySelector(".actor-face")?.textContent, "A");
+  assert.equal(face?.textContent, "A");
   assert.equal(face?.outerHTML, sharedFace(ADA)?.outerHTML);
 });
 

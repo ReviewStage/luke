@@ -3,13 +3,15 @@
 import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
-import { Avatar } from "./avatar.js";
+import { afterEach, test, vi } from "vitest";
+import { AVATAR_SHAPE, Avatar } from "./avatar.js";
 
 /**
  * avatar.test.ts -- the letter stands until the picture loads and comes back
  * where it fails; a picture that failed is asked for again once its address
- * is given back; and the disc names its person to a reader once. The page's
+ * is given back; a glyph stands where the letter would, for an app; a
+ * picture the browser drew before the page took over is shown; and the disc
+ * names its person to a reader once. The page's
  * answer to a picture is the boundary, so a test sends the load or the error
  * the browser would.
  */
@@ -25,6 +27,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const roots: Root[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
 });
@@ -107,4 +110,39 @@ test("a name with no character to draw stands as the figure, said to nobody", ()
   assert.equal(container.textContent, "");
   assert.ok(disc?.querySelector("svg"));
   assert.equal(disc?.getAttribute("aria-hidden"), "true");
+});
+
+/** A glyph a caller hands the square, as an app's mark would be. */
+const GLYPH = createElement("svg", { "data-glyph": "robot" });
+
+test("an app's glyph stands where its letter would, until its picture loads and again where it fails", () => {
+  const { container, redraw } = drawn({
+    name: "Vercel",
+    src: PICTURE,
+    shape: AVATAR_SHAPE.SQUARE,
+    glyph: GLYPH,
+  });
+  assert.equal(container.textContent, "");
+  assert.ok(container.querySelector('[data-glyph="robot"]'));
+  answer(container, "load");
+  assert.equal(container.querySelector('[data-glyph="robot"]'), null);
+  redraw({ name: "Vercel", src: `${PICTURE}?v=2`, shape: AVATAR_SHAPE.SQUARE, glyph: GLYPH });
+  answer(container, "error");
+  assert.equal(picture(container), null);
+  assert.ok(container.querySelector('[data-glyph="robot"]'));
+});
+
+test("an app's square names it to a reader as a person's disc does", () => {
+  const disc = drawn({ name: "Vercel", shape: AVATAR_SHAPE.SQUARE, glyph: GLYPH }).container
+    .firstElementChild;
+  assert.equal(disc?.getAttribute("role"), "img");
+  assert.equal(disc?.getAttribute("aria-label"), "Vercel");
+});
+
+test("a picture the browser had drawn before the page took over is shown without a load of its own", () => {
+  vi.spyOn(HTMLImageElement.prototype, "complete", "get").mockReturnValue(true);
+  vi.spyOn(HTMLImageElement.prototype, "naturalWidth", "get").mockReturnValue(96);
+  const { container } = drawn({ name: "Ada", src: PICTURE });
+  assert.equal(container.textContent, "");
+  assert.equal(picture(container)?.getAttribute("src"), PICTURE);
 });

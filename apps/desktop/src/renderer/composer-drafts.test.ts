@@ -55,7 +55,7 @@ import { NO_LOOKS } from "./tasks/use-task-looks";
 
 /** A task with one agent of its own, open on its agent's tab. */
 function task(id: string, name: string, agentId: string) {
-  const plan: Task = {
+  const summary: Task = {
     id,
     workspaceId: "workspace-personal",
     name,
@@ -74,7 +74,7 @@ function task(id: string, name: string, agentId: string) {
     status: CODING_AGENT_STATUS.COMPLETED,
     turnId: null,
   };
-  return { plan, agent };
+  return { plan: summary, agent };
 }
 
 const INVITES = task(
@@ -147,7 +147,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
     }: { onTask?: boolean; send?: MessageSender; account?: Identity } = {},
   ) => {
     const agentTab = { agent: open.agent.id };
-    const plans = tasksControl({
+    const tasks = tasksControl({
       page: TASKS_PAGE.DOCUMENT,
       tasks: [INVITES.plan, BILLING.plan],
       activeTaskId: open.plan.id,
@@ -165,12 +165,12 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
           send(agentId, text, clientKey, attachments),
       }),
     });
-    const rows = [INVITES.plan, BILLING.plan].map((plan) =>
+    const rows = [INVITES.plan, BILLING.plan].map((summary) =>
       createElement(SidebarTask, {
-        key: plan.id,
-        tasks: plans,
-        task: plan,
-        current: plan.id === open.plan.id,
+        key: summary.id,
+        tasks: tasks,
+        task: summary,
+        current: summary.id === open.plan.id,
         unread: false,
         now: 3,
         onOpen: () => undefined,
@@ -188,7 +188,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
             createElement(DesktopTasks, {
               summary: UNPINNED_SUMMARY,
               looks: NO_LOOKS,
-              tasks: plans,
+              tasks: tasks,
             }),
           ),
         ),
@@ -351,8 +351,8 @@ test("the drafts an account kept under its address are its own still once its id
 });
 
 /** A draft as storage keeps it: an agent's words on a plan, by the account that wrote them. */
-function keptEntry(accountId: string, planId: string, agentId: string, text: string) {
-  return { accountId, place: { kind: "agent", planId, agentId }, text };
+function keptEntry(accountId: string, taskId: string, agentId: string, text: string) {
+  return { accountId, place: { kind: "agent", planId: taskId, agentId }, text };
 }
 
 test("past the most drafts kept, the oldest written goes, whosever it is, and the window lets go of it as storage does", async () => {
@@ -415,7 +415,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   answerMotion();
   fakeAppBridge({});
   const pin = { task: open.plan.id, tab: { agent: open.agent.id }, label: "Agent", at: 5 };
-  const plans = tasksControl({
+  const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     tasks: [INVITES.plan, BILLING.plan],
     activeTaskId: open.plan.id,
@@ -434,7 +434,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   roots.push(root);
   await act(async () =>
     root.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(plans))),
+      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(tasks))),
     ),
   );
   await settle();
@@ -471,7 +471,7 @@ const DRAFT_KEY = "draft-invites";
  * drafts are what storage holds.
  */
 async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVITES.agent) {
-  const plans = tasksControl({
+  const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     tasks: [INVITES.plan],
     activeTaskId: INVITES.plan.id,
@@ -513,7 +513,7 @@ async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVIT
             "ul",
             null,
             createElement(SidebarTask, {
-              tasks: plans,
+              tasks: tasks,
               task: INVITES.plan,
               current: true,
               unread: false,
@@ -521,7 +521,7 @@ async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVIT
               onOpen: () => undefined,
             }),
           ),
-          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: plans }),
+          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: tasks }),
         ),
       ),
     ),
@@ -619,7 +619,7 @@ async function inboxOn(item: InboxItem) {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  const plans = tasksControl({
+  const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     tasks: [INVITES.plan],
     activeTaskId: INVITES.plan.id,
@@ -649,7 +649,7 @@ async function inboxOn(item: InboxItem) {
             "ul",
             null,
             createElement(SidebarTask, {
-              tasks: plans,
+              tasks: tasks,
               task: INVITES.plan,
               current: false,
               unread: false,
@@ -657,7 +657,7 @@ async function inboxOn(item: InboxItem) {
               onOpen: () => undefined,
             }),
           ),
-          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: plans }),
+          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: tasks }),
         ),
       ),
     ),

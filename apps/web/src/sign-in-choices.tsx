@@ -3,7 +3,7 @@ import {
   SOCIAL_PROVIDER_LABEL,
   type SocialProvider,
 } from "@luke/features/sign-in-provider";
-import { BUTTON_VARIANT, Button, ProviderMark } from "@luke/ui";
+import { ProviderButton } from "@luke/ui";
 import type { createAuthClient } from "better-auth/react";
 import { useState } from "react";
 
@@ -22,7 +22,7 @@ type SocialSignIn = Pick<ReturnType<typeof createAuthClient>, "signIn">;
  * while its sign-in is opening, named for the provider it is opening. Every
  * other choice stands unavailable while one opens.
  */
-export function ProviderButton({
+export function SocialProviderButton({
   provider,
   pending,
   onPress,
@@ -34,16 +34,14 @@ export function ProviderButton({
 }): React.JSX.Element {
   const label = SOCIAL_PROVIDER_LABEL[provider];
   return (
-    <Button
-      variant={BUTTON_VARIANT.OUTLINE}
-      icon={<ProviderMark provider={provider} className="shrink-0" />}
-      busy={pending === provider}
-      busyLabel={`Opening ${label}`}
+    <ProviderButton
+      provider={provider}
+      name={label}
+      pending={pending === provider}
+      pendingLabel={`Opening ${label}`}
       disabled={pending !== undefined && pending !== provider}
-      onClick={onPress}
-    >
-      {`Continue with ${label}`}
-    </Button>
+      onPress={onPress}
+    />
   );
 }
 
@@ -92,7 +90,7 @@ export function ProviderChoices({
   return (
     <>
       {Object.values(SOCIAL_PROVIDER).map((provider) => (
-        <ProviderButton
+        <SocialProviderButton
           key={provider}
           provider={provider}
           pending={pending}

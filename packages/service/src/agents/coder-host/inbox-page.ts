@@ -55,9 +55,10 @@ import { chatWaitingEntries, chatWaitingStamps } from "./chat-waiting.js";
 /** How far back a run that failed to start is still carried to its automation's owner. */
 const FAILED_RUN_WINDOW = Duration.days(7);
 
-/** What a cursor digests of one thing it covers, an item or a failed run. */
+/** What a cursor digests of one thing it covers, an item, whose stamp says whether it is unread for the reader, or a failed run. */
 type InboxCursorStamp = Pick<InboxStamp, "id" | "revision" | "updatedAt"> & {
   readonly status: string;
+  readonly unread?: boolean;
 };
 
 /** Waits until the inbox moves past the reader's cursor, or a transcript read's hold ends. */

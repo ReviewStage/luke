@@ -62,6 +62,9 @@ const COMPOSING_KEY_CODE = 229;
 /** The class the editor's own element wears beside the read view's, which `tasks.css` styles. */
 const EDITOR_CLASS = "plan-document-text";
 
+/** What an empty plan says until a word is typed. */
+const PLAN_PLACEHOLDER = "Write the plan";
+
 /** The heading levels that open a section, as `planSections` counts them. */
 const SECTION_LEVELS = new Set([1, 2]);
 
@@ -238,6 +241,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     placement,
     focus,
     label,
+    placeholder = PLAN_PLACEHOLDER,
     className,
     onDraft,
     onFinish,
@@ -262,7 +266,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     injectCSS: false,
     extensions: [
       ...extensions,
-      Placeholder.configure({ placeholder: "Write the plan" }),
+      Placeholder.configure({ placeholder }),
       ...(drawDiagram === undefined ? [] : [diagramPreview(drawDiagram)]),
     ],
     content: opened.content,

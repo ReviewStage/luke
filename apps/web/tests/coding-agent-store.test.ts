@@ -158,15 +158,15 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
 
   it.effect("an archived agent is left out of its plan's agents unless asked for", () =>
     Effect.gen(function* () {
-      const { userId, taskId: planId } = yield* openTask;
-      const agent = started(yield* createCodingAgent(userId, start(planId)));
+      const { userId, taskId } = yield* openTask;
+      const agent = started(yield* createCodingAgent(userId, start(taskId)));
       const archived = Option.getOrElse(yield* archiveCodingAgent(userId, agent.id, true), () =>
         assert.fail("the agent is archived"),
       );
 
-      assert.deepEqual(yield* listPublishedCodingAgents(userId, [planId]), []);
+      assert.deepEqual(yield* listPublishedCodingAgents(userId, [taskId]), []);
       assert.deepEqual(
-        yield* listPublishedCodingAgents(userId, [planId], { includeArchived: true }),
+        yield* listPublishedCodingAgents(userId, [taskId], { includeArchived: true }),
         [{ agent: archived, published: null }],
       );
     }),
@@ -176,9 +176,9 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
     "a plan whose agent was archived still reads that agent's activity, naming the agent no more",
     () =>
       Effect.gen(function* () {
-        const { userId, taskId: planId } = yield* openTask;
+        const { userId, taskId } = yield* openTask;
         yield* TestClock.adjust("1 hour");
-        const agent = started(yield* createCodingAgent(userId, start(planId)));
+        const agent = started(yield* createCodingAgent(userId, start(taskId)));
         yield* archiveCodingAgent(userId, agent.id, true);
 
         const [listed] = yield* withTaskAgents(userId, yield* listTasks(userId));
