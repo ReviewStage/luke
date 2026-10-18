@@ -13,7 +13,7 @@
  * retry, which this pipeline does not want — the desktop never retries either.
  */
 
-import { HTTP_METHOD, withoutTrailingSlash } from "@luke/wire";
+import { HTTP_METHOD, positiveInteger, withoutTrailingSlash } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Data, Effect, type Layer, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -154,7 +154,7 @@ export function forgetPosthogPersonEffect(
   distinctId: string,
   options: PosthogForgetOptions,
 ): Effect.Effect<void, PosthogForgetError, HttpClient.HttpClient> {
-  const requestTimeoutMs = options.timeoutMs ?? POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS;
+  const requestTimeoutMs = positiveInteger(options.timeoutMs, POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS);
   const call = accountCall({
     baseUrl: resolvePosthogApiHost(options.host),
     credential: fixedBearer(options.personalApiKey),

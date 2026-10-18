@@ -134,6 +134,22 @@ it.effect("a success whose body never ends fails at the deadline", () =>
   }),
 );
 
+it.effect("a timeout the call refuses waits out the default deadline rather than none", () =>
+  Effect.gen(function* () {
+    const posthog = upstream(202, new ReadableStream());
+    const pending = yield* Effect.forkChild(
+      forgetPosthogPersonEffect("user-1", options({ timeoutMs: 0 })).pipe(
+        Effect.provide(posthog.layer),
+        Effect.flip,
+      ),
+    );
+    yield* TestClock.adjust("5 seconds");
+    const error = yield* Fiber.join(pending);
+
+    assert.match(error.message, /no answer within 5000ms/);
+  }),
+);
+
 it.effect("a refusal fails with the status alone, never anything that could name the key", () =>
   Effect.gen(function* () {
     const posthog = upstream(401, JSON.stringify({ detail: `bad key ${PERSONAL_KEY}` }));
