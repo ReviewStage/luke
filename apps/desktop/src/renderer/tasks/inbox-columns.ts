@@ -67,8 +67,13 @@ function useInboxRowPresses(): InboxRowPresses {
         const known = refs.get(itemId);
         if (known !== undefined) return known;
         const ref = (element: HTMLElement | null) => {
-          if (element === null) held.delete(itemId);
-          else held.set(itemId, element);
+          if (element !== null) {
+            held.set(itemId, element);
+            return;
+          }
+          // Note that a row gone takes its ref with it, so an Inbox left open keeps only the rows it draws.
+          held.delete(itemId);
+          refs.delete(itemId);
         };
         refs.set(itemId, ref);
         return ref;

@@ -8663,9 +8663,11 @@ button.automation-run:hover {
 }
 
 /* Note that the context gives way before the marks and the time, because
-   the metadata's slot clips at its end and the time is what ends it. */
+   the metadata's slot clips at its end and the time is what ends it, and
+   stops at a bound, so a long one never takes the row's title's room. */
 .home-row-meta > .home-row-context {
   min-width: 0;
+  max-width: 20ch;
   flex: 0 1 auto;
 }
 
