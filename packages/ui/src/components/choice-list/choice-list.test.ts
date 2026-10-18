@@ -257,6 +257,18 @@ test("a list across stands its rows side by side, each toned row filling its che
   assert.equal(row(page, "Decline").getAttribute("aria-checked"), "true");
 });
 
+test("a pill list draws its options as pills, a check before the picked one's words, and picks as a radio group does", () => {
+  const page = render(createElement(Held, { look: CHOICE_LOOK.PILL, start: ["never"] }));
+  assert.equal(page.querySelector('[role="radiogroup"]')?.getAttribute("data-look"), "pill");
+  assert.deepEqual(
+    rows(page).map((each) => each.querySelector(".luke-choice-check") !== null),
+    [true, true, true],
+  );
+  act(() => row(page, "Never retry").focus());
+  key(row(page, "Never retry"), "ArrowDown");
+  assert.equal(heard(page), "three");
+});
+
 test("an unavailable list changes nothing, by press or by key", () => {
   const page = render(createElement(Held, { disabled: true, start: ["three"] }));
   act(() => row(page, "Never retry").click());
