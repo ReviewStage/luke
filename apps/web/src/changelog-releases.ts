@@ -368,29 +368,3 @@ export function changelogFeed(releases: readonly Release[]): string {
     "",
   ].join("\n");
 }
-
-/** How many page numbers the pager shows on each side of the current one before it elides. */
-const PAGER_REACH = 1;
-
-/**
- * The page numbers the pager shows for a page, in order, with `undefined`
- * where a run of them is elided. Every number shows while they all fit;
- * past that the first, the last, and the current page's neighbours show, so
- * the pager stays one short line however long the changelog grows.
- */
-export function changelogPagerItems(
-  page: number,
-  pageCount: number,
-): readonly (number | undefined)[] {
-  const shown = new Set([1, pageCount]);
-  for (let near = page - PAGER_REACH; near <= page + PAGER_REACH; near += 1) {
-    if (near >= 1 && near <= pageCount) shown.add(near);
-  }
-  const ordered = [...shown].sort((a, b) => a - b);
-  return ordered.flatMap((number, index) => {
-    const previous = ordered[index - 1];
-    if (previous === undefined || number - previous === 1) return [number];
-    // Note that a gap of one page shows that page, because "…" would take as much room as the number.
-    return number - previous === 2 ? [previous + 1, number] : [undefined, number];
-  });
-}

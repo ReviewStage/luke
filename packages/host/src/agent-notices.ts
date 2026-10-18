@@ -583,7 +583,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const doors = yield* AgentNoticeDoors;
     const ledger = new Map<string, HeldAgent>();
     /** What each agent with no plan is announced under, by agent: its automation's name, or its repository where the reader may not read the automation. */
-    const planlessSubjects = new Map<string, string>();
+    const tasklessSubjects = new Map<string, string>();
     /** What each agent was last read to have published, by agent. */
     const published = new Map<string, CodingAgentPullRequest | null>();
     const unseen = new Set<string>();
@@ -667,7 +667,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       const text = noticeText({
         subject:
           end.agent.taskId === null
-            ? planlessSubjects.get(end.agentId)
+            ? tasklessSubjects.get(end.agentId)
             : taskName(end.agent.taskId),
         model: end.agent.model,
         title: end.agent.title,
@@ -943,7 +943,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         if (keep(agent, agentId)) continue;
         ledger.delete(agentId);
         published.delete(agentId);
-        planlessSubjects.delete(agentId);
+        tasklessSubjects.delete(agentId);
         if (unseen.delete(agentId)) dotted = true;
       }
       if (dotted) publishUnseen();
@@ -960,7 +960,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     }
 
     /** The plans with an agent watched, each listed again on the watch's clock. */
-    function watchedPlans(): readonly string[] {
+    function watchedTasks(): readonly string[] {
       const plans = new Set<string>();
       for (const agent of ledger.values()) {
         if (agent.taskId !== null && watched(agent)) plans.add(agent.taskId);
@@ -969,7 +969,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     }
 
     /** The agents with no plan watched, each read again by itself on the watch's clock. */
-    function watchedPlanless(): readonly string[] {
+    function watchedTaskless(): readonly string[] {
       return [...ledger]
         .filter(([, agent]) => agent.taskId === null && watched(agent))
         .map(([agentId]) => agentId);
@@ -1013,7 +1013,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       agent: Pick<CodingAgentSummary, "id" | "planId" | "automationName">,
     ): void {
       if (agent.planId === null && agent.automationName !== undefined) {
-        planlessSubjects.set(agent.id, agent.automationName);
+        tasklessSubjects.set(agent.id, agent.automationName);
       }
     }
 
@@ -1028,7 +1028,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       observeTaskless: (agents) => {
         for (const agent of agents) {
           if (!heldHere(agent)) continue;
-          planlessSubjects.set(agent.id, agent.automationName ?? agent.repository);
+          tasklessSubjects.set(agent.id, agent.automationName ?? agent.repository);
           observe(agent.id, heldOf(agent));
         }
       },
@@ -1073,7 +1073,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const tick = Effect.suspend(() =>
       Effect.andThen(
         Effect.forEach(
-          watchedPlans(),
+          watchedTasks(),
           (planId) =>
             Effect.map(listAgents(planId), (answer) => {
               if ("agents" in answer) notices.observeAgents(answer.agents);
@@ -1084,7 +1084,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
           { discard: true },
         ),
         Effect.forEach(
-          watchedPlanless(),
+          watchedTaskless(),
           (agentId) =>
             Effect.map(dependencies.readAgent(agentId), (answer) => {
               if ("agent" in answer) observe(agentId, heldOf(answer.agent));

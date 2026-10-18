@@ -1,35 +1,25 @@
 import type { AdminDayAccount, AdminDayDetail } from "@luke/service/admin/admin-day";
 import {
-  BADGE_TONE,
-  Badge,
-  CARD_PADDING,
-  Card,
-  EmptyState,
-  Inline,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
-  UserIcon,
+  DATA_TABLE_COLUMN_KIND,
+  DATA_TABLE_MIN_WIDTH,
+  DataTable,
+  type DataTableColumn,
 } from "@luke/ui";
-import { accountLabel } from "@luke/ui/account-initials";
 import { formatDayHeading, formatNumber } from "@luke/ui/admin-format";
 import { partialDayKey } from "@luke/ui/daily-series";
+import { AccountCell } from "../accounts-table/accounts-table";
 import { SectionHeading, STAT_CELL, STAT_ROW, StatCard } from "../charts/stat-card";
 import { BackLink } from "../chrome/back-link";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing } from "../chrome/controls";
 import { DayNote } from "../chrome/notes";
-import { AccountAvatar, AdminPage, type ViewerAccount } from "../chrome/page-header";
+import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
-import { accountHref, dayReadPath, plainLeftClick } from "../routing";
+import { dayReadPath } from "../routing";
 import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
 import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
 const DAY_ERROR = "The day endpoint did not answer.";
-
-/** A cell's room around its words, the same in the heading row and the rows under it. */
-const TABLE_CELL = "px-5 py-3";
 
 // SAFETY: a 200 from the admin day endpoint is an AdminDayDetail body by its contract.
 const readDayDetail: AdminReader<AdminDayDetail> = async (response) =>
@@ -46,12 +36,30 @@ const DAY_SHAPES: readonly SkeletonShape[] = [
   { kind: SKELETON_SHAPE.TABLE, rows: 5, numericColumns: 1 },
 ];
 
+/** The day's two columns: who called, and how many times. */
+function dayAccountColumns(
+  onOpen: (id: string) => void,
+): readonly DataTableColumn<AdminDayAccount>[] {
+  return [
+    {
+      key: "account",
+      label: "Account",
+      cell: (row) => <AccountCell account={row} onOpen={onOpen} />,
+    },
+    {
+      key: "calls",
+      label: "Calls",
+      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
+      cell: (row) => formatNumber(row.calls),
+    },
+  ];
+}
+
 /**
  * The day's accounts, busiest first as the endpoint orders them. The shared
  * `AccountsTable` draws windowed columns a single day does not have, so the
- * day page keeps a table of its own with the same row anatomy: the row for
- * the pointer, and a real anchor on the name so a keyboard reaches it and a
- * modified click still gets the browser's own gesture.
+ * day page keeps a table of its own over the same account cell: the row for
+ * the pointer, the anchor on the name for a keyboard.
  */
 function DayAccountsTable({
   accounts,
@@ -60,76 +68,16 @@ function DayAccountsTable({
   accounts: readonly AdminDayAccount[];
   onOpen: (id: string) => void;
 }): React.JSX.Element {
-  if (accounts.length === 0) {
-    return <EmptyState icon={<UserIcon />}>No hosted-tier calls recorded on this day.</EmptyState>;
-  }
   return (
-    <Card padding={CARD_PADDING.FLUSH}>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px]">
-          <thead>
-            <tr className="border-b border-border text-left">
-              <th className={TABLE_CELL}>
-                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
-                  Account
-                </Text>
-              </th>
-              <th className={`${TABLE_CELL} text-right`}>
-                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL} tone={TEXT_TONE.MUTED}>
-                  Calls
-                </Text>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {accounts.map((row) => (
-              <tr
-                key={row.id}
-                className="cursor-pointer border-b border-border transition-colors duration-150 last:border-0 hover:bg-muted"
-                onClick={() => onOpen(row.id)}
-              >
-                <td className={TABLE_CELL}>
-                  <a
-                    href={accountHref(row.id)}
-                    className="flex items-center gap-3 outline-offset-2"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (!plainLeftClick(event)) return;
-                      event.preventDefault();
-                      onOpen(row.id);
-                    }}
-                  >
-                    <AccountAvatar
-                      account={{ name: row.name, email: row.email, image: row.image ?? undefined }}
-                    />
-                    <div className="min-w-0">
-                      <Inline>
-                        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
-                          {accountLabel(row)}
-                        </Text>
-                        {row.admin ? <Badge tone={BADGE_TONE.NEUTRAL}>Admin</Badge> : null}
-                      </Inline>
-                      {accountLabel(row) === row.email ? null : (
-                        <Text
-                          as={TEXT_ELEMENT.DIV}
-                          variant={TEXT_VARIANT.CAPTION}
-                          tone={TEXT_TONE.MUTED}
-                        >
-                          {row.email}
-                        </Text>
-                      )}
-                    </div>
-                  </a>
-                </td>
-                <td className={`${TABLE_CELL} text-right tabular-nums`}>
-                  <Text as={TEXT_ELEMENT.SPAN}>{formatNumber(row.calls)}</Text>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+    <DataTable
+      label="Accounts active this day"
+      columns={dayAccountColumns(onOpen)}
+      rows={accounts}
+      rowKey={(row) => row.id}
+      empty="No hosted-tier calls recorded on this day."
+      minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
+      onRowPress={(row) => onOpen(row.id)}
+    />
   );
 }
 

@@ -4,11 +4,11 @@ import {
   REVIEW_EVENT,
   type ReviewEvent,
 } from "@luke/features/pull-request-write-wire";
-import { AnchoredPopover, POPOVER_ALIGN } from "@luke/ui";
-import { MessageSquarePlusIcon, XIcon } from "lucide-react";
+import { AnchoredPopover, BUTTON_VARIANT, Button, POPOVER_ALIGN } from "@luke/ui";
+import { MessageSquarePlusIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { PopoverPanel } from "../popover-panel";
 import { Segmented } from "../segmented";
-import { Tooltip } from "../tooltip";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes";
 import { TranscriptWords } from "./transcript-blocks";
 
@@ -43,7 +43,7 @@ const REVIEW_WORDS = {
   EVENTS: "What the review says",
   CANCEL: "Cancel",
   SUBMIT: "Submit review",
-  SUBMITTING: "Submitting…",
+  SUBMITTING: "Submitting review",
 } as const;
 
 /** What the review may say, in the order GitHub's own review box offers it, and what each means. */
@@ -112,44 +112,22 @@ function ReviewPanel({
   const sending = writes.pending !== undefined;
   const eventsName = useId();
 
-  useEffect(() => {
-    field.current?.focus();
-  }, []);
-
   const onKey = (event: React.KeyboardEvent) => {
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      onClose();
-    }
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      if (!sending) draft.submit();
-    }
+    if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+    event.preventDefault();
+    if (!sending) draft.submit();
   };
 
   return (
-    <div
+    <PopoverPanel
       id={id}
-      className="pull-request-review-panel"
-      role="dialog"
-      aria-label={REVIEW_WORDS.TITLE}
-      tabIndex={-1}
+      title={REVIEW_WORDS.TITLE}
+      closeLabel={REVIEW_WORDS.CLOSE}
+      initialFocus={field}
+      onDismiss={onClose}
+      onLeave={onLeave}
       onKeyDown={onKey}
-      onBlur={(event) => onLeave(event.relatedTarget)}
     >
-      <div className="pull-request-review-head">
-        <h2 className="pull-request-review-title">{REVIEW_WORDS.TITLE}</h2>
-        <Tooltip label={REVIEW_WORDS.CLOSE}>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={REVIEW_WORDS.CLOSE}
-            onClick={onClose}
-          >
-            <XIcon />
-          </button>
-        </Tooltip>
-      </div>
       <p className="pull-request-review-lead">{REVIEW_WORDS.LEAD}</p>
       <div className="pull-request-review-body">
         <Segmented
@@ -202,20 +180,17 @@ function ReviewPanel({
       </fieldset>
       <PullRequestWriteNote writes={writes} className="pull-request-review-note" />
       <div className="pull-request-review-foot">
-        <button type="button" className="toolbar-button" onClick={onClose}>
-          {REVIEW_WORDS.CANCEL}
-        </button>
-        <button
-          type="button"
-          className="primary-button"
-          disabled={sending}
-          aria-busy={sending}
+        <Button onClick={onClose}>{REVIEW_WORDS.CANCEL}</Button>
+        <Button
+          variant={BUTTON_VARIANT.PRIMARY}
+          busy={sending}
+          busyLabel={REVIEW_WORDS.SUBMITTING}
           onClick={draft.submit}
         >
-          {sending ? REVIEW_WORDS.SUBMITTING : REVIEW_WORDS.SUBMIT}
-        </button>
+          {REVIEW_WORDS.SUBMIT}
+        </Button>
       </div>
-    </div>
+    </PopoverPanel>
   );
 }
 
@@ -260,18 +235,16 @@ export function PullRequestReview({ writes }: { writes: PullRequestWrites }): Re
 
   return (
     <div className="pull-request-review" ref={root}>
-      <button
+      <Button
         ref={trigger}
-        type="button"
-        className="toolbar-button pull-request-review-button"
+        icon={<MessageSquarePlusIcon aria-hidden="true" />}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen(!open)}
       >
-        <MessageSquarePlusIcon aria-hidden="true" />
         {REVIEW_WORDS.OPEN}
-      </button>
+      </Button>
       {open ? (
         <AnchoredPopover align={POPOVER_ALIGN.END} width={PANEL_WIDTH}>
           <ReviewPanel
