@@ -197,6 +197,8 @@ export const SHORTCUT_KEY = {
   },
   COMMA: { accelerator: ",", glyph: ",", key: ",", code: "Comma" },
   SLASH: { accelerator: "/", glyph: "/", key: "/", code: "Slash" },
+  // A bare ; and ⇧; are Files changed's own fold keys, stage-cli's, read by their place.
+  SEMICOLON: { accelerator: ";", glyph: ";", key: ";", code: "Semicolon" },
   // Note that Return is ⏎ rather than ↩, because the system face draws ⏎ as
   // the Mac's own Return mark, centred on the capitals as ⌘ is, and has no ↩:
   // a ↩ is borrowed from another face and sits off the line beside it.

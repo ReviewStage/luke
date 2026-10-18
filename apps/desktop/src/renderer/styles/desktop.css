@@ -1667,8 +1667,8 @@ ul.actor-stack {
 }
 
 .desktop-shell .title-bar-controls .offline-mark {
-  width: var(--control-height);
-  height: var(--control-height);
+  width: var(--luke-control-height);
+  height: var(--luke-control-height);
   justify-content: center;
   padding: 0;
 }
@@ -1681,8 +1681,8 @@ ul.actor-stack {
   --sidebar-toggle-clearance: calc(
     var(--title-bar-left) +
     3 *
-    var(--control-height) +
-    var(--control-gap)
+    var(--luke-control-height) +
+    var(--luke-control-gap)
   );
 }
 
@@ -4104,6 +4104,12 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--luke-space-8);
 }
 
+/* An automation's toolbar while the list is read: its name's crumb is a
+   block with no words, so no baseline, and the heading centres instead. */
+.desktop-toolbar-heading.automation-toolbar-reading {
+  align-items: center;
+}
+
 .experiment-tag {
   flex: none;
   padding: 0 var(--luke-space-6);
@@ -4601,7 +4607,8 @@ body:has(.app-stage[data-capture="true"])
   padding: var(--luke-space-16) var(--content-inset) var(--luke-space-32);
 }
 
-.automation-group {
+.automation-group,
+.automations-skeleton {
   max-width: var(--luke-page-measure);
   margin-inline: auto;
 }
@@ -4864,30 +4871,18 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--luke-space-12);
 }
 
-/* Its name is written where a Settings page's title stands, in the page
-   title role. */
-.automation-editor-name {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-title-size);
-  font-weight: var(--luke-weight-bold);
-  letter-spacing: -0.015em;
-  line-height: var(--luke-type-title-leading);
-  outline: none; /* no ring: the caret in the title's own words shows focus */
-}
-
-.automation-editor-name::placeholder {
-  color: var(--luke-color-text-subtle);
-}
-
 /* The form, drawn as a Settings page: each group's name over a card of
    Settings rows, the groups a section apart. */
 .automation-form {
   display: flex;
   flex-direction: column;
   gap: var(--luke-section-gap);
+}
+
+/* The prompt's placeholder, the height of its five-row field
+   (`text-field.css`). */
+.automation-prompt-skeleton {
+  height: calc(5 * var(--luke-type-body-leading) + 2 * var(--luke-space-6) + 2px);
 }
 
 /* The servers left on, by their marks, inside the servers row's field chip. */
@@ -5300,8 +5295,7 @@ body:has(.app-stage[data-capture="true"])
   border-radius: var(--luke-radius-10);
 }
 
-.chat-composer-field,
-.chat-ask-note-field {
+.chat-composer-field {
   width: 100%;
   min-height: 0;
   padding: 0;
@@ -5347,15 +5341,17 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* An open ask's note line, the round send at its end where the note is what is sent. */
+/* The note's field and, where the answer is sent by one, its send beside it. */
 .chat-ask-note {
   display: flex;
   align-items: center;
   gap: var(--luke-space-8);
   margin: var(--luke-space-4) 0 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-10);
-  background: var(--luke-color-sidebar);
+}
+
+.chat-ask-note-field {
+  flex: 1;
+  min-width: 0;
 }
 
 .chat-ask-presses {

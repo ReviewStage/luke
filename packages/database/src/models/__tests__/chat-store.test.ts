@@ -115,7 +115,7 @@ const openTask = (userId: string, organizationId: string, name = "Billing export
 const openAgent = (userId: string, taskId: string) =>
   Effect.gen(function* () {
     const started = yield* createCodingAgent(userId, {
-      taskId: taskId,
+      taskId,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
       effort: "high",
@@ -170,7 +170,7 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
           ["ada-lovelace", "ada-lovelace-2", "luke-2", "agent-1-2", "member"],
         );
         const lukes = yield* Effect.forEach([task, otherTask], (taskId) =>
-          mint({ kind: MEMBER_KIND.LUKE, planId: taskId }),
+          mint({ kind: MEMBER_KIND.LUKE, taskId }),
         );
         assert.deepEqual(
           lukes.map((row) => row.handle),
@@ -201,13 +201,13 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
         const first = yield* channel(billing);
         assert.equal((yield* channel(billing)).id, first.id);
         const names = yield* Effect.forEach([billing, again, general, unnamed], (taskId) =>
-          Effect.map(channel(taskId), (row) => [row.kind, row.name, row.planId]),
+          Effect.map(channel(taskId), (row) => [row.kind, row.name, row.taskId]),
         );
         assert.deepEqual(names, [
-          [CHANNEL_KIND.PLAN, "billing-export", billing],
-          [CHANNEL_KIND.PLAN, "billing-export-2", again],
-          [CHANNEL_KIND.PLAN, "general-2", general],
-          [CHANNEL_KIND.PLAN, "plan", unnamed],
+          [CHANNEL_KIND.TASK, "billing-export", billing],
+          [CHANNEL_KIND.TASK, "billing-export-2", again],
+          [CHANNEL_KIND.TASK, "general-2", general],
+          [CHANNEL_KIND.TASK, "plan", unnamed],
         ]);
 
         const room = Option.getOrThrow(yield* ensureGeneral(owner, workspace));
@@ -1202,7 +1202,7 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
         // Every change in a test lands at one instant, so the sequence orders them, the latest first.
         const waiting = yield* waitingOn(room.owner);
         assert.deepEqual(
-          waiting.map((each) => [each.message.id, each.planId]),
+          waiting.map((each) => [each.message.id, each.taskId]),
           [
             [dmAsk.message.id, null],
             [inChannel.message.id, room.plan],

@@ -169,11 +169,11 @@ export function RepositoryDetail({
  * opening their page where the window offers one.
  */
 function CreatorDetail({
-  plan: task,
+  task,
   readerId,
   now,
 }: {
-  plan: TaskSummary;
+  task: TaskSummary;
   readerId: string | undefined;
   now: number;
 }): React.JSX.Element {
@@ -325,7 +325,7 @@ export function TaskCard({
       )}
       {(shared ?? (members !== undefined && members.length > 1)) &&
       (task.createdBy !== undefined || task.ownerId !== undefined) ? (
-        <CreatorDetail plan={task} readerId={readerId} now={now} />
+        <CreatorDetail task={task} readerId={readerId} now={now} />
       ) : null}
       {stranded === undefined ? null : (
         <span className="task-card-detail">

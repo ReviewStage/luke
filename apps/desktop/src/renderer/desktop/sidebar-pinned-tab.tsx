@@ -75,7 +75,10 @@ function pinGone(pin: PinnedTab, tasks: TasksControl): boolean {
     const { agents } = tasks.agents;
     return agents !== undefined && !agents.some((agent) => agent.id === agentId);
   }
-  if (!isFileTab(tab) || tasks.shownCode === undefined) return false;
+  // Note that a task Luke showed no code on says nothing of its files, because a file pinned there was browsed to rather than shown.
+  if (!isFileTab(tab) || tasks.shownCode === undefined || tasks.shownCode.length === 0) {
+    return false;
+  }
   return !shownFiles(tasks.shownCode).some((ref) => ref.path === tab.file);
 }
 

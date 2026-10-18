@@ -34,7 +34,7 @@ const TOLD_BOUND = 100;
 /** Where a message waits: its workspace, and its plan where it waits in a plan's channel. */
 interface WaitsIn {
   readonly workspaceId: string;
-  readonly planId: string | null;
+  readonly taskId: string | null;
 }
 
 /** Says each message main hands the window, `view` opening its workspace's Chat, and withdraws each once the Chat it is read in is on screen. */
@@ -49,31 +49,29 @@ export function useChatToasts(view: (workspaceId: string) => void, shown: ChatSh
   const told = useRef(new Map<string, WaitsIn>());
   useEffect(
     () =>
-      appBridge().onChatMessageWaiting(
-        ({ messageId, workspaceId, planId: taskId, words, detail }) => {
-          told.current.set(messageId, { workspaceId, planId: taskId });
-          const oldest = told.current.keys().next().value;
-          if (told.current.size > TOLD_BOUND && oldest !== undefined) told.current.delete(oldest);
-          toast({
-            words,
-            detail,
-            waits: true,
-            hold: TOAST_HOLD.NEWS,
-            subject: messageId,
-            tone: TOAST_TONE.ASK,
-            action: { label: VIEW_LABEL, onPress: () => viewing.current(workspaceId) },
-          });
-        },
-      ),
+      appBridge().onChatMessageWaiting(({ messageId, workspaceId, taskId, words, detail }) => {
+        told.current.set(messageId, { workspaceId, taskId });
+        const oldest = told.current.keys().next().value;
+        if (told.current.size > TOLD_BOUND && oldest !== undefined) told.current.delete(oldest);
+        toast({
+          words,
+          detail,
+          waits: true,
+          hold: TOAST_HOLD.NEWS,
+          subject: messageId,
+          tone: TOAST_TONE.ASK,
+          action: { label: VIEW_LABEL, onPress: () => viewing.current(workspaceId) },
+        });
+      }),
     [toast],
   );
   const shownWorkspace = shown?.workspaceId;
-  const shownTask = shown?.planId ?? null;
+  const shownTask = shown?.taskId ?? null;
   useEffect(() => {
     if (shownWorkspace === undefined) return;
     for (const [messageId, waits] of told.current) {
       if (waits.workspaceId !== shownWorkspace) continue;
-      if (shownTask !== null && waits.planId !== shownTask) continue;
+      if (shownTask !== null && waits.taskId !== shownTask) continue;
       withdraw(messageId);
       told.current.delete(messageId);
     }

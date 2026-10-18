@@ -322,13 +322,13 @@ function channelMeta(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): 
     case CHANNEL_KIND.GENERAL:
     case CHANNEL_KIND.TOPIC:
       return CHANNEL_META[channel.kind];
-    case CHANNEL_KIND.PLAN:
-      return channel.planId === undefined ? undefined : names.plans.get(channel.planId);
+    case CHANNEL_KIND.TASK:
+      return channel.planId === undefined ? undefined : names.tasks.get(channel.planId);
     case CHANNEL_KIND.DM: {
       const other = channel.members?.find((id) => id !== chat.self);
       if (other === undefined) return undefined;
       const who = chatWho(chat, names, other);
-      return who.agent?.title ?? who.planName ?? undefined;
+      return who.agent?.title ?? who.taskName ?? undefined;
     }
   }
 }

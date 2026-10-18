@@ -95,7 +95,7 @@ function taskOf(id: string, body: string): Task {
 }
 
 const picture = (taskId: string, id: string) =>
-  planAttachmentAddress({ taskId: taskId, attachmentId: id }, "acme");
+  planAttachmentAddress({ taskId, attachmentId: id }, "acme");
 
 test("a plan's picture is drawn from its bytes under its caption, and one this reader cannot reach as its words", async () => {
   const taskId = "7a1d4e90-0c3f-4b6a-9d2e-5f6a7b8c9d03";
@@ -156,7 +156,7 @@ test("who last changed a picture's section is said in the viewer over the window
       { section: "Approach", actor: PLAN_ACTOR.NOTETAKER, at: now - 2 * HOUR, duringCall: false },
     ],
   };
-  const view = await drawn(createElement(PlanBody, { task: task, live: false }));
+  const view = await drawn(createElement(PlanBody, { task, live: false }));
 
   assert.deepEqual(
     [...view.querySelectorAll(".plan-unit-byline")].map((line) => lineWords(line)),
@@ -230,7 +230,7 @@ test("a version draws the picture it struck and the one it wrote in, each in its
       },
       restore,
       task: {
-        taskId: taskId,
+        taskId,
         place: { workspace: "acme", repository: null },
         anchors: new Set<string>(),
       },
@@ -330,7 +330,7 @@ test("an agent's plan card draws the plan's pictures once opened, while the agen
     createElement(
       Fragment,
       null,
-      createElement(AgentMessage, { ...shared, message: handed, plan: true, planId: taskId }),
+      createElement(AgentMessage, { ...shared, message: handed, plan: true, taskId }),
       createElement(AgentMessage, { ...shared, message: turn, plan: false }),
     ),
   );

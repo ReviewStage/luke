@@ -174,7 +174,7 @@ test("the card's Video off and Video on are the Call tab's own toggle, and both 
       createElement(
         "div",
         { className: "call-tab" },
-        createElement(CallTabVideo, { planId: TASK_ID }),
+        createElement(CallTabVideo, { taskId: TASK_ID }),
       ),
       createElement(CallCardDock, {
         call: { ...CARD, video },

@@ -93,7 +93,7 @@ export const workspaceAgentsOf = (
 ): Effect.Effect<WorkspaceAgents, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
     const listed = yield* listWorkspaceCodingAgents(userId, workspaceId, {
-      ...(options.taskId === undefined ? undefined : { planId: options.taskId }),
+      ...(options.taskId === undefined ? undefined : { taskId: options.taskId }),
       includeArchived: true,
       limit: WORKSPACE_AGENTS_LIST_LIMIT + 1,
     });

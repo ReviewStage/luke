@@ -346,14 +346,14 @@ export function fixtureChat(
       { id: CHANNEL.GENERAL, kind: CHANNEL_KIND.GENERAL, name: GENERAL_CHANNEL, archived: false },
       {
         id: CHANNEL.INVITES,
-        kind: CHANNEL_KIND.PLAN,
+        kind: CHANNEL_KIND.TASK,
         name: "teammate-invitations",
         planId: FIXTURE_TASK_ID,
         archived: false,
       },
       {
         id: CHANNEL.BILLING,
-        kind: CHANNEL_KIND.PLAN,
+        kind: CHANNEL_KIND.TASK,
         name: "billing-export",
         planId: BILLING_TASK_ID,
         archived: false,

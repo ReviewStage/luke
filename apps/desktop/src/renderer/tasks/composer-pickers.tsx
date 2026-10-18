@@ -139,7 +139,7 @@ export function useComposerPickers({
               pasted: (words) =>
                 pastedMentionNode(words, taskMentions.doors.place, {
                   known,
-                  planId: taskMentions.taskId,
+                  taskId: taskMentions.taskId,
                   text: taskMentions.text,
                 }),
             },

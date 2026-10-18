@@ -11,6 +11,7 @@ import {
   ChoiceList,
   type ChoiceOption,
   POPOVER_ALIGN,
+  TextArea,
 } from "@luke/ui";
 import { MessageSquarePlusIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -146,15 +147,15 @@ function ReviewPanel({
           onChange={setMode}
         />
         {mode === BODY_MODE.WRITE ? (
-          <textarea
+          <TextArea
             ref={field}
-            className="settings-input pull-request-review-field"
-            aria-label={REVIEW_WORDS.BODY}
+            label={REVIEW_WORDS.BODY}
             placeholder={placeholderOf(draft.event)}
             value={draft.body}
             maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS}
-            readOnly={sending}
-            onChange={(event) => draft.setBody(event.target.value)}
+            rows={4}
+            busy={sending}
+            onChange={draft.setBody}
           />
         ) : (
           <div className="pull-request-review-preview pull-request-words">

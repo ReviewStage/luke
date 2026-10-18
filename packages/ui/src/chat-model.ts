@@ -76,7 +76,7 @@ const LUKE_NAME = "Luke";
 /** The order the rail lists channels in, by kind: `#general`, the plans', then the topics. */
 const CHANNEL_ORDER = {
   [CHANNEL_KIND.GENERAL]: 0,
-  [CHANNEL_KIND.PLAN]: 1,
+  [CHANNEL_KIND.TASK]: 1,
   [CHANNEL_KIND.TOPIC]: 2,
   [CHANNEL_KIND.DM]: 3,
 } as const satisfies Record<ChatChannel["kind"], number>;
@@ -84,7 +84,7 @@ const CHANNEL_ORDER = {
 /** What the window knows beside the chat that names its members: each agent's line, each plan's name, and the reader's own name. */
 export interface ChatNames {
   readonly agents: ReadonlyMap<string, TaskAgentLine>;
-  readonly plans: ReadonlyMap<string, string>;
+  readonly tasks: ReadonlyMap<string, string>;
   readonly selfName: string | undefined;
 }
 
@@ -97,7 +97,7 @@ export function chatNames(
   const lines = [...tasks.flatMap((task) => task.agents?.agents ?? []), ...agents];
   return {
     agents: new Map(lines.map((line) => [line.id, line])),
-    plans: new Map(tasks.map((task) => [task.id, task.name])),
+    tasks: new Map(tasks.map((task) => [task.id, task.name])),
     selfName,
   };
 }
@@ -108,7 +108,7 @@ export interface ChatWho {
   readonly name: string;
   readonly handle: string;
   readonly agent: TaskAgentLine | undefined;
-  readonly planName: string | undefined;
+  readonly taskName: string | undefined;
 }
 
 /** One row of the rail: the channel, what it is called, what it says beside that, and how many unread messages it holds. */
@@ -167,7 +167,7 @@ export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): C
   const member = chat.members.find((each) => each.id === memberId);
   const handle = member?.handle ?? "unknown";
   const agent = member?.agentId === undefined ? undefined : names.agents.get(member.agentId);
-  const taskName = member?.planId === undefined ? undefined : names.plans.get(member.planId);
+  const taskName = member?.planId === undefined ? undefined : names.tasks.get(member.planId);
   const name =
     member?.kind === MEMBER_KIND.LUKE
       ? LUKE_NAME
@@ -176,7 +176,7 @@ export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): C
         : memberId === chat.self && names.selfName !== undefined
           ? names.selfName
           : handle;
-  return { member, name, handle, agent, planName: taskName };
+  return { member, name, handle, agent, taskName };
 }
 
 /** What a channel is called: a channel's own name, a direct message's other member's handle. */
@@ -184,7 +184,7 @@ export function channelLabel(chat: ChatAnswer, names: ChatNames, channel: ChatCh
   const other = otherOf(chat, channel);
   if (other !== undefined) return chatWho(chat, names, other).handle;
   return (
-    channel.name ?? (channel.planId === undefined ? "" : names.plans.get(channel.planId)) ?? ""
+    channel.name ?? (channel.planId === undefined ? "" : names.tasks.get(channel.planId)) ?? ""
   );
 }
 
@@ -201,7 +201,7 @@ export function chatRail(chat: ChatAnswer, names: ChatNames): ChatRail {
     return {
       channel,
       label: channelLabel(chat, names, channel),
-      sub: who?.agent?.title ?? who?.planName,
+      sub: who?.agent?.title ?? who?.taskName,
       other: who,
       unread: messagesIn(chat, channel.id).filter((message) => unreadBy(chat, message)).length,
     };
@@ -294,7 +294,7 @@ export function chatTargets(chat: ChatAnswer, names: ChatNames): readonly ChatTa
       (channel): ChatTarget => ({
         sigil: CHAT_TARGET_SIGIL.CHANNEL,
         name: channelLabel(chat, names, channel),
-        detail: channel.planId === undefined ? undefined : names.plans.get(channel.planId),
+        detail: channel.planId === undefined ? undefined : names.tasks.get(channel.planId),
       }),
     );
   // Note that every plan's planner answers to `@luke`, so a handle is offered once.

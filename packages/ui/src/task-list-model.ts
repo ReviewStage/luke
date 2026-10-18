@@ -57,7 +57,7 @@ export const TASK_ROW = {
 
 /** One row of the list: a task, or an agent an automation started with no task. */
 export type TaskRow =
-  | { readonly kind: typeof TASK_ROW.TASK; readonly plan: TaskSummary }
+  | { readonly kind: typeof TASK_ROW.TASK; readonly task: TaskSummary }
   | { readonly kind: typeof TASK_ROW.AGENT; readonly agent: TasklessAgent };
 
 /** The rows of one repository, as the sidebar groups them under its header; null is the rows with none. */
@@ -74,7 +74,7 @@ export interface CreatorGroup {
 
 /** A task as a row of the list. */
 export function taskRow(task: TaskSummary): TaskRow {
-  return { kind: TASK_ROW.TASK, plan: task };
+  return { kind: TASK_ROW.TASK, task };
 }
 
 /** An agent with no task as a row of the list. */
@@ -84,12 +84,12 @@ export function agentRow(agent: TasklessAgent): TaskRow {
 
 /** The row's name: its task's, or its agent's as its tab names it (`agentTabLabel`). */
 export function taskRowName(row: TaskRow): string {
-  return row.kind === TASK_ROW.TASK ? row.plan.name : agentTabLabel(row.agent);
+  return row.kind === TASK_ROW.TASK ? row.task.name : agentTabLabel(row.agent);
 }
 
 /** The repository the row works in; null for a task with none chosen yet. */
 export function taskRowRepository(row: TaskRow): string | null {
-  return row.kind === TASK_ROW.TASK ? row.plan.repository : row.agent.repository;
+  return row.kind === TASK_ROW.TASK ? row.task.repository : row.agent.repository;
 }
 
 /** Who created a plan, by account id: the creator the wire names, else its owner. */
@@ -99,7 +99,7 @@ function creatorIdOf(task: TaskSummary): string | undefined {
 
 /** Who created the row, by account id: a task's creator, or whoever started the agent, whose automation it ran on. */
 function taskRowCreatorId(row: TaskRow): string | undefined {
-  return row.kind === TASK_ROW.TASK ? creatorIdOf(row.plan) : row.agent.startedBy?.userId;
+  return row.kind === TASK_ROW.TASK ? creatorIdOf(row.task) : row.agent.startedBy?.userId;
 }
 
 /**
@@ -118,7 +118,7 @@ export function taskTime(task: TaskSummary, order: TaskOrder): number {
 
 /** The time a row shows and is ordered by: its task's (`taskTime`), or its agent's start under Created and its last activity otherwise. */
 export function taskRowTime(row: TaskRow, order: TaskOrder): number {
-  if (row.kind === TASK_ROW.TASK) return taskTime(row.plan, order);
+  if (row.kind === TASK_ROW.TASK) return taskTime(row.task, order);
   return order === TASK_ORDER.CREATED ? row.agent.createdAt : row.agent.activityAt;
 }
 
@@ -140,7 +140,7 @@ export function orderTaskRows(rows: readonly TaskRow[], order: TaskOrder): TaskR
 /** The plans in the order chosen, as their rows are ordered. */
 export function orderTasks(tasks: readonly TaskSummary[], order: TaskOrder): TaskSummary[] {
   return orderTaskRows(tasks.map(taskRow), order).flatMap((row) =>
-    row.kind === TASK_ROW.TASK ? [row.plan] : [],
+    row.kind === TASK_ROW.TASK ? [row.task] : [],
   );
 }
 

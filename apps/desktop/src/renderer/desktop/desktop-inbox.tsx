@@ -658,7 +658,7 @@ function InboxSidePanel({
       {...drawing}
       unread={NO_UNREAD}
       holder={SIDE_PANEL_HOLDER.INBOX}
-      planId={panelFor ?? ""}
+      taskId={panelFor ?? ""}
       repository={repository}
       board={undefined}
       shownCode={undefined}

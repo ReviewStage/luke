@@ -1,7 +1,8 @@
 /* text-field.css -- a text entry: one control's height and corner for a
    line, a field's ground inside a hairline, the body's type, and the danger
    ink for its edge while its field says something is wrong. Code is set
-   in the mono face where its caller asks. The keyboard's
+   in the mono face where its caller asks, and a page's title written in
+   place stands in the title's type without a well. The keyboard's
    ring is the app's reset's, as it is for every field. */
 
 @layer components {
@@ -47,6 +48,20 @@
     max-height: var(--luke-text-area-grow-max);
     field-sizing: content;
     resize: none;
+  }
+
+  /* A page's title written in place: the title's words alone, the caret in
+     them showing focus, so no well, no edge and no ring. */
+  .luke-text-field[data-size="title"],
+  .luke-text-field[data-size="title"]:focus {
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: var(--luke-type-title-size);
+    font-weight: var(--luke-weight-bold);
+    line-height: var(--luke-type-title-leading);
+    outline: none;
   }
 
   .luke-text-field[data-font="mono"] {

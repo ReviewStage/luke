@@ -1269,6 +1269,144 @@ test("People lists the listed workspace's members by name and role, the reader a
   assert.deepEqual(sent.tabs, []);
 });
 
+/** What the list says where no row stands: its notice, or "Nothing matches.". */
+function emptyLine(): string | undefined {
+  return document.querySelector(".command-palette-empty")?.textContent ?? undefined;
+}
+
+/** Lets every promise settled so far run its continuations. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
+
+/** A window whose members read is answered by `members`, every other act refused. */
+function membersAnswer(members: () => Promise<ActOutcome>): void {
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> =>
+      request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+        ? members()
+        : Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+}
+
+const ACME = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null };
+
+test("under All, a query nothing else matches says the repository's files are still being read rather than that nothing matches, and the files found follow", async () => {
+  let answer: (listed: TasksTreeAnswer) => void = () => undefined;
+  const tasks = tasksControl({
+    activeTaskId: "plan-1",
+    tasks: [
+      {
+        id: "plan-1",
+        workspaceId: "workspace-personal",
+        name: "Teammate invitations",
+        createdAt: 1,
+        updatedAt: 2,
+        repository: "acme/relay",
+      },
+    ],
+  });
+  membersAnswer(() => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }));
+  openPalette(
+    { ...tasks, workspace: ACME },
+    () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+  );
+  await settle();
+  type("zqx");
+
+  assert.deepEqual(rows(), []);
+  assert.equal(emptyLine(), "Reading the repository's files…");
+  assert.equal(document.querySelector(".command-palette-empty")?.getAttribute("role"), "status");
+
+  await act(async () =>
+    answer({
+      folder: {
+        path: "",
+        repository: "acme/relay",
+        branch: "main",
+        entries: [{ name: "src/zqx.ts", kind: TASK_TREE_ENTRY.FILE }],
+        truncated: false,
+      },
+    }),
+  );
+  assert.deepEqual(rows(), ["zqx.ts · src"]);
+
+  type("nothing-at-all");
+  assert.equal(emptyLine(), "Nothing matches.", "once every source answered, it says so");
+});
+
+test("People says the members are being read until they answer, and a refused read says so with a Retry that reads them again", async () => {
+  const member = {
+    userId: "user-charles",
+    name: "Charles Pan",
+    email: "charles@example.com",
+    role: WORKSPACE_ROLE.MEMBER,
+  };
+  let answers: ((outcome: ActOutcome) => void)[] = [];
+  membersAnswer(
+    () =>
+      new Promise((resolve) => {
+        answers.push(resolve);
+      }),
+  );
+  openPalette(tasksControl({ me: "user-dean", workspace: ACME }));
+  chooseFilter("People");
+  await settle();
+  assert.equal(emptyLine(), "Reading the workspace's members…");
+
+  await act(async () => answers.shift()?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No." }));
+  await settle();
+  const alert = document.querySelector(".command-palette-empty [role=alert]");
+  assert.match(alert?.textContent ?? "", /The workspace's members could not be read\./u);
+  assert.doesNotMatch(document.body.textContent ?? "", /Nothing matches/u);
+
+  answers = [];
+  const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) => each.textContent === "Retry",
+  );
+  assert.ok(retry, "Retry is offered");
+  act(() => retry.click());
+  await settle();
+  assert.equal(emptyLine(), "Reading the workspace's members…");
+  await act(async () => answers.shift()?.({ status: ACT_OUTCOME_STATUS.DONE, value: [member] }));
+  await settle();
+  assert.deepEqual(rows(), ["Charles Pan · Member"]);
+});
+
+test("Tasks says the account's tasks are being read before the list first answers", () => {
+  membersAnswer(() => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }));
+  openPalette(tasksControl({ workspace: ACME, listRead: false }));
+  chooseFilter("Tasks");
+  assert.equal(emptyLine(), "Reading your tasks…");
+  assert.doesNotMatch(document.body.textContent ?? "", /Nothing matches/u);
+});
+
+test("Tasks says a refused list with a Retry that reads it again", () => {
+  const retried: number[] = [];
+  membersAnswer(() => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }));
+  openPalette(
+    tasksControl({
+      workspace: ACME,
+      listRead: false,
+      listFailed: true,
+      onRetryList: () => retried.push(1),
+    }),
+  );
+  chooseFilter("Tasks");
+  const alert = document.querySelector(".command-palette-empty [role=alert]");
+  assert.match(alert?.textContent ?? "", /Your tasks could not be read\./u);
+  const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) => each.textContent === "Retry",
+  );
+  act(() => retry?.click());
+  assert.deepEqual(retried, [1]);
+});
+
 test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it is pinned, and nothing for an archived agent", () => {
   const asked: string[] = [];
   const agent = {

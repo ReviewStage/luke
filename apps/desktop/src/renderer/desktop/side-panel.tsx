@@ -237,7 +237,7 @@ const NO_PAGES: readonly PageLine[] = [];
  * pinned there, since the Inbox is no plan's page.
  */
 export const SIDE_PANEL_HOLDER = {
-  PLAN: "plan",
+  TASK: "plan",
   AGENT: "agent",
   INBOX: "inbox",
 } as const;
@@ -252,7 +252,7 @@ const NO_TERMINALS: readonly TerminalStripTab[] = [];
 
 /** The fixed kinds each holder's panel offers. */
 const HOLDER_KINDS = {
-  [SIDE_PANEL_HOLDER.PLAN]: SIDE_PANEL_TABS,
+  [SIDE_PANEL_HOLDER.TASK]: SIDE_PANEL_TABS,
   [SIDE_PANEL_HOLDER.AGENT]: NO_KINDS,
   [SIDE_PANEL_HOLDER.INBOX]: NO_KINDS,
 } as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;
@@ -823,7 +823,7 @@ function PanelTabs({
     readWorker: (callId) => readWholeTranscript(readWorker, { agentId: taskId, callId }),
     onOpenAgent,
     shownAgent,
-    taskId: taskId,
+    taskId,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   const copyLink = useCopyLinkItem();
@@ -832,7 +832,7 @@ function PanelTabs({
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
   const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
-    if (holder !== SIDE_PANEL_HOLDER.PLAN || !isPinnable(tab)) return undefined;
+    if (holder !== SIDE_PANEL_HOLDER.TASK || !isPinnable(tab)) return undefined;
     const pinned = panel.pins.some((pin) => pin.task === taskId && sameTab(pin.tab, tab));
     return {
       pinned,
@@ -842,7 +842,7 @@ function PanelTabs({
   const doorsOf = (entry: DrawnTab, at: number): TabDoors => {
     const others = strip.filter((_, place) => place !== at);
     // Note that only a task's panel names its tabs by the task: an agent's page holds its panel under the agent's id.
-    const linked = holder === SIDE_PANEL_HOLDER.PLAN ? panelTabPlace(taskId, entry.tab) : undefined;
+    const linked = holder === SIDE_PANEL_HOLDER.TASK ? panelTabPlace(taskId, entry.tab) : undefined;
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
@@ -1346,7 +1346,7 @@ function TabContent({
         taskId={taskId}
         page={page}
         readSource={(version) =>
-          act(ACT_KIND.TASKS_PAGE_SOURCE, { taskId: taskId, pageId: page.id, version })
+          act(ACT_KIND.TASKS_PAGE_SOURCE, { taskId, pageId: page.id, version })
         }
         findActive={findActive}
       />
@@ -1384,7 +1384,7 @@ function TabContent({
           file={file}
           snippet={snippetOf(shownCode, file)}
           shownCode={shownCode}
-          readFile={(window) => act(ACT_KIND.TASKS_FILE, { taskId: taskId, ...window })}
+          readFile={(window) => act(ACT_KIND.TASKS_FILE, { taskId, ...window })}
           readFolder={(path) => act(ACT_KIND.TASKS_TREE, { planId: taskId, path })}
           readWhole={() => act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })}
           openGitHub={(url) => appPlatform().openGitHub(url)}
@@ -1459,7 +1459,9 @@ function TabContent({
         <TaskBoard taskId={taskId} board={board} viewOnly={agents.onUnarchive !== undefined} />
       );
     case SIDE_PANEL_TAB.CODE:
-      return shownCode === undefined || shownCode.length === 0 ? (
+      // Note that no code read yet is a wait, and only code read as none says so.
+      if (shownCode === undefined) return <SpinnerRegion label="Loading code" />;
+      return shownCode.length === 0 ? (
         <EmptyState icon={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.CODE }).icon}>
           {NO_CODE_LINE}
         </EmptyState>
@@ -1486,7 +1488,7 @@ function TabContent({
           shown={shown}
           models={agents.models}
           reveal={transcript.reveal ?? work.reveal}
-          video={<CallTabVideo planId={taskId} />}
+          video={<CallTabVideo taskId={taskId} />}
         />
       );
   }
@@ -1689,7 +1691,7 @@ export function SidePanel({
   edge,
   unread,
   holder,
-  planId: taskId,
+  taskId,
   repository,
   board,
   shownCode,
@@ -1711,7 +1713,7 @@ export function SidePanel({
   unread: readonly StripTab[];
   holder: SidePanelHolder;
   /** The plan the panel stands beside, or the agent where it stands beside the agent's own page. */
-  planId: string;
+  taskId: string;
   /** The task's repository, `owner/name`, or none before one is chosen. */
   repository: string | null;
   board: Board | undefined;

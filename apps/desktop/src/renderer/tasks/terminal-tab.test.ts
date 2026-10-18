@@ -726,6 +726,53 @@ function lastPayload(kind: ActKind) {
   return "payload" in request ? request.payload : undefined;
 }
 
+/** What the shells list says to a reader in place of its rows: the reading region's words, or the failure's. */
+function shellsSaid(container: HTMLElement) {
+  const list = container.querySelector("aside[aria-label='Shells']");
+  assert.ok(list, "the shells list stands");
+  return {
+    reading: list.querySelector("[role=status]")?.textContent,
+    failed: list.querySelector("[role=alert]")?.textContent,
+  };
+}
+
+test("while the shells are first read, the list stands rows of blocks that say so, and the shells land in their place", async () => {
+  main.holding.add(ACT_KIND.TERMINAL_LIST);
+  const tab = await mount();
+  assert.deepEqual(shellsSaid(tab.container), {
+    reading: "Reading the shells…",
+    failed: undefined,
+  });
+  assert.doesNotMatch(tab.container.textContent ?? "", /No shells\./u);
+
+  main.holding.clear();
+  for (const release of main.held.splice(0)) release();
+  await settle();
+  assert.deepEqual(shellsSaid(tab.container), { reading: undefined, failed: undefined });
+  assert.deepEqual(
+    tab.rows().map((row) => row.name),
+    ["zsh", "dev server"],
+  );
+});
+
+test("a read of the shells the service refused says so in the list, beside the bar's Retry", async () => {
+  main.down.add(ACT_KIND.TERMINAL_LIST);
+  const tab = await mount();
+  assert.deepEqual(shellsSaid(tab.container), {
+    reading: undefined,
+    failed: "The shells could not be read.",
+  });
+
+  main.down.clear();
+  await act(async () => tab.action()?.click());
+  await settle();
+  assert.deepEqual(shellsSaid(tab.container), { reading: undefined, failed: undefined });
+  assert.deepEqual(
+    tab.rows().map((row) => row.name),
+    ["zsh", "dev server"],
+  );
+});
+
 test("the list shows each shell in the agent's sandbox, the one shown marked, a running one's command and its dot", async () => {
   main.listed = {
     sandbox: SANDBOX_STATE.RUNNING,

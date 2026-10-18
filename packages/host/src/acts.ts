@@ -752,7 +752,7 @@ const exactId = exactText(512);
  */
 const chatShownSchema = EffectSchema.Struct({
   workspaceId: exactId,
-  planId: EffectSchema.NullOr(exactId),
+  taskId: EffectSchema.NullOr(exactId),
 });
 
 export type ChatShown = typeof chatShownSchema.Type;

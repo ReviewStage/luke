@@ -720,7 +720,7 @@ function PlanCard({
   sentAt,
   body,
   messageId,
-  planId: taskId,
+  taskId,
 }: {
   text: string;
   lead: TranscriptLead;
@@ -735,7 +735,7 @@ function PlanCard({
   /** A webhook call's body, which rode in with an automation's prompt. */
   body?: string | undefined;
   /** The task the agent works on, whose plan's pictures the card draws; none where it works on none. */
-  planId?: string | undefined;
+  taskId?: string | undefined;
 }): ReactNode {
   const named = sender != null;
   const words = <TranscriptWords text={text} />;
@@ -750,7 +750,7 @@ function PlanCard({
           {taskId === undefined ? (
             words
           ) : (
-            <PlanPictures planId={taskId} text={text}>
+            <PlanPictures taskId={taskId} text={text}>
               {words}
             </PlanPictures>
           )}
@@ -1045,7 +1045,7 @@ export function AgentMessage({
   sender,
   origin,
   arrived = NO_ARRIVED,
-  planId: taskId,
+  taskId,
   forkable = true,
   forkCut,
 }: {
@@ -1057,7 +1057,7 @@ export function AgentMessage({
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
   plan: boolean;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
-  planId?: string | undefined;
+  taskId?: string | undefined;
   /** Who handed the agent the plan or the prompt it opens on, and the card's words where they are not the message's own. */
   origin?: TranscriptOrigin | undefined;
   /** The plan's or task's card line, where the transcript names it otherwise than by its first line. */
@@ -1086,7 +1086,7 @@ export function AgentMessage({
         sentAt={message.sentAt}
         body={origin?.body}
         messageId={message.id}
-        planId={taskId}
+        taskId={taskId}
       />
     );
   }
@@ -1278,7 +1278,7 @@ function AgentTranscriptView({
   briefSender,
   origin,
   readerId,
-  planId: taskId,
+  taskId,
   replay,
   endTrail,
 }: {
@@ -1317,7 +1317,7 @@ function AgentTranscriptView({
   /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
   readerId?: string | undefined;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
-  planId?: string | undefined;
+  taskId?: string | undefined;
   /** Where a replay its first message holds is drawn as its own card, between the brief and the note (`replay-card.tsx`); none where no replay is read, as on a worker's tab. */
   replay?: ReplayPlace | undefined;
   /** The row under the end line, or at the transcript's end where it has none: Continue in new agent, or the agents that continued it (`continue-agent.tsx`). */
@@ -1356,7 +1356,7 @@ function AgentTranscriptView({
               <AgentMessage
                 message={message === first && opening !== undefined ? opening.brief : message}
                 plan={message === plan}
-                planId={message === plan ? taskId : undefined}
+                taskId={message === plan ? taskId : undefined}
                 lead={lead}
                 moving={working && index === placed.length - 1}
                 forkCut={forkCutOf(message, open)}
@@ -1380,7 +1380,7 @@ function AgentTranscriptView({
                     replay={opening.replay}
                     sentAt={first.sentAt}
                     place={replay}
-                    planId={taskId}
+                    taskId={taskId}
                   />
                   {opening.note === undefined ? null : (
                     <AgentMessage
@@ -1566,7 +1566,7 @@ function AgentTabView({
                 briefSender={starter === undefined ? undefined : starterActor}
                 origin={origin}
                 readerId={readerId}
-                planId={agent.planId ?? undefined}
+                taskId={agent.planId ?? undefined}
                 replay={replay}
                 delegation={{
                   models,
@@ -1852,7 +1852,7 @@ export function AgentTab({
             carry={{
               words: composer.unsent.words,
               attachments: composer.unsent.attachments,
-              planId: agent.planId,
+              taskId: agent.planId,
             }}
           />
         }

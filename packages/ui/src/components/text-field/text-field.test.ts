@@ -6,12 +6,21 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { FormField } from "../form-field/form-field.js";
 import { SettingsRow } from "../settings-row/settings-row.js";
-import { TEXT_FIELD_AUTO_COMPLETE, TEXT_FIELD_TYPE, TextArea, TextField } from "./text-field.js";
+import {
+  TEXT_AREA_SUBMIT,
+  TEXT_FIELD_AUTO_COMPLETE,
+  TEXT_FIELD_TYPE,
+  TextArea,
+  type TextAreaSubmit,
+  TextField,
+} from "./text-field.js";
 
 /**
  * text-field.test.ts -- a text entry draws the value its caller holds and
- * hands every change back, answers Enter only when no input method is
- * composing, stays out of spell check and autofill where asked, holds its
+ * hands every change back, a number field a number or nothing, answers
+ * Enter, and a text area its submit key, only when no input method is
+ * composing, answers the caret leaving, says its chord, holds a busy text
+ * area's words and keys still, stays out of spell check and autofill where asked, holds its
  * form back while empty where required, hands a paste to a
  * caller that takes pasted files itself, inside a field is named, described, and marked invalid by
  * the field's words, and standing alone in a settings row is described by the row's words
@@ -346,4 +355,125 @@ test("a text entry is named by its field or by a label of its own, and never by 
   createElement(TextField, { value: "", onChange: () => undefined });
   // @ts-expect-error A text area with neither a field nor a label would stand unnamed.
   createElement(TextArea, { value: "", onChange: () => undefined });
+});
+
+test("a number field hands back the number typed, and nothing while it is empty or not yet a number", () => {
+  const changes: (number | undefined)[] = [];
+  const page = render(
+    createElement(TextField, {
+      label: "Count",
+      type: TEXT_FIELD_TYPE.NUMBER,
+      value: 3,
+      onChange: (value) => changes.push(value),
+    }),
+  );
+  const field = fieldNamed(page, "Count");
+  assert.equal(field.value, "3");
+  for (const typed of ["12", "", "-", "2.5"]) type(field, typed);
+  assert.deepEqual(changes, [12, undefined, undefined, 2.5]);
+});
+
+test("a text entry answers the caret leaving it, and says the chord that acts on it", () => {
+  const left: string[] = [];
+  const page = render(
+    createElement(
+      "div",
+      null,
+      createElement(TextField, {
+        label: "Title",
+        value: "",
+        onChange: () => undefined,
+        keyShortcuts: "Meta+Enter",
+        onBlur: () => left.push("title"),
+      }),
+      createElement(TextArea, {
+        label: "Body",
+        value: "",
+        onChange: () => undefined,
+        onBlur: () => left.push("body"),
+      }),
+    ),
+  );
+  const title = fieldNamed(page, "Title");
+  const body = page.querySelector("textarea") ?? assert.fail("no text area");
+  act(() => title.focus());
+  act(() => body.focus());
+  act(() => body.blur());
+  assert.deepEqual(left, ["title", "body"]);
+  assert.equal(title.getAttribute("aria-keyshortcuts"), "Meta+Enter");
+});
+
+/** A text area submitting with `submitKey`, counting its submits. */
+function submitsOf(submitKey: TextAreaSubmit | undefined, presses: KeyboardEventInit[]): number {
+  let submits = 0;
+  const page = render(
+    createElement(TextArea, {
+      label: "Reply",
+      value: "Looks good",
+      onChange: () => undefined,
+      onSubmit: () => {
+        submits += 1;
+      },
+      submitKey,
+    }),
+  );
+  const area = page.querySelector("textarea") ?? assert.fail("no text area");
+  for (const init of presses) press(area, { key: "Enter", cancelable: true, ...init });
+  return submits;
+}
+
+test("a text area submits on ⌘Return or Ctrl+Enter, never a plain Return or an input method's Return", () => {
+  const submits = submitsOf(undefined, [
+    { metaKey: true },
+    { ctrlKey: true },
+    {},
+    { shiftKey: true },
+    { metaKey: true, isComposing: true },
+    { ctrlKey: true, keyCode: 229 },
+  ]);
+  assert.equal(submits, 2);
+});
+
+test("a text area asked to submits on a plain Return, leaving Shift-Return and an input method's Return be", () => {
+  const submits = submitsOf(TEXT_AREA_SUBMIT.ENTER, [
+    {},
+    { shiftKey: true },
+    { isComposing: true },
+    { keyCode: 229 },
+  ]);
+  assert.equal(submits, 1);
+});
+
+test("a busy text area takes no typing and answers neither its submit key nor Escape, which it still keeps from the page", () => {
+  const answered: string[] = [];
+  const area = (busy: boolean) =>
+    createElement(TextArea, {
+      label: "Description",
+      value: "Draft",
+      onChange: () => undefined,
+      busy,
+      onSubmit: () => answered.push("submit"),
+      onEscape: () => answered.push("escape"),
+    });
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(area(true)));
+  const field = container.querySelector("textarea") ?? assert.fail("no text area");
+  assert.equal(field.readOnly, true);
+  assert.equal(field.getAttribute("aria-busy"), "true");
+  const held = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  act(() => {
+    field.dispatchEvent(held);
+  });
+  press(field, { key: "Enter", metaKey: true, cancelable: true });
+  assert.deepEqual(answered, []);
+  assert.equal(held.defaultPrevented, true);
+
+  act(() => root.render(area(false)));
+  assert.equal(field.readOnly, false);
+  assert.equal(field.getAttribute("aria-busy"), null);
+  press(field, { key: "Escape", cancelable: true });
+  press(field, { key: "Enter", metaKey: true, cancelable: true });
+  assert.deepEqual(answered, ["escape", "submit"]);
 });

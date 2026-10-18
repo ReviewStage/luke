@@ -136,7 +136,7 @@ function mount(shown: "agent" | "plan", linkWorkspace?: string) {
           LinkWorkspaceProvider,
           { value: linkWorkspace },
           createElement(TaskSummary, {
-            tasks: tasks,
+            tasks,
             layout: PINNED,
             cardId: "summary-card",
             inbox: { open: [], settled: [] },
@@ -268,7 +268,7 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
 const NO_INBOX = { open: [], settled: [] };
 
 /** The plan's column as the shell lays it out: the toolbar's button over the summary, laid out by the column's own width. */
-function TaskColumn({ plans: tasks }: { plans: TasksControl }): React.JSX.Element {
+function TaskColumn({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const pin = useSummaryPin(true);
   const [column, setColumn] = useState<HTMLElement | null>(null);
   const layout = useSummaryLayout(pin, column, false, summaryHolds(tasks, NO_INBOX));
@@ -277,7 +277,7 @@ function TaskColumn({ plans: tasks }: { plans: TasksControl }): React.JSX.Elemen
     { ref: setColumn },
     createElement(SummaryButton, { layout, cardId: "summary-card" }),
     createElement(TaskSummary, {
-      tasks: tasks,
+      tasks,
       layout,
       cardId: "summary-card",
       inbox: NO_INBOX,
@@ -296,7 +296,7 @@ function columnAt(width: number, tasks: TasksControl = tasksControl()) {
   root = createRoot(page);
   const draw = (shown: TasksControl) =>
     act(() =>
-      root?.render(onRegistry(AtomRegistry.make(), createElement(TaskColumn, { plans: shown }))),
+      root?.render(onRegistry(AtomRegistry.make(), createElement(TaskColumn, { tasks: shown }))),
     );
   draw(tasks);
   return {

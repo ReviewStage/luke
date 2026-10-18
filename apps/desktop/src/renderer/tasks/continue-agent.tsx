@@ -49,7 +49,7 @@ const CONTINUED_COPY = {
 export interface ContinueCarry {
   readonly words: string;
   readonly attachments: readonly CodingAgentAttachment[];
-  readonly planId: string | null;
+  readonly taskId: string | null;
 }
 
 /** Whether a draft still holds what a press carried: the same words and the same files in order. */
@@ -86,7 +86,7 @@ export function ContinueAgent({
     if (opensDraft !== undefined) {
       opensDraft(carry?.words ?? "", carry?.attachments ?? []);
       if (carry !== undefined) {
-        writer.update({ kind: DRAFT_PLACE.AGENT, planId: carry.planId, agentId }, (now) =>
+        writer.update({ kind: DRAFT_PLACE.AGENT, planId: carry.taskId, agentId }, (now) =>
           holdsCarried(now, carry) ? EMPTY_DRAFT : now,
         );
       }
@@ -101,7 +101,7 @@ export function ContinueAgent({
         setNote(failed);
         // The words went on into the new agent, so the closed box lets them go, where nothing newer stands.
         if (failed === undefined && carry !== undefined) {
-          writer.update({ kind: DRAFT_PLACE.AGENT, planId: carry.planId, agentId }, (now) =>
+          writer.update({ kind: DRAFT_PLACE.AGENT, planId: carry.taskId, agentId }, (now) =>
             holdsCarried(now, carry) ? EMPTY_DRAFT : now,
           );
         }

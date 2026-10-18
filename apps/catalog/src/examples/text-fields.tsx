@@ -5,7 +5,10 @@ import {
   Stack,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_FONT,
+  TEXT_FIELD_SIZE,
   TEXT_FIELD_TYPE,
+  TEXT_TONE,
+  Text,
   TextArea,
   TextField,
 } from "@luke/ui";
@@ -15,8 +18,9 @@ import { CatalogSection } from "../section";
 
 /**
  * text-fields.tsx -- a TextField empty with a placeholder, filled, invalid,
- * unavailable, as a secret, as code in the mono face, and as a time of day; a TextArea, standing and growing with its
- * words; a TextField in a settings row, invalid while the row says its error;
+ * unavailable, as a secret, as code in the mono face, as a time of day, and as a number; a page's title
+ * written in place; a TextArea, standing and growing with its words, and busy
+ * sending what ⌘Return submitted; a TextField in a settings row, invalid while the row says its error;
  * and both in a narrow column.
  */
 
@@ -30,6 +34,39 @@ function Held({
 }): React.JSX.Element {
   const [value, setValue] = useState(start);
   return <>{children(value, setValue)}</>;
+}
+
+/** A count the example holds, as a number or nothing. */
+function NumberHeld(): React.JSX.Element {
+  const [count, setCount] = useState<number | undefined>(3);
+  return (
+    <FormField label="Retries">
+      {(field) => (
+        <TextField field={field} type={TEXT_FIELD_TYPE.NUMBER} value={count} onChange={setCount} />
+      )}
+    </FormField>
+  );
+}
+
+/** A reply that ⌘Return sends, saying what it sent, beside one standing busy while its words are on their way. */
+function SubmittedNote(): React.JSX.Element {
+  const [reply, setReply] = useState("Looks good to me.");
+  const [sent, setSent] = useState<string | undefined>(undefined);
+  return (
+    <Stack gap={GAP.FIELD}>
+      <TextArea
+        label="Reply"
+        value={reply}
+        onChange={setReply}
+        rows={3}
+        onSubmit={() => setSent(reply)}
+      />
+      <Text tone={TEXT_TONE.MUTED}>
+        {sent === undefined ? "Nothing sent yet." : `Sent: ${sent}`}
+      </Text>
+      <TextArea label="Sending" value="On its way." onChange={() => undefined} rows={2} busy />
+    </Stack>
+  );
 }
 
 function TextFields(): React.JSX.Element {
@@ -103,7 +140,23 @@ function TextFields(): React.JSX.Element {
                 </FormField>
               )}
             </Held>
+            <NumberHeld />
           </Stack>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="text-title" title="A page's title">
+        <div className="catalog-column">
+          <Held start="">
+            {(value, onChange) => (
+              <TextField
+                label="Automation name"
+                placeholder="Untitled automation"
+                size={TEXT_FIELD_SIZE.TITLE}
+                value={value}
+                onChange={onChange}
+              />
+            )}
+          </Held>
         </div>
       </CatalogSection>
       <CatalogSection id="text-area" title="Many lines">
@@ -131,6 +184,11 @@ function TextFields(): React.JSX.Element {
               />
             )}
           </Held>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="text-area-submit" title="Many lines, submitted with ⌘Return">
+        <div className="catalog-column">
+          <SubmittedNote />
         </div>
       </CatalogSection>
       <CatalogSection id="text-settings-row" title="In a settings row, invalid">
