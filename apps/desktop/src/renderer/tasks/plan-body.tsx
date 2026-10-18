@@ -8,8 +8,17 @@ import {
 } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
+import { useCreator } from "@luke/panel/member-directory";
 import { agoText, momentText, sinceText, useMinute } from "@luke/panel/tasks/task-time";
+import { TaskTitle } from "@luke/panel/tasks/task-title";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
+import {
+  EDITOR_PLACE,
+  type PlanEditDoor,
+  usePlanEditing,
+} from "@luke/panel/tasks/use-plan-editing";
+import { NO_LOOKS, type TaskLooks } from "@luke/panel/tasks/use-task-looks";
+import { prefersReducedMotion } from "@luke/panel/use-reduced-motion";
 import { Button, EllipsisIcon, IconButton, TextButton, useMenu } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
@@ -18,9 +27,7 @@ import { ActorStack } from "../actor-ref";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { type LinkDrawer, MarkdownMessage, type TaskToggler } from "../markdown-message";
-import { useCreator } from "../member-directory";
 import { Tooltip } from "../tooltip";
-import { prefersReducedMotion } from "../use-reduced-motion";
 import { DocumentByline, DocumentScroll } from "./document-frame";
 import {
   type EditAgents,
@@ -56,9 +63,6 @@ import {
   chaseView,
   type UnitView,
 } from "./task-reveal";
-import { TaskTitle } from "./task-title";
-import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing";
-import { NO_LOOKS, type TaskLooks } from "./use-task-looks";
 
 /**
  * plan-body.tsx -- the open task's document as it scrolls between the header and the microphone row, typing in each newer document as it arrives.

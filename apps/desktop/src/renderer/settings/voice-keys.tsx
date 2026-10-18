@@ -2,6 +2,8 @@
  * voice-keys.tsx -- the Voice page's Keys group: Luke's two system-wide keys, talk and stop, each a chord that can be changed.
  */
 
+import { AttentionMark, ChangedMark } from "@luke/panel/settings/marks";
+import { Shortcut } from "@luke/panel/shortcut";
 import {
   capturedVoiceHotkey,
   DEFAULT_STOP_HOTKEYS,
@@ -31,8 +33,6 @@ import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import type { ShortcutControl } from "@luke/voice/settings-controls";
 import type { ActionResult } from "@luke/wire";
 import { useEffect, useId, useRef, useState } from "react";
-import { Shortcut } from "../shortcut";
-import { AttentionMark, ChangedMark } from "./marks";
 import { MenuRow } from "./menu-row";
 
 /* What a talk key may be: offered the moment recording starts, and restated

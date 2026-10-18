@@ -8,7 +8,7 @@ import { ArchiveIcon } from "lucide-react";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { PRIORITY_ORDER, PriorityGlyph, StatusGlyph } from "./issue-pickers";
-import { useStartTaskItem } from "./issue-work";
+import { useStartItems } from "./issue-work";
 
 /**
  * issue-actions.tsx -- an issue's actions as its card on the board and its row in the list offer them: its status and priority changed, a task started from it, its link copied, and its archive.
@@ -18,7 +18,7 @@ import { useStartTaskItem } from "./issue-work";
  * keyboard. Status and Priority are submenus of every choice, the current
  * one checked, as the sidebar's Group by is; a pick is handed back for the
  * page to send, so the card moves the moment the answer lands. Start task…
- * (`issue-work.tsx`), Copy link
+ * and Start agent… (`issue-work.tsx`), Copy link
  * and Archive follow as the issue's own page offers them, and Archive asks
  * first, in the words that page asks in (`issue-detail.tsx`).
  */
@@ -99,10 +99,10 @@ export function IssueActions({
     onChange({ archived: true }).then(archiveAnswered),
   );
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.ISSUE, issueId: issue.id });
-  const startTask = useStartTaskItem(issue, identifier);
+  const starts = useStartItems(issue, identifier);
   const groups: MenuEntry[][] = [
     choiceEntries(issue, (change) => void onChange(change)),
-    ...(startTask === undefined ? [] : [[startTask]]),
+    ...(starts.length === 0 ? [] : [starts]),
     ...(copyLink === undefined ? [] : [[copyLink]]),
     [archiveItem(archiving.ask)],
   ];

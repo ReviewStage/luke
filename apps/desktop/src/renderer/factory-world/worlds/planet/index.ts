@@ -1,4 +1,12 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  type WorldModule,
+  type WorldPalette,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
 import { agentDrawnUnder, type FactoryWorldView, type ZoneView } from "@luke/ui/factory-world";
 import {
   CircleGeometry,
@@ -9,14 +17,6 @@ import {
   type Texture,
   Vector3,
 } from "three";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  type WorldModule,
-  type WorldPalette,
-  type WorldState,
-} from "../../world";
 import { createBlast } from "./blast";
 import { createCast } from "./cast";
 import { createCities, windowMaterial } from "./cities";

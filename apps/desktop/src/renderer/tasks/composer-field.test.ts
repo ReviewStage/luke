@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { PlanEditorModule } from "@luke/panel/plan-editor/contract";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -10,10 +12,8 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "#testing/composer";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { onSideBundles } from "#testing/side-bundles";
 import { sideBundles } from "../bundle-loader";
-import type { PlanEditorModule } from "../plan-editor/contract";
 import { planEditor } from "../plan-editor/index";
 import { AgentComposer } from "./agent-composer";
 import { useAgentComposer } from "./use-agent-composer";

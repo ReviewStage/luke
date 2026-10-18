@@ -1,4 +1,5 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import { useMemberDirectory } from "@luke/panel/member-directory";
 import {
   LIST_DENSITY,
   LIST_ROW_CURRENT,
@@ -13,7 +14,6 @@ import { agentRow, taskRowName } from "@luke/ui/task-list-model";
 import { useCallback, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item";
-import { useMemberDirectory } from "../member-directory";
 import { RelativeTime } from "../tasks/relative-time";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
 import { Tooltip } from "../tooltip";

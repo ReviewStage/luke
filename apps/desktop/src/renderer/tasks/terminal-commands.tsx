@@ -8,9 +8,9 @@ import {
 import { sandboxRead, shellsAsked } from "@luke/features/terminal-store";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { useAppCommand } from "@luke/panel/app-commands";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useCallback, useContext, useState } from "react";
-import { useAppCommand } from "../app-commands";
 import { TerminalPicker } from "./terminal-picker";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import type { SidePanelControl } from "./use-side-panel";

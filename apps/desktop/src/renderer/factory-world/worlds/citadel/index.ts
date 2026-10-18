@@ -3,6 +3,13 @@ import {
   type FactoryDefect,
   type FactoryPlanned,
 } from "@luke/features/factory-world-wire";
+import {
+  PICK_KIND,
+  type PickTarget,
+  type WorldModule,
+  type WorldPoint,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
 import { type AgentView, agentDrawnUnder, ZONE_LAYER, type ZoneView } from "@luke/ui/factory-world";
 import {
   CylinderGeometry,
@@ -13,13 +20,6 @@ import {
   Points,
   Vector2,
 } from "three";
-import {
-  PICK_KIND,
-  type PickTarget,
-  type WorldModule,
-  type WorldPoint,
-  type WorldState,
-} from "../../world";
 import { breachesOf, buildStonework, outerGatesOf } from "./architecture";
 import { buildDamage, type Wound, woundsOf } from "./damage";
 import { buildDecor } from "./decor";

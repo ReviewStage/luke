@@ -2,6 +2,12 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import {
+  COMPOSER_INPUT,
+  type ComposerEditorHandle,
+  type ComposerEditorProps,
+  type ComposerTrigger,
+} from "@luke/panel/plan-editor/contract";
 import { afterEach, beforeEach, test } from "vitest";
 import {
   composerEditor,
@@ -10,12 +16,6 @@ import {
   typeInComposer,
 } from "#testing/composer";
 import { mountComposer } from "./composer-editor";
-import {
-  COMPOSER_INPUT,
-  type ComposerEditorHandle,
-  type ComposerEditorProps,
-  type ComposerTrigger,
-} from "./contract";
 
 /**
  * The message box's editor through its mount and its handle: the words read

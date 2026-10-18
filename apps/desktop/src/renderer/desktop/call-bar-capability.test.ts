@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
+import { DESKTOP_CAPABILITIES, handCapabilities } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { DESKTOP_CAPABILITIES, handCapabilities } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { DOCUMENT_TASK } from "#testing/document-task";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import { NO_LOOKS } from "../tasks/use-task-looks";
 import { DesktopTasks } from "./desktop-tasks";
 
 /**

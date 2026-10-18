@@ -47,6 +47,7 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentReviewOptionsAnswerView,
   type CodingAgentWorkspaceListParams,
@@ -127,6 +128,7 @@ import {
 import {
   type PullRequestActionRequest,
   pullRequestActionRequestSchema,
+  pullRequestViewedAnswerSchema,
   pullRequestWriteAnswerSchema,
 } from "./pull-request-write-wire.js";
 import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
@@ -142,6 +144,7 @@ import {
   agentPicturePath,
   agentPullRequestActionPath,
   agentPullRequestPath,
+  agentPullRequestViewedPath,
   agentReviewOptionsPath,
   agentStopPath,
   agentSubagentMessagesPath,
@@ -163,6 +166,7 @@ import {
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
+import type { TaskAgentRefusal } from "./task-wire.js";
 
 /**
  * coding-agent-client.ts -- the window's side of a task's coding agents, as the host asks the service for them.
@@ -272,6 +276,11 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   if (failure !== CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) return { failure };
   const reached = Result.getOrUndefined(readServiceAnswer(repositoryNotReachableSchema)(payload));
   return reached === undefined ? { failure } : { failure, unreached: reached.unreached };
+}
+
+/** A Start's refusal the service answered beside a task it made all the same (`task-wire.ts`'s `taskStartAnswerSchema`), read as a refused Start is. */
+export function startRefusedAs(refusal: TaskAgentRefusal): Failed {
+  return refusedAs(unparsedWire(refusal), START_REFUSALS);
 }
 
 /** An image's bytes read whole and spelled in base64 under the type the service named, or unanswered where the type is none an image block may be or the body could not be read. */
@@ -880,6 +889,16 @@ export class HostedCodingAgentClient {
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, pullRequestWriteAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** Which of the agent's pull request's files the member marked viewed on GitHub, read on their own sign-in. */
+  pullRequestViewed(
+    agentId: string,
+  ): Effect.Effect<CodingAgentPullRequestViewedAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentPullRequestViewedPath(agentId) }),
+      (answer) => readAnswer(answer, pullRequestViewedAnswerSchema, ROW_REFUSALS),
     );
   }
 

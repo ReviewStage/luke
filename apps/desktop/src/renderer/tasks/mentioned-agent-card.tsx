@@ -5,13 +5,13 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { askAct } from "@luke/panel/act";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { useKnownNames } from "@luke/panel/tasks/use-known-names";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { createContext, type ReactNode, useContext } from "react";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { useKnownNames } from "./use-known-names";
 
 /**
  * mentioned-agent-card.tsx -- the card a chip of a coding agent hangs where the place drawing it holds no tab of the agent: the agent's tab's own card, read when it is first hung, and the task it works on.

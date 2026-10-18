@@ -1,7 +1,7 @@
+import { useFaceHover, useFaceMotion } from "@luke/panel/luke-face-mood";
+import { usePrefersReducedMotion } from "@luke/panel/use-reduced-motion";
 import { WingFace } from "@luke/ui";
 import { useRef } from "react";
-import { useFaceHover, useFaceMotion } from "../luke-face-mood";
-import { usePrefersReducedMotion } from "../use-reduced-motion";
 
 /** No one speaking: the head of the sidebar does not follow a call. */
 const QUIET = { speaking: false, microphoneLive: false } as const;

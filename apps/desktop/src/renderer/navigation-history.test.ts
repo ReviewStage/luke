@@ -2,6 +2,9 @@
 
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { PANEL_TAB } from "@luke/panel/panel-tabs";
+import { handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
@@ -11,11 +14,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { handState } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl } from "#testing/tasks-control";
 import { installWindowHistory, useWindowHistory, type WindowHistory } from "./navigation-history";
-import { PANEL_TAB } from "./panel-tabs";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,

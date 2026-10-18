@@ -9,11 +9,11 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { LIVE_CLOSE_REASON } from "@luke/live";
+import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { Effect } from "effect";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { markdownHtmlParserLanded } from "#testing/markdown";
 import { TaskCard } from "./desktop/task-card";
 import { ChangesCard } from "./tasks/agent-changes-tab";
 import { agentSubject, NOTHING_HELD } from "./tasks/agent-ref";

@@ -29,11 +29,11 @@ import {
   REACTION,
   type Reaction,
 } from "@luke/features/pull-request-write-wire";
+import { useMemberDirectory } from "@luke/panel/member-directory";
 import { AnchoredPopover, IconButton, POPOVER_ALIGN, POPOVER_PANEL_LOOK } from "@luke/ui";
 import { ACTOR_KIND, actorName, githubActor } from "@luke/ui/actor-model";
 import { SmilePlusIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
-import { useMemberDirectory } from "../member-directory";
 import { PopoverPanel } from "../popover-panel";
 import { Tooltip } from "../tooltip";
 import { noop, useThreadWriting } from "./pull-request-thread-actions";

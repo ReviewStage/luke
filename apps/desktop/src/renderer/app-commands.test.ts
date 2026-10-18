@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { useAppCommand, useMenuCommands } from "@luke/panel/app-commands";
 import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
 import { Dialog } from "@luke/ui";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppPlatform } from "#testing/app-platform";
-import { useAppCommand, useMenuCommands } from "./app-commands";
 
 /**
  * The menu bar's commands as the window runs them under a dialog: Back and

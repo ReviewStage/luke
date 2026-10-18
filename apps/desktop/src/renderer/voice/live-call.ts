@@ -24,6 +24,15 @@ import {
   TRANSCRIPT_SPEAKER,
   unmuteEvent,
 } from "@luke/live";
+import {
+  acquireLivePeer,
+  LIVE_PEER_OUTCOME,
+  type LivePeer,
+  type LivePeerConnection,
+  type LiveSilence,
+  stopDevice,
+} from "@luke/panel/voice/live-peer";
+import { VOICE_ACTIVITY_HANGOVER_MS } from "@luke/panel/voice/voice-level-meter";
 import { AVATAR_STATUS, type AvatarFeed, type AvatarStatus } from "@luke/voice/avatar";
 import {
   AVATAR_HANDOVER_DIRECT,
@@ -58,15 +67,6 @@ import {
   type Scope,
 } from "effect";
 import type { AvatarFeedOptions } from "../avatar-feed/start-avatar-feed";
-import {
-  acquireLivePeer,
-  LIVE_PEER_OUTCOME,
-  type LivePeer,
-  type LivePeerConnection,
-  type LiveSilence,
-  stopDevice,
-} from "./live-peer";
-import { VOICE_ACTIVITY_HANGOVER_MS } from "./voice-level-meter";
 
 /** How long a created session may take to announce itself started before the peer gives up on it. */
 const SESSION_START_TIMEOUT_MS = 15_000;

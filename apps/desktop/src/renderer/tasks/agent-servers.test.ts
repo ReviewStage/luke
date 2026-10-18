@@ -8,11 +8,11 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import type { IntegrationStatuses } from "@luke/panel/integration-statuses";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import type { IntegrationStatuses } from "../integration-statuses";
 import { AgentServersButton } from "./agent-servers";
 
 /**
@@ -156,11 +156,9 @@ async function opened(standing: IntegrationStatuses = statuses) {
 
 /** Each section's heading and its rows' names, as drawn. */
 function sections(container: HTMLElement) {
-  return [...container.querySelectorAll('.agent-servers-menu [role="group"]')].map((group) => [
-    group.querySelector(".menu-heading")?.textContent,
-    [...group.querySelectorAll(".agent-servers-row .task-compose-menu-name")].map(
-      (name) => name.textContent,
-    ),
+  return [...container.querySelectorAll(".agent-servers-list > ul")].map((group) => [
+    group.getAttribute("aria-label"),
+    [...group.querySelectorAll(".agent-servers-name")].map((name) => name.textContent),
   ]);
 }
 
@@ -173,13 +171,18 @@ function tools(container: HTMLElement) {
   ]);
 }
 
+/** The press of the home's row whose words hold `name`. */
+function serverPress(container: HTMLElement, name: string): HTMLElement | undefined {
+  return (
+    [...container.querySelectorAll<HTMLElement>(".agent-servers-list li")]
+      .find((row) => row.textContent?.includes(name))
+      ?.querySelector<HTMLElement>("button") ?? undefined
+  );
+}
+
 /** Opens Vercel's page from the popover's home. */
 function openVercel(container: HTMLElement) {
-  act(() =>
-    [...container.querySelectorAll<HTMLElement>(".agent-servers-row")]
-      .find((row) => row.textContent?.includes("Vercel"))
-      ?.click(),
-  );
+  act(() => serverPress(container, "Vercel")?.click());
 }
 
 /** The name of the tool a server's page holds highlighted. */
@@ -215,11 +218,7 @@ test("the servers stand under Connected and Not connected, each connected one wi
 test("pressing a connected server opens its tools in place, each badged only as its server annotated it", async () => {
   const { container } = await opened();
 
-  act(() =>
-    [...container.querySelectorAll<HTMLElement>(".agent-servers-row")]
-      .find((row) => row.textContent?.includes("Vercel"))
-      ?.click(),
-  );
+  act(() => serverPress(container, "Vercel")?.click());
 
   assert.equal(container.querySelector(".agent-servers-page-title")?.textContent, "Vercel");
   assert.deepEqual(tools(container), [
@@ -235,7 +234,7 @@ test("a search finds a server and its tools, Enter opens its page filtered to th
 
   type("deploy");
   assert.deepEqual(
-    [...container.querySelectorAll(".agent-servers-hit .integration-tool-id")].map(
+    [...container.querySelectorAll(".agent-servers-list li .integration-tool-id")].map(
       (hit) => hit.textContent,
     ),
     ["get_deployment"],
@@ -267,7 +266,7 @@ test("the arrows move the highlight, and Space on an empty search flips the high
 
   key("ArrowDown");
   assert.equal(
-    container.querySelector('.agent-servers-row[data-highlighted="true"] .task-compose-menu-name')
+    container.querySelector('.agent-servers-list li:has([aria-current="true"]) .agent-servers-name')
       ?.textContent,
     "Vercel",
   );
@@ -278,11 +277,7 @@ test("the arrows move the highlight, and Space on an empty search flips the high
 
 test("a pointer's press on a server page's switch leaves the focus in the filter, so Backspace still goes back", async () => {
   const { container, key, switched } = await opened();
-  act(() =>
-    [...container.querySelectorAll<HTMLElement>(".agent-servers-row")]
-      .find((row) => row.textContent?.includes("Vercel"))
-      ?.click(),
-  );
+  act(() => serverPress(container, "Vercel")?.click());
   const toggle =
     container.querySelector<HTMLButtonElement>('.agent-servers-page-head [role="switch"]') ??
     assert.fail("no switch on the page");
@@ -462,7 +457,7 @@ test("two accounts at a provider stand as two rows, each named by its label, and
 
   assert.deepEqual(sections(container), [["Connected", ["Notion · Acme", "Notion · Personal"]]]);
   act(() =>
-    [...container.querySelectorAll<HTMLElement>(".agent-servers-row")]
+    [...container.querySelectorAll<HTMLElement>(".agent-servers-list li")]
       .find((row) => row.textContent?.includes("Personal"))
       ?.querySelector<HTMLElement>('[role="switch"]')
       ?.click(),

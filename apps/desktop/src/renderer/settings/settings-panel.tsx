@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { UpdatesSection } from "@luke/panel/settings/updates";
 import { useSettingsWrites } from "@luke/panel/settings/writes";
 import { EXPERIMENTS, HOST_CAPABILITY, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
@@ -22,7 +23,6 @@ import { type IntegrationsFilter, IntegrationsSection } from "./integrations-pag
 import { MacCommandsSection } from "./mac-commands-section";
 import { NotificationsSection } from "./notifications-section";
 import { WindowShortcutSections } from "./shortcuts-page";
-import { UpdatesSection } from "./updates";
 import { ShortcutSection } from "./voice-keys";
 import { VoiceSection } from "./voice-page";
 import { shownWorkspace, WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";

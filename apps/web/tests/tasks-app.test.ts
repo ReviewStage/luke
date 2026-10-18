@@ -671,6 +671,42 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
+    "a session cookie starts a task but not one with an agent, whose session is opened over the bearer, and that start writes nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const cookie = sessionCookieOf(owner);
+        const agent = { idempotencyKey: randomUUID(), prompt: "Expire invitations." };
+
+        const plain = yield* ask(
+          request(TASKS, undefined, { method: "POST", body: RELAY, cookie }),
+        );
+        const withAgent = yield* ask(
+          request(TASKS, undefined, {
+            method: "POST",
+            body: { name: LEDGER.name, repository: "acme/relay", agent },
+            cookie,
+          }),
+        );
+        const listed = readAnswer(
+          taskListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(TASKS, owner)),
+        );
+
+        assert.equal(plain.status, HOSTED_HTTP_STATUS.CREATED);
+        assert.deepEqual(
+          withAgent,
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+        assert.deepEqual(
+          listed.plans.map((plan) => plan.name),
+          [RELAY.name],
+        );
+      }),
+  );
+
+  it.effect(
     "a plan never planned on reads as an empty conversation on the agent tab's wire, and as no code shown",
     () =>
       Effect.gen(function* () {

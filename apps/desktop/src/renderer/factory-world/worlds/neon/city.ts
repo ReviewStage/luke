@@ -1,3 +1,4 @@
+import type { WorldPalette } from "@luke/panel/factory-world/world";
 import { ZONE_LAYER } from "@luke/ui/factory-world";
 import {
   AdditiveBlending,
@@ -35,7 +36,6 @@ import {
   Vector3,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import type { WorldPalette } from "../../world";
 import {
   COMMON_GLSL,
   OUTPUT_GLSL,

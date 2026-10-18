@@ -148,6 +148,10 @@
     "dest": "/api/default.js?route=agents/pull-request-action&id=$1"
   },
   {
+    "src": "/api/agents/([^/]+)/pull-request/viewed",
+    "dest": "/api/default.js?route=agents/pull-request-viewed&id=$1"
+  },
+  {
     "src": "/api/agents/([^/]+)/changes",
     "dest": "/api/default.js?route=agents/changes&id=$1"
   },

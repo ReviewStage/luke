@@ -69,7 +69,7 @@
     transform: rotate(90deg);
   }
 
-  .luke-disclosure-body[data-inset] {
+  .luke-disclosure-body:is([data-inset="indented"], [data-inset="flush"]) {
     display: flex;
     flex-direction: column;
     gap: var(--luke-space-4);

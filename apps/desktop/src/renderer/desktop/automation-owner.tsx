@@ -1,10 +1,10 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { AUTOMATION_SCOPE, type AutomationScope } from "@luke/features/automation-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { TILE_SIZE, WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
 import { useAppState } from "@luke/panel/use-app-state";
 import { ACTOR_KIND, accountActor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { TILE_SIZE, WorkspaceTile } from "./workspace-tile";
 
 /**
  * automation-owner.tsx -- who owns an automation, drawn by picture: the workspace's photo for the workspace's, the account's own sign-in picture for its own personal one.

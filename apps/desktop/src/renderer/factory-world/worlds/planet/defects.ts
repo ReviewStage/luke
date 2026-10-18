@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS, type FactoryDefect } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget, type WorldPicking } from "@luke/panel/factory-world/world";
 import {
   AdditiveBlending,
   BufferAttribute,
@@ -27,7 +28,6 @@ import {
   type Vector4,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
 import {
   type CoreZone,
   type CrustZone,

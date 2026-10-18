@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import type { PickTarget } from "@luke/panel/factory-world/world";
 import {
   AGENT_KIND,
   AGENT_STATE,
@@ -30,7 +31,6 @@ import {
   TorusGeometry,
   Vector3,
 } from "three";
-import type { PickTarget } from "../../world";
 import { haloPoints, type Sparks } from "./effects";
 import { basisFromY, basisFromZ, clamp, clean, merged, seeded, smooth, TAU, v3 } from "./kit";
 import type { EffectUniforms } from "./materials";

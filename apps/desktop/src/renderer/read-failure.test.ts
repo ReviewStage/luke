@@ -16,18 +16,18 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "@luke/host/acts";
+import { PANEL_TAB } from "@luke/panel/panel-tabs";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { DesktopInbox } from "./desktop/desktop-inbox";
 import { DesktopSidebar } from "./desktop/desktop-sidebar";
 import { SIDEBAR_OVERLAY } from "./desktop/sidebar-collapse";
-import { PANEL_TAB } from "./panel-tabs";
 import { ApiKeysSection } from "./settings/api-keys-section";
 import { WorkspacePage } from "./settings/workspace-page";
 import { AgentChangesTab } from "./tasks/agent-changes-tab";

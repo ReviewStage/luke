@@ -3,6 +3,7 @@ import {
   type FactoryPlanned,
   LINEAR_PRIORITY,
 } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget } from "@luke/panel/factory-world/world";
 import type { SIGNAL_COLOR, TimelineEntry } from "@luke/ui/factory-world";
 import {
   BufferAttribute,
@@ -25,7 +26,6 @@ import {
   TorusGeometry,
   type Vector3,
 } from "three";
-import { PICK_KIND, type PickTarget } from "../../world";
 import { type Bursts, haloPoints, type Sparks, type Streaks } from "./effects";
 import {
   basisFromY,

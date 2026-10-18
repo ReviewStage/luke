@@ -1,6 +1,6 @@
 {
   "name": "@luke/ui",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "private": true,
   "type": "module",
   "description": "Shared React for the desktop panel: Luke's face and glyphs, traced from the brand's generated art",
@@ -53,6 +53,7 @@
     "./chat-mention": "./src/chat-mention.js",
     "./chat-model": "./src/chat-model.js",
     "./factory-world": "./src/factory-world/factory-world.js",
+    "./factory-campus": "./src/factory-world/campus.js",
     "./testing": "./src/testing/index.js"
   },
   "types": "./src/index.ts",

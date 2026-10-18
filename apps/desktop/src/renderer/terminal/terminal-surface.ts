@@ -1,3 +1,10 @@
+import {
+  TERMINAL_FIND,
+  type TerminalFind,
+  type TerminalFindWay,
+  type TerminalHandle,
+  type TerminalProps,
+} from "@luke/panel/terminal/contract";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
@@ -5,13 +12,6 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import { adoptInlineStyles } from "./adopted-styles";
-import {
-  TERMINAL_FIND,
-  type TerminalFind,
-  type TerminalFindWay,
-  type TerminalHandle,
-  type TerminalProps,
-} from "./contract";
 import { TERMINAL_KEY, terminalKey } from "./terminal-keys";
 import { LIGHT_APPEARANCE, terminalFindTints, terminalTheme } from "./terminal-theme";
 

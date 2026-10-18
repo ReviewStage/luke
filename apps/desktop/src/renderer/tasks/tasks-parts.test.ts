@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { onRegistry } from "#testing/copy-feedback";
 import { CALL_CONTROL_LABEL, CallBar } from "./tasks-parts";
 
 /**

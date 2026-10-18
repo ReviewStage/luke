@@ -17,10 +17,10 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import {
   focusedSegment,

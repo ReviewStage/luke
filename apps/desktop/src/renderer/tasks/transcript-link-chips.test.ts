@@ -3,13 +3,13 @@
 import assert from "node:assert/strict";
 import { MENTION_KIND, type Mention, type MentionLines } from "@luke/features/mention-link";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
-import { markdownHtmlParserLanded } from "#testing/markdown";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 

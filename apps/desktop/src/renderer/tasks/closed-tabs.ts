@@ -13,7 +13,7 @@
  * for it. The list is a moment's, kept nowhere, and held to a bound.
  */
 
-import type { MainTab } from "./use-main-tabs";
+import type { MainTab } from "@luke/panel/tasks/use-main-tabs";
 import type { OpenFile, SidePanelTab } from "./use-side-panel";
 
 /** How many closed tabs are kept, the latest closed; the oldest is let go past it. */

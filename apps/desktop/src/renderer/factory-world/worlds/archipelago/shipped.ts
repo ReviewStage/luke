@@ -1,4 +1,6 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import type { PickTarget, WorldPalette, WorldPicking } from "@luke/panel/factory-world/world";
+import { PICK_KIND } from "@luke/panel/factory-world/world";
 import type { TimelineEntry } from "@luke/ui/factory-world";
 import {
   AdditiveBlending,
@@ -20,8 +22,6 @@ import {
   TorusGeometry,
   Vector3,
 } from "three";
-import type { PickTarget, WorldPalette, WorldPicking } from "../../world";
-import { PICK_KIND } from "../../world";
 import type { Effects } from "./effects";
 import type { Isle } from "./islands";
 import {

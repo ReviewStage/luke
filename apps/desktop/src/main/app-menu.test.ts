@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { ellipsized } from "@luke/panel/testing/action-label";
+import { DESKTOP_CAPABILITIES } from "@luke/panel/testing/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import {
   APP_COMMAND,
@@ -13,8 +15,6 @@ import {
 import { experimentsOn } from "@luke/settings/testing";
 import type { MenuItemConstructorOptions } from "electron";
 import { describe, test } from "vitest";
-import { ellipsized } from "#testing/action-label";
-import { DESKTOP_CAPABILITIES } from "#testing/app-state";
 import { appMenuTemplate, menuBarDrawer, UPDATE_MENU_ACT } from "./app-menu";
 
 /**

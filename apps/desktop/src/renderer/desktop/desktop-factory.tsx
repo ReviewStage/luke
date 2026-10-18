@@ -1,6 +1,12 @@
 import { PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { AttentionMark } from "@luke/panel/attention-mark";
+import { paneTiming } from "@luke/panel/desktop/pane-motion";
+import { useRowKeys } from "@luke/panel/desktop/use-row-keys";
+import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
+import { useSettledWaiting } from "@luke/panel/tasks/inbox-settling";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -38,14 +44,12 @@ import {
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
-import { useAppCommand } from "../app-commands";
-import { AttentionMark } from "../attention-mark";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
+import { FACTORY_CAMPUS } from "../factory-world/registry";
 import { FactoryWorldPage } from "../factory-world/world-page";
 import { useFactoryWorlds, WorldPicker } from "../factory-world/world-picker";
-import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { NEEDS_YOU } from "../tasks/inbox-model";
@@ -74,9 +78,7 @@ import {
   factoryOneOffWaiting,
   factoryWaiting,
 } from "./factory-model";
-import { paneTiming } from "./pane-motion";
 import { taskCardOf } from "./task-card";
-import { useRowKeys } from "./use-row-keys";
 
 /**
  * desktop-factory.tsx -- the window's Factory: the workspace's tasks being talked through, built, and shipped, as three stations on one line, each leading with what waits on the developer there.
@@ -103,11 +105,11 @@ import { useRowKeys } from "./use-row-keys";
  * fades in; nothing else moves, and the times count on with the window's
  * minute. ↑ and ↓ move through the rows from the window itself, as on Home,
  * and Return opens the one reached. Escape leaves it for the task it stood
- * over, and so does any row of the sidebar. The toolbar's picker, where the
- * build offers a world, shows one of the Factory's worlds in the board's
- * place (`../factory-world/`); the board is its first entry and what the
- * page opens on, and Escape in a world steps back to its overview before it
- * leaves. Until the plan list is read the line stands in blocks, its
+ * over, and so does any row of the sidebar. The toolbar's picker shows the
+ * campus or one of the Factory's worlds in the board's place
+ * (`../factory-world/`); the board is its first entry and what the page
+ * opens on, and Escape in the campus or a world steps back to its overview
+ * before it leaves. Until the plan list is read the line stands in blocks, its
  * stations named and holding placeholder rows in a row's own shape, so the
  * rows land where the blocks stood; a list that could not be read says so
  * with Retry, above the line where an earlier read still stands, and with
@@ -191,13 +193,15 @@ function useFactoryBoard(tasks: TasksControl, now: number): FactoryRead {
   const questions = useWaitingItems(tasks);
   // Note that main's own count stands in only for a plan the Inbox has not read as it stands now, because such a read is newer than main's, and an item it shows answered must not come back; a plan changed since its last read, its reread out or failed, keeps main's count.
   const { items, readTasks } = questions;
+  // Note that main's count leaves out what the window answered, from the moment it was sent, as the reads do.
+  const settled = useSettledWaiting(tasks.inbox, tasks.inboxTaskless);
   const waiting = useMemo(
     () =>
       factoryWaiting(
         items,
-        tasks.inbox.filter((each) => !readTasks.has(each.taskId)),
+        settled.waiting.filter((each) => !readTasks.has(each.taskId)),
       ),
-    [items, readTasks, tasks.inbox],
+    [items, readTasks, settled.waiting],
   );
   const oneOff = tasks.listedAgents.standing;
   // Note that an agent with no task keeps main's count on the same terms as a task does, until its own read is current.
@@ -206,9 +210,9 @@ function useFactoryBoard(tasks: TasksControl, now: number): FactoryRead {
     () =>
       factoryOneOffWaiting(
         items,
-        tasks.inboxTaskless.filter((each) => !readAgents.has(each.agentId)),
+        settled.taskless.filter((each) => !readAgents.has(each.agentId)),
       ),
-    [items, readAgents, tasks.inboxTaskless],
+    [items, readAgents, settled.taskless],
   );
   const board = useMemo(
     () =>
@@ -892,13 +896,13 @@ export function DesktopFactory({ tasks }: { tasks: TasksControl }): React.JSX.El
   const state = lineState(tasks, empty);
   return (
     <div ref={setRoot} className="factory-pages">
-      {worlds.chosen !== undefined ? (
+      {worlds.chosen !== undefined || worlds.campus ? (
         <section className="factory-view" aria-label="Factory">
           {toolbar}
           <FactoryWorldPage
-            key={worlds.chosen.key}
+            key={worlds.chosen?.key ?? FACTORY_CAMPUS}
             tasks={tasks}
-            entry={worlds.chosen}
+            scene={worlds.chosen === undefined ? { campus: true } : { world: worlds.chosen }}
             backOut={backOut}
           />
         </section>

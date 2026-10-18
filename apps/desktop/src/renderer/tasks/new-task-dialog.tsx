@@ -1,6 +1,9 @@
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
+import { Shortcut } from "@luke/panel/shortcut";
+import { useNewTaskPlanning } from "@luke/panel/tasks/new-task-planning";
 import {
   SHORTCUT_KEY,
   type ShortcutChord,
@@ -22,12 +25,9 @@ import {
 } from "@luke/ui";
 import { taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
 import { useId, useRef, useState } from "react";
-import { WorkspaceTile } from "../desktop/workspace-tile";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row";
-import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
 import { LINEAR_CHORD, LinearIssueChip } from "./linear-issue-chip";
-import { useNewTaskPlanning } from "./new-task-planning";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import type { TasksControl } from "./use-tasks-tab";
 
@@ -81,7 +81,10 @@ import type { TasksControl } from "./use-tasks-tab";
  * says so in its title, its name starts as the issue's title, it starts in
  * the issue's workspace and no other, and it offers no Linear chip; the
  * task it starts is linked to that issue, which the issue's page lists it
- * under.
+ * under. Opened from the issue's Start agent…, the card is a new agent's:
+ * it offers no Plan switch, since the task starts without its planning
+ * phase, asks for a repository for the agent to work in, and its Start
+ * agent starts the task and an agent on it at once, which opens on its tab.
  */
 
 /** Create task's chord: Return alone, from the name field. */
@@ -90,11 +93,15 @@ const CREATE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER, bare: true };
 /** What the name field says before anything is typed. */
 const NAME_PLACEHOLDER = "Task name (optional)";
 
-/** The card's title, before the workspace's chip: the issue it starts from where there is one, and "in" where the chip stands after it. */
-function newTaskHeading(issue: string | undefined, inWorkspace: boolean): string {
-  const heading = issue === undefined ? "New task" : `New task from ${issue}`;
+/** The card's title, before the workspace's chip: an agent's where one starts at once, the issue it starts from where there is one, and "in" where the chip stands after it. */
+function newTaskHeading(issue: string | undefined, inWorkspace: boolean, agent: boolean): string {
+  const what = agent ? "New agent" : "New task";
+  const heading = issue === undefined ? what : `${what} from ${issue}`;
   return inWorkspace ? `${heading} in` : heading;
 }
+
+/** What the card says where an agent is asked to start with no repository chosen for it to work in. */
+const AGENT_NEEDS_REPOSITORY = "Choose a repository for the agent to work in.";
 
 /** What the Plan switch's description says the start will do, by its state. */
 const PLANNING_NOTE = {
@@ -153,6 +160,8 @@ function WorkspaceChip({
 function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.JSX.Element {
   // The workspace's own issue the task starts from, where the card was opened on one: it names the task, and its workspace is the one the task starts in.
   const from = newTask.preset?.issue;
+  // Whether an agent starts on the task at once, without its planning phase: what an issue's Start agent… asks.
+  const agent = newTask.preset?.agent === true;
   const [name, setName] = useState(from?.title ?? "");
   const [chosen, setChosen] = useState<string | null | undefined>(newTask.preset?.repository);
   // The workspace the task starts in: the one listed, or the issue's, until the title's chip chooses another.
@@ -193,12 +202,18 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
 
   const begin = (taskName: string, issue?: LinearIssueSummary) => {
     if (!canStart) return;
+    // Note that an agent works in a repository, so one asked to start with none is not asked for.
+    if (agent && repository === null) {
+      setNote(AGENT_NEEDS_REPOSITORY);
+      return;
+    }
     setStarting(true);
     setNote(undefined);
     newTask
-      .start(taskName, repository, startsIn, planning, {
+      .start(taskName, repository, startsIn, agent ? false : planning, {
         ...(issue === undefined ? undefined : { linearIssueId: issue.id }),
         ...(from === undefined ? undefined : { issueId: from.id }),
+        ...(agent ? { agent } : undefined),
       })
       .then(setNote)
       .finally(() => setStarting(false));
@@ -230,7 +245,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
         <div className="new-task-head">
           <div className="new-task-title">
             <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
-              {newTaskHeading(from?.identifier, startsIn !== undefined)}
+              {newTaskHeading(from?.identifier, startsIn !== undefined, agent)}
             </Text>
             <WorkspaceChip
               workspaces={newTask.workspaces}
@@ -239,23 +254,28 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
               onChoose={setWorkspaceId}
             />
           </div>
-          {/* Note that the word labels the switch, so a press on it turns the switch too. */}
-          <Tooltip label={planningNote}>
-            <span className="new-task-planning">
-              <label htmlFor={planningId}>Plan</label>
-              <Switch
-                id={planningId}
-                checked={planning}
-                label="Plan with Luke"
-                describedBy={planningNoteId}
-                disabled={starting}
-                onChange={setPlanning}
-              />
-              <span id={planningNoteId} hidden>
-                {planningNote}
-              </span>
-            </span>
-          </Tooltip>
+          {/* Note that an agent started at once starts without planning, so its card offers no Plan switch. */}
+          {agent ? null : (
+            <>
+              {/* Note that the word labels the switch, so a press on it turns the switch too. */}
+              <Tooltip label={planningNote}>
+                <span className="new-task-planning">
+                  <label htmlFor={planningId}>Plan</label>
+                  <Switch
+                    id={planningId}
+                    checked={planning}
+                    label="Plan with Luke"
+                    describedBy={planningNoteId}
+                    disabled={starting}
+                    onChange={setPlanning}
+                  />
+                  <span id={planningNoteId} hidden>
+                    {planningNote}
+                  </span>
+                </span>
+              </Tooltip>
+            </>
+          )}
         </div>
         <TextField
           ref={field}
@@ -296,10 +316,10 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
               variant={BUTTON_VARIANT.PRIMARY}
               aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
               busy={starting}
-              busyLabel="Creating"
+              busyLabel={agent ? "Starting" : "Creating"}
               onClick={start}
             >
-              Create task
+              {agent ? "Start agent" : "Create task"}
               <Shortcut chord={CREATE_CHORD} />
             </Button>
           </div>

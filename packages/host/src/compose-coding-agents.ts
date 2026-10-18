@@ -22,6 +22,7 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentReviewOptionsAnswerView,
   codingAgentAccountInboxParamsSchema,
@@ -118,6 +119,7 @@ export type CodingAgentClient = Pick<
   | "overviewConversation"
   | "githubImage"
   | "pullRequestAction"
+  | "pullRequestViewed"
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
@@ -467,6 +469,16 @@ function composed(
         );
         const answer = yield* asked(client.pullRequestAction(agentId, request));
         return carried<CodingAgentPullRequestWriteAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPullRequestParamsSchema,
+          params,
+          "reading which files of an agent's pull request were viewed names the agent",
+        );
+        const answer = yield* asked(client.pullRequestViewed(agentId));
+        return carried<CodingAgentPullRequestViewedAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_GITHUB_IMAGE]: (params) =>
       Effect.gen(function* () {

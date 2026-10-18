@@ -7,15 +7,16 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { SpinnerRegion } from "@luke/panel/spinner";
+import { MAIN_TAB, type MainTab, type MainTabsControl } from "@luke/panel/tasks/use-main-tabs";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { INLINE_EDIT_LOOK, InlineEdit } from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
 import { useEffect, useRef } from "react";
-import { useAppCommand } from "../app-commands";
 import { useCopyLinkItem } from "../copy-link-item";
 import { RetryButton } from "../retry-button";
-import { SpinnerRegion } from "../spinner";
 import { agentCardReading } from "../tasks/agent-ref";
 import { AgentTab } from "../tasks/agent-tab";
 import { AgentTabCard } from "../tasks/agent-tab-card";
@@ -33,7 +34,6 @@ import {
   type TranscriptCopy,
 } from "../tasks/transcript-copy";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
-import { MAIN_TAB, type MainTab, type MainTabsControl } from "../tasks/use-main-tabs";
 import type { ColumnPinnableTab, PinnedTab } from "../tasks/use-side-panel";
 import { useAgentArchive } from "./agent-archive";
 import type { TaskCards } from "./side-panel";
