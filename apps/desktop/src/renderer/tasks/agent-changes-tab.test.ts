@@ -27,6 +27,7 @@ import { appBridge } from "../app-bridge";
 import { useAppCommand, useAppKeymap } from "../app-commands";
 import type { SideBundles } from "../bundle-loader";
 import type { DiffListProps, DiffViewModule } from "../diff-view/contract";
+import type { FileTreeModule } from "../file-tree/contract";
 import type { ChangesThreads } from "./agent-changes-tab";
 
 /**
@@ -124,15 +125,41 @@ const standIn: DiffViewModule = {
   },
 };
 
+/** The doors each tree the view mounted opens a chosen file through, the latest last. */
+let treeOpens: Array<(path: string, newTab: boolean) => void> = [];
+
+/** The tree bundle, stood in for: it draws nothing and keeps the door its tree opens a file through. */
+const treeStandIn: FileTreeModule = {
+  mount: (_host, props) => {
+    treeOpens.push(props.onOpen);
+    const nothing = () => undefined;
+    return {
+      reveal: nothing,
+      search: nothing,
+      only: nothing,
+      within: nothing,
+      mark: nothing,
+      unmount: nothing,
+    };
+  },
+  fileIcon: () => ({ symbol: "", type: "" }),
+};
+
 let bundles: SideBundles;
 
 beforeAll(async () => {
-  bundles = await Effect.runPromise(landedBundles({ diffView: () => Promise.resolve(standIn) }));
+  bundles = await Effect.runPromise(
+    landedBundles({
+      diffView: () => Promise.resolve(standIn),
+      fileTree: () => Promise.resolve(treeStandIn),
+    }),
+  );
 });
 
 beforeEach(() => {
   drawn = [];
   revealed = [];
+  treeOpens = [];
   files = [changed("src/seats.ts")];
   boxWidth = 900;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
@@ -392,6 +419,25 @@ test("the tree's search narrows the list, said over it while the tree is hidden,
   act(() => notice?.querySelector("button")?.click());
   await flush();
   assert.equal(lastDrawn().files.length, 3);
+});
+
+test("a file the filter leaves out, chosen in a tree of every changed file, clears the filter and is scrolled to", async () => {
+  files = [changed("src/seats.ts"), changed("src/billing/plan.ts"), changed("README.md")];
+  await drawTab({ treeOpen: true });
+  typeSearch("billing");
+  await flush();
+  assert.deepEqual(
+    lastDrawn().files.map((file) => file.path),
+    ["src/billing/plan.ts"],
+  );
+
+  const open = treeOpens.at(-1) ?? assert.fail("a tree is mounted");
+  act(() => open("README.md", false));
+  await flush();
+
+  assert.equal(lastDrawn().files.length, 3, "the filter is cleared");
+  assert.deepEqual(revealed, ["README.md"]);
+  assert.match(document.querySelector(".file-view-bar")?.textContent ?? "", /README\.md/u);
 });
 
 test("J and K step through the files inside the view, ; and ⇧; fold, and Escape lets go of the file", async () => {

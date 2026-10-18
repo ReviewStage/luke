@@ -1,7 +1,7 @@
 import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
 import { ChevronRightIcon } from "lucide-react";
-import { type RefObject, useCallback, useMemo, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
 import {
@@ -31,7 +31,9 @@ import type { DiffListDoor } from "./diff-list";
  * A file's fold is its default, `startsCollapsed`, turned over for the files
  * the developer folded the other way, so a file that starts collapsed and is
  * opened stays open, and Collapse all and Expand all turn over exactly the
- * files the filter keeps.
+ * files the filter keeps. A file the filter leaves out, chosen where every
+ * changed file is listed, as the bar's crumbs list them, clears the filter
+ * and is scrolled to once the list holds it.
  */
 
 /** What a key does in the list. */
@@ -157,10 +159,22 @@ export function useChangesList(files: readonly CodingAgentChangedFile[]): Change
     () => setOverrides((was) => foldedAs(was, kept, !allCollapsed)),
     [kept, allCollapsed],
   );
-  const go = useCallback((path: string) => {
-    setStanding(path);
-    door.current?.reveal(path);
-  }, []);
+  // A file the filter leaves out is chosen in the tree's crumbs, which list every changed file: the filter is cleared, and the list scrolled to it once it holds it again.
+  const [revealing, setRevealing] = useState<string | undefined>(undefined);
+  const go = useCallback(
+    (path: string) => {
+      setStanding(path);
+      if (paths.includes(path)) return door.current?.reveal(path);
+      onQuery("");
+      setRevealing(path);
+    },
+    [paths],
+  );
+  useEffect(() => {
+    if (revealing === undefined || !paths.includes(revealing)) return;
+    setRevealing(undefined);
+    door.current?.reveal(revealing);
+  }, [revealing, paths]);
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     const key = fileKeyOf(event, keptStanding !== undefined);
