@@ -384,6 +384,36 @@ export const PRODUCT_EVENT_BATCH_LIMIT = 50;
  */
 export const PRODUCT_EVENT_MAXIMUM_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Event names this vocabulary once held and no build since 0.8.0 emits. A
+ * batch from a 0.7.1 or older build may still carry one, and the batch reader
+ * refuses a batch whole on any name it does not know, so it skips these items
+ * instead and keeps the rest of that build's counts. A name that was never in
+ * the vocabulary is still refused. Delete this set once no build at or below
+ * 0.7.1 is active.
+ */
+const RETIRED_PRODUCT_EVENT = {
+  PROVIDER_CONNECT: "provider:connect",
+  PROVIDER_DISCONNECT: "provider:disconnect",
+  CALENDAR_CONNECT: "calendar:connect",
+  CALENDAR_DISCONNECT: "calendar:disconnect",
+  SESSION_OBSERVE: "session:observe",
+  SESSION_ACTION_SEND: "session:action_send",
+  PANEL_OPEN: "panel:open",
+  INTRODUCTION_COMPLETE: "introduction:complete",
+  VOICE_ANNOUNCEMENT_SPEAK: "voice:announcement_speak",
+  VOICE_FIRST_ANNOUNCEMENT: "voice:first_announcement",
+  CONVERSATION_RATED: "conversation:rated",
+} as const;
+
+const RETIRED_PRODUCT_EVENT_NAMES: ReadonlySet<string> = new Set(
+  Object.values(RETIRED_PRODUCT_EVENT),
+);
+
+function isRetiredProductEvent(value: UnparsedWireValue): boolean {
+  return isRecord(value) && isWireString(value.name) && RETIRED_PRODUCT_EVENT_NAMES.has(value.name);
+}
+
 type PropertyReader = {
   [Property in ProductEventProperty]: (
     value: UnparsedWireValue,
@@ -463,7 +493,9 @@ export function productEventFromWire(value: UnparsedWireValue): ProductEvent | u
 /**
  * Reads a whole batch, or nothing. One unreadable event refuses the batch
  * rather than trimming it: a partial acceptance would let a desktop bug show
- * up as a quiet gap in the counts instead of a refusal somebody notices.
+ * up as a quiet gap in the counts instead of a refusal somebody notices. The
+ * one exception is a retired name, which an older build still sends and which
+ * is skipped, so a batch of nothing but retired names reads as empty.
  */
 export function productEventBatchFromWire(value: UnparsedWireValue): ProductEventBatch | undefined {
   if (!isRecord(value) || !Array.isArray(value.events)) return undefined;
@@ -472,6 +504,7 @@ export function productEventBatchFromWire(value: UnparsedWireValue): ProductEven
   }
   const events: ProductEvent[] = [];
   for (const candidate of value.events) {
+    if (isRetiredProductEvent(candidate)) continue;
     const event = productEventFromWire(candidate);
     if (!event) return undefined;
     events.push(event);
