@@ -14,6 +14,10 @@
  * A browser that holds no session, which is the case when the Mac asks for
  * a session apart from its sign-in, signs in here first, and the page
  * carries on with the transfer when the sign-in returns it.
+ *
+ * It is also where the website names the visitor and counts their sign-in
+ * (`completeSiteSignIn`), since the desktop's sign-in skips the consent page
+ * and passes through no other page of the site on the session it made.
  */
 
 import {
@@ -26,6 +30,7 @@ import { createAuthClient } from "better-auth/react";
 import { Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { completeSiteSignIn, startSiteAnalytics } from "./analytics";
 import { ProviderChoices, SIGN_IN_FAILURE, useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 
@@ -76,6 +81,11 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
       : said("Luke could not be reached", "Return to Luke and sign in again.");
   }
   const code = Schema.decodeUnknownSync(TransferAnswer)(answered.data).electron_authorization_code;
+  // Note that the sign-in is counted here, before the page leaves, because
+  // the desktop's client skips consent and this is the one page of the flow
+  // that runs on the session a sign-in just made; a count that fails never
+  // stands between the Mac and its session.
+  await completeSiteSignIn(async () => (await authClient.getSession()).data).catch(() => undefined);
   window.location.replace(desktopSessionReturnUrl(query.returnTo, code, query.transfer.state));
   return WORKING;
 }
@@ -112,6 +122,8 @@ function DesktopSession(): React.JSX.Element {
     </AuthPage>
   );
 }
+
+startSiteAnalytics();
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Root element is missing");
