@@ -17,7 +17,7 @@ import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**
@@ -34,7 +34,7 @@ import { TranscriptWords } from "./transcript-blocks";
  * counts. Synthetic workspace, plan, pull requests, and issues.
  */
 
-const PLAN = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AT = 1_792_000_000_000;
 const MERGED = "https://github.com/acme/relay/pull/42";
 const UNREACHED = "https://github.com/acme/secret/pull/7";
@@ -139,7 +139,7 @@ const ACME: Workspace = {
 const ACME_WITH_GITHUB: Workspace = { ...ACME, github: { login: "acme", active: true } };
 
 const TASK: TaskSummary = {
-  id: PLAN,
+  id: TASK_ID,
   workspaceId: "workspace-acme",
   name: "Teammate invitations",
   createdAt: AT,
@@ -157,15 +157,15 @@ function stateWith(workspace: Workspace): AppStateSnapshot {
 }
 
 /** The plan's page, as its words' chips stand on it. */
-const PAGE: PlanMentionsValue = {
-  taskId: PLAN,
+const PAGE: TaskMentionsValue = {
+  taskId: TASK_ID,
   taskName: TASK.name,
   workspace: "acme",
   workspaceId: "workspace-acme",
   repository: "acme/relay",
   text: () => "",
   doors: {
-    taskId: PLAN,
+    taskId: TASK_ID,
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(),
     onOpenTask: () => undefined,
@@ -209,7 +209,7 @@ async function drawn(text: string, workspace: Workspace) {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(PlanMentions, {
+        createElement(TaskMentions, {
           value: PAGE,
           children: createElement(TranscriptWords, { text }),
         }),
@@ -224,20 +224,20 @@ async function drawn(text: string, workspace: Workspace) {
 
 /** Each chip drawn: the name it says, the state after it, and the pull request's mark it wears, if any. */
 function chips(container: HTMLElement): [string | null, string | null, string | undefined][] {
-  return [...container.querySelectorAll<HTMLElement>(".mention-chip")].map((chip) => [
-    chip.querySelector(".mention-chip-label")?.textContent ?? null,
-    chip.querySelector(".mention-chip-state")?.textContent ?? null,
+  return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
+    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
+    chip.querySelector(".luke-inline-ref-state")?.textContent ?? null,
     chip.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
   ]);
 }
 
 /** Each chip drawn: the name it says, the state after it, and the issue's mark it wears, if any, by its state and the words a reader who cannot see it hears. */
 function issueChips(container: HTMLElement): (string | null | undefined)[][] {
-  return [...container.querySelectorAll<HTMLElement>(".mention-chip")].map((chip) => {
+  return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => {
     const mark = chip.querySelector<SVGElement>("[data-issue-mark]");
     return [
-      chip.querySelector(".mention-chip-label")?.textContent ?? null,
-      chip.querySelector(".mention-chip-state")?.textContent ?? null,
+      chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
+      chip.querySelector(".luke-inline-ref-state")?.textContent ?? null,
       mark?.dataset.issueState,
       mark?.getAttribute("aria-label"),
     ];
@@ -358,7 +358,8 @@ test("a pull request's and an issue's cards say who opened them, as the workspac
     `Lands after ${MERGED}, and see ${OPEN_ISSUE}, ${SHELVED_ISSUE}, and ${UNREACHED}.`,
     ACME_WITH_GITHUB,
   );
-  const [pullRequest, opened, shelved, unreached] = container.querySelectorAll(".mention-chip");
+  const [pullRequest, opened, shelved, unreached] =
+    container.querySelectorAll("[data-mention-ref]");
 
   assert.deepEqual(cardNotes(pullRequest), [
     "relay#42 · Merged · +120 −30 in 4 files",
@@ -402,7 +403,7 @@ test("a pull request's card names its labels, and one read from an older service
     `Lands after ${MERGED} and ${OLDER_SERVICE}.`,
     ACME_WITH_GITHUB,
   );
-  const [whole, older] = container.querySelectorAll(".mention-chip");
+  const [whole, older] = container.querySelectorAll("[data-mention-ref]");
 
   assert.deepEqual(cardLabels(whole), ["service", "not a colour"]);
   assert.deepEqual(cardNotes(older), ["relay#44 · Open"]);
@@ -412,7 +413,7 @@ test("a pull request's card names its labels, and one read from an older service
 test("a pull request's card names its first six labels and counts the rest, so a card with many stays short", async () => {
   const { container } = await drawn(`See ${MANY_LABELS}.`, ACME_WITH_GITHUB);
 
-  assert.deepEqual(cardLabels(container.querySelector(".mention-chip") ?? undefined), [
+  assert.deepEqual(cardLabels(container.querySelector("[data-mention-ref]") ?? undefined), [
     "a",
     "b",
     "c",

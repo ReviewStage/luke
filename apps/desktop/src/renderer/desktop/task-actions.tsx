@@ -5,6 +5,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
+  BUTTON_SIZE,
   ConfirmDialog,
   CopyIcon,
   type DialogQuestion,
@@ -66,7 +67,7 @@ import { TaskStatusMark, taskCardOf } from "./task-card";
  * so both doors draw it the same way and Permanently delete can be drawn red.
  *
  * Copy link copies the plan's address on tryluke.dev, as the ⋯
- * beside the plan's title does (`plan-menu-items.tsx`). Mark as unread
+ * beside the plan's title does (`task-menu-items.tsx`). Mark as unread
  * draws the task's row in the unread weight until it next opens, and turns
  * to Mark as read on a task already unread. Rename edits the
  * name where the door draws it: the sidebar's row turns into a field, and
@@ -87,11 +88,11 @@ import { TaskStatusMark, taskCardOf } from "./task-card";
  */
 
 /** A task as the list or the open document holds it, archived or not; nothing for a task neither holds. */
-export function taskOf(tasks: TasksControl, planId: string): TaskSummary | undefined {
-  const listed = [...tasks.tasks, ...tasks.archived].find((plan) => plan.id === planId);
+export function taskOf(tasks: TasksControl, taskId: string): TaskSummary | undefined {
+  const listed = [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId);
   if (listed !== undefined) return listed;
   const { region } = tasks;
-  return region.kind === DOCUMENT_REGION.READY && region.task.id === planId
+  return region.kind === DOCUMENT_REGION.READY && region.task.id === taskId
     ? region.task
     : undefined;
 }
@@ -163,16 +164,14 @@ function SidebarTaskMarks({
           label={label}
           {...(current && mark === TASK_MARK.ARCHIVE ? { command: APP_COMMAND.ARCHIVE_TASK } : {})}
         >
-          <button
-            type="button"
-            className="sidebar-task-mark"
-            aria-label={label}
+          <IconButton
+            icon={icon}
+            label={label}
+            size={BUTTON_SIZE.COMPACT}
             disabled={disabled}
             onClick={() => tasks.onMarkTask(task.id, mark)}
             onContextMenu={onContextMenu}
-          >
-            {icon}
-          </button>
+          />
         </Tooltip>
       ))}
     </span>
@@ -333,27 +332,27 @@ function useTaskMenu(
   name: string,
   doors: { rename: () => void; drawn: boolean; unread: boolean },
 ) {
-  const plan = taskOf(tasks, taskId);
+  const task = taskOf(tasks, taskId);
   const reads = useReadMarks();
-  const deletion = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: tasks.shown }, () =>
+  const deletion = useConfirmDialog({ subject: task !== undefined, surfaceOpen: tasks.shown }, () =>
     tasks.onDeleteTask(taskId),
   );
-  const moving = useMoveTaskDialog(tasks, plan);
+  const moving = useMoveTaskDialog(tasks, task);
   const copy = useCopyToast();
   const { open, drawn, close, trigger, contextMenu } = useMenu(tasks.shown && doors.drawn);
   // Note that an archived task stands in no section, so it is offered none until it is brought back.
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
   const section =
-    sectionsOn && plan !== undefined && plan.archivedAt === undefined
-      ? moveToSectionEntry(tasks, plan, sections.askNew)
+    sectionsOn && task !== undefined && task.archivedAt === undefined
+      ? moveToSectionEntry(tasks, task, sections.askNew)
       : undefined;
   const menu =
     drawn === undefined ? null : (
       <ActionMenu
         label="Task actions"
         menu={drawn}
-        footer={plan === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={plan} />}
+        footer={task === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={task} />}
         groups={taskActionGroups(tasks, taskId, {
           rename: doors.rename,
           askDelete: deletion.ask,
@@ -363,7 +362,7 @@ function useTaskMenu(
           read: {
             unread: doors.unread,
             onMark: (unread) => {
-              if (plan !== undefined) reads.mark(plan, unread);
+              if (task !== undefined) reads.mark(task, unread);
             },
           },
         })}
@@ -374,7 +373,7 @@ function useTaskMenu(
     <>
       <ConfirmDialog
         confirm={deletion}
-        question={deleteQuestion(name, plan?.archivedAt !== undefined)}
+        question={deleteQuestion(name, task?.archivedAt !== undefined)}
       />
       {moving.dialog}
       {sections.dialog}

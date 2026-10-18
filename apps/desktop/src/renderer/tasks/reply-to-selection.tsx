@@ -1,4 +1,4 @@
-import { Button } from "@luke/ui";
+import { BUTTON_SIZE, Button, IconButton } from "@luke/ui";
 import { replyOf } from "@luke/ui/reply-quote";
 import { ReplyIcon, XIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
@@ -155,17 +155,15 @@ export function ComposerQuoteView({
     <div className="composer-quote">
       <span className="composer-quote-words">{quote.words}</span>
       <Tooltip label={REPLY_WORDS.REMOVE}>
-        <button
-          type="button"
-          className="icon-button composer-quote-remove"
-          aria-label={REPLY_WORDS.REMOVE}
+        {/* Note that the press keeps the caret where it stands, so the words around the quote stay where they were. */}
+        <IconButton
+          icon={<XIcon aria-hidden="true" />}
+          label={REPLY_WORDS.REMOVE}
+          size={BUTTON_SIZE.COMPACT}
           disabled={held}
-          // Note that the press keeps the caret where it stands, so the words around the quote stay where they were.
-          onMouseDown={(event) => event.preventDefault()}
+          keepFocus
           onClick={quote.remove}
-        >
-          <XIcon aria-hidden="true" />
-        </button>
+        />
       </Tooltip>
     </div>
   );

@@ -23,6 +23,7 @@ import {
   HoverCard,
   HoverCardHead,
   HoverCardNote,
+  INLINE_REF_LOOK,
   ProviderMark,
   UserIcon,
 } from "@luke/ui";
@@ -42,10 +43,10 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
+import { InlineRef } from "../inline-ref";
 import type { LinkDrawer } from "../markdown-message";
 import { usePerson } from "../member-directory";
 import type { HeadingsChange, MentionNode } from "../plan-editor/contract";
-import { Tooltip } from "../tooltip";
 import { useAppState } from "../use-app-state";
 import {
   AutomationChipCard,
@@ -356,7 +357,7 @@ function MentionGlyph({
 function noteOf(
   mention: Mention,
   state: MentionState,
-  planId: string,
+  taskId: string,
   standing: LinkStanding | undefined,
 ): string | undefined {
   if (state === MENTION_STATE.GONE) return GONE_WORDS;
@@ -364,7 +365,7 @@ function noteOf(
   if (mention.kind === MENTION_KIND.PAGE) return PAGE_WORDS;
   if (mention.kind === MENTION_KIND.AGENT) {
     if (mention.taskId === undefined) return AGENT_WORDS.NO_TASK;
-    return mention.taskId === planId ? AGENT_WORDS.THIS_TASK : AGENT_WORDS.OTHER_TASK;
+    return mention.taskId === taskId ? AGENT_WORDS.THIS_TASK : AGENT_WORDS.OTHER_TASK;
   }
   return undefined;
 }
@@ -577,23 +578,6 @@ function MentionChip({
   const name = bareName(mention, written, bare, known, standing);
   const state = mentionState(mention, doors);
   const press = pressOf(mention, target, state, doors, openLink);
-  const face = (
-    <>
-      <span className="mention-chip-glyph">
-        <MentionGlyph
-          mention={mention}
-          name={name}
-          doors={doors}
-          known={known}
-          standing={standing}
-        />
-      </span>
-      <span className="mention-chip-label">{name}</span>
-      {standing?.state === undefined ? null : (
-        <span className="mention-chip-state">{standing.state}</span>
-      )}
-    </>
-  );
   const card = (
     <MentionCard
       mention={mention}
@@ -606,27 +590,35 @@ function MentionChip({
     />
   );
   return (
-    <Tooltip label={name} card={card}>
-      {press === undefined ? (
-        <span className="mention-chip" data-kind={mention.kind} data-state={state}>
-          {face}
-        </span>
-      ) : (
-        <button
-          type="button"
-          className="mention-chip"
-          data-kind={mention.kind}
-          data-state={state}
-          onClick={(event) => {
-            // Note that the press stops here, because a click into a section opens its editor.
-            event.stopPropagation();
-            press();
-          }}
-        >
-          {face}
-        </button>
-      )}
-    </Tooltip>
+    <InlineRef
+      look={INLINE_REF_LOOK.PILL}
+      glyph={
+        <MentionGlyph
+          mention={mention}
+          name={name}
+          doors={doors}
+          known={known}
+          standing={standing}
+        />
+      }
+      label={name}
+      state={standing?.state}
+      gone={state === MENTION_STATE.GONE}
+      onPress={
+        press === undefined
+          ? undefined
+          : (event) => {
+              // Note that the press stops here, because a click into a section opens its editor.
+              event.stopPropagation();
+              press();
+            }
+      }
+      card={card}
+      data-mention-ref=""
+      data-kind={mention.kind}
+      data-state={state}
+      data-stated={standing?.state === undefined ? undefined : ""}
+    />
   );
 }
 
@@ -660,7 +652,7 @@ function PlaceGlyph({
           agentId={place.agentId}
           taskId={place.planId}
           name={name}
-          where={{ planId: place.planId ?? NO_PLAN_ID, workspace }}
+          where={{ planId: place.planId ?? NO_TASK_ID, workspace }}
           known={known}
         />
       );
@@ -719,21 +711,19 @@ function PlaceChip({
   );
   const card = <PlaceCard place={place} workspace={workspace} name={name} fallback={own} />;
   return (
-    <Tooltip label={name} card={card}>
-      <button
-        type="button"
-        className="mention-chip"
-        data-kind={MENTION_KIND_PLACE}
-        onClick={(event) => {
-          // Note that the press stops here, as a mention's does, because a click into a section opens its editor.
-          event.stopPropagation();
-          openLink(href);
-        }}
-      >
-        <span className="mention-chip-glyph">{glyph}</span>
-        <span className="mention-chip-label">{name}</span>
-      </button>
-    </Tooltip>
+    <InlineRef
+      look={INLINE_REF_LOOK.PILL}
+      glyph={glyph}
+      label={name}
+      onPress={(event) => {
+        // Note that the press stops here, as a mention's does, because a click into a section opens its editor.
+        event.stopPropagation();
+        openLink(href);
+      }}
+      card={card}
+      data-mention-ref=""
+      data-kind={MENTION_KIND_PLACE}
+    />
   );
 }
 
@@ -755,7 +745,7 @@ function PlaceCard({
   fallback: ReactNode;
 }): ReactNode {
   const workspaceId = useWordsWorkspaceId({
-    planId: "planId" in place ? (place.planId ?? NO_PLAN_ID) : NO_PLAN_ID,
+    planId: "planId" in place ? (place.planId ?? NO_TASK_ID) : NO_TASK_ID,
     workspace,
   });
   switch (place.kind) {
@@ -807,7 +797,7 @@ function PlaceCard({
 }
 
 /** The plan of a place that names none, which no plan's id spells. */
-const NO_PLAN_ID = "";
+const NO_TASK_ID = "";
 
 /** The kind a chip of a place in Luke carries beside a mention's kinds, for its styles and a test. */
 const MENTION_KIND_PLACE = "place";

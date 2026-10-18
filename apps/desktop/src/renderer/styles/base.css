@@ -23,23 +23,8 @@
      read from here, so the two can never disagree about who has the turn. */
   --voice-developer: #7fe0ac;
   --voice-luke: var(--luke-color-working);
-  /* How thick the keyboard's ring is and how far it stands off the control's
-     edge; its colour is the palette's accent. The reach is how far the ring
-     stands past the control's
-     edge: a scroller pads by it, so the ring of a row laid edge to edge in
-     it is not clipped. A box that clips what it holds keeps the ring whole
-     one of two ways. One whose clip is only there to hold in what runs long
-     clips past the ring, `overflow: clip` with `overflow-clip-margin` the
-     room; note that the room names its box, because Chromium drops a bare
-     `calc()` there and clips at the edge after all. One whose clip is an
-     edge it draws, a card, sets the offset to the inset for everything in
-     it, so the ring is drawn inside the control, on the card's side of the
-     edge. */
-  --focus-ring-width: 2px;
-  --focus-ring-offset: 1px;
-  --focus-ring-inset: calc(-1 * var(--focus-ring-width));
-  --focus-ring-reach: calc(var(--focus-ring-width) + var(--focus-ring-offset));
-  --focus-ring-room: padding-box var(--focus-ring-reach);
+  /* The keyboard's ring, how thick and how far off the edge, is the
+     profile's `--luke-focus-ring-*` (`tokens/profiles.css`). */
   /* The caption strip's ground, opaque because the document scrolls on beneath it. */
   --surface-caption: var(--luke-color-overlay);
   /* The code on screen, in the ground and inks of the theme the host colours
@@ -68,7 +53,9 @@
      canvas, which reads none of this itself, so the bundle reads each one
      off the host and draws again when the appearance flips
      (`terminal/terminal-theme.ts`). */
-  --terminal-ground: var(--desktop-well);
+  /* The well's own colour in each appearance rather than `--luke-color-well`,
+     because xterm takes the property's text and cannot read a `light-dark()`. */
+  --terminal-ground: #0f0f12;
   --terminal-text: var(--code-text);
   --terminal-cursor: var(--code-text);
   --terminal-selection: rgba(56, 139, 253, 0.4);
@@ -159,6 +146,7 @@
     --code-line-number-pointed: rgba(31, 35, 40, 0.85);
     --code-pointed: rgba(9, 105, 218, 0.08);
     --code-pointed-edge: #0969da;
+    --terminal-ground: #f8f8f9;
     --terminal-selection: rgba(9, 105, 218, 0.2);
     --terminal-scrollbar: rgba(0, 0, 0, 0.2);
     --terminal-black: #24292f;
@@ -201,9 +189,7 @@
    banner, a bar at its foot, a band stuck inside it, or the window's drag
    strip. Content dissolves over `--scroll-fade` rather than being sliced
    against that edge. A scroller wears `scroll-fade` to fade at both edges,
-   or `scroll-fade-top` where only its top meets something pinned; the
-   shared settings page, which takes no class of the window's, fades as
-   `scroll-fade-top` by its place under a Settings page's drag strip.
+   or `scroll-fade-top` where only its top meets something pinned.
 
    Each edge's depth is a registered length that a scroll timeline eases
    from none to `--scroll-fade` over the first (or the last) `--scroll-fade`
@@ -250,8 +236,7 @@
 }
 
 .scroll-fade,
-.scroll-fade-top,
-.settings-page > .luke-settings-page {
+.scroll-fade-top {
   --scroll-fade-mask: linear-gradient(
     to bottom,
     #000 var(--fade-inset-top),
@@ -275,8 +260,7 @@
   scroll-padding-bottom: var(--scroll-fade);
 }
 
-.scroll-fade-top,
-.settings-page > .luke-settings-page {
+.scroll-fade-top {
   animation-name: scroll-fade-start, none;
 }
 
@@ -365,8 +349,8 @@
     [role="menuitemcheckbox"],
     [tabindex]:not([tabindex="-1"])
   ):focus-visible:not(:has(> [data-focus-ring])) {
-    outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: var(--focus-ring-offset);
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: var(--luke-focus-ring-offset);
   }
 
   /* A control whose drawn shape is a part of it, a picture tile's picture
@@ -378,8 +362,8 @@
   }
 
   :root[data-keyboard="true"] :focus-visible > [data-focus-ring] {
-    outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: var(--focus-ring-offset);
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: var(--luke-focus-ring-offset);
   }
 
   /* The keyboard scrolls a control in with its ring's reach to spare, so a
@@ -401,7 +385,7 @@
     [role="menuitemcheckbox"],
     [tabindex]:not([tabindex="-1"])
   ) {
-    scroll-margin: var(--focus-ring-reach);
+    scroll-margin: var(--luke-focus-ring-reach);
   }
 
   :root:not([data-keyboard="true"])
@@ -417,8 +401,8 @@
      caret without ringing the composer around it. */
   :is(textarea, [contenteditable], input:not([type="checkbox"])):focus-visible,
   .field-well:has(:is(textarea, [contenteditable], input):not(.menu-surface *):focus-visible) {
-    outline: var(--focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: calc(var(--focus-ring-width) / -2);
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: calc(var(--luke-focus-ring-width) / -2);
   }
 }
 
@@ -905,54 +889,6 @@ svg.working-mark[viewBox] {
   border: 0;
   clip-path: inset(50%);
   white-space: nowrap;
-}
-
-/* Disclosures ------------------------------------------------------------ */
-
-/* A fold a press opens or closes (`use-disclosure.ts`). Its body lands in the
-   layout at once and rides in on the pair an arriving element rides: a fade,
-   and a clip unrolling it from its top edge, on the panes' plain ease-out,
-   since a clip that overshot would cut nothing. Closing, it fades out first
-   and the layout lands once the fade is done. Nothing moves a height, so the
-   words never re-wrap mid-motion, and a body still growing as it streams is
-   unrolled by a fraction of its own box rather than a size it was measured
-   at. Only the press marks the root, so a find opening a fold onto a match,
-   or a row drawn again, appears at once. */
-[data-disclosure="opening"] > .disclosure-body {
-  animation:
-    disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
-    disclosure-unroll var(--duration-pane) var(--motion-pane) backwards;
-}
-
-[data-disclosure="closing"] > .disclosure-body {
-  animation: disclosure-leave var(--duration-exit) var(--motion-exit) forwards;
-  /* Note that the hold waits on every motion the body runs, and a body that
-     held focus would start the scrollbar's own fade (desktop.css) as it
-     lost it, so the exit is the one motion it has. */
-  transition: none;
-}
-
-@keyframes disclosure-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-/* Note that the clip names both ends, because a clip cannot be interpolated
-   from none: it would flip halfway through instead. */
-@keyframes disclosure-unroll {
-  from {
-    clip-path: inset(0 0 100% 0);
-  }
-  to {
-    clip-path: inset(0);
-  }
-}
-
-@keyframes disclosure-leave {
-  to {
-    opacity: 0;
-  }
 }
 
 /* Evidence capture screenshots a fixed moment after the renderer reports ready,

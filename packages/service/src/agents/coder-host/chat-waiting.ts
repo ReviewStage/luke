@@ -13,7 +13,7 @@ import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { ACCOUNT_CHAT_REASON, type AccountChatEntry } from "@luke/features/account-inbox-wire";
 import { ASK_STATUS, CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
 import { Effect, Option, type Schema } from "effect";
-import type { InboxStamp } from "../../inbox/inbox-store.js";
+import type { CursorStamp } from "../../http/held-read.js";
 
 /**
  * chat-waiting.ts -- what waits on a person in their workspaces' chat, as the account's held read carries it beside the inbox: the asks open to them, and the message their member was last told of.
@@ -70,7 +70,7 @@ function rostersOf(userId: string) {
  */
 export function chatWaitingStamps(
   userId: string,
-): Effect.Effect<readonly InboxStamp[], ChatWaitingFailure, DatabaseServices> {
+): Effect.Effect<readonly CursorStamp[], ChatWaitingFailure, DatabaseServices> {
   return Effect.gen(function* () {
     // Chat is an experiment: an account with it off has nothing waiting in it.
     if (!(yield* chatEnabledFor(userId))) return [];
@@ -104,7 +104,7 @@ export function chatWaitingStamps(
 function entryOf(
   message: ChatMessageRow,
   reason: AccountChatEntry["reason"],
-  planId: string | null,
+  taskId: string | null,
   rosters: Rosters,
 ): AccountChatEntry {
   return {
@@ -113,7 +113,7 @@ function entryOf(
     workspaceId: rosters.workspaceId,
     reason,
     from: rosters.members.get(message.authorMemberId)?.handle ?? "",
-    planId,
+    planId: taskId,
     touchedSeq: message.touchedSeq,
     updatedAt: message.touchedAt.getTime(),
   };
@@ -142,9 +142,9 @@ export function chatWaitingEntries(
     if (!(yield* chatEnabledFor(userId))) return [];
     const rosters = yield* rostersOf(userId);
     const byWorkspace = new Map(rosters.map((each) => [each.workspaceId, each]));
-    const asks = (yield* waitingOn(userId)).flatMap(({ message, planId }) => {
+    const asks = (yield* waitingOn(userId)).flatMap(({ message, planId: taskId }) => {
       const of = byWorkspace.get(message.organizationId);
-      return of === undefined ? [] : [entryOf(message, ACCOUNT_CHAT_REASON.ASK, planId, of)];
+      return of === undefined ? [] : [entryOf(message, ACCOUNT_CHAT_REASON.ASK, taskId, of)];
     });
     const notices = (yield* Effect.forEach(rosters, (each) => noticeEntry(userId, each))).flat();
     // A notice of an ask is the ask already, so it is said once.

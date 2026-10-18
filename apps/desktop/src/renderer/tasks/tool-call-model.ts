@@ -816,7 +816,7 @@ const CHAT_TARGET: ToolTarget = { kind: TOOL_TARGET.CHAT };
  * because the channel each reaches is named in words the window cannot
  * place on a channel, or not named at all.
  */
-function plansOwnPost(call: TargetedCall): ToolTarget | undefined {
+function tasksOwnPost(call: TargetedCall): ToolTarget | undefined {
   if (!isRecord(call.input) || "to" in call.input || "replyTo" in call.input) return undefined;
   return CHAT_TARGET;
 }
@@ -908,7 +908,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],
   [AGENT_TOOL.READ_INBOX, () => INBOX_TARGET],
   [REPLY_INBOX_TOOL, () => INBOX_TARGET],
-  [CHAT_TOOL.POST, plansOwnPost],
+  [CHAT_TOOL.POST, tasksOwnPost],
 ]);
 
 /**

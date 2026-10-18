@@ -49,31 +49,33 @@ export function useChatToasts(view: (workspaceId: string) => void, shown: ChatSh
   const told = useRef(new Map<string, WaitsIn>());
   useEffect(
     () =>
-      appBridge().onChatMessageWaiting(({ messageId, workspaceId, planId, words, detail }) => {
-        told.current.set(messageId, { workspaceId, planId });
-        const oldest = told.current.keys().next().value;
-        if (told.current.size > TOLD_BOUND && oldest !== undefined) told.current.delete(oldest);
-        toast({
-          words,
-          detail,
-          waits: true,
-          hold: TOAST_HOLD.NEWS,
-          subject: messageId,
-          tone: TOAST_TONE.ASK,
-          action: { label: VIEW_LABEL, onPress: () => viewing.current(workspaceId) },
-        });
-      }),
+      appBridge().onChatMessageWaiting(
+        ({ messageId, workspaceId, planId: taskId, words, detail }) => {
+          told.current.set(messageId, { workspaceId, planId: taskId });
+          const oldest = told.current.keys().next().value;
+          if (told.current.size > TOLD_BOUND && oldest !== undefined) told.current.delete(oldest);
+          toast({
+            words,
+            detail,
+            waits: true,
+            hold: TOAST_HOLD.NEWS,
+            subject: messageId,
+            tone: TOAST_TONE.ASK,
+            action: { label: VIEW_LABEL, onPress: () => viewing.current(workspaceId) },
+          });
+        },
+      ),
     [toast],
   );
   const shownWorkspace = shown?.workspaceId;
-  const shownPlan = shown?.planId ?? null;
+  const shownTask = shown?.planId ?? null;
   useEffect(() => {
     if (shownWorkspace === undefined) return;
     for (const [messageId, waits] of told.current) {
       if (waits.workspaceId !== shownWorkspace) continue;
-      if (shownPlan !== null && waits.planId !== shownPlan) continue;
+      if (shownTask !== null && waits.planId !== shownTask) continue;
       withdraw(messageId);
       told.current.delete(messageId);
     }
-  }, [shownWorkspace, shownPlan, withdraw]);
+  }, [shownWorkspace, shownTask, withdraw]);
 }

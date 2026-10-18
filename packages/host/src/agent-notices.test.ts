@@ -102,7 +102,7 @@ function fixture() {
   const inboxReads: string[] = [];
   const waiting: (readonly AppInboxTask[])[] = [];
   const holding: (readonly AppInboxTaskHolding[])[] = [];
-  const planless: AppInboxSlice["taskless"][] = [];
+  const taskless: AppInboxSlice["taskless"][] = [];
   const failedRuns: AppInboxSlice["failedRuns"][] = [];
   const openedAutomations: string[] = [];
   let automationsOn = true;
@@ -180,14 +180,14 @@ function fixture() {
       onInboxChanged: (next) => {
         waiting.push(next.waiting);
         holding.push(next.tasks);
-        planless.push(next.taskless);
+        taskless.push(next.taskless);
         failedRuns.push(next.failedRuns);
       },
       openFailedRun: (place) => openedAutomations.push(place.automationId),
       automationsOn: () => automationsOn,
       openChat: (workspaceId) => chatOpened.push(workspaceId),
       chatOn: () => chatOn,
-      openInbox: (planId) => openedInboxes.push(planId),
+      openInbox: (taskId) => openedInboxes.push(taskId),
       openTasklessItem: (item) => openedTaskless.push(item),
       watchInterval: WATCH,
       report: () => undefined,
@@ -206,7 +206,7 @@ function fixture() {
     openedTaskless,
     unseen,
     /** The list answers a task's reads hear, in order; the last stands for every read after it. */
-    answer: (planId: string, ...queue: CodingAgentListAnswer[]) => answers.set(planId, queue),
+    answer: (taskId: string, ...queue: CodingAgentListAnswer[]) => answers.set(taskId, queue),
     /** The page answers an agent's own reads hear, in order; the last stands for every read after it. */
     answerPage: (agentId: string, ...queue: CodingAgentPageAnswerView[]) =>
       pages.set(agentId, queue),
@@ -232,7 +232,7 @@ function fixture() {
     inboxReads,
     waiting,
     holding,
-    taskless: planless,
+    taskless: taskless,
     badges,
     inboxToasted,
     openedInboxes,

@@ -14,14 +14,15 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
  * takes nothing away. Reduced motion and a capture run zero the tokens an
  * exit is timed on, and an element that runs no motion is taken out at once.
  *
- * The motion itself is the stylesheet's. The desktop's base.css also draws an optional
- * layer for a disclosure that opens downward over content, which a caller
- * asks for by marking the root `data-disclosure` (`disclosureMotion`) and
- * its body `.disclosure-body`, the root's own child: `opening` unrolls
+ * The motion itself is the stylesheet's. The Disclosure's stylesheet
+ * (`disclosure.css`) also draws an optional layer for a disclosure that
+ * opens downward over content, which a caller asks for by marking the root
+ * `data-disclosure` (`disclosureMotion`) and its body
+ * `.luke-disclosure-body`, the root's own child: `opening` unrolls
  * the body from its top edge as it fades in, `closing` fades it out.
  */
 
-/** The marks base.css's disclosure layer reads from a root's `data-disclosure`. */
+/** The marks disclosure.css's motion layer reads from a root's `data-disclosure`. */
 const DISCLOSURE_MOTION = {
   OPENING: "opening",
   CLOSING: "closing",

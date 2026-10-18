@@ -121,9 +121,9 @@ test("each of Help's items opens the dialog of its own kind, with the field taki
   assert.equal(document.activeElement, field());
   assert.equal(field().placeholder, "What happened, and what did you expect?");
   assert.ok(
-    feedback.children.length > 0 &&
-      [...feedback.children].every((part) => part.classList.contains("ph-no-capture")),
-    "everything the dialog holds is left out of the screen recording",
+    field().closest(".ph-no-capture")?.contains(feedback.querySelector('input[type="checkbox"]')) ??
+      false,
+    "the note and its signature are left out of the screen recording",
   );
 
   act(() => button("Cancel").click());

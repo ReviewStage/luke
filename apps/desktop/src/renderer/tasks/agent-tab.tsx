@@ -22,8 +22,11 @@ import {
   ErrorState,
   HoverCard,
   HoverCardHead,
+  INLINE_REF_LOOK,
+  TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
+  TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -46,16 +49,16 @@ import {
 } from "../ai-elements/conversation";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message";
-import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/task";
+import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
 import { appPlatform } from "../app-platform";
 import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
+import { InlineRef } from "../inline-ref";
 import { useMemberDirectory, usePerson } from "../member-directory";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
-import { Tooltip } from "../tooltip";
 import { AgentComposer } from "./agent-composer";
 import {
   AgentPicturesProvider,
@@ -117,7 +120,6 @@ import {
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links";
-import { useMentionDoors } from "./plan-mentions";
 import { PlanPictures } from "./plan-pictures";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
 import { briefAgent, replayOpening } from "./replay-card-model";
@@ -127,6 +129,7 @@ import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
+import { useMentionDoors } from "./task-mentions";
 import { useMinute } from "./task-time";
 import {
   calledAgent,
@@ -701,7 +704,7 @@ function PlanCard({
   sentAt,
   body,
   messageId,
-  planId,
+  planId: taskId,
 }: {
   text: string;
   lead: TranscriptLead;
@@ -728,10 +731,10 @@ function PlanCard({
           <PlanTitle label={lead.label}>{title}</PlanTitle>
         </PlanHeader>
         <PlanContent>
-          {planId === undefined ? (
+          {taskId === undefined ? (
             words
           ) : (
-            <PlanPictures planId={planId} text={text}>
+            <PlanPictures planId={taskId} text={text}>
               {words}
             </PlanPictures>
           )}
@@ -750,24 +753,19 @@ function PlanCard({
 
 /** A task named as the sender of its plan: its document glyph and its name as one target, hanging its card and opening its plan where the place can. */
 function TaskRef({ task, onOpen }: { task: BriefTask; onOpen?: (() => void) | undefined }) {
-  const inner = (
-    <>
-      <span className="agent-origin-glyph" aria-hidden="true">
-        <DocumentIcon />
-      </span>
-      <span className="actor-ref-name">{task.name}</span>
-    </>
-  );
   return (
-    <Tooltip label={task.name} card={task.card}>
-      {onOpen === undefined ? (
-        <span className="actor-ref">{inner}</span>
-      ) : (
-        <button type="button" className="actor-ref" data-task-ref="" onClick={onOpen}>
-          {inner}
-        </button>
-      )}
-    </Tooltip>
+    <InlineRef
+      look={INLINE_REF_LOOK.WASH}
+      glyph={
+        <span className="agent-origin-glyph">
+          <DocumentIcon />
+        </span>
+      }
+      label={task.name}
+      onPress={onOpen === undefined ? undefined : () => onOpen()}
+      card={task.card}
+      data-task-ref=""
+    />
   );
 }
 
@@ -816,16 +814,18 @@ function OriginSubject({
   const chip = linkChip(url, words, doors);
   if (chip !== undefined) return <span className="agent-origin-chip">{chip}</span>;
   return (
-    <a
-      className="text-link agent-origin-subject"
-      href={url}
-      onClick={(event) => {
-        event.preventDefault();
-        openGitHub(url);
-      }}
-    >
-      {words}
-    </a>
+    <span className="agent-origin-subject">
+      <TextLink
+        href={url}
+        look={TEXT_LINK_LOOK.UNDERLINED}
+        onClick={(event) => {
+          event.preventDefault();
+          openGitHub(url);
+        }}
+      >
+        {words}
+      </TextLink>
+    </span>
   );
 }
 
@@ -1029,7 +1029,7 @@ export function AgentMessage({
   sender,
   origin,
   arrived = NO_ARRIVED,
-  planId,
+  planId: taskId,
   forkable = true,
   forkCut,
 }: {
@@ -1070,7 +1070,7 @@ export function AgentMessage({
         sentAt={message.sentAt}
         body={origin?.body}
         messageId={message.id}
-        planId={planId}
+        planId={taskId}
       />
     );
   }
@@ -1263,7 +1263,7 @@ function AgentTranscriptView({
   briefSender,
   origin,
   readerId,
-  planId,
+  planId: taskId,
   replay,
   endTrail,
 }: {
@@ -1343,7 +1343,7 @@ function AgentTranscriptView({
               <AgentMessage
                 message={message === first && opening !== undefined ? opening.brief : message}
                 plan={message === plan}
-                planId={message === plan ? planId : undefined}
+                planId={message === plan ? taskId : undefined}
                 lead={lead}
                 moving={working && index === placed.length - 1}
                 forkCut={forkCutOf(message, open)}
@@ -1367,7 +1367,7 @@ function AgentTranscriptView({
                     replay={opening.replay}
                     sentAt={first.sentAt}
                     place={replay}
-                    planId={planId}
+                    planId={taskId}
                   />
                   {opening.note === undefined ? null : (
                     <AgentMessage
@@ -1649,7 +1649,6 @@ export function AgentTab({
   control,
   shown,
   onOpenSubagent,
-  onOpenChanges,
   onOpenPullRequest,
   onOpenTarget,
   cards,
@@ -1669,8 +1668,6 @@ export function AgentTab({
   onOpenTarget?: DelegationDoors["onOpenTarget"];
   /** The cards its rows that open a tab hang, as those tabs hang them. */
   cards?: TranscriptCards | undefined;
-  /** Opens the agent's changes, its pull request's files, in a tab of the side panel's own. */
-  onOpenChanges?: (() => void) | undefined;
   /** Opens the agent's pull request, its checks, description, and conversation, in a tab of the side panel's own. */
   onOpenPullRequest?: (() => void) | undefined;
   /** The chat a chat notice's card reads its message from and opens in; none where the window holds none. */
@@ -1785,7 +1782,6 @@ export function AgentTab({
         doors={{
           openGitHub,
           copy: copyWithToast,
-          openChanges: onOpenChanges,
           openPullRequest: onOpenPullRequest,
         }}
         startedAt={shown ? agent.runStartedAt : undefined}

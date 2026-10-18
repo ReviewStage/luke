@@ -610,7 +610,7 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
     moveTo = setListed;
     // The window's own guard, over doors guarded as the Plans tab guards its own.
     const leaveGuard = useLeaveGuard();
-    const plans = tasksControl({
+    const tasks = tasksControl({
       leaveGuard,
       agentView: {
         agentId: undefined,
@@ -634,11 +634,11 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
         onClose: () => undefined,
       },
     });
-    const base = plans.newTask;
-    openFactory = plans.factoryView.onOpen;
+    const base = tasks.newTask;
+    openFactory = tasks.factoryView.onOpen;
     return createElement(AutomationsPage, {
       tasks: {
-        ...plans,
+        ...tasks,
         newTask: {
           ...base,
           repositoriesIn: () => ({
@@ -847,6 +847,11 @@ test("a new automation is created only once it is named and told its task, and t
   assert.deepEqual(creates, []);
   assert.match(page.textContent ?? "", /Name it\./u);
   assert.match(page.textContent ?? "", /Tell the agent what to do\./u);
+  assert.equal(
+    page.querySelector("textarea[aria-label='Prompt']")?.getAttribute("aria-invalid"),
+    "true",
+    "the prompt is marked as what stops the save",
+  );
 
   type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
   type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");

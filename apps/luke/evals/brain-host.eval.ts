@@ -120,8 +120,8 @@ function readMessagesByTurn(run: Run, conversationId: string, turnId: string) {
 }
 
 /** The id of the task's conversation, opened on its first call; the task must stand. */
-async function taskConversation(run: Run, planId: string): Promise<string> {
-  const opened = await run(openTaskConversation(LOCAL_DEV_PRINCIPAL, planId));
+async function taskConversation(run: Run, taskId: string): Promise<string> {
+  const opened = await run(openTaskConversation(LOCAL_DEV_PRINCIPAL, taskId));
   assert.ok(Option.isSome(opened));
   return opened.value.conversationId;
 }
@@ -184,13 +184,13 @@ export default defineEval({
       // The brain is handed the saved document and answers in words;
       // the notetaker beside the call writes the plan, so the turn leaves the
       // document as it stood.
-      const plan = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
-      await run(savePlanText(LOCAL_DEV_PRINCIPAL, plan.id, PLAN_TEXT));
-      const taskConversationId = await taskConversation(run, plan.id);
+      const task = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
+      await run(savePlanText(LOCAL_DEV_PRINCIPAL, task.id, PLAN_TEXT));
+      const taskConversationId = await taskConversation(run, task.id);
       const tasks = await openSession(taskConversationId, PLAN_WORDS.FIRST);
       const tasksSession = await t.target.attachSession(tasks.sessionId);
       tasksSession.succeeded();
-      assert.deepEqual(await planDocument(run, plan.id), PLAN_SAVED);
+      assert.deepEqual(await planDocument(run, task.id), PLAN_SAVED);
 
       const turnId = hostTurnId(tasks.sessionId, "turn_0");
       const turn = await readTurnById(run, turnId);
@@ -289,17 +289,17 @@ export default defineEval({
       await chatChosen(true);
       // Asked to post, the model posts in the plan's channel as the plan's
       // Luke, and says where it landed.
-      const chatPlan = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
-      const chatConversationId = await taskConversation(run, chatPlan.id);
+      const chatTask = await run(startTask(LOCAL_DEV_PRINCIPAL, TASK));
+      const chatConversationId = await taskConversation(run, chatTask.id);
       const posting = await openSession(chatConversationId, `${SCRIPTED_POST}${PLAN_WORDS.POSTED}`);
       const postingSession = await t.target.attachSession(posting.sessionId);
       postingSession.succeeded();
-      const channel = await run(ensureTaskChannel(LOCAL_DEV_PRINCIPAL, chatPlan.id));
+      const channel = await run(ensureTaskChannel(LOCAL_DEV_PRINCIPAL, chatTask.id));
       assert.ok(Option.isSome(channel));
       const { organizationId } = channel.value;
       const members = await run(roster(LOCAL_DEV_PRINCIPAL, organizationId));
       const luke = members.find(
-        (member) => member.kind === MEMBER_KIND.LUKE && member.planId === chatPlan.id,
+        (member) => member.kind === MEMBER_KIND.LUKE && member.planId === chatTask.id,
       );
       assert.ok(luke);
       const said = await run(

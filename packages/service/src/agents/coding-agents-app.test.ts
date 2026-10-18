@@ -131,6 +131,8 @@ import {
   inboxAnsweredSchema,
   inboxAnswerSchema,
   inboxMessagedSchema,
+  inboxReadAllSchema,
+  inboxReadStateSchema,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
@@ -728,22 +730,22 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
     "a Start whose prompt mentions a page the store cannot read is refused before any agent is made, so a retry under its key starts afresh",
     () =>
       Effect.gen(function* () {
-        const { owner, task: plan, eve, ask } = yield* openTask();
+        const { owner, task, eve, ask } = yield* openTask();
         const shown = yield* writePage(
           owner,
-          plan.id,
+          task.id,
           { title: "Chart", html: "<h1>Chart</h1>" },
           { kind: PAGE_SHOWER.LUKE },
         );
         assert.ok(Option.isSome(shown));
-        const prompt = `Build ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: plan.id, pageId: shown.value.id }, "Chart", { workspace: "acme", repository: plan.repository })}.`;
+        const prompt = `Build ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: task.id, pageId: shown.value.id }, "Chart", { workspace: "acme", repository: task.repository })}.`;
         const idempotencyKey = randomUUID();
         const sql = yield* SqlClient.SqlClient;
         // The pages' table is moved aside for the Start alone, so the store's read of the page fails.
         const answered = yield* Effect.ensuring(
           Effect.andThen(
             sql.unsafe("ALTER TABLE plan_page_version RENAME TO plan_page_version_aside"),
-            ask(startAs(owner, plan.id, { idempotencyKey, task: prompt })),
+            ask(startAs(owner, task.id, { idempotencyKey, task: prompt })),
           ),
           Effect.orDie(
             sql.unsafe("ALTER TABLE plan_page_version_aside RENAME TO plan_page_version"),
@@ -2352,7 +2354,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task: plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, task, agent, ask } = yield* startedAgent(eve, { running: false });
         const ranAs = (firing: AutomationFiring) =>
           Effect.gen(function* () {
             yield* Database.use((db) =>
@@ -2360,7 +2362,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
                 .update(codingAgent)
                 .set({
                   taskId: null,
-                  organizationId: plan.workspaceId,
+                  organizationId: task.workspaceId,
                   automationOrigin: { name: "Code review", firing, prompt: "Review it." },
                 })
                 .where(eq(codingAgent.id, agent.id)),
@@ -2431,17 +2433,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const {
-          owner,
-          other,
-          task: plan,
-          agent,
-          ask,
-        } = yield* startedAgent(eve, { running: false });
+        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
             .update(codingAgent)
-            .set({ taskId: null, organizationId: plan.workspaceId })
+            .set({ taskId: null, organizationId: task.workspaceId })
             .where(eq(codingAgent.id, agent.id)),
         );
         const listed = (bearer: string, archived?: string) =>
@@ -2470,7 +2466,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const { activityAt, ...read } = only;
         assert.deepEqual([read, rest], [page, []]);
         assert.ok(activityAt >= page.createdAt);
-        assert.equal(standing.plans.find((each) => each.id === plan.id)?.agents, undefined);
+        assert.equal(standing.plans.find((each) => each.id === task.id)?.agents, undefined);
         assert.deepEqual(outside.planlessAgents, []);
         assert.deepEqual(archived.planlessAgents, []);
         assert.deepEqual(
@@ -2485,17 +2481,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const {
-          owner,
-          other,
-          task: plan,
-          agent,
-          ask,
-        } = yield* startedAgent(eve, { running: false });
+        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
             .update(codingAgent)
-            .set({ taskId: null, organizationId: plan.workspaceId })
+            .set({ taskId: null, organizationId: task.workspaceId })
             .where(eq(codingAgent.id, agent.id)),
         );
         const pin = (bearer: string, pinned: boolean) =>
@@ -2533,11 +2523,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task: plan, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, task, agent, ask } = yield* startedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
             .update(codingAgent)
-            .set({ taskId: null, organizationId: plan.workspaceId })
+            .set({ taskId: null, organizationId: task.workspaceId })
             .where(eq(codingAgent.id, agent.id)),
         );
         const patch = (body: { pinned: boolean; position: string }) =>
@@ -2811,12 +2801,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task: plan, ask, sent } = yield* startedAgent(eve, { running: true });
-        const other = yield* startedAgentOf(owner, plan.id, ask);
+        const { owner, task, ask, sent } = yield* startedAgent(eve, { running: true });
+        const other = yield* startedAgentOf(owner, task.id, ask);
         yield* updateCodingAgentBranch(owner, other.agent.id, "luke/store-invitations");
         const shown = yield* writePage(
           owner,
-          plan.id,
+          task.id,
           {
             title: "Invites by week",
             html: "<h1>Invites by week</h1>",
@@ -2824,8 +2814,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           { kind: PAGE_SHOWER.LUKE },
         );
         assert.ok(Option.isSome(shown));
-        const place = { workspace: "acme", repository: plan.repository };
-        const words = `Build what ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: plan.id, pageId: shown.value.id }, "Invites by week", place)} shows on ${mentionMarkdown({ kind: MENTION_KIND.AGENT, taskId: plan.id, agentId: other.agent.id }, "Store", place)}.`;
+        const place = { workspace: "acme", repository: task.repository };
+        const words = `Build what ${mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: task.id, pageId: shown.value.id }, "Invites by week", place)} shows on ${mentionMarkdown({ kind: MENTION_KIND.AGENT, taskId: task.id, agentId: other.agent.id }, "Store", place)}.`;
 
         yield* sent(words);
 
@@ -2877,11 +2867,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* moved(oneOff.agent.id, task.workspaceId);
         yield* moved(foreign.agent.id, elsewhere);
         const place = { workspace: "acme", repository: task.repository };
-        const mention = (agentId: string, planId: string | undefined, name: string) =>
+        const mention = (agentId: string, taskId: string | undefined, name: string) =>
           mentionMarkdown(
-            planId === undefined
+            taskId === undefined
               ? { kind: MENTION_KIND.AGENT, agentId }
-              : { kind: MENTION_KIND.AGENT, taskId: planId, agentId },
+              : { kind: MENTION_KIND.AGENT, taskId: taskId, agentId },
             name,
             place,
           );
@@ -3096,8 +3086,8 @@ const startedAgent = (
 /** The same, under a name a suite with a `startedAgent` of its own still reaches. */
 const startedAgentOf = startedAgent;
 
-function startAs(bearer: string | undefined, planId: string, body: WireBoundaryInput): Request {
-  return request(TASK_AGENTS, bearer, { method: "POST", id: planId, body });
+function startAs(bearer: string | undefined, taskId: string, body: WireBoundaryInput): Request {
+  return request(TASK_AGENTS, bearer, { method: "POST", id: taskId, body });
 }
 
 const TASK_INBOX = "/api/plans/inbox";
@@ -3105,6 +3095,7 @@ const INBOX_ITEM = "/api/inbox/item";
 const ACCOUNT_INBOX = "/api/inbox";
 const INBOX_ATTACHMENT = "/api/inbox/attachment";
 const INBOX_MESSAGES = "/api/inbox/messages";
+const INBOX_READ = "/api/inbox/read";
 
 /** The first bytes of a PNG, as a screenshot's file starts. */
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
@@ -3502,13 +3493,78 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
+    "a member marks an item read and unread for themselves alone, or every item of a workspace's Inbox read, and an outsider, another method, and a malformed request are refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask, post, read, waiting } = yield* openInbox();
+        const asked = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(asked));
+        const { id } = asked.success;
+        const unread = () =>
+          Effect.map(read(), (page) => page.items.find((item) => item.id === id)?.unread);
+        const mark = (method: string, bearer = owner) =>
+          ask(request(INBOX_READ, bearer, { method, id }));
+        assert.equal(yield* unread(), true, "a new item is unread");
+        assert.deepEqual(
+          (yield* waiting()).items.map((entry) => [entry.id, entry.unread]),
+          [[id, true]],
+        );
+
+        assert.deepEqual(
+          readAnswer(inboxReadStateSchema, HOSTED_HTTP_STATUS.OK, yield* mark("PUT")),
+          { id, unread: false },
+        );
+        assert.equal(yield* unread(), false);
+        assert.deepEqual(
+          readAnswer(inboxReadStateSchema, HOSTED_HTTP_STATUS.OK, yield* mark("DELETE")),
+          { id, unread: true },
+        );
+        assert.equal(yield* unread(), true);
+
+        assert.deepEqual(
+          yield* mark("PUT", other),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+          "an account outside the workspace reaches no item",
+        );
+        assert.deepEqual(
+          yield* mark("POST"),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+        assert.deepEqual(
+          yield* ask(request(INBOX_READ, owner, { method: "DELETE", body: {} })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+          "nothing marks every item unread",
+        );
+
+        const all = (body: WireBoundaryInput) =>
+          ask(request(INBOX_READ, owner, { method: "PUT", body }));
+        assert.deepEqual(
+          yield* all({ workspaceId: "" }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          readAnswer(
+            inboxReadAllSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* all({ workspaceId: task.workspaceId }),
+          ),
+          { marked: 1 },
+        );
+        assert.equal(yield* unread(), false);
+        assert.deepEqual(readAnswer(inboxReadAllSchema, HOSTED_HTTP_STATUS.OK, yield* all({})), {
+          marked: 0,
+        });
+      }),
+  );
+
+  it.effect(
     "a run of the account's own automation that failed to start rides the account's inbox read and moves its cursor, as no item, and another account's read carries none",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task: plan, waiting } = yield* openInbox();
+        const { owner, other, task, waiting } = yield* openInbox();
         const automation = Option.getOrThrow(
           yield* createAutomation(owner, {
-            taskId: plan.id,
+            taskId: task.id,
             name: "Nightly flaky-test sweep",
             trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
             action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
@@ -3548,7 +3604,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
               run.id,
               automation.id,
               "Nightly flaky-test sweep",
-              plan.workspaceId,
+              task.workspaceId,
               AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE,
             ],
           ],
@@ -4533,8 +4589,8 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           .update(codingAgent)
           .set({ taskId: null })
           .where(eq(codingAgent.id, "agentId" in chat.first.self ? chat.first.self.agentId : ""));
-        const planless = { ...chat.first, planId: null };
-        const posted = yield* chat.post(planless, { text: "@luke who owns the invite table?" });
+        const taskless = { ...chat.first, planId: null };
+        const posted = yield* chat.post(taskless, { text: "@luke who owns the invite table?" });
         assert.ok("seq" in posted);
         assert.deepEqual([posted.in, posted.unresolved], ["#general", ["@luke"]]);
       }),

@@ -17,24 +17,32 @@ import { type Duration, Effect, Schedule } from "effect";
 /** How many characters of the digest a cursor carries: far more than any two readings of one plan's rows could share by chance. */
 const CURSOR_CHARS = 32;
 
-/** What a cursor digests of one row it covers: its id, revision, status, and instant. */
+/** What a cursor digests of one row it covers: its id, revision, status, and instant, and, for a row a reader reads or not, whether it is unread for them. */
 export interface CursorStamp {
   readonly id: string;
   readonly revision: number;
   readonly status: string;
   readonly updatedAt: number;
+  readonly unread?: boolean;
 }
 
 /**
  * Where the rows stand for a reader: a digest of every row's id, revision,
- * status, and instant, taken in the rows' id order so the same rows read in
- * another order are the same cursor, and any change to any row moves it, two
- * within one millisecond included. Note that no rows digest to a cursor of
- * their own rather than the start, so a first read answers at once.
+ * status, and instant, and its unread state where it has one, taken in the
+ * rows' id order so the same rows read in another order are the same
+ * cursor, and any change to any row moves it, two within one millisecond
+ * included, as does the reader marking one read or unread. Note that a row
+ * with no unread state digests as it did before there was one, so a read
+ * that carries none keeps its cursors. Note too that no rows digest to a
+ * cursor of their own rather than the start, so a first read answers at once.
  */
 export function cursorOf(stamps: readonly CursorStamp[]): string {
   const standing = stamps
-    .map((stamp) => [stamp.id, stamp.revision, stamp.status, stamp.updatedAt] as const)
+    .map((stamp) =>
+      stamp.unread === undefined
+        ? ([stamp.id, stamp.revision, stamp.status, stamp.updatedAt] as const)
+        : ([stamp.id, stamp.revision, stamp.status, stamp.updatedAt, stamp.unread] as const),
+    )
     .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   return createHash("sha256").update(JSON.stringify(standing)).digest("hex").slice(0, CURSOR_CHARS);
 }

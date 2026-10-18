@@ -60,7 +60,7 @@ const GLOBEX: Workspace = {
   github: { login: "globex", active: true },
 };
 
-const PLAN: TaskSummary = {
+const TASK: TaskSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: ACME.id,
   name: "Teammate invitations",
@@ -68,7 +68,7 @@ const PLAN: TaskSummary = {
   updatedAt: 2,
   repository: "acme/relay",
 };
-const PLAN_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+const TASK_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const SWEEP_AGENT = "5d7e8f90-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
 
 /** An item an agent posted, asking only an acknowledgement, its one block the words given. */
@@ -119,7 +119,7 @@ afterEach(() => {
 /** The window's Inbox listing `listed`, holding the plan's items and the agent's given, and every pull request read it asked. */
 async function inbox(options: {
   listed: Workspace | undefined;
-  planItems: readonly InboxItem[];
+  taskItems: readonly InboxItem[];
   sweep: { readonly item: InboxItem; readonly workspaceId: string | undefined } | undefined;
   /** The account's workspaces as main's document holds them; Acme and Globex unless said. */
   workspaces?: readonly Workspace[];
@@ -127,7 +127,7 @@ async function inbox(options: {
   const asked: Act[] = [];
   const state = {
     ...signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" }),
-    tasks: { ...IDLE_TASKS_VIEW, tasks: [PLAN], workspaces: options.workspaces ?? [ACME, GLOBEX] },
+    tasks: { ...IDLE_TASKS_VIEW, tasks: [TASK], workspaces: options.workspaces ?? [ACME, GLOBEX] },
   };
   const inboxOf = (items: readonly InboxItem[]): Promise<ActOutcome> =>
     Promise.resolve({
@@ -153,7 +153,7 @@ async function inbox(options: {
         case ACT_KIND.CODING_AGENTS_INBOX:
           // A read past the cursor is held open while nothing changes, as the service holds it.
           return request.payload.after === "0"
-            ? inboxOf(options.planItems)
+            ? inboxOf(options.taskItems)
             : new Promise(() => undefined);
         case ACT_KIND.CODING_AGENTS_AGENT_INBOX:
           return request.payload.after === "0"
@@ -176,15 +176,15 @@ async function inbox(options: {
     return createElement(DesktopInbox, {
       tasks: tasksControl({
         workspace: options.listed,
-        tasks: [PLAN],
+        tasks: [TASK],
         inbox:
-          options.planItems.length === 0
+          options.taskItems.length === 0
             ? []
-            : [{ taskId: PLAN.id, items: options.planItems.map(waitingOf) }],
+            : [{ taskId: TASK.id, items: options.taskItems.map(waitingOf) }],
         inboxTasks:
-          options.planItems.length === 0
+          options.taskItems.length === 0
             ? []
-            : [{ taskId: PLAN.id, items: options.planItems.length, updatedAt: 2_000 }],
+            : [{ taskId: TASK.id, items: options.taskItems.length, updatedAt: 2_000 }],
         inboxTaskless: sweep === undefined ? [] : [waitingSweep(sweep.item, sweep.workspaceId)],
         inboxView: {
           open: true,
@@ -209,12 +209,12 @@ async function inbox(options: {
 
 /** The chips the chosen item's words draw, by the name each says and the state after it. */
 function chips(container: HTMLElement): [string | null, string | null][] {
-  return [...container.querySelectorAll<HTMLElement>("[data-inbox-markdown] .mention-chip")].map(
-    (chip) => [
-      chip.querySelector(".mention-chip-label")?.textContent ?? null,
-      chip.querySelector(".mention-chip-state")?.textContent ?? null,
-    ],
-  );
+  return [
+    ...container.querySelectorAll<HTMLElement>("[data-inbox-markdown] [data-mention-ref]"),
+  ].map((chip) => [
+    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
+    chip.querySelector(".luke-inline-ref-state")?.textContent ?? null,
+  ]);
 }
 
 /** The workspaces each pull request read was asked through. */
@@ -229,7 +229,7 @@ function readThrough(asked: readonly Act[]): string[] {
 test("a plan's item in the window's Inbox reads its links through the plan's workspace, as its task does", async () => {
   const { container, asked } = await inbox({
     listed: ACME,
-    planItems: [item("a1b2c3d4-0000-4000-8000-000000000001", PLAN_AGENT, `Opened ${PULL}.`)],
+    taskItems: [item("a1b2c3d4-0000-4000-8000-000000000001", TASK_AGENT, `Opened ${PULL}.`)],
     sweep: undefined,
   });
 
@@ -241,7 +241,7 @@ test("an item of a workspace an older service answered with no slug still reads 
   const { slug: _slug, ...unslugged } = GLOBEX;
   const { container, asked } = await inbox({
     listed: undefined,
-    planItems: [],
+    taskItems: [],
     sweep: {
       item: item("a1b2c3d4-0000-4000-8000-000000000004", SWEEP_AGENT, `Opened ${LEDGER_PULL}.`),
       workspaceId: GLOBEX.id,
@@ -256,7 +256,7 @@ test("an item of a workspace an older service answered with no slug still reads 
 test("an item of an agent with no plan reads its links through the agent's own workspace, not the one the Inbox lists", async () => {
   const { container, asked } = await inbox({
     listed: undefined,
-    planItems: [],
+    taskItems: [],
     sweep: {
       item: item("a1b2c3d4-0000-4000-8000-000000000002", SWEEP_AGENT, `Opened ${LEDGER_PULL}.`),
       workspaceId: GLOBEX.id,
@@ -270,7 +270,7 @@ test("an item of an agent with no plan reads its links through the agent's own w
 test("an item whose workspace the service did not name reads nothing, and its link says what its address says, though the Inbox lists a workspace", async () => {
   const { container, asked } = await inbox({
     listed: ACME,
-    planItems: [],
+    taskItems: [],
     sweep: {
       item: item("a1b2c3d4-0000-4000-8000-000000000003", SWEEP_AGENT, `Opened ${PULL}.`),
       workspaceId: undefined,

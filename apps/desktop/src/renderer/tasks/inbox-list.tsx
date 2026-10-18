@@ -1,7 +1,18 @@
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { DocumentIcon, EmptyState, IconButton, LIST_ROW_CURRENT, ListRow, useMenu } from "@luke/ui";
+import {
+  DocumentIcon,
+  EmptyState,
+  IconButton,
+  LIST_ROW_CURRENT,
+  LIST_ROW_META,
+  ListRow,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
+  useMenu,
+} from "@luke/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -19,6 +30,7 @@ import {
 } from "lucide-react";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
+import { AttentionMark } from "../attention-mark";
 import { useAutomation } from "../automation-directory";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
@@ -34,7 +46,7 @@ import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
-import { AgentRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
+import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
 import { providerOf } from "./coding-agent-model";
 import {
   INBOX_COLUMNS,
@@ -53,6 +65,7 @@ import {
   type InboxListView,
   type InboxPersonGroup,
   type InboxStarter,
+  inboxPreview,
   NEEDS_YOU,
   needsReader,
   readersItem,
@@ -70,30 +83,28 @@ import { cardTitle } from "./tool-call-model";
  * (`sidebar-group-header.tsx`), the task's glyph giving way to its chevron
  * under the pointer, a press folding the group, and each fold kept across
  * launches as a sidebar group's is; an automation's agents stand under its
- * clock tile, which hangs its card. An item is a sidebar row: the tile of
- * the agent that posted it (`actor-ref.tsx`), as the task's summary or
- * main's read of an agent with no task names the agent, its title, and how
- * long ago it last changed, and before its time the face of the teammate
- * whose agent asks it, as the sidebar marks a teammate's task, the reader's
- * own wearing none; a press chooses it, for the pane beside the
- * list to show. The tile hangs the agent's tab's card while the pointer
- * rests on it (`agent-ref.tsx`), and leaves the press to its row, whose
- * pane opens the agent. An item that needs the developer's answer, an open
- * one their own agent asks (`needsReader`), reads as a mail app's
- * unread mail does, a blue dot past its time beside its title in the
- * weight every unread row and tab reads in, in either grouping and
- * filtered or not; a teammate's open item waits on the teammate, in the
- * body's weight with a hollow dot in the blue's place, and any member may
- * still answer it; an answered one is settled, in the body's weight with
- * no dot. Only an item waiting on the developer wears the dot: a task or a
- * tab with something unseen on it is unread, not waiting, and wears the
- * weight alone. A folded task
+ * clock tile, which hangs its card. An item is a row of two lines, as a
+ * mail app lists a thread: the tile of the agent that posted it
+ * (`actor-ref.tsx`), as the task's summary or main's read of an agent with
+ * no task names the agent, its title, and how long ago it last changed,
+ * and before its time the face of the teammate whose agent asks it, as the
+ * sidebar marks a teammate's task, the reader's own wearing none; under
+ * them, muted, the last word in its thread, who said it first
+ * (`inboxPreview`); a press chooses it, for the pane beside the list to
+ * show. The tile hangs the agent's tab's card while the pointer rests on
+ * it (`agent-ref.tsx`), and leaves the press to its row, whose pane opens
+ * the agent. An item that needs the developer's answer, an open one their
+ * own agent asks (`needsReader`), wears the attention mark before its time
+ * (`attention-mark.tsx`), in either grouping and filtered or not; a
+ * teammate's open item waits on the teammate, whose face stands in that
+ * place, and any member may still answer it; an answered one wears
+ * neither. A folded task
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers two
  * buttons: Needs you, pressed while the list holds only what needs the
  * developer, the way a mail app shows unread mail only, its glyph the
- * Inbox's own wearing the rows' blue dot while anything needs the
- * developer, filtered out or not, its pressed fill alone saying the filter
+ * Inbox's own wearing a dot in the attention mark's orange while anything
+ * needs the developer, filtered out or not, its pressed fill alone saying the filter
  * is on and its tooltip what a press does; and one whose menu says
  * how the list groups its items, by plan, by person, or newest first, the
  * choice checked; both are kept across launches. Grouped by person, each
@@ -117,13 +128,31 @@ const ITEM_ACTIONS = "Inbox item actions";
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
 
+/** What the list's placeholder rows say to a reader while its items are first read. */
+const READING_ITEMS = "Reading your inbox…";
+
+/** How wide each placeholder row's title and the preview under it stand, as shares of their lines, so the rows read as items of their own. */
+const SKELETON_ROWS = [
+  { title: "68%", preview: "84%" },
+  { title: "52%", preview: "70%" },
+  { title: "74%", preview: "90%" },
+  { title: "46%", preview: "62%" },
+  { title: "60%", preview: "78%" },
+] as const;
+
+/** How wide a placeholder row's time stands, as wide as a short "2h". */
+const SKELETON_TIME = "20px";
+
+/** How wide a placeholder row's mark stands, an agent's tile at its inline size (`.actor-mark`). */
+const SKELETON_MARK = "16px";
+
 /** What a press on Needs you does, as its tooltip says: list only what needs the developer, or everything again. */
 const NEEDS_YOU_PRESS = {
   ONLY: "Show only what needs you",
   ALL: "Show all",
 } as const;
 
-/** What a teammate's open item's hollow dot says: it waits on them, not the reader. */
+/** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */
 function waitingOn(starter: Actor): string {
   return `Waiting on ${actorName(starter, { sentence: true })}`;
 }
@@ -216,19 +245,17 @@ export function ItemMark({
       </ReadAgentModel>
     );
   }
-  return (
-    <AgentRef subject={subject} models={models} onOpen={undefined}>
-      <ActorMark actor={subject.tile} />
-    </AgentRef>
-  );
+  return <AgentMarkRef subject={subject} models={models} />;
 }
 
 /**
- * One item as a `ListRow`: the agent's mark, the title, and how long ago it
- * changed, a teammate's face before the time where the item is theirs and
- * `face` allows it; one that needs the developer unread, with a dot past its
- * time, and a teammate's open one a hollow dot. The title hangs in the
- * window's pill, since a narrow list cuts it short. The home page's Inbox
+ * One item as a `ListRow` of two lines, as a mail app lists a thread: the
+ * agent's mark, the title, and how long ago it changed, then the last word
+ * in its thread, muted (`inboxPreview`). One that needs the developer wears
+ * the attention mark before its time, and a teammate's item their face
+ * there where `face` allows it, the mark of their open item being theirs to
+ * wear. The title hangs in the window's pill, since a narrow list cuts it
+ * short. The home page's Inbox
  * names the item's plan at the row's end, in `context`, since its rows stand
  * under no plan's header, as a person's group does. Its right-click offers
  * Copy link, the item's link under the task or the agent that holds it, where
@@ -266,7 +293,9 @@ export function InboxItemRow({
   const starter = readersItem(item, reader)
     ? undefined
     : personActor(item.startedBy, directory.members, reader, directory.former);
-  const waitsOnTeammate = starter !== undefined && item.status === INBOX_STATUS.OPEN;
+  const preview = inboxPreview(item, (member) =>
+    actorName(personActor(member, directory.members, reader, directory.former)),
+  );
   const menu = useMenu(true);
   const copyLink = useCopyLinkItem()(
     holder.kind === INBOX_HOLDER.TASK
@@ -291,29 +320,27 @@ export function InboxItemRow({
           </span>
         }
         title={title}
+        description={preview}
         meta={
           <span className="home-row-meta">
             {context === undefined ? null : <span className="home-row-context">{context}</span>}
             {starter === undefined || !face ? null : (
               <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
             )}
+            {starter === undefined || item.status !== INBOX_STATUS.OPEN ? null : (
+              <span className="visually-hidden">{waitingOn(starter)}</span>
+            )}
+            {needsYou ? (
+              <span className="inbox-row-attention">
+                <AttentionMark />
+                <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+              </span>
+            ) : null}
             <RelativeTime at={item.updatedAt} now={now} hint={false} />
-            {/* Note that the dot's place stands on every row, so the times line up whether a row wears one or not. */}
-            <span className="inbox-row-dot-place">
-              {needsYou ? (
-                <span className="inbox-row-dot">
-                  <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
-                </span>
-              ) : waitsOnTeammate ? (
-                <span className="inbox-row-dot" data-hollow="true">
-                  <span className="visually-hidden">{waitingOn(starter)}</span>
-                </span>
-              ) : null}
-            </span>
           </span>
         }
+        metaAt={LIST_ROW_META.TITLE}
         current={chosen ? LIST_ROW_CURRENT.PAGE : undefined}
-        unread={needsYou}
         hint={{ Hint: Tooltip, label: title }}
         onPress={() => onChoose(listed)}
         onContextMenu={copyLink === undefined ? undefined : menu.contextMenu(press)}
@@ -467,7 +494,7 @@ function ViewOptions({
   );
 }
 
-/** The head's button that lists only what needs the developer while it is pressed, its glyph wearing the rows' dot while anything does. */
+/** The head's button that lists only what needs the developer while it is pressed, its glyph wearing a dot in the attention mark's orange while anything does. */
 function NeedsYouOnly({
   waiting,
   waitingOnly,
@@ -517,6 +544,32 @@ export function NeedsYouEmpty({
     >
       {NEEDS_YOU.ANSWERED}
     </EmptyState>
+  );
+}
+
+/**
+ * The list while its items are first read: rows in an item's own row, a
+ * block where its agent's tile, its title, its time, and the line under
+ * them will stand, so the
+ * items land where the blocks stood rather than a lone ring in the list's
+ * corner. The rows open nothing and the region says what is being read.
+ */
+export function InboxListSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label={READING_ITEMS}>
+      <ul className="sidebar-tasks">
+        {SKELETON_ROWS.map(({ title, preview }) => (
+          <ListRow
+            key={title}
+            leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />}
+            title={<Skeleton width={title} />}
+            description={<Skeleton width={preview} />}
+            meta={<Skeleton width={SKELETON_TIME} />}
+            metaAt={LIST_ROW_META.TITLE}
+          />
+        ))}
+      </ul>
+    </SkeletonRegion>
   );
 }
 
@@ -621,7 +674,7 @@ export function InboxList({
   /** The signed-in account's id, whose own agents' cards name no starter, where a teammate's name theirs. */
   readerId: string | undefined;
   head: InboxListHead;
-  /** What stands under the rows: the list's empty line, a spinner, or a read that did not answer. */
+  /** What stands under the rows: the list's empty line, placeholder rows while it is read, or a read that did not answer. */
   note: React.ReactNode;
   /** Which of the Inbox's columns stand. */
   columns: InboxColumnsShown;

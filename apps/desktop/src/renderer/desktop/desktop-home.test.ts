@@ -310,6 +310,23 @@ test("a waiting item's row opens the Inbox on its item, a recent plan opens the 
   assert.equal(opened.newTasks, 1);
 });
 
+test("a waiting item's row on Home reads as the Inbox's own: what it asks under its title, its plan and the attention mark before its time, and no blue dot", async () => {
+  const { page } = mount();
+  await settle();
+
+  const region = page.querySelector('section[aria-labelledby="home-inbox"]');
+  assert.ok(region, "Home's Inbox stands");
+  const row = [...region.querySelectorAll("li")].find(
+    (each) => each.querySelector(NAME)?.textContent === EMAIL.title,
+  );
+  assert.ok(row, "the waiting item has a row");
+  assert.equal(row.querySelector(".luke-list-row-description")?.textContent, "Choice · 2 options");
+  const head = row.querySelector(".luke-list-row-head");
+  assert.equal(head?.querySelector(".home-row-context")?.textContent, "Teammate invitations");
+  assert.ok(head?.querySelector(".attention-mark"), "it needs the reader");
+  assert.equal(row.querySelector(".inbox-row-dot"), null);
+});
+
 test("the waiting items stand under the Inbox's name, the place a press on one opens", async () => {
   const { page } = mount();
   await settle();

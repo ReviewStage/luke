@@ -226,9 +226,9 @@ function readingOf(agent: MentionedAgent, repository: string | null): string {
 }
 
 /** Where a mentioned agent works, beside the plan of the agent it is handed to. */
-function taskWords(agent: MentionedAgent, plan: Task | undefined): string {
+function taskWords(agent: MentionedAgent, task: Task | undefined): string {
   if (agent.task === null) return "on no task";
-  if (agent.task.id === plan?.id) return "on this task";
+  if (agent.task.id === task?.id) return "on this task";
   return `on the task "${agent.task.name}"`;
 }
 
@@ -237,7 +237,7 @@ function agentNoteOf(
   agentId: string,
   name: string,
   reads: MentionedReads,
-  plan: Task | undefined,
+  task: Task | undefined,
 ): string {
   // The store holds an id in lower case, whatever case the link spelled it in.
   const agent = reads.agents.get(agentId.toLowerCase());
@@ -253,7 +253,7 @@ function agentNoteOf(
     : agent.task?.archived === true
       ? " Its task is archived, so it takes no message."
       : ` To message it, call \`${AGENT_TOOL.MESSAGE_AGENT}\` with its id.`;
-  return `The developer pointed you at another coding agent of your workspace ${taskWords(agent, plan)}, "${agent.name}" (id \`${agent.id}\`)${archived} working in \`${agent.repository}\`${branch}${pullRequest}.${readingOf(agent, plan?.repository ?? null)}${message} Its conversation is not yours to read.`;
+  return `The developer pointed you at another coding agent of your workspace ${taskWords(agent, task)}, "${agent.name}" (id \`${agent.id}\`)${archived} working in \`${agent.repository}\`${branch}${pullRequest}.${readingOf(agent, task?.repository ?? null)}${message} Its conversation is not yours to read.`;
 }
 
 /** What a member's role is said as. */
@@ -298,12 +298,12 @@ function noteOf(mention: ServerMention): string {
 }
 
 /** The mention as the part hands it, where it hands it anything: what stands on another plan, or on a plan where the agent has none, is handed nothing, but for a coding agent, which is read across the workspace. */
-function handedMention(mention: Mention, plan: Task | undefined): Handed | undefined {
+function handedMention(mention: Mention, task: Task | undefined): Handed | undefined {
   switch (mention.kind) {
     case MENTION_KIND.TASK:
     case MENTION_KIND.SECTION:
     case MENTION_KIND.PAGE:
-      return mention.taskId === plan?.id ? mention : undefined;
+      return mention.taskId === task?.id ? mention : undefined;
     case MENTION_KIND.AGENT:
     case MENTION_KIND.PERSON:
     case MENTION_KIND.SERVER:
@@ -363,17 +363,17 @@ function sameMention(first: Handed, second: Handed): boolean {
 /** What the part hands for one mention; a mention of the plan or of what it holds only where the agent has one (`handedMention`). */
 function handedAs(
   { mention, name }: HandedMention,
-  plan: Task | undefined,
+  task: Task | undefined,
   reads: MentionedReads,
 ): string {
   switch (mention.kind) {
     case MENTION_KIND.TASK:
     case MENTION_KIND.SECTION:
-      return plan === undefined ? "" : excerptOf({ mention, name }, plan);
+      return task === undefined ? "" : excerptOf({ mention, name }, task);
     case MENTION_KIND.PAGE:
       return pageNoteOf(mention.pageId, name, reads);
     case MENTION_KIND.AGENT:
-      return agentNoteOf(mention.agentId, name, reads, plan);
+      return agentNoteOf(mention.agentId, name, reads, task);
     case MENTION_KIND.PERSON:
       return personNoteOf(mention.userId, name, reads);
     case MENTION_KIND.FILE:
@@ -393,12 +393,12 @@ export interface MentionedIds {
 }
 
 /** The pages of the plan, where there is one, the agents on any task or none, and the people, that the words mention, by id, each once: what the send reads for `mentionedContext` to hand. */
-export function mentionedIds(words: string, plan: Task | undefined): MentionedIds {
+export function mentionedIds(words: string, task: Task | undefined): MentionedIds {
   const pages = new Set<string>();
   const agents = new Set<string>();
   const people = new Set<string>();
-  for (const { mention } of handedMentionsIn(words, plan?.repository ?? null)) {
-    if (mention.kind === MENTION_KIND.PAGE && mention.taskId === plan?.id)
+  for (const { mention } of handedMentionsIn(words, task?.repository ?? null)) {
+    if (mention.kind === MENTION_KIND.PAGE && mention.taskId === task?.id)
       pages.add(mention.pageId);
     if (mention.kind === MENTION_KIND.AGENT) agents.add(mention.agentId.toLowerCase());
     if (mention.kind === MENTION_KIND.PERSON) people.add(mention.userId);

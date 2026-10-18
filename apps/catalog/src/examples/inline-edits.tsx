@@ -68,7 +68,7 @@ function InlineEdits(): React.JSX.Element {
       <CatalogSection id="inline-edit-narrow" title="Narrow column, long name">
         <div className="catalog-narrow">
           <Renamed
-            start="A plan whose name runs well past its column"
+            start="A task whose name runs well past its column"
             look={INLINE_EDIT_LOOK.FIELD}
           />
         </div>

@@ -3,29 +3,21 @@ import type { AdminMetricsWindow } from "@luke/service/admin/http";
 import {
   BADGE_TONE,
   Badge,
-  GAP,
-  Inline,
-  JUSTIFY,
-  LAYOUT_ELEMENT,
-  Stack,
-  TEXT_ELEMENT,
+  List,
+  ListRow,
+  TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
+  TextLink,
 } from "@luke/ui";
 import { formatNumber } from "@luke/ui/admin-format";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table";
 import { RetentionGrid } from "../charts/retention-grid";
 import { SignInMethodsChart, SignupsChart } from "../charts/signups-chart";
-import {
-  METRIC_STATUS,
-  MetricCard,
-  SectionHeading,
-  StatCard,
-  StatGroup,
-} from "../charts/stat-card";
+import { MetricCard, SectionHeading, StatCard, StatGroup } from "../charts/stat-card";
 import { UsageChart } from "../charts/usage-chart";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
-import { HideAdminsToggle, RefreshFailureNotice, WindowSwitcher } from "../chrome/controls";
+import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
 import { RetentionNote, TopAccountsNote } from "../chrome/notes";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
@@ -59,25 +51,22 @@ const DASHBOARD_SHAPES: readonly SkeletonShape[] = [
   { kind: SKELETON_SHAPE.TABLE, rows: 10, numericColumns: 3 },
   { kind: SKELETON_SHAPE.STATIC, node: <TopAccountsNote /> },
   { kind: SKELETON_SHAPE.HEADING, label: "Reliability" },
-  { kind: SKELETON_SHAPE.LINES, bones: ["w-full", "w-full", "w-2/5"] },
+  { kind: SKELETON_SHAPE.LINES, bones: ["100%", "100%", "40%"] },
   { kind: SKELETON_SHAPE.HEADING, label: "System health" },
   { kind: SKELETON_SHAPE.HEALTH },
 ];
 
-/** The database's status, the health card's figure: its word, and a dot that repeats it. */
-const DATABASE_STATUS = `inline-flex items-center gap-2 ${METRIC_STATUS}`;
-
 /** One integration in the health card's list: its name, and whether its keys are set. */
 function IntegrationRow({ integration }: { integration: AdminIntegration }): React.JSX.Element {
   return (
-    <li className="border-b border-border py-3 last:border-0">
-      <Inline justify={JUSTIFY.BETWEEN} gap={GAP.FIELD}>
-        <Text as={TEXT_ELEMENT.SPAN}>{integration.label}</Text>
+    <ListRow
+      title={integration.label}
+      meta={
         <Badge tone={integration.configured ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
           {integration.configured ? "Configured" : "Not configured"}
         </Badge>
-      </Inline>
-    </li>
+      }
+    />
   );
 }
 
@@ -172,20 +161,10 @@ export function DashboardScreen({
             </>
           }
         >
-          <RefreshFailureNotice
-            failure={state.refreshFailure}
-            refreshing={refreshing}
-            onRetry={reload}
-          />
-
           {/* A refetch dims the answer already on screen rather than replacing it:
           the numbers below stay the last ones actually read, and the dimming
           says so while the next read is in flight. */}
-          <div
-            className="transition-opacity duration-150 data-[busy=true]:opacity-50"
-            data-busy={refreshing}
-            aria-busy={refreshing}
-          >
+          <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
             <SectionHeading>User activity</SectionHeading>
             <StatGroup>
               <StatCard label="Total accounts" value={formatNumber(metrics.users.total)} grouped />
@@ -252,14 +231,14 @@ export function DashboardScreen({
               counts above. Per-request error rates and client-side failures are recorded as
               product-analytics events, which live with{" "}
               {metrics.reliability.analyticsConsoleUrl ? (
-                <a
+                <TextLink
                   href={metrics.reliability.analyticsConsoleUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline underline-offset-2 transition-colors duration-150 hover:text-foreground"
+                  look={TEXT_LINK_LOOK.UNDERLINED}
+                  external
+                  newTab
                 >
                   the analytics processor
-                </a>
+                </TextLink>
               ) : (
                 "the analytics processor"
               )}{" "}
@@ -272,29 +251,21 @@ export function DashboardScreen({
                 label="Database"
                 hint={`probe round-trip ${formatNumber(db.latencyMs)} ms`}
               >
-                <div
-                  className={DATABASE_STATUS}
-                  data-tone={db.reachable ? "complete" : "attention"}
-                >
-                  <span
-                    className="inline-block size-2.5 rounded-full data-[on=true]:bg-complete data-[on=false]:bg-attention"
-                    data-on={db.reachable}
-                    aria-hidden="true"
-                  />
-                  <span className={db.reachable ? "text-complete" : "text-attention"}>
+                <div>
+                  <Badge tone={db.reachable ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
                     {db.reachable ? "Reachable" : "Unreachable"}
-                  </span>
+                  </Badge>
                 </div>
               </MetricCard>
               <MetricCard label="Integrations">
-                <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.NONE}>
+                <List label="Integrations">
                   {metrics.systemHealth.integrations.map((integration) => (
                     <IntegrationRow key={integration.key} integration={integration} />
                   ))}
-                </Stack>
+                </List>
               </MetricCard>
             </div>
-          </div>
+          </Refreshing>
         </AdminPage>,
       );
     }

@@ -100,3 +100,14 @@ test("while a check runs, its press stays focusable, says so, and asks for no se
   act(() => busy.click());
   assert.equal(asked(), 0);
 });
+
+test("a check that failed is said in the row's announced line, not among its details", () => {
+  const { page } = about({
+    status: UPDATE_STATUS.ERROR,
+    currentVersion: "0.17.0",
+    installSupported: true,
+  });
+  const announced = page.querySelector('[aria-live="polite"]');
+  assert.equal(announced?.textContent, "Couldn't check for updates");
+  assert.equal(page.textContent?.split("Couldn't check for updates").length, 2, "said once");
+});

@@ -37,7 +37,7 @@ import { DesktopTasks } from "./desktop-tasks";
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 
-const PLAN: Task = {
+const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: "workspace-personal",
   name: "Teammate invitations",
@@ -49,7 +49,7 @@ const PLAN: Task = {
 
 const AGENT: CodingAgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-  planId: PLAN.id,
+  planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite expiry job",
@@ -90,8 +90,8 @@ async function mount(input: {
   const control = tasksControl({
     me: input.reader,
     page: TASKS_PAGE.DOCUMENT,
-    activeTaskId: PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, task: PLAN },
+    activeTaskId: TASK.id,
+    region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...tasksControl().mainTabs,
       tabs: [MAIN_TAB.PLAN, { agent: AGENT.id }],
@@ -211,7 +211,7 @@ test("a worker's tab opens on its task sent by the agent that delegated it, whos
   });
 
   const panel = container.querySelector(".desktop-side-panel") ?? container;
-  const parent = senderLine(panel).querySelector<HTMLButtonElement>(".actor-ref");
+  const parent = senderLine(panel).querySelector<HTMLButtonElement>("[data-actor-ref]");
   assert.equal(words(parent), "Invite expiry job");
   assert.equal(parent?.dataset.kind, "agent");
   act(() => parent?.click());

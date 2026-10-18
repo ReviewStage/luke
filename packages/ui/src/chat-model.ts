@@ -90,14 +90,14 @@ export interface ChatNames {
 
 /** The names a window knows: each agent's line from the plans' summaries and the lines a chat read carries, each plan's name, and the reader's own. */
 export function chatNames(
-  plans: readonly TaskSummary[],
+  tasks: readonly TaskSummary[],
   agents: readonly TaskAgentLine[],
   selfName: string | undefined,
 ): ChatNames {
-  const lines = [...plans.flatMap((plan) => plan.agents?.agents ?? []), ...agents];
+  const lines = [...tasks.flatMap((task) => task.agents?.agents ?? []), ...agents];
   return {
     agents: new Map(lines.map((line) => [line.id, line])),
-    plans: new Map(plans.map((plan) => [plan.id, plan.name])),
+    plans: new Map(tasks.map((task) => [task.id, task.name])),
     selfName,
   };
 }
@@ -167,7 +167,7 @@ export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): C
   const member = chat.members.find((each) => each.id === memberId);
   const handle = member?.handle ?? "unknown";
   const agent = member?.agentId === undefined ? undefined : names.agents.get(member.agentId);
-  const planName = member?.planId === undefined ? undefined : names.plans.get(member.planId);
+  const taskName = member?.planId === undefined ? undefined : names.plans.get(member.planId);
   const name =
     member?.kind === MEMBER_KIND.LUKE
       ? LUKE_NAME
@@ -176,7 +176,7 @@ export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): C
         : memberId === chat.self && names.selfName !== undefined
           ? names.selfName
           : handle;
-  return { member, name, handle, agent, planName };
+  return { member, name, handle, agent, planName: taskName };
 }
 
 /** What a channel is called: a channel's own name, a direct message's other member's handle. */

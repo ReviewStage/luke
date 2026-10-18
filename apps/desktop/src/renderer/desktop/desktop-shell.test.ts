@@ -175,7 +175,7 @@ function mount(
   const control = tasksControl();
   function Shell() {
     const [asked, setAsked] = useState(false);
-    const plans = tasksControl({
+    const tasks = tasksControl({
       page: TASKS_PAGE.HOME,
       restoring,
       inboxView: {
@@ -191,7 +191,7 @@ function mount(
       newTask: { ...control.newTask, open: asked, onClose: () => setAsked(false) },
       ...overrides,
     });
-    return createElement(DesktopShell, shellProps(plans, tab, onTabChange, sidebarPatch));
+    return createElement(DesktopShell, shellProps(tasks, tab, onTabChange, sidebarPatch));
   }
   act(() => root?.render(onRegistry(registry, createElement(Shell))));
   return container;
@@ -260,9 +260,23 @@ test("while a launch reopens the plan last open, the column draws no home page t
   assert.equal(page.querySelector('section[aria-label="Home"]'), null);
 });
 
+/** The sidebar's row named `name`: the button whose first words a reader hears are it. */
+function rowNamed(within: ParentNode, name: string): HTMLButtonElement | undefined {
+  return [...within.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) =>
+      [...button.children].find((part) => part.getAttribute("aria-hidden") !== "true")
+        ?.textContent === name,
+  );
+}
+
+/** The sidebar's row named `name`, where one stands. */
+function placeRow(page: HTMLElement, name: string): HTMLButtonElement | undefined {
+  return rowNamed(page.querySelector("aside.desktop-sidebar") ?? page, name);
+}
+
 /** The sidebar's Home row. */
 function homeRow(page: HTMLElement): HTMLButtonElement {
-  const row = page.querySelector<HTMLButtonElement>("button.sidebar-home");
+  const row = placeRow(page, "Home");
   assert.ok(row, "the Home row stands");
   return row;
 }
@@ -369,7 +383,7 @@ test("a plan opened on its Inbox tab rather than its own is read at once, its ro
 });
 
 /** A second plan beside `DOCUMENT_PLAN`, saved after it. */
-const NOTES_PLAN: Task = {
+const NOTES_TASK: Task = {
   ...DOCUMENT_TASK,
   id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
   name: "Release notes",
@@ -393,16 +407,16 @@ function mountListing(
   root = createRoot(container);
   const registry = AtomRegistry.make();
   return (open) => {
-    const plans = tasksControl({
+    const tasks = tasksControl({
       page: open === undefined ? TASKS_PAGE.HOME : TASKS_PAGE.DOCUMENT,
-      tasks: listed.map((plan) => (plan.id === open?.id ? open : plan)),
+      tasks: listed.map((task) => (task.id === open?.id ? open : task)),
       activeTaskId: open?.id,
       region:
         open === undefined
           ? { kind: DOCUMENT_REGION.NONE }
           : { kind: DOCUMENT_REGION.READY, task: open },
     });
-    const props = shellProps(plans, PANEL_TAB.TASKS, ignore, { collapsed: false });
+    const props = shellProps(tasks, PANEL_TAB.TASKS, ignore, { collapsed: false });
     act(() => root?.render(onRegistry(registry, createElement(DesktopShell, props))));
   };
 }
@@ -440,9 +454,9 @@ function rowReadMark(name: string, choose = false): string | undefined {
 }
 
 test("Mark as unread on the task being looked at draws its row unread through a save landing as it stays, and until it is opened again", () => {
-  const draw = mountListing([DOCUMENT_TASK, NOTES_PLAN], {
+  const draw = mountListing([DOCUMENT_TASK, NOTES_TASK], {
     [DOCUMENT_TASK.id]: DOCUMENT_TASK.updatedAt,
-    [NOTES_PLAN.id]: NOTES_PLAN.updatedAt,
+    [NOTES_TASK.id]: NOTES_TASK.updatedAt,
   });
   draw(DOCUMENT_TASK);
   assert.equal(rowUnread(DOCUMENT_NAME), "false");
@@ -452,7 +466,7 @@ test("Mark as unread on the task being looked at draws its row unread through a 
   draw({ ...DOCUMENT_TASK, updatedAt: DOCUMENT_TASK.updatedAt + 1 });
   assert.equal(rowUnread(DOCUMENT_NAME), "true");
 
-  draw(NOTES_PLAN);
+  draw(NOTES_TASK);
   assert.equal(rowUnread(DOCUMENT_NAME), "true");
 
   draw(DOCUMENT_TASK);
@@ -460,21 +474,21 @@ test("Mark as unread on the task being looked at draws its row unread through a 
 });
 
 test("a task's menu offers Mark as read while its row is unread, which draws it read, and Mark as unread after", () => {
-  const draw = mountListing([DOCUMENT_TASK, NOTES_PLAN], {
+  const draw = mountListing([DOCUMENT_TASK, NOTES_TASK], {
     [DOCUMENT_TASK.id]: DOCUMENT_TASK.updatedAt,
-    [NOTES_PLAN.id]: NOTES_PLAN.updatedAt - 1,
+    [NOTES_TASK.id]: NOTES_TASK.updatedAt - 1,
   });
   draw(undefined);
-  assert.equal(rowUnread(NOTES_PLAN.name), "true");
+  assert.equal(rowUnread(NOTES_TASK.name), "true");
   assert.equal(rowReadMark(DOCUMENT_NAME), "Mark as unread");
 
-  assert.equal(rowReadMark(NOTES_PLAN.name, true), "Mark as read");
-  assert.equal(rowUnread(NOTES_PLAN.name), "false");
-  assert.equal(rowReadMark(NOTES_PLAN.name), "Mark as unread");
+  assert.equal(rowReadMark(NOTES_TASK.name, true), "Mark as read");
+  assert.equal(rowUnread(NOTES_TASK.name), "false");
+  assert.equal(rowReadMark(NOTES_TASK.name), "Mark as unread");
 
-  assert.equal(rowReadMark(NOTES_PLAN.name, true), "Mark as unread");
-  assert.equal(rowUnread(NOTES_PLAN.name), "true");
-  assert.equal(rowReadMark(NOTES_PLAN.name), "Mark as read");
+  assert.equal(rowReadMark(NOTES_TASK.name, true), "Mark as unread");
+  assert.equal(rowUnread(NOTES_TASK.name), "true");
+  assert.equal(rowReadMark(NOTES_TASK.name), "Mark as read");
 });
 
 /** Lets every promise settled so far run its continuations. */
@@ -488,7 +502,7 @@ test("Factory's sidebar row and its command stand only while the account has its
   handState({});
   const off = mount(false);
   await settle();
-  assert.equal(off.querySelector(".sidebar-factory"), null);
+  assert.equal(placeRow(off, "Factory"), undefined);
   assert.equal(runAppCommand(APP_COMMAND.FACTORY), false);
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -496,7 +510,7 @@ test("Factory's sidebar row and its command stand only while the account has its
   handState(experimentsOn(EXPERIMENT.FACTORY));
   const on = mount(false);
   await settle();
-  assert.ok(on.querySelector(".sidebar-factory"));
+  assert.ok(placeRow(on, "Factory"));
   assert.equal(runAppCommand(APP_COMMAND.FACTORY), true);
 });
 
@@ -508,7 +522,7 @@ test("a press on Factory's row in a floating sidebar puts the sidebar away, as e
     onOverlay: (next) => told.push(next),
   });
   await settle();
-  const row = page.querySelector<HTMLButtonElement>(".sidebar-factory");
+  const row = placeRow(page, "Factory");
   assert.ok(row);
   act(() => row.click());
   assert.deepEqual(told, [SIDEBAR_OVERLAY.CLOSED]);
@@ -521,7 +535,7 @@ test("the Issues page's sidebar row and its command stand only while the account
   handState({});
   const off = mount(false, false, { issuesView });
   await settle();
-  assert.equal(off.querySelector(".sidebar-issues"), null);
+  assert.equal(placeRow(off, "Issues"), undefined);
   assert.equal(runAppCommand(APP_COMMAND.ISSUES), false);
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -529,7 +543,7 @@ test("the Issues page's sidebar row and its command stand only while the account
   handState(experimentsOn(EXPERIMENT.ISSUES));
   const on = mount(false, false, { issuesView });
   await settle();
-  const issues = on.querySelector<HTMLButtonElement>("button.sidebar-issues");
+  const issues = placeRow(on, "Issues");
   assert.ok(issues, "the Issues row stands");
   act(() => issues.click());
   assert.equal(runAppCommand(APP_COMMAND.ISSUES), true);
@@ -540,7 +554,7 @@ test("the Automations page's sidebar row and its command stand only while the ac
   handState({});
   const off = mount(false);
   await settle();
-  assert.equal(off.querySelector(".sidebar-automations"), null);
+  assert.equal(placeRow(off, "Automations"), undefined);
   assert.equal(runAppCommand(APP_COMMAND.AUTOMATIONS), false);
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -548,7 +562,7 @@ test("the Automations page's sidebar row and its command stand only while the ac
   handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
   const on = mount(false);
   await settle();
-  assert.ok(on.querySelector(".sidebar-automations"));
+  assert.ok(placeRow(on, "Automations"));
   assert.equal(runAppCommand(APP_COMMAND.AUTOMATIONS), true);
 });
 
@@ -920,7 +934,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
       },
     },
   });
-  const chip = page.querySelector(".mention-chip");
+  const chip = page.querySelector("[data-mention-ref]");
   assert.ok(chip, "the version draws the plan's chip");
 
   act(() => {
@@ -933,9 +947,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
 
 /** The sidebar's Chat row, where one stands. */
 function chatRow(page: HTMLElement): HTMLButtonElement | undefined {
-  return [...page.querySelectorAll<HTMLButtonElement>("button.sidebar-inbox")].find((button) =>
-    button.textContent?.startsWith("Chat"),
-  );
+  return placeRow(page, "Chat");
 }
 
 test("the sidebar's Chat row stands only while the account has Chat on and a chat is available, counts what waits on the developer, and opens Chat in the plan's place, which it marks while Home's row is not", async () => {
@@ -999,4 +1011,47 @@ test("a fixture run staged on Chat offers it with no account to turn its experim
   const other = mount(false, false, { chatView: view });
   await settle();
   assert.equal(chatRow(other), undefined, "another fixture run does not");
+});
+
+/** The offline status in the title bar beside the traffic lights, if one stands. */
+function titleBarOffline(page: HTMLElement): Element | null {
+  return page.querySelector('.title-bar-controls [role="status"][aria-label="Offline"]');
+}
+
+test("with the sidebar folded, the Mac offline says so in the title bar beside New task, and nothing does online", async () => {
+  handState({}, { network: { online: false } });
+  const offline = mount(false);
+  await settle();
+  assert.ok(titleBarOffline(offline), "the title bar says the Mac is offline");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState({}, { network: { online: true } });
+  const online = mount(false);
+  await settle();
+  assert.equal(titleBarOffline(online), null);
+});
+
+test("the sign-in, which needs the network, says over it when the Mac is offline", async () => {
+  handState({}, { network: { online: false } });
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  const props = shellProps(tasksControl(), PANEL_TAB.TASKS, ignore, {});
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopShell, {
+          ...props,
+          gates: { ...props.gates, accountRequired: true },
+          settings: { ...SETTINGS, account: { status: ACCOUNT_STATUS.SIGNED_OUT } },
+        }),
+      ),
+    ),
+  );
+  await settle();
+
+  assert.ok(container.querySelector(".desktop-onboarding"), "the sign-in stands");
+  assert.equal(titleBarOffline(container)?.textContent, "Offline");
 });

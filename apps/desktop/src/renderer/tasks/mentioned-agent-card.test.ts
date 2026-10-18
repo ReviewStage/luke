@@ -307,9 +307,12 @@ test("chips of agents off their task's page that the window lists read nothing a
 
 test("a chip of an agent the window lists not reads its task's agents once as it is drawn, wearing its harness, and the card hung after reads nothing more", async () => {
   const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
-  const chip = container.querySelector(".mention-chip") ?? undefined;
+  const chip = container.querySelector("[data-mention-ref]") ?? undefined;
 
-  assert.ok(chip?.querySelector(".mention-chip-glyph .harness-mark"), "the chip wears its harness");
+  assert.ok(
+    chip?.querySelector(".luke-inline-ref-glyph .harness-mark"),
+    "the chip wears its harness",
+  );
   const card = await cardOf(chip);
   assert.equal(card.name, "Prorate seat changes");
   assert.deepEqual(agentReads(), [
@@ -351,7 +354,7 @@ test("a mention of an agent the window lists not, laid in a message box as an In
   );
 
   assert.ok(
-    container.querySelector(".mention-chip-glyph .harness-mark"),
+    container.querySelector(".luke-inline-ref-glyph .harness-mark"),
     "the box's chip wears its harness",
   );
   assert.deepEqual(agentReads(), [
@@ -393,7 +396,7 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
   );
 
   assert.ok(
-    container.querySelector(".mention-chip-glyph .harness-mark"),
+    container.querySelector(".luke-inline-ref-glyph .harness-mark"),
     "the box's chip wears its harness",
   );
   assert.deepEqual(agentReads(), [
@@ -407,7 +410,7 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
 test("an agent on another task hangs its tab's card, its task's agents read once as it is hung, naming the task it works on", async () => {
   const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
 
-  const card = await cardOf(container.querySelector(".mention-chip") ?? undefined);
+  const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
 
   assert.equal(card.tab, true, "the card is the agent's tab's own");
   assert.equal(card.name, "Prorate seat changes");
@@ -432,7 +435,7 @@ test("an agent on no task is found by the name its chip was written with, else a
       mentionOf(agentOf("0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c", { planId: null }), "Gone"),
     ].join(" "),
   );
-  const [searched, newest, byId, gone] = container.querySelectorAll(".mention-chip");
+  const [searched, newest, byId, gone] = container.querySelectorAll("[data-mention-ref]");
 
   const sweeper = await cardOf(searched);
   const auditor = await cardOf(newest);
@@ -474,7 +477,7 @@ test("where the read answers nothing, the chip's own card says where the agent w
   answering = false;
   const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
 
-  const card = await cardOf(container.querySelector(".mention-chip") ?? undefined);
+  const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
 
   assert.equal(card.tab, false);
   assert.match(card.words ?? "", /A coding agent on another task/u);
@@ -484,7 +487,7 @@ test("two chips of one task's agents hung one after the other share the task's r
   const container = await drawn(
     `${mentionOf(PRORATE, "Prorate")} then ${mentionOf(PRORATE, "the prorater")}.`,
   );
-  const [first, second] = container.querySelectorAll(".mention-chip");
+  const [first, second] = container.querySelectorAll("[data-mention-ref]");
 
   act(() => {
     first?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));

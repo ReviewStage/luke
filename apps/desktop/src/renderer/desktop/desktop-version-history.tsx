@@ -9,9 +9,12 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import type { DialogConfirm } from "@luke/ui";
 import {
   BackIcon,
+  BUTTON_SIZE,
   EllipsisIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  IconButton,
+  NavItem,
   RetryRowLabel,
   Skeleton,
   SkeletonRegion,
@@ -44,8 +47,8 @@ import {
   VERSION_CHANGE,
   versionDiff,
 } from "../tasks/plan-history-model";
-import type { MentionedTask } from "../tasks/plan-mentions";
 import { RelativeTime } from "../tasks/relative-time";
+import type { MentionedTask } from "../tasks/task-mentions";
 import { useMinute } from "../tasks/task-time";
 import {
   HISTORY_READ,
@@ -253,16 +256,14 @@ function RevisionRow({
       {offered ? (
         <span className="version-row-actions">
           <Tooltip label={ACTIONS_LABEL}>
-            <button
+            <IconButton
               ref={ellipsis}
-              type="button"
-              className="sidebar-task-mark"
-              aria-label={ACTIONS_LABEL}
+              icon={<EllipsisIcon />}
+              label={ACTIONS_LABEL}
+              size={BUTTON_SIZE.COMPACT}
               {...menu.trigger()}
               onContextMenu={showMenu}
-            >
-              <EllipsisIcon />
-            </button>
+            />
           </Tooltip>
         </span>
       ) : null}
@@ -298,10 +299,9 @@ function SectionsHead({
   );
   return (
     <>
-      <button type="button" className="sidebar-item version-sections-back" onClick={onBack}>
-        <BackIcon />
+      <NavItem icon={<BackIcon />} onClick={onBack}>
         All versions
-      </button>
+      </NavItem>
       {source === undefined ? (
         <p className="version-sections-head">{who}</p>
       ) : (
@@ -721,19 +721,14 @@ export function DesktopVersionHistory({
       <nav className="version-log ph-no-capture" aria-label="Versions">
         <div className="desktop-drag-strip" />
         <HistoryButtons history={history} />
-        <button
-          type="button"
-          className="sidebar-item version-log-back"
+        <NavItem
+          icon={<BackIcon />}
           aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}
+          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord} />}
           onClick={onExit}
         >
-          <BackIcon />
           Back
-          <Shortcut
-            chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord}
-            className="row-shortcut"
-          />
-        </button>
+        </NavItem>
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>
             <h1 className="version-log-title">Version history</h1>

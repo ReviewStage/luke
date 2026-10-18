@@ -42,6 +42,12 @@ import {
   Skeleton,
   SkeletonRegion,
   Switch,
+  TAB_COUNT_TONE,
+  TABS_INSET,
+  TabCount,
+  type TabCountTone,
+  type TabItem,
+  Tabs,
   useMenu,
 } from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
@@ -76,8 +82,10 @@ import {
   useConversationFilters,
 } from "./conversation-filters";
 import { PierreDiff, useDiffLook } from "./file-diff";
-import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
+import { PullRequestLabels } from "./pull-request-labels";
+import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people";
 import { PullRequestReview } from "./pull-request-review";
+import { PullRequestStack } from "./pull-request-stack";
 import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions";
 import {
   PullRequestStateMenu,
@@ -122,10 +130,12 @@ import { useWorkingNow, workingTime } from "./working-time";
  * The header stays put while the tab under it scrolls: a bar like a File
  * tab's, wearing the pull request's mark and the word for where it stands,
  * with its doors (Review while it is open, `pull-request-review.tsx`,
- * then GitHub and the ⋯); its title and number; its branches;
- * who opened it and when, as the Changes tab names them
- * (`pull-request-people.tsx`), with its reviewers' faces wearing where each
- * stands; and, while it is open, whether it would merge as it stands, in
+ * then GitHub and the ⋯); its title and number; its labels in their
+ * GitHub colours (`pull-request-labels.tsx`); its branches, with the stack
+ * it stands in beside them (`pull-request-stack.tsx`); who opened it and
+ * when, as the Changes tab names them (`pull-request-people.tsx`), with its
+ * reviewers' first faces wearing where each stands; and, while it is open,
+ * whether it would merge as it stands, in
  * GitHub's own terms. Under it, a row of tabs, each its glyph, its name,
  * and a quiet count: Conversation, its description and its comments and
  * reviews in time order, as GitHub renders them (`body_html`), drawn
@@ -403,20 +413,30 @@ function barPullRequestOf(
 }
 
 /**
- * Who the pull request names as its reviewers: where each stands by their
- * reviews, as its conversation's read says, with those it still asks for a
- * review, as its own read says, standing asked whatever they said before,
- * as GitHub shows a re-requested reviewer; up to the bound.
+ * Who the pull request names as its reviewers, as stage-cli's header names
+ * them: where each stands by their reviews, as its conversation's read
+ * says, with those it still asks for a review, as its own read says,
+ * standing asked whatever they said before, as GitHub shows a re-requested
+ * reviewer, save one whose changes asked for still stand; its author left
+ * out, and Apps' bots after the people; up to the bound. Until the reviews
+ * land, those it asks stand asked.
  */
 function reviewersOf(
   requested: readonly CodingAgentOverviewPullRequest["requested"][number][],
   standings: readonly PullRequestReviewer[],
+  author: string | undefined,
 ): readonly PullRequestReviewer[] {
   const by = new Map<string, PullRequestReviewer>();
   for (const reviewer of standings) by.set(reviewer.by.login, reviewer);
-  for (const person of requested)
+  for (const person of requested) {
+    if (by.get(person.login)?.state === REVIEW_STATE.CHANGES_REQUESTED) continue;
     by.set(person.login, { by: person, state: REVIEW_STATE.REQUESTED });
-  return [...by.values()].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
+  }
+  const named = [...by.values()].filter((reviewer) => reviewer.by.login !== author);
+  return [
+    ...named.filter((reviewer) => !reviewer.by.bot),
+    ...named.filter((reviewer) => reviewer.by.bot),
+  ].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
 }
 
 /**
@@ -873,7 +893,7 @@ interface OverviewParts {
   };
 }
 
-/** Under the title: the branches, who opened it and when, its reviewers, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
+/** Under the title: its labels, the branches and the stack it stands in, who opened it and when, its reviewers, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
 function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }): React.JSX.Element {
   const { pullRequest: part, conversation } = parts;
   if (part.kind === PART.PENDING) {
@@ -890,18 +910,26 @@ function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }):
   }
   const pullRequest = part.value;
   const { author, mergedAt } = pullRequest;
-  const reviewers = reviewersOf(pullRequest.requested, landed(conversation)?.reviewers ?? []);
+  const reviewers = reviewersOf(
+    pullRequest.requested,
+    landed(conversation)?.reviewers ?? [],
+    author?.login,
+  );
   const open =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return (
     <>
-      <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
-        <p className="pull-request-branches">
-          <bdi>{pullRequest.base}</bdi>
-          {" ← "}
-          <bdi>{pullRequest.head}</bdi>
-        </p>
-      </Tooltip>
+      <PullRequestLabels labels={pullRequest.labels ?? []} />
+      <div className="pull-request-branch-row">
+        <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
+          <p className="pull-request-branches">
+            <bdi>{pullRequest.base}</bdi>
+            {" ← "}
+            <bdi>{pullRequest.head}</bdi>
+          </p>
+        </Tooltip>
+        <PullRequestStack stack={pullRequest.stack ?? []} number={pullRequest.number} />
+      </div>
       <div className="changes-people pull-request-people">
         {author === undefined ? null : <OpenedBy person={author} />}
         {/* Note that a merged one says when it merged, which is the moment that matters once it has. */}
@@ -909,7 +937,7 @@ function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }):
           {mergedAt === null ? null : "Merged "}
           <RelativeTime at={mergedAt ?? pullRequest.createdAt} now={now} ago />
         </span>
-        {reviewers.length === 0 ? null : <ReviewersLine reviewers={reviewers} />}
+        {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
       </div>
       {open ? <MergeLine pullRequest={pullRequest} /> : null}
     </>
@@ -1134,35 +1162,6 @@ function HeaderTitle({
   );
 }
 
-/** What a tab of the row says beside its name: a quiet count, a count in the checks' colour, or the lines a pull request adds and removes. */
-const TAB_COUNT = {
-  COUNT: "count",
-  CHECKS: "checks",
-  LINES: "lines",
-} as const;
-
-type TabCount =
-  | { readonly kind: typeof TAB_COUNT.COUNT; readonly count: number }
-  | {
-      readonly kind: typeof TAB_COUNT.CHECKS;
-      /** How many stand as its glyph says, once the checks are read; none before. */
-      readonly count: number | undefined;
-      readonly summary: CheckSummary;
-    }
-  | {
-      readonly kind: typeof TAB_COUNT.LINES;
-      readonly additions: number;
-      readonly deletions: number;
-    };
-
-/** One tab of the row: the view it shows, its glyph, its name, and what it counts. */
-interface TabEntry {
-  readonly view: PullRequestView;
-  readonly icon: ReactNode;
-  readonly label: string;
-  readonly count: TabCount | undefined;
-}
-
 /** How many checks the Checks tab's glyph counts: those that failed beside a failure, those still running beside a wait, and every one where all passed. */
 function summaryCountOf(checks: readonly PullRequestCheck[], summary: CheckSummary): number {
   if (summary === CHECK_SUMMARY.FAILING) {
@@ -1190,94 +1189,35 @@ const SUMMARY_WORDS = {
   [CHECK_SUMMARY.NONE]: "none",
 } as const satisfies Record<CheckSummary, string>;
 
-/** What a tab counts, drawn quiet beside its name: on Checks, how they went in its colour from the first frame, and how many once read. */
-function TabCountWords({ count }: { count: TabCount }): React.JSX.Element | null {
-  if (count.kind === TAB_COUNT.CHECKS) {
-    const glyph = SUMMARY_GLYPHS[count.summary];
-    if (glyph === null && count.count === undefined) return null;
-    return (
-      <span className="pull-request-tab-count" data-check-summary={count.summary}>
-        {glyph === null ? null : (
-          <span
-            className="pull-request-tab-glyph"
-            role="img"
-            aria-label={SUMMARY_WORDS[count.summary]}
-          >
-            {glyph}
-          </span>
-        )}
-        {count.count?.toLocaleString()}
-      </span>
-    );
-  }
-  if (count.kind === TAB_COUNT.LINES) {
-    return (
-      <span className="pull-request-tab-count">
-        <span className="pull-request-tab-added">+{count.additions.toLocaleString()}</span>{" "}
-        <span className="pull-request-tab-removed">−{count.deletions.toLocaleString()}</span>
-      </span>
-    );
-  }
-  return <span className="pull-request-tab-count">{count.count.toLocaleString()}</span>;
+/** The tone the Checks tab's count takes for how its checks went, as its glyph does. */
+const SUMMARY_TONES = {
+  [CHECK_SUMMARY.FAILING]: TAB_COUNT_TONE.DANGER,
+  [CHECK_SUMMARY.PENDING]: TAB_COUNT_TONE.ATTENTION,
+  [CHECK_SUMMARY.PASSING]: TAB_COUNT_TONE.COMPLETE,
+  [CHECK_SUMMARY.NONE]: TAB_COUNT_TONE.QUIET,
+} as const satisfies Record<CheckSummary, TabCountTone>;
+
+/** What the Checks tab counts: how they went in its colour from the first frame, and how many once read; nothing where neither stands. */
+function checksCount(summary: CheckSummary, count: number | undefined): ReactNode {
+  const glyph = SUMMARY_GLYPHS[summary];
+  if (glyph === null && count === undefined) return undefined;
+  return (
+    <TabCount
+      tone={SUMMARY_TONES[summary]}
+      {...(glyph === null ? {} : { glyph, glyphLabel: SUMMARY_WORDS[summary] })}
+    >
+      {count?.toLocaleString()}
+    </TabCount>
+  );
 }
 
-/**
- * The row of tabs under the fixed header, as stage-cli's pull request page
- * draws them: each its glyph, its name, and a quiet count, the chosen one
- * underlined. The arrows move between them, as a tab strip's do.
- */
-function PullRequestTabs({
-  tabs,
-  view,
-  onView,
-  ids,
-}: {
-  tabs: readonly TabEntry[];
-  view: PullRequestView;
-  onView: (view: PullRequestView) => void;
-  /** The id of each tab and of the panel it controls, by view. */
-  ids: (view: PullRequestView) => { readonly tab: string; readonly panel: string };
-}): React.JSX.Element {
-  const step = (by: number) => {
-    const at = tabs.findIndex((tab) => tab.view === view);
-    const next = tabs[(at + by + tabs.length) % tabs.length];
-    if (next === undefined) return;
-    onView(next.view);
-    document.getElementById(ids(next.view).tab)?.focus();
-  };
+/** What the Files changed tab counts: the lines a pull request adds and removes, each in its colour. */
+function linesCount(additions: number, deletions: number): ReactNode {
   return (
-    <div
-      className="pull-request-tabs"
-      role="tablist"
-      aria-label="Pull request"
-      onKeyDown={(event) => {
-        if (event.key === "ArrowRight") step(1);
-        if (event.key === "ArrowLeft") step(-1);
-      }}
-    >
-      {tabs.map((tab) => {
-        const selected = tab.view === view;
-        return (
-          <button
-            key={tab.view}
-            id={ids(tab.view).tab}
-            type="button"
-            role="tab"
-            className="pull-request-tab-button"
-            aria-selected={selected}
-            aria-controls={ids(tab.view).panel}
-            tabIndex={selected ? 0 : -1}
-            onClick={() => onView(tab.view)}
-          >
-            <span className="pull-request-tab-icon" aria-hidden="true">
-              {tab.icon}
-            </span>
-            <span className="pull-request-tab-label">{tab.label}</span>
-            {tab.count === undefined ? null : <TabCountWords count={tab.count} />}
-          </button>
-        );
-      })}
-    </div>
+    <>
+      <TabCount tone={TAB_COUNT_TONE.COMPLETE}>{`+${additions.toLocaleString()}`}</TabCount>{" "}
+      <TabCount tone={TAB_COUNT_TONE.DANGER}>{`−${deletions.toLocaleString()}`}</TabCount>
+    </>
   );
 }
 
@@ -1300,44 +1240,35 @@ function tabsOf(
   parts: OverviewParts,
   published: CodingAgentPullRequest | undefined,
   bar: BarPullRequest | undefined,
-): readonly TabEntry[] {
+): readonly TabItem<PullRequestView>[] {
   const conversation = landed(parts.conversation);
   const checks = landed(parts.checks);
   return [
     {
-      view: PULL_REQUEST_VIEW.CONVERSATION,
+      value: PULL_REQUEST_VIEW.CONVERSATION,
       icon: <MessagesSquareIcon />,
       label: "Conversation",
       count:
-        conversation === undefined
-          ? undefined
-          : { kind: TAB_COUNT.COUNT, count: conversationCount(conversation) },
+        conversation === undefined ? undefined : conversationCount(conversation).toLocaleString(),
     },
     {
-      view: PULL_REQUEST_VIEW.CHECKS,
+      value: PULL_REQUEST_VIEW.CHECKS,
       icon: <CircleCheckIcon />,
       label: "Checks",
       count:
         bar === undefined
           ? undefined
-          : {
-              kind: TAB_COUNT.CHECKS,
-              count: checks === undefined ? undefined : summaryCountOf(checks.checks, bar.checks),
-              summary: bar.checks,
-            },
+          : checksCount(
+              bar.checks,
+              checks === undefined ? undefined : summaryCountOf(checks.checks, bar.checks),
+            ),
     },
     {
-      view: PULL_REQUEST_VIEW.FILES,
+      value: PULL_REQUEST_VIEW.FILES,
       icon: <FileDiffIcon />,
       label: "Files changed",
       count:
-        published === undefined
-          ? undefined
-          : {
-              kind: TAB_COUNT.LINES,
-              additions: published.additions,
-              deletions: published.deletions,
-            },
+        published === undefined ? undefined : linesCount(published.additions, published.deletions),
     },
   ];
 }
@@ -1573,11 +1504,13 @@ export function AgentPullRequestTab({
               <HeaderTitle title={title} />
               <PullRequestHead parts={parts} now={now} />
             </header>
-            <PullRequestTabs
+            <Tabs<PullRequestView>
+              label="Pull request"
               tabs={tabsOf(parts, published, bar)}
-              view={view}
-              onView={onView}
+              value={view}
+              onChange={onView}
               ids={ids}
+              inset={TABS_INSET.READING}
             />
             <div
               className="pull-request-view"
