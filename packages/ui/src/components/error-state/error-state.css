@@ -1,0 +1,82 @@
+/* error-state.css -- a failure among the rows, laid out as a row: the
+   fault's glyph in red where a row's glyph stands, the sentence in the muted
+   ink of the words around it, and Retry at the row's end, its glyph alone
+   where the row is narrow. Alone in a region it is `EmptyState`, and draws
+   nothing here. A row that is itself the retry (`RetryRowLabel`) draws the
+   glyph and word after its sentence in the row's own type, held together. */
+
+@layer components {
+  /* Every part stands on the row's first line, a control tall, so the glyph,
+     the words, and Retry share one middle; a sentence too long for its room
+     wraps in its own column under its first line. The row is the container
+     its narrow look asks about, so it fills the width it is given. */
+  .luke-error-state {
+    display: flex;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    align-items: flex-start;
+    gap: var(--luke-icon-gap);
+    margin: 0;
+    color: var(--luke-color-text-muted);
+    container: luke-error-state / inline-size;
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  .luke-error-state-glyph {
+    display: flex;
+    height: var(--luke-control-height);
+    flex: none;
+    align-items: center;
+    color: var(--luke-color-danger-text);
+  }
+
+  .luke-error-state-glyph svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+
+  /* The words' first line is centred in the control's height, as the glyph
+     and Retry are, and any line after it runs on below. */
+  .luke-error-state-words {
+    min-width: 0;
+    flex: 1;
+    padding-block: calc((var(--luke-control-height) - var(--luke-type-caption-leading)) / 2);
+  }
+
+  /* Narrow, Retry is drawn as a glyph alone is (`IconButton`): a control's
+     square in the muted ink, its words kept for a reader and drawn nowhere. */
+  @container luke-error-state (max-width: 360px) {
+    .luke-error-state > .luke-button {
+      --luke-button-ink: var(--luke-color-text-muted);
+      width: var(--luke-control-height);
+      padding: 0;
+    }
+
+    .luke-error-state > .luke-button .luke-button-words {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  .luke-retry-row-label {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--luke-space-4);
+    margin-left: var(--luke-space-4);
+    font-weight: 600;
+  }
+
+  .luke-retry-row-label svg {
+    width: 12px;
+    height: 12px;
+    flex: none;
+    align-self: center;
+  }
+}

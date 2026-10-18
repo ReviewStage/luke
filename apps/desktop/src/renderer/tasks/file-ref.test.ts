@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 /**
- * The plan open, its side panel on the Code tab holding the file's code,
+ * The task open, its side panel on the Code tab holding the file's code,
  * and the file's own tab open beside it, read at `commit` where it names
  * one; each file opened recorded.
  */
@@ -106,11 +106,11 @@ function cardOn(element: Element | null | undefined): (string | null | undefined
   act(() => {
     element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-file-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
   assert.ok(card, "the file's card is hung");
   const read = [
-    card.querySelector(".card-name")?.textContent,
-    card.querySelector(".card-note")?.textContent,
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    card.querySelector(".luke-hover-card-note")?.textContent,
   ];
   act(() => {
     element.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
@@ -130,7 +130,7 @@ test("a file's tab, its row in the panel's +, and its code card's head wear its 
   const icon = tab.querySelector(".tab-icon")?.innerHTML;
   assert.equal(head.querySelector("svg")?.outerHTML, icon, "the head wears the tab's icon");
 
-  const add = panel.querySelector<HTMLButtonElement>("button.tab-add");
+  const add = panel.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]');
   assert.ok(add, "the strip's +");
   act(() => add.click());
   const row = [...document.querySelectorAll('.tab-add-menu [role="option"]')].find(

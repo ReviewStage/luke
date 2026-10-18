@@ -32,6 +32,7 @@ import {
   messageFailureWords,
   messageWords,
   modelLabel,
+  newTaskCallIds,
   offeredModels,
   publishedUrl,
   pullRequestPillLabel,
@@ -448,6 +449,31 @@ test("the calls that move a task's agents are its starts, archives, and unarchiv
   assert.deepEqual(agentListCallIds([]), []);
 });
 
+test("the starts that made a new task are named by call id once answered, and a start on a task, a call still out, or another tool's answer names none", () => {
+  const call = (callId: string, tool: string, output?: WireRecord) => ({
+    type: `tool-${tool}`,
+    toolCallId: callId,
+    state: output === undefined ? "input-available" : "output-available",
+    input: { newTask: "Expiry" },
+    ...(output === undefined ? undefined : { output }),
+  });
+  const made = { status: "accepted", agent: { id: "agent-2" }, newTask: { id: "task-2" } };
+  const messages: CodingAgentMessage[] = [
+    {
+      id: "m1",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        call("c1", "start_agent", made),
+        call("c2", "start_agent", { status: "accepted", agent: { id: "agent-3" } }),
+        call("c3", "start_agent"),
+        call("c4", "message_agent", made),
+      ],
+    },
+  ];
+
+  assert.deepEqual(newTaskCallIds(messages), ["c1"]);
+});
+
 test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {
   const task: CodingAgentMessage = {
     id: "m-plan",
@@ -540,7 +566,7 @@ test("a message refused for a repository out of reach names the plan's remedy on
     reason: FAILURE_REASON.OTHER,
     text: messageFailureWords(CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE),
   });
-  // Giving the repository to Luke on GitHub is pressed on GitHub, not the plan, so it stands for an agent with no plan.
+  // Giving the repository to Luke on GitHub is pressed on GitHub, not the task, so it stands for an agent with no task.
   const notSelected = messageFailureNote(
     {
       failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,

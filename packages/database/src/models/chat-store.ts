@@ -16,8 +16,8 @@ import {
   chatReplySchema,
   formValueLines,
   GENERAL_CHANNEL,
+  LUKE_HANDLE,
   MEMBER_KIND,
-  PLANNER_HANDLE,
   replyWords,
 } from "@luke/features/chat-wire";
 import {
@@ -54,7 +54,7 @@ import {
   workspaceChat,
 } from "../schemas/chat.js";
 import { codingAgent } from "../schemas/coding-agent.js";
-import { task } from "../schemas/plan.js";
+import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
 import { isWorkspaceMember, taskReachableBy } from "./workspace-store.js";
 
@@ -119,11 +119,11 @@ export const CHAT_REFUSAL = {
 
 export type ChatRefusal = (typeof CHAT_REFUSAL)[keyof typeof CHAT_REFUSAL];
 
-/** Who a member stands for: a person in the workspace, a coding agent on one of its plans, or one of its plans' planner. */
+/** Who a member stands for: a person in the workspace, a coding agent on one of its tasks, or one of its tasks' Luke. */
 export type ChatMemberSubject =
   | { readonly kind: typeof MEMBER_KIND.HUMAN; readonly userId: string }
   | { readonly kind: typeof MEMBER_KIND.AGENT; readonly agentId: string }
-  | { readonly kind: typeof MEMBER_KIND.PLANNER; readonly planId: string };
+  | { readonly kind: typeof MEMBER_KIND.LUKE; readonly planId: string };
 
 /** The most messages a window's read past its cursor answers with; the rest are read from the cursor it hands back. */
 const MAX_PAST = 200;
@@ -145,7 +145,7 @@ const MAX_HANDLE_STEM_CHARS = 32;
 /** The handle a person's name spells nothing of. */
 const FALLBACK_HANDLE = "member";
 
-/** The handles no person is minted: every planner's, and the shape of an agent's. */
+/** The handles no person is minted: Luke's, and the shape of an agent's. */
 const SPOKEN_FOR = /^(luke|agent-\d+)$/u;
 
 const ChatMemberRowSchema = Schema.Struct({
@@ -233,6 +233,11 @@ export interface ChatPosted {
 export interface ChatUnread {
   readonly messages: readonly ChatMessageRow[];
   readonly more: boolean;
+}
+
+/** A member's unread as a turn is handed it: the page, whether more waits, and the place a read of it moves the cursor to. */
+export interface ChatUnreadPage extends ChatUnread {
+  readonly through: number;
 }
 
 /** Where a read of unread looks: one channel, or every channel the member may see where none is named; and a page's size. */
@@ -338,7 +343,7 @@ const SubjectKeySchema = Schema.Struct({
 const SUBJECT_COLUMN = {
   [MEMBER_KIND.HUMAN]: chatMember.userId,
   [MEMBER_KIND.AGENT]: chatMember.agentId,
-  [MEMBER_KIND.PLANNER]: chatMember.planId,
+  [MEMBER_KIND.LUKE]: chatMember.planId,
 } as const;
 
 const findMemberOfSubject = SqlSchema.findOneOption({
@@ -400,7 +405,7 @@ const findHandles = SqlSchema.findAll({
         .where(
           and(
             eq(chatMember.organizationId, key.organizationId),
-            ne(chatMember.kind, MEMBER_KIND.PLANNER),
+            ne(chatMember.kind, MEMBER_KIND.LUKE),
           ),
         ),
     ),
@@ -427,7 +432,7 @@ const findAgentWorkspace = SqlSchema.findOneOption({
 });
 
 /** A plan the account reaches, with its workspace and its name. */
-const findReachablePlan = SqlSchema.findOneOption({
+const findReachableTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
   Result: Schema.Struct({
     organizationId: Schema.String,
@@ -447,7 +452,7 @@ const findReachablePlan = SqlSchema.findOneOption({
     ),
 });
 
-const findPlanWorkspace = SqlSchema.findOneOption({
+const findTaskWorkspace = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: OrganizationKeySchema,
   execute: (planId) =>
@@ -556,7 +561,7 @@ const findChannelByName = SqlSchema.findOneOption({
     ),
 });
 
-const findPlanChannel = SqlSchema.findOneOption({
+const findTaskChannel = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: ChatChannelRowSchema,
   execute: (planId) =>
@@ -717,7 +722,7 @@ const findMemberByHandle = SqlSchema.findOneOption({
           and(
             eq(chatMember.organizationId, key.organizationId),
             eq(chatMember.handle, key.handle),
-            ne(chatMember.kind, MEMBER_KIND.PLANNER),
+            ne(chatMember.kind, MEMBER_KIND.LUKE),
           ),
         ),
     ),
@@ -740,7 +745,7 @@ const findChannelInWorkspace = SqlSchema.findOneOption({
     ),
 });
 
-const findAgentPlan = SqlSchema.findOneOption({
+const findAgentTask = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ planId: Schema.NullOr(Schema.String) }),
   execute: (agentId) =>
@@ -1103,8 +1108,8 @@ function subjectInWorkspace(
       return Effect.map(findAgentWorkspace(subject.agentId), (found) =>
         Option.exists(found, (row) => row.organizationId === organizationId),
       );
-    case MEMBER_KIND.PLANNER:
-      return Effect.map(findPlanWorkspace(subject.planId), (found) =>
+    case MEMBER_KIND.LUKE:
+      return Effect.map(findTaskWorkspace(subject.planId), (found) =>
         Option.exists(found, (row) => row.organizationId === organizationId),
       );
   }
@@ -1117,7 +1122,7 @@ function subjectId(subject: ChatMemberSubject): string {
       return subject.userId;
     case MEMBER_KIND.AGENT:
       return subject.agentId;
-    case MEMBER_KIND.PLANNER:
+    case MEMBER_KIND.LUKE:
       return subject.planId;
   }
 }
@@ -1130,7 +1135,7 @@ function mintHandle(
 ): ChatStoreEffect<string> {
   return Effect.gen(function* () {
     if (subject.kind === MEMBER_KIND.AGENT) return `agent-${ordinal}`;
-    if (subject.kind === MEMBER_KIND.PLANNER) return PLANNER_HANDLE;
+    if (subject.kind === MEMBER_KIND.LUKE) return LUKE_HANDLE;
     const account = yield* findAccountName(subject.userId);
     const held = new Set((yield* findHandles({ organizationId })).map((row) => row.handle));
     const stem = personStem(Option.match(account, { onNone: () => "", onSome: (row) => row.name }));
@@ -1209,7 +1214,7 @@ function headOf(organizationId: string): ChatStoreEffect<number> {
 }
 
 /** The plan a message's `@luke` names: its channel's plan, else its author's; none for an agent that works no plan outside a plan's channel. */
-function planOfContext(
+function taskOfContext(
   channel: ChatChannelRow,
   author: ChatMemberRow,
 ): ChatStoreEffect<Option.Option<string>> {
@@ -1218,21 +1223,21 @@ function planOfContext(
   if (author.agentId === null) return Effect.succeed(Option.none());
   // An agent that works no plan names no planner, so its `@luke` answers to no one.
   return Effect.map(
-    findAgentPlan(author.agentId),
+    findAgentTask(author.agentId),
     Option.flatMap((row) => Option.fromNullishOr(row.planId)),
   );
 }
 
-/** The member a handle names in the workspace: `luke` the plan's planner, minted where it is not yet, any other a person or agent standing under it. */
+/** The member a handle names in the workspace: `luke` the task's Luke, minted where it is not yet, any other a person or agent standing under it. */
 function namedMember(
   userId: string,
   organizationId: string,
   handle: string,
   planId: Option.Option<string>,
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
-  if (handle !== PLANNER_HANDLE) return findMemberByHandle({ organizationId, handle });
+  if (handle !== LUKE_HANDLE) return findMemberByHandle({ organizationId, handle });
   if (Option.isNone(planId)) return Effect.succeed(Option.none());
-  return ensureMember(userId, organizationId, { kind: MEMBER_KIND.PLANNER, planId: planId.value });
+  return ensureMember(userId, organizationId, { kind: MEMBER_KIND.LUKE, planId: planId.value });
 }
 
 /** The reader as a member of the workspace; nothing where the account is not in it or no such member is. */
@@ -1293,7 +1298,7 @@ export function ensureMember(
         kind: subject.kind,
         userId: subject.kind === MEMBER_KIND.HUMAN ? subject.userId : null,
         agentId: subject.kind === MEMBER_KIND.AGENT ? subject.agentId : null,
-        planId: subject.kind === MEMBER_KIND.PLANNER ? subject.planId : null,
+        planId: subject.kind === MEMBER_KIND.LUKE ? subject.planId : null,
         handle,
         ordinal,
         now,
@@ -1355,19 +1360,19 @@ export function ensureGeneral(
  * holds the name already, and `plan` where the name spells nothing; nothing
  * where the account does not reach the plan.
  */
-export function ensurePlanChannel(
+export function ensureTaskChannel(
   userId: string,
   planId: string,
 ): ChatStoreEffect<Option.Option<ChatChannelRow>> {
   return transaction(
     Effect.gen(function* () {
-      const reached = yield* findReachablePlan({ userId, planId });
+      const reached = yield* findReachableTask({ userId, planId });
       if (Option.isNone(reached)) return Option.none();
-      const standing = yield* findPlanChannel(planId);
+      const standing = yield* findTaskChannel(planId);
       if (Option.isSome(standing)) return standing;
       const { organizationId } = reached.value;
       yield* lockWorkspace(organizationId);
-      const again = yield* findPlanChannel(planId);
+      const again = yield* findTaskChannel(planId);
       if (Option.isSome(again)) return again;
       const held = new Set(
         (yield* findChannels({ organizationId })).flatMap((row) =>
@@ -1392,7 +1397,7 @@ export function ensurePlanChannel(
         archivedAt: reached.value.archivedAt,
         now,
       });
-      return yield* madeOrStanding(made, findPlanChannel(planId));
+      return yield* madeOrStanding(made, findTaskChannel(planId));
     }),
   );
 }
@@ -1488,7 +1493,7 @@ export function findOrMakeDm(
   });
 }
 
-const stampPlanChannelArchive = SqlSchema.void({
+const stampTaskChannelArchive = SqlSchema.void({
   Request: Schema.Struct({ planId: Schema.String, archivedAt: Schema.NullOr(Schema.Date) }),
   execute: ({ planId, archivedAt }) =>
     Database.use((db) =>
@@ -1505,8 +1510,8 @@ const stampPlanChannelArchive = SqlSchema.void({
  * plan's lock, so an archived plan's channel takes no post until the plan
  * returns. Nothing where the plan has no channel.
  */
-export function followPlanArchive(planId: string, archivedAt: Date | null): ChatStoreEffect<void> {
-  return stampPlanChannelArchive({ planId, archivedAt });
+export function followTaskArchive(planId: string, archivedAt: Date | null): ChatStoreEffect<void> {
+  return stampTaskChannelArchive({ planId, archivedAt });
 }
 
 /**
@@ -1528,7 +1533,7 @@ export function leave(
   });
 }
 
-/** The member a handle names in the workspace, `luke` the planner of the plan given; nothing where the account is not in it or no member answers to it. */
+/** The member a handle names in the workspace, `luke` the Luke of the task given; nothing where the account is not in it or no member answers to it. */
 export function memberNamed(
   userId: string,
   organizationId: string,
@@ -1593,7 +1598,7 @@ function placePost(
     if (!postsIn(author.value, channel.value)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
     if (channel.value.archivedAt !== null) return Result.fail(CHAT_REFUSAL.CHANNEL_ARCHIVED);
     // Mentions are resolved before the sequence is locked, because minting a planner takes the workspace's lock.
-    const planId = yield* planOfContext(channel.value, author.value);
+    const planId = yield* taskOfContext(channel.value, author.value);
     const named = yield* Effect.forEach(post.mentions, (handle) =>
       Effect.map(namedMember(userId, organizationId, handle, planId), (found) => ({
         handle,
@@ -1990,6 +1995,40 @@ export function resolveAsk(
 }
 
 /**
+ * The reader's unread page: what it may see that someone else posted or
+ * changed past its cursor in each channel, in one channel where the query
+ * names one, oldest change first, a page of between one and the bound, and
+ * the place reading it moves the cursor to, past the page, or the
+ * workspace's head where nothing more waits.
+ */
+function unreadPage(
+  reader: ChatMemberRow,
+  query: ChatUnreadQuery,
+): ChatStoreEffect<ChatUnreadPage> {
+  return Effect.gen(function* () {
+    const { channelId } = query;
+    const head = yield* headOf(reader.organizationId);
+    const page = boundedPage(query.limit ?? CHAT_BOUNDS.MAX_READ);
+    // One past the page is read, so a page that is the last says so.
+    const rows = yield* visibleMessages(
+      reader,
+      [
+        channelId === undefined ? undefined : eq(chatMessage.channelId, channelId),
+        sql`${chatMessage.touchedSeq} > ${cursorIn(reader.id, reader.readSeq, chatMessage.channelId)}`,
+        ne(chatMessage.authorMemberId, reader.id),
+      ],
+      READ_ORDER.TOUCHED,
+      page + 1,
+    );
+    const read = yield* Schema.decodeUnknownEffect(Schema.Array(ChatMessageRowSchema))(rows);
+    const more = read.length > page;
+    const messages = read.slice(0, page);
+    const through = more ? (messages.at(-1)?.touchedSeq ?? reader.readSeq) : head;
+    return { messages, more, through };
+  });
+}
+
+/**
  * What a member has not read: what it may see that someone else posted or
  * changed past its cursor in each channel, in one channel where the query
  * names one, oldest change first, a page of between one and the bound. The
@@ -2015,29 +2054,53 @@ export function unreadFor(
       if (channelId !== undefined && !(yield* seesChannel(reader.value, channelId))) {
         return Option.none();
       }
-      const head = yield* headOf(organizationId);
-      const page = boundedPage(query.limit ?? CHAT_BOUNDS.MAX_READ);
-      // One past the page is read, so a page that is the last says so.
-      const rows = yield* visibleMessages(
-        reader.value,
-        [
-          channelId === undefined ? undefined : eq(chatMessage.channelId, channelId),
-          sql`${chatMessage.touchedSeq} > ${cursorIn(readerId, reader.value.readSeq, chatMessage.channelId)}`,
-          ne(chatMessage.authorMemberId, readerId),
-        ],
-        READ_ORDER.TOUCHED,
-        page + 1,
-      );
-      const read = yield* Schema.decodeUnknownEffect(Schema.Array(ChatMessageRowSchema))(rows);
-      const more = read.length > page;
-      const messages = read.slice(0, page);
-      const to = more ? (messages.at(-1)?.touchedSeq ?? reader.value.readSeq) : head;
+      const { messages, more, through: to } = yield* unreadPage(reader.value, query);
       yield* channelId === undefined
         ? moveCursor({ readerId, organizationId, to })
         : moveChannelCursor({ readerId, organizationId, channelId, to });
       return Option.some({ messages, more });
     }),
   );
+}
+
+/**
+ * What a member has not read in every channel it may see, as `unreadFor`
+ * reads it, moving nothing: the page and the place its read would move the
+ * floor cursor to, which `readThrough` moves it to once the reader has
+ * taken the page in. Nothing where the account is not in the workspace or
+ * the member is not of it.
+ */
+export function peekUnread(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  limit: number = CHAT_BOUNDS.MAX_READ,
+): ChatStoreEffect<Option.Option<ChatUnreadPage>> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader)) return Option.none();
+    return Option.some(yield* unreadPage(reader.value, { limit }));
+  });
+}
+
+/**
+ * Moves a member's floor cursor on to the place given, never back, letting
+ * go of a notice it passes: a page `peekUnread` answered, taken in, as a
+ * read of every channel would have moved it. Answers whether the account
+ * and the member were found.
+ */
+export function readThrough(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  through: number,
+): ChatStoreEffect<boolean> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader)) return false;
+    yield* moveCursor({ readerId, organizationId, to: through });
+    return true;
+  });
 }
 
 /**
@@ -2064,6 +2127,36 @@ export function readTo(
       return true;
     }),
   );
+}
+
+/** How far a member has read each channel it read on that channel's own cursor. */
+const findChannelReads = SqlSchema.findAll({
+  Request: Schema.Struct({ memberId: Schema.String }),
+  Result: Schema.Struct({ channelId: Schema.String, readSeq: Schema.Number }),
+  execute: ({ memberId }) =>
+    Database.use((db) =>
+      db
+        .select({ channelId: chatRead.channelId, readSeq: chatRead.readSeq })
+        .from(chatRead)
+        .where(eq(chatRead.memberId, memberId)),
+    ),
+});
+
+/**
+ * How far the member has read each channel it read on that channel's own
+ * cursor; none where the account is not in the workspace or the member is
+ * not of it.
+ */
+export function channelReads(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+): ChatStoreEffect<readonly { readonly channelId: string; readonly readSeq: number }[]> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader)) return [];
+    return yield* findChannelReads({ memberId: readerId });
+  });
 }
 
 /**
@@ -2171,6 +2264,74 @@ export function chatPast(
       messages.length === MAX_PAST ? (messages.at(-1)?.touchedSeq ?? head) : Math.max(head, after);
     return Option.some({ messages, cursor });
   });
+}
+
+/**
+ * The last place the workspace's chat sequence handed out, zero before its
+ * first post: what a held read of the window looks at between reads, since
+ * every post and every change to a message, an ask's re-post, answer,
+ * withdrawal, and resolve, takes the next place. Nothing where the account
+ * is not in the workspace.
+ */
+export function chatHead(
+  userId: string,
+  organizationId: string,
+): ChatStoreEffect<Option.Option<number>> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+    return Option.some(yield* headOf(organizationId));
+  });
+}
+
+/**
+ * The message at the place given, where the reader may see it; nothing
+ * where the account is not in the workspace, the reader is not of it, or no
+ * message it sees stands there.
+ */
+export function messageAt(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  seq: number,
+): ChatStoreEffect<Option.Option<ChatMessageRow>> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader)) return Option.none();
+    const rows = yield* visibleMessages(
+      reader.value,
+      [eq(chatMessage.seq, seq)],
+      READ_ORDER.NEWEST,
+      1,
+    );
+    const messages = yield* Schema.decodeUnknownEffect(Schema.Array(ChatMessageRowSchema))(rows);
+    return Option.fromNullishOr(messages[0]);
+  });
+}
+
+/**
+ * Moves the member's cursor on to the place given, never back and never
+ * past the workspace's head, letting go of a notice it passes: what a
+ * person's window says they have read to, across every channel. Answers
+ * where the cursor then stands; nothing where the account is not in the
+ * workspace or may not act as the member.
+ */
+export function readAllTo(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  seq: number,
+): ChatStoreEffect<Option.Option<number>> {
+  return transaction(
+    Effect.gen(function* () {
+      const reader = yield* readerIn(userId, organizationId, readerId);
+      if (Option.isNone(reader) || !actsAs(userId, reader.value)) return Option.none();
+      const to = Math.min(seq, yield* headOf(organizationId));
+      yield* moveCursor({ readerId, organizationId, to });
+      // Read again, because a move landing at once may have carried the cursor further than this one.
+      const moved = yield* findMemberInWorkspace({ organizationId, memberId: readerId });
+      return Option.map(moved, (member) => member.readSeq);
+    }),
+  );
 }
 
 /** Whose asks a read lists: one author's, or one channel's. */
@@ -2608,8 +2769,8 @@ const findChannelMessages = SqlSchema.findAll({
     ),
 });
 
-/** The members a plan's move takes along: its planner, and the agents of the plan, in the workspace it leaves. */
-const findPlanMembers = SqlSchema.findAll({
+/** The members a task's move takes along: its Luke, and the agents of the task, in the workspace it leaves. */
+const findTaskMembers = SqlSchema.findAll({
   Request: Schema.Struct({ planId: Schema.String, organizationId: Schema.String }),
   Result: ChatMemberRowSchema,
   execute: ({ planId, organizationId }) =>
@@ -2750,7 +2911,7 @@ const advanceSequence = SqlSchema.void({
  */
 function memberAcross(
   member: ChatMemberRow,
-  ofPlan: boolean,
+  ofTask: boolean,
   planId: string,
   organizationId: string,
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
@@ -2767,10 +2928,10 @@ function memberAcross(
       }
       return Option.some(minted);
     }
-    const subject = !ofPlan
+    const subject = !ofTask
       ? undefined
-      : member.kind === MEMBER_KIND.PLANNER
-        ? ({ kind: MEMBER_KIND.PLANNER, planId } as const)
+      : member.kind === MEMBER_KIND.LUKE
+        ? ({ kind: MEMBER_KIND.LUKE, planId } as const)
         : member.agentId === null
           ? undefined
           : ({ kind: MEMBER_KIND.AGENT, agentId: member.agentId } as const);
@@ -2780,7 +2941,7 @@ function memberAcross(
   });
 }
 
-/** A former agent or planner minted in the workspace as having left, naming no agent or plan, for the moved messages that name it. */
+/** A former agent or Luke minted in the workspace as having left, naming no agent or task, for the moved messages that name it. */
 function mintFormer(
   organizationId: string,
   member: ChatMemberRow,
@@ -2798,7 +2959,7 @@ function mintFormer(
       userId: null,
       agentId: null,
       planId: null,
-      handle: member.kind === MEMBER_KIND.PLANNER ? PLANNER_HANDLE : `agent-${ordinal}`,
+      handle: member.kind === MEMBER_KIND.LUKE ? LUKE_HANDLE : `agent-${ordinal}`,
       ordinal,
       now,
     }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
@@ -2822,7 +2983,7 @@ function mint(organizationId: string, subject: ChatMemberSubject): ChatStoreEffe
       kind: subject.kind,
       userId: subject.kind === MEMBER_KIND.HUMAN ? subject.userId : null,
       agentId: subject.kind === MEMBER_KIND.AGENT ? subject.agentId : null,
-      planId: subject.kind === MEMBER_KIND.PLANNER ? subject.planId : null,
+      planId: subject.kind === MEMBER_KIND.LUKE ? subject.planId : null,
       handle,
       ordinal,
       now,
@@ -2858,10 +3019,10 @@ const forgetChannelReads = SqlSchema.void({
  * go of, since their places are the old sequence's. DMs, threads, and posts elsewhere stay where they were. Nothing where the
  * plan has no channel or it stands in that workspace already.
  */
-export function movePlanChat(planId: string, organizationId: string): ChatStoreEffect<void> {
+export function moveTaskChat(planId: string, organizationId: string): ChatStoreEffect<void> {
   return transaction(
     Effect.gen(function* () {
-      const channel = yield* findPlanChannel(planId);
+      const channel = yield* findTaskChannel(planId);
       if (Option.isNone(channel) || channel.value.organizationId === organizationId) return;
       const from = channel.value.organizationId;
       // Note that both workspaces are locked before both sequences, each pair in one order, because a post that mints a planner takes a workspace's lock before its sequence's, and two moves the other way at once would each wait on the other.
@@ -2876,16 +3037,16 @@ export function movePlanChat(planId: string, organizationId: string): ChatStoreE
           ...(row.answeredByMemberId === null ? [] : [row.answeredByMemberId]),
         ]),
       );
-      const ours = yield* findPlanMembers({ planId, organizationId: from });
+      const ours = yield* findTaskMembers({ planId, organizationId: from });
       const others = yield* findMembersByIds({
         ids: [...named].filter((id) => !ours.some((row) => row.id === id)),
       });
       const across = new Map<string, string>();
-      for (const [member, ofPlan] of [
+      for (const [member, ofTask] of [
         ...ours.map((row) => [row, true] as const),
         ...others.map((row) => [row, false] as const),
       ]) {
-        const moved = yield* memberAcross(member, ofPlan, planId, organizationId);
+        const moved = yield* memberAcross(member, ofTask, planId, organizationId);
         if (Option.isSome(moved)) across.set(member.id, moved.value.id);
       }
       const held = new Set(
@@ -2922,4 +3083,57 @@ export function movePlanChat(planId: string, organizationId: string): ChatStoreE
       yield* advanceSequence({ organizationId, by: 2 * messages.length });
     }),
   );
+}
+
+const findSeqsOf = SqlSchema.findAll({
+  Request: Schema.Struct({ organizationId: Schema.String, ids: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({ id: Schema.String, seq: Schema.Number }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ id: chatMessage.id, seq: chatMessage.seq })
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.organizationId, key.organizationId),
+            inArray(chatMessage.id, [...key.ids]),
+          ),
+        ),
+    ),
+});
+
+/**
+ * The places of the messages named by id in the workspace, by id: what a
+ * reader names a thread's root by, where a reply carries its root's id.
+ * Empty where the account is not in it or nothing is named.
+ */
+export function seqsOf(
+  userId: string,
+  organizationId: string,
+  ids: readonly string[],
+): ChatStoreEffect<ReadonlyMap<string, number>> {
+  return Effect.gen(function* () {
+    if (ids.length === 0 || !(yield* isWorkspaceMember(userId, organizationId))) return new Map();
+    const rows = yield* findSeqsOf({ organizationId, ids });
+    return new Map(rows.map((row) => [row.id, row.seq]));
+  });
+}
+
+/**
+ * The workspace a coding agent was started in, as its own row names it,
+ * which is what seats a planless agent; nothing where the agent names none
+ * or the account is not in it.
+ */
+export function agentWorkspace(
+  userId: string,
+  agentId: string,
+): ChatStoreEffect<Option.Option<string>> {
+  return Effect.gen(function* () {
+    const found = yield* findAgentWorkspace(agentId);
+    const organizationId = Option.flatMap(found, (row) => Option.fromNullishOr(row.organizationId));
+    if (Option.isNone(organizationId)) return Option.none();
+    return (yield* isWorkspaceMember(userId, organizationId.value))
+      ? organizationId
+      : Option.none();
+  });
 }

@@ -1,7 +1,7 @@
 # Contributing to Luke
 
-Luke is a macOS Electron app for planning features out loud with a voice agent
-that reads your code. It started as a sidecar that observes coding-agent
+Luke is a macOS Electron app for working through a task out loud with a voice
+agent that reads your code. It started as a sidecar that observes coding-agent
 sessions, and that code is still here.
 
 This page covers setup and points at the documents that own the rest.
@@ -73,7 +73,7 @@ packages/
   brand/          the design sources, the generators, and the generated art, motion tokens, and geometry
   credentials/    account sign-in: PKCE, loopback consent, the account session manager
   database/       the hosted store's Drizzle schema, queries, migrations, and test databases
-  features/       the hosted service's client side: paths, wire, clients, plans and boards, product events, feedback
+  features/       the hosted service's client side: paths, wire, clients, tasks and boards, product events, feedback
   gateway/        the one protocol between the renderer and the host, and the trace record of what crosses it
   host/           the desktop's Node kernel, reached only through the Gateway
   live/           the GPT Live protocol as Luke reads it
@@ -86,7 +86,7 @@ tools/
   anti-slop/      the repository's oxlint rules
   trace-export/   turns a recorded development trace into the unbox-ai viewer's document
 scripts/          bootstrap, check, run, evidence, and release; repository-checks.sh holds the contract checks
-docs/             design, planning, style, and workflow; proposals/ for what is not built yet
+docs/             design, tasks, style, and workflow; proposals/ for what is not built yet
 ```
 
 Application logic lives in `packages/`; an app holds only what is specific to

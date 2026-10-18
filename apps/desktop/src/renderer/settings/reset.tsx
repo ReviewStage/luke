@@ -7,7 +7,7 @@ import type {
   SettingsResetScope,
 } from "@luke/settings/wire";
 import { appSettingsView, SETTINGS_RESET_SCOPE } from "@luke/settings/wire";
-import { ResetIcon } from "@luke/ui";
+import { BUTTON_VARIANT, Button, ResetIcon } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
@@ -86,6 +86,8 @@ function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promis
  * beside it.
  * A reset that landed takes the control away with what it reset, so it is
  * said in a toast with an Undo, which writes back what the page held.
+ * The control is `@luke/ui`'s quiet `Button`, its glyph in the button's icon
+ * slot.
  */
 function ResetPageButton({
   scope,
@@ -123,15 +125,14 @@ function ResetPageButton({
           {rejection}
         </p>
       ) : null}
-      <button
-        type="button"
-        className="toolbar-button quiet-button"
+      <Button
+        variant={BUTTON_VARIANT.QUIET}
+        icon={<ResetIcon />}
         disabled={busy}
         onClick={() => run(scope)}
       >
-        <ResetIcon />
         Reset to defaults
-      </button>
+      </Button>
     </>
   );
 }

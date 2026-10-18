@@ -37,7 +37,7 @@ import {
 /**
  * The ask door: a spoken question handed to Luke's judgment, admitted before
  * eve is reached — the conversation it names stands and the caller reaches
- * it, its own or its workspace's plan's, or it is refused as not found, a
+ * it, its own or its workspace's task's, or it is refused as not found, a
  * stranger's and none at all answering alike — and then handed to the one eve session the conversation runs in,
  * or the session opened for it. eve folds asks that arrive while a turn runs
  * into the next turn and names no turn at accept time, so the ask stands on

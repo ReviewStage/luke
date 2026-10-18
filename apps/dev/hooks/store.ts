@@ -23,7 +23,7 @@ import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
  * The relay from eve's stream into the store, and the two things the
  * session's sandbox needs of the stream: every event eve records for a
  * session is read here, after eve has written it, and told to the writer as
- * the agent's own event through the relay the planning brain shares
+ * the agent's own event through the relay the brain shares
  * (`packages/service/src/agents/brain-host/relay.ts`). A session the host does not admit
  * writes nothing. Beside the relay, the hook watches the sandbox: a call of
  * a sandbox tool, or a message received with files eve staged there, is

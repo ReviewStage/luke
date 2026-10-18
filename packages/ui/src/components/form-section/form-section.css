@@ -1,0 +1,53 @@
+/* form-section.css -- a form's parts one under another, a field's gap
+   apart: its heading over what it is for, its fields, what went wrong with
+   the whole in the danger ink, and its actions ending its last line, a
+   control's gap between each. A field's own parts are its own
+   (`form-field.css`). */
+
+@layer components {
+  .luke-form-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-field-gap);
+    min-width: 0;
+    margin: 0;
+  }
+
+  .luke-form-section-head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-4);
+    min-width: 0;
+  }
+
+  .luke-form-section-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-field-gap);
+    min-width: 0;
+  }
+
+  .luke-form-section-error {
+    margin: 0;
+    color: var(--luke-color-danger-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    font-weight: var(--luke-weight-regular);
+    overflow-wrap: anywhere;
+  }
+
+  /* Empty, it keeps its place in the tree, so its live region is standing
+     when an error arrives, and gives back the gap before it. */
+  .luke-form-section-error:empty {
+    margin-top: calc(-1 * var(--luke-field-gap));
+  }
+
+  .luke-form-section-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--luke-control-gap);
+  }
+}

@@ -16,7 +16,11 @@
  * Nothing of the token, the request, or GitHub's body reaches a log line.
  */
 
-import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
+import {
+  PULL_REQUEST_WRITE_BOUNDS,
+  REVIEW_EVENT,
+  type ReviewEvent,
+} from "@luke/features/pull-request-write-wire";
 import { Data, Effect, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -171,3 +175,154 @@ export const setPullRequestDraft = /* @__PURE__ */ Effect.fn("web/setPullRequest
     Schema.Unknown,
   );
 });
+
+/** GitHub's own word for each review event, as `PullRequestReviewEvent` spells it. */
+const GRAPHQL_REVIEW_EVENT = {
+  [REVIEW_EVENT.COMMENT]: "COMMENT",
+  [REVIEW_EVENT.APPROVE]: "APPROVE",
+  [REVIEW_EVENT.REQUEST_CHANGES]: "REQUEST_CHANGES",
+} as const satisfies Record<ReviewEvent, string>;
+
+/** At most this many pending reviews are read to find the member's own; GitHub shows a member only theirs, so one is the most ever answered. */
+const PENDING_REVIEWS_READ = 10;
+
+const PENDING_REVIEW_QUERY = `query($id: ID!) {
+  node(id: $id) {
+    ... on PullRequest {
+      reviews(states: PENDING, first: ${PENDING_REVIEWS_READ}) { nodes { id viewerDidAuthor } }
+    }
+  }
+}`;
+
+const PendingReviewsSchema = Schema.Struct({
+  node: Schema.Struct({
+    reviews: Schema.Struct({
+      nodes: Schema.Array(Schema.Struct({ id: Schema.String, viewerDidAuthor: Schema.Boolean })),
+    }),
+  }),
+});
+
+const SUBMIT_PENDING_REVIEW_MUTATION = `mutation($id: ID!, $event: PullRequestReviewEvent!, $body: String) {
+  submitPullRequestReview(input: { pullRequestReviewId: $id, event: $event, body: $body }) {
+    pullRequestReview { id }
+  }
+}`;
+
+const ADD_REVIEW_MUTATION = `mutation($id: ID!, $event: PullRequestReviewEvent!, $body: String) {
+  addPullRequestReview(input: { pullRequestId: $id, event: $event, body: $body }) {
+    pullRequestReview { id }
+  }
+}`;
+
+/**
+ * A review submitted on the member's token: their own pending review,
+ * where they hold one, so the comments they started it with are what
+ * publishes, else a new review made and submitted at once. An empty body
+ * is left unsent, so a pending review keeps the words it already holds.
+ * GitHub's own rules, such as no approving one's own pull request, are its
+ * refusal in its words.
+ */
+export const submitPullRequestReview = /* @__PURE__ */ Effect.fn("web/submitPullRequestReview")(
+  function* (
+    token: Redacted.Redacted,
+    pullRequestId: string,
+    review: { readonly event: ReviewEvent; readonly body: string },
+  ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+    const pending = yield* githubWrite(
+      token,
+      PENDING_REVIEW_QUERY,
+      { id: pullRequestId },
+      PendingReviewsSchema,
+    );
+    const own = pending.node.reviews.nodes.find((node) => node.viewerDidAuthor);
+    const event = GRAPHQL_REVIEW_EVENT[review.event];
+    const body = review.body.trim() === "" ? {} : { body: review.body };
+    yield* githubWrite(
+      token,
+      own === undefined ? ADD_REVIEW_MUTATION : SUBMIT_PENDING_REVIEW_MUTATION,
+      { id: own?.id ?? pullRequestId, event, ...body },
+      Schema.Unknown,
+    );
+  },
+);
+
+const THREAD_PULL_REQUEST_QUERY = `query($id: ID!) {
+  node(id: $id) { ... on PullRequestReviewThread { pullRequest { id } } }
+}`;
+
+const ThreadPullRequestSchema = Schema.Struct({
+  node: Schema.NullOr(
+    Schema.Struct({
+      pullRequest: Schema.optionalKey(Schema.Struct({ id: Schema.String })),
+    }),
+  ),
+});
+
+/** What the member is told where the thread named is none of this pull request's, or none they can see. */
+const NOT_THIS_THREAD = "Could not resolve to a review thread on this pull request.";
+
+/**
+ * The review thread confirmed one of this pull request's, read on the
+ * member's token, so a thread of another pull request is never changed
+ * through this one's tab; a thread out of their sight is refused alike.
+ */
+const threadOnPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  threadId: string,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  const read = yield* githubWrite(
+    token,
+    THREAD_PULL_REQUEST_QUERY,
+    { id: threadId },
+    ThreadPullRequestSchema,
+  );
+  if (read.node?.pullRequest?.id !== pullRequestId) return yield* refusalOf([NOT_THIS_THREAD]);
+});
+
+const REPLY_MUTATION = `mutation($id: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $id, body: $body }) {
+    comment { id }
+  }
+}`;
+
+const RESOLVE_MUTATION = `mutation($id: ID!) {
+  resolveReviewThread(input: { threadId: $id }) { thread { isResolved } }
+}`;
+
+const UNRESOLVE_MUTATION = `mutation($id: ID!) {
+  unresolveReviewThread(input: { threadId: $id }) { thread { isResolved } }
+}`;
+
+/** A reply on one of the pull request's review threads, on the member's token, published at once. */
+export const replyToReviewThread = /* @__PURE__ */ Effect.fn("web/replyToReviewThread")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  reply: { readonly threadId: string; readonly body: string },
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* threadOnPullRequest(token, pullRequestId, reply.threadId);
+  yield* githubWrite(
+    token,
+    REPLY_MUTATION,
+    { id: reply.threadId, body: reply.body },
+    Schema.Unknown,
+  );
+});
+
+/** One of the pull request's review threads marked resolved, or opened again where `resolved` is false, on the member's token. */
+export const setReviewThreadResolved = /* @__PURE__ */ Effect.fn("web/setReviewThreadResolved")(
+  function* (
+    token: Redacted.Redacted,
+    pullRequestId: string,
+    threadId: string,
+    resolved: boolean,
+  ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+    yield* threadOnPullRequest(token, pullRequestId, threadId);
+    yield* githubWrite(
+      token,
+      resolved ? RESOLVE_MUTATION : UNRESOLVE_MUTATION,
+      { id: threadId },
+      Schema.Unknown,
+    );
+  },
+);

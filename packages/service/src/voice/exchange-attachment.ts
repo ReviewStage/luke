@@ -13,7 +13,7 @@ import { upstreamSideband } from "./live-sideband.js";
 
 /**
  * The hosted exchange as the voice service is offered it, one per signed-in
- * session: the conversation of the plan the session is bound to resolved at
+ * session: the conversation of the task the session is bound to resolved at
  * the session's start, the writer the function already holds, eve reached as the deployment for the calling account, and a notetaker
  * writing the plan as the call goes. This is the whole of what
  * `VoiceServiceOptions.exchange` takes, kept apart from the function's
@@ -21,7 +21,7 @@ import { upstreamSideband } from "./live-sideband.js";
  * (`deployment-exchange.ts`).
  *
  * One socket, one scope. The attachment builds the whole standing — the
- * plan's conversation, the exchange, and its adoption of the sideband — as
+ * task's conversation, the exchange, and its adoption of the sideband — as
  * one effect in the scope the service provides, and that scope's close is
  * the exchange's stop. A standing that could not be reached
  * fails in that scope, so the service closing it gives back everything the
@@ -32,7 +32,7 @@ interface ExchangeAttachmentDeps {
   readonly writer: StoreWriter;
   /** eve as the deployment reaches it for one account, composed by the caller so no secret enters here. */
   readonly eve: (accountId: string) => EveSessions;
-  /** The model a planning call's notetaker runs on, composed by the caller so no key enters here; nothing where the deployment has none. */
+  /** The model a task call's notetaker runs on, composed by the caller so no key enters here; nothing where the deployment has none. */
   readonly scribeModel: () => LanguageModel | undefined;
   readonly createId: () => string;
   /** Where a standing exchange's own reports go. */
@@ -46,12 +46,12 @@ class ExchangeCannotStand extends Data.TaggedError("ExchangeCannotStand")<{
 
 const EXCHANGE_CANNOT_STAND_MESSAGE = "the exchange could not stand on the session's sideband";
 
-const TASK_GONE_MESSAGE = "the plan the session is bound to no longer stands";
+const TASK_GONE_MESSAGE = "the task the session is bound to no longer stands";
 
 /**
- * The conversation a call lands in: its plan's, opened and attached now
- * where the plan has none yet, and answered under the member who opened it
- * where a teammate did. A plan deleted since the session was created, or
+ * The conversation a call lands in: its task's, opened and attached now
+ * where the task has none yet, and answered under the member who opened it
+ * where a teammate did. A task deleted since the session was created, or
  * one the account no longer reaches, has none to offer, and the session is
  * refused.
  */

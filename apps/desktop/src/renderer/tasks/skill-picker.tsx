@@ -1,3 +1,4 @@
+import { ALIGN, GAP, Stack, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import {
   holdsSlashWord,
   matchingSkills,
@@ -18,7 +19,7 @@ import { Tooltip } from "../tooltip";
 import { SkillCard } from "./skill-ref";
 
 /**
- * skill-picker.tsx -- the list a `/` in the composer opens, of the skills the plan's repository keeps, and the chips the chosen ones are drawn as.
+ * skill-picker.tsx -- the list a `/` in the composer opens, of the skills the task's repository keeps, and the chips the chosen ones are drawn as.
  *
  * The list opens the way an @-mention list does in every chat: at the
  * caret, as soon as a `/` starts a word (`skill-mention.ts`), with one row
@@ -28,7 +29,7 @@ import { SkillCard } from "./skill-ref";
  * list until the caret leaves that word; the caret stays in the box
  * throughout, so the keys the list does not take are the box's own. The
  * skills are read the first time a `/` is typed in the box, from the
- * plan's repository as the service finds them, and kept for the plan
+ * task's repository as the service finds them, and kept for the task
  * (`repository-skills.ts`), so nothing is read for a message that names
  * none. A repository that keeps none says so, and where one is added.
  *
@@ -42,10 +43,10 @@ import { SkillCard } from "./skill-ref";
  * `SKILL.md` in a File tab, as a sent message's chip does (`skill-chip.tsx`).
  */
 
-/** The skills the plan's repository keeps, as the composer reads them: the skills, or why they were not read. */
+/** The skills the task's repository keeps, as the composer reads them: the skills, or why they were not read. */
 export type SkillsRead = { readonly skills: readonly SkillOption[] } | { readonly unread: string };
 
-/** Reads the plan's repository's skills; asked the first time a `/` is typed. */
+/** Reads the task's repository's skills; asked the first time a `/` is typed. */
 export type SkillSource = () => Promise<SkillsRead>;
 
 /** What the list says where it has no row to offer. */
@@ -112,9 +113,15 @@ function MenuNote({ read }: { read: SkillsRead | undefined }): React.JSX.Element
     return <p className="task-compose-menu-note">{SKILL_MENU_NOTE.NO_MATCH}</p>;
   }
   return (
-    <div className="task-compose-menu-note skill-menu-none">
-      <span>{SKILL_MENU_NOTE.NONE}</span>
-      <span className="skill-menu-hint">{SKILL_MENU_NOTE.NONE_HINT}</span>
+    <div className="task-compose-menu-note">
+      <Stack gap={GAP.TIGHT} align={ALIGN.CENTER}>
+        <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.SUBTLE}>
+          {SKILL_MENU_NOTE.NONE}
+        </Text>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+          {SKILL_MENU_NOTE.NONE_HINT}
+        </Text>
+      </Stack>
     </div>
   );
 }
@@ -177,7 +184,7 @@ function SkillMenu({
 
 /**
  * A chosen skill in the box: its pill, which a press opens the skill's
- * `SKILL.md` from where the skill is known and the box stands on a plan's
+ * `SKILL.md` from where the skill is known and the box stands on a task's
  * page, the pointer turning to a hand over it then.
  */
 function BoxChip({
@@ -228,7 +235,7 @@ export function useSkillPicker({
   draft: string;
   /** Where the skills are read from; nothing where the box offers none. */
   source: SkillSource | undefined;
-  /** Opens a chosen skill's `SKILL.md`; nothing where the box stands on no plan's page. */
+  /** Opens a chosen skill's `SKILL.md`; nothing where the box stands on no task's page. */
   onOpen: ((skill: SkillOption) => void) | undefined;
 }): SkillPicker {
   const listId = useId();

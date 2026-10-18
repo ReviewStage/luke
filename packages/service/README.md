@@ -9,7 +9,7 @@ the voice function's edge — and reaches everything else here.
 The package has no barrel. Each module is its own subpath, as
 `@luke/database`'s are (`@luke/service/http/http-effect`), and test builders
 stand at `@luke/service/testing/<name>`. A module lives in the folder of the
-domain it belongs to (`auth/`, `github/`, `plans/`, `agents/`, `voice/`, …),
+domain it belongs to (`auth/`, `github/`, `tasks/`, `agents/`, `voice/`, …),
 named by the group of this README that describes it.
 
 `src/core.ts` is the package's own door to the workspace packages it builds on,
@@ -1018,7 +1018,7 @@ notetaker's own notes (`@luke/features/plan-template`'s `planNotesSchema`)
 into the agent's plan through the plan's one write (`plan-notes.ts`): an open
 question the agent met with the assumption it goes on under, a fact it
 corrected in the code, a decision it made. The save is journaled on the task's
-row (`plan.agent_edits`, the last fifty, the agent's id and its notes as
+row (`task.agent_edits`, the last fifty, the agent's id and its notes as
 taken) and named from the agent's row at read time, so the window's "Updated
 by" line and Luke's "recent edits by coding agents" say what the
 row says now; the developer reads them on their next call while the
@@ -1031,7 +1031,10 @@ Beside them stand
 the agent tools Luke on a call is offered too, one implementation for both
 (`src/agents/coding-agent-tools.ts`): `list_agents`, every other agent on
 any task and by any member, each with its task, narrowed to one task or its
-own where asked, archived ones marked; `message_agent`, which takes the
+own where asked, archived ones marked; `read_agent`, one agent of the
+workspace by its id, with what its branch published and a tail of its
+transcript, each entry kept longer than Luke's, who summarises his aloud,
+and as many entries as asked, to a bound; `message_agent`, which takes the
 message box's own steer path under eve's id for the call, as the deployment
 acting for the agent's starter, kept under the sending agent's name
 (`MESSAGE_SENDER.AGENT`) and opening with who sent it, and which an archived
@@ -1042,10 +1045,16 @@ it which agent started it; `archive_agent` and `unarchive_agent`, which
 archive an idle agent of the workspace, never itself or one still working,
 on the rule the Archive agent menu keeps for the agent's starter, recording
 the archiving agent and its reason on the archived agent's row
-(`archived_by`), and bring one back; `read_page`, a page shown on any task
+(`archived_by`), and bring one back; `stop_agent`, which stops the turn
+under way of an agent of the workspace, never itself or an archived one, by
+the Stop button's own path (`src/agents/coder-host/stop.ts`), the agent
+staying available and an idle one answered as idle; `read_page`, a page shown on any task
 of the workspace by its id, its HTML cut on a line to a bound, which a
-mention of a page points the agent at; and `list_tasks`, the workspace's
-open tasks. A list, a read, or a start of an agent, a list of tasks,
+mention of a page points the agent at; `list_tasks`, the workspace's
+open tasks; and `list_models`, the models and efforts the agent's starter may
+start one on and their default, read from the one source a start is checked
+against (`accountModelChoices` in `src/agents/coder-host/start.ts`), so a
+choice it lists is one `start_agent` takes. A list, a read, or a start of an agent, a list of tasks,
 `show_page`, and `read_page` answer each thing's mention ready to write, `[@name](link)` under
 the workspace's slug (`src/agents/written-mentions.ts`), and the agent's
 instructions show it the mention of every kind it names, under its own
@@ -1290,7 +1299,12 @@ the task's workspace no longer reaches, read at the start rather than when
 the task named it (`repository-not-reachable`, 403;
 `src/github/workspace-repository.ts`), snapshots the
 task's plan as the Markdown Copy puts on the clipboard
-(`@luke/features/plan-markdown`), makes the agent and its conversation
+(`@luke/features/plan-markdown`), with the Linear issue a plan was started
+from after it (`linearIssueBrief`): the issue as a mention, a branch named
+`luke/<key>-<slug>` and a `Fixes <key>` or `Part of <key>` line in the pull
+request, by which Linear's own GitHub integration links the pull request and
+moves the issue's status, and the issue's description fenced as data; then
+makes the agent and its conversation
 (`createCodingAgent`), and opens the eve session under the developer's own
 bearer with the snapshot as the first message of a typed turn. A Start
 naming a prompt (`task`), the developer's own words bounded as a message is, opens the
@@ -1750,7 +1764,7 @@ a task of a workspace the account is not in reads as an empty history and
 restores as `not-found`. `packages/features/src/task-wire.ts` declares the answers
 (`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
 
-A task's repository is `plan.repository` (migration 0063), the full name
+A task's repository is `task.repository` (migration 0063), the full name
 `owner/name` as GitHub spells it, or null for a task with none, which is
 where every task from before repositories stands and is no error. It is
 kept only once `workspaceRepository` on the `GitHubApp` confirms the
@@ -1818,9 +1832,9 @@ research reads beside it, `queue_question`
 (`src/tasks/queue-question.ts`), which runs nothing: its journaled call is
 how a question reaches the voice while the turn still runs, and the
 tools about coding agents (`src/agents/coding-agent-tools.ts`), the same
-`list_agents`, `message_agent`, `start_agent`, `archive_agent`,
-`unarchive_agent`, and `list_tasks` every coding agent is offered and
-`read_agent` beside them: a list
+`list_agents`, `read_agent`, `message_agent`, `start_agent`,
+`stop_agent`, `archive_agent`, `unarchive_agent`, `list_tasks`, and `list_models`
+every coding agent is offered: a list
 of the task's workspace's agents, on any task and by any member, with each
 agent's status, task, and what it published, narrowed to this task or
 another where asked (`src/agents/workspace-agents.ts`), one agent's recent
@@ -1908,7 +1922,7 @@ so the delegation reaches
 Luke with the plan, his tools, and the conversation so far.
 The recent words ride the delegation as context, and whether an answer
 agrees to anything is Luke's instructions' to judge. The binding is the session's for life. It is written on
-the `voice_sessions` row as a plain `plan_id`,
+the `voice_sessions` row as a plain `task_id`,
 and a re-attach reads it from there, so a later connection cannot move a
 session onto another task, and one whose row names no task is refused. The Mac holds one call at a time, which outlives
 the task on screen and moves only when another task's Talk press hangs it up
@@ -2440,7 +2454,7 @@ spoken ask's turn the moment eve tells an event rather than only on its
 250 ms poll (the poll stays, for a stream refused or dropped), and nothing
 else: any other route or kind of turn carrying the secret is refused outright
 rather than passed to the account authenticator behind it. The stream read is
-the planning channel's alone; the coder channel's deployment, which presents
+the brain's channel's alone; the coder channel's deployment, which presents
 the account, is refused it. Which account a request acts
 for is one accessor over both principal types, and the door's ownership
 checks and the host's admission read that answer, so the deployment can open

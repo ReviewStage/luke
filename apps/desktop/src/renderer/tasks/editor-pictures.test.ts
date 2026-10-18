@@ -4,17 +4,19 @@ import assert from "node:assert/strict";
 import type { Task } from "@luke/features/task-wire";
 import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
+import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
-import { installEditorBundle, installEditorLayout } from "#testing/composer";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { editorBundleLanded, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { relayout } from "#testing/resize-observer";
 import { appCommandOffered, runAppCommand } from "../app-commands";
 import { PlanBody } from "./plan-body";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 
 /**
  * editor-pictures.test.ts -- a picture laid into the plan's editor is drawn
@@ -22,8 +24,7 @@ import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
  * caption will stand, and as the kept picture once the service kept it; a
  * keep that failed says why with Retry and Remove, and Remove takes it out;
  * and Insert image is offered while the text is edited, and only then; and
- * a selected picture's tools are only their glyphs, each named, in a narrow
- * column.
+ * a selected picture's tools are each still named in a narrow column.
  * Synthetic plan and pictures.
  */
 
@@ -36,7 +37,7 @@ const PLAN: Task = {
   document: { body: "## Approach\n\nThe invite email follows the mock.\n", assumptions: [] },
 };
 
-const PAGE: PlanMentionsValue = {
+const PAGE: TaskMentionsValue = {
   taskId: TASK_ID,
   taskName: "Invitations",
   workspace: "acme",
@@ -66,21 +67,19 @@ const saved: string[] = [];
 /** The keep the host answers next: held until the test lets it go, with what it answers. */
 let keeping: { resolve: (outcome: ActOutcome) => void } | undefined;
 
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
-  installEditorBundle();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
-          return new Promise((resolve) => {
-            keeping = { resolve };
-          });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
-      recordSurfaceEvent: () => undefined,
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
+        return new Promise((resolve) => {
+          keeping = { resolve };
+        });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
 });
@@ -104,7 +103,7 @@ function drawn(node: ReactNode): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(PlanMentions, { value: PAGE, children: node })));
+  act(() => root.render(createElement(TaskMentions, { value: PAGE, children: node })));
   return container;
 }
 
@@ -297,7 +296,7 @@ function layOutColumn(container: HTMLElement, width: number): void {
   act(() => relayout());
 }
 
-test("in a column too narrow for their names, a selected picture's tools are their glyphs, each still named", async () => {
+test("in a column too narrow for their names, a selected picture's tools are each still named", async () => {
   const container = await editing();
   await pasteScreenshot(container);
   await keepAsked();
@@ -305,19 +304,6 @@ test("in a column too narrow for their names, a selected picture's tools are the
 
   const tools = selectPicture(container);
   layOutColumn(container, 280);
-
-  const buttons = [...tools.querySelectorAll("button")];
-  assert.deepEqual(
-    buttons.map((button) => button.textContent),
-    ["", "", "", ""],
-  );
-  assert.deepEqual(
-    buttons.map((button) => button.getAttribute("aria-label")),
-    ["Alt text", "Caption", "Enlarge", "Delete"],
-  );
-
-  // Given the room again, they say their names.
-  layOutColumn(container, 720);
   assert.deepEqual(
     [...tools.querySelectorAll("button")].map((button) => button.textContent),
     ["Alt text", "Caption", "Enlarge", "Delete"],

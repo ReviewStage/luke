@@ -5,7 +5,7 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -17,16 +17,26 @@ import {
 import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import type { AccountToken } from "./account-token.js";
 import {
+  CHAT_QUERY,
+  type ChatWriteRequest,
+  chatAnswerSchema,
+  chatWriteAnswerSchema,
+  chatWriteRequestSchema,
+} from "./chat-wire.js";
+import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
   type CodingAgentChangesAnswerView,
+  type CodingAgentChatAnswerView,
+  type CodingAgentChatWriteAnswerView,
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxMessagedView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -51,6 +61,7 @@ import {
   type ProviderKeysAnswerView,
 } from "./coding-agent-view.js";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_LIST_QUERY,
@@ -79,10 +90,13 @@ import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.
 import { imageBodyOf } from "./image-body.js";
 import {
   type InboxAnswerRequest,
+  type InboxMessageRequest,
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
   inboxImageTypeSchema,
+  inboxMessagedSchema,
+  inboxMessageRequestSchema,
 } from "./inbox-wire.js";
 import {
   codingAgentDefaultAnswerSchema,
@@ -125,6 +139,7 @@ import {
   HOSTED_SERVICE_PATH,
   inboxAttachmentPath,
   inboxItemPath,
+  inboxMessagesPath,
   planTemplateRestorePath,
   planTemplateRevisionPath,
   taskAgentsPath,
@@ -140,23 +155,33 @@ import {
 } from "./service-wire.js";
 
 /**
- * coding-agent-client.ts -- the window's side of a plan's coding agents, as the host asks the service for them.
+ * coding-agent-client.ts -- the window's side of a task's coding agents, as the host asks the service for them.
  *
  * Every call is the one account call, so the bearer is read fresh per
  * attempt and a 401 is renewed and retried once. Each call answers one of
  * the view's shapes rather than failing, because every caller does the same
  * thing with a failure: draws why, and offers to try again. The transcript
- * read and the two inbox reads, a plan's and the account's, are the calls
- * the service holds open, for as long as it waits on the agent's next
- * message or the inbox's next change, so they travel under a deadline of
- * their own that outlasts that hold; every other call keeps the account
- * call's usual one. The account's plan
+ * read, the two inbox reads, a task's and the account's, and the
+ * workspace's chat read are the calls the service holds open, for as long
+ * as it waits on the agent's next message or the next change, so they
+ * travel under a deadline of
+ * their own that outlasts that hold; a Start travels under a longer one
+ * still, since one from another agent copies its work first; every other
+ * call keeps the account call's usual one. The account's task
  * template is read and written here too, as Settings asks for it beside
  * the default and the keys.
  */
 
 /** How long a held read or a dictated clip may stand: the service's hold or the model's hearing, and room for the answer to travel after it. */
 const HELD_READ_TIMEOUT_MS = 35_000;
+
+/**
+ * How long a Start may stand: a Start from another agent copies its work,
+ * summarizing what does not fit, before the new agent's session opens,
+ * which can run well past the usual deadline; a Start that outlasts it is
+ * asked again under the same key and answered with the agent it made.
+ */
+const START_TIMEOUT_MS = 120_000;
 
 export interface HostedCodingAgentClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
@@ -195,7 +220,7 @@ const ARCHIVE_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_NOT_READY]: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY,
 } satisfies NamedRefusals;
 
-/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, its plan archived, and the repository the turn's checkout no longer reaches. */
+/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, its task archived, and the repository the turn's checkout no longer reaches. */
 const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
@@ -244,6 +269,14 @@ function readImage(response: Response): Effect.Effect<CodingAgentInboxAttachment
   return Effect.map(imageBodyOf(response, inboxImageTypeSchema), (image) => image ?? UNANSWERED);
 }
 
+/** The types an inbox item's attachment is served under: a block's picture's, or any a file an answer carried travelled as. */
+const inboxFileTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+
+/** An inbox attachment's bytes in base64 under its type: a picture, or a file an answer carried; unanswered under any other type. */
+function readInboxFile(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
+  return Effect.map(imageBodyOf(response, inboxFileTypeSchema), (file) => file ?? UNANSWERED);
+}
+
 /**
  * An answer read whole: the body the schema admits where the service
  * answered, a key a newer service added dropped rather than refused, the
@@ -265,16 +298,17 @@ function readAnswer<Answer, Encoded>(
 }
 
 /**
- * The window's reads and writes of a plan's coding agents: the models the
- * service offers and the account's default among them, a plan's agents,
+ * The window's reads and writes of a task's coding agents: the models the
+ * service offers and the account's default among them, a task's agents,
  * one started, one's transcript past a cursor, one messaged, one's model
- * and effort changed, one stopped, what one published, the plan's inbox
+ * and effort changed, one stopped, what one published, the task's inbox
  * of what its agents need of the developer, read past a cursor and
- * answered an item at a time, and what waits across the account's plans.
+ * answered an item at a time, and what waits across the account's tasks.
  */
 export class HostedCodingAgentClient {
   readonly #call: AccountCallEffects;
   readonly #held: AccountCallEffects;
+  readonly #start: AccountCallEffects;
 
   constructor(options: HostedCodingAgentClientOptions) {
     const credential = accountBearer(options);
@@ -287,6 +321,11 @@ export class HostedCodingAgentClient {
       baseUrl: options.serviceBaseUrl,
       credential,
       requestTimeoutMs: HELD_READ_TIMEOUT_MS,
+    });
+    this.#start = accountCall({
+      baseUrl: options.serviceBaseUrl,
+      credential,
+      requestTimeoutMs: START_TIMEOUT_MS,
     });
   }
 
@@ -458,7 +497,7 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One plan's agents with their status, in the order they were started, the archived ones among them, each flagged, where `includeArchived` asks. */
+  /** One task's agents with their status, in the order they were started, the archived ones among them, each flagged, where `includeArchived` asks. */
   list(
     taskId: string,
     includeArchived = false,
@@ -493,7 +532,7 @@ export class HostedCodingAgentClient {
   }
 
   /**
-   * Starts an agent on the plan under the request's own key, so a retry
+   * Starts an agent on the task under the request's own key, so a retry
    * carrying the same key answers the agent the first Start made; a request
    * the service would refuse by shape is refused here without traveling.
    */
@@ -504,7 +543,7 @@ export class HostedCodingAgentClient {
     const admitted = Result.getOrUndefined(codingAgentStartRequestOnWire(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return Effect.flatMap(
-      this.#call.send({
+      this.#start.send({
         method: HTTP_METHOD.POST,
         path: taskAgentsPath(taskId),
         body: JSON.stringify(admitted),
@@ -529,8 +568,8 @@ export class HostedCodingAgentClient {
   }
 
   /**
-   * One plan's planning conversation as an agent's transcript is read, or a
-   * planning worker's where the call that started it is named: past the
+   * One task's conversation as an agent's transcript is read, or a
+   * brain worker's where the call that started it is named: past the
    * cursor, held by the service while a turn or the worker runs; with no
    * cursor, its newest turns; with `before`, the turns before that one.
    */
@@ -663,7 +702,7 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One agent read whole as its own page by its id, on a plan or with none. */
+  /** One agent read whole as its own page by its id, on a task or with none. */
   agent(agentId: string): Effect.Effect<CodingAgentPageAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: agentPath(agentId) }),
@@ -721,7 +760,7 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One plan's inbox past the cursor: every item its agents posted, held by the service while nothing changed. */
+  /** One task's inbox past the cursor: every item its agents posted, held by the service while nothing changed. */
   inbox(
     taskId: string,
     after: string,
@@ -732,7 +771,7 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One agent's inbox past the cursor, an agent with no plan as much as one on a plan: every item it posted, held by the service while nothing changed. */
+  /** One agent's inbox past the cursor, an agent with no task as much as one on a task: every item it posted, held by the service while nothing changed. */
   agentInbox(
     agentId: string,
     after: string,
@@ -753,6 +792,24 @@ export class HostedCodingAgentClient {
         path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({ after })}`,
       }),
       (answer) => readAnswer(answer, accountInboxAnswerSchema, {}),
+    );
+  }
+
+  /** A workspace's chat past the cursor: what a person in it sees, held by the service while nothing moved. */
+  chat(
+    workspaceId: string,
+    after: string,
+  ): Effect.Effect<CodingAgentChatAnswerView, never, HttpClient.HttpClient> {
+    const query = new URLSearchParams({
+      [CHAT_QUERY.WORKSPACE_ID]: workspaceId,
+      [CHAT_QUERY.AFTER]: after,
+    });
+    return Effect.flatMap(
+      this.#held.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT}?${query}`,
+      }),
+      (answer) => readAnswer(answer, chatAnswerSchema, ROW_REFUSALS),
     );
   }
 
@@ -807,6 +864,29 @@ export class HostedCodingAgentClient {
   }
 
   /**
+   * Writes to a workspace's chat as the account's own member of it: a post,
+   * an answer to an ask, a resolve, or how far the person has read, under
+   * the key the window made where the write carries one, which a retry
+   * carries again; a write the service would refuse by shape is refused
+   * here without traveling.
+   */
+  chatPost(
+    workspaceId: string,
+    request: ChatWriteRequest,
+  ): Effect.Effect<CodingAgentChatWriteAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(chatWriteRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    const query = new URLSearchParams({ [CHAT_QUERY.WORKSPACE_ID]: workspaceId });
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT}?${query}`,
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, chatWriteAnswerSchema, MESSAGE_REFUSALS),
+    );
+  }
+  /**
    * One image an agent's pull request's overview names, by the address
    * GitHub's rendering spelled, fetched under the account: its bytes in
    * base64 under the type GitHub served; not found where GitHub answers no
@@ -836,7 +916,7 @@ export class HostedCodingAgentClient {
   /**
    * One image of an inbox item, fetched under the account: its bytes in
    * base64 under the media type the service kept, where the service answered
-   * with one of the types an image block may be; not found where the item or
+   * with one of the types an image block's picture or an answer's file may be; not found where the item or
    * the attachment is not the account's; unanswered for anything else,
    * another media type included, so nothing the window draws is a type it
    * did not expect.
@@ -854,7 +934,7 @@ export class HostedCodingAgentClient {
             refusedAs(unparsedWire(body), ROW_REFUSALS),
           );
         }
-        return readImage(answer.response);
+        return readInboxFile(answer.response);
       },
     );
   }
@@ -879,6 +959,28 @@ export class HostedCodingAgentClient {
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, inboxAnsweredSchema, INBOX_ANSWER_REFUSALS),
+    );
+  }
+
+  /**
+   * A message of the account's on one item's thread, open or settled: the
+   * item as it then stands, its thread with the message on it, where the
+   * service wrote it and handed it to the agent; the refusals a message to
+   * the agent answers with otherwise, since it reaches the agent as one.
+   */
+  messageInbox(
+    itemId: string,
+    request: InboxMessageRequest,
+  ): Effect.Effect<CodingAgentInboxMessagedView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(inboxMessageRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: inboxMessagesPath(itemId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, inboxMessagedSchema, INBOX_ANSWER_REFUSALS),
     );
   }
 }

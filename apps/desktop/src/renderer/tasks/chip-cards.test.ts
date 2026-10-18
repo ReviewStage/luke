@@ -9,6 +9,7 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
+import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
@@ -25,13 +26,15 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { fakeAppPlatform } from "#testing/app-platform";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
 import { TaskCard } from "../desktop/task-card";
 import { MemberDirectory } from "../member-directory";
 import { ChipCards, type TaskFocus } from "./chip-cards";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**
@@ -48,7 +51,7 @@ import { TranscriptWords } from "./transcript-blocks";
 
 const AT = 1_792_000_000_000;
 
-const PLAN_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 
 const PAGE_ID = "26494df1-595a-4364-abf7-85781c65a9f8";
 
@@ -84,7 +87,7 @@ const BETA_MEMBERS: readonly WorkspaceMember[] = [
 ];
 
 const PLAN: TaskSummary = {
-  id: PLAN_ID,
+  id: TASK_ID,
   workspaceId: ACME.id,
   name: "Teammate invitations",
   createdAt: AT,
@@ -127,7 +130,7 @@ const STATE: AppStateSnapshot = (() => {
       ...IDLE_TASKS_VIEW,
       tasks: [PLAN],
       workspaces: [ACME, BETA],
-      activeTaskId: PLAN_ID,
+      activeTaskId: TASK_ID,
       pages: [
         {
           id: PAGE_ID,
@@ -142,7 +145,7 @@ const STATE: AppStateSnapshot = (() => {
       ...snapshot.inbox,
       waiting: [
         {
-          taskId: PLAN_ID,
+          taskId: TASK_ID,
           items: [{ id: ITEM_ID, agentId: "agent-1", title: "Keep expired links?", postedAt: AT }],
         },
       ],
@@ -177,9 +180,9 @@ function answer(request: Act): ActOutcome {
 }
 
 /** The plan's card as the window's plans make it, with what a chip hangs it for. */
-const planCards = {
+const taskCards = {
   taskCard: (taskId: string, now: number, focus: TaskFocus | undefined) =>
-    taskId !== PLAN_ID
+    taskId !== TASK_ID
       ? undefined
       : createElement(TaskCard, {
           task: PLAN,
@@ -193,14 +196,14 @@ const planCards = {
 };
 
 /** The plan's page, whose words the section's heading is read from. */
-const PAGE: PlanMentionsValue = {
-  taskId: PLAN_ID,
+const PAGE: TaskMentionsValue = {
+  taskId: TASK_ID,
   taskName: PLAN.name,
   workspace: PLACE.workspace,
   repository: PLACE.repository,
   text: () => PLAN_TEXT,
   doors: {
-    taskId: PLAN_ID,
+    taskId: TASK_ID,
     place: PLACE,
     anchors: new Set(["goal", "roll-it-out"]),
     onOpenTask: () => undefined,
@@ -210,21 +213,18 @@ const PAGE: PlanMentionsValue = {
 
 /** The words drawn as a transcript draws them on the plan's page, in a window holding `STATE`. */
 async function drawn(text: string): Promise<HTMLElement> {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(STATE),
-      act: (request: Act): Promise<ActOutcome> => {
-        told.push(request);
-        return Promise.resolve(answer(request));
-      },
+  fakeAppBridge({
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(STATE),
+    act: (request: Act): Promise<ActOutcome> => {
+      told.push(request);
+      return Promise.resolve(answer(request));
     },
   });
+  fakeAppPlatform({ pageFrameUrl });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  const words: ReactNode = createElement(PlanMentions, {
+  const words: ReactNode = createElement(TaskMentions, {
     value: PAGE,
     children: createElement(TranscriptWords, { text }),
   });
@@ -235,7 +235,7 @@ async function drawn(text: string): Promise<HTMLElement> {
         createElement(MemberDirectory, {
           workspace: ACME,
           readerId: DEAN,
-          children: createElement(ChipCards, { value: planCards, children: words }),
+          children: createElement(ChipCards, { value: taskCards, children: words }),
         }),
       ),
     ),
@@ -257,14 +257,14 @@ async function cardOf(chip: Element | undefined) {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   await settle();
-  const card = [...document.querySelectorAll(".tooltip-card > *")].at(-1);
+  const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {
     card: [...card.attributes].map((attribute) => attribute.name).find((name) => name !== "class"),
-    name: card.querySelector(".card-name")?.textContent,
-    sub: card.querySelector(".card-sub")?.textContent,
-    corner: card.querySelector(".card-corner")?.textContent,
-    notes: [...card.querySelectorAll(".card-note")].map((note) => note.textContent),
+    name: card.querySelector(".luke-hover-card-name")?.textContent,
+    sub: card.querySelector(".luke-hover-card-sub")?.textContent,
+    corner: card.querySelector(".luke-hover-card-corner")?.textContent,
+    notes: [...card.querySelectorAll(".luke-hover-card-note")].map((note) => note.textContent),
     focus: card.querySelector("[data-task-card-focus]")?.textContent,
     details: [...card.querySelectorAll(".task-card-detail")].map((detail) => detail.textContent),
   };
@@ -295,29 +295,29 @@ function chipsOf(container: HTMLElement): readonly Element[] {
 test("a plan's chip hangs the plan's card, and a section's the same card's head with the heading the anchor names", async () => {
   const container = await drawn(
     [
-      mentionMarkdown({ kind: MENTION_KIND.TASK, taskId: PLAN_ID }, "the plan", PLACE),
+      mentionMarkdown({ kind: MENTION_KIND.TASK, taskId: TASK_ID }, "the plan", PLACE),
       mentionMarkdown(
-        { kind: MENTION_KIND.SECTION, taskId: PLAN_ID, anchor: "roll-it-out" },
+        { kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "roll-it-out" },
         "rollout",
         PLACE,
       ),
       mentionMarkdown(
-        { kind: MENTION_KIND.SECTION, taskId: PLAN_ID, anchor: "pricing" },
+        { kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "pricing" },
         "Pricing",
         PLACE,
       ),
-      `[v4](${HOME}/plan/${PLAN_ID}/version/4)`,
+      `[v4](${HOME}/plan/${TASK_ID}/version/4)`,
     ].join(" "),
   );
   const [plan, section, gone, version] = chipsOf(container);
 
-  const planCard = await cardOf(plan);
+  const taskCard = await cardOf(plan);
   const sectionCard = await cardOf(section);
 
-  assert.equal(planCard.card, "data-task-card");
-  assert.equal(planCard.name, PLAN.name);
-  assert.deepEqual(planCard.details, ["acme/relay"]);
-  assert.equal(planCard.focus, undefined);
+  assert.equal(taskCard.card, "data-task-card");
+  assert.equal(taskCard.name, PLAN.name);
+  assert.deepEqual(taskCard.details, ["acme/relay"]);
+  assert.equal(taskCard.focus, undefined);
   assert.equal(sectionCard.card, "data-task-card");
   assert.equal(sectionCard.name, PLAN.name);
   assert.equal(sectionCard.focus, "Roll it out");
@@ -328,11 +328,11 @@ test("a plan's chip hangs the plan's card, and a section's the same card's head 
 test("a page's chip hangs its title, its version and who showed it, and when it moved; one the window holds nothing of, or one of another plan, keeps the chip's own card", async () => {
   const container = await drawn(
     [
-      mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: PLAN_ID, pageId: PAGE_ID }, "", PLACE),
+      mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE_ID }, "", PLACE),
       mentionMarkdown(
         {
           kind: MENTION_KIND.PAGE,
-          taskId: PLAN_ID,
+          taskId: TASK_ID,
           pageId: "0b1c2d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e",
         },
         "Old draft",
@@ -400,7 +400,7 @@ test("a file's and a folder's chips hang their path, their repository, and where
 
 test("a member's chip hangs their card, and an Inbox item's its question and that it waits", async () => {
   const container = await drawn(
-    `Ask [Sam](${HOME}/person/${SAM}) about [the links](${HOME}/plan/${PLAN_ID}/inbox/${ITEM_ID}).`,
+    `Ask [Sam](${HOME}/person/${SAM}) about [the links](${HOME}/plan/${TASK_ID}/inbox/${ITEM_ID}).`,
   );
   const [person, item] = chipsOf(container);
 

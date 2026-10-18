@@ -9,10 +9,12 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { fakeAppPlatform } from "#testing/app-platform";
 import { stateWith } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 import { OpenLinkProvider } from "./use-open-link";
 
@@ -45,7 +47,7 @@ const REPLY = [
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 /** The task's page an agent's tab stands on, whose repository a file's link is read against. */
-const TASK_PAGE: PlanMentionsValue = {
+const TASK_PAGE: TaskMentionsValue = {
   taskId: TASK,
   taskName: "Teammate invitations",
   workspace: "acme",
@@ -80,7 +82,7 @@ function drawn(text: string, opened: ReadLink[]): HTMLElement {
         createElement(
           OpenLinkProvider,
           { value: (link: ReadLink) => opened.push(link) },
-          createElement(PlanMentions, {
+          createElement(TaskMentions, {
             value: TASK_PAGE,
             children: createElement(TranscriptWords, { text }),
           }),
@@ -125,13 +127,11 @@ test("a page's chip on the open plan hangs the page's tab's card, previewing its
       },
     },
   );
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(state),
-    },
+  fakeAppBridge({
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(state),
   });
+  fakeAppPlatform({ pageFrameUrl });
   const container = drawn(REPLY, []);
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -141,10 +141,10 @@ test("a page's chip on the open plan hangs the page's tab's card, previewing its
   act(() => {
     page.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = document.querySelector(".tooltip-card [data-page-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the page's tab's card is hung");
-  assert.equal(card.querySelector(".card-name")?.textContent, "Invite funnel");
-  assert.equal(card.querySelector(".card-sub")?.textContent, "Version 2");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Invite funnel");
+  assert.equal(card.querySelector(".luke-hover-card-sub")?.textContent, "Version 2");
   assert.equal(
     card.querySelector("iframe")?.getAttribute("src"),
     pageFrameUrl({ taskId: TASK, pageId: PAGE, version: 2 }),

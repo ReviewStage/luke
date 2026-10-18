@@ -1,5 +1,5 @@
 /**
- * plan-work.ts -- a planning turn's work as the service sends it, built for a test: its journal's parts as the AI SDK stores them, and the workers it started.
+ * task-work.ts -- a brain turn's work as the service sends it, built for a test: its journal's parts as the AI SDK stores them, and the workers it started.
  *
  * Each part is the shape the relay journals and the wire carries as it is
  * (`taskWorkTurnSchema`), so a test reads the Call tab the way a turn told
@@ -94,7 +94,7 @@ export function workerCall(started: TaskWorkWorker): WireRecord {
   );
 }
 
-/** A planning turn as a test builds it: the frame's shape, and what opened the turn where the test says, which the planner page carries and the frame does not. */
+/** A brain turn as a test builds it: the frame's shape, and what opened the turn where the test says, which the brain's page carries and the frame does not. */
 export interface TestTaskWorkTurn extends TaskWorkTurn {
   readonly origin?: TurnOrigin;
 }
@@ -116,14 +116,14 @@ export function workTurn(
   };
 }
 
-/** Where a worker's own session stands, as a planner page says it, by where the test's worker stands. */
+/** Where a worker's own session stands, as a brain's page says it, by where the test's worker stands. */
 const STATUS_OF_STATE = {
   [TASK_WORK_STATE.RUNNING]: CODING_AGENT_STATUS.RUNNING,
   [TASK_WORK_STATE.DONE]: CODING_AGENT_STATUS.COMPLETED,
   [TASK_WORK_STATE.FAILED]: CODING_AGENT_STATUS.FAILED,
 } as const satisfies Record<TaskWorkState, CodingAgentStatus>;
 
-/** A turn's journal as a planner page carries it: its parts, its turn, what opened it and the lines that asked for it, and its span and record; a turn that ended without answering says it stopped where it says nothing else. */
+/** A turn's journal as a brain's page carries it: its parts, its turn, what opened it and the lines that asked for it, and its span and record; a turn that ended without answering says it stopped where it says nothing else. */
 function messageOfTurn(turn: TestTaskWorkTurn): CodingAgentMessage {
   const { model, effort, tokens } = turn;
   const ending =
@@ -150,9 +150,9 @@ function messageOfTurn(turn: TestTaskWorkTurn): CodingAgentMessage {
 }
 
 /**
- * The turns as the plan's planning conversation reads them, as the window
+ * The turns as the task's conversation with the brain reads them, as the window
  * holds it (`planning.conversation`): each turn's journal one message, and
- * where each worker stands and its title beside them, as the planner's pages
+ * where each worker stands and its title beside them, as the brain's pages
  * say them; with the turn the page before is read before, where one is.
  */
 export function conversationOf(

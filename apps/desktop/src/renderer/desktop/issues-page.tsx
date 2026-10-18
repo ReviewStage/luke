@@ -1,6 +1,25 @@
-import { ISSUE_CALL_FAILURE, type IssueCallFailure } from "@luke/features/issue-view";
-import type { Issue } from "@luke/features/issue-wire";
+import {
+  ISSUE_CALL_FAILURE,
+  type IssueCallFailure,
+  type IssueView,
+} from "@luke/features/issue-view";
+import type { Issue, IssueStatus } from "@luke/features/issue-wire";
 import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  BUTTON_VARIANT,
+  Button,
+  COLLECTION_STATE,
+  CollectionPage,
+  type CollectionState,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  IconButton,
+  PAGE_FRAME,
+  PAGE_WIDTH,
+  useMenu,
+} from "@luke/ui";
 import { Schema } from "effect";
 import {
   ListIcon,
@@ -10,21 +29,19 @@ import {
   SquareKanbanIcon,
 } from "lucide-react";
 import { useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { LinkWorkspaceProvider } from "../copy-link-item";
-import { EmptyState } from "../empty-state";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
-import { READ_FAILURE_PLACE, ReadFailure } from "../read-failure";
+import { MemberDirectory } from "../member-directory";
 import { useMinute } from "../tasks/task-time";
 import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction, useActionMenu } from "./action-menu";
+import { ActionMenu, type MenuAction } from "./action-menu";
 import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail } from "./issue-detail";
-import { IssueList } from "./issue-list";
+import { IssueList, listRowIssue } from "./issue-list";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
 import { type IssueChange, useIssue, useIssues } from "./use-issues";
 import { useRowKeys } from "./use-row-keys";
@@ -37,7 +54,8 @@ import { useRowKeys } from "./use-row-keys";
  * (`EXPERIMENT.ISSUES`): every door to it is gated on the account's switch,
  * and its toolbar says so with a quiet badge and Send feedback. New issue,
  * or C pressed anywhere on the page but a field, opens a card as New task
- * does (`new-issue-dialog.tsx`), whose issue lands in its group at once.
+ * does (`new-issue-dialog.tsx`), whose issue lands in its group at once; a
+ * board column's + opens it with that column's status chosen.
  * ↑ and ↓ move through the rows from anywhere on the
  * page, and Return opens the one reached on its own page
  * (`issue-detail.tsx`), from which Escape comes back to the list with that
@@ -71,6 +89,9 @@ const storedLayout = Schema.fromJsonString(Schema.Literals(Object.values(ISSUES_
 /** What the toolbar's layout menu is called. */
 const VIEW_OPTIONS = "View options";
 
+/** What the list's page is read as while its issues are. */
+const READING_LINE = "Reading issues";
+
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The issues could not be read.";
 
@@ -81,90 +102,165 @@ const GONE_LINE = "This issue is gone, or not in this workspace.";
 /** What a change the service did not keep says. */
 const UNCHANGED_LINE = "Couldn't change the issue. Try again.";
 
+/** The new issue's card as asked for: the status it opens on, or none for the card's own. */
+interface Composing {
+  readonly status: IssueStatus | undefined;
+}
+
+/**
+ * A change's answer as the pages say it: whether it was kept, and a toast
+ * where it was not. Note that a refused archive is said by its own dialog,
+ * which stays up to say it.
+ */
+function useChangeSaid(): (asked: IssueChange, sent: Promise<IssueView>) => Promise<boolean> {
+  const toast = useToast();
+  return (asked, sent) =>
+    sent.then((answer) => {
+      if ("issue" in answer) return true;
+      if (asked.archived === undefined) {
+        toast({ words: UNCHANGED_LINE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+      }
+      return false;
+    });
+}
+
+/**
+ * Whether the keyboard is still where a change from an issue's menu left it:
+ * on that issue's card or row, or on nothing once the answer moved the card
+ * away. A card a change moved keeps the keyboard only then, so one answered
+ * after the developer went on to another control takes nothing from it.
+ */
+function keyboardLeftWith(issueId: string): boolean {
+  const at = document.activeElement;
+  if (at === null || at === document.body) return true;
+  if (!(at instanceof HTMLElement)) return false;
+  return (
+    (at.closest<HTMLElement>("[data-issue-id]")?.dataset.issueId ?? listRowIssue(at)) === issueId
+  );
+}
+
+/**
+ * What the list's page stands, by its read and its layout. Note that an
+ * empty board still stands its columns, each saying it holds none, so only
+ * the list says there are none yet; and that a board being read stands
+ * nothing, since the page's loading rows are a list's shape, not a board's.
+ */
+function listState(read: ReturnType<typeof useIssues>["read"], onBoard: boolean): CollectionState {
+  if (read === undefined) return onBoard ? COLLECTION_STATE.READY : COLLECTION_STATE.LOADING;
+  if ("failure" in read) return COLLECTION_STATE.ERROR;
+  return !onBoard && read.issues.length === 0 ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
+}
+
 /** The list's page: the listed workspace's issues by status, a new one a press away. */
 function ListPage({
+  root,
   plans,
   issues,
   focused,
   layout,
   onLayout,
+  onFocus,
   onCompose,
+  onComposeIn,
 }: {
+  /** What the arrows move through the rows of: the pages' own root. */
+  root: HTMLElement | null;
   plans: TasksControl;
   issues: ReturnType<typeof useIssues>;
+  /** The issue whose card or row takes the keyboard as it is drawn. */
   focused: string | undefined;
   layout: IssuesLayout;
   onLayout: (layout: IssuesLayout) => void;
+  /** Hands the keyboard to an issue's card or row wherever it is drawn next, or to none. */
+  onFocus: (issueId: string | undefined) => void;
   /** Opens the new issue's card; none while no workspace is listed to file one in. */
   onCompose: (() => void) | undefined;
+  /** Opens the card with a board column's status chosen; none while no workspace is listed. */
+  onComposeIn: ((status: IssueStatus) => void) | undefined;
 }): React.JSX.Element {
   const view = plans.issuesView;
   useAppCommand(APP_COMMAND.EXIT_ISSUES, view.onClose);
   const now = useMinute();
   const workspace = plans.workspace;
   const { read, reload } = issues;
-  const [root, setRoot] = useState<HTMLElement | null>(null);
   const onBoard = layout === ISSUES_LAYOUT.BOARD;
   useRowKeys(root, plans.shown && !onBoard);
   useBoardKeys(root, plans.shown && onBoard);
   const open = (issue: Issue) => view.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId: issue.id });
+  const said = useChangeSaid();
+  const change = (issue: Issue, asked: IssueChange) => {
+    const sent = said(asked, issues.change({ issueId: issue.id, change: asked }));
+    if (asked.archived !== undefined) return sent;
+    // Note that no card takes the keyboard while the change is out, so a card redrawn meanwhile takes it from nothing.
+    onFocus(undefined);
+    return sent.then((kept) => {
+      if (kept && keyboardLeftWith(issue.id)) onFocus(issue.id);
+      return kept;
+    });
+  };
   const workspaceName = workspace?.name ?? "";
+  const listed = read !== undefined && "issues" in read ? read.issues : undefined;
   return (
-    <section ref={setRoot} className="automations-view" aria-label="Issues">
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">Issues</h1>
-          <ExperimentTag />
-        </div>
-        <div className="desktop-toolbar-actions">
-          <SendFeedbackButton experiment={EXPERIMENT.ISSUES} />
-          <ViewOptions shown={plans.shown} layout={layout} onLayout={onLayout} />
-          <button
-            type="button"
-            className="toolbar-button bordered-button"
-            aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_ISSUE)}
-            disabled={onCompose === undefined}
-            onClick={onCompose}
-          >
-            <PlusIcon />
-            New issue
-          </button>
-        </div>
-      </header>
-      {/* The board scrolls sideways in its own scroller, each column scrolling its cards; a failure is said in the list's. */}
-      <div
-        className={
-          onBoard && read !== undefined && "issues" in read
-            ? "issue-board-scroll"
-            : "automations-scroll scroll-fade-top"
-        }
-      >
-        {read === undefined ? null : "failure" in read ? (
-          <ReadFailure line={UNREAD_LINE} onRetry={reload} place={READ_FAILURE_PLACE.CENTRED} />
-        ) : onBoard ? (
-          <IssueBoard
-            issues={read.issues}
+    <CollectionPage
+      frame={PAGE_FRAME.TOOLBAR}
+      // Note that the board stands its columns across the room and scrolls sideways past it, each column scrolling its own cards.
+      width={onBoard ? PAGE_WIDTH.FULL : PAGE_WIDTH.MEASURE}
+      label="Issues"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">Issues</h1>
+            <ExperimentTag />
+          </div>
+          <div className="desktop-toolbar-actions">
+            <SendFeedbackButton experiment={EXPERIMENT.ISSUES} />
+            <ViewOptions shown={plans.shown} layout={layout} onLayout={onLayout} />
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              icon={<PlusIcon />}
+              aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_ISSUE)}
+              disabled={onCompose === undefined}
+              onClick={onCompose}
+            >
+              New issue
+            </Button>
+          </div>
+        </header>
+      }
+      state={listState(read, onBoard)}
+      loadingLabel={READING_LINE}
+      empty={<EmptyState icon={<ListTodoIcon />}>No issues yet</EmptyState>}
+      error={
+        <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {UNREAD_LINE}
+        </ErrorState>
+      }
+    >
+      {listed === undefined ? null : onBoard ? (
+        <IssueBoard
+          issues={listed}
+          workspaceName={workspaceName}
+          now={now}
+          focused={focused}
+          shown={plans.shown}
+          onOpen={open}
+          onCompose={onComposeIn}
+          onChange={change}
+        />
+      ) : (
+        <div className="issue-groups">
+          <IssueList
+            issues={listed}
             workspaceName={workspaceName}
             now={now}
             focused={focused}
+            shown={plans.shown}
             onOpen={open}
+            onChange={change}
           />
-        ) : read.issues.length === 0 ? (
-          // Note that an empty board still stands its columns, each saying it holds none, so only the list says there are none yet.
-          <EmptyState icon={<ListTodoIcon />}>No issues yet</EmptyState>
-        ) : (
-          <div className="home-column issues-column">
-            <IssueList
-              issues={read.issues}
-              workspaceName={workspaceName}
-              now={now}
-              focused={focused}
-              onOpen={open}
-            />
-          </div>
-        )}
-      </div>
-    </section>
+        </div>
+      )}
+    </CollectionPage>
   );
 }
 
@@ -178,7 +274,7 @@ function ViewOptions({
   layout: IssuesLayout;
   onLayout: (layout: IssuesLayout) => void;
 }): React.JSX.Element {
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const choices: MenuAction[] = [
     {
       label: "Board",
@@ -196,9 +292,7 @@ function ViewOptions({
   return (
     <>
       <Tooltip label={VIEW_OPTIONS}>
-        <button type="button" className="icon-button" aria-label={VIEW_OPTIONS} {...menu.trigger()}>
-          <SlidersHorizontalIcon className="icon-button-glyph" />
-        </button>
+        <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
@@ -233,11 +327,9 @@ function DetailFrame({
       </header>
       <div className="automations-scroll scroll-fade-top">
         {failure === undefined ? null : (
-          <ReadFailure
-            line={failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
-            onRetry={onRetry}
-            place={READ_FAILURE_PLACE.CENTRED}
-          />
+          <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
+          </ErrorState>
         )}
       </div>
     </section>
@@ -260,22 +352,14 @@ function DetailPage({
   issues: ReturnType<typeof useIssues>;
   onBack: () => void;
 }): React.JSX.Element {
-  const toast = useToast();
+  const said = useChangeSaid();
   const { read, reload, change } = useIssue(issueId, issues.change);
   const listed =
     issues.read !== undefined && "issues" in issues.read
       ? issues.read.issues.find((each) => each.id === issueId)
       : undefined;
   const issue = read !== undefined && "issue" in read ? read.issue : listed;
-  const onChange = (asked: IssueChange) =>
-    change(asked).then((answer) => {
-      if ("issue" in answer) return true;
-      // Note that a refused archive is said by its own dialog, which stays up to say it.
-      if (asked.archived === undefined) {
-        toast({ words: UNCHANGED_LINE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
-      }
-      return false;
-    });
+  const onChange = (asked: IssueChange) => said(asked, change(asked));
   // Note that an issue of a workspace other than the one listed is no issue of this page, as a link to one is not.
   const listedElsewhere =
     issue !== undefined &&
@@ -291,12 +375,15 @@ function DetailPage({
   }
 
   return (
-    <IssueDetail
-      issue={issue}
-      workspaceName={plans.workspace?.name ?? ""}
-      onChange={onChange}
-      onBack={onBack}
-    />
+    // The workspace's members, read for the issue's creator: their picture, and You for the reader's own.
+    <MemberDirectory workspace={plans.workspace} readerId={plans.me}>
+      <IssueDetail
+        issue={issue}
+        workspaceName={plans.workspace?.name ?? ""}
+        onChange={onChange}
+        onBack={onBack}
+      />
+    </MemberDirectory>
   );
 }
 
@@ -321,12 +408,12 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
   const workspace = plans.workspace;
   const issues = useIssues(workspace?.id);
   const [cameFrom, setCameFrom] = useState<string | undefined>(undefined);
-  const [composing, setComposing] = useState(false);
+  const [composing, setComposing] = useState<Composing | undefined>(undefined);
   // Note that the layout is the page's own, so an issue opened from it goes back to it, and the board until one is first chosen.
   const [layout, setLayout] = useState<IssuesLayout>(() =>
     readKept(LAYOUT_KEY, storedLayout, ISSUES_LAYOUT.BOARD),
   );
-  const pages = useRef<HTMLDivElement>(null);
+  const [pages, setPages] = useState<HTMLDivElement | null>(null);
   const listedNow = useRef(workspace?.id);
   listedNow.current = workspace?.id;
   /**
@@ -335,14 +422,17 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
    * is a letter as well as the command: one typed in a title, the
    * description, or the card's own field is that letter and nothing more.
    */
-  const compose = () => {
+  const compose = (status?: IssueStatus) => {
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && focused !== document.body) {
-      if (!pages.current?.contains(focused) || typedInto(focused)) return;
+      if (!pages?.contains(focused) || typedInto(focused)) return;
     }
-    setComposing(true);
+    setComposing({ status });
   };
-  const onCompose = workspace === undefined || composing ? undefined : compose;
+  const onCompose =
+    workspace === undefined || composing !== undefined ? undefined : () => compose();
+  // Note that a column's + stands while the card does, which covers it, so the heads hold still under the card.
+  const onComposeIn = workspace === undefined ? undefined : compose;
   useAppCommand(APP_COMMAND.NEW_ISSUE, onCompose);
   const onCreate = (draft: IssueDraft) => {
     if (workspace === undefined) return Promise.resolve(false);
@@ -356,9 +446,10 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
     view.onOpen({ kind: ISSUES_PAGE.LIST });
   };
   return (
-    <div ref={pages} className="issues-pages">
+    <div ref={setPages} className="issues-pages">
       {place.kind === ISSUES_PAGE.LIST ? (
         <ListPage
+          root={pages}
           plans={plans}
           issues={issues}
           focused={cameFrom}
@@ -369,7 +460,9 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
             setLayout(chosen);
             writeKept(LAYOUT_KEY, storedLayout, chosen);
           }}
+          onFocus={setCameFrom}
           onCompose={onCompose}
+          onComposeIn={onComposeIn}
         />
       ) : (
         // Keyed by the issue, so another issue's page holds nothing of the last's.
@@ -384,11 +477,12 @@ function IssuesPages({ tasks: plans }: { tasks: TasksControl }): React.JSX.Eleme
       {/* Keyed by the workspace, so a title typed in one is never filed in another. */}
       <NewIssueDialog
         key={workspace?.id}
-        open={composing}
+        open={composing !== undefined}
+        status={composing?.status}
         onCreate={onCreate}
         onClose={() => {
           // Note that a card filed in a workspace no longer listed puts away no card of the one listed now.
-          if (listedNow.current === workspace?.id) setComposing(false);
+          if (listedNow.current === workspace?.id) setComposing(undefined);
         }}
       />
     </div>

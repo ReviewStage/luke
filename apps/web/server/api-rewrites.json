@@ -192,6 +192,10 @@
     "dest": "/api/default.js?route=inbox/attachment&id=$1&attachment=$2"
   },
   {
+    "src": "/api/inbox/([^/]+)/messages",
+    "dest": "/api/default.js?route=inbox/messages&id=$1"
+  },
+  {
     "src": "/api/inbox/([^/]+)",
     "dest": "/api/default.js?route=inbox/item&id=$1"
   },
@@ -284,6 +288,10 @@
     "dest": "/api/default.js?route=events"
   },
   {
+    "src": "/api/factory/world",
+    "dest": "/api/default.js?route=factory/world"
+  },
+  {
     "src": "/api/github/connect",
     "dest": "/api/default.js?route=github/connect"
   },
@@ -364,8 +372,16 @@
     "dest": "/api/default.js?route=repository-pins"
   },
   {
+    "src": "/api/task-sections",
+    "dest": "/api/default.js?route=task-sections"
+  },
+  {
     "src": "/api/workspaces",
     "dest": "/api/default.js?route=workspaces"
+  },
+  {
+    "src": "/api/workspaces/chat",
+    "dest": "/api/default.js?route=workspaces/chat"
   },
   {
     "src": "/api/workspaces/github/connect",

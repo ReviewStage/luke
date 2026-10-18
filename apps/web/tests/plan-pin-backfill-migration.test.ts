@@ -19,7 +19,7 @@ const BACKFILL = "20261015211326_plan_pin_per_account";
 
 const PINNED_AT = "2026-10-01T09:30:00.000Z";
 
-const PINNED_PLAN = "00000000-0000-4000-8000-000000000001";
+const PINNED_TASK = "00000000-0000-4000-8000-000000000001";
 
 /** A migrations folder holding every migration named before the backfill, and none after. */
 const foldersBeforeBackfill = Effect.gen(function* () {
@@ -51,28 +51,28 @@ it.effect(
           values ('dean-member', 'team', 'dean', 'owner', now()),
                  ('charles-member', 'team', 'charles', 'member', now())`;
         yield* sql`insert into plan (id, user_id, organization_id, name, document, pinned_at)
-          values (${PINNED_PLAN}, 'charles', 'team', 'Pinned', '', ${PINNED_AT}),
+          values (${PINNED_TASK}, 'charles', 'team', 'Pinned', '', ${PINNED_AT}),
                  ('00000000-0000-4000-8000-000000000002', 'dean', 'team', 'Unpinned', '', null)`;
 
         yield* runWebMigrations();
 
         const pins = yield* sql<{
           readonly user_id: string;
-          readonly plan_id: string;
+          readonly task_id: string;
           readonly pinned_at: string;
         }>`
-          select user_id, plan_id, pinned_at::text as pinned_at from plan_pin
+          select user_id, task_id, pinned_at::text as pinned_at from task_pin
         `;
         assert.deepEqual(
           pins.map((pin) => ({
             userId: pin.user_id,
-            planId: pin.plan_id,
+            planId: pin.task_id,
             pinnedAt: new Date(pin.pinned_at).toISOString(),
           })),
           [
             {
               userId: "charles",
-              planId: PINNED_PLAN,
+              planId: PINNED_TASK,
               pinnedAt: PINNED_AT,
             },
           ],

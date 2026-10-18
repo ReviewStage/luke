@@ -113,97 +113,97 @@ import { readTaskTree, treeRequestOf } from "./task-tree.js";
 import { readTaskCode, readTaskWork } from "./task-work-store.js";
 
 /**
- * tasks-app.ts -- the Mac Plans tab's named plans: list, start, open, change, and delete.
+ * tasks-app.ts -- the Mac Tasks tab's named tasks: list, start, open, change, and delete.
  *
  * Every endpoint resolves the bearer before it touches a row, and every row
- * it touches is one the bearer's account owns: a plan id another account
+ * it touches is one the bearer's account owns: a task id another account
  * owns answers exactly as one that names nothing, so nothing is learned
- * about plans the caller does not hold. The developer writes a document in
+ * about tasks the caller does not hold. The developer writes a document in
  * two ways here, each through the plan's one write (`packages/service/src/tasks/plan-notes.ts`)
  * that the notetaker and the coding agents save their notes through: `POST
  * /api/plans/{id}/edit` is their edit of the document, saved, or answered as
  * a conflict with the text as it stands now where Luke wrote it meanwhile and
  * the edit no longer lands, with nothing saved; and a restore puts back an
  * earlier revision.
- * `GET /api/tasks/{id}` is the window opening a plan, a read that moves
+ * `GET /api/plans/{id}` is the window opening a task, a read that moves
  * nothing: the list stands newest started first whatever is opened. Its
- * `DELETE` stops every coding agent of the plan first, through the one Stop
- * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes the plan. Each
- * row of the list carries what the plan's coding agents are doing and what
- * they published, in brief, where it has any (`packages/service/src/agents/plan-agents.ts`). A pin
+ * `DELETE` stops every coding agent of the task first, through the one Stop
+ * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes the task. Each
+ * row of the list carries what the task's coding agents are doing and what
+ * they published, in brief, where it has any (`packages/service/src/agents/task-agents.ts`). A pin
  * and an archive are changes like a rename, though a pin is the asking
  * member's own and reads pinned for no one else, and the list leaves the archived
- * plans out unless `archived=include` asks for them, so a build from before
+ * tasks out unless `archived=include` asks for them, so a build from before
  * archiving, which never asks, draws none of them rather than all of them.
  *
- * `/api/tasks/{id}/board` is the plan's whiteboard: the Mac reads it, with
+ * `/api/plans/{id}/board` is the task's whiteboard: the Mac reads it, with
  * Luke's latest drawing, and writes the scene back whole, the last write
- * winning (`@luke/database/models/board-store`). `/api/tasks/{id}/transcript` is what was
- * said on the plan's calls, read and never written here
- * (`@luke/database/models/transcript-store`). `/api/tasks/{id}/work` is what Luke's
- * planning model wrote and ran on them, a page at a time, and every code he
- * showed, read back from the plan's conversation
- * (`tasks/task-work-store.ts`). `/api/tasks/{id}/file` is a window of one
- * file of the plan's repository for the File tab, read from GitHub as it
+ * winning (`@luke/database/models/board-store`). `/api/plans/{id}/transcript` is what was
+ * said on the task's calls, read and never written here
+ * (`@luke/database/models/transcript-store`). `/api/plans/{id}/work` is what Luke's
+ * brain wrote and ran on them, a page at a time, and every code he
+ * showed, read back from the task's conversation
+ * (`tasks/task-work-store.ts`). `/api/plans/{id}/file` is a window of one
+ * file of the task's repository for the File tab, read from GitHub as it
  * stands now, or at the commit an inbox item's code reference pins, through
- * the App, under the rule `show_code` is held to (`packages/service/src/tasks/task-file.ts`), and `/api/tasks/{id}/tree` one folder of it for
+ * the App, under the rule `show_code` is held to (`packages/service/src/tasks/task-file.ts`), and `/api/plans/{id}/tree` one folder of it for
  * the tree beside that tab, listed where and as the file is read
- * (`packages/service/src/tasks/task-tree.ts`); `/api/tasks/{id}/skills` is the skills a
+ * (`packages/service/src/tasks/task-tree.ts`); `/api/plans/{id}/skills` is the skills a
  * developer may choose of that repository, read where and as the file is
- * (`packages/service/src/tasks/task-skills.ts`). `/api/tasks/{id}/revisions` is the plan's history
- * for the History tab, a page at a time; `/api/tasks/{id}/revisions/{seq}`
+ * (`packages/service/src/tasks/task-skills.ts`). `/api/plans/{id}/revisions` is the plan's history
+ * for the History tab, a page at a time; `/api/plans/{id}/revisions/{seq}`
  * one revision's content beside the one before it, both formatted under the
- * plan's name as it stands; and `/api/tasks/{id}/revisions/{seq}/restore`
+ * task's name as it stands; and `/api/plans/{id}/revisions/{seq}/restore`
  * puts that content back as a revision of the developer's, answered with the
- * plan (`@luke/database/models/plan-revisions`). `/api/tasks/{id}/pages`
- * is the pages agents wrote for the plan, each by its newest version, and
- * `/api/tasks/{id}/pages/{page}/versions/{version}` one version's HTML,
+ * plan (`@luke/database/models/plan-revisions`). `/api/plans/{id}/pages`
+ * is the pages agents wrote for the task, each by its newest version, and
+ * `/api/plans/{id}/pages/{page}/versions/{version}` one version's HTML,
  * answered inside JSON so no page is ever a document of this origin
  * (`@luke/database/models/plan-pages`).
  *
- * A plan may name the GitHub repository it is about, at its start or by a
- * later change, and null is a plan with none. A repository is kept only once
+ * A task may name the GitHub repository it is about, at its start or by a
+ * later change, and null is a task with none. A repository is kept only once
  * the Luke GitHub App confirms the account reaches it (`github/github-app.ts`),
  * read from GitHub on the account's own token before the row is written, so a
- * plan never names a repository its owner could not reach through the App at
+ * task never names a repository its owner could not reach through the App at
  * the moment it was named: an account that must sign in with GitHub again, and
  * a repository the App reaches no installation of for the account, are each
- * refused by name, with nothing written. A plan in the workspace of a GitHub
+ * refused by name, with nothing written. A task in the workspace of a GitHub
  * App installation may name only a repository of that installation, and a
- * plan in a workspace with nothing connected names none.
+ * task in a workspace with nothing connected names none.
  *
- * A plan starts in the workspace the request names, which the account must be
+ * A task starts in the workspace the request names, which the account must be
  * a member of, or in the account's first workspace where it names none;
- * either way the plan belongs to that workspace from then on, and its row in
+ * either way the task belongs to that workspace from then on, and its row in
  * the list names it.
  *
- * Starting a plan otherwise names nothing of the developer's Mac: the
- * planning model reads the repository in its own sandbox on the service
+ * Starting a task otherwise names nothing of the developer's Mac: the
+ * brain reads the repository in its own sandbox on the service
  * (`packages/service/src/agents/repository-shell.ts`), and no route here carries a command.
  */
 
 const TASKS_PATH = {
-  /** GET lists, the archived plans too where `archived=include` asks; POST starts. */
+  /** GET lists, the archived tasks too where `archived=include` asks; POST starts. */
   COLLECTION: "/api/plans",
   /** GET opens, PATCH changes the name, the repository, the pin, or the archive, DELETE deletes; the rewrite moves the path's id into the `id` query. */
   ONE: "/api/plans/plan",
-  /** GET reads the plan's board, PUT writes it; the rewrite moves the path's id into the `id` query. */
+  /** GET reads the task's board, PUT writes it; the rewrite moves the path's id into the `id` query. */
   BOARD: "/api/plans/board",
-  /** GET reads what was said on the plan's calls; the rewrite moves the path's id into the `id` query. */
+  /** GET reads what was said on the task's calls; the rewrite moves the path's id into the `id` query. */
   TRANSCRIPT: "/api/plans/transcript",
-  /** GET reads a page of the plan's work, before the turn `before` names where it names one, and on the newest page every code shown on it; the rewrite moves the path's id into the `id` query. */
+  /** GET reads a page of the task's work, before the turn `before` names where it names one, and on the newest page every code shown on it; the rewrite moves the path's id into the `id` query. */
   WORK: "/api/plans/work",
-  /** GET reads the plan's planning conversation as a coding agent's transcript is read: past the cursor `after` names, held while a turn or a worker runs; its newest turns where it names none; the turns before the one `before` names. The rewrite moves the path's id into the `id` query. */
+  /** GET reads the task's brain conversation as a coding agent's transcript is read: past the cursor `after` names, held while a turn or a worker runs; its newest turns where it names none; the turns before the one `before` names. The rewrite moves the path's id into the `id` query. */
   MESSAGES: "/api/plans/messages",
-  /** GET reads one planning worker's session past the cursor, held while it runs; the rewrite moves the path's id and the call that started the worker into the `id` and `call` queries. */
+  /** GET reads one brain worker's session past the cursor, held while it runs; the rewrite moves the path's id and the call that started the worker into the `id` and `call` queries. */
   SUBAGENT_MESSAGES: "/api/plans/subagent-messages",
-  /** GET reads every code Luke showed on the plan; the rewrite moves the path's id into the `id` query. */
+  /** GET reads every code Luke showed on the task; the rewrite moves the path's id into the `id` query. */
   CODE: "/api/plans/code",
-  /** GET reads a window of one file of the plan's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
+  /** GET reads a window of one file of the task's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
   FILE: "/api/plans/file",
-  /** GET lists one folder of the plan's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
+  /** GET lists one folder of the task's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
   TREE: "/api/plans/tree",
-  /** GET reads the skills a developer may choose of the plan's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
+  /** GET reads the skills a developer may choose of the task's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
   SKILLS: "/api/plans/skills",
   /** GET reads a page of the plan's history, before the revision `before` names where it names one; the rewrite moves the path's id into the `id` query. */
   REVISIONS: "/api/plans/revisions",
@@ -213,7 +213,7 @@ const TASKS_PATH = {
   RESTORE: "/api/plans/restore",
   /** POST saves the developer's edit of the document; the rewrite moves the path's id into the `id` query. */
   EDIT: "/api/plans/edit",
-  /** GET lists the plan's pages; the rewrite moves the path's id into the `id` query. */
+  /** GET lists the task's pages; the rewrite moves the path's id into the `id` query. */
   PAGES: "/api/plans/pages",
   /** GET reads one version of one page; the rewrite moves the path's ids and number into the `id`, `page`, and `version` queries. */
   PAGE: "/api/plans/page",
@@ -233,7 +233,7 @@ const HTTP_METHOD = {
 
 const TASK_ID_QUERY = "id";
 
-/** The query naming the turn an older page of a plan's work is read before, and the revision an older page of its history is. */
+/** The query naming the turn an older page of a task's work is read before, and the revision an older page of its history is. */
 const BEFORE_TURN_QUERY = "before";
 
 /** The queries of a transcript read: the cursor it reads past, and the call that started the worker whose session it is. */
@@ -294,7 +294,7 @@ export interface TasksAppSeams extends EveReach {
   workspaces: WorkspaceSeams;
 }
 
-/** What the routes may require of the function that stands them: the store, GitHub through the App for a repository's check, and the model catalog a planning worker's transcript prices its turns at. */
+/** What the routes may require of the function that stands them: the store, GitHub through the App for a repository's check, and the model catalog a brain worker's transcript prices its turns at. */
 export type TasksAppServices =
   | DatabaseServices
   | GitHubApp
@@ -354,7 +354,7 @@ const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   return reached.fullName;
 });
 
-/** The account's plan, or not found for a plan it does not reach. */
+/** The account's task, or not found for a task it does not reach. */
 const reachedTask = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   taskId: string,
@@ -364,15 +364,15 @@ const reachedTask = /* @__PURE__ */ Effect.fnUntraced(function* (
   return opened.value;
 });
 
-/** A move the workspace's GitHub refused under the plan's lock, carried out of the store's change as the route's refusal. */
+/** A move the workspace's GitHub refused under the task's lock, carried out of the store's change as the route's refusal. */
 class MoveRefused extends Data.TaggedError("MoveRefused")<{ readonly refusal: HostedRefusal }> {}
 
 /**
- * The workspace a plan moves to, confirmed: the plan is the account's own,
- * since a teammate's plan moved out of a shared workspace would leave the
+ * The workspace a task moves to, confirmed: the task is the account's own,
+ * since a teammate's task moved out of a shared workspace would leave the
  * teammates who wrote it behind, and the account is a member of the
  * workspace, which answers as none where it is not. That the workspace's
- * GitHub reaches the plan's repository is confirmed under the plan's lock
+ * GitHub reaches the task's repository is confirmed under the task's lock
  * (`movedRepositoryReached`), so a move never strands one.
  */
 const movedToWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -386,7 +386,7 @@ const movedToWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
   return workspaceId;
 });
 
-/** The move's guard: the workspace's GitHub reaches the repository the plan names under its lock, where it names one. */
+/** The move's guard: the workspace's GitHub reaches the repository the task names under its lock, where it names one. */
 const movedRepositoryReached =
   (workspaceId: string) =>
   (
@@ -404,7 +404,7 @@ const movedRepositoryReached =
  * account is a member of it, or the account's first workspace, made the
  * first time it is needed, where it named none. A workspace the account is
  * not in answers as one that names nothing. The plugin refusing to make the
- * first workspace is the service unable to start the plan, written down
+ * first workspace is the service unable to start the task, written down
  * without the plugin's message, which may quote what it refused.
  */
 const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -442,10 +442,10 @@ const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
 const startingLinearIssue = (organizationId: string, issueId: string) =>
   linearOrRefused(
     throughWorkspaceLinear(organizationId, (token) => linearIssue(token, issueId)),
-    "Linear gave no issue to start a plan from",
+    "Linear gave no issue to start a task from",
   );
 
-/** Whether a list read asks for the archived plans too; a build from before archiving never does. */
+/** Whether a list read asks for the archived tasks too; a build from before archiving never does. */
 function listsArchived(request: Request): boolean {
   const asked = new URL(request.url).searchParams.get(TASK_LIST_QUERY.ARCHIVED);
   return asked === TASK_LIST_ARCHIVED.INCLUDE;
@@ -500,11 +500,11 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
 });
 
 /**
- * PATCH: the plan's name, its repository, its pin, its archive, its
+ * PATCH: the task's name, its repository, its pin, its archive, its
  * workspace, or any of them changed, answered with its document. A
  * repository and a move are confirmed before the row is touched, so a
  * refused one leaves the rest unchanged too; a repository named beside a
- * move is confirmed in the workspace the plan moves to, and a move confirms
+ * move is confirmed in the workspace the task moves to, and a move confirms
  * the repository the row names under its lock, so one changed meanwhile is
  * the one confirmed.
  */
@@ -556,12 +556,12 @@ const ONE_TASK_METHODS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * DELETE: every coding agent of the plan stopped for good first, as a Stop
- * and an archive stop one, so none works on for a plan that is gone; then
- * the plan's eve sessions and its agents' retired (`retire-sessions.ts`);
- * then the plan. An eve that refuses a Stop, an agent with a turn still coming
+ * DELETE: every coding agent of the task stopped for good first, as a Stop
+ * and an archive stop one, so none works on for a task that is gone; then
+ * the task's eve sessions and its agents' retired (`retire-sessions.ts`);
+ * then the task. An eve that refuses a Stop, an agent with a turn still coming
  * that no Stop can name yet, or an agent started while the others were
- * stopped, leaves the plan standing and refused.
+ * stopped, leaves the task standing and refused.
  */
 const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: TasksAppSeams,
@@ -580,7 +580,7 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const deleted = yield* hostedStoreOrUnavailable(
     deleteTask(userId, taskId, {
       stoppedAgentIds: stopped,
-      // Note that the sessions are retired under the plan's lock and before its conversations are
+      // Note that the sessions are retired under the task's lock and before its conversations are
       // cleared: eve's door admits no one to a cleared conversation's session, and a delete an
       // agent started meanwhile refuses retires nothing.
       beforeDelete: (conversationIds) =>
@@ -595,7 +595,7 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
 });
 
-/** GET opens one plan with its saved document; PATCH changes it; DELETE deletes it. */
+/** GET opens one task with its saved document; PATCH changes it; DELETE deletes it. */
 const oneEndpoint = /* @__PURE__ */ Effect.fn("web/taskEndpoint")(function* (
   seams: TasksAppSeams,
   writer: Effect.Effect<StoreWriter>,
@@ -618,7 +618,7 @@ const oneEndpoint = /* @__PURE__ */ Effect.fn("web/taskEndpoint")(function* (
   return yield* deleteEndpoint(seams, writer, request, userId, taskId);
 });
 
-/** GET reads the plan's board; PUT writes the Mac's scene whole. */
+/** GET reads the task's board; PUT writes the Mac's scene whole. */
 const boardEndpoint = /* @__PURE__ */ Effect.fn("web/taskBoardEndpoint")(function* (
   seams: TasksAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -650,7 +650,7 @@ const boardEndpoint = /* @__PURE__ */ Effect.fn("web/taskBoardEndpoint")(functio
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { board: written.value });
 });
 
-/** GET reads what was said on the plan's calls. */
+/** GET reads what was said on the task's calls. */
 const transcriptEndpoint = /* @__PURE__ */ Effect.fn("web/taskTranscriptEndpoint")(function* (
   seams: TasksAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -684,7 +684,7 @@ const beforeTurnOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read.success;
 });
 
-/** GET reads a page of the plan's work, and on the newest page every code shown on it. */
+/** GET reads a page of the task's work, and on the newest page every code shown on it. */
 const workEndpoint = /* @__PURE__ */ Effect.fn("web/taskWorkEndpoint")(function* (
   seams: TasksAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -715,7 +715,7 @@ const cursorQueryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read.success;
 });
 
-/** A page of a transcript as the wire answers it, the agent transcript's own shape, every field the page holds carried as it is; a planning conversation is named by its plan, so it carries no title. */
+/** A page of a transcript as the wire answers it, the agent transcript's own shape, every field the page holds carried as it is; a brain conversation is named by its task, so it carries no title. */
 function transcriptAnswer(
   page: BrainPage | TranscriptPage,
   title: string | null,
@@ -728,10 +728,10 @@ function transcriptAnswer(
 }
 
 /**
- * GET reads the plan's planning conversation as a coding agent's transcript
+ * GET reads the task's brain conversation as a coding agent's transcript
  * is read: past the cursor, held while a turn or a worker runs; with no
  * cursor, its newest turns, or with `before` the turns queued before that
- * one. A plan never planned on reads as an empty conversation.
+ * one. A task never planned on reads as an empty conversation.
  */
 const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskMessagesEndpoint")(function* (
   seams: TasksAppSeams,
@@ -767,9 +767,9 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskMessagesEndpoint")(f
 });
 
 /**
- * GET reads one planning worker's session past the cursor, as an agent's
+ * GET reads one brain worker's session past the cursor, as an agent's
  * worker's is read and on the same answer: the child conversation of the
- * plan's conversation under the call that started the worker, held while it
+ * task's conversation under the call that started the worker, held while it
  * runs, with its title once one landed. A worker whose session has written
  * nothing yet reads as starting, held for, so a tab opened the moment its
  * call was made keeps reading.
@@ -825,7 +825,7 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskSubagentMess
   },
 );
 
-/** GET reads every code Luke showed on the plan, oldest first. */
+/** GET reads every code Luke showed on the task, oldest first. */
 const codeEndpoint = /* @__PURE__ */ Effect.fn("web/taskCodeEndpoint")(function* (
   seams: TasksAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -868,7 +868,7 @@ const fileRequestOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return read.success;
 });
 
-/** GET reads a window of one file of the plan's repository, or why it is not shown. */
+/** GET reads a window of one file of the task's repository, or why it is not shown. */
 const fileEndpoint = /* @__PURE__ */ Effect.fn("web/taskFileEndpoint")(function* (
   seams: TasksAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -885,7 +885,7 @@ const fileEndpoint = /* @__PURE__ */ Effect.fn("web/taskFileEndpoint")(function*
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, file.value);
 });
 
-/** GET lists one folder of the plan's repository, or why it is not listed. */
+/** GET lists one folder of the task's repository, or why it is not listed. */
 const treeEndpoint = /* @__PURE__ */ Effect.fn("web/taskTreeEndpoint")(function* (
   seams: TasksAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -902,7 +902,7 @@ const treeEndpoint = /* @__PURE__ */ Effect.fn("web/taskTreeEndpoint")(function*
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, tree.value);
 });
 
-/** GET reads the skills a developer may choose of the plan's repository, or why they are not read. */
+/** GET reads the skills a developer may choose of the task's repository, or why they are not read. */
 const skillsEndpoint = /* @__PURE__ */ Effect.fn("web/taskSkillsEndpoint")(function* (
   seams: TasksAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -947,8 +947,8 @@ const namedRevisionOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * GET reads a page of the plan's history, the newest first. A plan with no
- * history yet answers an empty page, and so does a plan id the account does
+ * GET reads a page of the plan's history, the newest first. A task with no
+ * history yet answers an empty page, and so does a task id the account does
  * not own, as `readTranscript` answers neither apart.
  */
 const revisionsEndpoint = /* @__PURE__ */ Effect.fn("web/planRevisionsEndpoint")(function* (
@@ -994,7 +994,7 @@ const RESTORE_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, Host
 /**
  * POST puts one revision's content back as the plan's, a revision of the
  * developer's naming it, and answers the plan as it now stands. It names
- * nothing in a body: the plan and the revision are the path's.
+ * nothing in a body: the task and the revision are the path's.
  */
 const restoreEndpoint = /* @__PURE__ */ Effect.fn("web/taskRestoreEndpoint")(function* (
   seams: TasksAppSeams,
@@ -1021,10 +1021,10 @@ const EDIT_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedR
 ]);
 
 /**
- * POST saves the developer's edit of the plan's document: answered with the
+ * POST saves the developer's edit of the task's document: answered with the
  * plan as saved, with the text as it now stands where the edit conflicts with it,
  * or as refused where the plan would be longer than a plan may be. An
- * archived plan is refused outright, as no plan is, since a desktop that
+ * archived task is refused outright, as no task is, since a desktop that
  * knows archiving draws no editor on one.
  */
 const editEndpoint = /* @__PURE__ */ Effect.fn("web/planEditEndpoint")(function* (
@@ -1054,7 +1054,7 @@ const editEndpoint = /* @__PURE__ */ Effect.fn("web/planEditEndpoint")(function*
   }
 });
 
-/** GET lists the plan's pages, the most recently written first; a plan id the account does not own answers none, as the history does. */
+/** GET lists the task's pages, the most recently written first; a task id the account does not own answers none, as the history does. */
 const pagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskPagesEndpoint")(function* (
   seams: TasksAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -1159,7 +1159,7 @@ const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/planAttachmentEndpoint
   });
 });
 
-/** The group: the plan paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the task paths, and the hosted vocabulary's own refusal for any other. */
 export function tasksApp(seams: TasksAppSeams): WebRoutes<TasksAppServices> {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   return Layer.mergeAll(

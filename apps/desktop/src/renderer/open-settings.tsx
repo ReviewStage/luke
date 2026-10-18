@@ -5,7 +5,7 @@ import { createContext, useContext } from "react";
  * open-settings.tsx -- Open Settings from anywhere in the window: the way the window opens Settings at a place, and what its press is called.
  *
  * The window's one opener (`App`'s, over `settings-link.ts`) is handed down
- * on a context, so a note deep in a plan's page opens Settings at the place
+ * on a context, so a note deep in a task's page opens Settings at the place
  * that mends it without every surface between threading it on. Outside the
  * window, as in a test of one surface, the opener does nothing.
  */

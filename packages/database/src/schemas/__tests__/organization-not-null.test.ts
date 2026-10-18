@@ -15,13 +15,18 @@ import { Database } from "../../core/query.js";
 import { createAutomation } from "../../models/automation-store.js";
 import { createCodingAgent } from "../../models/coding-agent-store.js";
 import { createTask } from "../../models/task-store.js";
-import { getTestDB } from "../../testing/index.js";
+import {
+  getTestDB,
+  migrationStatements,
+  RENAME_PLAN_TO_TASK,
+  undoneRename,
+} from "../../testing/index.js";
 import { member, organization, user } from "../auth.js";
 
 /**
  * The contract step's migration over a database from before it: rows the
  * expand step's backfill had not reached, an automation and an agent with
- * no workspace, take their plan's, and the column then refuses a null.
+ * no workspace, take their task's, and the column then refuses a null.
  * The constraint is dropped first so the database stands as one from before
  * the migration, and the migration's own statements are run over it.
  * Synthetic accounts and rows throughout.
@@ -39,7 +44,7 @@ const statements = Effect.promise(async () =>
     .filter((statement) => statement.length > 0),
 );
 
-/** A plan in a workspace the account owns, and the workspace. */
+/** A task in a workspace the account owns, and the workspace. */
 const openTask = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
@@ -96,7 +101,11 @@ it.layer(getTestDB())("the contract step's organization migration", (it) => {
         yield* sql`UPDATE automation SET organization_id = NULL WHERE id = ${made.id}`;
         yield* sql`UPDATE coding_agent SET organization_id = NULL WHERE id = ${started.agent.id}`;
 
+        // Note that the migration names the plan's row by the names it held then, so the later rename is walked back around it.
+        const renames = yield* migrationStatements(RENAME_PLAN_TO_TASK);
+        for (const statement of [...renames].reverse()) yield* sql.unsafe(undoneRename(statement));
         for (const statement of yield* statements) yield* sql.unsafe(statement);
+        for (const statement of renames) yield* sql.unsafe(statement);
 
         const [automationRow] = yield* sql<{ readonly organization_id: string | null }>`
           SELECT organization_id FROM automation WHERE id = ${made.id}

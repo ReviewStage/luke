@@ -1,13 +1,17 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  type ErrorStatePlacement,
+  RetryRowLabel,
+} from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { useFindOpen } from "../find-in-tab";
-import { READ_FAILURE_PLACE, ReadFailure, type ReadFailurePlace } from "../read-failure";
-import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, SpinnerRegion } from "../spinner";
 import { CodeLineRows, centreWithin } from "./code-pane";
 import { type FileNotes, notesBefore } from "./file-note";
@@ -25,11 +29,11 @@ import {
   withWindow,
 } from "./file-tab-model";
 import { useFileViewSettings } from "./file-view-settings";
-import { useMentionDrop, usePlanMentions } from "./plan-mentions";
+import { useMentionDrop, useTaskMentions } from "./task-mentions";
 import type { OpenFile } from "./use-side-panel";
 
 /**
- * file-tab.tsx -- a File tab: one whole file of the open plan's repository, opened from a snippet Luke showed, its lines lit and scrolled into view.
+ * file-tab.tsx -- a File tab: one whole file of the open task's repository, opened from a snippet Luke showed, its lines lit and scrolled into view.
  *
  * The Code tab's cards hold the lines a snippet pointed at and a few around
  * them; opening a card's file draws the file whole here, numbered and
@@ -46,7 +50,7 @@ import type { OpenFile } from "./use-side-panel";
  * before its commit was recorded is read: a file changed since is drawn as
  * it is now, the snippet's lines lit where they fall, and a file gone, or
  * one the service refuses, says so in the file's place, over the lines Luke
- * showed of it where the plan holds them. Over the first line of each
+ * showed of it where the task holds them. Over the first line of each
  * range Luke showed with a note stands his note on it (`file-note.tsx`),
  * on the file and on those lines alike. The tab draws no heading of its
  * own: the File view's bar over it names the file and offers what is done
@@ -230,14 +234,18 @@ function ReadNotice({
   /** The commit the file was read at, where one pinned it. */
   commit: string | undefined;
   onRetry: () => void;
-  place: ReadFailurePlace;
+  place: ErrorStatePlacement;
 }): React.JSX.Element {
   if (read.kind === FILE_READ.FAILED || refusalPasses(read.refusal)) {
     const line =
       read.kind === FILE_READ.FAILED
         ? "The file could not be read."
         : refusalLine(read.refusal, read.branch, commit);
-    return <ReadFailure line={line} onRetry={onRetry} place={place} />;
+    return (
+      <ErrorState onRetry={onRetry} placement={place}>
+        {line}
+      </ErrorState>
+    );
   }
   return (
     <p className="m-0" role="alert">
@@ -299,7 +307,7 @@ export function FileTab({
 }): React.JSX.Element {
   const [read, setRead] = useState<FileRead>({ kind: FILE_READ.READING });
   const tab = useRef<HTMLElement>(null);
-  const page = usePlanMentions();
+  const page = useTaskMentions();
   const drop = useMentionDrop();
   const held = useRef<FileRead>(read);
   held.current = read;
@@ -419,7 +427,7 @@ export function FileTab({
             read={read}
             commit={file.commit}
             onRetry={readLit}
-            place={READ_FAILURE_PLACE.CENTRED}
+            place={ERROR_STATE_PLACEMENT.CENTRED}
           />
         </div>
       ) : (
@@ -429,7 +437,7 @@ export function FileTab({
               read={read}
               commit={file.commit}
               onRetry={readLit}
-              place={READ_FAILURE_PLACE.INLINE}
+              place={ERROR_STATE_PLACEMENT.INLINE}
             />
           </div>
           <p className="file-tab-snippet-label">{SNIPPET_LABEL}</p>

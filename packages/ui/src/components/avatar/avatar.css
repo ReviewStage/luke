@@ -1,0 +1,107 @@
+/* avatar.css -- a person's disc: one box per size, the picture filling it
+   once loaded, their letter on one of the six identity hues until then, or
+   the figure on a quiet tile. */
+
+@layer components {
+  .luke-avatar {
+    --luke-avatar-size: 20px;
+    position: relative;
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: var(--luke-avatar-size);
+    height: var(--luke-avatar-size);
+    overflow: hidden;
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-fill-strong);
+    color: var(--luke-color-text-muted);
+    font-family: var(--luke-font-sans);
+    font-size: calc(var(--luke-avatar-size) * 0.5);
+    font-weight: var(--luke-weight-semibold);
+    line-height: 1;
+    vertical-align: middle;
+    user-select: none;
+  }
+
+  /* A picture keeps its edge on a ground of its own colour. */
+  .luke-avatar::after {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 0.5px var(--luke-color-border-strong);
+    content: "";
+    pointer-events: none;
+  }
+
+  .luke-avatar[data-size="mark"] {
+    --luke-avatar-size: 14px;
+  }
+
+  .luke-avatar[data-size="inline"] {
+    --luke-avatar-size: 16px;
+  }
+
+  .luke-avatar[data-size="stack"] {
+    --luke-avatar-size: 18px;
+  }
+
+  .luke-avatar[data-size="account"] {
+    --luke-avatar-size: 26px;
+  }
+
+  .luke-avatar[data-size="card"] {
+    --luke-avatar-size: 32px;
+  }
+
+  .luke-avatar[data-size="page"] {
+    --luke-avatar-size: 48px;
+  }
+
+  .luke-avatar > svg {
+    width: calc(var(--luke-avatar-size) * 0.62);
+    height: calc(var(--luke-avatar-size) * 0.62);
+  }
+
+  /* Note that the picture is hidden rather than absent until it has loaded,
+     because the letter must stand while it loads and where it fails, and
+     the picture must not paint a broken frame over it. */
+  .luke-avatar-picture {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .luke-avatar-picture[data-loaded="false"] {
+    visibility: hidden;
+  }
+
+  .luke-avatar[data-hue] {
+    color: var(--luke-color-on-identity);
+  }
+
+  .luke-avatar[data-hue="1"] {
+    background: var(--luke-color-identity-1);
+  }
+
+  .luke-avatar[data-hue="2"] {
+    background: var(--luke-color-identity-2);
+  }
+
+  .luke-avatar[data-hue="3"] {
+    background: var(--luke-color-identity-3);
+  }
+
+  .luke-avatar[data-hue="4"] {
+    background: var(--luke-color-identity-4);
+  }
+
+  .luke-avatar[data-hue="5"] {
+    background: var(--luke-color-identity-5);
+  }
+
+  .luke-avatar[data-hue="6"] {
+    background: var(--luke-color-identity-6);
+  }
+}

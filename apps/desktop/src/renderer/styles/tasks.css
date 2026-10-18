@@ -1,9 +1,10 @@
-/* The whiteboard fills the page between the header and the microphone row;
-   Excalidraw draws to the size of the box it is given, so the canvas's box
-   is the page's own. Note that the board isolates its own stacking, because
-   Excalidraw raises its toolbar, hints, and menus by z-index: unisolated they
-   rose through the side panel's tab strip and over the "+" menu dropped from
-   it, while isolated they still layer among themselves as Excalidraw says. */
+/* The whiteboard fills the tab edge to edge, between the header and the
+   microphone row: the panel is its frame. Excalidraw draws to the size of
+   the box it is given, so the canvas's box is the tab's own. Note that the
+   board isolates its own stacking, because Excalidraw raises its toolbar,
+   hints, and menus by z-index: unisolated they rose through the side panel's
+   tab strip and over the "+" menu dropped from it, while isolated they still
+   layer among themselves as Excalidraw says. */
 .task-board {
   position: relative;
   isolation: isolate;
@@ -11,17 +12,8 @@
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  justify-content: center;
-  margin-top: 10px;
   overflow: hidden;
-  border-radius: 10px;
-  background: var(--raised);
-  color: var(--text-secondary);
-}
-
-.task-board > p {
-  margin: 0;
-  text-align: center;
+  color: var(--luke-color-text-muted);
 }
 
 .task-board-canvas {
@@ -65,7 +57,7 @@
   --accent: var(--voice-luke);
   flex: 1;
   min-height: 0;
-  padding: 10px 2px 12px;
+  padding: var(--luke-space-12) var(--luke-space-2) var(--luke-space-12);
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-user-select: text;
@@ -73,7 +65,7 @@
 }
 
 .plan-body {
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
   line-height: 1.5;
 }
 
@@ -126,7 +118,7 @@
   box-sizing: border-box;
   width: 9px;
   height: 9px;
-  margin-left: 6px;
+  margin-left: var(--luke-space-6);
   border: 1.5px solid color-mix(in srgb, var(--accent) 25%, transparent);
   border-top-color: var(--accent);
   border-radius: 50%;
@@ -148,27 +140,8 @@
   position: absolute;
   z-index: -1;
   inset: -2px;
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: color-mix(in srgb, var(--accent) 18%, transparent);
-  animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
-  content: "";
-  pointer-events: none;
-}
-
-/* A run a link named in an automation's runs (automation-runs-panel.tsx):
-   lit once, as a fresh edit of the plan is, and marked current. Note that it
-   names Luke's own ink, because no `--accent` is set above an automation. */
-[data-run-linked] {
-  position: relative;
-  isolation: isolate;
-}
-
-[data-run-linked]::before {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
   animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
   content: "";
   pointer-events: none;
@@ -185,7 +158,7 @@
   position: absolute;
   z-index: -1;
   inset: -4px;
-  border-radius: 8px;
+  border-radius: var(--luke-radius-8);
   background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
   animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
   content: "";
@@ -210,9 +183,10 @@
 
 /* Who last edited the plan, over the document in the muted meta weight. */
 .plan-edit-note {
-  margin: 0 0 12px;
-  font-size: 12px;
-  color: var(--text-secondary);
+  margin: 0 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* Who last changed a section, and when: the writer's face and a few
@@ -220,19 +194,24 @@
    keyboard is on the section. It fades on opacity alone, so nothing moves.
    `--plan-byline-room` holds a face and the widest of those letters, a date
    such as "Sep 30"; `--plan-unit-row-room` is what the row takes of the
-   column with its ⋯, which hangs `--space-6` past the column's edge. */
+   column with its ⋯, which hangs `--luke-space-6` past the column's edge. */
 .plan-body {
   --plan-byline-room: 64px;
   --plan-unit-row-room: calc(
     var(--plan-byline-room) +
-    var(--space-4) +
-    var(--control-height) -
-    var(--space-6)
+    var(--luke-space-4) +
+    var(--luke-control-height) -
+    var(--luke-space-6)
   );
 }
 
 .plan-unit-attributed {
   position: relative;
+}
+
+/* A plan's task item the developer can tick from the drawn plan says so. */
+.plan-unit li.task-list-item input[type="checkbox"]:enabled {
+  cursor: pointer;
 }
 
 /* A section's heading wraps short of the row at its end, so the byline and
@@ -246,25 +225,25 @@
 
 /* The byline and the section's ⋯ stand in one row at the heading's line, a
    control tall, each centred on it, so the line reads level with the button.
-   The row hangs past the column's edge by `--space-6`, as the ⋯ always has,
+   The row hangs past the column's edge by `--luke-space-6`, as the ⋯ always has,
    and holds the room its heading keeps; where a section has no ⋯, the row
    keeps its room, so every byline ends at one edge. It takes no pointer
    itself, only its byline and its ⋯ do. */
 .plan-unit-row {
   position: absolute;
   top: 0;
-  right: calc(var(--space-6) * -1);
-  width: calc(var(--plan-unit-row-room) + var(--space-6));
+  right: calc(var(--luke-space-6) * -1);
+  width: calc(var(--plan-unit-row-room) + var(--luke-space-6));
   display: flex;
-  height: var(--control-height);
+  height: var(--luke-control-height);
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   pointer-events: none;
 }
 
 .plan-unit-row:not(:has(.plan-unit-more)) {
-  padding-right: calc(var(--control-height) + var(--space-4));
+  padding-right: calc(var(--luke-control-height) + var(--luke-space-4));
 }
 
 .plan-unit-byline {
@@ -272,10 +251,10 @@
   max-width: var(--plan-byline-room);
   /* Past the ring an actor's hover fill bleeds by, so the ring is drawn whole. */
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-room);
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.4;
+  overflow-clip-margin: var(--luke-focus-ring-room);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--duration-hover) ease;
@@ -290,8 +269,8 @@
    shown as the byline is. Note that it stays drawn while its menu stands, as
    every ⋯ does. */
 .plan-unit-more {
+  display: flex;
   flex: none;
-  height: var(--control-height);
   opacity: 0;
   pointer-events: auto;
   transition: opacity var(--duration-hover) ease;
@@ -299,7 +278,7 @@
 
 .plan-unit-attributed:hover .plan-unit-more,
 .plan-unit-attributed:focus-within .plan-unit-more,
-.plan-unit-more[aria-expanded="true"] {
+.plan-unit-more:has([aria-expanded="true"]) {
   opacity: 1;
 }
 
@@ -316,16 +295,16 @@
   display: inline-flex;
   max-width: min(240px, 100%);
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   margin-block: -0.075em;
-  padding: 0.075em var(--space-6) 0.075em var(--space-4);
+  padding: 0.075em var(--luke-space-6) 0.075em var(--luke-space-4);
   border: 0;
-  border-radius: 5px;
-  background: var(--raised-strong);
-  color: var(--text-primary);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
   cursor: pointer;
   font: inherit;
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
   line-height: 1.2;
   vertical-align: baseline;
   white-space: nowrap;
@@ -333,7 +312,7 @@
 
 .mention-chip:hover,
 .mention-chip:focus-visible {
-  background: var(--selected);
+  background: var(--luke-color-fill-selected);
 }
 
 /* An agent named on a call's row (`transcript-blocks.tsx`'s
@@ -348,7 +327,7 @@
 }
 
 :is(button, summary):is(:hover, :focus-visible) .tool-agent-chip {
-  background: var(--selected);
+  background: var(--luke-color-fill-selected);
 }
 
 .mention-chip-glyph {
@@ -357,7 +336,7 @@
   place-items: center;
   width: 13px;
   height: 13px;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .mention-chip-glyph svg {
@@ -387,16 +366,16 @@
 .mention-chip-state {
   flex: none;
   align-self: baseline;
-  padding-left: var(--space-4);
-  border-left: 1px solid var(--hairline-strong);
-  color: var(--text-secondary);
-  font-weight: 400;
+  padding-left: var(--luke-space-4);
+  border-left: 1px solid var(--luke-color-border-strong);
+  color: var(--luke-color-text-muted);
+  font-weight: var(--luke-weight-regular);
 }
 
 .mention-chip[data-state="gone"] {
   background: none;
-  box-shadow: inset 0 0 0 1px var(--hairline-strong);
-  color: var(--text-tertiary);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
+  color: var(--luke-color-text-subtle);
 }
 
 .mention-chip[data-state="gone"] .mention-chip-label {
@@ -419,51 +398,36 @@
   max-width: 360px;
 }
 
-/* The list an @ opens (`mention-picker.tsx`): a searchable menu whose field
-   is the editor it was typed in, hung under the word's line inside it, its
-   rows grouped by kind under the menu's own headings, each with its kind's
-   glyph and a muted detail, and the keys it hears at its foot. Named with
-   the menu's own class, since the menu's rule opens it under a trigger and
-   is read later. */
+/* The list an @ opens (`mention-picker.tsx`): `@luke/ui`'s combobox list
+   on a searchable menu's surface, whose field is the editor it was typed
+   in, hung under the word's line inside it, under a narrowed kind's crumb
+   and over the keys it hears at its foot. Named with the menu's own class,
+   since the menu's rule opens it under a trigger and is read later. */
 .searchable-menu.mention-menu {
   z-index: 3;
   width: 360px;
   max-width: 100%;
 }
 
-.mention-menu .task-compose-menu-list {
-  max-height: 320px;
-}
-
-/* A row's detail gives way first, and a name too long for the row even
-   then, a pull request's title, is cut as a searchable menu cuts one. */
-.mention-menu .task-compose-menu-name {
-  flex: 0 1 auto;
-}
-
-.mention-row-detail {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.mention-menu .mention-row-detail {
-  flex-shrink: 1000;
-}
-
 /* A narrowed list stands under its kind's crumb, as an MCP server's page
    stands under its own; a kind typed with its colon has no back arrow, so
    its glyph keeps the rows' inset. */
-.mention-menu-crumb:not(:has(.agent-servers-back)) {
-  padding-left: calc(var(--row-inset) + var(--menu-inset));
+.mention-menu-crumb:not(:has(button)) {
+  padding-left: calc(var(--row-inset) + var(--luke-menu-inset));
+}
+
+/* A folder's path too long for the crumb is cut short. */
+.mention-menu-crumb-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mention-menu .mention-menu-foot {
   display: flex;
-  gap: var(--space-12);
-  padding: var(--space-6) calc(var(--row-inset) + var(--menu-inset));
-  color: var(--text-tertiary);
-  font-size: 11.5px;
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-6) calc(var(--row-inset) + var(--luke-menu-inset));
 }
 
 /* The editor of a plan's text is the room its @ list hangs in. */
@@ -491,24 +455,26 @@
 .plan-changed::after {
   position: absolute;
   z-index: -1;
-  inset: calc(var(--space-2) * -1) calc(var(--space-6) * -1);
-  border-radius: 6px;
+  inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
+  border-radius: var(--luke-radius-6);
   background: color-mix(in srgb, var(--accent) 9%, transparent);
   content: "";
   pointer-events: none;
 }
 
 /* How many sections changed since the last look, under the "Edited by"
-   line in the same muted weight, with its dismissal, held to the line's
-   own height so the button does not push the document down. */
+   line in the caption role, with its dismissal. The line keeps the room it
+   always had and the Dismiss button overhangs it, so the button does not
+   push the document down. */
 .plan-changed-note {
-  --control-height: 22px;
   display: flex;
+  height: 22px; /* off-scale: the line's room under "Edited by", which the button overhangs */
   align-items: center;
-  gap: var(--space-6);
-  margin: -6px 0 12px;
-  color: var(--text-secondary);
-  font-size: 12px;
+  gap: var(--luke-space-6);
+  margin: calc(-1 * var(--luke-space-6)) 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* The text open in its editor, in the document's own type, so the words do
@@ -535,9 +501,9 @@
 .plan-document-block:focus-visible::before {
   position: absolute;
   z-index: -1;
-  inset: calc(var(--space-2) * -1) calc(var(--space-6) * -1);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--focus-ring) 14%, transparent);
+  inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
+  border-radius: var(--luke-radius-6);
+  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
   content: "";
   pointer-events: none;
 }
@@ -548,7 +514,7 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-12);
+  gap: var(--luke-space-12);
 }
 
 .task-title-line > .task-title {
@@ -559,7 +525,7 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
 }
 
 /* The title breaks inside a word only where the word is wider than the
@@ -571,13 +537,8 @@
 
 /* The title is edited where it is drawn: its caret in the accent and no box. */
 .task-title-text {
-  caret-color: var(--accent);
+  caret-color: var(--luke-color-accent);
   outline: none; /* no ring: the caret alone, edited where it is drawn */
-}
-
-/* The section between an editor's words and what stands under them. */
-.plan-document-editor > .plan-editor-note {
-  margin-top: 0.5em;
 }
 
 /* The space between two sections, resolved at the text's own size so a
@@ -620,11 +581,11 @@
    while its section is edited, so opening the section does not turn its
    chips into underlined words; its glyph is the read view's alone. */
 .plan-document-text a.plan-mention-link {
-  padding: 0 var(--space-4);
+  padding: 0 var(--luke-space-4);
   color: inherit;
-  border-radius: 5px;
-  background: var(--raised-strong);
-  font-weight: 500;
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-strong);
+  font-weight: var(--luke-weight-medium);
   text-decoration: none;
   box-decoration-break: clone;
 }
@@ -632,16 +593,44 @@
 .plan-document-text p.is-editor-empty:first-child::before {
   float: left;
   height: 0;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   content: attr(data-placeholder);
   pointer-events: none;
+}
+
+/* A task item as TipTap draws it: its box in a label and its words in a block
+   of their own after it. The label stands in the bullet's gutter exactly where
+   the read view stands its box (`markdown.css`), in its size and accent, so
+   the words keep their place as the section opens to be edited. */
+.plan-document-text li[data-checked] {
+  position: relative;
+  list-style: none;
+}
+
+.plan-document-text li[data-checked] > label {
+  position: absolute;
+  top: calc((1lh - 0.95em) / 2);
+  left: -1.45em;
+}
+
+.plan-document-text li[data-checked] > label > input {
+  display: block;
+  width: 0.95em;
+  height: 0.95em;
+  margin: 0;
+  font: inherit;
+  accent-color: var(--luke-color-accent);
+}
+
+.plan-document-text li[data-checked] > div {
+  margin-top: 0;
 }
 
 /* What the editor keeps byte for byte but does not draw as its own: inline
    HTML, a footnote, a link's definition, a block of HTML. */
 .plan-raw-block {
   margin: 0;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font: inherit;
   white-space: pre-wrap;
 }
@@ -651,34 +640,21 @@
    picture is an `<img>`, so its own size holds it and the column bounds it. */
 .plan-diagram {
   display: block;
-  margin: var(--space-12) 0;
-  padding: var(--space-12) var(--space-16);
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
+  margin: var(--luke-space-12) 0;
+  padding: var(--luke-space-12) var(--luke-space-16);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
 }
 
 .plan-diagram-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-8);
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-.plan-diagram-toggle {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-secondary);
-  font: inherit;
-  font-weight: 500;
-}
-
-.plan-diagram-toggle:hover {
-  color: var(--text-primary);
+  margin-bottom: var(--luke-space-8);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .plan-diagram-picture {
@@ -690,28 +666,30 @@
 
 /* A fence Mermaid refused says so over its code, in the failure's red. */
 .plan-diagram-failed {
-  margin: 0 0 var(--space-8);
-  color: var(--danger-text);
-  font-size: 12px;
+  margin: 0 0 var(--luke-space-8);
+  color: var(--luke-color-danger-text);
+  font-size: var(--luke-type-caption-size);
 }
 
 /* In the editor the fence stays code, and its diagram stands under it,
    out of the text: nothing in it takes the caret or a selection. */
 .plan-diagram-preview {
-  margin-top: var(--space-4);
+  margin-top: var(--luke-space-4);
   user-select: none;
 }
 
 /* What stands under the editor: a failed save, or Luke's change and the
-   choice it asks, in the muted meta weight. */
+   choice it asks, in the caption role. Note that it outranks the editor's
+   own gap between its children by coming later. */
 .plan-editor-note {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-8);
-  margin: var(--space-6) 0 0;
-  font-size: 12px;
-  color: var(--text-secondary);
+  gap: var(--luke-space-8);
+  margin: var(--luke-space-6) 0 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* The Code tab: every code Luke showed on the plan, one card each under the
@@ -721,6 +699,305 @@
   min-height: 0;
   flex: 1;
   flex-direction: column;
+}
+
+/* The transcript's frame (../ai-elements/conversation.tsx): a log that
+   scrolls inside the room its pane leaves it, its lines a step apart, the way
+   back to its newest line floating over their foot, and the line it says in
+   place of lines. It sits in the components layer, under the window's own
+   rules and utilities, so a pane's log (`.checkpoint-log`,
+   `.agent-log-over-composer`) and a line's own spacing still say the last
+   word, as they did over the utilities this replaced. */
+@layer components {
+  .conversation {
+    position: relative;
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .conversation-log {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
+  }
+
+  .conversation-log > :not(:last-child) {
+    margin-block-end: var(--luke-space-12);
+  }
+
+  .conversation-empty {
+    display: flex;
+    max-width: 280px; /* off-scale: a short line's measure */
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--luke-space-12);
+    margin: auto;
+    padding: var(--luke-space-24);
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    text-align: center;
+  }
+
+  .conversation-empty-wide {
+    max-width: 440px; /* off-scale: a one-line failure's measure */
+  }
+
+  /* Its own ground under the button, ringed and lifted off the lines, which
+     the button's lit fill is laid over as a title bar's is. */
+  .conversation-scroll {
+    --luke-button-ground: var(--luke-color-well);
+    position: absolute;
+    bottom: var(--luke-space-16);
+    left: 50%;
+    display: flex;
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-button-ground);
+    box-shadow:
+      inset 0 0 0 1px var(--luke-color-border),
+      0 6px 16px var(--luke-color-shadow-soft);
+    translate: -50% 0;
+  }
+}
+
+/* A transcript's messages (../ai-elements/message.tsx) and the quiet lines
+   between them (working-time.tsx, call-card.tsx, inbox-pane.tsx). They sit in
+   the components layer, as the frame above does, so a surface's own rule for
+   a message (`.agent-origin`, `.agent-turn-foot > [data-worked]`) still says
+   the last word, as it did over the utilities these replaced. */
+@layer components {
+  .transcript-message {
+    position: relative;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: var(--luke-space-4);
+  }
+
+  .transcript-message.is-user {
+    max-width: 95%;
+    margin-left: auto;
+    align-items: flex-end;
+    justify-content: flex-end;
+  }
+
+  /* A reply is reading text, so it keeps a reading leading rather than the
+     body role's. It clips past the keyboard's ring rather than at its edge,
+     so a fold, a tool line, or a chip it holds keeps its ring. */
+  .message-content {
+    min-width: 0;
+    max-width: 100%;
+    overflow: clip;
+    overflow-clip-margin: var(--luke-focus-ring-room);
+    color: var(--luke-color-text);
+    font-size: var(--luke-type-body-size);
+    line-height: 1.625;
+  }
+
+  /* Note that the rhythm between a message's blocks weighs nothing, so a
+     block's own margin, a quiet line's or a note's, still wins. */
+  :where(.message-content > :not(:last-child)) {
+    margin-block: 0 var(--luke-space-8);
+  }
+
+  .transcript-message.is-user .message-content {
+    width: fit-content;
+    padding: var(--luke-space-8) var(--luke-space-12);
+    border-radius: var(--luke-radius-14);
+    background: var(--luke-color-fill-strong);
+  }
+
+  .message-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-space-2);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-quick) var(--spring);
+  }
+
+  .message-actions[data-placement="floating"] {
+    position: absolute;
+    top: calc(-1 * var(--luke-space-8));
+    right: 0;
+    z-index: 10;
+    padding: var(--luke-space-2);
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-radius-6);
+    background: var(--luke-color-overlay);
+    box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
+  }
+
+  .message-actions:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  @media (hover: hover) {
+    .transcript-message:hover .message-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  /* A working line and the line a finished turn or a call ends on: the
+     caption type, muted, its words selectable. */
+  .status-line {
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    user-select: text;
+  }
+
+  .status-line:is([data-worked], [data-call-ended]) {
+    width: fit-content;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .status-line[data-worked] {
+    margin-block: var(--luke-space-8) 0;
+  }
+
+  /* Only its top margin is cleared, because the conversation's gap below it
+     is a bottom margin. */
+  .status-line[data-working] {
+    margin-top: 0;
+  }
+
+  .status-line[data-working]:last-child {
+    margin-bottom: 0;
+  }
+
+  .working-time {
+    color: var(--luke-color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .working-time-after {
+    margin-left: var(--luke-space-6);
+  }
+
+  /* How long ago a thread's line says something happened. */
+  .thread-time {
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* The Inbox's thread, scrolling inside the room its pane leaves it. */
+  .inbox-board {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--luke-space-12);
+    overflow-y: auto;
+    padding-top: var(--luke-section-gap);
+  }
+
+  /* Words with a light passing along them (../ai-elements/shimmer.tsx): the
+     muted gray with the highlight in the text's own ink. Its duration is a
+     literal as DESIGN.md allows a loop with no end of its own, because it
+     answers `--loop-motion` with its play state. */
+  .shimmer {
+    display: inline-block;
+    background-image: linear-gradient(
+      90deg,
+      var(--luke-color-text-muted) 0%,
+      var(--luke-color-text-muted) 40%,
+      var(--luke-color-text) 50%,
+      var(--luke-color-text-muted) 60%,
+      var(--luke-color-text-muted) 100%
+    );
+    background-size: 300% 100%;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 2s linear infinite;
+    animation-play-state: var(--loop-motion);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% center;
+  }
+
+  to {
+    background-position: 0% center;
+  }
+}
+
+/* A replay card's head: what it is, the source's chip, and how many steps,
+   on one line that gives way at its end. */
+.replay-card-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--luke-space-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+  outline: none;
+}
+
+/* A replay card's foot: the branch, the pull request, and the way to the
+   whole transcript, over a dashed rule. */
+.replay-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4) var(--luke-space-12);
+  padding-top: var(--luke-space-8);
+  border-top: 1px dashed var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.replay-foot > * {
+  min-width: 0;
+}
+
+/* A message's actions, their glyphs the control icon whichever way each is
+   drawn, a copy's glyph inside its own swap. */
+.message-actions svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+/* An Inbox item's words and what was filled in, which a reader may select
+   and copy; what was filled in keeps the lines it was typed on. */
+.inbox-words {
+  margin: 0;
+  user-select: text;
+}
+
+.inbox-lines {
+  white-space: pre-line;
+}
+
+/* A link the window does not open: its address beside its label, to copy. */
+.inbox-link-address {
+  color: var(--luke-color-text-muted);
+  user-select: text;
+}
+
+/* A code card's failure stands at its foot, so it draws no rule under it. */
+.code-card > .file-tab-notice {
+  border-bottom: 0;
 }
 
 /* The Code and Call tabs' logs, whose calls each open at a checkpoint stuck
@@ -733,8 +1010,49 @@
    both. */
 .checkpoint-log {
   --checkpoint-height: 32px;
+  /* No top padding, because a sticky checkpoint would leave what scrolled
+     under it showing in that band; cards fade beneath it. */
+  padding-top: 0;
   --fade-inset-top: var(--checkpoint-height);
   scroll-padding-top: calc(var(--checkpoint-height) + var(--scroll-fade));
+}
+
+/* A divider across a log (../ai-elements/checkpoint.tsx): its words at the
+   left in the muted ink, a hairline running on from them, and what the
+   caller puts at the right, stuck to the log's top on the well's own ground
+   so nothing shows through. A standing call's "Live" stands at the right in
+   the developer's colour beside the voice mark (../tasks/call-card.tsx). */
+.checkpoint {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding: var(--luke-space-12) 0 var(--luke-space-8);
+  background: var(--luke-color-well);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.checkpoint-rule {
+  height: 1px;
+  min-width: 0;
+  flex: 1;
+  background: var(--luke-color-border);
+}
+
+.checkpoint-live {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  color: var(--voice-developer);
+}
+
+.checkpoint-live > svg {
+  width: 14px; /* off-scale: the voice mark at the divider's words */
+  height: 14px;
 }
 
 /* One line, as a teammate's heading already keeps (`.call-caller`), so a
@@ -744,22 +1062,28 @@
   white-space: nowrap;
 }
 
+/* The card clips at its rounded edge, against which its header's actions
+   stand flush, so a ring inside it is drawn inside its control. */
 .code-card {
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
   overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-10);
   background: var(--code-ground);
 }
 
+/* The file at the left and the card's actions flush with its right edge,
+   so the header is the buttons' height and no more, as a transcript
+   fence's is. */
 .code-card-header {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--control-gap);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  background: var(--raised);
-  font-size: 11.5px;
+  gap: var(--luke-control-gap);
+  padding-left: var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  font-size: var(--luke-type-caption-size);
 }
 
 /* A file named in place (file-ref.tsx): its type's icon at the size the
@@ -769,11 +1093,11 @@
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: var(--control-gap);
+  gap: var(--luke-control-gap);
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font: inherit;
   text-align: left;
 }
@@ -790,7 +1114,7 @@
   min-width: 0;
   overflow: hidden;
   direction: rtl;
-  font-family: var(--font-mono);
+  font-family: var(--luke-font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -801,20 +1125,15 @@ button.file-ref:hover .file-ref-path {
 
 .file-ref-lines {
   flex: 0 0 auto;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   white-space: nowrap;
 }
 
-/* A card's copy and its file's opening keep to the header's right, a step
-   smaller than a toolbar's. */
+/* A card's copy and its file's opening keep to the header's right. */
 .code-card-actions {
   display: flex;
   flex: 0 0 auto;
   margin-left: auto;
-}
-
-.code-card-action {
-  --control-height: 24px;
 }
 
 /* A File tab: the file's heading over its lines, which fill the tab and
@@ -856,7 +1175,7 @@ button.file-ref:hover .file-ref-path {
 }
 
 .file-tab-lines[data-line-numbers="false"] .code-line-text {
-  padding-left: var(--space-12);
+  padding-left: var(--luke-space-12);
 }
 
 /* A File tab beside its repository's tree, under one bar across both: the
@@ -885,18 +1204,21 @@ button.file-ref:hover .file-ref-path {
 }
 
 /* The bar: history, the path, then the file's actions and the tree's
-   toggle at its end, in the window's toolbar buttons. */
+   toggle at its end, in the window's toolbar buttons. It stands the one
+   height of a tab's bar whatever it holds, words alone or nothing yet, its
+   words in the caption's type. */
 .file-view-bar {
-  container: file-bar / inline-size;
   display: flex;
   min-width: 0;
+  min-height: var(--secondary-bar-height);
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid var(--hairline);
-  background: var(--raised);
-  font-size: 12px;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-4) var(--luke-space-6);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .file-view-history,
@@ -904,16 +1226,11 @@ button.file-ref:hover .file-ref-path {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--luke-space-2);
 }
 
 .file-view-actions {
   margin-left: auto;
-}
-
-.file-view-actions .provider-mark {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
 }
 
 /* A plan with no repository names the file plainly, cut from its left, in
@@ -921,7 +1238,7 @@ button.file-ref:hover .file-ref-path {
 .file-view-path {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   direction: rtl;
   text-align: left;
   text-overflow: ellipsis;
@@ -931,24 +1248,21 @@ button.file-ref:hover .file-ref-path {
 /* The commit a pinned read is at, quiet beside the path. */
 .file-view-commit {
   flex: 0 0 auto;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
   white-space: nowrap;
 }
 
-/* The bar's path as breadcrumbs: each crumb a press that lists where it
-   stands, the chevrons between plain. The path gives way in the stylesheet
-   alone (file-breadcrumbs.tsx): every crumb narrows, cut short at its end,
-   the folders first, then the repository, the file's own name last, clipped
-   past the keyboard's ring on a crumb, which stands as tall as the path; and
-   on a narrow bar the folders between the repository and the file's own
-   folder stand as one "…" crumb (below). */
+/* A path drawn in the bar's breadcrumbs' own rows rather than `@luke/ui`'s
+   `Breadcrumbs`, as the Inbox pane's is: each crumb gives way, by its
+   share, down to its first letters and the ellipsis, clipped past the
+   keyboard's ring on a crumb, the last giving way last of all. */
 .file-breadcrumbs {
   position: relative;
   min-width: 0;
   flex: 0 1 auto;
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-room);
+  overflow-clip-margin: var(--luke-focus-ring-room);
 }
 
 .file-breadcrumbs ol {
@@ -960,9 +1274,6 @@ button.file-ref:hover .file-ref-path {
   list-style: none;
 }
 
-/* A crumb gives way, by its share, down to its first letters and the
-   ellipsis, its chevron always standing before it: the repository and the
-   folders first, and the file's own name last of all. */
 .file-breadcrumbs li {
   display: flex;
   min-width: calc(2.5em + 12px);
@@ -970,16 +1281,8 @@ button.file-ref:hover .file-ref-path {
   align-items: center;
 }
 
-.file-breadcrumbs li:is([data-crumb="0"], [data-folded-crumb="all"]) {
-  min-width: 2.5em;
-}
-
-.file-breadcrumbs li[data-crumb="0"] {
-  flex-shrink: 9;
-}
-
-/* Note that the file's share is a whole one, because shares summing to
-   less than one leave the rest of the overflow standing. */
+/* Note that the last crumb's share is a whole one, because shares summing
+   to less than one leave the rest of the overflow standing. */
 .file-breadcrumbs li:last-child {
   flex-shrink: 1;
 }
@@ -991,80 +1294,10 @@ button.file-ref:hover .file-ref-path {
   flex-shrink: 0;
 }
 
-/* A "…" stands for crumbs only where the bar is narrow enough to ask for
-   it. */
-.file-breadcrumbs li[data-folded-crumb] {
-  display: none;
-  flex-shrink: 0;
-}
-
-/* A path six folders deep or deeper draws its middle folders as the one
-   "…" on a bar of any width it does not fold further, since their floors
-   alone would push the file's own name out of the bar. */
-@container file-bar (min-width: 300px) {
-  .file-breadcrumbs:has(li[data-crumb="6"][data-folder="true"]) li[data-folded-crumb="middle"] {
-    display: flex;
-  }
-
-  .file-breadcrumbs:has(li[data-crumb="6"][data-folder="true"]) li[data-middle="true"] {
-    display: none;
-  }
-}
-
-/* A bar narrower than 520px draws the folders between the repository and
-   the file's own folder as one "…", which names them in its pill. */
-@container file-bar (max-width: 519px) {
-  .file-breadcrumbs li[data-folded-crumb="middle"] {
-    display: flex;
-  }
-
-  .file-breadcrumbs li[data-middle="true"] {
-    display: none;
-  }
-}
-
-/* A bar narrower than 300px draws the repository and every folder as one
-   "…", the file's own name alone after it. */
-@container file-bar (max-width: 299px) {
-  .file-breadcrumbs li[data-folded-crumb="all"] {
-    display: flex;
-  }
-
-  .file-breadcrumbs li:is([data-folded-crumb="middle"], [data-folder="true"]) {
-    display: none;
-  }
-}
-
-.file-breadcrumb {
-  min-width: 0;
-  padding: var(--space-2) var(--space-4);
-  overflow: hidden;
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  color: var(--text-secondary);
-  font: inherit;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.file-breadcrumb:hover,
-.file-breadcrumb[aria-expanded="true"] {
-  background: var(--selected);
-  color: var(--text-primary);
-}
-
-.file-breadcrumb[aria-current="page"] {
-  color: var(--text-primary);
-}
-
 .file-breadcrumb-separator {
   display: flex;
   align-items: center;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .file-breadcrumb-separator svg {
@@ -1076,7 +1309,7 @@ button.file-ref:hover .file-ref-path {
    (file-breadcrumbs.tsx). */
 .file-crumb-tree {
   position: fixed;
-  z-index: var(--z-menu);
+  z-index: var(--luke-z-menu);
   max-height: calc(100vh - 16px);
   -webkit-app-region: no-drag;
 }
@@ -1087,20 +1320,21 @@ button.file-ref:hover .file-ref-path {
 }
 
 .file-crumb-tree .file-tree-host {
-  --trees-bg-override: var(--surface-popover);
+  --trees-bg-override: var(--luke-color-overlay);
 }
 
 .file-crumb-notice {
   margin: 0;
-  padding: var(--space-4) var(--space-8);
-  color: var(--text-secondary);
-  font-size: 12.5px;
+  padding: var(--luke-space-4) var(--luke-space-8);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
-/* The tree's toggle reads as on while the tree is shown, as the side
-   panel's own toggle does. */
-.file-tree-toggle[aria-expanded="true"] {
-  color: var(--text-primary);
+/* The box a pane's toggle stands in, which names the place it opens the
+   pane (file-view.tsx): one place is shown at a time, by the panel's width. */
+.file-tree-toggle {
+  display: flex;
 }
 
 /* The tree beside a File tab, its search level with the tab's heading. */
@@ -1110,7 +1344,7 @@ button.file-ref:hover .file-ref-path {
   min-width: 0;
   flex: 0 0 auto;
   flex-direction: column;
-  border-left: 1px solid var(--hairline);
+  border-left: 1px solid var(--luke-color-border);
 }
 
 /* A tree on its way out has left the layout, the file already standing in
@@ -1120,7 +1354,7 @@ button.file-ref:hover .file-ref-path {
   position: absolute;
   inset-block: 0;
   right: 0;
-  background: var(--desktop-well);
+  background: var(--luke-color-well);
 }
 
 /* A pane beside a tab, a File or Changes tab's tree or a Terminal tab's
@@ -1158,9 +1392,9 @@ button.file-ref:hover .file-ref-path {
     z-index: 1;
     inset-block: 0;
     right: 0;
-    width: min(264px, calc(100% - var(--space-48)));
-    background: var(--desktop-well);
-    box-shadow: var(--menu-shadow);
+    width: min(264px, calc(100% - var(--luke-space-48)));
+    background: var(--luke-color-well);
+    box-shadow: var(--luke-menu-shadow);
   }
 
   .file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-pane {
@@ -1185,7 +1419,7 @@ button.file-ref:hover .file-ref-path {
   }
 
   .file-tree-toggle[data-place="over"] {
-    display: inline-flex;
+    display: flex;
   }
 
   .file-view[data-pane-beside] > .file-tree-foot {
@@ -1202,8 +1436,8 @@ button.file-ref:hover .file-ref-path {
     z-index: 1;
     inset-block: 0;
     right: 0;
-    width: min(264px, calc(100% - var(--space-48)));
-    box-shadow: var(--menu-shadow);
+    width: min(264px, calc(100% - var(--luke-space-48)));
+    box-shadow: var(--luke-menu-shadow);
   }
 
   .terminal-tab:is([data-pane-over="peek"], [data-pane-over="open"]) .terminal-shells {
@@ -1224,7 +1458,7 @@ button.file-ref:hover .file-ref-path {
   }
 
   .terminal-tab .file-tree-toggle[data-place="over"] {
-    display: inline-flex;
+    display: flex;
   }
 }
 
@@ -1242,13 +1476,13 @@ button.file-ref:hover .file-ref-path {
 .page-view-title {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .page-view-version {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1288,9 +1522,9 @@ button.file-ref:hover .file-ref-path {
   overflow: hidden;
   flex: none;
   aspect-ratio: 16 / 10;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--raised);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-fill-hover);
 }
 
 .page-card-frame {
@@ -1320,87 +1554,45 @@ button.file-ref:hover .file-ref-path {
   flex-direction: column;
 }
 
-/* The source's toggle reads as on while the source is shown, as the File
-   tab's tree toggle does. */
-.page-view-source-toggle[data-source="true"] {
-  color: var(--text-primary);
-}
-
 /* What became of a changed file, lettered quietly beside its path in a
    Changes tab's bar (agent-changes-tab.tsx), coloured as its row in the
    tree is. */
 .file-view-status {
   flex: 0 0 auto;
-  color: var(--state-attention);
-  font-family: var(--font-mono);
-  font-weight: 600;
+  color: var(--luke-color-attention);
+  font-family: var(--luke-font-mono);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .file-view-status[data-status="added"] {
-  color: var(--state-complete);
+  color: var(--luke-color-complete);
 }
 
 .file-view-status[data-status="deleted"] {
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 .file-view-status[data-status="renamed"] {
-  color: var(--state-working);
+  color: var(--luke-color-working);
 }
 
 /* The Files changed bar's diff settings (diff-settings.tsx): the button,
-   and under it a popover in the context popover's look, its rows the
-   settings page's own, scrolling within the room the panel leaves. */
+   and under it `@luke/ui`'s popover panel, its rows the settings page's
+   own, set apart in groups by a rule. */
 .diff-settings {
   position: relative;
   display: flex;
 }
 
-.diff-settings-popover {
-  display: flex;
-  max-height: min(560px, 70vh);
-  flex-direction: column;
-  gap: var(--space-12);
-  padding: var(--space-12) var(--space-16) var(--space-16);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--menu-radius);
-  background: var(--surface-popover);
-  box-shadow: var(--menu-shadow);
-  color: var(--text-primary);
-  font-size: 12.5px;
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.diff-settings-popover:focus-visible {
-  outline: none; /* no ring: a popover holding focus for its controls */
-}
-
-.diff-settings-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-right: calc(-1 * var(--space-8));
-}
-
-.diff-settings-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-}
-
 .diff-settings-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 .diff-settings-group + .diff-settings-group {
-  padding-top: var(--space-12);
-  border-top: 1px solid var(--hairline);
+  padding-top: var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
 }
 
 /* A Files changed diff (file-diff.tsx): Pierre draws it in a shadow root
@@ -1411,42 +1603,29 @@ button.file-ref:hover .file-ref-path {
   user-select: text;
 }
 
-/* The tree's search field and its filter, in one row over the tree: the
-   app's search well, a step shorter to sit in the panel's heading row. */
+/* The tree's search field and its filter, in one row over the tree. */
 .file-tree-search {
-  --control-height: 26px;
   display: flex;
   align-items: center;
-  gap: var(--control-gap);
-  padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid var(--hairline);
+  gap: var(--luke-control-gap);
+  padding: var(--luke-space-4) var(--luke-space-6);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
-.file-tree-search-well {
-  min-width: 0;
-  height: var(--control-height);
+.file-tree-search > .luke-search-field {
   flex: 1;
-  border-radius: var(--control-radius);
-}
-
-.file-tree-search-well .settings-search-input {
-  font-size: 12.5px;
-}
-
-.file-tree-filter {
-  flex: 0 0 auto;
 }
 
 .file-tree-notice {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin: 0;
-  padding: var(--space-12);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.5;
+  padding: var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* Pierre's tree draws in a shadow root of its own, which inherits these:
@@ -1458,23 +1637,23 @@ button.file-ref:hover .file-ref-path {
    cuts a long name in its middle by painting the cut over in that ground:
    a transparent one drew both halves of the name over one another. */
 .file-tree-host {
-  --trees-bg-override: var(--desktop-well);
-  --trees-bg-muted-override: var(--raised);
-  --trees-fg-override: var(--text-primary);
-  --trees-fg-muted-override: var(--text-secondary);
-  --trees-selected-bg-override: var(--selected);
-  --trees-selected-fg-override: var(--text-primary);
-  --trees-selected-focused-border-color-override: var(--focus-ring);
-  --trees-border-color-override: var(--hairline);
-  --trees-focus-ring-color-override: var(--focus-ring);
-  --trees-focus-ring-width-override: var(--focus-ring-width);
-  --trees-focus-ring-offset-override: var(--focus-ring-inset);
-  --trees-font-family-override: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-  --trees-font-size-override: 12.5px;
-  --trees-git-added-color-override: var(--state-complete);
-  --trees-git-modified-color-override: var(--state-attention);
-  --trees-git-deleted-color-override: var(--danger-text);
-  --trees-git-renamed-color-override: var(--state-working);
+  --trees-bg-override: var(--luke-color-well);
+  --trees-bg-muted-override: var(--luke-color-fill-hover);
+  --trees-fg-override: var(--luke-color-text);
+  --trees-fg-muted-override: var(--luke-color-text-muted);
+  --trees-selected-bg-override: var(--luke-color-fill-selected);
+  --trees-selected-fg-override: var(--luke-color-text);
+  --trees-selected-focused-border-color-override: var(--luke-color-focus-ring);
+  --trees-border-color-override: var(--luke-color-border);
+  --trees-focus-ring-color-override: var(--luke-color-focus-ring);
+  --trees-focus-ring-width-override: var(--luke-focus-ring-width);
+  --trees-focus-ring-offset-override: var(--luke-focus-ring-inset);
+  --trees-font-family-override: var(--luke-font-sans);
+  --trees-font-size-override: var(--luke-type-caption-size);
+  --trees-git-added-color-override: var(--luke-color-complete);
+  --trees-git-modified-color-override: var(--luke-color-attention);
+  --trees-git-deleted-color-override: var(--luke-color-danger-text);
+  --trees-git-renamed-color-override: var(--luke-color-working);
   display: flex;
   min-height: 0;
   flex: 1;
@@ -1511,8 +1690,8 @@ button.file-ref:hover .file-ref-path {
 /* The line under the tree saying a folder was listed short of whole. */
 .file-tree-host > .file-tree-cut {
   flex: none;
-  border-top: 1px solid var(--hairline);
-  font-size: 11.5px;
+  border-top: 1px solid var(--luke-color-border);
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The line under a change set's tree counting its files (file-tree-pane.tsx),
@@ -1520,26 +1699,27 @@ button.file-ref:hover .file-ref-path {
 .file-tree-foot {
   flex: none;
   margin: 0;
-  padding: var(--space-6) var(--space-12);
-  border-top: 1px solid var(--hairline);
-  color: var(--text-secondary);
-  font-size: 11.5px;
+  padding: var(--luke-space-6) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
 }
 
 /* Why the file is not drawn, standing over the lines Luke showed of it. */
 .file-tab-notice {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-8) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.5;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .file-tab-notice > p {
   flex: 1;
+  margin: 0;
 }
 
 /* Who a Changes tab's pull request names, under its bar in a notice's
@@ -1549,31 +1729,31 @@ button.file-ref:hover .file-ref-path {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-4) var(--space-16);
-  padding: var(--space-8) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.5;
+  gap: var(--luke-space-4) var(--luke-space-16);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* A reviewer's standing, in GitHub's colours: approved green, changes asked
    for red, a review asked for amber, a comment or a dismissal quiet. */
 [data-review-state="approved"] {
-  --review-tone: var(--state-complete);
+  --review-tone: var(--luke-color-complete);
 }
 
 [data-review-state="changes-requested"] {
-  --review-tone: var(--danger);
+  --review-tone: var(--luke-color-danger);
 }
 
 [data-review-state="requested"] {
-  --review-tone: var(--state-attention);
+  --review-tone: var(--luke-color-attention);
 }
 
 [data-review-state="commented"],
 [data-review-state="dismissed"] {
-  --review-tone: var(--text-tertiary);
+  --review-tone: var(--luke-color-text-subtle);
 }
 
 .review-state {
@@ -1586,15 +1766,15 @@ button.file-ref:hover .file-ref-path {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-8);
-  color: var(--text-primary);
+  gap: var(--luke-space-8);
+  color: var(--luke-color-text);
 }
 
 .changes-comment-state {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
-  color: var(--text-secondary);
+  gap: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
 }
 
 .changes-comment-state .review-state > svg {
@@ -1603,7 +1783,7 @@ button.file-ref:hover .file-ref-path {
 }
 
 .changes-comment-time {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a File tab's
@@ -1625,7 +1805,7 @@ button.file-ref:hover .file-ref-path {
 
 .pull-request-bar,
 .pull-request-tab .file-view-bar {
-  gap: var(--control-gap);
+  gap: var(--luke-control-gap);
   padding-inline: var(--column-inset);
 }
 
@@ -1653,121 +1833,11 @@ button.file-ref:hover .file-ref-path {
    under it scrolls. */
 .pull-request-header {
   flex: none;
-  padding: var(--space-8) var(--column-inset) var(--space-12);
+  padding: var(--luke-space-8) var(--column-inset) var(--luke-space-12);
 }
 
-/* The row of tabs under the header, as stage-cli's pull request page draws
-   them: each its glyph, its name, and a quiet count, the chosen one
-   underlined on the row's hairline; its words stand at the content inset,
-   as the header's do. */
-.pull-request-tabs {
-  display: flex;
-  flex: none;
-  gap: var(--space-2);
-  padding-inline: var(--column-inset);
-  overflow-x: auto;
-  border-bottom: 1px solid var(--hairline);
-  container: pull-request-tabs / inline-size;
-  align-self: stretch;
-  scrollbar-width: none;
-}
-
-/* Narrower than the three need, a tab other than the chosen one keeps its
-   glyph and its count, its name left to a reader who cannot see it, as a
-   narrow tab of the strip keeps its glyph. */
-@container pull-request-tabs (width < 520px) {
-  .pull-request-tab-button[aria-selected="false"] .pull-request-tab-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
-
-.side-panel-content :is(.pull-request-header, .pull-request-tabs) {
+.side-panel-content .pull-request-header {
   padding-inline: max(var(--column-inset), var(--reading-room));
-}
-
-.pull-request-tab-button {
-  display: inline-flex;
-  height: 34px;
-  align-items: center;
-  gap: var(--glyph-gap);
-  margin-bottom: -1px;
-  padding: 0 var(--row-inset);
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 560;
-  white-space: nowrap;
-  transition:
-    color var(--duration-hover) ease,
-    border-color var(--duration-hover) ease;
-}
-
-.pull-request-tab-button:hover {
-  color: var(--text-primary);
-}
-
-.pull-request-tab-button[aria-selected="true"] {
-  border-bottom-color: var(--text-primary);
-  color: var(--text-primary);
-}
-
-.pull-request-tab-icon {
-  display: inline-flex;
-}
-
-.pull-request-tab-icon > svg {
-  width: 14px;
-  height: 14px;
-}
-
-.pull-request-tab-count {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 400;
-}
-
-.pull-request-tab-count[data-check-summary] {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.pull-request-tab-glyph {
-  display: inline-flex;
-}
-
-.pull-request-tab-glyph > svg {
-  width: 12px;
-  height: 12px;
-}
-
-.pull-request-tab-count[data-check-summary="failing"] {
-  color: var(--danger-text);
-}
-
-.pull-request-tab-count[data-check-summary="pending"] {
-  color: var(--state-attention);
-}
-
-.pull-request-tab-count[data-check-summary="passing"] {
-  color: var(--state-complete);
-}
-
-.pull-request-tab-added {
-  color: var(--state-complete);
-}
-
-.pull-request-tab-removed {
-  color: var(--danger-text);
 }
 
 /* The Conversation's filters, Hide resolved and Hide bots, at the end of a
@@ -1779,10 +1849,10 @@ button.file-ref:hover .file-ref-path {
   flex: none;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: var(--space-6) var(--space-16);
-  padding: var(--space-8) var(--column-inset) 0;
-  color: var(--text-secondary);
-  font-size: 12px;
+  gap: var(--luke-space-6) var(--luke-space-16);
+  padding: var(--luke-space-8) var(--column-inset) 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
 }
 
 .side-panel-content .pull-request-filters {
@@ -1792,60 +1862,23 @@ button.file-ref:hover .file-ref-path {
 .pull-request-filter {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   user-select: none;
 }
 
 .pull-request-filter > label {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 /* A tab's page has the header above it, so it starts close under the row. */
 .pull-request-view > .pull-request-page {
-  padding-top: var(--space-4);
+  padding-top: var(--luke-space-4);
 }
 
 .pull-request-view > .pull-request-page > .pull-request-section:first-child {
-  margin-top: var(--space-12);
-}
-
-.pull-request-state {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-2) var(--boxed-inset);
-  border: 1px solid color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);
-  color: var(--pull-request-tone);
-  font-weight: 600;
-}
-
-/* The pill as the press that opens what may be done from where the pull
-   request stands (`pull-request-writes.tsx`): its tone deepens under the
-   pointer, and a chevron says it opens. */
-.pull-request-state-button {
-  font: inherit;
-  font-weight: 600;
-  cursor: default;
-}
-
-.pull-request-state-button:not(:disabled):hover,
-.pull-request-state-button[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--pull-request-tone) 20%, transparent);
-}
-
-.pull-request-state-button:disabled {
-  opacity: 0.7;
-}
-
-.pull-request-state-chevron {
-  width: 12px;
-  height: 12px;
-  margin-inline-start: calc(-1 * var(--space-2));
+  margin-top: var(--luke-space-12);
 }
 
 /* Where GitHub did not take the last change: a line under the bar, at the
@@ -1853,10 +1886,10 @@ button.file-ref:hover .file-ref-path {
 .pull-request-write-note {
   flex: 0 0 auto;
   margin: 0;
-  padding: var(--space-4) var(--column-inset) var(--space-4) var(--content-inset);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-secondary);
-  font-size: 12px;
+  padding: var(--luke-space-4) var(--column-inset) var(--luke-space-4) var(--content-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
 }
 
 .pull-request-write-note .failure-note-words {
@@ -1868,14 +1901,121 @@ button.file-ref:hover .file-ref-path {
   margin-inline-start: auto;
 }
 
+/* The bar's Review press and the panel it opens (`pull-request-review.tsx`):
+   the press holds the panel's anchor, and the panel is a popover card as
+   the context ring's is, its words' field over what the review says, each
+   choice a row with its meaning under its name, as stage-cli draws them. */
+.pull-request-review {
+  position: relative;
+  display: flex;
+}
+
+.pull-request-review-lead {
+  margin: calc(-1 * var(--luke-space-8)) 0 0;
+  color: var(--luke-color-text-muted);
+}
+
+.pull-request-review-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-8);
+}
+
+.pull-request-review-field,
+.pull-request-review-preview {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 96px;
+  max-height: 240px;
+}
+
+.pull-request-review-field {
+  resize: vertical;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+.pull-request-review-preview {
+  overflow-y: auto;
+  padding: 9px 11px;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-10);
+}
+
+.pull-request-review-preview > p:only-child {
+  margin: 0;
+}
+
+.pull-request-review-events {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pull-request-review-event {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+}
+
+.pull-request-review-event:has(input:checked) {
+  border-color: var(--luke-color-border-strong);
+  background: var(--luke-color-fill-selected);
+}
+
+.pull-request-review-events:disabled .pull-request-review-event {
+  opacity: 0.6;
+}
+
+.pull-request-review-event input {
+  margin: var(--luke-space-2) 0 0;
+  accent-color: var(--luke-color-accent);
+}
+
+.pull-request-review-event-words {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-2);
+  min-width: 0;
+}
+
+.pull-request-review-event-label {
+  font-weight: var(--luke-weight-semibold);
+}
+
+.pull-request-review-note {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+.pull-request-review-note .failure-note-words {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pull-request-review-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--luke-control-gap);
+}
+
 /* The branches it merges, quiet in the code face under the title. */
 .pull-request-branches {
-  margin: var(--space-2) 0 0;
+  margin: var(--luke-space-2) 0 0;
   min-width: 0;
   overflow: hidden;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1883,7 +2023,7 @@ button.file-ref:hover .file-ref-path {
 .pull-request-page {
   min-height: 0;
   flex: 1;
-  padding: var(--space-12) var(--column-inset) var(--space-24);
+  padding: var(--luke-space-12) var(--column-inset) var(--luke-space-24);
   overflow-y: auto;
 }
 
@@ -1907,27 +2047,27 @@ button.file-ref:hover .file-ref-path {
 
 .pull-request-title {
   margin: 0;
-  color: var(--text-primary);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.35;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-semibold);
+  line-height: var(--luke-type-dialog-leading);
   user-select: text;
 }
 
 .pull-request-number {
-  color: var(--text-tertiary);
-  font-weight: 400;
+  color: var(--luke-color-text-subtle);
+  font-weight: var(--luke-weight-regular);
 }
 
 /* Who opened it and its reviewers, in the Changes tab's voice, standing on
    the page rather than across it. */
 .changes-people.pull-request-people {
-  padding-block: var(--space-6) 0;
+  padding-block: var(--luke-space-6) 0;
   border-bottom: 0;
 }
 
 .pull-request-quiet {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* Whether it would merge as it stands, boxed as GitHub's own box is, its
@@ -1936,13 +2076,13 @@ button.file-ref:hover .file-ref-path {
 .pull-request-merge {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
-  margin: var(--space-12) 0 0;
-  padding: var(--space-8) var(--boxed-inset);
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  color: var(--text-primary);
-  font-size: 12.5px;
+  gap: var(--luke-space-8);
+  margin: var(--luke-space-12) 0 0;
+  padding: var(--luke-space-8) var(--boxed-inset);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
 }
 
 .pull-request-merge > svg {
@@ -1953,40 +2093,40 @@ button.file-ref:hover .file-ref-path {
 }
 
 [data-merge-tone="ready"] {
-  --merge-tone: var(--state-complete);
+  --merge-tone: var(--luke-color-complete);
 }
 
 [data-merge-tone="waiting"] {
-  --merge-tone: var(--state-attention);
+  --merge-tone: var(--luke-color-attention);
 }
 
 [data-merge-tone="blocked"] {
-  --merge-tone: var(--danger);
+  --merge-tone: var(--luke-color-danger);
 }
 
 .pull-request-section {
-  margin-top: var(--space-20);
+  margin-top: var(--luke-space-20);
 }
 
 .pull-request-heading {
   display: flex;
   align-items: baseline;
-  gap: var(--space-6);
-  margin: 0 0 var(--space-6);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
+  gap: var(--luke-space-6);
+  margin: 0 0 var(--luke-space-6);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .pull-request-count {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-variant-numeric: tabular-nums;
-  font-weight: 400;
+  font-weight: var(--luke-weight-regular);
 }
 
 .pull-request-none {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* A part of the overview still being read: its blocks in the type its
@@ -1999,26 +2139,26 @@ button.file-ref:hover .file-ref-path {
 }
 
 .pull-request-skeleton > .skeleton + .skeleton {
-  margin-top: var(--space-6);
+  margin-top: var(--luke-space-6);
 }
 
 .pull-request-head-skeleton,
 .pull-request-title + .pull-request-failure {
-  margin-top: var(--space-8);
+  margin-top: var(--luke-space-8);
 }
 
 .pull-request-checks-skeleton {
-  padding: var(--space-8) var(--boxed-inset);
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
+  padding: var(--luke-space-8) var(--boxed-inset);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
 }
 
 /* The checks, one boxed list, each row opening the check's page, folded
-   past five behind a quiet control along its foot. */
+   past five behind a quiet button under it. */
 .pull-request-checks {
   overflow: clip;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
 }
 
 .pull-request-check-list {
@@ -2028,27 +2168,7 @@ button.file-ref:hover .file-ref-path {
 }
 
 .pull-request-check-list > li + li {
-  border-top: 1px solid var(--hairline);
-}
-
-.pull-request-checks-fold {
-  display: block;
-  width: 100%;
-  padding: var(--space-6) var(--boxed-inset);
-  border: 0;
-  border-top: 1px solid var(--hairline);
-  background: none;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  text-align: center;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.pull-request-checks-fold:hover {
-  background: var(--raised);
-  color: var(--text-primary);
+  border-top: 1px solid var(--luke-color-border);
 }
 
 /* A deployment's door to the address it serves, quiet at its row's end. */
@@ -2064,8 +2184,8 @@ button.file-ref:hover .file-ref-path {
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
-  border-radius: 4px;
-  background: var(--raised);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-hover);
   object-fit: cover;
 }
 
@@ -2074,12 +2194,12 @@ button.file-ref:hover .file-ref-path {
   width: 100%;
   min-width: 0;
   align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-6) var(--boxed-inset);
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-6) var(--boxed-inset);
   border: 0;
   background: none;
-  color: var(--text-primary);
-  font-size: 12.5px;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
   text-align: left;
 }
 
@@ -2088,7 +2208,7 @@ button.pull-request-check {
 }
 
 button.pull-request-check:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .pull-request-check-glyph {
@@ -2104,19 +2224,19 @@ button.pull-request-check:hover {
 }
 
 [data-check-state="passed"] {
-  --check-tone: var(--state-complete);
+  --check-tone: var(--luke-color-complete);
 }
 
 [data-check-state="failed"] {
-  --check-tone: var(--danger);
+  --check-tone: var(--luke-color-danger);
 }
 
 [data-check-state="pending"] {
-  --check-tone: var(--state-attention);
+  --check-tone: var(--luke-color-attention);
 }
 
 [data-check-state="skipped"] {
-  --check-tone: var(--text-tertiary);
+  --check-tone: var(--luke-color-text-subtle);
 }
 
 .pull-request-check-name {
@@ -2136,8 +2256,8 @@ button.pull-request-check:hover {
    (`PANEL_MARKDOWN_COMPONENTS`). */
 .pull-request-words {
   min-width: 0;
-  color: var(--text-primary);
-  font-size: 13px;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
   line-height: 1.55;
   user-select: text;
 }
@@ -2146,7 +2266,7 @@ button.pull-request-check:hover {
 .pull-request-conversation {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2156,11 +2276,11 @@ button.pull-request-check:hover {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--space-6);
-  padding: var(--space-8) var(--boxed-inset);
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  font-size: 12.5px;
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-8) var(--boxed-inset);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  font-size: var(--luke-type-caption-size);
 }
 
 /* A task list stands as GitHub draws one: its boxes in the bullets' place. */
@@ -2170,7 +2290,7 @@ button.pull-request-check:hover {
 }
 
 .pull-request-words li > input[type="checkbox"] {
-  margin: 0 var(--space-6) 0 0;
+  margin: 0 var(--luke-space-6) 0 0;
   vertical-align: middle;
 }
 
@@ -2181,7 +2301,7 @@ button.pull-request-check:hover {
   display: inline-block;
   max-width: 100%;
   height: auto;
-  border-radius: var(--space-4);
+  border-radius: var(--luke-radius-6);
   vertical-align: middle;
 }
 
@@ -2189,8 +2309,6 @@ button.pull-request-check:hover {
   display: inline-block;
   width: min(100%, 240px);
   aspect-ratio: 16 / 10;
-  border-radius: var(--space-4);
-  background: var(--raised);
   vertical-align: middle;
 }
 
@@ -2207,40 +2325,40 @@ button.pull-request-check:hover {
 .pull-request-threads {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .pull-request-thread {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
   min-width: 0;
   overflow: clip;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
 }
 
 .pull-request-thread-head {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-6) var(--boxed-inset);
-  color: var(--text-primary);
-  font-size: 12.5px;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-6) var(--boxed-inset);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
   transition: background-color var(--duration-hover) ease;
 }
 
 .pull-request-thread-head:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .pull-request-thread-head > svg {
   width: 14px;
   height: 14px;
   margin-left: auto;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* A long path is cut at its start rather than its end, so its file's name
@@ -2261,22 +2379,11 @@ button.pull-request-check:hover {
 
 /* Whether a thread was resolved or outdated, in the quiet badge a bot's
    name wears (desktop.css's `.actor-bot`). */
-.pull-request-thread-label {
-  flex: 0 0 auto;
-  padding: 0 5px; /* off-scale */
-  border-radius: 4px;
-  background: var(--raised-strong);
-  color: var(--text-secondary);
-  font-size: 10.5px;
-  font-weight: 500;
-  line-height: 16px;
-}
-
 /* The preview (file-diff.tsx) stands in the box rather than filling a tab. */
 .pull-request-thread-lines {
   flex: none;
   overflow-y: visible;
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--luke-color-border);
   background: var(--code-ground);
 }
 
@@ -2290,13 +2397,83 @@ button.pull-request-check:hover {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--space-6);
-  padding: var(--space-8) var(--boxed-inset);
-  border-top: 1px solid var(--hairline);
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-8) var(--boxed-inset);
+  border-top: 1px solid var(--luke-color-border);
 }
 
 .pull-request-thread-more {
-  margin: 0 var(--boxed-inset) var(--space-8);
+  margin: 0 var(--boxed-inset) var(--luke-space-8);
+}
+
+/* Under a thread's comments, what a member does on it
+   (`pull-request-thread-actions.tsx`): a quiet field-shaped Reply… that
+   opens the reply's own field, and Resolve or Unresolve at the row's end;
+   GitHub's refusal of the last one under them. */
+.pull-request-thread-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--boxed-inset);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.pull-request-thread-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--luke-control-gap);
+}
+
+.pull-request-thread-reply-open {
+  min-width: 0;
+  height: var(--luke-control-height);
+  flex: 1 1 auto;
+  padding: 0 var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-input);
+  color: var(--luke-color-text-subtle);
+  font: inherit;
+  font-size: var(--luke-type-caption-size);
+  text-align: start;
+  cursor: text;
+}
+
+.pull-request-thread-reply-open:hover {
+  border-color: var(--luke-color-border-strong);
+}
+
+.pull-request-thread-reply {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
+.pull-request-thread-reply-field {
+  box-sizing: border-box;
+  min-height: 72px;
+  max-height: 240px;
+  resize: vertical;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+.pull-request-thread-reply-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--luke-control-gap);
+}
+
+.pull-request-thread-note {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+.pull-request-thread-note .failure-note-words {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* The reactions under a description or a comment, as GitHub draws them:
@@ -2340,7 +2517,7 @@ button.pull-request-check:hover {
 
 /* The earlier entries a read left on GitHub, counted where they would stand. */
 .pull-request-earlier {
-  margin: 0 0 var(--space-8);
+  margin: 0 0 var(--luke-space-8);
   padding-inline: var(--row-inset);
 }
 
@@ -2349,25 +2526,25 @@ button.pull-request-check:hover {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
   text-decoration: underline;
 }
 
 .file-tab-snippet-label {
   margin: 0;
-  padding: var(--space-8) var(--space-12) var(--space-4);
-  color: var(--text-tertiary);
-  font-size: 11.5px;
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
 }
 
 .file-tab-edge {
   display: block;
   width: 100%;
-  padding: var(--space-4) 0 var(--space-4) 48px;
+  padding: var(--luke-space-4) 0 var(--luke-space-4) var(--luke-space-48);
   border: 0;
   background: none;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font: inherit;
   text-align: left;
   -webkit-user-select: none;
@@ -2375,12 +2552,12 @@ button.pull-request-check:hover {
 }
 
 .file-tab-edge:hover:not(:disabled) {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 /* The edges run the lines' whole width, so their ring is drawn inside them. */
 .file-tab-edge:focus-visible {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
 }
 
 /* Luke's note over the lines it is on, in a File tab (file-note.tsx): a
@@ -2388,20 +2565,20 @@ button.pull-request-check:hover {
    stands in a diff. Lines unwrapped scroll sideways under it while it
    keeps to the tab's width in view. */
 .file-note {
-  margin: var(--space-6) var(--space-12);
+  margin: var(--luke-space-6) var(--luke-space-12);
   overflow: hidden;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 8px;
-  background: var(--raised);
-  color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
-  font-size: 12.5px;
-  line-height: 1.5;
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
+  font-family: var(--luke-font-sans);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
 }
 
 .file-tab-lines[data-wrap="false"] > .file-note {
   position: sticky;
-  left: var(--space-12);
+  left: var(--luke-space-12);
 }
 
 /* The note's words select with the lines around it; its header is the card's controls. */
@@ -2409,9 +2586,10 @@ button.pull-request-check:hover {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-2);
-  font-size: 11.5px;
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-2) var(--luke-space-8) var(--luke-space-2) var(--luke-space-2);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   -webkit-user-select: none;
   user-select: none;
 }
@@ -2421,11 +2599,11 @@ button.pull-request-check:hover {
   min-width: 0;
   flex: 1;
   align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-4);
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-4);
   overflow: hidden;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--luke-radius-6);
   background: none;
   color: inherit;
   font: inherit;
@@ -2433,19 +2611,19 @@ button.pull-request-check:hover {
 }
 
 .file-note-fold:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 /* The note's card clips what it holds, so its fold's ring is drawn inside. */
 .file-note-fold:focus-visible {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
 }
 
 .file-note-fold > svg:first-child {
   width: 12px;
   height: 12px;
   flex: 0 0 auto;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   transition: transform var(--duration-quick) var(--motion-exit);
 }
 
@@ -2456,13 +2634,13 @@ button.pull-request-check:hover {
 .file-note-author {
   flex: 0 0 auto;
   color: var(--voice-luke);
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .file-note-lines,
 .file-note-time {
   flex: 0 0 auto;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* The lines give way before the header's parts would stand on one another. */
@@ -2478,65 +2656,41 @@ button.pull-request-check:hover {
 .file-note-preview {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.file-note-show {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-secondary);
-  font: inherit;
-  white-space: nowrap;
-}
-
-.file-note-show > svg {
-  display: none;
-  width: 14px;
-  height: 14px;
-}
-
 /* A narrow panel's note says its age in the link's pill, and the link
-   draws the Code tab's glyph alone, named still. */
+   folds to the Code tab's glyph alone, named still. */
 @container side-panel (max-width: 359px) {
-  .file-note-time,
-  .file-note-show-words {
+  .file-note-time {
     display: none;
   }
 
-  .file-note-show > svg {
-    display: block;
+  .file-note-header {
+    --luke-fold: folded;
   }
 }
 
-.file-note-show:hover {
-  color: var(--text-primary);
-  text-decoration: underline;
-}
-
 .file-note-words {
-  padding: 0 var(--space-12) var(--space-8) 38px;
+  padding: 0 var(--luke-space-12) var(--luke-space-8) 38px;
   overflow-wrap: anywhere;
 }
 
 /* Luke's note reads as the step's words, so the path above it steps back. */
 .code-card:has(> .code-card-note) .file-ref {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .code-card-note {
   margin: 0;
-  padding: var(--space-8) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  background: var(--raised);
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.5;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
   overflow-wrap: anywhere;
   -webkit-user-select: text;
   user-select: text;
@@ -2544,7 +2698,6 @@ button.pull-request-check:hover {
 
 .code-card-header:has(+ .code-card-note) {
   border-bottom: 0;
-  padding-bottom: 0;
 }
 
 /* Lines wrap rather than scroll sideways, so no card takes a swipe from the
@@ -2552,11 +2705,11 @@ button.pull-request-check:hover {
    nothing by default (`base.css`): a File tab's, a card's, and an inbox
    item's code is read to be copied, the gutter's numbers left out of it. */
 .code-lines {
-  padding: var(--space-6) 0;
+  padding: var(--luke-space-6) 0;
   color: var(--code-text);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.6;
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-reading-leading);
   -webkit-user-select: text;
   user-select: text;
 }
@@ -2573,8 +2726,8 @@ button.pull-request-check:hover {
 
 .code-line-number {
   flex: 0 0 auto;
-  width: 48px;
-  padding: 0 var(--space-12) 0 0;
+  width: 48px; /* off-scale: a gutter for four digits */
+  padding: 0 var(--luke-space-12) 0 0;
   color: var(--code-line-number);
   text-align: right;
   -webkit-user-select: none;
@@ -2607,15 +2760,410 @@ button.pull-request-check:hover {
   }
 }
 
+/* A transcript's markdown (../ai-elements/message.tsx's MessageResponse):
+   selectable, breaking a long path anywhere rather than widening the
+   column. Its headings are a note's, a step above the words around them and
+   no more, and its lists keep to the column's own indent. These stand
+   outside every layer, as the utilities they replaced won over Streamdown's
+   own spacing between blocks; its first block's top margin and its last
+   block's bottom one are still none. */
+.transcript-markdown {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.transcript-heading {
+  margin: var(--luke-space-8) 0 var(--luke-space-4);
+  font-size: var(--luke-type-body-size);
+  font-weight: var(--luke-weight-medium);
+}
+
+.transcript-heading:where([data-level="1"], [data-level="2"], [data-level="3"]) {
+  font-weight: var(--luke-weight-semibold);
+}
+
+.transcript-heading:where([data-level="1"], [data-level="2"]) {
+  margin-top: var(--luke-space-12);
+}
+
+.transcript-heading:where([data-level="1"]) {
+  font-size: var(--luke-type-dialog-size);
+}
+
+.transcript-heading:where([data-level="2"]) {
+  font-size: var(--luke-type-section-size);
+}
+
+.transcript-list {
+  margin-block: var(--luke-space-4);
+  padding-left: var(--luke-space-20);
+  list-style-type: disc;
+}
+
+ol.transcript-list {
+  list-style-type: decimal;
+}
+
+.transcript-list-item {
+  margin-block: var(--luke-space-2);
+}
+
+.transcript-markdown > :first-child {
+  margin-top: 0;
+}
+
+.transcript-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+/* A tool call's input or output (../ai-elements/code-block.tsx): its words
+   as they are, in mono, wrapping anywhere rather than widening the
+   transcript, and scrolling inside the block past its height. */
+.code-block {
+  max-height: 256px; /* off-scale: a block's tallest before it scrolls */
+  margin: 0;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  overflow: auto;
+  color: var(--luke-color-text);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: 1.625;
+  overflow-wrap: anywhere;
+  user-select: text;
+  white-space: pre-wrap;
+}
+
+/* Where a transcript line's words start: past a call's line inset, its 16px
+   icon seat, and the gap after it. What opens under a line (a call's body,
+   a model's reasoning, a todo list, a subagent's failure, a call's pictures)
+   is set in to it, so it stands under the words rather than the icon. */
+:root {
+  --transcript-gutter: calc(var(--luke-space-4) + 16px + var(--luke-icon-gap));
+}
+
+/* A tool call (../ai-elements/tool.tsx): one line, opening its body under
+   it, or a tab elsewhere (`.tool-opening`), in the muted ink its icon,
+   subject, and working mark keep, its label in the full ink over it; a
+   hover fill says the line opens. */
+.tool {
+  font-size: var(--luke-type-caption-size);
+}
+
+.tool-line {
+  display: flex;
+  height: 28px; /* off-scale: a call's line */
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding-inline: var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
+  color: var(--luke-color-text-muted);
+  cursor: pointer;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.tool-line:hover {
+  background: var(--luke-color-fill-strong);
+}
+
+/* A call whose subject opens in a tab of its own: the same line as a button
+   across the transcript's width. */
+.tool-opening {
+  width: 100%;
+  background: transparent;
+  font-size: var(--luke-type-caption-size);
+  text-align: left;
+}
+
+.tool-icon {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--luke-color-text-muted);
+}
+
+.tool-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tool-words {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: var(--luke-space-4);
+}
+
+.tool-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--luke-color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Note that a chip after the label gives way first, since a name cut at its
+   end still reads. */
+.tool-label[data-chipped] {
+  flex-shrink: 0;
+}
+
+.tool-chip {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* The subject takes what is left of the line and fades where the line cuts
+   it, over the last `--label-fade` as a cut label's (desktop.css). Note
+   that it is drawn without measuring the words, unlike a label's
+   (`use-clipped.ts`), because the subject's box takes the line's whole rest
+   whatever it holds, so words that stop short end before the fade begins,
+   and words still streaming in reach it without a resize to measure. */
+.tool-subject {
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+  white-space: nowrap;
+}
+
+.tool-subject[data-code] {
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+}
+
+.tool-place {
+  flex-shrink: 0;
+  padding-inline: var(--luke-space-4);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-6);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* The body under an open line, set in past its icon: a card holding the
+   input and the answer, a hairline between them, clipped to its corners so
+   a focus ring draws inside it. */
+.tool-body {
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+
+  margin: var(--luke-space-4) 0 var(--luke-space-4) var(--transcript-gutter);
+  overflow: hidden;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-fill-hover);
+}
+
+.tool-body > * + * {
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.tool-prompt {
+  color: var(--luke-color-text-muted);
+  user-select: none;
+}
+
+.tool-patch-line {
+  display: block;
+}
+
+.tool-patch-line[data-line="added"] {
+  color: var(--luke-color-working);
+}
+
+.tool-patch-line[data-line="removed"] {
+  color: var(--luke-color-danger-text);
+}
+
+.tool-patch-line[data-line="mark"] {
+  color: var(--luke-color-text-muted);
+}
+
+.tool-error {
+  margin: 0;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  color: var(--luke-color-danger-text);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: 1.625;
+  overflow-wrap: anywhere;
+  user-select: text;
+  white-space: pre-wrap;
+}
+
+/* Show more, under an answer cut to its first lines: a quiet strip across
+   the card's width. */
+.tool-more {
+  display: block;
+  width: 100%;
+  padding: var(--luke-space-6) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+  background: transparent;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  text-align: left;
+  transition: color var(--duration-quick) var(--spring);
+}
+
+.tool-more:hover {
+  color: var(--luke-color-text);
+}
+
+/* A plan's card (../ai-elements/plan.tsx), and what else a transcript opens
+   on drawn as one: a card on the raised ground inside a hairline, clipped to
+   its corners so the header's hover fill follows them and what is in it
+   rings inside itself. The header is the one line a closed card shows, its
+   chevron and icon in the muted ink and the title cut to the line behind
+   its quieter label; open, the plan stands under a hairline in the body
+   type, its words running or, for a replay, its blocks stacked. */
+.plan-card {
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+
+  overflow: clip;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-fill-hover);
+  font-size: var(--luke-type-caption-size);
+}
+
+.plan-card-head {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding-inline: var(--luke-space-12);
+  border-radius: inherit;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.plan-card-head:hover {
+  background: var(--luke-color-fill-strong);
+}
+
+.plan-card[open] > .plan-card-head {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.plan-card-icon {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--luke-color-text-muted);
+}
+
+.plan-card-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.plan-card-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-card-label {
+  color: var(--luke-color-text-muted);
+}
+
+.plan-card-name {
+  font-weight: var(--luke-weight-medium);
+}
+
+.plan-card-body {
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
+}
+
+.plan-card-body[data-layout="stack"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+}
+
+/* A model's reasoning (../ai-elements/reasoning.tsx): one line, a call's
+   line's height and type, the brain in the 16px seat a call's icon stands
+   in, "Thought" in the full ink and the preview after it in the muted one,
+   cut to the line. Open, its words sit under the line's, set in past the
+   brain, in the muted ink, keeping their own breaks and wrapping anywhere. */
+.reasoning {
+  font-size: var(--luke-type-caption-size);
+}
+
+.reasoning-line {
+  display: flex;
+  height: 28px; /* off-scale: a call's line */
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding-inline: var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
+  color: var(--luke-color-text-muted);
+  cursor: pointer;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.reasoning-line:hover {
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
+}
+
+.reasoning-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.reasoning-preview {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reasoning-label {
+  color: var(--luke-color-text);
+}
+
+.reasoning-body {
+  margin: var(--luke-space-4) 0 0 var(--transcript-gutter);
+  color: var(--luke-color-text-muted);
+}
+
+.reasoning-words {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 /* A transcript's fenced block (transcript-markdown.tsx), drawn as a Code
    tab card is: the code's own ground inside a hairline, a header naming
    the language with the copy at its right, and the lines in the cards'
-   type. The lines keep whole and scroll sideways inside the block, so a
-   long one never widens the transcript. */
+   type. The copy is the window's own icon button, flush with the header's
+   right edge, so the header is the button's height and no more. The lines
+   keep whole and scroll sideways inside the block, so a long one never
+   widens the transcript. */
 .transcript-code {
   overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
   background: var(--code-ground);
 }
 
@@ -2624,18 +3172,19 @@ button.pull-request-check:hover {
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: var(--control-gap);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  background: var(--raised);
-  color: var(--text-secondary);
-  font-size: 11.5px;
+  gap: var(--luke-control-gap);
+  padding-left: var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .transcript-code-language {
   min-width: 0;
   overflow: hidden;
-  font-family: var(--font-mono);
+  font-family: var(--luke-font-mono);
   text-overflow: ellipsis;
   text-transform: lowercase;
   white-space: nowrap;
@@ -2643,13 +3192,13 @@ button.pull-request-check:hover {
 
 .transcript-code-body {
   margin: 0;
-  padding: var(--space-8) var(--space-12);
+  padding: var(--luke-space-8) var(--luke-space-12);
   overflow-x: auto;
   overscroll-behavior-x: contain;
   color: var(--code-text);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.6;
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-reading-leading);
   overflow-wrap: normal;
   tab-size: 2;
   white-space: pre;
@@ -2662,18 +3211,18 @@ button.pull-request-check:hover {
 /* An inline span of code: the blocks' type on a subtle fill, no edge. */
 .transcript-inline-code {
   padding: 0.1em 0.35em;
-  border-radius: 4px;
-  background: var(--raised-strong);
-  font-family: var(--font-mono);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-strong);
+  font-family: var(--luke-font-mono);
   font-size: 0.9em;
 }
 
 /* A transcript's table: no box, a hairline under each row, the header in
-   the secondary colour at medium weight, the outer columns flush with the
-   words around it. A table wider than the column scrolls sideways inside
-   its own box, fading each edge it hides columns past as a Markdown table
-   does (markdown.css). A cell keeps the alignment its column's rule gave it,
-   which it carries as its own style. */
+   the muted ink at the label's weight, the outer columns flush with the
+   words around it, in the body's type. A table wider than the column
+   scrolls sideways inside its own box, fading each edge it hides columns
+   past as a Markdown table does (markdown.css). A cell keeps the alignment
+   its column's rule gave it, which it carries as its own style. */
 .transcript-table {
   max-width: 100%;
   overflow-x: auto;
@@ -2683,14 +3232,14 @@ button.pull-request-check:hover {
 .transcript-table > table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12.5px;
+  font-size: var(--luke-type-body-size);
   font-variant-numeric: tabular-nums;
-  line-height: 1.5;
+  line-height: var(--luke-type-body-leading);
 }
 
 .transcript-table :is(th, td) {
-  padding: var(--space-6) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
+  padding: var(--luke-space-6) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
   overflow-wrap: normal;
   text-align: left;
   vertical-align: top;
@@ -2705,9 +3254,9 @@ button.pull-request-check:hover {
 }
 
 .transcript-table th {
-  border-bottom-color: var(--hairline-strong);
-  color: var(--text-secondary);
-  font-weight: 500;
+  border-bottom-color: var(--luke-color-border-strong);
+  color: var(--luke-color-text-muted);
+  font-weight: var(--luke-weight-medium);
   white-space: nowrap;
 }
 
@@ -2743,18 +3292,138 @@ button.pull-request-check:hover {
 
 /* Coding agents --------------------------------------------------------- */
 
-/* The quiet line a transcript ends on once its turn was stopped or failed. */
-.agent-end-line {
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: 12.5px;
+/* The block a transcript ends on once its turn was stopped or failed, or
+   once another agent continued it (`agent-tab.tsx`'s AgentEndLine): the
+   end line, then under it the row the end leads on to, Continue in new
+   agent or Continued in. In an empty transcript the two stand as siblings
+   in the empty state's own centred column instead. */
+.agent-end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-8);
 }
 
 /* Note that it keeps the gap the log's `space-y-3` leaves under every block
-   but its last, which the reset above takes, so a failure's press never
+   but its last, which the reset below takes, so a failure's press never
    touches the pull request's row under it. */
-[role="log"] > .agent-end-line:not(:last-child) {
-  margin-bottom: 0.75rem;
+[role="log"] > :is(.agent-end, .agent-end-line):not(:last-child) {
+  margin-bottom: var(--luke-space-12);
+}
+
+/* The end line: a failure's mark, its words, then what the turn cost after
+   a dot, flowing as one sentence, so a long failure wraps under its own
+   words and the mark never parts from the first of them. Note that the
+   14px mark is lowered to sit centred on the words' x-height, and that
+   only a failure is drawn in the danger ink: a stop is the developer's own
+   doing. */
+.agent-end-line {
+  margin: 0;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.agent-end-line > .failed-mark {
+  margin-right: var(--luke-space-4);
+  vertical-align: -3px; /* off-scale: centres a 14px mark on 12px words */
+}
+
+.agent-end-line[data-failed] > .agent-end-words {
+  color: var(--luke-color-danger-text);
+}
+
+.agent-end-dot {
+  margin: 0 var(--luke-space-4);
+}
+
+.agent-end-cost {
+  white-space: nowrap;
+}
+
+.agent-end-remedy {
+  margin-left: var(--luke-space-8);
+  vertical-align: middle;
+}
+
+/* Where an agent may be continued (`continue-agent.tsx`), under a failed
+   turn's end line or in a closed box's note: Continue in new agent, and
+   why it did not start where it did not. */
+.agent-continue {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4) var(--luke-space-8);
+}
+
+.agent-continue-note {
+  color: var(--luke-color-danger-text);
+}
+
+/* The row naming the agents that continued this one, at the transcript's
+   end where an archive took the box: an arrow, as Forked to leads on its
+   split, then Continued in and the chips, which take their baseline from
+   their names, so every word stands on one line. */
+.agent-continued {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--luke-space-4);
+  margin: 0;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
+.agent-continued > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
+  align-self: center;
+}
+
+/* Continued in and its chips, in the row above or the continued box's note. */
+.agent-continued-in {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--luke-space-4);
+}
+
+.agent-continued-item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+}
+
+/* A box closed for good (`agent-composer.tsx`) wears the held look a box
+   sending does, faded, so the note and Continue under it read as the way
+   on. Note that it still takes a press, because its controls are disabled
+   one by one and its branch and changes chips still open what they name. */
+.agent-composer[data-closed] > form {
+  opacity: 0.6;
+}
+
+/* A line the agent refused for good (`undelivered-mark.tsx`): its bubble
+   and files faded, as words that did not go, and the quiet mark under
+   them in the danger red a failure note speaks in. */
+.agent-undelivered {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  margin: 0;
+  color: var(--luke-color-danger-text);
+  font-size: var(--luke-type-caption-size);
+}
+
+.agent-undelivered > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
+}
+
+.is-user:has(> .agent-undelivered) > :not(.agent-undelivered, .message-meta) {
+  opacity: 0.6;
 }
 
 /* A finished turn's line (`working-time.tsx`) breaks between how long it
@@ -2771,14 +3440,82 @@ button.pull-request-check:hover {
 .agent-turn-foot {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   min-width: 0;
-  margin-top: var(--space-4);
+  margin-top: var(--luke-space-4);
 }
 
 .agent-turn-foot > [data-worked] {
   min-width: 0;
   margin-top: 0;
+}
+
+/* The quiet line under an agent's message naming the agents forked at it
+   (`fork-action.tsx`), in the meta voice a finished turn's line speaks in,
+   its chips wrapping as words do. */
+.agent-forked-to {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4);
+  margin: var(--luke-space-2) 0 0;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
+.agent-forked-to > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
+}
+
+.agent-forked-to-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* A forked draft's chip over its box: what it forks, the message's opening
+   words, and the × that lets the fork go, docked on the composer's own
+   inset as the to-do list is. The × is the shared quiet IconButton, held to
+   the chip's end by its seat (fork-action.tsx). */
+.draft-fork-dock {
+  padding: 0 var(--luke-space-16) var(--luke-space-8);
+}
+
+.draft-fork-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-4);
+  padding: 0 0 0 var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+.draft-fork-glyph {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.draft-fork-quote {
+  min-width: 0;
+  background: none;
+  overflow: hidden;
+  color: var(--luke-color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.draft-fork-quote:hover {
+  text-decoration: underline;
+}
+
+.draft-fork-drop {
+  display: flex;
+  margin-left: auto;
 }
 
 /* The room under the transcript for the composer, with no rule between
@@ -2795,23 +3532,140 @@ button.pull-request-check:hover {
    newest line, scrolled to or followed, stands whole above it, and a
    control focused from below is scrolled in past the fade as well. */
 .agent-log-over-composer {
-  padding-bottom: calc(var(--scroll-fade) + var(--space-4));
-  scroll-padding-bottom: calc(var(--scroll-fade) + var(--space-4));
+  padding-bottom: calc(var(--scroll-fade) + var(--luke-space-4));
+  scroll-padding-bottom: calc(var(--scroll-fade) + var(--luke-space-4));
 }
 
 /* The to-do list the agent is working through, docked over the composer
    on the composer's own inset, so its card and the composer's line up; a
    column or a panel that pads the composer in pads the list in alike. */
 .agent-todos-dock {
-  padding: 0 16px 8px;
+  padding: 0 var(--luke-space-16) var(--luke-space-8);
 }
 
-/* A to-do list a call's row opens onto is a record of one write, so the
-   working mark on its item in progress holds still, on the frame a capture
-   holds it on, while the call's own working mark on the row above runs. Only
-   the docked list, the one the agent is at, keeps the mark moving. */
-[data-todos] > .disclosure-body {
-  --loop-motion: paused;
+/* The docked list's card (transcript-blocks.tsx's `TranscriptTodosDock`),
+   on the task card's look (`.plan-card`): one line saying how far the list
+   has got, the item it is at cut to the line, and the chevron at its end,
+   which opens onto the whole list under a hairline. */
+.todos-dock {
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+
+  overflow: clip;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-fill-hover);
+  font-size: var(--luke-type-caption-size);
+}
+
+.todos-dock-head {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding-inline: var(--luke-space-12);
+  border-radius: inherit;
+  cursor: pointer;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.todos-dock-head:hover {
+  background: var(--luke-color-fill-strong);
+}
+
+.todos-dock[open] > .todos-dock-head {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.todos-dock-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--luke-color-text-muted);
+}
+
+.todos-dock-summary {
+  flex-shrink: 0;
+  color: var(--luke-color-text-muted);
+}
+
+.todos-dock-focus {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todos-dock-chevron {
+  margin-left: auto;
+}
+
+.todos-dock-body {
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+/* One write of the list, as a call's row opens onto it: set bare at the
+   row's text column, past the line's inset and icon, and selectable as a
+   call's body is; a failure is said under it. */
+.todos-body {
+  margin: var(--luke-space-2) 0 var(--luke-space-4) var(--transcript-gutter);
+  user-select: text;
+}
+
+.todos-error {
+  margin: var(--luke-space-4) 0 0;
+  color: var(--luke-color-danger-text);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* A list's items, each behind the glyph of where it stands, in a 16px
+   seat with a call's 8px gap after it, centred on the item's first line.
+   Pending and done wear the muted ink, in progress the full one, and a
+   done item's words are muted beside it. */
+.todo-items {
+  --state-glyph-size: 14px;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  margin: 0;
+  padding: 0;
+  line-height: var(--luke-type-body-leading);
+  list-style: none;
+}
+
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--luke-icon-gap);
+}
+
+.todo-mark {
+  display: flex;
+  width: 16px;
+  height: 1lh;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--luke-color-text-muted);
+}
+
+.todo-item[data-todo-status="in_progress"] > .todo-mark {
+  color: var(--luke-color-text);
+}
+
+.todo-words {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.todo-item[data-todo-status="done"] > .todo-words {
+  color: var(--luke-color-text-muted);
 }
 
 /* The list opens upward, since the composer under it holds the card's foot
@@ -2831,9 +3685,9 @@ button.pull-request-check:hover {
   animation: todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
 }
 
-[data-todos-dock][data-disclosure="opening"] > .disclosure-body {
+[data-todos-dock][data-disclosure="opening"] > .luke-disclosure-body {
   animation:
-    disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
+    luke-disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
     todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
 }
 
@@ -2845,9 +3699,9 @@ button.pull-request-check:hover {
   animation: todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
 }
 
-[data-todos-dock][data-disclosure="closing"] > .disclosure-body {
+[data-todos-dock][data-disclosure="closing"] > .luke-disclosure-body {
   animation:
-    disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
+    luke-disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
     todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
 }
 
@@ -2883,6 +3737,70 @@ button.pull-request-check:hover {
   }
 }
 
+/* The shared composer card (../ai-elements/prompt-input.tsx): one card on
+   the sidebar's ground inside a hairline, ringed while its field holds the
+   caret (`.field-well`, base.css); under its field, the foot with the
+   owner's controls at its left and the round submit at its right. */
+.prompt-input {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-14);
+  background: var(--luke-color-sidebar);
+}
+
+.prompt-input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-12);
+  padding: 0 var(--luke-space-12) var(--luke-space-12);
+}
+
+.prompt-input-tools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+/* The submit: a disc at the control's height that never changes size or
+   place, filled in ink while it takes a press and on the strong fill with a
+   muted glyph while it does not. */
+.prompt-input-submit {
+  display: flex;
+  width: var(--luke-control-height);
+  height: var(--luke-control-height);
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--luke-radius-full);
+  background: var(--luke-color-text);
+  color: var(--luke-color-ink-inverse);
+  cursor: default;
+  transition:
+    color var(--duration-quick) var(--spring),
+    background-color var(--duration-quick) var(--spring);
+}
+
+.prompt-input-submit:disabled {
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text-muted);
+}
+
+.prompt-input-submit > svg,
+.prompt-input-submit-ring {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+.prompt-input-submit > .prompt-input-submit-stop {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
 /* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
    default type, and a note under it, on the transcript's own inset so the
    card and the column line up. What stands here is the room around the
@@ -2891,23 +3809,57 @@ button.pull-request-check:hover {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 0 16px 12px;
+  gap: var(--luke-space-8);
+  padding: 0 var(--luke-space-16) var(--luke-space-12);
 }
 
 .agent-composer-note {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-left: 4px;
+  gap: var(--luke-space-8);
+  padding-left: var(--luke-space-4);
 }
 
-/* The box's field (`composer-field.tsx`): its editor, set in the card's
-   type with no space between its paragraphs, as a textarea's lines stand,
-   and the placeholder the field draws at the editor's own insets while the
-   words are empty, dimmed with the editor while the box is held. */
+/* The box's field (`composer-field.tsx`): its editor in the body type, one
+   line to eight and then scrolling, with no space between its paragraphs,
+   as a textarea's lines stand, and the placeholder the field draws at the
+   editor's own insets while the words are empty, dimmed with the editor
+   while the box is held. No ring: the card around it rings (`.field-well`). */
 .agent-composer-field {
   position: relative;
+  --agent-composer-field-block: calc(var(--luke-space-16) + var(--luke-space-8));
+}
+
+.agent-composer-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  max-height: calc(8 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  overflow-y: auto;
+  padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-8);
+  background: transparent;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
+  outline: none;
+  user-select: text;
+}
+
+.agent-composer-input[aria-disabled="true"] {
+  opacity: 0.6;
+}
+
+/* Note that the editor keeps its spaces as typed, as TipTap's own base rules
+   would were they let in (`composer-editor.ts`'s `injectCSS`), so the space a
+   chosen chip is followed by stands at the end of a line rather than
+   collapsing, and the caret is drawn after it, not against the chip. */
+.composer-editor {
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.composer-editor [contenteditable="false"] {
+  white-space: normal;
 }
 
 .agent-composer-input p {
@@ -2920,10 +3872,10 @@ button.pull-request-check:hover {
   right: 0;
   left: 0;
   overflow: hidden;
-  padding: 1rem 1rem 0;
-  color: var(--text-secondary);
-  font-size: var(--composer-type);
-  line-height: 1.45;
+  padding: var(--luke-space-16) var(--luke-space-16) 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
   pointer-events: none;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2939,9 +3891,9 @@ button.pull-request-check:hover {
    it is a button drawing its words in the bubble's type, which opens the
    same file. */
 .skill-chip {
-  border-radius: 4px;
-  background: var(--raised-strong);
-  box-shadow: 0 0 0 2px var(--raised-strong);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-strong);
+  box-shadow: 0 0 0 2px var(--luke-color-fill-strong);
 }
 
 /* Note that the button keeps to its words' height, as the composer's pill
@@ -2961,8 +3913,8 @@ button.skill-chip {
 
 button.skill-chip:hover,
 .skill-chip[data-opens]:hover {
-  background: var(--selected);
-  box-shadow: 0 0 0 2px var(--selected);
+  background: var(--luke-color-fill-selected);
+  box-shadow: 0 0 0 2px var(--luke-color-fill-selected);
 }
 
 /* The list a `/` opens: a searchable menu whose field is the composer,
@@ -2984,19 +3936,10 @@ button.skill-chip:hover,
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
-  color: var(--text-tertiary);
-  font-size: 12px;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.skill-menu-none {
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.skill-menu-hint {
-  font-size: 11.5px;
 }
 
 /* The foot's right: the model chip, the context ring, the microphone, and
@@ -3008,7 +3951,7 @@ button.skill-chip:hover,
   flex: 0 1 auto;
   min-width: 0;
   align-items: center;
-  gap: 4px;
+  gap: var(--luke-space-4);
 }
 
 /* The composer answers its card's width, not the window's, so it holds in
@@ -3023,23 +3966,17 @@ button.skill-chip:hover,
   flex: none;
 }
 
-/* Note that the ⋯ is named under the foot, because desktop.css's
-   `.icon-button` comes later and would otherwise draw it. */
-.agent-composer-actions .agent-composer-more,
-.agent-model-chip .harness-mark {
-  display: none;
+/* The +, the MCP button and the ⋯ each stand in a box of their own, which
+   the queries below hide and the ⋯ reads (`agent-composer.tsx`); the ⋯
+   stands only once the card is too narrow for every press. */
+.agent-composer-attach,
+.agent-servers-button,
+.dictate-button {
+  display: flex;
 }
 
-/* Too narrow for the published chips' words: each draws its mark alone,
-   its label and hint still naming it. */
-@container composer (max-width: 519px) {
-  .agent-composer :is(.agent-published-chip, .agent-changes-chip) {
-    padding: 0 var(--space-8);
-  }
-
-  .agent-composer :is(.agent-published-chip, .agent-changes-chip) .chip-name {
-    display: none;
-  }
+.agent-composer-actions .agent-composer-more {
+  display: none;
 }
 
 /* Too narrow for every press: the ⋯ takes in the Changes chip, the MCP
@@ -3048,7 +3985,7 @@ button.skill-chip:hover,
    opens for them hangs where the ⋯ stands. */
 @container composer (max-width: 399px) {
   .agent-composer :is(.agent-changes-chip, .agent-servers-button, .agent-context-button),
-  .agent-composer .dictate-button {
+  .agent-composer > form:not(.inbox-answer) .dictate-button {
     display: none;
   }
 
@@ -3064,25 +4001,6 @@ button.skill-chip:hover,
   }
 }
 
-/* Too narrow for the model's words: the chip draws its harness's mark
-   alone, where it has one, its label and hint still naming the choice. */
-@container composer (max-width: 299px) {
-  .agent-composer .agent-model-chip .luke-chip:has(.harness-mark) {
-    padding: 0 var(--space-8);
-  }
-
-  .agent-composer .agent-model-chip .harness-mark {
-    display: block;
-  }
-
-  .agent-composer
-    .agent-model-chip
-    .luke-chip:has(.harness-mark)
-    :is(.model-label, .settings-chevron) {
-    display: none;
-  }
-}
-
 /* The narrowest: the + goes into the ⋯ too, leaving what the agent
    published, the model, the ⋯, and Send. */
 @container composer (max-width: 239px) {
@@ -3091,12 +4009,32 @@ button.skill-chip:hover,
   }
 }
 
-/* The Inbox's answer box draws the same card (`inbox-pane.tsx`): its quiet
-   line is cut short before its presses are, and goes once the card is too
-   narrow for both, when the presses tighten and, still too wide, stack at
-   the right rather than run past the card. */
-.inbox-answer-quiet {
+/* The Inbox's answer box draws the same card and field
+   (`inbox-answer-box.tsx`): its + stands at the foot's left as the agent
+   box's does, and its quiet line beside it is cut short before its
+   microphone and presses are, and goes once the card is too narrow for
+   both, when the microphone goes too and the presses tighten and, still
+   too wide, stack at the right rather than run past the card. */
+.inbox-answer-tools {
   flex: 1 1 0;
+}
+
+.inbox-answer-quiet {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.inbox-answer-actions {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-4);
 }
 
 .inbox-answer-quiet [data-inbox-quiet] {
@@ -3107,10 +4045,11 @@ button.skill-chip:hover,
 }
 
 .inbox-presses {
+  display: flex;
   flex: none;
   flex-wrap: wrap;
   justify-content: flex-end;
-  row-gap: var(--space-8);
+  gap: var(--luke-space-8) var(--luke-control-gap);
 }
 
 /* A box answered in words alone holds its round Send at the field's end
@@ -3121,24 +4060,26 @@ button.skill-chip:hover,
 }
 
 @container composer (max-width: 299px) {
-  .inbox-answer-foot > .inbox-answer-quiet {
+  .inbox-answer-foot .inbox-answer-quiet,
+  .inbox-answer .dictate-button,
+  .inbox-answer:not([data-presses]) .inbox-answer-tools {
     display: none;
   }
 
-  .inbox-answer:not([data-presses]) > textarea {
-    padding: var(--space-12) calc(30px + 2 * var(--space-6)) var(--space-12) var(--space-12);
+  .inbox-answer:not([data-presses]) .agent-composer-input {
+    padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6))
+      var(--luke-space-12) var(--luke-space-12);
   }
 
-  .inbox-answer:not([data-presses]) > textarea::placeholder {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .inbox-answer:not([data-presses]) .agent-composer-placeholder {
+    padding: var(--luke-space-12) calc(var(--luke-control-height) + 2 * var(--luke-space-6)) 0
+      var(--luke-space-12);
   }
 
   .inbox-answer:not([data-presses]) > .inbox-answer-foot {
     position: absolute;
-    right: var(--space-6);
-    bottom: var(--space-6);
+    right: var(--luke-space-6);
+    bottom: var(--luke-space-6);
     padding: 0;
   }
 
@@ -3148,7 +4089,7 @@ button.skill-chip:hover,
   }
 
   .inbox-presses > button {
-    padding-inline: var(--space-8);
+    padding-inline: var(--luke-space-8);
   }
 }
 
@@ -3159,28 +4100,28 @@ button.skill-chip:hover,
   display: flex;
   flex: 1;
   min-width: 0;
-  height: 30px;
+  height: var(--luke-control-height);
   align-items: center;
-  gap: var(--space-8);
-  color: var(--text-secondary);
+  gap: var(--luke-control-gap);
+  color: var(--luke-color-text-muted);
 }
 
 .dictation-wave {
   display: flex;
   flex: 1;
   min-width: 0;
-  height: 20px;
+  height: var(--luke-space-20);
   align-items: center;
   justify-content: flex-end;
-  gap: 2px;
+  gap: var(--luke-space-2);
   overflow: clip;
 }
 
 .dictation-wave-bar {
   flex: none;
-  width: 2px;
+  width: var(--luke-space-2);
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: currentColor;
   transform: scaleY(0.08);
 }
@@ -3188,8 +4129,8 @@ button.skill-chip:hover,
 .dictation-clock {
   flex: none;
   min-width: 34px;
-  color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -3199,14 +4140,13 @@ button.skill-chip:hover,
   flex: 1;
   min-width: 0;
   align-items: center;
-  gap: var(--space-8);
-  font-size: 12.5px;
+  gap: var(--luke-icon-gap);
 }
 
 /* Files dragged over the box: the card's edge brightens as it does under
    focus, so the drop target is the card itself. */
 .agent-composer[data-dropping] form {
-  border-color: var(--selected-edge);
+  border-color: var(--luke-color-border-selected);
 }
 
 /* A quote block in the message box (`reply-to-selection.tsx`): the agent's
@@ -3216,13 +4156,13 @@ button.skill-chip:hover,
 .composer-quote {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  margin: 4px 0;
+  gap: var(--luke-space-8);
+  margin: var(--luke-space-4) 0;
   padding-left: 0.8em;
-  border-left: 3px solid var(--hairline-strong);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 20px;
+  border-left: 3px solid var(--luke-color-border-strong);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-body-leading);
   user-select: none;
 }
 
@@ -3254,8 +4194,8 @@ button.skill-chip:hover,
    entrance animates its `transform`. */
 .reply-to-selection {
   position: fixed;
-  z-index: var(--z-menu);
-  padding: 2px;
+  z-index: var(--luke-z-menu);
+  padding: var(--luke-space-2);
   translate: -50% -100%;
   -webkit-app-region: no-drag;
 }
@@ -3264,48 +4204,38 @@ button.skill-chip:hover,
   translate: -50% 0;
 }
 
-.reply-to-selection .toolbar-button {
-  height: 26px;
-  padding: 0 var(--space-8);
-  color: var(--text-primary);
-  font-size: 12px;
-}
-
-.reply-to-selection .toolbar-button svg {
-  width: 14px;
-  height: 14px;
-}
-
-/* The files on a message: a row of chips over the box's words, and over
-   the developer's bubble in the transcript, at its right as the bubble is. */
+/* The files on a message: a row of chips (`@luke/ui`'s AttachmentChip) over
+   the box's words, and over the developer's bubble in the transcript, at its
+   right as the bubble is; and the pictures a call answered
+   (`agent-pictures.tsx`), whose chips are drawn by the rules below. */
 .attached-files {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--luke-space-8);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .agent-composer .attached-files {
-  padding: 12px 12px 0;
+  padding: var(--luke-space-12) var(--luke-space-12) 0;
 }
 
 .is-user > .attached-files {
   justify-content: flex-end;
 }
 
-/* An image is its thumbnail; any other file its type's icon, its name, and
-   its size, on a chip as tall as the thumbnail. The chip's face is the
-   press that opens the file, washed under the pointer as a row is. */
+/* A call's picture is its thumbnail, or why it is not there, on a chip as
+   tall as the thumbnail. The chip's face is the press that opens the
+   picture, washed under the pointer as a row is. */
 .attached-file {
   position: relative;
   display: flex;
   max-width: min(220px, 100%);
   height: 48px;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  background: var(--section-fill);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-surface);
   transition: border-color var(--duration-hover) ease;
 }
 
@@ -3314,12 +4244,12 @@ button.skill-chip:hover,
   min-width: 0;
   flex: 1 1 auto;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px 0 10px;
-  border-radius: 7px;
+  gap: var(--luke-space-8);
+  padding: 0 var(--luke-space-12);
+  border-radius: var(--luke-radius-8);
   background: none;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
@@ -3329,11 +4259,11 @@ button.attached-file-face {
 }
 
 button.attached-file-face:hover {
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 .attached-file:has(button.attached-file-face:hover) {
-  border-color: var(--hairline-strong);
+  border-color: var(--luke-color-border-strong);
 }
 
 .attached-file:has(img) {
@@ -3349,7 +4279,7 @@ button.attached-file-face:hover {
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: 7px;
+  border-radius: var(--luke-radius-8);
   object-fit: cover;
   transition: filter var(--duration-hover) ease;
 }
@@ -3366,7 +4296,7 @@ button.attached-file-face:hover img {
 
 .attached-file-name {
   overflow: hidden;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3380,7 +4310,7 @@ button.attached-file-face:hover img {
    stylesheet), in the palette `base.css` repeats from it. A type Pierre
    colours nowhere takes the muted ink the tree gives it. */
 .file-type-icon {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   fill: currentColor;
 }
 
@@ -3481,70 +4411,59 @@ button.attached-file-face:hover img {
 }
 
 /* A file opened over the window (attachment-viewer.tsx): the dialog's
-   dimmed window and card, the file's name and its buttons along the top,
-   and the file under them, an image fitted to the window, a text file's
-   lines scrolling inside the card, any other file its icon over Download. */
+   media card, fitted to what it holds, with the file's name and its buttons
+   along the top and the file under them, an image fitted to the window, a
+   text file's lines scrolling inside the card, any other file its icon over
+   Download. */
 .attachment-viewer {
   display: flex;
-  min-width: min(360px, 100%);
-  max-width: min(1200px, 100%);
-  max-height: calc(100vh - 2 * var(--space-24));
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 14px;
-  background: var(--surface-popover);
-  box-shadow: 0 24px 64px var(--shadow-deep);
-  color: var(--text-primary);
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.attachment-viewer:focus {
-  outline: none; /* no ring: a dialog holding focus for its controls */
 }
 
 .attachment-viewer[data-view="text"] {
-  width: min(880px, 100%);
-  height: calc(100vh - 2 * var(--space-24));
+  width: min(880px, 100vw - 2 * var(--luke-space-24));
+  height: calc(100vh - 2 * var(--luke-space-24));
 }
 
 .attachment-viewer[data-view="other"] {
-  width: min(400px, 100%);
+  width: min(400px, 100vw - 2 * var(--luke-space-24));
 }
 
 .attachment-viewer-header {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-6) var(--space-6) var(--space-6) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-6) var(--luke-space-6) var(--luke-space-6) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
 .attachment-viewer-header > .file-type-icon,
 .attachment-viewer-header > .icon-button-glyph {
-  width: 16px;
-  height: 16px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: none;
-  margin-right: var(--space-4);
+  margin-right: var(--luke-space-4);
 }
 
 .attachment-viewer-title {
   overflow: hidden;
   margin: 0;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--luke-type-section-size);
+  line-height: var(--luke-type-section-leading);
+  font-weight: var(--luke-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .attachment-viewer-size {
   flex: none;
-  margin: 0 auto 0 var(--space-4);
-  color: var(--text-secondary);
-  font-size: 12px;
+  margin: 0 auto 0 var(--luke-space-4);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* What the place opening the viewer says of the file shown, after its size
@@ -3558,11 +4477,12 @@ button.attached-file-face:hover img {
 .attachment-viewer-note {
   display: flex;
   min-width: 0;
-  margin: 0 auto 0 var(--space-12);
+  margin: 0 auto 0 var(--luke-space-12);
   overflow: clip;
-  overflow-clip-margin: var(--focus-ring-room);
-  color: var(--text-secondary);
-  font-size: 12px;
+  overflow-clip-margin: var(--luke-focus-ring-room);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .attachment-viewer-walk {
@@ -3572,8 +4492,9 @@ button.attached-file-face:hover img {
 
 .attachment-viewer-place {
   min-width: 48px;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
@@ -3587,7 +4508,7 @@ button.attached-file-face:hover img {
   display: grid;
   overflow: hidden;
   place-items: center;
-  background: var(--section-fill);
+  background: var(--luke-color-surface);
 }
 
 /* The picture is zoomed by a transform over its fitted size
@@ -3598,7 +4519,7 @@ button.attached-file-face:hover img {
 .attachment-viewer-image {
   display: block;
   max-width: 100%;
-  max-height: calc(100vh - 2 * var(--space-24) - 50px);
+  max-height: calc(100vh - 2 * var(--luke-space-24) - 50px);
   object-fit: contain;
   cursor: zoom-in;
   touch-action: none;
@@ -3627,8 +4548,8 @@ button.attached-file-face:hover img {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-24);
+  gap: var(--luke-space-6);
+  padding: var(--luke-space-24);
   text-align: center;
 }
 
@@ -3640,46 +4561,38 @@ button.attached-file-face:hover img {
 
 .attachment-viewer-other-name {
   max-width: 100%;
-  margin: var(--space-6) 0 0;
-  font-size: 13px;
-  font-weight: 600;
+  margin: var(--luke-space-6) 0 0;
+  font-size: var(--luke-type-section-size);
+  line-height: var(--luke-type-section-leading);
+  font-weight: var(--luke-weight-semibold);
   overflow-wrap: anywhere;
 }
 
 .attachment-viewer-other-size {
-  margin: 0 0 var(--space-12);
-  color: var(--text-secondary);
-  font-size: 12px;
+  margin: 0 0 var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* An archived plan's agent takes no message, so its composer's place says
    why on one quiet row (`banner.tsx`), with Unarchive as the press that
    opens it again. */
+/* The note a continued agent's box gives way to (`continue-agent.tsx`),
+   framed as the box was, on its card, edge and corner, so it stands where
+   the box stood rather than across the column. */
+.continued-composer > .banner-row {
+  padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-8) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-14);
+  background: var(--luke-color-sidebar);
+}
+
 .archived-composer .banner-row > svg {
-  width: 14px;
-  height: 14px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: none;
-  color: var(--text-secondary);
-}
-
-.archived-composer-line {
-  color: var(--text-secondary);
-  font-size: 12.5px;
-}
-
-/* Who archived an agent, and why, over the note's own line: the reason is
-   the archiver's sentence, so it wraps rather than being cut. */
-.archived-composer-words {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.archived-composer-by {
-  color: var(--text-primary);
-  font-size: 12.5px;
-  overflow-wrap: anywhere;
+  color: var(--luke-color-text-muted);
 }
 
 /* An agent's Terminal tab (`terminal-tab.tsx`): the File tab's frame, its
@@ -3691,17 +4604,17 @@ button.attached-file-face:hover img {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-6);
-  padding-left: var(--space-4);
+  gap: var(--luke-space-6);
+  padding-left: var(--luke-space-4);
   overflow: hidden;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   white-space: nowrap;
 }
 
 .terminal-tab-title .agent-ref {
   flex: 0 1 auto;
-  color: var(--text-primary);
-  font-weight: 600;
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .terminal-tab-agent {
@@ -3753,8 +4666,8 @@ button.attached-file-face:hover img {
   min-width: 0;
   flex: 0 0 auto;
   flex-direction: column;
-  border-left: 1px solid var(--hairline);
-  background: var(--desktop-well);
+  border-left: 1px solid var(--luke-color-border);
+  background: var(--luke-color-well);
 }
 
 /* A list on its way out has left the layout, the screen already standing in
@@ -3770,16 +4683,17 @@ button.attached-file-face:hover img {
   display: flex;
   min-height: 35px;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-6) var(--space-4) var(--space-12);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-4) var(--luke-space-6) var(--luke-space-4) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  font-weight: var(--luke-weight-semibold);
 }
 
-.terminal-shells-head .icon-button {
-  margin-left: auto;
+.terminal-shells-title {
+  flex: 1;
 }
 
 .terminal-shells-rows {
@@ -3789,7 +4703,7 @@ button.attached-file-face:hover img {
   flex-direction: column;
   gap: 1px;
   margin: 0;
-  padding: var(--space-4);
+  padding: var(--luke-space-4);
   overflow-y: auto;
   list-style: none;
 }
@@ -3797,9 +4711,10 @@ button.attached-file-face:hover img {
 .terminal-shells-none {
   flex: 1;
   margin: 0;
-  padding: var(--space-8) var(--space-12);
-  color: var(--text-tertiary);
-  font-size: 12px;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .terminal-shell {
@@ -3807,24 +4722,24 @@ button.attached-file-face:hover img {
   display: flex;
   min-height: 40px;
   align-items: center;
-  gap: var(--space-8);
-  padding: 0 var(--space-4) 0 var(--space-8);
-  border-radius: 7px;
+  gap: var(--luke-space-8);
+  padding: 0 var(--luke-space-4) 0 var(--luke-space-8);
+  border-radius: var(--luke-radius-8);
 }
 
 .terminal-shell:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 .terminal-shell[aria-current="true"] {
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 .terminal-shell-glyph {
-  width: 14px;
-  height: 14px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
   flex: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 /* The row's press covers its words; the glyph, mark, and × stand on it. */
@@ -3838,10 +4753,10 @@ button.attached-file-face:hover img {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font: inherit;
-  font-size: 12.5px;
-  line-height: 15px;
+  font-size: var(--luke-type-label-size);
+  line-height: var(--luke-type-label-leading);
   text-align: left;
 }
 
@@ -3859,26 +4774,18 @@ button.attached-file-face:hover img {
 }
 
 .terminal-shell-name {
-  font-weight: 520;
+  font-weight: var(--luke-weight-medium);
 }
 
 .terminal-shell-detail {
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
-.terminal-shell-field {
-  min-width: 0;
+.terminal-shell > .luke-inline-edit {
   flex: 1;
-  padding: 1px var(--space-4);
-  border: 0;
-  border-radius: 5px;
-  background: var(--input-fill);
-  box-shadow: inset 0 0 0 1px var(--selected-edge);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 12.5px;
 }
 
 .terminal-shell-mark {
@@ -3891,15 +4798,15 @@ button.attached-file-face:hover img {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--state-working);
+  background: var(--luke-color-working);
 }
 
-/* The × stands in the mark's place while the row is pointed at or holds focus. */
+/* The × stands in the mark's place while the row is pointed at or holds
+   focus, its control's square centred where the mark's is. */
 .terminal-shell-kill {
   position: absolute;
-  right: var(--space-4);
-  width: 20px;
-  height: 20px;
+  right: calc(var(--luke-space-4) + 10px - var(--luke-control-height) / 2);
+  display: flex;
   visibility: hidden;
 }
 
@@ -3907,7 +4814,7 @@ button.attached-file-face:hover img {
   visibility: visible;
 }
 
-.terminal-shell:has(.terminal-shell-field) .terminal-shell-kill {
+.terminal-shell:has(> .luke-inline-edit) .terminal-shell-kill {
   visibility: hidden;
 }
 
@@ -3917,17 +4824,18 @@ button.attached-file-face:hover img {
 
 .terminal-shells-foot {
   display: flex;
-  padding: var(--space-8) var(--space-12);
-  border-top: 1px solid var(--hairline);
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 600;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .terminal-shells-foot .agent-ref .harness-mark,
 .terminal-shells-foot .agent-ref .working-mark {
-  width: 14px;
-  height: 14px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 .terminal-tab-screen[data-dim="true"] {
@@ -3936,10 +4844,11 @@ button.attached-file-face:hover img {
 
 .terminal-tab-failed {
   margin: 0;
-  padding: var(--space-8) var(--space-12) var(--space-8) var(--space-16);
-  color: var(--danger-text);
-  font-family: var(--font-mono);
-  font-size: 12px;
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-8) var(--luke-space-16);
+  color: var(--luke-color-danger-text);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* Where the words and the action do not fit one line, the action drops to
@@ -3950,13 +4859,14 @@ button.attached-file-face:hover img {
   flex-wrap: wrap;
   min-height: 28px;
   align-items: center;
-  gap: var(--space-2) var(--space-8);
-  padding: var(--space-4) var(--space-12) var(--space-4) var(--space-16);
-  border-bottom: 1px solid var(--hairline);
-  background: var(--raised);
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  gap: var(--luke-space-2) var(--luke-space-8);
+  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-4) var(--luke-space-16);
+  border-bottom: 1px solid var(--luke-color-border);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text-muted);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   white-space: nowrap;
 }
 
@@ -3964,7 +4874,7 @@ button.attached-file-face:hover img {
    is already making again, shows only once it has held a second, so a blip
    is never seen. */
 .terminal-bar[data-late="true"] {
-  animation: terminal-bar-late 0s linear 1s both;
+  animation: terminal-bar-late 0s linear var(--late-delay) both;
 }
 
 @keyframes terminal-bar-late {
@@ -3977,7 +4887,7 @@ button.attached-file-face:hover img {
 }
 
 .terminal-bar-busy {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   letter-spacing: 1px;
 }
 
@@ -3990,24 +4900,24 @@ button.attached-file-face:hover img {
 .terminal-bar-end {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   margin-left: auto;
 }
 
 .terminal-bar-note {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .terminal-bar-action {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   padding: 0;
   border: 0;
   background: none;
-  color: var(--message-sent);
+  color: var(--luke-color-accent);
   font: inherit;
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .terminal-bar-key {
@@ -4022,7 +4932,7 @@ button.attached-file-face:hover img {
   min-width: 0;
   max-width: 100%;
   align-items: center;
-  gap: var(--glyph-gap);
+  gap: var(--luke-icon-gap);
   padding: 0;
   border: 0;
   background: none;
@@ -4038,11 +4948,11 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 /* The chips along the box's foot: the model chip, the MCP button, and the
-   context ring, each the box its popover hangs from (`anchored-popover.tsx`),
-   above itself since the box stands at the panel's foot, and before them what
-   the agent published, in the composer's pill (`chip.tsx`), the pull
-   request's wearing its state's colour, the branch's its name in the code
-   face. */
+   context ring, each the box its popover hangs from (`@luke/ui`'s
+   `AnchoredPopover`), above itself since the box stands at the panel's foot,
+   and before them what the agent published, in the composer's pill
+   (`chip.tsx`), the pull request's wearing its state's colour, the branch's
+   its name in the code face. */
 .agent-model-chip,
 .agent-servers,
 .agent-context {
@@ -4059,23 +4969,15 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 .model-label-detail {
-  color: var(--text-secondary);
-}
-
-/* The model chip is the toolbar chip (`chip.tsx`): the pair it names cut
-   short before the chevron where the foot is narrow. */
-.agent-model-chip .model-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--luke-color-text-muted);
 }
 
 /* The MCP servers popover: the searchable menu's surface, its search field
    first, then one row per server under Connected and Not connected, and
    Manage in Settings pinned at its foot. A row is its mark, its name, how
    many tools it offers in the muted detail type, and at its end its switch,
-   or Connect in the accent's words rather than a bordered button, so the
-   rows to connect never outweigh the switches. A row that opens onto its
+   or Connect as Settings › Integrations draws it (`@luke/ui`'s Button), a
+   control's height inside the menu's row. A row that opens onto its
    tools shows its chevron while it holds the highlight; a row with nothing
    to press is dimmed as the menu's other disabled rows are. The list is
    taller than the searchable menu's, as tall as a server's page, so going
@@ -4084,6 +4986,12 @@ button.agent-ref:hover .agent-ref-name {
    field stays on screen in the shortest window. */
 .agent-servers-menu .agent-servers-list {
   max-height: clamp(160px, 100vh - 320px, 400px);
+}
+
+/* The searchable menu's class rides a box drawn as its contents
+   (`agent-servers.tsx`), so its rows lie in `@luke/ui`'s panel. */
+.luke-popover-panel > .agent-servers-menu {
+  display: contents;
 }
 
 .agent-servers-row[data-opens="true"] {
@@ -4096,8 +5004,8 @@ button.agent-ref:hover .agent-ref-name {
 
 .agent-servers-count {
   flex: none;
-  color: var(--text-tertiary);
-  font-size: 12px;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -4106,13 +5014,13 @@ button.agent-ref:hover .agent-ref-name {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   margin-left: auto;
 }
 
 .agent-servers-chevron {
   display: flex;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   visibility: hidden;
 }
 
@@ -4123,25 +5031,6 @@ button.agent-ref:hover .agent-ref-name {
 
 .agent-servers-row[data-highlighted="true"] .agent-servers-chevron {
   visibility: visible;
-}
-
-.agent-servers-connect {
-  height: 22px;
-  padding: 0 var(--space-6);
-  border-radius: var(--menu-row-radius);
-  background: none;
-  color: var(--message-sent);
-  font-size: 12.5px;
-  font-weight: 560;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.agent-servers-connect:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--message-sent) 12%, transparent);
-}
-
-.agent-servers-connect:disabled {
-  opacity: 0.5;
 }
 
 /* Why a connected server lists no tools, after its name in the attention
@@ -4155,74 +5044,56 @@ button.agent-ref:hover .agent-ref-name {
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
-  color: var(--state-attention);
-  font-size: 12px;
+  color: var(--luke-color-attention);
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 /* A sign-in's line in the same place is no problem: never finished, in the
-   muted detail colour. One still waiting on the browser is its small ring
+   muted detail colour. One still waiting on the browser is the shared ring
    alone after the name, its words in its title, with Reopen and Cancel at
-   the row's end, Cancel in the muted colour beside the accent's Reopen. */
+   the row's end, as Settings › Integrations draws them. */
 .agent-servers-problem[data-tone="quiet"] {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
-.agent-servers-row .agent-servers-waiting {
-  width: 12px;
-  height: 12px;
-}
-
-.agent-servers-connect[data-tone="quiet"] {
-  color: var(--text-secondary);
-}
-
-.agent-servers-connect[data-tone="quiet"]:hover:not(:disabled) {
-  background: var(--raised-strong);
+.agent-servers-waiting {
+  display: flex;
 }
 
 /* A tool a search found: its name in the code face at the row's size, and
    its server's name after it as the count is drawn. */
 .agent-servers-hit .integration-tool-id {
   flex: 0 1 auto;
-  color: var(--text-primary);
-  font-size: 12px;
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
 }
 
-/* A server's page, in the popover's place: back, its mark and name, its
-   count, and its switch at the end, over a hairline, at the search field's
-   height. */
+/* A server's page, in the popover's place: back (`@luke/ui`'s IconButton),
+   its mark and name, its count, and its switch at the end, over a hairline,
+   at the search field's height. */
 .agent-servers-page-head {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--glyph-gap);
+  gap: var(--luke-icon-gap);
   height: 40px;
-  padding: 0 var(--space-12) 0 var(--space-6);
-  border-bottom: 1px solid var(--hairline);
+  padding: 0 var(--luke-space-12) 0 var(--luke-space-6);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
 .agent-servers-page-head .provider-mark {
-  width: var(--menu-glyph);
-  height: var(--menu-glyph);
+  width: var(--luke-menu-glyph);
+  height: var(--luke-menu-glyph);
   flex: none;
-}
-
-.agent-servers-page-head .agent-servers-back {
-  --control-height: 24px;
-}
-
-.agent-servers-page-head .agent-servers-back svg {
-  width: 14px;
-  height: 14px;
 }
 
 .agent-servers-page-title {
   overflow: hidden;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4238,7 +5109,7 @@ button.agent-ref:hover .agent-ref-name {
 
 /* Manage in Settings, pinned under the list: a quiet row, its gear a glyph's size. */
 .agent-servers-manage {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .agent-servers-manage svg {
@@ -4251,15 +5122,15 @@ button.agent-ref:hover .agent-ref-name {
    room to spare, amber within a tenth of the window of eve's compaction,
    and red at or past it. */
 .agent-context-button {
-  --context-fill: var(--text-secondary);
+  --context-fill: var(--luke-color-text-muted);
 }
 
 .agent-context-button[data-level="near"] {
-  --context-fill: var(--state-attention);
+  --context-fill: var(--luke-color-attention);
 }
 
 .agent-context-button[data-level="over"] {
-  --context-fill: var(--danger);
+  --context-fill: var(--luke-color-danger);
 }
 
 .agent-context-ring {
@@ -4268,7 +5139,7 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 .agent-context-track {
-  stroke: var(--hairline-strong);
+  stroke: var(--luke-color-border-strong);
 }
 
 .agent-context-fill {
@@ -4280,62 +5151,29 @@ button.agent-ref:hover .agent-ref-name {
 /* The popover hangs above the ring as the model menu does above its chip,
    at its width, on the menu's own surface; each part of the context wears
    one colour on the bar and on its legend row's square. */
-.agent-context-popover {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-12);
-  padding: var(--space-12) var(--space-16) var(--space-16);
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--menu-radius);
-  background: var(--surface-popover);
-  box-shadow: var(--menu-shadow);
-  color: var(--text-primary);
-  font-size: 12.5px;
-  animation:
-    popup-fade var(--duration-quick) var(--motion-exit) both,
-    menu-drop var(--duration-fast) var(--spring-fast) both;
-}
-
-.agent-context-popover:focus-visible {
-  outline: none; /* no ring: a popover holding focus for its controls */
-}
-
-.agent-context-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-right: calc(-1 * var(--space-8));
-}
-
-.agent-context-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-}
-
 .agent-context-summary {
   display: flex;
   justify-content: space-between;
-  gap: var(--control-gap);
+  gap: var(--luke-control-gap);
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
 
 .agent-context-full {
-  font-weight: 600;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .agent-context-total {
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .agent-context-bar {
   display: flex;
   height: 6px;
   overflow: hidden;
-  gap: var(--space-2);
-  border-radius: 999px;
-  background: var(--raised-strong);
+  gap: var(--luke-space-2);
+  border-radius: var(--luke-radius-full);
+  background: var(--luke-color-fill-strong);
 }
 
 .agent-context-segment {
@@ -4347,21 +5185,21 @@ button.agent-ref:hover .agent-ref-name {
 .agent-context-stats {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .agent-context-stats {
-  padding-top: var(--space-12);
-  border-top: 1px solid var(--hairline);
+  padding-top: var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
 }
 
 .agent-context-row {
   display: flex;
   align-items: center;
-  gap: var(--glyph-gap);
+  gap: var(--luke-icon-gap);
 }
 
 .agent-context-swatch {
@@ -4376,7 +5214,7 @@ button.agent-ref:hover .agent-ref-name {
   flex: 1;
   min-width: 0;
   margin: 0;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .agent-context-count {
@@ -4386,50 +5224,52 @@ button.agent-ref:hover .agent-ref-name {
 
 .agent-context-note {
   margin: 0;
-  color: var(--text-tertiary);
-  font-size: 11.5px;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
 }
 
-.agent-context-popover [data-part="system-prompt"] {
-  --context-part: var(--state-merged);
+.agent-context [data-part="system-prompt"] {
+  --context-part: var(--luke-color-merged);
 }
 
-.agent-context-popover [data-part="tool-definitions"] {
-  --context-part: var(--state-working);
+.agent-context [data-part="tool-definitions"] {
+  --context-part: var(--luke-color-working);
 }
 
-.agent-context-popover [data-part="brief"] {
-  --context-part: var(--state-complete);
+.agent-context [data-part="brief"] {
+  --context-part: var(--luke-color-complete);
 }
 
-.agent-context-popover [data-part="conversation"] {
-  --context-part: var(--text-secondary);
+.agent-context [data-part="conversation"] {
+  --context-part: var(--luke-color-text-muted);
 }
 
-.agent-published-chip {
-  flex: 0 1 auto;
-  font-variant-numeric: tabular-nums;
+/* The published chips' boxes (agent-published.tsx) draw no box of their
+   own, so each chip stands in the composer's row as the row's own. */
+.agent-published-chip,
+.agent-changes-chip {
+  display: contents;
 }
 
 /* A pull request's colour for where it stands, in GitHub's colours: open in
    the success green, a draft in the muted ink, merged in the merged purple,
-   closed in the danger red. Its mark wears it (`pull-request-mark.tsx`),
-   and so does the chip naming it, as its tint, its edge, and its words;
-   the mark alone turns red once its checks failed. */
+   closed in the danger red. Its mark wears it (`pull-request-mark.tsx`); a
+   chip naming it wears the shared palette's tone for it
+   (`PULL_REQUEST_TONE`); the mark alone turns red once its checks failed. */
 [data-pull-request-state="open"] {
-  --pull-request-tone: var(--state-complete);
+  --pull-request-tone: var(--luke-color-complete);
 }
 
 [data-pull-request-state="draft"] {
-  --pull-request-tone: var(--text-tertiary);
+  --pull-request-tone: var(--luke-color-text-subtle);
 }
 
 [data-pull-request-state="merged"] {
-  --pull-request-tone: var(--state-merged);
+  --pull-request-tone: var(--luke-color-merged);
 }
 
 [data-pull-request-state="closed"] {
-  --pull-request-tone: var(--danger);
+  --pull-request-tone: var(--luke-color-danger);
 }
 
 .pull-request-mark {
@@ -4445,7 +5285,7 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 .pull-request-mark[data-failing="true"] {
-  color: var(--danger);
+  color: var(--luke-color-danger);
 }
 
 /* A GitHub issue's mark in GitHub's colours (`issue-mark.tsx`): open in the
@@ -4458,34 +5298,15 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 .issue-mark[data-issue-state="open"] {
-  color: var(--state-complete);
+  color: var(--luke-color-complete);
 }
 
 .issue-mark[data-issue-state="closed"] {
-  color: var(--state-merged);
+  color: var(--luke-color-merged);
 }
 
 .issue-mark[data-issue-state="not-planned"] {
-  color: var(--text-tertiary);
-}
-
-.agent-published-chip[data-pull-request-state] {
-  border-color: color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
-  background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);
-  color: var(--pull-request-tone);
-  font-weight: 600;
-}
-
-.agent-published-chip[data-pull-request-state]:hover,
-.agent-published-chip[data-pull-request-state][data-menu-open="true"] {
-  background: color-mix(in srgb, var(--pull-request-tone) 22%, transparent);
-  color: var(--pull-request-tone);
-}
-
-.agent-branch-name {
-  max-width: 180px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  color: var(--luke-color-text-subtle);
 }
 
 /* The pull request's row at a finished transcript's end: a boxed line, the
@@ -4501,22 +5322,22 @@ button.agent-ref:hover .agent-ref-name {
   display: flex;
   width: 100%;
   min-width: 0;
-  height: 36px;
+  height: 36px; /* off-scale: a transcript's boxed row */
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
+  gap: var(--luke-icon-gap);
+  padding: 0 var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-8);
   background: none;
-  color: var(--text-primary);
+  color: var(--luke-color-text);
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: var(--luke-type-caption-size);
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
 
 .agent-published-row:hover {
-  background: var(--raised);
+  background: var(--luke-color-fill-hover);
 }
 
 /* The number, never cut, then the title, which gives way first. */
@@ -4555,14 +5376,14 @@ button.agent-ref:hover .agent-ref-name {
 
 .agent-published-state {
   flex: 0 0 auto;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 /* The one word the checks still get: said, in the danger red, only once
    they have failed, since that is the one result that asks for a look. */
 .agent-published-checks {
   flex: 0 0 auto;
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 .agent-published-lines {
@@ -4572,11 +5393,11 @@ button.agent-ref:hover .agent-ref-name {
 }
 
 .agent-published-added {
-  color: var(--state-complete);
+  color: var(--luke-color-complete);
 }
 
 .agent-published-removed {
-  color: var(--danger-text);
+  color: var(--luke-color-danger-text);
 }
 
 /* The Work tab's own ----------------------------------------------------- */
@@ -4587,15 +5408,15 @@ button.agent-ref:hover .agent-ref-name {
 .ai-trigger {
   padding: 0;
   background: none;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   text-align: left;
   transition: color var(--duration-hover) ease;
 }
 
 .ai-trigger:hover {
-  color: var(--text-primary);
+  color: var(--luke-color-text);
 }
 
 /* Lucide's glyphs, which the AI Elements components draw with, at the
@@ -4605,40 +5426,78 @@ svg.lucide {
   stroke-width: 1.9;
 }
 
-/* A subagent's row, on the Work tab and an agent's tab alike: a line drawn
-   as a call's row is (ai-elements/tool.tsx), in its muted ink, unboxed, the
-   whole of it the button that opens the subagent's tab, with the same hover
-   fill and the focus ring every button of ours draws. Note that it is written here
-   rather than as utilities, because base.css sets every button's font and
-   colour outside the utilities' layer. It answers its own width, so the job,
-   the one thing naming the subagent, keeps the room in a narrow column. */
+/* A subagent's row, on the Work tab and an agent's tab alike
+   (transcript-blocks.tsx): a line drawn as a call's row is (`.tool-line`),
+   in its muted ink, unboxed, the whole of it the button that opens the
+   subagent's tab, with the same hover fill and the focus ring every button
+   of ours draws. It answers its own width, so the job, the one thing naming
+   the subagent, keeps the room in a narrow column. */
 .subagent-line {
   container: subagent-row / inline-size;
-  height: 28px;
-  padding: 0 4px;
-  border-radius: 6px;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 28px; /* off-scale: a call's line */
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding: 0 var(--luke-space-4);
+  border-radius: var(--luke-radius-6);
   background: none;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.5;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
 
 button.subagent-line:hover {
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
+}
+
+/* The harness's mark, in the 16px seat a call's icon stands in. */
+.subagent-icon {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--luke-color-text-muted);
+}
+
+.subagent-icon > svg {
+  width: 16px;
+  height: 16px;
 }
 
 .subagent-job {
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
+  color: var(--luke-color-text);
   white-space: nowrap;
+}
+
+.subagent-pair,
+.subagent-time {
+  flex-shrink: 0;
+}
+
+/* Why a call failed, under the job, past the line's 4px padding, mark, and
+   gap. */
+.subagent-error {
+  margin: var(--luke-space-4) 0 0 var(--transcript-gutter);
+  color: var(--luke-color-danger-text);
+  font-size: var(--luke-type-caption-size);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 /* Too narrow for the job beside the model and effort: they go first, as
    the subagent's card still names them, and the working mark and its
    count stay. */
 @container subagent-row (max-width: 319px) {
-  .subagent-line > [data-subagent-pair] {
+  .subagent-pair {
     display: none;
   }
 }
@@ -4648,8 +5507,8 @@ button.subagent-line:hover {
 @container side-panel (max-width: 359px) {
   .subagent-line {
     height: auto;
-    min-height: 28px;
-    padding-block: var(--space-2);
+    min-height: 28px; /* off-scale: a call's line */
+    padding-block: var(--luke-space-2);
   }
 
   .subagent-job {
@@ -4674,44 +5533,44 @@ button.subagent-line:hover {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-6) var(--space-12);
-  border-radius: var(--control-radius);
-  background: var(--raised);
-  color: var(--text-primary);
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-6) var(--luke-space-12);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
   text-align: left;
   transition: background-color var(--duration-hover) ease;
 }
 
 button.inbox-option:hover:not(:disabled) {
-  background: var(--raised-strong);
+  background: var(--luke-color-fill-strong);
 }
 
 .inbox-option[aria-pressed="true"],
 .inbox-option[data-picked="true"] {
-  background: var(--raised-strong);
-  box-shadow: inset 0 0 0 1px var(--selected-edge);
+  background: var(--luke-color-fill-strong);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
 /* A settled item keeps every option it offered: the pick wears the
    pressed look, and the rest step back to an outline in muted words. */
 .inbox-option[data-picked="false"] {
   background: none;
-  box-shadow: inset 0 0 0 1px var(--hairline);
-  color: var(--text-secondary);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border);
+  color: var(--luke-color-text-muted);
 }
 
 .inbox-picked {
-  margin-left: var(--space-8);
-  color: var(--text-secondary);
-  font-size: 12px;
+  margin-left: var(--luke-space-8);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
   white-space: nowrap;
 }
 
 .inbox-picked svg {
   width: 13px;
   height: 13px;
-  margin-right: var(--space-2);
+  margin-right: var(--luke-space-2);
   vertical-align: -2px;
 }
 
@@ -4722,7 +5581,7 @@ button.inbox-option:hover:not(:disabled) {
 /* An option's head (`inbox-pane.tsx`'s `OptionHead`): its label, and the
    agent's recommendation as a badge at the option's top right, so it stands
    in one place however the label wraps. The badge is the app's badge
-   (`.integration-tool-badge`) in the accent's fill, the primary button's,
+   in the accent's fill, the primary button's,
    while the item waits, and steps back to the quiet badge once it is
    settled. It sits on the label's first line, centred on its 13px words. */
 .inbox-option-head {
@@ -4730,7 +5589,7 @@ button.inbox-option:hover:not(:disabled) {
   width: 100%;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 /* The label gives the badge its room: it shrinks past its longest word,
@@ -4739,23 +5598,6 @@ button.inbox-option:hover:not(:disabled) {
 .inbox-option-label {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.inbox-recommended {
-  flex: none;
-  margin-top: 3px;
-  padding: 0 var(--space-6);
-  border-radius: 4px;
-  background: var(--message-sent);
-  color: var(--on-accent);
-  font-size: 10.5px;
-  font-weight: 560;
-  line-height: 16px;
-}
-
-.inbox-recommended[data-settled="true"] {
-  background: var(--raised-strong);
-  color: var(--text-secondary);
 }
 
 /* An image block on the Inbox (`inbox-pane.tsx`): a picture in written
@@ -4773,7 +5615,7 @@ button.inbox-option:hover:not(:disabled) {
   display: block;
   width: fit-content;
   max-width: 100%;
-  margin: var(--space-12) 0;
+  margin: var(--luke-space-12) 0;
 }
 
 .picture-frame {
@@ -4782,9 +5624,9 @@ button.inbox-option:hover:not(:disabled) {
   width: fit-content;
   max-width: 100%;
   padding: 0;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
   overflow: clip;
 }
 
@@ -4802,8 +5644,8 @@ button.picture-frame {
 
 .picture-caption {
   display: block;
-  margin-top: var(--space-6);
-  color: var(--text-secondary);
+  margin-top: var(--luke-space-6);
+  color: var(--luke-color-text-muted);
   font-size: 0.9em;
   line-height: 1.45;
 }
@@ -4822,11 +5664,11 @@ button.picture-frame {
 .picture-missing {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
   width: 480px;
-  padding: var(--space-12);
+  padding: var(--luke-space-12);
   border-style: dashed;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   cursor: default;
   font-size: 0.92em;
 }
@@ -4858,7 +5700,7 @@ button.picture-frame {
   display: block;
   width: fit-content;
   max-width: 100%;
-  margin-top: var(--space-12);
+  margin-top: var(--luke-space-12);
 }
 
 .editor-picture-drawn > .picture-block {
@@ -4882,93 +5724,57 @@ button.picture-frame {
   display: flex;
   width: max-content;
   align-items: center;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 9px;
-  background: var(--surface-popover);
-  box-shadow: 0 6px 18px var(--shadow-deep);
-  translate: 0 calc(-100% - var(--space-8));
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-2);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 6px 18px var(--luke-color-shadow-deep);
+  translate: 0 calc(-100% - var(--luke-space-8));
   white-space: nowrap;
-}
-
-.picture-tool {
-  display: inline-flex;
-  height: 26px;
-  flex: none;
-  align-items: center;
-  gap: var(--space-4);
-  padding: 0 var(--space-8);
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
 }
 
 /* With no room above the picture inside the plan's scroller, as at its top,
    the tools stand inside the picture's top edge rather than be cut off. */
 .picture-tools[data-above="false"] {
-  top: var(--space-8);
-  left: var(--space-8);
+  top: var(--luke-space-8);
+  left: var(--luke-space-8);
   translate: none;
 }
 
-/* A tool that is its glyph alone, in a column too narrow for its name, is square. */
-.picture-tools[data-worded="false"] .picture-tool {
-  width: 26px;
-  justify-content: center;
-  padding: 0;
-}
-
-.picture-tool:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-}
-
-.picture-tool > svg {
-  width: 14px;
-  height: 14px;
-  flex: none;
-}
-
-.picture-tool[data-tone="danger"] {
-  color: var(--danger-text);
+/* A tool that is its glyph alone, in a column too narrow for its name, folds
+   its words away, named by its pill. */
+.picture-tools[data-worded="false"] {
+  --luke-fold: folded;
 }
 
 /* A field under a picture that describes it anew, in Settings' well. */
 .picture-describe {
   display: grid;
   width: min(360px, 100%);
-  gap: var(--space-6);
-  margin: var(--space-6) 0 var(--space-12);
-  font-size: 12.5px;
+  gap: var(--luke-space-6);
+  margin: var(--luke-space-6) 0 var(--luke-space-12);
+  font-size: var(--luke-type-caption-size);
 }
 
 .picture-describe label {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
 }
 
 .picture-describe-label {
-  color: var(--text-secondary);
-  font-weight: 600;
+  color: var(--luke-color-text-muted);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .picture-describe-field {
-  padding: 6px 9px;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 7px;
-  background: var(--desktop-well);
-  color: var(--text-primary);
+  padding: var(--luke-space-6) var(--luke-space-8);
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-well);
+  color: var(--luke-color-text);
   font: inherit;
-  font-size: 13px;
-}
-
-.picture-describe-field:focus {
-  border-color: var(--focus-ring);
-  outline: none;
+  font-size: var(--luke-type-body-size);
 }
 
 /* A picture waiting on its upload: the Mac's own bytes at half strength,
@@ -4981,20 +5787,20 @@ button.picture-frame {
 .picture-status {
   display: flex;
   align-items: center;
-  gap: var(--space-6);
-  margin-top: var(--space-6);
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.4;
+  gap: var(--luke-space-6);
+  margin-top: var(--luke-space-6);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 .picture-status.failure-note {
-  gap: var(--space-4);
-  color: var(--danger-text);
+  gap: var(--luke-space-4);
+  color: var(--luke-color-danger-text);
 }
 
 .picture-status .failure-note-words {
-  margin-right: var(--space-4);
+  margin-right: var(--luke-space-4);
 }
 
 /* Several pictures an agent showed at once (`agent-pictures.tsx`): one
@@ -5003,13 +5809,13 @@ button.picture-frame {
    thumbnails of one height that wrap, the last drawn saying how many more. */
 .picture-set {
   max-width: 100%;
-  margin: var(--space-12) 0;
+  margin: var(--luke-space-12) 0;
 }
 
 .picture-set-tiles {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--luke-space-6);
 }
 
 .picture-set-tile {
@@ -5018,7 +5824,7 @@ button.picture-frame {
   min-width: 0;
   max-width: 100%;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   padding: 0;
   border: 0;
   background: none;
@@ -5033,10 +5839,10 @@ button.picture-frame {
   display: grid;
   width: 100%;
   place-items: center;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
-  color: var(--text-secondary);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
+  color: var(--luke-color-text-muted);
   overflow: clip;
 }
 
@@ -5053,7 +5859,7 @@ button.picture-frame {
 
 .picture-set-caption {
   overflow: hidden;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 0.9em;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -5065,16 +5871,16 @@ button.picture-frame {
   inset: 0;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, #000 52%, transparent);
-  color: #fff;
-  font-size: 17px;
-  font-weight: 600;
+  background: var(--picture-veil);
+  color: var(--picture-veil-ink);
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* The pictures an integration's call answered: the message box's chips,
    set in under the row's words, a picture not kept saying so. */
 .call-pictures {
-  margin: 2px 0 6px 28px;
+  margin: var(--luke-space-2) 0 var(--luke-space-6) var(--transcript-gutter);
 }
 
 .call-picture[data-state] .attached-file-face {
@@ -5082,7 +5888,7 @@ button.picture-frame {
   width: 64px;
   height: 48px;
   place-items: center;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
 }
 
 .call-picture[data-state="too-large"] .attached-file-face,
@@ -5090,8 +5896,8 @@ button.picture-frame {
 .call-picture[data-state="unsupported"] .attached-file-face {
   display: flex;
   width: auto;
-  gap: var(--space-4);
-  padding: 0 var(--space-8);
+  gap: var(--luke-space-4);
+  padding: 0 var(--luke-space-8);
 }
 
 .call-picture svg {
@@ -5111,19 +5917,19 @@ button.picture-frame {
 }
 
 .markdown-inserted > .picture-block .picture-frame {
-  outline: 2px solid color-mix(in srgb, var(--state-complete) 75%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--luke-color-complete) 75%, transparent);
   outline-offset: 2px;
 }
 
 .markdown-deleted > .picture-block .picture-frame {
   opacity: 0.45;
-  outline: 2px dashed color-mix(in srgb, var(--danger) 70%, transparent);
+  outline: 2px dashed color-mix(in srgb, var(--luke-color-danger) 70%, transparent);
   outline-offset: 2px;
 }
 
 /* A form's text field takes Settings' well, but in the card's body type:
    Settings' tracking is for a key's characters, not an answer's words. */
 .inbox-field-input {
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
   letter-spacing: 0;
 }

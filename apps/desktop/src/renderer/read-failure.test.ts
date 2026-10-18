@@ -21,6 +21,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { DesktopInbox } from "./desktop/desktop-inbox";
@@ -33,10 +34,10 @@ import { AgentChangesTab } from "./tasks/agent-changes-tab";
 
 /**
  * A read that did not land says so alike on every surface that reads: the
- * sidebar's plans, the Inbox's list, a side panel tab, and a Settings
+ * sidebar's tasks, the Inbox's list, a side panel tab, and a Settings
  * page's card each draw one alert, a sentence of the shape "The inbox
  * could not be read.", and one Retry, whose press reads again. Synthetic
- * plans and keys.
+ * tasks and keys.
  */
 
 const ignore = () => undefined;
@@ -80,10 +81,7 @@ beforeEach(() => {
     configurable: true,
     value: () => ({ matches: false, addEventListener: ignore, removeEventListener: ignore }),
   });
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: { act: answer, onMenuCommand: () => ignore, recordSurfaceEvent: ignore },
-  });
+  fakeAppBridge({ act: answer });
 });
 
 const unmounts: (() => void)[] = [];
@@ -118,10 +116,11 @@ function readFailure(page: HTMLElement) {
   const [alert] = alerts;
   assert.ok(alert);
   const presses = [...alert.querySelectorAll<HTMLButtonElement>("button")];
-  const words = [...alert.childNodes]
-    .filter((node) => !(node instanceof HTMLButtonElement))
-    .map((node) => node.textContent)
-    .join("");
+  // The alert's words are what it says with its presses taken out, however it nests them.
+  const said = alert.cloneNode(true);
+  assert.ok(said instanceof HTMLElement);
+  for (const press of said.querySelectorAll("button")) press.remove();
+  const words = said.textContent;
   return {
     words,
     presses: presses.map((each) => each.textContent),
@@ -200,6 +199,8 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
           onOpen: ignore,
           onClose: ignore,
           onChoose: ignore,
+          pages: undefined,
+          onRereadPages: () => undefined,
         },
       }),
     }),

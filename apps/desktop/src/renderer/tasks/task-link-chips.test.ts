@@ -4,25 +4,27 @@ import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
+import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { installEditorBundle, installEditorLayout } from "#testing/composer";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
+import { editorBundleLanded, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { MARKDOWN_MARK, type MarkdownMark, MarkdownMessage } from "../markdown-message";
 import { notesBefore } from "./file-note";
 import { PlanBody } from "./plan-body";
-import { PlanMentions, type PlanMentionsValue, useMentionLink } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue, useMentionLink } from "./task-mentions";
 import { HISTORY_READ } from "./use-plan-history";
 import { VersionView } from "./version-view";
 
 /**
- * plan-link-chips.test.ts -- a link in the plan's words, or in Luke's
+ * task-link-chips.test.ts -- a link in the plan's words, or in Luke's
  * notes, is drawn as the chip of what it names whoever wrote it, as a
- * transcript draws one: the plan read on its page, a version's diff, and a
+ * transcript draws one: the task read on its page, a version's diff, and a
  * File tab's note. A link that names nothing stays a link, and code stays
  * code.
- * Synthetic plan and repository.
+ * Synthetic task and repository.
  */
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -44,15 +46,13 @@ const TASK: Task = {
 
 const roots: Root[] = [];
 
+// Landed before any box renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
-  installEditorBundle();
   installEditorLayout();
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-      recordSurfaceEvent: () => undefined,
-    },
+  fakeAppBridge({
+    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
 });
 
@@ -61,8 +61,8 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** What a plan's page hands its places. */
-const PAGE: PlanMentionsValue = {
+/** What a task's page hands its places. */
+const PAGE: TaskMentionsValue = {
   taskId: TASK_ID,
   taskName: "Invitations",
   workspace: "acme",
@@ -122,7 +122,7 @@ test("the plan read on its page draws a plan's link, a file's lines, and a Linea
 
   assert.deepEqual(chips(container), THREE_CHIPS);
   assert.deepEqual(
-    [...container.querySelectorAll(".text-link")].map((link) => link.textContent),
+    [...container.querySelectorAll(".luke-text-link")].map((link) => link.textContent),
     ["the docs"],
   );
   assert.deepEqual(
@@ -133,7 +133,7 @@ test("the plan read on its page draws a plan's link, a file's lines, and a Linea
 
 test("a version's diff draws a mention written in as its chip, still marked as written in", () => {
   const container = drawn(
-    createElement(PlanMentions, {
+    createElement(TaskMentions, {
       value: PAGE,
       children: createElement(PageWords, {
         words: LINKS,
@@ -158,11 +158,11 @@ test("Luke's note on a File tab's lines draws its links as a transcript does", (
     onFold: () => undefined,
     onShow: () => undefined,
   });
-  const container = drawn(createElement(PlanMentions, { value: PAGE, children: notes(3) }));
+  const container = drawn(createElement(TaskMentions, { value: PAGE, children: notes(3) }));
 
   assert.deepEqual(chips(container), THREE_CHIPS);
   assert.deepEqual(
-    [...container.querySelectorAll(".text-link")].map((link) => link.textContent),
+    [...container.querySelectorAll(".luke-text-link")].map((link) => link.textContent),
     ["the docs"],
   );
 });
@@ -171,7 +171,7 @@ test("a link whose label a version changed in part is drawn as words with the ch
   const words = `Read [the new store](https://github.com/${REPOSITORY}/blob/HEAD/store.ts).`;
   const from = words.indexOf("new");
   const container = drawn(
-    createElement(PlanMentions, {
+    createElement(TaskMentions, {
       value: PAGE,
       children: createElement(PageWords, {
         words,
@@ -181,7 +181,10 @@ test("a link whose label a version changed in part is drawn as words with the ch
   );
 
   assert.equal(container.querySelector(".mention-chip"), null);
-  assert.equal(container.querySelector(".text-link ins.markdown-inserted")?.textContent, "new ");
+  assert.equal(
+    container.querySelector(".luke-text-link ins.markdown-inserted")?.textContent,
+    "new ",
+  );
 });
 
 test("the plan's version history, off the plan's page, reads a version's mentions against the plan it is of", () => {

@@ -28,7 +28,7 @@
 }
 
 .markdown-heading {
-  font-weight: 680;
+  font-weight: var(--luke-weight-bold);
   letter-spacing: -0.01em;
 }
 
@@ -48,10 +48,10 @@
   padding: 0.08em 0.36em;
   border-radius: 0.36em;
   background: var(--markdown-tint);
-  font-family: var(--font-mono);
+  font-family: var(--luke-font-mono);
   /* Mono runs wider than the text around it at equal size. */
   font-size: 0.92em;
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
   letter-spacing: 0;
 }
 
@@ -75,7 +75,7 @@
   padding: 0;
   border-radius: 0;
   background: transparent;
-  font-weight: 450;
+  font-weight: var(--luke-weight-regular);
   line-height: 1.45;
   white-space: pre;
 }
@@ -100,8 +100,8 @@
 .markdown-quote {
   margin: 0;
   padding-left: 0.8em;
-  border-left: 3px solid var(--hairline-strong);
-  color: var(--text-secondary);
+  border-left: 3px solid var(--luke-color-border-strong);
+  color: var(--luke-color-text-muted);
   font-style: normal;
   text-align: left;
 }
@@ -124,17 +124,25 @@ blockquote.markdown-quote > * + * {
 }
 
 /* A task item keeps the library's own disabled checkbox as its marker, in the
-   green a finished session wears once ticked. */
+   accent every control wears. The box stands in the bullet's gutter, out of
+   the line, so the space after it folds away and the words, wrapped lines
+   included, start where a bullet's would; the plan's editor stands its box in
+   the same place (`tasks.css`), so opening a section moves nothing. Note that
+   the box takes the words' size, because a control's own is the browser's. */
 .markdown li.task-list-item {
+  position: relative;
   list-style: none;
 }
 
 .markdown li.task-list-item input[type="checkbox"] {
+  position: absolute;
+  top: calc((1lh - 0.95em) / 2);
+  left: -1.45em;
   width: 0.95em;
   height: 0.95em;
-  margin: 0 0.45em 0 -1.45em;
-  vertical-align: -0.1em;
-  accent-color: var(--state-complete);
+  margin: 0;
+  font: inherit;
+  accent-color: var(--luke-color-accent);
 }
 
 /* A table scrolls sideways rather than widening the bubble; a column's
@@ -194,7 +202,7 @@ blockquote.markdown-quote > * + * {
 
 .markdown th {
   opacity: 0.8;
-  font-weight: 640;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .markdown tbody tr:last-child td {
@@ -207,12 +215,10 @@ blockquote.markdown-quote > * + * {
   border-top: 1px solid var(--markdown-edge);
 }
 
-/* A plain link (`text-link.tsx`), drawn alike in a transcript, the plan, its
-   versions, Luke's notes, and the plan's editor: the words' own ink over a
-   thin underline in a faint wash of it, which goes full strength under the
-   pointer or the keyboard, so a link reads by its line and not its colour
-   alone and sits apart from a mention's filled chip. A bare address cut
-   short wears a small ↗ after it, which says a press leaves the window. */
+/* A button that reads as a link (`replay-card.tsx`'s way to the full
+   transcript) wears an underlined TextLink's line: the words' own ink over a
+   thin underline in a faint wash of it, full strength under the pointer or
+   the keyboard. */
 .text-link {
   border-radius: 2px;
   color: inherit;
@@ -223,31 +229,8 @@ blockquote.markdown-quote > * + * {
   transition: text-decoration-color var(--duration-hover) ease;
 }
 
-a.text-link {
-  cursor: pointer;
-}
-
 .text-link:is(:hover, :focus-visible) {
   text-decoration-color: currentColor;
-}
-
-/* In the editor a link is words being written, so it keeps the caret's cursor. */
-[contenteditable] a.text-link {
-  cursor: text;
-}
-
-.text-link-out {
-  display: inline-block;
-  width: 0.78em;
-  height: 0.78em;
-  margin-left: 0.12em;
-  opacity: 0.55;
-  transition: opacity var(--duration-hover) ease;
-  vertical-align: -0.02em;
-}
-
-.text-link:is(:hover, :focus-visible) .text-link-out {
-  opacity: 1;
 }
 
 /* An address the window opens nothing for, a file's say: the same line,
@@ -265,18 +248,18 @@ a.text-link {
    its colour alone. The washes are the palette's finished green and its one
    red, which each appearance restates. */
 .markdown-inserted {
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--state-complete) 24%, transparent);
+  border-radius: var(--luke-radius-6);
+  background: color-mix(in srgb, var(--luke-color-complete) 24%, transparent);
   color: inherit;
   text-decoration: none;
 }
 
 .markdown-deleted {
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--danger) 16%, transparent);
-  color: var(--text-secondary);
+  border-radius: var(--luke-radius-6);
+  background: color-mix(in srgb, var(--luke-color-danger) 16%, transparent);
+  color: var(--luke-color-text-muted);
   text-decoration: line-through;
-  text-decoration-color: color-mix(in srgb, var(--danger) 70%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--luke-color-danger) 70%, transparent);
 }
 
 /* Words struck out and the words written in their place stand side by side,

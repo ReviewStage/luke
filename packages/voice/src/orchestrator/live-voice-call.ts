@@ -17,7 +17,7 @@ import type { Effect } from "effect";
  * capture device rides every offer.
  */
 export interface LiveVoiceCallOpening {
-  /** The plan the call is about, which the host creates the session about. */
+  /** The task the call is about, which the host creates the session about. */
   taskId: string;
 }
 

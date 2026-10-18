@@ -1,0 +1,135 @@
+{
+  "type": "object",
+  "properties": {
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "emoji"
+                    ]
+                  },
+                  "emoji": {
+                    "type": "string",
+                    "maxLength": 32
+                  }
+                },
+                "required": [
+                  "kind",
+                  "emoji"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "glyph"
+                    ]
+                  },
+                  "glyph": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "color": {
+                    "type": "string",
+                    "enum": [
+                      "red",
+                      "orange",
+                      "yellow",
+                      "green",
+                      "teal",
+                      "blue",
+                      "purple",
+                      "pink"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "glyph"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "position": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "workspaceId",
+          "title",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "sectionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "position": {
+            "type": "string"
+          },
+          "addedAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "taskId",
+          "sectionId",
+          "addedAt"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "sections",
+    "entries"
+  ],
+  "additionalProperties": false
+}

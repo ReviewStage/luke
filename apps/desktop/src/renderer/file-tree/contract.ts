@@ -4,8 +4,8 @@
  * The tree beside a File tab is drawn by Pierre's tree (`@pierre/trees`),
  * which is too large for the bundle every window parses, so it ships as a
  * bundle of its own (`file-tree.js`, built from `./index.ts`) that the tab
- * loads the first time its tree is shown, as the Plans tab loads the
- * whiteboard. That bundle sets one global, `window.lukeFileTree`, and this
+ * loads the first time its tree is shown, as the Tasks tab loads the
+ * whiteboard. That bundle exports one module, `fileTree`, and this
  * file is the whole of what the two share: no Pierre type crosses, only the
  * repository's own paths and names, and nothing here imports anything, so
  * the bundle carries none of the panel's libraries, its wire schemas
@@ -18,7 +18,7 @@
  *
  * The same bundle answers what icon a file's type draws as, so a file
  * attached to a message (`../tasks/attached-file-chips.tsx`) or listed in
- * the plan's summary (`../desktop/task-summary.tsx`) is drawn as the tree
+ * the task's summary (`../desktop/task-summary.tsx`) is drawn as the tree
  * draws it, without Pierre's icons riding in the bundle every window parses.
  */
 
@@ -122,20 +122,9 @@ export interface FileTypeIcon {
   readonly type: string;
 }
 
-/** What the file tree bundle sets on `window` once it has loaded. */
+/** What the file tree bundle's entry exports, which the panel imports the first time it is needed (`../bundle-loader.ts`). */
 export interface FileTreeModule {
   readonly mount: (host: HTMLElement, props: FileTreeProps) => FileTreeHandle;
   /** The type icon of a file by its name alone. */
   readonly fileIcon: (name: string) => FileTypeIcon;
 }
-
-declare global {
-  interface Window {
-    lukeFileTree?: FileTreeModule;
-  }
-}
-
-/** The file the tree bundle is, beside `index.html`. */
-export const FILE_TREE_ASSET = {
-  SCRIPT: "file-tree.js",
-} as const;

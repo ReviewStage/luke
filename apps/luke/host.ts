@@ -49,8 +49,8 @@ export function relayChildEvent(
 }
 
 /**
- * The skills the planning session is offered as it starts, for the
- * project's own `skills/repository.ts`: the ones the plan's repository
+ * The skills the brain's session is offered as it starts, for the
+ * project's own `skills/repository.ts`: the ones the task's repository
  * keeps, or none for a session the host does not admit.
  */
 export function sessionSkills(

@@ -125,7 +125,7 @@ export const DESKTOP_SESSION = { clientID: DESKTOP_SESSION_CLIENT_ID } as const;
 
 /**
  * How Better Auth keeps workspaces, each an organization of its members. A
- * workspace is never deleted, so no plan is lost with one, and no signed-in
+ * workspace is never deleted, so no task is lost with one, and no signed-in
  * user creates one: the plugin still lets a server-only call that names a
  * `userId` and carries no session through, which is the one way Luke
  * creates a workspace.

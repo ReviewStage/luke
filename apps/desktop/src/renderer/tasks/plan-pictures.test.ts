@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { useConfirmDialog } from "@luke/ui";
 import { forgetPictures } from "@luke/ui/picture-cache";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -11,10 +12,10 @@ import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { lineWords } from "#testing/actor-line";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { MarkdownMessage } from "../markdown-message";
-import { useConfirmDialog } from "../settings/confirm-dialog";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 import { PlanBody } from "./plan-body";
 import { HISTORY_READ } from "./use-plan-history";
@@ -62,24 +63,20 @@ function standHost(
   asked: string[],
   unanswered: ReadonlySet<string> = new Set(),
 ): void {
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      act: (request: Act): Promise<ActOutcome> => {
-        if (request.kind !== ACT_KIND.TASKS_PICTURE_READ) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-        }
-        asked.push(request.payload.attachmentId);
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: pictures.has(request.payload.attachmentId)
-            ? { contentType: "image/png", base64: PNG_BASE64 }
-            : {
-                failure: unanswered.has(request.payload.attachmentId) ? "unanswered" : "not-found",
-              },
-        });
-      },
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      if (request.kind !== ACT_KIND.TASKS_PICTURE_READ) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+      }
+      asked.push(request.payload.attachmentId);
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: pictures.has(request.payload.attachmentId)
+          ? { contentType: "image/png", base64: PNG_BASE64 }
+          : {
+              failure: unanswered.has(request.payload.attachmentId) ? "unanswered" : "not-found",
+            },
+      });
     },
   });
 }
@@ -192,7 +189,7 @@ test("a picture from outside Luke is a link to it, and nothing is read for it", 
   const view = await drawn(createElement(PlanBody, { task: taskOf(planId, body), live: false }));
 
   assert.equal(view.querySelector("img"), null);
-  assert.equal(view.querySelector(".text-link")?.textContent, "SSO flow");
+  assert.equal(view.querySelector(".luke-text-link")?.textContent, "SSO flow");
   assert.deepEqual(asked, []);
 });
 
@@ -254,9 +251,9 @@ test("a version draws the picture it struck and the one it wrote in, each in its
 
 test("another plan's picture is drawn as itself, with no press that would open nothing", async () => {
   const planId = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
-  const otherPlanId = "6f5e4d3c-2b1a-4c9d-8e7f-a0b1c2d3e4f5";
+  const otherTaskId = "6f5e4d3c-2b1a-4c9d-8e7f-a0b1c2d3e4f5";
   standHost(new Set([MOCK]), []);
-  const body = `## Approach\n\n![Copied mock](${picture(otherPlanId, MOCK)})`;
+  const body = `## Approach\n\n![Copied mock](${picture(otherTaskId, MOCK)})`;
 
   const view = await drawn(createElement(PlanBody, { task: taskOf(planId, body), live: false }));
 

@@ -61,7 +61,7 @@ export const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The agent the path names, on a plan or with none, where the account is a
+ * The agent the path names, on a task or with none, where the account is a
  * member of its workspace, or not found; its conversation is targeted
  * under the member who started it, which is whom the conversation belongs
  * to.

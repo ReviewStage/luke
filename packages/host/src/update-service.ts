@@ -6,7 +6,6 @@ import {
   type UpdateStatus,
 } from "@luke/settings/update";
 import { type Context, Duration, Effect, type Fiber, Schedule, Scope } from "effect";
-import { reportToStderr } from "./stderr-report.js";
 
 /**
  * The addresses updating ever touches, fixed here rather than passed in,
@@ -119,7 +118,7 @@ interface UpdateServiceOptions {
   lastRunVersion?: LastRunVersionStore;
   intervalMs?: number;
   justUpdatedFirstCheckDelayMs?: number;
-  report?: (line: string) => void;
+  report: (line: string) => void;
 }
 
 /**
@@ -197,7 +196,7 @@ export class UpdateService {
     this.#justUpdatedFirstCheckDelayMs =
       options.justUpdatedFirstCheckDelayMs ??
       UPDATE_CHECK_DEFAULTS.JUST_UPDATED_FIRST_CHECK_DELAY_MS;
-    this.#report = options.report ?? reportToStderr;
+    this.#report = options.report;
     this.#snapshot = this.#idle(false);
     this.#engine?.wire({
       onChecking: () => this.#move({ ...this.#base(UPDATE_STATUS.CHECKING) }),

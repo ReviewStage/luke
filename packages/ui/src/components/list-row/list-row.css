@@ -1,0 +1,178 @@
+/* list-row.css -- a List's rows: the row's press and its acts side by side
+   in one filled line, its metadata and its acts centred on the row's middle.
+   The fill is the item's, so the pointer anywhere on the row, an act
+   included, lights the whole of it as one. */
+
+@layer components {
+  .luke-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .luke-list-row {
+    display: flex;
+    align-items: center;
+    gap: var(--luke-control-gap);
+    min-width: 0;
+    border-radius: var(--luke-control-radius);
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    transition: background-color var(--duration-hover) ease;
+  }
+
+  /* The pointer lights a row that opens something, never past the open
+     row's own stronger fill. */
+  .luke-list-row:has(> button.luke-list-row-main):hover:not([data-current="true"]) {
+    background: var(--luke-color-fill-hover);
+  }
+
+  .luke-list-row[data-current="true"] {
+    background: var(--luke-color-fill-strong);
+  }
+
+  .luke-list-row-main {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    min-width: 0;
+    margin: 0;
+    padding: var(--luke-space-8) var(--luke-space-12);
+    border: 0;
+    border-radius: inherit;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+  }
+
+  button.luke-list-row-main {
+    cursor: pointer;
+  }
+
+  /* A desktop row answers a press the way a Mac's list does, without the
+     web's pointing hand. */
+  [data-luke-profile="desktop"] button.luke-list-row-main {
+    cursor: default;
+  }
+
+  /* A card holds its rows edge to edge on its ground, a hairline between
+     each and the next, as a settings section's card does; its corner clips
+     the fill of its first and last rows. */
+  .luke-list[data-variant="card"] {
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-surface);
+  }
+
+  .luke-list[data-variant="card"] > .luke-list-row {
+    border-radius: 0;
+  }
+
+  .luke-list[data-variant="card"] > .luke-list-row + .luke-list-row {
+    border-top: 1px solid var(--luke-color-border);
+  }
+
+  /* A card's rows keep a settings row's side inset, so their words line up
+     with the card's other rows. */
+  .luke-list[data-variant="card"] .luke-list-row-main {
+    padding-inline: var(--luke-space-16);
+  }
+
+  .luke-list[data-variant="card"] .luke-list-row-actions {
+    padding-inline-end: var(--luke-space-16);
+  }
+
+  /* Note that a card's row rings inside its press, because the card's
+     corner clips whatever stands past its edge. */
+  .luke-list[data-variant="card"] .luke-list-row-main:focus-visible {
+    outline-offset: calc(-1 * var(--luke-focus-ring-width));
+  }
+
+  /* A compact row keeps its words and gives up some of the room around them. */
+  .luke-list[data-density="compact"] .luke-list-row-main {
+    padding: var(--luke-space-4) var(--luke-space-8);
+  }
+
+  .luke-list[data-density="compact"] .luke-list-row-actions {
+    padding-inline-end: var(--luke-space-8);
+  }
+
+  /* Beside its acts, the row's press gives its end inset to the acts,
+     whatever its list's variant or density set it (so this rule stays below
+     theirs). */
+  .luke-list-row:has(> .luke-list-row-actions) > .luke-list-row-main {
+    padding-inline-end: 0;
+  }
+
+  .luke-list-row-leading {
+    display: inline-flex;
+    flex: none;
+    color: var(--luke-color-text-muted);
+  }
+
+  /* A glyph stands at a control's glyph size; an avatar brings its own. */
+  .luke-list-row-leading > svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+
+  .luke-list-row-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--luke-space-2);
+    min-width: 0;
+  }
+
+  .luke-list-row-title,
+  .luke-list-row-description {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .luke-list-row-title {
+    font-size: var(--luke-type-label-size);
+    line-height: var(--luke-type-label-leading);
+    font-weight: var(--luke-weight-medium);
+  }
+
+  /* What has not been seen reads in the heavier weight until it is, as a
+     mail app's unread rows do. */
+  .luke-list-row[data-unread="true"] .luke-list-row-title {
+    font-weight: var(--luke-weight-bold);
+  }
+
+  .luke-list-row-description,
+  .luke-list-row-meta {
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
+
+  /* The title gives way first; past it, the metadata is cut short rather
+     than running under the row's acts. */
+  .luke-list-row-meta {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .luke-list-row-actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--luke-space-4);
+    padding-inline-end: var(--luke-space-12);
+  }
+}

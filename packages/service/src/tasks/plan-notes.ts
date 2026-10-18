@@ -34,7 +34,7 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  * plan-notes.ts -- the plan's one write: take the notetaker's notes, the developer's edit of the text, or their restore of a revision, into a plan and read back what was saved.
  *
  * A plan is one Markdown text (`@luke/features/plan-document`). Its callers
- * are a planning call's notetaker (`tasks/plan-scribe.ts`) and a coding
+ * are a task call's notetaker (`tasks/plan-scribe.ts`) and a coding
  * agent's `edit_plan` (`coder-host/plan-edit.ts`), whose models answer with
  * notes (`@luke/features/plan-template`): a point added under a heading, a
  * phrase corrected, a line struck, or a section struck or moved, anywhere in
@@ -49,9 +49,9 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  * changed the text is kept as a revision under that writer
  * (`plan-revisions.ts`), in the same transaction, so the plan and its history
  * never disagree. A coding agent's save that took any note is also written
- * into the plan's journal with the notes as taken, which is what the planning
- * model is told of what each agent changed. Who last changed each section,
- * which tells the planning model and the notetaker the sections the developer
+ * into the task's journal with the notes as taken, which is what the brain
+ * is told of what each agent changed. Who last changed each section,
+ * which tells the brain and the notetaker the sections the developer
  * wrote, is read back off those revisions. The developer's edit is the
  * same save with their text in place of notes, laid over what the text holds
  * now where Luke wrote meanwhile, or answered as a conflict with nothing
@@ -60,25 +60,25 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  * the developer's that names the one it brought back.
  *
  * Note that the notes are the plan's content and nothing else. Which account
- * and which plan they land in are the binding the service built from the
- * authenticated session and the plan it opened, never a field the model
- * supplies. The plan is read and saved under its row's lock, so two saves of
- * one plan take each other's words into account rather than crossing. The
- * save is `savePlanText`'s single update over the row that stands, so a plan
+ * and which task they land in are the binding the service built from the
+ * authenticated session and the task it opened, never a field the model
+ * supplies. The task is read and saved under its row's lock, so two saves of
+ * one task take each other's words into account rather than crossing. The
+ * save is `savePlanText`'s single update over the row that stands, so a task
  * deleted meanwhile answers as gone and is not written back into being, and
  * a save that fails answers as not saved with the prior text standing. Every
  * outcome is a result, never a failure: an unsaved change leaves the
  * notetaker's lines for its next run, over the text as it then stands, and a
  * coding agent retries from the text its conflict answered.
  *
- * An archived plan takes no new edit or restore of the developer's, read
+ * An archived task takes no new edit or restore of the developer's, read
  * under the same lock as the save, so an older desktop or an archive racing
  * the edit cannot write it. The notes of a call or a coding agent already
- * running when the plan was archived still land, as revisions in its
+ * running when the task was archived still land, as revisions in its
  * history: the archive takes no new work, and loses none under way.
  */
 
-/** The account and plan a planning call writes, as the service bound them. */
+/** The account and task a task call writes, as the service bound them. */
 export interface PlanDocumentBinding {
   readonly userId: string;
   readonly taskId: string;
@@ -148,7 +148,7 @@ const TOO_LONG_RESULT: PlanNotSaved = {
   reason: PLAN_SAVE_REFUSAL.TOO_LONG,
 };
 
-/** Whether the plan as read under its lock is archived, which takes none of the developer's writes. */
+/** Whether the task as read under its lock is archived, which takes none of the developer's writes. */
 function archived(stored: StoredTask): boolean {
   return stored.task.archivedAt !== undefined;
 }
@@ -161,7 +161,7 @@ interface TextTaken {
   readonly anchors?: ReportedAnchors;
 }
 
-/** One save under the plan's lock, answered: the plan as saved with what the change took, or why nothing was saved. */
+/** One save under the task's lock, answered: the plan as saved with what the change took, or why nothing was saved. */
 type LockedSave<T> =
   | {
       readonly status: typeof PLAN_SAVE_STATUS.SAVED;

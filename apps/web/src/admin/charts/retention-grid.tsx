@@ -1,6 +1,8 @@
 import type { AdminMetrics, AdminRetentionCell } from "@luke/service/admin/admin-metrics";
+import { TEXT_ELEMENT, TEXT_FONT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { formatDayTick, formatNumber } from "@luke/ui/admin-format";
 import { Fragment } from "react";
+import { ChartEmpty, ChartFrame } from "./chart-frame";
 
 /**
  * The floor under a cell's fill, so a small nonzero share still reads as a
@@ -17,8 +19,9 @@ const RETENTION_TEXT_FLIP_SHARE = 0.75;
 function retentionCellStyle(share: number): React.CSSProperties {
   const fill = Math.max(RETENTION_FILL_FLOOR_PERCENT, Math.round(share * 100));
   return {
-    backgroundColor: `color-mix(in oklab, var(--chart-1) ${fill}%, transparent)`,
-    color: share >= RETENTION_TEXT_FLIP_SHARE ? "var(--background)" : "var(--foreground)",
+    backgroundColor: `color-mix(in oklab, var(--luke-color-chart-1) ${fill}%, transparent)`,
+    color:
+      share >= RETENTION_TEXT_FLIP_SHARE ? "var(--luke-color-ground)" : "var(--luke-color-text)",
   };
 }
 
@@ -59,13 +62,29 @@ function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Elemen
   );
 }
 
+/** A column's heading in the mono face the grid keeps for its labels. */
+function HeaderWords({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <Text
+      as={TEXT_ELEMENT.SPAN}
+      variant={TEXT_VARIANT.CAPTION}
+      tone={TEXT_TONE.MUTED}
+      font={TEXT_FONT.MONO}
+    >
+      {children}
+    </Text>
+  );
+}
+
 /**
  * Weekly signup cohorts against the weeks after them, as a plain CSS grid
  * rather than a chart: each row is the accounts created in one UTC week, each
  * cell the share of them that used the hosted tier that many weeks after
  * signing up. The grid is triangular because the builder emits no cell for a
  * week the calendar has not reached, and the current week's cells wear a
- * dashed border because their week is still accruing.
+ * dashed border because their week is still accruing. The page's section
+ * heading names it, so its card carries no title, and the grid scrolls inside
+ * the card rather than squeezing its cells in a narrow column.
  */
 export function RetentionGrid({
   retention,
@@ -75,32 +94,33 @@ export function RetentionGrid({
   const totalAccounts = retention.cohorts.reduce((total, cohort) => total + cohort.size, 0);
   if (totalAccounts === 0) {
     return (
-      <div className="rounded-lg border border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
-        No accounts created in the last {retention.weeks} weeks yet.
-      </div>
+      <ChartFrame>
+        <ChartEmpty>No accounts created in the last {retention.weeks} weeks yet.</ChartEmpty>
+      </ChartFrame>
     );
   }
 
   const offsets = Array.from({ length: retention.weeks }, (_, offset) => offset);
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="overflow-x-auto">
+    <ChartFrame>
+      {/* Note that the scroller bleeds across the card's inset, because cells
+      scrolled out of a narrow card should pass under its edge, not stop short of it. */}
+      <div className="-mx-5 overflow-x-auto px-5">
         <div
-          className="grid min-w-[640px] gap-1 p-5 text-xs tabular-nums"
+          className="grid min-w-[640px] gap-1 text-xs tabular-nums"
           style={{
             gridTemplateColumns: `minmax(84px, auto) minmax(72px, auto) repeat(${retention.weeks}, minmax(52px, 1fr))`,
           }}
         >
-          <div className="flex items-center font-mono text-muted-foreground uppercase">Cohort</div>
-          <div className="flex items-center justify-end font-mono text-muted-foreground uppercase">
-            Accounts
+          <div className="flex items-center uppercase">
+            <HeaderWords>Cohort</HeaderWords>
+          </div>
+          <div className="flex items-center justify-end uppercase">
+            <HeaderWords>Accounts</HeaderWords>
           </div>
           {offsets.map((offset) => (
-            <div
-              key={offset}
-              className="flex items-center justify-center font-mono text-muted-foreground uppercase"
-            >
-              Wk {offset}
+            <div key={offset} className="flex items-center justify-center uppercase">
+              <HeaderWords>Wk {offset}</HeaderWords>
             </div>
           ))}
           {retention.cohorts.map((cohort) => (
@@ -121,6 +141,6 @@ export function RetentionGrid({
           ))}
         </div>
       </div>
-    </div>
+    </ChartFrame>
   );
 }

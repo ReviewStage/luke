@@ -1,11 +1,11 @@
 import { developerSeedItem, type InitialItem } from "./seed.js";
 
 /**
- * A planning call's backend is the planning model, which holds the saved
- * document and reads the plan's repository; a notetaker beside the call
+ * A task's call's backend is the brain, which holds the saved
+ * document and reads the task's repository; a notetaker beside the call
  * writes the plan, so there is no save to delegate. The guide's Delegation
  * section asks for concrete conditions, so the policy is the template's own
- * conditions with the planning model's tools named: the voice is choosing
+ * conditions with the brain's tools named: the voice is choosing
  * whether one call is needed, and a tool it cannot name is a capability it
  * will not reach for. Note that the backend keeps the question queue, so
  * every answer is a reason to delegate: it is what keeps the queue the voice
@@ -32,7 +32,7 @@ Backend tools:
 - The repository: run_in_repository, which runs shell commands in a checkout of the task's GitHub repository.
 - Research: search_web and read_web_page, which can search the Internet.
 - The whiteboard: draw_on_board, which draws on the board the developer sees beside the plan.
-- Coding agents: list_agents, read_agent, message_agent, start_agent, archive_agent, unarchive_agent, and list_tasks, which say how an agent working on this task or another task of the workspace is doing, pass the developer's instruction to one, start a new one on this task's plan, on a prompt in the developer's words, or on another task of the workspace, and archive an idle one the developer asks to put away or bring one back.
+- Coding agents: list_agents, read_agent, message_agent, start_agent, stop_agent, archive_agent, unarchive_agent, list_tasks, and list_models, which say how an agent working on this task or another task of the workspace is doing, pass the developer's instruction to one, start a new one on this task's plan, on a prompt in the developer's words, or on another task of the workspace, say which models one may run on, stop one the developer asks to stop, and archive an idle one the developer asks to put away or bring one back.
 - The call: end_call, the only way the call hangs up. A goodbye you say without delegating leaves the call up.
 
 Delegate to the backend when:
@@ -63,7 +63,7 @@ Do not guess the result while waiting.`;
  * commentary it is handed is the model's own. The backchannel and
  * interruption policies stay because they are about the call rather than the
  * words: one keeps the model from talking over the developer, the other
- * keeps it listening when they cut in. The role line is a planning call's
+ * keeps it listening when they cut in. The role line is a task's call's
  * own. Note that it leads, because without a lead the voice waited for the
  * developer to drive and the call went quiet.
  */
@@ -72,7 +72,7 @@ Lead the conversation and never let it fall silent, but follow the developer whe
 A notetaker writes the plan live as you talk; you never write it yourself.`;
 
 /**
- * A planning call's one policy beyond the template, added because listening
+ * A task's call's one policy beyond the template, added because listening
  * showed each behavior: several questions read out at once, a pause after
  * every answer while the voice waited on the backend, one more question
  * after the plan was already enough to build from, and a developer with only
@@ -103,21 +103,21 @@ Interruption policy: Stop speaking when the user interrupts. Listen to what they
 
 ${CALL_ENDING_POLICY}${CALL_CONVERSATION_POLICY}${CALL_DELEGATION_POLICY}`;
 
-/** The `instructions` a planning call is created with. */
+/** The `instructions` a task's call is created with. */
 export function sessionInstructions(): string {
   return CALL_INSTRUCTIONS;
 }
 
 /**
- * A planning call's opening, as the last developer message of the history
+ * A task's call's opening, as the last developer message of the history
  * the call is created with, which is the Live conversations guide's way to
  * have the model speak before the caller has: the greeting is in the session
  * from its first instant, so there is no instruction to append once it starts,
- * no acknowledgment to wait for, and no cue after it. The plan the call is
+ * no acknowledgment to wait for, and no cue after it. The task the call is
  * about is the history's first message, whose first line says whether the
- * plan is new or under way, so the opening picks its words from that line: a
- * new plan opens on what the developer has in mind, asked so a problem or a
- * rough idea is as good an answer as a design, and a plan under way picks up
+ * task is new or under way, so the opening picks its words from that line: a
+ * new task opens on what the developer has in mind, asked so a problem or a
+ * rough idea is as good an answer as a design, and a task under way picks up
  * where it stands. It asks the question in the same turn, because a voice
  * that opened by handing the backend a look at the repository said "give me
  * a second" and then waited on a backend with nothing yet to go on. It says

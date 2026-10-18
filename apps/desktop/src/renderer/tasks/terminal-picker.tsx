@@ -2,10 +2,10 @@ import { useAtomValue } from "@effect/atom-react";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { sandboxRead } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type SandboxState } from "@luke/features/terminal-wire";
+import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import { PlusIcon, SearchIcon } from "@luke/ui";
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
-import { SHORTCUT_KEY } from "#shared/shortcuts";
 import { Shortcut } from "../shortcut";
 import { agentStillWriting, agentTabLabel } from "./coding-agent-model";
 import { AgentGlyph } from "./tab-look";
@@ -15,11 +15,11 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * terminal-picker.tsx -- the palette asking which coding agent's sandbox a terminal is for, when the rules leave it to the developer.
  *
  * A terminal belongs to one agent's sandbox (`terminal-entry.ts`), and with
- * several agents on the plan New terminal asks, as ⌘J does before any
+ * several agents on the task New terminal asks, as ⌘J does before any
  * terminal was used. It is the command palette's own dialog and rows: each
  * agent as its tab wears it, its glyph and its name, with whether it works
  * and how its sandbox stands, the agent whose terminal was used last chosen
- * to begin with and saying so. A plan with no agent offers to start one.
+ * to begin with and saying so. A task with no agent offers to start one.
  * How each sandbox stands is read as the picker opens, which never wakes
  * one.
  */
@@ -93,13 +93,13 @@ export function TerminalPicker({
   /** Reads how one agent's sandbox stands, into what the window last read of it. */
   readSandbox: (agentId: string) => void;
   onPick: (agentId: string) => void;
-  /** Starts a coding agent on the plan, the picker's offer where it has none. */
+  /** Starts a coding agent on the task, the picker's offer where it has none. */
   onStartAgent: () => void;
-  /** Whether a coding agent can start on the plan now, and why not where it cannot. */
+  /** Whether a coding agent can start on the task now, and why not where it cannot. */
   start: { readonly available: boolean; readonly reason: string | undefined };
   onClose: () => void;
 }): React.JSX.Element {
-  // Note that a plan whose agents are not read yet offers none, nor to start one.
+  // Note that a task whose agents are not read yet offers none, nor to start one.
   const read = agents.agents !== undefined;
   const listed = agents.agents ?? [];
   const [selected, setSelected] = useState("");

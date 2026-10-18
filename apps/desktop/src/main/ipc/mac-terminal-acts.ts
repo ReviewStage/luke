@@ -3,10 +3,10 @@
  *
  * An open asks nothing of the developer first. It reads the repository's
  * run command from this Mac's settings, where it has one, and starts the
- * terminal (`@luke/host/mac-terminal`), whose script clones the repository
+ * terminal (`startMacTerminal` in `@luke/host/node`), whose script clones the repository
  * into Luke's own folder the first time, brings the branch into a worktree
  * of that clone, runs the command there where there is one, and opens a
- * shell (`@luke/host/open-on-mac`). Its output goes out on a port posted to the
+ * shell (`openOnMacScript`, beside it). Its output goes out on a port posted to the
  * asking panel alone, and what the panel types and its size come back on
  * it. The terminal keeps running while its tab is out of sight: a tab drawn
  * again opens afresh, gets a new port, and is shown the terminal's latest
@@ -23,15 +23,20 @@ import {
   type MacTerminalPortOutbound,
   macTerminalPortInboundSchema,
 } from "@luke/features/mac-terminal-wire";
+import { ActRefused, type ActRows, type ActSender } from "@luke/host/act-router";
 import { ACT, ACT_KIND } from "@luke/host/acts";
 import type { HostOperator } from "@luke/host/host-operator";
-import type { MacTerminal, startMacTerminal } from "@luke/host/mac-terminal";
-import { cloneFolder, openOnMacScript, worktreeFolder } from "@luke/host/open-on-mac";
+import {
+  cloneFolder,
+  type MacTerminal,
+  openOnMacScript,
+  type startMacTerminal,
+  worktreeFolder,
+} from "@luke/host/node";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result } from "effect";
 import type { WebContents } from "electron";
-import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
 type MacTerminalActKind =
   | typeof ACT_KIND.MAC_REPOSITORIES
@@ -90,7 +95,7 @@ function refuseUnlessPanel(kind: MacTerminalActKind, sender: ActSender): void {
 
 export function macTerminalActRows(
   dependencies: MacTerminalActsDependencies,
-): Pick<ActRows, MacTerminalActKind> {
+): Pick<ActRows<WebContents>, MacTerminalActKind> {
   const { host, stateRoot, ports, start } = dependencies;
   /**
    * Each panel's terminals, by the agent whose branch each opened, and the

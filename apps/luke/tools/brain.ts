@@ -17,7 +17,7 @@ import { runAgent } from "../runtime.js";
  * its resolver can take (`host.admitDelegated`); each call is admitted again
  * as it runs, through the root eve then names. Every result is shown to the
  * model as the JSON it is, and a look at the board or at one of the plan's
- * pictures as its image (`planningModelOutput`).
+ * pictures as its image (`tasksModelOutput`).
  */
 export function hostedTools(
   offered: ReadonlySet<string> = BRAIN_TOOL_NAMES,
@@ -37,9 +37,9 @@ export function hostedTools(
             if (!turn) return null;
             const { target } = admitted.success;
             const binding: HostedToolBinding = { target, turn };
-            const declarations = host
-              .toolDeclarations()
-              .filter((declared) => offered.has(declared.name));
+            const declarations = (yield* host.toolDeclarationsFor(admitted.success)).filter(
+              (declared) => offered.has(declared.name),
+            );
             return Object.fromEntries(
               declarations.map((declared) => {
                 const name = declared.name;

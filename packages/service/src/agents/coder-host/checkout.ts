@@ -29,8 +29,8 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * checkout.ts -- a coding agent's checkout of its repository, whose its commits are, and the credential its sandbox pushes through.
  *
  * The agent's repository is checked out once, as its sandbox opens, on the
- * same terms as the planning checkout (`repository-shell.ts`): the
- * installation of its plan's workspace is confirmed to reach it and a token
+ * same terms as the brain's checkout (`repository-shell.ts`): the
+ * installation of its task's workspace is confirmed to reach it and a token
  * minted for that one repository, set at
  * the sandbox's firewall for the clone alone and withdrawn after it. What
  * differs is the token and the depth: the token carries contents and pull
@@ -171,7 +171,7 @@ export const agentCoAuthor = /* @__PURE__ */ Effect.fn("web/agentCoAuthor")(func
 
 /**
  * Whether the agent's token will read its pull request's CI: the
- * installation of its plan's workspace grants the App the read (`github-app.ts`'s `CI_READ_PERMISSIONS`). Told to the session
+ * installation of its task's workspace grants the App the read (`github-app.ts`'s `CI_READ_PERMISSIONS`). Told to the session
  * as it starts, so a read that fails is logged and reads as not readable
  * rather than failing the start: the checkout refuses on its own terms when
  * the sandbox opens.
@@ -199,7 +199,7 @@ export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(
 
 /**
  * A write token for the agent's repository, minted as the App where the
- * installation of its plan's workspace still reaches the repository, with
+ * installation of its task's workspace still reaches the repository, with
  * the repository as GitHub spells it.
  */
 export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentRepositoryToken")(
@@ -255,12 +255,14 @@ const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(func
 });
 
 /**
- * The agent's repository checked out whole, at its current default branch,
- * into the sandbox, with its commit identity set in it; answers the token
+ * The agent's repository checked out whole, at the branch it was started on
+ * where its row names one and at the current default branch otherwise, into
+ * the sandbox, with its commit identity set in it; answers the token
  * minted for it, for the caller to set at the firewall for the commands
  * that follow. The checkout is recorded under the name the agent's row
  * holds. Note that the identity is read ahead of the clone, so a bot GitHub
- * cannot name costs no clone.
+ * cannot name costs no clone; and that a start branch deleted since the
+ * start fails the clone, which says so in git's own words.
  */
 export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAgentRepository")(
   function* (
@@ -277,7 +279,7 @@ export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAg
       sandbox,
       {
         fullName: minted.fullName,
-        defaultBranch: minted.defaultBranch,
+        defaultBranch: agent.startBranch ?? minted.defaultBranch,
         recordedAs: agent.repository,
       },
       minted.token,

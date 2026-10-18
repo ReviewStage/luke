@@ -46,8 +46,8 @@ import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
-import { task } from "../schemas/plan.js";
 import { conversations } from "../schemas/storage.js";
+import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 import { AGENT_WORKSPACE, isWorkspaceMember, reachableTask } from "./workspace-store.js";
@@ -57,8 +57,8 @@ import { AGENT_WORKSPACE, isWorkspaceMember, reachableTask } from "./workspace-s
  *
  * Every statement an account makes names it beside the automation, so no
  * account reads or changes another's, and gates on the account still
- * reaching the automation's plan, a member of the plan's workspace, as every
- * plan statement is gated (`workspace-store.ts`): an account that leaves the
+ * reaching the automation's task, a member of the task's workspace, as every
+ * task statement is gated (`workspace-store.ts`): an account that leaves the
  * workspace leaves its automations there with it, unread and unchanged,
  * and their runs fail on the same check when they fire. A trigger is kept
  * with only the columns it uses: a schedule's due instant and a webhook's
@@ -76,10 +76,10 @@ const MAX_RUNS_READ = 100;
 const AutomationRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
-  /** The plan it was made on; null for one made on its workspace with no plan. */
+  /** The task it was made on; null for one made on its workspace with no task. */
   taskId: Schema.NullOr(Schema.String),
   taskName: Schema.NullOr(Schema.String),
-  /** The plan's repository as `owner/name`, or null where it names none or there is no plan. */
+  /** The task's repository as `owner/name`, or null where it names none or there is no task. */
   taskRepository: Schema.NullOr(Schema.String),
   name: Schema.String,
   enabled: Schema.Boolean,
@@ -97,13 +97,13 @@ const AutomationRowSchema = Schema.Struct({
   updatedAt: InstantColumnSchema,
 });
 
-/** One automation as its account reads it, with the name of the plan it works on. */
+/** One automation as its account reads it, with the name of the task it works on. */
 export type Automation = typeof AutomationRowSchema.Type;
 
-/** An automation row's workspace: its own, or its plan's on a row an older build wrote, its workspace still null. */
+/** An automation row's workspace: its own, or its task's on a row an older build wrote, its workspace still null. */
 const AUTOMATION_WORKSPACE = sql<string>`coalesce(${automation.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${automation.taskId}))`;
 
-/** An automation row's repositories: its own, or its plan's on a row an older build wrote, its list still empty. */
+/** An automation row's repositories: its own, or its task's on a row an older build wrote, its list still empty. */
 const AUTOMATION_REPOSITORIES = sql<
   readonly string[]
 >`case when ${automation.repositories} = '[]'::jsonb and ${task.repository} is not null then jsonb_build_array(${task.repository}) else ${automation.repositories} end`;
@@ -121,7 +121,7 @@ const AUTOMATION_COLUMNS = {
   guards: automation.guards,
   nextRunAt: automation.nextRunAt,
   // Note that a row an older build wrote after the backfill, its workspace null and its
-  // repositories empty, reads its plan's, until the contract step fills it for good.
+  // repositories empty, reads its task's, until the contract step fills it for good.
   organizationId: sql<
     string | null
   >`coalesce(${automation.organizationId}, ${task.organizationId})`,
@@ -134,13 +134,13 @@ const AUTOMATION_COLUMNS = {
   updatedAt: automation.updatedAt,
 };
 
-/** What making an automation takes: the plan, what fires it and what it starts, its guards, when a schedule is first due, and a webhook's secret hash. */
+/** What making an automation takes: the task, what fires it and what it starts, its guards, when a schedule is first due, and a webhook's secret hash. */
 export interface NewAutomation {
-  /** The plan it stands on, whose workspace and repository it takes; null for one made on a workspace with repositories of its own. */
+  /** The task it stands on, whose workspace and repository it takes; null for one made on a workspace with repositories of its own. */
   readonly taskId: string | null;
-  /** The workspace an automation with no plan stands on, which the account must be a member of; read off the plan otherwise. */
+  /** The workspace an automation with no task stands on, which the account must be a member of; read off the task otherwise. */
   readonly organizationId?: string | undefined;
-  /** The repositories an automation with no plan works in; read off the plan otherwise. */
+  /** The repositories an automation with no task works in; read off the task otherwise. */
   readonly repositories?: readonly string[] | undefined;
   readonly name: string;
   readonly trigger: AutomationTrigger;
@@ -267,7 +267,7 @@ function memberOfAutomationWorkspace(
       .from(member)
       .where(
         and(
-          // A row an older build wrote, its workspace still null, is its plan's workspace's.
+          // A row an older build wrote, its workspace still null, is its task's workspace's.
           eq(member.organizationId, AUTOMATION_WORKSPACE),
           eq(member.userId, userId),
           // The plugin's role text may name several roles, comma-separated, as `roleOf` reads it.
@@ -612,7 +612,7 @@ export interface DueClaim {
 
 /**
  * The enabled schedules due, soonest first, of owners who still reach
- * their plans, locked for this claim. Note that a row another claim holds is
+ * their tasks, locked for this claim. Note that a row another claim holds is
  * skipped rather than waited on, because the cron may call twice in one
  * minute and the second call must find nothing left rather than queue
  * behind the first; and that the trigger's kind is read beside the due
@@ -1027,9 +1027,9 @@ function readWritten(userId: string, id: string): TaskStoreEffect<Option.Option<
   return findAutomation({ userId, id, access: AUTOMATION_ACCESS.READ });
 }
 
-/** Makes the account's automation on the plan, enabled; nothing where the account does not reach the plan. */
+/** Makes the account's automation on the task, enabled; nothing where the account does not reach the task. */
 /**
- * Where a new automation stands, read as the account: its plan's workspace
+ * Where a new automation stands, read as the account: its task's workspace
  * and repository, or the workspace it names with the repositories it names,
  * where the account is a member of it; nothing where it reaches neither.
  */
@@ -1073,13 +1073,13 @@ export function createAutomation(
   });
 }
 
-/** Which automations a list reads: one plan's, one workspace's, or every one the account may read where it names neither. */
+/** Which automations a list reads: one task's, one workspace's, or every one the account may read where it names neither. */
 export interface AutomationListFilter {
   readonly taskId?: string | undefined;
   readonly organizationId?: string | undefined;
 }
 
-/** The automations the account may read, newest first, narrowed to one plan's or one workspace's where the filter names it. */
+/** The automations the account may read, newest first, narrowed to one task's or one workspace's where the filter names it. */
 export function listAutomations(
   userId: string,
   filter: AutomationListFilter = {},
@@ -1234,7 +1234,7 @@ export function claimDueAutomations(claim: DueClaim): TaskStoreEffect<readonly C
 /**
  * One automation by id, whoever owns it, for a run the service fires: the
  * sweep and a trigger hold no account's bearer, and the run's own start
- * checks the owner still reaches the plan, as every Start does.
+ * checks the owner still reaches the task, as every Start does.
  */
 export function readAutomationToRun(id: string): TaskStoreEffect<Option.Option<Automation>> {
   return findAutomationToRun(id);

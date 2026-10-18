@@ -1,10 +1,12 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { HoverCard, HoverCardHead, HoverCardNote, IconButton, useMenu } from "@luke/ui";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { useClipped } from "@luke/ui/use-clipped";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item";
-import { CardHead, CardNote, HoverCard } from "../hover-card";
 import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab";
 import { agentCardReading, agentSubject } from "../tasks/agent-ref";
 import { AgentTabCard } from "../tasks/agent-tab-card";
@@ -17,9 +19,7 @@ import { MAIN_TAB } from "../tasks/use-main-tabs";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
-import { useClipped } from "../use-clipped";
-import { useDisclosure } from "../use-disclosure";
-import { ActionMenu, useActionMenu } from "./action-menu";
+import { ActionMenu } from "./action-menu";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs";
 import {
@@ -33,12 +33,12 @@ import {
 import type { AddEntry, HeldTranscripts } from "./strip-tabs";
 
 /**
- * task-summary.tsx -- the open plan's summary at its column's right: everything the plan's two "+" menus open, at a glance, pinned beside the document or folded to a rail of glyphs that expands in place as a card.
+ * task-summary.tsx -- the open task's summary at its column's right: everything the task's two "+" menus open, at a glance, pinned beside the document or folded to a rail of glyphs that expands in place as a card.
  *
- * The summary lists what the side panel's "+" and the plan's column's "+"
+ * The summary lists what the side panel's "+" and the task's column's "+"
  * open, in their rows' words and glyphs (`panelEntries`, `inboxEntry`,
- * `agentEntries`), under quiet headings: the plan's Inbox, counting what
- * waits on the developer, and the panel's kinds the plan has used, its
+ * `agentEntries`), under quiet headings: the task's Inbox, counting what
+ * waits on the developer, and the panel's kinds the task has used, its
  * coding agents, each agent's pull request whose Changes tab the panel
  * opens, its subagents, and the files Luke showed on it. An agent or a subagent wears where it stands on its glyph,
  * and a failure at the row's end, as its tab does, since no tab stands
@@ -86,10 +86,10 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs";
 const SUMMARY_PINNED_KEY = "luke.summary-pinned";
 
 /**
- * The least width of the plan's column, in CSS pixels, at which the summary
+ * The least width of the task's column, in CSS pixels, at which the summary
  * can stand pinned rather than as a rail: the document's measure and its page
- * insets either side (desktop.css's `--reading-width`, 720, and
- * `--page-inset`, 40) beside the column's own `--summary-width`, 240, so
+ * insets either side (`@luke/ui`'s `--luke-page-measure`, 720, and
+ * `--luke-page-inset`, 40) beside the column's own `--summary-width`, 240, so
  * making room for it never reads the document under its measure. Note that
  * the column is measured whole, the summary included, and the side panel
  * beside it is not, so an open panel narrows what is measured and the
@@ -98,7 +98,7 @@ const SUMMARY_PINNED_KEY = "luke.summary-pinned";
 const SUMMARY_WIDE = 1040;
 
 /**
- * The least width of the plan's column, in CSS pixels, at which the summary
+ * The least width of the task's column, in CSS pixels, at which the summary
  * stands as a rail rather than not at all. Note that below it the rail's
  * 56px and the document's page insets either side, 80, would leave the words
  * under 344px, and the toolbar's button hangs the same card the rail does.
@@ -143,7 +143,7 @@ const OPENED_FROM_CARD = '[role="menu"], [role="alertdialog"], [role="tooltip"]'
 
 /**
  * Whether the summary stands pinned where it fits, rather than collapsed to
- * its rail, and the press that turns it; and whether the plan's column, as
+ * its rail, and the press that turns it; and whether the task's column, as
  * last measured, has room for it pinned, which the column reports. Both are
  * held by the shell, whose panes glide as either turns how the summary
  * stands, the column's measure included.
@@ -204,7 +204,7 @@ export interface SummaryLayout {
 }
 
 /**
- * How the summary stands in the plan's `column`, measured whole: pinned
+ * How the summary stands in the task's `column`, measured whole: pinned
  * while it is pinned and the column holds it beside the document's measure,
  * a rail where the column spares the rail's room, and not drawn otherwise,
  * nor while it `holds` nothing to list. A card hangs only where the summary
@@ -291,21 +291,15 @@ export function SummaryButton({
   const pins = layout.wide && layout.card === undefined;
   const label = pins ? "Toggle pinned summary" : "Toggle summary";
   const state = pins
-    ? { "aria-pressed": layout.mode === SUMMARY_MODE.COLUMN }
+    ? { pressed: layout.mode === SUMMARY_MODE.COLUMN }
     : cardControl(layout, cardId);
+  // Note that the box carries the opener's mark, which the shared button takes no attribute for.
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        className="icon-button summary-toggle"
-        aria-label={label}
-        {...state}
-        data-summary-opener={CARD_FROM.TOOLBAR}
-        onClick={layout.onToggle}
-      >
-        <ListIcon />
-      </button>
-    </Tooltip>
+    <span className="summary-toggle" data-summary-opener={CARD_FROM.TOOLBAR}>
+      <Tooltip label={label}>
+        <IconButton icon={<ListIcon />} label={label} {...state} onClick={layout.onToggle} />
+      </Tooltip>
+    </span>
   );
 }
 
@@ -330,7 +324,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
   const latest = waiting > 0 ? inbox.open.at(-1) : inbox.settled[0];
   return (
     <HoverCard data-tab-card="">
-      <CardHead
+      <HoverCardHead
         name={TAB_WORDS.INBOX}
         corner={
           waiting === 0
@@ -338,7 +332,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
             : `${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`
         }
       />
-      {latest === undefined ? null : <CardNote>{latest.title}</CardNote>}
+      {latest === undefined ? null : <HoverCardNote>{latest.title}</HoverCardNote>}
     </HoverCard>
   );
 }
@@ -346,7 +340,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
 /**
  * The card each row hangs, the one its tab hangs where it has one: an
  * agent's its tab's card, read from what its tab last held; a subagent's
- * its tab's card, from the session the plan's work holds; a file's its path
+ * its tab's card, from the session the task's work holds; a file's its path
  * and Luke's note; a pull request's its title, number, and what it
  * changes, under the agent whose it is; a page's a preview of its newest
  * version; the Inbox's what waits. The panel's kinds hang none, as their
@@ -555,7 +549,7 @@ function AgentSummaryRow({
   onPick: () => void;
 }) {
   const archive = useAgentArchive(agent, agents, shown);
-  const menu = useActionMenu(shown);
+  const menu = useMenu(shown);
   const copyLink = useCopyLinkItem()(agentPlace(agent));
   return (
     <>
@@ -578,10 +572,11 @@ function RailRow({ entry }: { entry: AddEntry }) {
   return (
     <li>
       <Tooltip label={entry.row.terms?.[0] ?? entry.row.label}>
-        <button type="button" className="icon-button" onClick={entry.onPick}>
-          <span className="task-summary-glyph">{entry.row.icon}</span>
-          <span className="visually-hidden">{entry.row.label}</span>
-        </button>
+        <IconButton
+          icon={<span className="task-summary-glyph">{entry.row.icon}</span>}
+          label={entry.row.label}
+          onClick={entry.onPick}
+        />
       </Tooltip>
     </li>
   );
@@ -684,7 +679,8 @@ function SummaryCard({
   const collapse = useCallback(() => {
     const opener = document.querySelector<HTMLElement>(`[data-summary-opener="${from}"]`);
     onDismiss();
-    opener?.focus({ preventScroll: true });
+    // The toolbar's opener is a box around its button, which takes the focus back.
+    (opener?.querySelector<HTMLElement>("button") ?? opener)?.focus({ preventScroll: true });
   }, [from, onDismiss]);
   useEffect(() => {
     if (leaving) return;
@@ -724,16 +720,11 @@ function SummaryCard({
       data-leaving={leaving ? "true" : undefined}
       inert={leaving}
     >
-      <Tooltip label="Collapse summary">
-        <button
-          type="button"
-          className="icon-button task-summary-collapse"
-          aria-label="Collapse summary"
-          onClick={collapse}
-        >
-          <ChevronsRightIcon />
-        </button>
-      </Tooltip>
+      <span className="task-summary-collapse">
+        <Tooltip label="Collapse summary">
+          <IconButton icon={<ChevronsRightIcon />} label="Collapse summary" onClick={collapse} />
+        </Tooltip>
+      </span>
       <SummaryList sections={sections} agents={agents} shown onPicked={onDismiss} />
     </div>
   );
@@ -758,19 +749,21 @@ function SummaryChevron({
   const pinned = layout.mode === SUMMARY_MODE.COLUMN;
   const label = pinned ? "Collapse summary" : "Expand summary";
   const hangs = !pinned && !(layout.wide && layout.card === undefined);
+  // Note that the box carries the opener's mark, which the shared button takes no attribute for.
   return (
-    <Tooltip label={label}>
-      <button
-        type="button"
-        className="icon-button task-summary-chevron"
-        aria-label={label}
-        {...(hangs ? cardControl(layout, cardId) : {})}
-        data-summary-opener={pinned ? undefined : CARD_FROM.RAIL}
-        onClick={pinned ? layout.onToggle : layout.onExpand}
-      >
-        {pinned ? <ChevronsRightIcon /> : <ChevronsLeftIcon />}
-      </button>
-    </Tooltip>
+    <span
+      className="task-summary-chevron"
+      data-summary-opener={pinned ? undefined : CARD_FROM.RAIL}
+    >
+      <Tooltip label={label}>
+        <IconButton
+          icon={pinned ? <ChevronsRightIcon /> : <ChevronsLeftIcon />}
+          label={label}
+          {...(hangs ? cardControl(layout, cardId) : {})}
+          onClick={pinned ? layout.onToggle : layout.onExpand}
+        />
+      </Tooltip>
+    </span>
   );
 }
 
@@ -793,11 +786,11 @@ export function TaskSummary({
   tasks: TasksControl;
   layout: SummaryLayout;
   cardId: string;
-  /** The plan's inbox, whose items stand its Inbox row and whose waiting ones it counts. */
+  /** The task's inbox, whose items stand its Inbox row and whose waiting ones it counts. */
   inbox: InboxBoardView;
   /** What the agents' tabs last drew, which their rows' cards preview as their tabs' cards do. */
   held: HeldTranscripts;
-  /** The plan's repository, whose showings alone a file row's card reads its note from. */
+  /** The task's repository, whose showings alone a file row's card reads its note from. */
   repository: string | null;
   /** Opens an agent's tab in the plan's column, handing it the keys, as a pull request's card offers. */
   onOpenAgent: (agentId: string) => void;

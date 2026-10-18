@@ -6,7 +6,6 @@ import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@luke/wire";
 import posthog, { type CaptureResult } from "posthog-js/dist/module.no-external";
 import { afterEach, test, vi } from "vitest";
-import { SESSION_RECORDER_ASSET } from "./session-recorder/contract";
 import { applySessionReplay } from "./session-replay";
 
 /**
@@ -104,31 +103,26 @@ test("the recorder loads before anything records, a stop while it loads holds, a
   vi.stubGlobal("PACKAGED_POSTHOG_PROJECT_API_KEY", "phc_test");
   drawPage();
 
-  // Recording is wanted, so the recorder's bundle is asked for, and nothing
-  // starts before it has run.
-  applySessionReplay(bootstrap(true));
-  const script = document.head.querySelector<HTMLScriptElement>(
-    `script[src="${SESSION_RECORDER_ASSET.SCRIPT}"]`,
-  );
-  assert.ok(script, "the recorder's bundle was asked for");
+  // The recorder's bundle, landing once the test lets it.
+  const landing = Promise.withResolvers<void>();
+  const importRecorder = () => landing.promise;
+
+  // Recording is wanted, and nothing starts before the recorder's bundle has run.
+  applySessionReplay(bootstrap(true), importRecorder);
   assert.equal(posthog.sessionRecordingStarted(), false);
 
-  // The account is deleted while it loads: the bundle runs, as the browser
-  // would run the script, and nothing starts and nothing is sent.
-  applySessionReplay(bootstrap(false));
+  // The account is deleted while it loads: the bundle runs and lands, and
+  // nothing starts and nothing is sent.
+  applySessionReplay(bootstrap(false), importRecorder);
   await import("posthog-js/dist/posthog-recorder");
-  script.dispatchEvent(new Event("load"));
+  landing.resolve();
   await vi.advanceTimersByTimeAsync(10_000);
   assert.equal(posthog.sessionRecordingStarted(), false);
   assert.deepEqual(requests, []);
 
   // Wanted again, the recorder already there starts at once.
-  applySessionReplay(bootstrap(true));
+  applySessionReplay(bootstrap(true), importRecorder);
   assert.equal(posthog.sessionRecordingStarted(), true);
-  assert.equal(
-    document.head.querySelectorAll(`script[src="${SESSION_RECORDER_ASSET.SCRIPT}"]`).length,
-    1,
-  );
 
   const sent: CaptureResult[] = [];
   posthog.on("eventCaptured", (event) => sent.push(event));
@@ -144,6 +138,6 @@ test("the recorder loads before anything records, a stop while it loads holds, a
   assert.ok(recording.includes("styles.css"), "the stylesheet's address");
   assert.ok(recording.includes("#file-icon-ts"), "the icon's symbol");
   // And none of its words, in a text node, an attribute, a link's address, an input's value, or
-  // an editor's words and chips (the agent's message box, `planning/composer-field.tsx`).
+  // an editor's words and chips (the agent's message box, `tasks/composer-field.tsx`).
   for (const word of WORDS) assert.ok(!recording.includes(word), word);
 });

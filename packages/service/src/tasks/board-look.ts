@@ -7,7 +7,7 @@ import type { ToolModelOutput } from "eve/tools";
 import type { PlanDocumentBinding } from "./plan-notes.js";
 
 /**
- * board-look.ts -- `look_at_board`, the planning model's eyes on the plan's whiteboard: its latest drawing as the developer's Mac drew it, handed back as an image.
+ * board-look.ts -- `look_at_board`, the brain's eyes on the task's whiteboard: its latest drawing as the developer's Mac drew it, handed back as an image.
  *
  * Excalidraw's own guides for a model that draws ask it to look at what it
  * drew and fix what it sees before it moves on: text cut off, shapes on top
@@ -18,7 +18,7 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * drawing on the board the moment the draw settles, while the board is open,
  * and its first save of the scene that holds it carries the scene drawn as a
  * PNG (`board-store.ts`); and while a look is the call pending, which the Mac
- * reads off the planning call's activity, the open board saves itself with
+ * reads off the brain call's activity, the open board saves itself with
  * its image again. So a look asks the Mac nothing directly: it waits a short
  * while for an image of the scene as it holds the latest drawing, and says
  * the board is not open when none landed.
@@ -26,7 +26,7 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * The image reaches the model as an image (`lookModelOutput`), never as its
  * base64 spelled out as text, and stays out of the conversation's stored
  * messages (`storedLookOutput`): what the model saw once is no record of the
- * plan, and a board's picture is hundreds of kilobytes.
+ * task, and a board's picture is hundreds of kilobytes.
  */
 
 /** Why a call shows nothing, in words the model can act on. */
@@ -54,7 +54,7 @@ export type LookAtBoardResult =
   | { readonly status: typeof LOOK_AT_BOARD_STATUS.LOOKED; readonly image: string }
   | { readonly status: typeof LOOK_AT_BOARD_STATUS.NOT_LOOKED; readonly reason: string };
 
-/** The tool as a planning model is offered it: its name, its words, and its input schema. */
+/** The tool as the brain is offered it: its name, its words, and its input schema. */
 export const LOOK_AT_BOARD_TOOL = {
   name: LOOK_AT_BOARD_TOOL_NAME,
   description:

@@ -5,7 +5,7 @@ import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { tasksApp } from "@luke/service/tasks/tasks-app";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
-/** What Luke worked on in one plan, a page at a time, and every code he showed on it, by the id its path carries (GET). */
+/** What Luke worked on in one task, a page at a time, and every code he showed on it, by the id its path carries (GET). */
 export default routeFromHttpRouter(
   tasksApp({
     resolveUserId: resolveHostedUserId,

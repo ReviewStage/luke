@@ -22,10 +22,18 @@
   --luke-control-inset: var(--luke-space-12);
   --luke-control-gap: var(--luke-space-8);
   --luke-icon-gap: var(--luke-space-8);
+  /* A settings row's pop-up stands in one column whatever value it names. */
+  --luke-select-field-width: 200px;
   --luke-field-gap: var(--luke-space-16);
   --luke-section-gap: var(--luke-space-16);
   --luke-page-inset: var(--luke-space-40);
   --luke-page-inset-narrow: var(--luke-space-24);
+  /* Between two items of a list, close enough that they read as one. */
+  --luke-list-gap: var(--luke-space-2);
+  /* The measure a page is read at, about seventy characters of body text: a
+     document, a detail page, a collection. Settings reads a step narrower. */
+  --luke-page-measure: 720px;
+  --luke-settings-measure: 640px;
 
   --luke-type-body-size: 13px;
   --luke-type-body-leading: 20px;
@@ -39,11 +47,40 @@
   --luke-type-dialog-leading: 20px;
   --luke-type-title-size: 22px;
   --luke-type-title-leading: 30px;
+  /* Long-form and code text read line after line, set looser than a control's words. */
+  --luke-type-reading-leading: 1.6;
 
   --luke-settings-row-block: var(--luke-space-12);
   --luke-settings-row-inline: var(--luke-space-16);
+  /* Every row stands as tall as a label and its description need, with or
+     without the description, so a card of rows reads even rather than cramped. */
+  --luke-settings-row-min-height: 52px;
+  /* A compact row stands bare in a popover's own inset, a menu row's height. */
+  --luke-settings-row-compact-block: var(--luke-space-0);
+  --luke-settings-row-compact-inline: var(--luke-space-0);
+  --luke-settings-row-compact-min-height: 32px;
+  /* A list row stands in a card as a reference list's line does, denser
+     than a setting's, because it is read down rather than set. */
+  --luke-settings-row-list-block: var(--luke-space-8);
+  --luke-settings-row-list-min-height: 40px;
+  /* The window's settings groups stand further apart than its fields. */
+  --luke-settings-section-gap: var(--luke-space-32);
+
+  --luke-text-area-grow-max: 320px;
+
+  /* A card frames a group of content on a page: a dialog's corner, and an
+     inset a step wider than a field's gap, so what it holds stands clear of
+     its edge; the compact and snug insets are the block axis of a figure's
+     card and a one-line band's. */
+  --luke-card-radius: var(--luke-radius-14);
+  --luke-card-inset: var(--luke-space-20);
+  --luke-card-inset-compact: var(--luke-space-16);
+  --luke-card-inset-snug: var(--luke-space-12);
 
   --luke-dialog-confirm-width: 400px;
+  --luke-dialog-wide-width: 520px;
+  --luke-dialog-media-min-width: 360px;
+  --luke-dialog-media-max-width: 1200px;
   --luke-dialog-inset: var(--luke-space-20);
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);
@@ -52,7 +89,36 @@
   --luke-menu-row-height: 32px;
   --luke-menu-row-radius: var(--luke-radius-6);
   --luke-menu-inset: var(--luke-space-4);
-  --luke-menu-radius: var(--luke-radius-10);
+  /* A row's corner and the inset together, so a highlighted row follows the menu's curve. */
+  --luke-menu-radius: calc(var(--luke-menu-row-radius) + var(--luke-menu-inset));
+  /* The glyph slot every menu row keeps, at its end as at its start. */
+  --luke-menu-glyph: 16px;
+  --luke-menu-shadow: 0 12px 32px var(--luke-color-shadow);
+
+  /* How thick the keyboard's ring is and how far it stands off the control's
+     edge; its colour is the palette's `--luke-color-focus-ring`. The reach is
+     how far the ring stands past the control's edge: a scroller pads by it,
+     so the ring of a row laid edge to edge in it is not clipped. A box that
+     clips what it holds keeps the ring whole one of two ways. One whose clip
+     is only there to hold in what runs long clips past the ring,
+     `overflow: clip` with `overflow-clip-margin` the room; note that the room
+     names its box, because Chromium drops a bare `calc()` there and clips at
+     the edge after all. One whose clip is an edge it draws, a card, sets the
+     offset to the inset for everything in it, so the ring is drawn inside
+     the control, on the card's side of the edge. */
+  --luke-focus-ring-width: 2px;
+  --luke-focus-ring-offset: 1px;
+  --luke-focus-ring-inset: calc(-1 * var(--luke-focus-ring-width));
+  --luke-focus-ring-reach: calc(var(--luke-focus-ring-width) + var(--luke-focus-ring-offset));
+  --luke-focus-ring-room: padding-box var(--luke-focus-ring-reach);
+
+  /* The layers that float over the whole page, each drawn at the root of the
+     document: a menu, then a dialog and a hint on one layer, whichever was
+     drawn later on top, then the passing notice over everything. */
+  --luke-z-menu: 20;
+  --luke-z-dialog: 30;
+  --luke-z-tooltip: 30;
+  --luke-z-toast: 31;
 }
 
 [data-luke-profile="web"] {
@@ -68,10 +134,17 @@
   --luke-control-inset: var(--luke-space-16);
   --luke-control-gap: var(--luke-space-8);
   --luke-icon-gap: var(--luke-space-8);
+  --luke-select-field-width: auto;
   --luke-field-gap: var(--luke-space-16);
   --luke-section-gap: var(--luke-space-16);
   --luke-page-inset: var(--luke-space-24);
   --luke-page-inset-narrow: var(--luke-space-24);
+  /* Between two items of a list, close enough that they read as one. */
+  --luke-list-gap: var(--luke-space-2);
+  /* The measure a page is read at, about seventy characters of body text: a
+     document, a detail page, a collection. Settings reads a step narrower. */
+  --luke-page-measure: 720px;
+  --luke-settings-measure: 640px;
 
   --luke-type-body-size: 16px;
   --luke-type-body-leading: 24px;
@@ -85,11 +158,30 @@
   --luke-type-dialog-leading: 28px;
   --luke-type-title-size: 28px;
   --luke-type-title-leading: 36px;
+  /* Long-form and code text read line after line, set looser than a control's words. */
+  --luke-type-reading-leading: 1.6;
 
   --luke-settings-row-block: var(--luke-space-12);
   --luke-settings-row-inline: var(--luke-space-16);
+  --luke-settings-row-min-height: auto;
+  --luke-settings-row-compact-block: var(--luke-space-0);
+  --luke-settings-row-compact-inline: var(--luke-space-0);
+  --luke-settings-row-compact-min-height: auto;
+  --luke-settings-row-list-block: var(--luke-settings-row-block);
+  --luke-settings-row-list-min-height: auto;
+  --luke-settings-section-gap: var(--luke-section-gap);
+
+  --luke-text-area-grow-max: 320px;
+
+  --luke-card-radius: var(--luke-radius-14);
+  --luke-card-inset: var(--luke-space-20);
+  --luke-card-inset-compact: var(--luke-space-16);
+  --luke-card-inset-snug: var(--luke-space-12);
 
   --luke-dialog-confirm-width: 400px;
+  --luke-dialog-wide-width: 520px;
+  --luke-dialog-media-min-width: 360px;
+  --luke-dialog-media-max-width: 1200px;
   --luke-dialog-inset: var(--luke-space-20);
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);
@@ -99,5 +191,54 @@
   --luke-menu-row-height: 44px;
   --luke-menu-row-radius: var(--luke-radius-6);
   --luke-menu-inset: var(--luke-space-4);
-  --luke-menu-radius: var(--luke-radius-10);
+  /* A row's corner and the inset together, so a highlighted row follows the menu's curve. */
+  --luke-menu-radius: calc(var(--luke-menu-row-radius) + var(--luke-menu-inset));
+  /* The glyph slot every menu row keeps, at its end as at its start. */
+  --luke-menu-glyph: 16px;
+  --luke-menu-shadow: 0 12px 32px var(--luke-color-shadow);
+
+  /* How thick the keyboard's ring is and how far it stands off the control's
+     edge; its colour is the palette's `--luke-color-focus-ring`. The reach is
+     how far the ring stands past the control's edge: a scroller pads by it,
+     so the ring of a row laid edge to edge in it is not clipped. A box that
+     clips what it holds keeps the ring whole one of two ways. One whose clip
+     is only there to hold in what runs long clips past the ring,
+     `overflow: clip` with `overflow-clip-margin` the room; note that the room
+     names its box, because Chromium drops a bare `calc()` there and clips at
+     the edge after all. One whose clip is an edge it draws, a card, sets the
+     offset to the inset for everything in it, so the ring is drawn inside
+     the control, on the card's side of the edge. */
+  --luke-focus-ring-width: 2px;
+  --luke-focus-ring-offset: 1px;
+  --luke-focus-ring-inset: calc(-1 * var(--luke-focus-ring-width));
+  --luke-focus-ring-reach: calc(var(--luke-focus-ring-width) + var(--luke-focus-ring-offset));
+  --luke-focus-ring-room: padding-box var(--luke-focus-ring-reach);
+
+  /* The layers that float over the whole page, each drawn at the root of the
+     document: a menu, then a dialog and a hint on one layer, whichever was
+     drawn later on top, then the passing notice over everything. */
+  --luke-z-menu: 20;
+  --luke-z-dialog: 30;
+  --luke-z-tooltip: 30;
+  --luke-z-toast: 31;
+}
+
+/* A compact site surface, a dashboard's (`DENSITY.COMPACT` in `surface.ts`):
+   the site's roles a step down in size, its controls short enough to stand
+   in a dense header and its type a step under a public page's. It sets size
+   roles alone, each one the site's profile sets, so its faces, its spacing
+   between things, and its palette stay the site's. */
+[data-luke-profile="web"][data-luke-density="compact"] {
+  --luke-control-height: 32px;
+  --luke-control-inset: var(--luke-space-12);
+
+  --luke-type-body-size: 14px;
+  --luke-type-body-leading: 20px;
+  --luke-type-label-size: 13px;
+  --luke-type-label-leading: 18px;
+  --luke-type-title-size: 22px;
+  --luke-type-title-leading: 30px;
+
+  /* A compact menu's rows are its controls' height, as the site's are. */
+  --luke-menu-row-height: 32px;
 }

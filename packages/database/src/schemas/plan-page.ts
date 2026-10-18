@@ -1,7 +1,7 @@
 import type { PageShower } from "@luke/features/page-wire";
 import { index, integer, jsonb, pgTable, text, unique, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
-import { task } from "./plan.js";
+import { task } from "./task.js";
 
 /**
  * plan-page.ts -- a plan's pages, one row per version of a page.
@@ -13,14 +13,14 @@ import { task } from "./plan.js";
  * one version can be named alone, as a link to it would name it, and says who
  * showed it, Luke or a coding agent by its id, named as it is read. The HTML is
  * stored as written, like the plan's own text, readable by an operator and
- * kept the developer's own by the plan it hangs off. Rows go with their plan.
+ * kept the developer's own by the task it hangs off. Rows go with their task.
  */
 export const planPageVersion = pgTable(
   "plan_page_version",
   {
     /** The version's own id. */
     id: uuid("id").primaryKey().defaultRandom(),
-    taskId: uuid("plan_id")
+    taskId: uuid("task_id")
       .notNull()
       .references(() => task.id, { onDelete: "cascade" }),
     /** The page the version is of, the same on each of its versions. */
@@ -37,6 +37,6 @@ export const planPageVersion = pgTable(
   (table) => [
     unique("plan_page_version_page_version").on(table.pageId, table.version),
     // A plan's pages are read together, each by its newest version.
-    index("plan_page_version_plan").on(table.taskId),
+    index("plan_page_version_task").on(table.taskId),
   ],
 );

@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   codeLinesReadable,
@@ -5,17 +6,22 @@ import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
+  INBOX_MESSAGE_AUTHOR,
+  INBOX_MESSAGE_LEAD,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_TOOL,
   type InboxChoice,
   type InboxForm,
   type InboxItem,
+  type InboxMessage,
   type InboxPost,
   type InboxReply,
+  type InboxReplyInput,
   inboxCloseInputSchema,
   inboxPostInputSchema,
   inboxReadInputSchema,
+  inboxReplyInputSchema,
 } from "@luke/features/inbox-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
@@ -27,21 +33,28 @@ import {
   INBOX_POST_REFUSAL,
   type InboxAgent,
   type InboxImage,
+  type InboxNamedImage,
   type InboxPostRefusal,
   postInboxItem,
+  replyInboxItem,
 } from "../../inbox/inbox-store.js";
 import { CODER } from "./bounds.js";
-import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
+import {
+  type InboxSandboxDoor,
+  readInboxImage,
+  readSandboxImage,
+  type SandboxImageTerms,
+} from "./inbox-image.js";
 
 /**
- * inbox.ts -- the coding agent's three inbox tools: post an item for the developer, close one, and read them all.
+ * inbox.ts -- the coding agent's four inbox tools: post an item for the developer, close one, read them all, and reply on one's thread.
  *
  * What an agent cannot do or decide alone, a product choice, an approval
  * of a risky step, a question, or something only the developer can do by
  * hand such as a setting on GitHub, and whatever is ready for the developer
  * to look at, review, or test by hand, such as a pull request, goes in the inbox rather
  * than in a message, where it is lost in the transcript: an item of its own
- * on the service (`inbox-store.ts`), drawn on the plan's Inbox tab until the
+ * on the service (`inbox-store.ts`), drawn on the task's Inbox tab until the
  * developer answers it or the agent takes it back. An item is a title, the
  * blocks of context under it, and the response it asks for, each a closed
  * shape the wire declares (`@luke/features/inbox-wire`). An image block
@@ -54,8 +67,14 @@ import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
  * a coder session takes no input mid-turn
  * (`brain-host/eve-sessions.ts`'s `requestInput`): an answer the agent
  * needs to hear reaches it as one of the developer's messages, and so does
- * any carrying a note the developer typed; a bare press on one it does not
- * need is kept for it to read. Every call answers with the agent's
+ * any carrying a note the developer typed or a file they attached, the
+ * files with it; a bare press on one it does not need is kept for it to
+ * read, and the agent reads back by name which files an answer carried.
+ * Beside its answer an item holds a thread: a member of the workspace may
+ * add a message to it at any point, which reaches the agent as one of the
+ * developer's messages, and the agent replies on it by key, its words with
+ * pictures from its sandbox, without changing what the item asks or where
+ * it stands; it reads every item's thread back in order. Every call answers with the agent's
  * whole inbox as it stands, answers and all, so the model holds its items
  * whatever its context has lost to compaction. A worker gets none of these
  * tools, because the developer answers the agent it works for.
@@ -86,7 +105,7 @@ export const INBOX_TOOLS = {
       "boolean, each named by its label and required where it must be filled; never ask for a credential or a secret in a " +
       "form, since the answer reaches your transcript: that is a to-do the developer does by hand), or none (something they " +
       "should know or look at; they acknowledge it). needsReply is whether you need to hear the answer as a message; set it false for a to-do you only " +
-      "need done or an item that asks nothing, and its answer is kept for you to read, though a note they type with it still reaches you as a message. " +
+      "need done or an item that asks nothing, and its answer is kept for you to read, though a note they type or a file they attach with it still reaches you as a message. " +
       `An answer you need reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
       `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open items. The call answers with your whole inbox as it stands.`,
     inputSchema: inboxPostInputSchema,
@@ -105,7 +124,28 @@ export const INBOX_TOOLS = {
       "and what you closed. Read it before you rely on a to-do you posted without needsReply being done.",
     inputSchema: inboxReadInputSchema,
   },
+  REPLY: {
+    name: INBOX_TOOL.REPLY,
+    description:
+      "Reply on the thread of one of your inbox items, by its key, as a comment the developer reads under the item: " +
+      `to answer a member's message on it, which reaches you as a developer's message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key, ` +
+      "or to follow up on an item after it was answered, such as saying what you did with the answer or that the to-do turned out not to be needed. " +
+      "text is your reply in short Markdown, a file, a pull request, or an issue in it written as a Markdown link to its page so Luke draws it as a chip; " +
+      `images are pictures that show what you mean, at most ${INBOX_BOUNDS.MAX_REPLY_IMAGES}, each by its path in your sandbox, relative to the checkout or absolute, ` +
+      `a PNG, JPEG, or WebP of at most ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB. ` +
+      `A reply works on an item whatever its status, leaves its status and its answer as they stand, and moves it to the top of the inbox. ` +
+      `When the item itself changes, what you need or what it asks, post it again with ${INBOX_TOOL.POST} under the same key instead. ` +
+      "The call answers with your whole inbox as it stands.",
+    inputSchema: inboxReplyInputSchema,
+  },
 } as const;
+
+/** One message of an item's thread as the agent reads it back: who wrote it, you or a member by name, its words, and its files by name. */
+interface AgentThreadLine {
+  readonly from: string;
+  readonly text: string;
+  readonly files?: readonly string[];
+}
 
 /** One item as the agent reads it back: its key, title, where it stands, what it asks while open, and the answer or the reason where there is one. */
 interface AgentInboxLine {
@@ -117,7 +157,11 @@ interface AgentInboxLine {
   readonly response?: InboxItem["response"];
   readonly needsReply?: boolean;
   readonly answer?: InboxReply;
+  /** The names of the files the answer carried, in the order they were attached. */
+  readonly answerFiles?: readonly string[];
   readonly closedReason?: string;
+  /** The item's thread, oldest first, where anyone wrote on it. */
+  readonly thread?: readonly AgentThreadLine[];
 }
 
 /** What a call answers, as the model reads it: the agent's inbox as it stands, or why the call did nothing beside it. */
@@ -150,19 +194,54 @@ export const INBOX_REFUSAL = {
   CODE_REPOSITORY:
     "Not posted: a code block points at lines of your own repository, named as owner/name.",
   CODE_LINES: `Not posted: a code block's endLine is at or after its startLine, and it spans at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines.`,
+  UNREADABLE_REPLY:
+    "Not sent: name the key of one of your items, and write text, images, or both; " +
+    `text is at most ${INBOX_BOUNDS.MAX_MESSAGE_CHARS} characters, and images at most ${INBOX_BOUNDS.MAX_REPLY_IMAGES}, each naming its path.`,
+  NO_REPLY_ITEM: "Not sent: you have no item under that key.",
   NO_AGENT: "Not done: this conversation is no coding agent's.",
   UNAVAILABLE: "Not done: the service could not reach its store.",
 } as const;
 
 const readPost = readEither(inboxPostInputSchema, { excess: EXCESS_KEYS.DROP });
 const readClose = readEither(inboxCloseInputSchema, { excess: EXCESS_KEYS.DROP });
+const readReply = readEither(inboxReplyInputSchema, { excess: EXCESS_KEYS.DROP });
+
+/** How a reply's picture is read from the sandbox: held to the inbox's picture bound, and refused in a reply's own words. */
+const REPLY_IMAGE_TERMS: SandboxImageTerms = {
+  maxBytes: INBOX_BOUNDS.MAX_IMAGE_BYTES,
+  refusals: {
+    NO_FILE: "Not sent: an image names no file in your sandbox:",
+    NOT_IMAGE: "Not sent: an image names a file that is not a PNG, JPEG, or WebP image:",
+    TOO_LARGE: `Not sent: an image names a file larger than ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB; render it smaller, or at one screen scale:`,
+    UNREADABLE: "Not sent: an image's file could not be read from your sandbox:",
+  },
+};
+
+/** Who wrote a message, as the agent reads it: itself, or the member by name, or a former member whose account is gone. */
+function writerOf(message: InboxMessage): string {
+  if (message.author === INBOX_MESSAGE_AUTHOR.AGENT) return "you";
+  return message.member?.name ?? "a former member";
+}
+
+/** One message of an item's thread as the agent reads it back, its files by name, since a member's reached it with their message and its own it sent. */
+function threadLineOf(message: InboxMessage): AgentThreadLine {
+  return {
+    from: writerOf(message),
+    text: message.text,
+    ...(message.files === undefined
+      ? undefined
+      : { files: message.files.map((file) => file.name) }),
+  };
+}
 
 /**
- * An item as the agent reads it back. Note that an open item carries what
+ * An item as the agent reads it back, an answer's files by their names,
+ * since the files themselves reached it with the answer. Note that an open item carries what
  * it asks whole, its blocks, its response, and whether the agent waits to
  * hear back, because compaction may have taken the call that posted it out
  * of the model's context, and an open item is one the agent still acts on;
- * a settled one carries what came of it alone.
+ * a settled one carries what came of it alone. Every item carries its
+ * thread, oldest first, since a member may write on a settled one too.
  */
 function lineOf(item: InboxItem): AgentInboxLine {
   const asks =
@@ -175,7 +254,11 @@ function lineOf(item: InboxItem): AgentInboxLine {
     status: item.status,
     ...asks,
     ...(item.answer === undefined ? undefined : { answer: item.answer }),
+    ...(item.answerFiles === undefined
+      ? undefined
+      : { answerFiles: item.answerFiles.map((file) => file.name) }),
     ...(item.closedReason === undefined ? undefined : { closedReason: item.closedReason }),
+    ...(item.messages === undefined ? undefined : { thread: item.messages.map(threadLineOf) }),
   };
 }
 
@@ -235,7 +318,7 @@ function formRefusal(form: InboxForm): string | undefined {
 
 /**
  * A code block's own refusal: lines of another repository than the agent's
- * own, which the desktop reads through the plan's repository alone, or a
+ * own, which the desktop reads through the task's repository alone, or a
  * range running backwards or past the bound. Note that GitHub spells a
  * repository's name in any case, so the names are compared without it.
  */
@@ -336,6 +419,52 @@ export function closeInInbox(
   return Effect.flatMap(closeInboxItem(agent, read.success.key, read.success.reason), (closed) =>
     Option.isNone(closed) ? Effect.succeed(inboxRejected(INBOX_REFUSAL.NO_ITEM)) : accepted(agent),
   ).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
+  );
+}
+
+/** The reply's pictures read from the sandbox in order, each named by its file's own name, or the first refusal among them. */
+function replyImages(
+  reply: InboxReplyInput,
+  sandbox: InboxSandboxDoor,
+): Effect.Effect<Result.Result<readonly InboxNamedImage[], string>> {
+  return Effect.gen(function* () {
+    const read: InboxNamedImage[] = [];
+    for (const { path } of reply.images ?? []) {
+      const image = yield* readSandboxImage(sandbox, CODER.CHECKOUT_PATH, path, REPLY_IMAGE_TERMS);
+      if (Result.isFailure(image)) return Result.fail(image.failure);
+      read.push({ ...image.success, name: posix.basename(path) });
+    }
+    return Result.succeed(read);
+  });
+}
+
+/**
+ * Runs one reply: its pictures read from the sandbox, the agent's message
+ * written on the thread of its own item under the key, and the agent's
+ * inbox answered, or why not. A reply carries words, pictures, or both.
+ */
+export function replyInInbox(
+  agent: InboxAgent,
+  input: UnparsedWireValue,
+  sandbox: InboxSandboxDoor,
+): Effect.Effect<InboxToolResult, never, DatabaseServices> {
+  const read = readReply(input);
+  if (Result.isFailure(read)) return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_REPLY));
+  const reply = read.success;
+  const text = reply.text.trim();
+  if (text === "" && (reply.images ?? []).length === 0) {
+    return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_REPLY));
+  }
+  return Effect.flatMap(replyImages(reply, sandbox), (images) => {
+    if (Result.isFailure(images)) return Effect.succeed(inboxRejected(images.failure));
+    return Effect.flatMap(replyInboxItem(agent, reply.key, text, images.success), (replied) =>
+      Option.isNone(replied)
+        ? Effect.succeed(inboxRejected(INBOX_REFUSAL.NO_REPLY_ITEM))
+        : accepted(agent),
+    );
+  }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
   );

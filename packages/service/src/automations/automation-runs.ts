@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { TURN_ABANDON } from "@luke/database/models/abandoned-turns";
 import {
   type Automation,
   type AutomationRun,
@@ -49,7 +50,6 @@ import { failureKind } from "@luke/runtime/effect";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { EveSessions } from "../agents/brain-host/eve-sessions.js";
-import { CODER } from "../agents/coder-host/bounds.js";
 import { type StartServices, startCodingAgent } from "../agents/coder-host/start.js";
 import { codingAgentStatusOf } from "../agents/coder-host/status.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
@@ -63,7 +63,7 @@ import type { ModelChoiceRefused } from "../providers/model-catalog.js";
  * automation-runs.ts -- one queued automation run acted on: its guards read, its coding agent started as the deployment acting for the owner, and the run settled.
  *
  * A run is a Start with a prompt, on the one path a Start takes
- * (`coder-host/start.ts`), in the automation's workspace on no plan: the
+ * (`coder-host/start.ts`), in the automation's workspace on no task: the
  * owner's membership of the workspace, the reach of the automation's
  * repository through the workspace's installation, and the model are
  * checked exactly as they are for the developer's own Start, and the agent
@@ -326,7 +326,7 @@ function reasonOfRefusal(refusal: HostedRefusal | ModelChoiceRefused): Automatio
  * The fixed word for why a run's line was not handed to the automation's
  * agent: one gone, retired, or archived is gone; one still coming up, or a
  * service that did not take the line, is unavailable, so the next firing
- * tries again; and a repository or plan out of reach is said as a start's.
+ * tries again; and a repository or task out of reach is said as a start's.
  */
 function reasonOfSteerRefusal(refusal: HostedRefusal): AutomationRunReason {
   switch (refusal.error) {
@@ -398,8 +398,8 @@ const steerClaimed = Effect.fnUntraced(function* (
  * so a run waits on that agent's own work as on its earlier runs'.
  */
 const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: number) {
-  // An agent's run is bounded by its sandbox's day, so a run older than that holds no agent at work.
-  const since = new Date(now - CODER.SANDBOX_TIMEOUT_MS - Duration.toMillis(Duration.hours(1)));
+  // An agent's run is settled by the sweep past its bound, so a run older than that holds no agent at work.
+  const since = new Date(now - TURN_ABANDON.CODING_AGENT_AFTER_MS);
   const started = yield* startedRunAgents(automation.id, since);
   const target =
     automation.targetKind === AUTOMATION_TARGET.SAME_AGENT && automation.targetAgentId !== null
@@ -427,7 +427,7 @@ const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: 
       codingAgentStatusOf(turns.get(agent.conversationId), {
         createdAt: agent.createdAt,
         now,
-        lineAwaits: awaiting.has(agent.conversationId),
+        awaitingLineAt: awaiting.get(agent.conversationId),
       }),
     ),
   ).length;
@@ -478,7 +478,7 @@ type Decision =
  * room for one more agent: a run held back is settled skipped there, and
  * one let through is claimed, started with no agent yet, which the next
  * act's concurrency counts. Note that the automation is read again under
- * the lock, because a pause or a plan's move committed while this act
+ * the lock, because a pause or a task's move committed while this act
  * waited for it must hold the run back.
  */
 const decide = (automationId: string, run: ActedRun) =>
@@ -533,9 +533,9 @@ const decide = (automationId: string, run: ActedRun) =>
 /**
  * A claimed run's agent started, the run settled with it, or failed with
  * the start's refusal in one fixed word. The agent starts in the
- * automation's workspace on no plan, in the repository a GitHub event named
+ * automation's workspace on no task, in the repository a GitHub event named
  * and on the first of its repositories otherwise, so
- * the automation's runs stand apart from the plan it was made on and
+ * the automation's runs stand apart from the task it was made on and
  * group under the automation itself.
  */
 const startClaimed = Effect.fnUntraced(function* (

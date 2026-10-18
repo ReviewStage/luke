@@ -11,15 +11,15 @@
  * item again. An Inbox whose
  * list holds nothing but the item has no way back, there being no list worth
  * going back to. The line is drawn by the Inbox's own width rather than the
- * window's, because the window's Inbox and a plan's own Inbox tab stand in
+ * window's, because the window's Inbox and a task's own Inbox tab stand in
  * columns of their own, beside a sidebar, a side panel, or neither. An Inbox
  * narrowed keeps the item it shows, as Material's list-detail layout does,
  * and one that splits again forgets that the list was asked for, so it
  * narrows onto its item again.
  */
 
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 
 /**
@@ -46,6 +46,54 @@ export const INBOX_COLUMNS = {
 
 export type InboxColumnsShown = (typeof INBOX_COLUMNS)[keyof typeof INBOX_COLUMNS];
 
+/** The list's rows' presses, each kept by the id of the item it opens through the row's ref. */
+export interface InboxRowPresses {
+  /** The ref of the row of the item given, the same one on every render. */
+  readonly hold: (itemId: string) => React.RefCallback<HTMLElement>;
+  readonly find: (itemId: string) => HTMLElement | undefined;
+  /** The press highest in the list. */
+  readonly first: () => HTMLElement | undefined;
+  /** The item whose row's press is the element given, if it is one. */
+  readonly itemOf: (element: EventTarget) => string | undefined;
+}
+
+/** The list's rows' presses, kept as each row is drawn and dropped as it goes. */
+function useInboxRowPresses(): InboxRowPresses {
+  const [presses] = useState(() => {
+    const held = new Map<string, HTMLElement>();
+    const refs = new Map<string, React.RefCallback<HTMLElement>>();
+    return {
+      hold: (itemId: string) => {
+        const known = refs.get(itemId);
+        if (known !== undefined) return known;
+        const ref = (element: HTMLElement | null) => {
+          if (element !== null) {
+            held.set(itemId, element);
+            return;
+          }
+          // Note that a row gone takes its ref with it, so an Inbox left open keeps only the rows it draws.
+          held.delete(itemId);
+          refs.delete(itemId);
+        };
+        refs.set(itemId, ref);
+        return ref;
+      },
+      find: (itemId: string) => held.get(itemId),
+      first: () =>
+        [...held.values()].reduce<HTMLElement | undefined>(
+          (top, each) =>
+            top === undefined ||
+            each.compareDocumentPosition(top) & Node.DOCUMENT_POSITION_FOLLOWING
+              ? each
+              : top,
+          undefined,
+        ),
+      itemOf: (element: EventTarget) => [...held].find(([, press]) => press === element)?.[0],
+    };
+  });
+  return presses;
+}
+
 /** What the Inbox is laid out by. */
 export interface InboxColumns {
   /** The Inbox's own element, whose width draws the line. */
@@ -57,6 +105,13 @@ export interface InboxColumns {
   readonly onBack: (() => void) | undefined;
   /** Asks for the list, as Show all does turning off a filter that listed nothing, so the item then chosen does not stand in the rows' place. */
   readonly onList: () => void;
+  /** The list's rows' presses, which the list keeps and a press handing the keyboard on finds. */
+  readonly rows: InboxRowPresses;
+}
+
+/** The list head's Needs you, the list's one steady control, found by the glyph it alone wears. */
+export function needsYouButton(list: ParentNode | null): HTMLElement | null {
+  return list?.querySelector(".inbox-needs-you-glyph")?.closest("button") ?? null;
 }
 
 /** Whether an Inbox this wide shows one column, given whether it did, so the line it crosses depends on the way it is crossed. */
@@ -94,6 +149,7 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
   const [showAlls, setShowAlls] = useState(0);
   const view = useRef<HTMLElement | null>(null);
   const pressed = useRef(false);
+  const rows = useInboxRowPresses();
   const ref = useCallback((element: HTMLElement | null) => {
     view.current = element;
     if (element === null) return undefined;
@@ -127,11 +183,10 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
     // Split, a press that opens an item from outside the list, as Next does, hands the keyboard to its row.
     if (shown === INBOX_COLUMNS.ITEM) return;
     // An item chosen that the list holds no row for, as a link's missing item or one Needs you leaves out, hands the keyboard to the first row instead, or to Needs you, the list's one steady control, where no row stands.
-    const rows = [...held.querySelectorAll<HTMLElement>(".inbox-tasks [data-item-id]")];
-    const row = rows.find((each) => each.dataset.itemId === chosen) ?? rows[0];
-    (row ?? held.querySelector<HTMLElement>(".inbox-tasks .inbox-needs-you-only"))?.focus();
+    const row = (chosen === undefined ? undefined : rows.find(chosen)) ?? rows.first();
+    (row ?? needsYouButton(held.querySelector(".inbox-tasks")))?.focus();
     setShowAlls(0);
-  }, [shown, chosen, showAlls]);
+  }, [shown, chosen, showAlls, rows]);
 
   const back =
     shown === INBOX_COLUMNS.ITEM && backable
@@ -156,5 +211,6 @@ export function useInboxColumns(chosen: string | undefined, backable: boolean): 
       setListAsked(true);
       setShowAlls((count) => count + 1);
     },
+    rows,
   };
 }

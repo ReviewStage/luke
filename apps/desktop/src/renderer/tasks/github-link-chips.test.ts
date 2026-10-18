@@ -13,10 +13,11 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
+import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**
@@ -156,7 +157,7 @@ function stateWith(workspace: Workspace): AppStateSnapshot {
 }
 
 /** The plan's page, as its words' chips stand on it. */
-const PAGE: PlanMentionsValue = {
+const PAGE: TaskMentionsValue = {
   taskId: PLAN,
   taskName: TASK.name,
   workspace: "acme",
@@ -184,26 +185,22 @@ afterEach(() => {
 async function drawn(text: string, workspace: Workspace) {
   const asked: Act[] = [];
   const state = stateWith(workspace);
-  Object.defineProperty(window, "luke", {
-    configurable: true,
-    value: {
-      recordSurfaceEvent: () => undefined,
-      onAppState: () => () => undefined,
-      requestAppState: () => Promise.resolve(state),
-      act: (request: Act): Promise<ActOutcome> => {
-        asked.push(request);
-        if (request.kind === ACT_KIND.TASKS_ISSUE) {
-          const { repository, number } = request.payload;
-          const issue = repository === "acme/relay" ? RELAY_ISSUES.get(number) : undefined;
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: issue ?? null });
-        }
-        if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
-          const { repository, number } = request.payload;
-          const pullRequest = repository === "acme/relay" ? RELAY_PULLS.get(number) : undefined;
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: pullRequest ?? null });
-        }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      },
+  fakeAppBridge({
+    onAppState: () => () => undefined,
+    requestAppState: () => Promise.resolve(state),
+    act: (request: Act): Promise<ActOutcome> => {
+      asked.push(request);
+      if (request.kind === ACT_KIND.TASKS_ISSUE) {
+        const { repository, number } = request.payload;
+        const issue = repository === "acme/relay" ? RELAY_ISSUES.get(number) : undefined;
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: issue ?? null });
+      }
+      if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
+        const { repository, number } = request.payload;
+        const pullRequest = repository === "acme/relay" ? RELAY_PULLS.get(number) : undefined;
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: pullRequest ?? null });
+      }
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
   const container = document.body.appendChild(document.createElement("div"));
@@ -212,7 +209,7 @@ async function drawn(text: string, workspace: Workspace) {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(PlanMentions, {
+        createElement(TaskMentions, {
           value: PAGE,
           children: createElement(TranscriptWords, { text }),
         }),
@@ -320,8 +317,8 @@ function cardNotes(chip: Element | undefined): (string | null)[] {
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
-  const notes = [...(card?.querySelectorAll(".card-note") ?? [])].map(readable);
+  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
+  const notes = [...(card?.querySelectorAll(".luke-hover-card-note") ?? [])].map(readable);
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
   });
@@ -344,8 +341,8 @@ function openerFace(chip: Element | undefined): [string | undefined, string | nu
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
-  const mark = card?.querySelector<HTMLElement>(".card-note .actor-mark");
+  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
+  const mark = card?.querySelector<HTMLElement>(".luke-hover-card-note .actor-mark");
   const face: [string | undefined, string | null | undefined] = [
     mark?.dataset.kind,
     mark?.querySelector("img")?.getAttribute("src"),
@@ -390,7 +387,7 @@ function cardLabels(chip: Element | undefined): (string | null)[] {
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
-  const card = [...document.querySelectorAll(".tooltip-card [data-mention-card]")].at(-1);
+  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
   const labels = [...(card?.querySelectorAll<HTMLElement>(".card-label") ?? [])].map(
     (label) => label.textContent,
   );
