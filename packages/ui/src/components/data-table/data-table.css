@@ -77,7 +77,7 @@
   }
 
   .luke-data-table-row {
-    transition: background-color var(--duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) ease;
   }
 
   .luke-data-table-row[data-pressable="true"] {

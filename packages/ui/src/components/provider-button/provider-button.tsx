@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { type MarkProvider, ProviderMark } from "../../marks/provider-mark.js";
+import { type MarkProvider, PROVIDER_MARK_SIZE, ProviderMark } from "../../marks/provider-mark.js";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 
@@ -68,7 +68,7 @@ function GateButton({
           <SpinnerRing />
         </span>
       ) : (
-        <ProviderMark provider={provider} />
+        <ProviderMark provider={provider} size={PROVIDER_MARK_SIZE.ICON} />
       )}
       {words}
     </button>

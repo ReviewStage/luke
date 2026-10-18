@@ -24,6 +24,7 @@ import {
   McpIcon,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
+  PROVIDER_MARK_SIZE,
   ProviderMark,
   SearchIcon,
   Spinner,
@@ -625,7 +626,7 @@ function ServersPopover({
           <Tooltip label={PAGE.BACK}>
             <IconButton icon={<ArrowLeftIcon />} label={PAGE.BACK} keepFocus onClick={back} />
           </Tooltip>
-          <ProviderMark provider={row.provider} />
+          <ProviderMark provider={row.provider} size={PROVIDER_MARK_SIZE.ICON} />
           <span className="agent-servers-page-title">{row.name}</span>
           <span className="agent-servers-count">{toolsCount(row.tools?.length ?? 0)}</span>
           <span className="agent-servers-end">

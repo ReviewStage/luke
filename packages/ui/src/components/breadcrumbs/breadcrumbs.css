@@ -85,8 +85,8 @@
     color: var(--luke-color-text-muted);
     font: inherit;
     transition:
-      background-color var(--duration-hover, 0s) ease,
-      color var(--duration-hover, 0s) ease;
+      background-color var(--luke-duration-hover) ease,
+      color var(--luke-duration-hover) ease;
   }
 
   .luke-breadcrumb-button:hover,

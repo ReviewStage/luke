@@ -180,8 +180,7 @@ body {
   background: var(--luke-color-surface);
 }
 
-.catalog-glyph svg,
-.catalog-mark {
+.catalog-glyph svg {
   display: block;
   flex: none;
   width: 20px;
@@ -468,13 +467,6 @@ body {
 
 .catalog-settings-key > .luke-text-field {
   flex: 1 1 var(--luke-select-field-width);
-}
-
-/* A provider's mark at the size a settings row's leading mark stands. */
-.catalog-settings-mark {
-  display: block;
-  width: 20px;
-  height: 20px;
 }
 
 /* The tooltip and hover card examples' control, whose wrapper is the hint's anchor and so wraps it exactly. */
