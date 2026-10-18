@@ -387,9 +387,9 @@ async function narrowTaskInbox(
         ...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
       ].find((button) => button.textContent === "Inbox") ?? null,
     row: (title: string) =>
-      [...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li > button")].find((each) =>
-        each.textContent?.includes(title),
-      ),
+      [
+        ...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
+      ].find((each) => each.textContent?.includes(title)),
     unmount: () => {
       act(() => root.unmount());
       container.remove();

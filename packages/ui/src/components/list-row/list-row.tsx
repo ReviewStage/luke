@@ -9,8 +9,10 @@ import {
   type RefCallback,
   useEffect,
 } from "react";
+import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon } from "../../face/glyphs.js";
 import { useClipped } from "../../use-clipped.js";
+import { useRowSwipe } from "./use-row-swipe.js";
 
 /**
  * list-row.tsx -- a List of rows, each a thing a collection holds: its title, a line under it, its metadata at the end, and the acts it offers beside it.
@@ -82,6 +84,12 @@ import { useClipped } from "../../use-clipped.js";
  * its metadata's end while the pointer rests on it or it holds the
  * keyboard, the metadata stepping aside as a sidebar row's time does for
  * Pin and Archive.
+ *
+ * A row may be swiped right to one act (`swipe`), as a mail app's thread
+ * is swiped to mark it read: a short swipe leaves it open on the act's
+ * button, a long one does the act on release (`use-row-swipe.ts`). The
+ * swipe is the pointer's and the trackpad's alone; the act it does is one
+ * the row offers another way too, so the button takes no Tab stop.
 
  */
 
@@ -108,6 +116,13 @@ export const LIST_ROW_ACTIONS = {
 } as const;
 
 export type ListRowActions = (typeof LIST_ROW_ACTIONS)[keyof typeof LIST_ROW_ACTIONS];
+
+/** A row's one swipe: what its act is called, its glyph, and the act. */
+export interface ListRowSwipe {
+  readonly label: string;
+  readonly icon: ReactNode;
+  readonly onAct: () => void;
+}
 
 /** What a hint hands the press it wraps: when to show and go, and what it says of the press. */
 interface ListRowHintProps {
@@ -167,6 +182,9 @@ function useTitleClipped(
   return onTitleClipped === undefined ? undefined : measured;
 }
 
+/** The act of a row that offers no swipe. */
+const NO_ACT = (): void => undefined;
+
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
@@ -216,6 +234,7 @@ export function ListRow({
   ref,
   onKeyDown,
   onContextMenu,
+  swipe,
 }: {
   /** A mark before the title (an avatar, a status's glyph), drawn as decoration. */
   leading?: ReactNode;
@@ -262,7 +281,10 @@ export function ListRow({
   onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
   /** A right-click, or the menu key, anywhere on the row. */
   onContextMenu?: ((event: MouseEvent<HTMLElement>) => void) | undefined;
+  /** The row's one swipe right; none where it offers none. */
+  swipe?: ListRowSwipe | undefined;
 }): React.JSX.Element {
+  const swiped = useRowSwipe(swipe?.label, swipe?.onAct ?? NO_ACT);
   const titleRef = useTitleClipped(onTitleClipped);
   const heading = (
     <span ref={titleRef} className="luke-list-row-title">
@@ -314,20 +336,8 @@ export function ListRow({
       {face}
     </button>
   ) : undefined;
-  return (
-    <li
-      id={id}
-      ref={onPress ? undefined : ref}
-      className="luke-list-row"
-      data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
-      data-actions={actionsAt === LIST_ROW_ACTIONS.HOVER ? actionsAt : undefined}
-      data-current={current === undefined ? undefined : "true"}
-      data-unread={unread === true ? "true" : undefined}
-      data-density={density}
-      data-ink={ink}
-      data-menu-open={menuOpen ? "true" : undefined}
-      onContextMenu={onContextMenu}
-    >
+  const row = (
+    <>
       {press === undefined ? (
         <div className="luke-list-row-main" aria-current={current}>
           {face}
@@ -338,6 +348,64 @@ export function ListRow({
         <hint.Hint label={hint.label}>{press}</hint.Hint>
       )}
       {said(actions) ? <div className="luke-list-row-actions">{actions}</div> : null}
+    </>
+  );
+  const { view, item } = swiped;
+  const hold = (element: HTMLLIElement | null) => {
+    item.ref.current = element;
+    if (!onPress) ref?.(element);
+  };
+  return (
+    <li
+      id={id}
+      ref={swipe === undefined ? (onPress ? undefined : ref) : hold}
+      className="luke-list-row"
+      data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
+      data-actions={actionsAt === LIST_ROW_ACTIONS.HOVER ? actionsAt : undefined}
+      data-current={current === undefined ? undefined : "true"}
+      data-unread={unread === true ? "true" : undefined}
+      data-density={density}
+      data-ink={ink}
+      data-menu-open={menuOpen ? "true" : undefined}
+      data-swipe={swipe === undefined ? undefined : view.state}
+      data-armed={view.armed ? "true" : undefined}
+      onContextMenu={onContextMenu}
+      {...(swipe === undefined
+        ? undefined
+        : {
+            onPointerDown: item.onPointerDown,
+            onPointerMove: item.onPointerMove,
+            onPointerUp: item.onPointerUp,
+            onPointerCancel: item.onPointerCancel,
+            onClickCapture: item.onClickCapture,
+            style: cssCustomProperties({
+              "--luke-list-row-swipe": `${view.offset}px`,
+              "--luke-list-row-swipe-label": `${view.label.offset}px`,
+              "--luke-list-row-swipe-shown": view.label.opacity,
+            }),
+          })}
+    >
+      {swipe === undefined ? (
+        row
+      ) : (
+        <>
+          <div className="luke-list-row-swipe">
+            <button
+              type="button"
+              className="luke-list-row-swipe-act"
+              tabIndex={-1}
+              data-swipe-act=""
+              onClick={swiped.onPress}
+            >
+              <span className="luke-list-row-swipe-label">
+                {swipe.icon}
+                <span>{swipe.label}</span>
+              </span>
+            </button>
+          </div>
+          <div className="luke-list-row-slide">{row}</div>
+        </>
+      )}
     </li>
   );
 }
