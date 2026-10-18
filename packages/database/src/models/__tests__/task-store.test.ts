@@ -404,8 +404,8 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
   );
 });
 
-/** One of the plan's coding agents, started by `userId`, standing unarchived. */
-const openPlanAgent = (userId: string, organizationId: string, taskId: string) =>
+/** One of the task's coding agents, started by `userId`, standing unarchived. */
+const openTaskAgent = (userId: string, organizationId: string, taskId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = randomUUID();
@@ -442,8 +442,8 @@ it.layer(getTestDB())("a plan's archive and its coding agents", (it) => {
       Effect.gen(function* () {
         const { dean, charles, taskId } = yield* openSharedTask;
         const workspace = (yield* listedTask(dean, taskId)).workspaceId;
-        const working = yield* openPlanAgent(dean, workspace, taskId);
-        const putAway = yield* openPlanAgent(dean, workspace, taskId);
+        const working = yield* openTaskAgent(dean, workspace, taskId);
+        const putAway = yield* openTaskAgent(dean, workspace, taskId);
         yield* archiveCodingAgent(charles, putAway, true);
         const before = yield* archiveOf(dean, putAway);
 
@@ -474,7 +474,7 @@ it.layer(getTestDB())("a plan's archive and its coding agents", (it) => {
       Effect.gen(function* () {
         const { dean, taskId } = yield* openSharedTask;
         const workspace = (yield* listedTask(dean, taskId)).workspaceId;
-        const agentId = yield* openPlanAgent(dean, workspace, taskId);
+        const agentId = yield* openTaskAgent(dean, workspace, taskId);
         const read: string[] = [];
 
         const refused = yield* Effect.result(

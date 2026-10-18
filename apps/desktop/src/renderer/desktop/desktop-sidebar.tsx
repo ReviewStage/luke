@@ -580,8 +580,8 @@ function PinnedSection({
  * have no pin, since they always stand last, and no page to open. A group of
  * archived plans offers no Archive, since its plans are already away, so the
  * plans with no repository offer nothing there.
- * Archive plans runs through `onArchive`, which asks first where any of the
- * plans has coding agents the archive would stop and archive with it.
+ * Archive tasks runs through `onArchive`, which asks first where any of the
+ * tasks has coding agents the archive would stop and archive with it.
  */
 function repositoryActionGroups(
   group: RepositoryGroup,
@@ -591,7 +591,7 @@ function repositoryActionGroups(
 ): MenuAction[][] {
   const { repository } = group;
   const archive: MenuAction[] =
-    archived || groupPlans(group).length === 0
+    archived || groupTasks(group).length === 0
       ? []
       : [
           {
@@ -619,12 +619,12 @@ function repositoryActionGroups(
 /** Pinned holds tabs as well as tasks, so its count is read as pins. */
 const PIN_NOUN: CountNoun = { one: "pin", many: "pins" };
 
-/** The plans under a repository's header; an agent with no plan under it is archived from its own page. */
-function groupPlans(group: RepositoryGroup): readonly TaskSummary[] {
+/** The tasks under a repository's header; an agent with no task under it is archived from its own page. */
+function groupTasks(group: RepositoryGroup): readonly TaskSummary[] {
   return group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task] : []));
 }
 
-/** What a repository's Archive tasks asks where a plan under it has coding agents, which the archive stops and archives with them. */
+/** What a repository's Archive tasks asks where a task under it has coding agents, which the archive stops and archives with them. */
 function archiveTasksQuestion(named: string, count: number): DialogQuestion {
   return {
     title: count === 1 ? "Archive task?" : `Archive ${count} tasks?`,
@@ -673,17 +673,17 @@ function RepositorySection({
   // closes with the sidebar folding away as well as with the tab hiding.
   const menu = useMenu(context.tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
-  const plans = groupPlans(group);
-  const archiveAll = () => context.tasks.onArchiveTasks(plans.map(({ id }) => id));
+  const listed = groupTasks(group);
+  const archiveAll = () => context.tasks.onArchiveTasks(listed.map(({ id }) => id));
   const archiving = useConfirmDialog(
-    { subject: plans.length > 0, surfaceOpen: context.tasks.shown },
+    { subject: listed.length > 0, surfaceOpen: context.tasks.shown },
     () => {
       archiveAll();
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
   );
   const actionGroups = repositoryActionGroups(group, context.tasks, context.archived, () => {
-    if (archiveAsks(plans)) archiving.ask();
+    if (archiveAsks(listed)) archiving.ask();
     else archiveAll();
   });
   return (
@@ -749,7 +749,7 @@ function RepositorySection({
           onClose={menu.close}
         />
       )}
-      <ConfirmDialog confirm={archiving} question={archiveTasksQuestion(named, plans.length)} />
+      <ConfirmDialog confirm={archiving} question={archiveTasksQuestion(named, listed.length)} />
       {rows.length === 0 ? null : <TaskRows rows={rows} context={context} />}
     </div>
   );
