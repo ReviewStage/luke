@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
 import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  type WorldHost,
+  type WorldLayers,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import {
   blastRadiusOf,
   factoryWorldAsOf,
   factoryWorldViewOf,
@@ -36,14 +44,6 @@ import {
   Vector3,
 } from "three";
 import { test } from "vitest";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  type WorldHost,
-  type WorldLayers,
-  type WorldState,
-} from "../../world";
 import { world } from "./index";
 
 /**
@@ -245,6 +245,25 @@ test("each layer switched off takes what it names out of reach, and leaves the r
   planet.update(stateOf(world0));
   assert.equal(pickable(PICK_KIND.AGENT).length, 5);
   assert.equal(pickable(PICK_KIND.SHIPPED).length, 2);
+  planet.dispose();
+});
+
+test("with one layer drawn alone, a failed agent is in reach under Defects and not under Planned", () => {
+  const { host, pickable } = standInHost();
+  const planet = world.create(host);
+  const world0 = snapshot();
+  const alone = (layer: keyof WorldLayers): WorldLayers => ({
+    planned: layer === "planned",
+    building: layer === "building",
+    shipped: layer === "shipped",
+    defects: layer === "defects",
+  });
+  planet.update(stateOf(world0, { layers: alone("planned") }));
+  assert.deepEqual(pickable(PICK_KIND.AGENT), []);
+  planet.update(stateOf(world0, { layers: alone("defects") }));
+  assert.deepEqual(pickable(PICK_KIND.AGENT), [uuidOf(2)]);
+  planet.update(stateOf(world0, { layers: alone("shipped") }));
+  assert.deepEqual(pickable(PICK_KIND.AGENT), []);
   planet.dispose();
 });
 

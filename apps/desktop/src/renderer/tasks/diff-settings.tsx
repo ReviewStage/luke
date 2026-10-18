@@ -1,3 +1,11 @@
+import { Segmented } from "@luke/panel/segmented";
+import { ChangedMark } from "@luke/panel/settings/marks";
+import { CHANGES_WORDS } from "@luke/panel/tasks/changes-model";
+import {
+  DEFAULT_SETTINGS,
+  type FileViewSettings,
+  useFileViewSettings,
+} from "@luke/panel/tasks/file-view-settings";
 import {
   DIFF_FONT,
   DIFF_FONT_LABEL,
@@ -22,14 +30,10 @@ import {
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { PopoverPanel } from "../popover-panel";
-import { Segmented } from "../segmented";
-import { ChangedMark } from "../settings/marks";
 import { PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
 import { SwitchRow } from "../settings/switch-row";
 import { Tooltip } from "../tooltip";
-import { CHANGES_WORDS } from "./changes-model";
-import { DEFAULT_SETTINGS, type FileViewSettings, useFileViewSettings } from "./file-view-settings";
 
 /**
  * diff-settings.tsx -- the diff settings button in the Files changed bar, and the popover under it: every diff setting stage-cli offers, in Luke's own controls.

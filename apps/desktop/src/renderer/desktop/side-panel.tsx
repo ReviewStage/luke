@@ -13,11 +13,26 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_WORK_STATE, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { appPlatform } from "@luke/panel/app-platform";
+import { paneTiming } from "@luke/panel/desktop/pane-motion";
+import {
+  EDGE_SIDE,
+  type ResizableEdgeProps,
+  useResizableEdge,
+} from "@luke/panel/desktop/use-resizable-edge";
+import { drawnVisibly, focusSeek } from "@luke/panel/focus-seek";
+import { SpinnerRegion } from "@luke/panel/spinner";
+import { PullRequestsOnGitHub } from "@luke/panel/tasks/use-open-link";
+import { useCapability, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CollapseIcon,
   EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
   ExpandIcon,
   IconButton,
   SidePanelIcon,
@@ -55,16 +70,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act";
-import { useAppCommand } from "../app-commands";
-import { appPlatform } from "../app-platform";
 import { CallTabVideo } from "../call/panel-avatar";
 import { useCopyLinkItem } from "../copy-link-item";
 import { FindScope } from "../find-in-tab";
-import { drawnVisibly, focusSeek } from "../focus-seek";
 import { panelTabPlace } from "../links-at-hand";
 import { type MenuRow, MenuRowList } from "../searchable-menu";
-import { SpinnerRegion } from "../spinner";
 import { GLYPH_STATE, type GlyphState, glyphStateWords, stateEndMark } from "../state-glyph";
 import { ChangesCard, peopleOf } from "../tasks/agent-changes-tab";
 import { AgentPullRequestTab } from "../tasks/agent-pull-request-tab";
@@ -101,7 +111,6 @@ import {
 } from "../tasks/transcript-copy";
 import type { TranscriptReader } from "../tasks/use-agent-transcript";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
-import { OpenHereProvider } from "../tasks/use-open-link";
 import {
   type DrawnTabs,
   drawsChanges,
@@ -132,8 +141,6 @@ import {
   workRowsOf,
 } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
-import { useCapability, useExperiment } from "../use-app-state";
-import { paneTiming } from "./pane-motion";
 import {
   type AddEntry,
   AddTabButton,
@@ -148,7 +155,6 @@ import {
   type WorkerStandings,
 } from "./strip-tabs";
 import { TabStrip } from "./tab-strip";
-import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
 /**
  * side-panel.tsx -- the open task's side panel at the window's right: its toggle, its tabs and their "+", its full-screen button, the tab shown, and the edge it is resized by.
@@ -187,6 +193,14 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
 
 /** What the Code tab says while Luke has shown no code on the task. */
 const NO_CODE_LINE = "No code yet.";
+
+/** What the Code tab says where the task's code could not be read and none is held. */
+const UNREAD_CODE_LINE = "The code could not be read.";
+
+/** The task's work read that did not land, and its retry, which the Code tab offers while it holds no code. */
+interface CodeFailed {
+  readonly onRetry: () => void;
+}
 
 /**
  * What the panel leaves the document beside it, as desktop.css declares it
@@ -241,7 +255,7 @@ const NO_PAGES: readonly PageLine[] = [];
  * pinned there, since the Inbox is no plan's page.
  */
 export const SIDE_PANEL_HOLDER = {
-  PLAN: "plan",
+  TASK: "plan",
   AGENT: "agent",
   INBOX: "inbox",
 } as const;
@@ -256,7 +270,7 @@ const NO_TERMINALS: readonly TerminalStripTab[] = [];
 
 /** The fixed kinds each holder's panel offers. */
 const HOLDER_KINDS = {
-  [SIDE_PANEL_HOLDER.PLAN]: SIDE_PANEL_TABS,
+  [SIDE_PANEL_HOLDER.TASK]: SIDE_PANEL_TABS,
   [SIDE_PANEL_HOLDER.AGENT]: NO_KINDS,
   [SIDE_PANEL_HOLDER.INBOX]: NO_KINDS,
 } as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;
@@ -886,7 +900,7 @@ function PanelTabs({
     readWorker: (callId) => readWholeTranscript(readWorker, { agentId: taskId, callId }),
     onOpenAgent,
     shownAgent,
-    taskId: taskId,
+    taskId,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   const copyLink = useCopyLinkItem();
@@ -895,7 +909,7 @@ function PanelTabs({
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
   const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
-    if (holder !== SIDE_PANEL_HOLDER.PLAN || !isPinnable(tab)) return undefined;
+    if (holder !== SIDE_PANEL_HOLDER.TASK || !isPinnable(tab)) return undefined;
     const pinned = panel.pins.some((pin) => pin.task === taskId && sameTab(pin.tab, tab));
     return {
       pinned,
@@ -905,7 +919,7 @@ function PanelTabs({
   const doorsOf = (entry: DrawnTab, at: number): TabDoors => {
     const others = strip.filter((_, place) => place !== at);
     // Note that only a task's panel names its tabs by the task: an agent's page holds its panel under the agent's id.
-    const linked = holder === SIDE_PANEL_HOLDER.PLAN ? panelTabPlace(taskId, entry.tab) : undefined;
+    const linked = holder === SIDE_PANEL_HOLDER.TASK ? panelTabPlace(taskId, entry.tab) : undefined;
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
@@ -969,6 +983,7 @@ function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Elemen
         </Text>
       </div>
       <MenuRowList
+        label="Open a tab"
         rows={entries.map((entry) => entry.row)}
         onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
       />
@@ -1299,6 +1314,7 @@ function TabContent({
   repository,
   board,
   shownCode,
+  codeFailed,
   files,
   pages,
   transcript,
@@ -1334,6 +1350,8 @@ function TabContent({
   repository: string | null;
   board: Board | undefined;
   shownCode: readonly TaskCodeShowing[] | undefined;
+  /** The task's work read that did not land, where the last did not. */
+  codeFailed: CodeFailed | undefined;
   /** The open file tabs, which a file's tab reads its lit lines from. */
   files: readonly OpenFile[];
   /** The plan's pages, which a page's tab draws its newest version of. */
@@ -1429,7 +1447,7 @@ function TabContent({
         taskId={taskId}
         page={page}
         readSource={(version) =>
-          act(ACT_KIND.TASKS_PAGE_SOURCE, { taskId: taskId, pageId: page.id, version })
+          act(ACT_KIND.TASKS_PAGE_SOURCE, { taskId, pageId: page.id, version })
         }
         findActive={findActive}
       />
@@ -1438,7 +1456,7 @@ function TabContent({
   if (isChangesTab(tab)) {
     // Note that a link in a pull request's own tab, to its earlier entries or a reply, leaves for GitHub, because the tab already is that pull request.
     return (
-      <OpenHereProvider key={tab.changes} value={undefined}>
+      <PullRequestsOnGitHub key={tab.changes}>
         <AgentPullRequestTab
           agentId={tab.changes}
           control={agents}
@@ -1448,7 +1466,7 @@ function TabContent({
           view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.CONVERSATION}
           onView={(view) => onPullRequestView(tab.changes, view)}
         />
-      </OpenHereProvider>
+      </PullRequestsOnGitHub>
     );
   }
   if (isFileTab(tab)) {
@@ -1467,7 +1485,7 @@ function TabContent({
           file={file}
           snippet={snippetOf(shownCode, file)}
           shownCode={shownCode}
-          readFile={(window) => act(ACT_KIND.TASKS_FILE, { taskId: taskId, ...window })}
+          readFile={(window) => act(ACT_KIND.TASKS_FILE, { taskId, ...window })}
           readFolder={(path) => act(ACT_KIND.TASKS_TREE, { planId: taskId, path })}
           readWhole={() => act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })}
           openGitHub={(url) => appPlatform().openGitHub(url)}
@@ -1542,7 +1560,16 @@ function TabContent({
         <TaskBoard taskId={taskId} board={board} viewOnly={agents.onUnarchive !== undefined} />
       );
     case SIDE_PANEL_TAB.CODE:
-      return shownCode === undefined || shownCode.length === 0 ? (
+      // Note that no code read yet is a wait, and only code read as none says so.
+      if (shownCode === undefined && codeFailed !== undefined) {
+        return (
+          <ErrorState onRetry={codeFailed.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            {UNREAD_CODE_LINE}
+          </ErrorState>
+        );
+      }
+      if (shownCode === undefined) return <SpinnerRegion label="Loading code" />;
+      return shownCode.length === 0 ? (
         <EmptyState icon={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.CODE }).icon}>
           {NO_CODE_LINE}
         </EmptyState>
@@ -1569,7 +1596,7 @@ function TabContent({
           shown={shown}
           models={agents.models}
           reveal={transcript.reveal ?? work.reveal}
-          video={<CallTabVideo planId={taskId} />}
+          video={<CallTabVideo taskId={taskId} />}
         />
       );
   }
@@ -1772,10 +1799,11 @@ export function SidePanel({
   edge,
   unread,
   holder,
-  planId: taskId,
+  taskId,
   repository,
   board,
   shownCode,
+  codeFailed,
   pages,
   transcript,
   work,
@@ -1794,12 +1822,14 @@ export function SidePanel({
   unread: readonly StripTab[];
   holder: SidePanelHolder;
   /** The plan the panel stands beside, or the agent where it stands beside the agent's own page. */
-  planId: string;
+  taskId: string;
   /** The task's repository, `owner/name`, or none before one is chosen. */
   repository: string | null;
   board: Board | undefined;
   /** Every code Luke showed on the task, oldest first. */
   shownCode: readonly TaskCodeShowing[] | undefined;
+  /** The task's work read that did not land, where the last did not; none where the panel reads no task's code. */
+  codeFailed: CodeFailed | undefined;
   /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
   pages: readonly PageLine[] | undefined;
   transcript: SidePanelTranscript;
@@ -2026,6 +2056,7 @@ export function SidePanel({
               repository={repository}
               board={board}
               shownCode={shownCode}
+              codeFailed={codeFailed}
               files={files}
               pages={taskPages}
               transcript={transcript}

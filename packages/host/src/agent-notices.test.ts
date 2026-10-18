@@ -232,7 +232,7 @@ function fixture() {
     inboxReads,
     waiting,
     holding,
-    taskless: taskless,
+    taskless,
     badges,
     inboxToasted,
     openedInboxes,
@@ -849,6 +849,32 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a question from a teammate's agent with no plan is written for the window's Inbox with who started it, as every member's Inbox lists it, though it is neither badged nor announced",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [], planless: [], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      f.answerInbox({
+        items: [],
+        planless: [tasklessItem(ITEM_B, { startedBy: "user-charles", updatedAt: READ_AT + 1 })],
+        cursor: "2",
+        readAt: READ_AT + 1,
+      });
+      yield* settled;
+
+      assert.deepEqual(
+        f.taskless.at(-1)?.map((item) => [item.id, item.startedBy]),
+        [[ITEM_B, "user-charles"]],
+      );
+      assert.equal(f.badges.at(-1), 0);
+      assert.deepEqual(f.said(), []);
+    }),
+);
+
 const RUN_ID = "4b5c6d7e-8f90-4a1b-8c2d-3e4f5a6b7c8d";
 const AUTOMATION_ID = "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04";
 
@@ -1007,13 +1033,13 @@ it.effect(
         {
           messageId: chatEntry(51).messageId,
           workspaceId: "workspace-acme",
-          planId: null,
+          taskId: null,
           words: "@agent-2 asked you",
           detail: "Chat",
         },
       ]);
 
-      notices.shownChat({ workspaceId: "workspace-acme", planId: null });
+      notices.shownChat({ workspaceId: "workspace-acme", taskId: null });
       const before = f.posted.length;
       f.answerInbox({
         items: [waitingItem(ITEM_A)],
@@ -1046,7 +1072,7 @@ it.effect(
       f.focus(true);
       f.answerInbox({ items: [], chat: [], cursor: "1", readAt: READ_AT });
       yield* settled;
-      notices.shownChat({ workspaceId: "workspace-acme", planId: TASK_ID });
+      notices.shownChat({ workspaceId: "workspace-acme", taskId: TASK_ID });
       const otherTask = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
       f.answerInbox({
         items: [],

@@ -19,6 +19,9 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "@luke/host/acts";
+import { runAppCommand } from "@luke/panel/app-commands";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { UnparsedWireValue } from "@luke/wire";
 import { Effect } from "effect";
@@ -27,11 +30,8 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
 import { bundleLanded, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { runAppCommand } from "../app-commands";
 import { SIDE_BUNDLES, type SideBundles, sideBundles } from "../bundle-loader";
 import { FindScope } from "../find-in-tab";
 import { TerminalCardFoot } from "./terminal-shells";
@@ -301,10 +301,10 @@ async function mount(
     registry,
     /** The shells as the list draws them: each one's name, what it says under it, whether it is shown, and whether it runs something. */
     rows: () =>
-      [...container.querySelectorAll(".terminal-shell")].map((row) => ({
-        name: row.querySelector(".terminal-shell-name")?.textContent,
+      [...container.querySelectorAll('[aria-label="Shell list"] > li')].map((row) => ({
+        name: row.querySelector(".luke-list-row-title")?.textContent,
         detail: row.querySelector(".terminal-shell-detail")?.textContent,
-        shown: row.getAttribute("aria-current") === "true",
+        shown: row.querySelector('[aria-current="true"]') !== null,
         running: row.querySelector(".terminal-shell-running") !== null,
       })),
     /** Presses the button the label names, wherever it stands in the tab. */
@@ -316,9 +316,9 @@ async function mount(
     },
     /** Presses a shell's row, which shows it. */
     choose: async (name: string) => {
-      const row = [...container.querySelectorAll<HTMLButtonElement>(".terminal-shell-row")].find(
-        (each) => each.querySelector(".terminal-shell-name")?.textContent === name,
-      );
+      const row = [
+        ...container.querySelectorAll<HTMLButtonElement>('[aria-label="Shell list"] > li > button'),
+      ].find((each) => each.querySelector(".luke-list-row-title")?.textContent === name);
       assert.ok(row, `a row for ${name}`);
       // A press takes the keyboard to the row first, as the window's does.
       row.focus();
@@ -331,7 +331,7 @@ async function mount(
     standing: () => container.querySelector(".terminal-tab-standing")?.textContent,
     /** The slim bar's words, its action's label, or nothing without one. */
     bar: () => container.querySelector(".terminal-bar-words")?.textContent,
-    action: () => container.querySelector<HTMLButtonElement>(".terminal-bar-action"),
+    action: () => container.querySelector<HTMLButtonElement>(".terminal-bar-end button"),
     dimmed: () =>
       container.querySelector(".terminal-tab-screen")?.getAttribute("data-dim") === "true",
     /** A key pressed in the screen, as the window delivers it: its keypress only where its keydown went unclaimed. */
@@ -726,6 +726,53 @@ function lastPayload(kind: ActKind) {
   return "payload" in request ? request.payload : undefined;
 }
 
+/** What the shells list says to a reader in place of its rows: the reading region's words, or the failure's. */
+function shellsSaid(container: HTMLElement) {
+  const list = container.querySelector("aside[aria-label='Shells']");
+  assert.ok(list, "the shells list stands");
+  return {
+    reading: list.querySelector("[role=status]")?.textContent,
+    failed: list.querySelector("[role=alert]")?.textContent,
+  };
+}
+
+test("while the shells are first read, the list stands rows of blocks that say so, and the shells land in their place", async () => {
+  main.holding.add(ACT_KIND.TERMINAL_LIST);
+  const tab = await mount();
+  assert.deepEqual(shellsSaid(tab.container), {
+    reading: "Reading the shells…",
+    failed: undefined,
+  });
+  assert.doesNotMatch(tab.container.textContent ?? "", /No shells\./u);
+
+  main.holding.clear();
+  for (const release of main.held.splice(0)) release();
+  await settle();
+  assert.deepEqual(shellsSaid(tab.container), { reading: undefined, failed: undefined });
+  assert.deepEqual(
+    tab.rows().map((row) => row.name),
+    ["zsh", "dev server"],
+  );
+});
+
+test("a read of the shells the service refused says so in the list, beside the bar's Retry", async () => {
+  main.down.add(ACT_KIND.TERMINAL_LIST);
+  const tab = await mount();
+  assert.deepEqual(shellsSaid(tab.container), {
+    reading: undefined,
+    failed: "The shells could not be read.",
+  });
+
+  main.down.clear();
+  await act(async () => tab.action()?.click());
+  await settle();
+  assert.deepEqual(shellsSaid(tab.container), { reading: undefined, failed: undefined });
+  assert.deepEqual(
+    tab.rows().map((row) => row.name),
+    ["zsh", "dev server"],
+  );
+});
+
 test("the list shows each shell in the agent's sandbox, the one shown marked, a running one's command and its dot", async () => {
   main.listed = {
     sandbox: SANDBOX_STATE.RUNNING,
@@ -807,7 +854,9 @@ test("a shell's × asks first, then ends it, and ending the one shown shows the 
 
 test("a shell renamed from its row's menu is renamed in place, and the list says its new name", async () => {
   const tab = await mount();
-  const row = tab.container.querySelector<HTMLButtonElement>(".terminal-shell-row");
+  const row = tab.container.querySelector<HTMLButtonElement>(
+    '[aria-label="Shell list"] > li > button',
+  );
   assert.ok(row);
   act(() => {
     row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
@@ -905,7 +954,9 @@ test("a read of the shells that went out before a rename lands nowhere, so the n
     window.dispatchEvent(new Event("focus"));
   });
   main.holding.clear();
-  const row = tab.container.querySelector<HTMLButtonElement>(".terminal-shell-row");
+  const row = tab.container.querySelector<HTMLButtonElement>(
+    '[aria-label="Shell list"] > li > button',
+  );
   assert.ok(row);
   act(() => {
     row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));

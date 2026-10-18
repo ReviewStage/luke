@@ -4,17 +4,17 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
+import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
+import { ellipsized } from "@luke/panel/testing/action-label";
+import { relayout } from "@luke/panel/testing/resize-observer";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { ellipsized } from "#testing/action-label";
-import { relayout } from "#testing/resize-observer";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
-import { NO_LOOKS } from "../tasks/use-task-looks";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopTasks } from "./desktop-tasks";
 
@@ -243,11 +243,9 @@ test("a row calls the account's own first workspace personal while no one else i
   const fresh: Workspace = { ...NORTHWIND, id: "ws-fresh", name: "Platform", memberCount: 1 };
   openMenu(openTab({ ...TASK, repository: null }, [personal, STUDIO, fresh]));
 
-  const rows = [...chooseMove().querySelectorAll('[role="radio"] .workspace-ref-line')].map(
-    (line) => line.textContent,
-  );
+  const rows = [...chooseMove().querySelectorAll('[role="radio"]')].map((row) => row.textContent);
 
-  assert.deepEqual(rows, ["Personal workspace", "1 member"]);
+  assert.deepEqual(rows, ["DDanaPersonal workspace", "PPlatform1 member"]);
 });
 
 test("a refused move keeps the dialog up, saying so under the list", async () => {
@@ -280,9 +278,16 @@ function openTask(tasks: TasksControl): HTMLElement {
   return container;
 }
 
-/** The task-wide banner over a stranded task, where one stands. */
+/** The task-wide banner over a stranded task, where one stands: the region its words name. */
 function strandedBanner(within: HTMLElement): HTMLElement | null {
-  return within.querySelector<HTMLElement>(".task-banner");
+  const regions = [...within.querySelectorAll<HTMLElement>("section[aria-labelledby]")];
+  return (
+    regions.find((region) =>
+      document
+        .getElementById(region.getAttribute("aria-labelledby") ?? "")
+        ?.textContent?.startsWith("This task's repository belongs to"),
+    ) ?? null
+  );
 }
 
 /** The words a reader hears in an element: its text but for a mark hidden from a screen reader, a workspace's tile's letter among them. */

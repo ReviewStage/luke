@@ -4,19 +4,19 @@ import assert from "node:assert/strict";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { stateWith } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { fakeAppPlatform } from "#testing/app-platform";
-import { stateWith } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { markdownHtmlParserLanded } from "#testing/markdown";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
-import { OpenLinkProvider } from "./use-open-link";
 
 /**
  * agent-written-mentions.test.ts -- the mentions a coding agent is told to

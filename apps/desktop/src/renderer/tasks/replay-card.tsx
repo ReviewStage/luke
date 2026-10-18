@@ -3,6 +3,9 @@ import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-age
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { useMemberDirectory } from "@luke/panel/member-directory";
+import { SentTime } from "@luke/panel/tasks/sent-time";
+import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
 import {
   BUTTON_VARIANT,
   Button,
@@ -11,11 +14,13 @@ import {
   DisclosureBody,
   DisclosureSummary,
   Inline,
+  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextButton,
   TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
@@ -28,7 +33,6 @@ import { Message, MessageContent } from "../ai-elements/message";
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan";
 import { TOOL_BLOCK } from "../ai-elements/tool";
 import { useFindOpen } from "../find-in-tab";
-import { useMemberDirectory } from "../member-directory";
 import { lineSender, providerOf } from "./coding-agent-model";
 import { linkChip } from "./mention-chip";
 import {
@@ -44,12 +48,10 @@ import {
   stepView,
   summaryLine,
 } from "./replay-card-model";
-import { SentTime } from "./sent-time";
 import { useMentionDoors } from "./task-mentions";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 import { TranscriptTool, TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { useOpenPlace } from "./use-open-link";
 
 /**
  * replay-card.tsx -- the card an agent started from another opens on after its brief: "Continued from" or "Forked from" the source agent, folded over the steps of the source's work it was handed.
@@ -390,14 +392,11 @@ function ReplayFoot({
         </span>
       )}
       {onOpenTranscript === undefined ? null : (
-        <button
-          type="button"
-          className="text-link ml-auto cursor-pointer border-0 bg-transparent p-0 text-[12.5px] text-foreground"
-          data-replay-open=""
-          onClick={onOpenTranscript}
-        >
-          {FULL_TRANSCRIPT_WORDS} ›
-        </button>
+        <span className="ml-auto text-foreground" data-replay-open="">
+          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={onOpenTranscript}>
+            {FULL_TRANSCRIPT_WORDS} ›
+          </TextButton>
+        </span>
       )}
     </div>
   );
@@ -413,14 +412,14 @@ export function ReplayCard({
   replay,
   sentAt,
   place,
-  planId: taskId,
+  taskId,
 }: {
   replay: Replay;
   /** When the agent's first message was sent, named after who started it; none where the transcript does not know. */
   sentAt?: number | undefined;
   place: ReplayPlace;
   /** The task the agents are of, under which a message of the source is opened; none where they are of none. */
-  planId: string | undefined;
+  taskId: string | undefined;
 }): React.JSX.Element {
   const { agentId, messageId } = replay;
   const source = useSource(agentId, place);

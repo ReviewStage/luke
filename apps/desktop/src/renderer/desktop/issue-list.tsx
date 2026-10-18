@@ -1,18 +1,33 @@
-import { ISSUE_STATUS_WORDS, issueGroups, issueIdentifier } from "@luke/features/issue-list-model";
+import {
+  type IssueGrouping,
+  issueIdentifier,
+  issueListGroups,
+} from "@luke/features/issue-list-model";
 import type { Issue } from "@luke/features/issue-wire";
-import { List, ListRow, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text, useMenu } from "@luke/ui";
+import type { IssueChange } from "@luke/panel/desktop/use-issues";
+import {
+  LIST_ROW_CURRENT,
+  List,
+  ListRow,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useMenu,
+} from "@luke/ui";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
 import { IssueActions } from "./issue-actions";
+import { ISSUE_OPENING, type IssueOpening, openingOf, pageKey } from "./issue-peek";
 import { PriorityMark, StatusGlyph } from "./issue-pickers";
-import type { IssueChange } from "./use-issues";
 
 /**
- * issue-list.tsx -- a workspace's issues as the Issues page lists them: under a heading for each status, the work under way first, each row its status, its identifier, its title, how much it matters, and when it last changed.
+ * issue-list.tsx -- a workspace's issues as the Issues page lists them: under a heading for each status, the work under way first, or for each priority, each row its status, its identifier, its title, how much it matters, and when it last changed.
  *
  * The sections are Home's own (`desktop-home.tsx`): a heading with its
  * count over a `List` of `ListRow`s, each a press, so the page's ↑ and ↓
- * move through the rows and Return opens the one reached. A right-click on
+ * move through the rows and Return peeks the one reached, ⌘Return opening
+ * its page (`issue-peek.tsx`); the row peeked is current. A right-click on
  * a row, or the menu key or ⇧F10 on it, opens its actions
  * (`issue-actions.tsx`), which hand the keyboard back to the row's press.
  * The order is the view model's (`issue-list-model.ts`); nothing is sorted
@@ -33,6 +48,7 @@ function IssueRow({
   workspaceName,
   now,
   focused,
+  peeked,
   shown,
   onOpen,
   onChange,
@@ -41,8 +57,10 @@ function IssueRow({
   workspaceName: string;
   now: number;
   focused: boolean;
+  /** Whether its issue is the one read in the peek beside the list. */
+  peeked: boolean;
   shown: boolean;
-  onOpen: () => void;
+  onOpen: (opening: IssueOpening) => void;
   onChange: (change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
   const menu = useMenu(shown);
@@ -75,9 +93,15 @@ function IssueRow({
             <RelativeTime at={issue.updatedAt} now={now} />
           </span>
         }
-        onPress={onOpen}
+        current={peeked ? LIST_ROW_CURRENT.ITEM : undefined}
+        onPress={(event) => onOpen(openingOf(event))}
         onContextMenu={menu.contextMenu(row)}
-        onKeyDown={menu.keyMenu}
+        onKeyDown={(event) => {
+          // Note that ⌘Return is taken before the row's own Return, which would peek it.
+          if (!pageKey(event)) return menu.keyMenu(event);
+          event.preventDefault();
+          onOpen(ISSUE_OPENING.PAGE);
+        }}
       />
       {/* Note that the menu and its question stand beside the row, not in it, because a press inside them would otherwise reach the row's own right-click. */}
       <IssueActions
@@ -91,45 +115,47 @@ function IssueRow({
   );
 }
 
-/** The issues under a heading for each status they stand in, the work under way first. */
+/** The issues under a heading for each status they stand in, the work under way first, or for each priority, the most pressing first. */
 export function IssueList({
   issues,
+  grouping,
   workspaceName,
   now,
   focused,
+  peeked,
   shown,
   onOpen,
   onChange,
 }: {
   issues: readonly Issue[];
+  grouping: IssueGrouping;
   workspaceName: string;
   now: number;
   /** The issue whose row takes the keyboard as the list is drawn: the one the page came back from. */
   focused: string | undefined;
+  /** The issue read in the peek beside the list, whose row is current; none while none is. */
+  peeked: string | undefined;
   /** Whether the page stands, which a card's menu and question do not outlive. */
   shown: boolean;
-  onOpen: (issue: Issue) => void;
+  /** Opens an issue as its row was pressed: in the peek, or on its own page. */
+  onOpen: (issue: Issue, opening: IssueOpening) => void;
   /** Sends a change to an issue from its menu, answering whether it was kept. */
   onChange: (issue: Issue, change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
   return (
     <>
-      {issueGroups(issues).map((group) => (
-        <section
-          key={group.status}
-          className="home-section"
-          aria-label={ISSUE_STATUS_WORDS[group.status]}
-        >
+      {issueListGroups(issues, grouping).map((group) => (
+        <section key={group.key} className="home-section" aria-label={group.words}>
           {/* Note that the count stands inside the heading, so a reader moving by headings hears it. */}
           <h2 className="issue-group-head">
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED}>
-              {ISSUE_STATUS_WORDS[group.status]}
+              {group.words}
             </Text>
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
               {group.issues.length}
             </Text>
           </h2>
-          <List label={ISSUE_STATUS_WORDS[group.status]}>
+          <List label={group.words}>
             {group.issues.map((issue) => (
               <IssueRow
                 key={issue.id}
@@ -137,8 +163,9 @@ export function IssueList({
                 workspaceName={workspaceName}
                 now={now}
                 focused={issue.id === focused}
+                peeked={issue.id === peeked}
                 shown={shown}
-                onOpen={() => onOpen(issue)}
+                onOpen={(opening) => onOpen(issue, opening)}
                 onChange={(change) => onChange(issue, change)}
               />
             ))}

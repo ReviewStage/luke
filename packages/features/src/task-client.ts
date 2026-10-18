@@ -15,6 +15,8 @@ import {
 } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import { type Board, type BoardElement, boardAnswerSchema } from "./board-wire.js";
+import { startRefusedAs } from "./coding-agent-client.js";
+import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
 import {
   GITHUB_REPOSITORIES_QUERY,
   type GitHubRepositoriesAnswer,
@@ -92,6 +94,7 @@ import {
   type TaskListAnswer,
   type TaskRenameRequest,
   type TaskSkillsAnswer,
+  type TaskStartAnswer,
   type TaskTreeAnswer,
   type TaskTreeRequest,
   type TaskUpdateRequest,
@@ -103,6 +106,7 @@ import {
   taskListAnswerSchema,
   taskRenameRequestSchema,
   taskSkillsAnswerSchema,
+  taskStartAnswerSchema,
   taskTreeAnswerSchema,
   taskTreeRequestSchema,
   taskUpdateRequestSchema,
@@ -132,6 +136,15 @@ import { type TaskTranscript, taskTranscriptAnswerSchema } from "./transcript-wi
  * answered, the task is gone, or, on a call that names a repository, GitHub's
  * reach refused it.
  */
+
+/** How long a start naming an agent may stand: an agent's Start's own bound, since it opens the agent's session before it answers. */
+const AGENT_START_TIMEOUT_MS = 120_000;
+
+/** A started task, and, where the start named an agent, the agent started on it or why it was not, as an agent's Start answers. */
+export interface TaskStarted {
+  readonly task: Task;
+  readonly agent?: CodingAgentAgentAnswer;
+}
 
 /** One call's answer, or why there is none. */
 export type TaskCallResult<Answer, Failure> =
@@ -167,6 +180,7 @@ const REPOSITORY_REFUSALS = {
 const START_REFUSALS = {
   ...REPOSITORY_REFUSALS,
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
+  [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
 } as const;
 
 /** The refusals a move can answer with: the task or the workspace not the account's, the task archived, or the workspace not reaching its repository. */
@@ -200,12 +214,19 @@ function refusedAs<Failure extends TaskCallFailure>(
  */
 export class HostedTaskClient {
   readonly #call: AccountCallEffects;
+  readonly #start: AccountCallEffects;
 
   constructor(options: HostedTaskClientOptions) {
+    const credential = accountBearer(options);
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
-      credential: accountBearer(options),
+      credential,
       requestTimeoutMs: options.requestTimeoutMs,
+    });
+    this.#start = accountCall({
+      baseUrl: options.serviceBaseUrl,
+      credential,
+      requestTimeoutMs: AGENT_START_TIMEOUT_MS,
     });
   }
 
@@ -782,16 +803,19 @@ export class HostedTaskClient {
 
   /**
    * Starts a task from the account's template, on the repository the
-   * request names where it names one; a request the service would refuse by
-   * shape is refused here without traveling at all, and a repository the
-   * service refused is answered as the refusal it was.
+   * request names where it names one, and the agent it names on it where it
+   * names one; a request the service would refuse by shape is refused here
+   * without traveling at all, and a repository the service refused is
+   * answered as the refusal it was. An agent the service refused beside the
+   * task it made is answered with the task, as a refused Start reads.
    */
   create(
     request: TaskCreateRequest,
-  ): Effect.Effect<TaskCallResult<Task, StartCallFailure>, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskCallResult<TaskStarted, StartCallFailure>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskCreateRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    const call = this.#call;
+    // Note that a start naming an agent waits as an agent's Start does, since it opens the agent's session too.
+    const call = admitted.agent === undefined ? this.#call : this.#start;
     return Effect.gen(function* () {
       const answer = yield* call.send({
         method: HTTP_METHOD.POST,
@@ -801,12 +825,21 @@ export class HostedTaskClient {
       if (!callAnswered(answer)) return UNANSWERED;
       const payload = unparsedWire(yield* jsonOf(answer.response));
       if (answer.response.ok) {
-        const started = Result.getOrUndefined(readServiceAnswer(taskAnswerSchema)(payload));
-        return started === undefined ? UNANSWERED : succeeded(started.plan);
+        const started = Result.getOrUndefined(readServiceAnswer(taskStartAnswerSchema)(payload));
+        return started === undefined ? UNANSWERED : succeeded(taskStartedOf(started));
       }
       return refusedAs(payload, START_REFUSALS);
     });
   }
+}
+
+/** A started task as the service answered it, with the agent started on it, or why it was not, where one was asked for. */
+function taskStartedOf(started: TaskStartAnswer): TaskStarted {
+  if (started.agent !== undefined) return { task: started.plan, agent: { agent: started.agent } };
+  if (started.agentRefusal !== undefined) {
+    return { task: started.plan, agent: startRefusedAs(started.agentRefusal) };
+  }
+  return { task: started.plan };
 }
 
 /** A response's body as JSON, or nothing where it is not JSON at all. */

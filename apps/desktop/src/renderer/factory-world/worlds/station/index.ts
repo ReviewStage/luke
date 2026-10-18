@@ -1,6 +1,4 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
-import { AGENT_STATE, type ZoneView } from "@luke/ui/factory-world";
-import { Color, DoubleSide, Group, Mesh, PlaneGeometry, Vector3 } from "three";
 import {
   PICK_KIND,
   type PickKind,
@@ -8,7 +6,9 @@ import {
   type WorldModule,
   type WorldPalette,
   type WorldState,
-} from "../../world";
+} from "@luke/panel/factory-world/world";
+import { agentDrawnUnder, type ZoneView } from "@luke/ui/factory-world";
+import { Color, DoubleSide, Group, Mesh, PlaneGeometry, Vector3 } from "three";
 import { Crew, type CrewPlan } from "./crew";
 import { Damage } from "./damage";
 import { Bursts, Reticle, Sparks, Streaks } from "./effects";
@@ -116,7 +116,7 @@ function crewPlansOf(state: WorldState, station: Station): CrewPlan[] {
   const { view, layers } = state;
   const shown = view.agents
     .slice(0, FACTORY_WORLD_BOUNDS.MAX_AGENTS)
-    .filter((agent) => layers.building || agent.state === AGENT_STATE.FAILED)
+    .filter((agent) => agentDrawnUnder(agent, layers))
     .flatMap((agent) => {
       const primary =
         agent.primaryZone === null ? undefined : station.bodies.get(agent.primaryZone);

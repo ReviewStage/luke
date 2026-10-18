@@ -5,7 +5,12 @@ import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
@@ -24,6 +29,12 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
+import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
+import { handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { newestToastAction, newestToastSays } from "@luke/panel/testing/toast";
+import { ToastHost } from "@luke/panel/toast";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
@@ -49,13 +60,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { handState } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { installScrollIntoView } from "#testing/scroll-into-view";
-import { newestToastAction, newestToastSays } from "#testing/toast";
-import { ToastHost } from "../toast";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
-import { MAIN_TAB } from "./use-main-tabs";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
 import {
   AUTOMATIONS_PAGE,
@@ -91,7 +96,7 @@ const readShown = Schema.decodeUnknownOption(
     inboxTaskId: Schema.NullOr(Schema.String),
     chatShown: Schema.optionalKey(
       Schema.NullOr(
-        Schema.Struct({ workspaceId: Schema.String, planId: Schema.NullOr(Schema.String) }),
+        Schema.Struct({ workspaceId: Schema.String, taskId: Schema.NullOr(Schema.String) }),
       ),
     ),
   }),
@@ -136,7 +141,7 @@ function mount(
   /** Which task's Inbox main was told is shown, each time it was told. */
   const shownInboxes: (string | null)[] = [];
   /** Which Chat main was told is on screen, each time it was told. */
-  const shownChats: ({ workspaceId: string; planId: string | null } | null)[] = [];
+  const shownChats: ({ workspaceId: string; taskId: string | null } | null)[] = [];
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
@@ -895,6 +900,57 @@ test("a Luke link to an agent's worker opens the worker's own tab in the task's 
   assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
 });
 
+test("a link to an agent's Pull request tab, on a pull request another of the task's agents shares whose tab is open, opens that tab rather than a second, unless that agent was archived", async () => {
+  const EARLIER = { ...RUNNING_AGENT, id: "5e3b6f1d-2a10-4c7a-9a55-7b0f5f3e2c1d", createdAt: 2 };
+  const shared = {
+    repository: "acme/relay",
+    branch: "luke/invites",
+    pullRequest: {
+      number: 41,
+      title: "Teammate invitations",
+      url: "https://github.com/acme/relay/pull/41",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 12,
+      deletions: 3,
+      changedFiles: 2,
+    },
+  };
+  let listed: readonly CodingAgentSummary[] = [EARLIER, RUNNING_AGENT];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
+      [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: () => Promise.resolve(shared),
+      [ACT_KIND.CODING_AGENTS_ARCHIVE]: () => {
+        const archived = { ...EARLIER, archivedAt: 5 };
+        listed = [archived, RUNNING_AGENT];
+        return Promise.resolve({ agent: archived });
+      },
+    },
+  );
+  await settle();
+  const open = (agentId: string) =>
+    act(() =>
+      tab.control().onOpenLink({
+        workspace: "acme",
+        place: { kind: LINK_PLACE.CHANGES, planId: TASK.id, agentId },
+      }),
+    );
+
+  open(EARLIER.id);
+  open(AGENT_ID);
+
+  assert.deepEqual(panelOf(tab), { open: true, tab: { changes: EARLIER.id } });
+  assert.deepEqual(tab.control().sidePanel.changes, [{ changes: EARLIER.id }]);
+
+  // Archived, the earlier agent's tab is no longer drawn, so the link opens the later agent's own.
+  await act(() => tab.control().agents.onArchive(EARLIER.id, true));
+  await settle();
+  open(AGENT_ID);
+  assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
+});
+
 test("a Luke link to an agent's message opens the agent and asks its tab to bring the message into view, each ask its own, let go once answered", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
@@ -1244,7 +1300,7 @@ test("opening a plan of another workspace lists that workspace once it opened, o
 /** A task's inbox waiting on the developer: `count` open items, each asked by one agent. */
 function waitingIn(taskId: string, count: number): AppInboxTask {
   return {
-    taskId: taskId,
+    taskId,
     items: Array.from({ length: count }, (_, index) => ({
       id: `${taskId}-item-${index}`,
       agentId: `${taskId}-agent`,
@@ -1639,7 +1695,7 @@ test("newer plans on repositories a workspace does not reach crowd out none it d
     tasks: {
       ...TWO_WORKSPACES,
       workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: true } }],
-      tasks: tasks,
+      tasks,
     },
   });
   act(() => active.control().onChooseWorkspace(ACME.id));
@@ -1651,7 +1707,7 @@ test("newer plans on repositories a workspace does not reach crowd out none it d
     tasks: {
       ...TWO_WORKSPACES,
       workspaces: [PERSONAL, { ...ACME, github: { login: "acme", active: false } }],
-      tasks: tasks,
+      tasks,
     },
   });
   act(() => suspended.control().onChooseWorkspace(ACME.id));
@@ -1823,7 +1879,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
     [
       // A row names the repository, then its owner after it.
       [...menu.querySelectorAll('[role="option"]')].map((row) =>
-        [".task-compose-menu-detail", ".task-compose-menu-name"]
+        [".luke-combobox-option-detail", ".luke-combobox-option-label"]
           .map((part) => row.querySelector(part)?.textContent)
           .join("/"),
       ),
@@ -2020,7 +2076,7 @@ const LAUNCHING: TasksView = { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.READIN
 
 /** The view once the list is read with nothing open, holding `plans`. */
 function listRead(tasks: TasksView["tasks"]): TasksView {
-  return { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.READY, tasks: tasks };
+  return { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.READY, tasks };
 }
 
 /** A select's payload, read back as the act's own schema admits it. */
@@ -2400,7 +2456,7 @@ test("a chat notification's click, listing the workspace its message waits in an
   });
   assert.equal(tab.control().workspace?.id, ACME.id);
   assert.equal(tab.control().chatView.open, true);
-  assert.deepEqual(tab.control().chatShown, { workspaceId: ACME.id, planId: null });
+  assert.deepEqual(tab.control().chatShown, { workspaceId: ACME.id, taskId: null });
 });
 
 test("the task's Chat tab, opened from ⌘K's Chat row, stands on its strip only while the account has Chat on", async () => {
@@ -2429,8 +2485,8 @@ test("main is told a task's Chat tab on screen shows only its plan's channel, wh
   const onTab = tab.shownChats.at(-1);
   act(() => tab.control().chatView.onOpen());
 
-  assert.deepEqual(onTab, { workspaceId: PERSONAL.id, planId: TASK.id });
-  assert.deepEqual(tab.shownChats.at(-1), { workspaceId: PERSONAL.id, planId: null });
+  assert.deepEqual(onTab, { workspaceId: PERSONAL.id, taskId: TASK.id });
+  assert.deepEqual(tab.shownChats.at(-1), { workspaceId: PERSONAL.id, taskId: null });
   assert.deepEqual(tab.control().chatShown, tab.shownChats.at(-1));
 });
 
@@ -2443,7 +2499,7 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
     readSeq: 0,
     members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
     channels: [
-      { id: channelId, kind: CHANNEL_KIND.PLAN, name: "invites", archived: false, planId: TASK.id },
+      { id: channelId, kind: CHANNEL_KIND.TASK, name: "invites", archived: false, planId: TASK.id },
     ],
     messages: [
       {
@@ -2481,4 +2537,134 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
       [{ workspaceId: PERSONAL.id, write: { readTo: 4, channelId } }],
     );
   });
+});
+
+test("a task started from an issue's Start agent… presses its Start once it stands open, with no planning, linked to the issue, and the agent's tab opens; an agent that did not start says why beside the Start", async () => {
+  let agents = 0;
+  let listed: CodingAgentSummary[] = [];
+  const started: Task = { ...TASK, id: OTHER_TASK_ID, name: "Invites", repository: "acme/web" };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
+      // The service lists the agent once it started, as it does.
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
+      [ACT_KIND.CODING_AGENTS_START]: () => {
+        if (agents++ > 0) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+        listed = [{ ...RUNNING_AGENT, id: AGENT_ID }];
+        return Promise.resolve({ agent: { ...RUNNING_AGENT, id: AGENT_ID } });
+      },
+    },
+  );
+  await settle();
+  const issue = {
+    id: "issue-1",
+    workspaceId: "workspace-acme",
+    identifier: "ACME-7",
+    title: "Invites",
+  };
+  const agentStarts = () =>
+    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START);
+  /** Start agent… pressed and its card's Start answered, then the task standing open as the host opens it. */
+  const startFrom = async () => {
+    act(() => tab.control().onNewTaskFrom(issue, true));
+    await act(async () => {
+      await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
+        issueId: issue.id,
+        agent: true,
+      });
+    });
+    await settle();
+    tab.stand({
+      tasks: {
+        ...OPEN,
+        activeTaskId: OTHER_TASK_ID,
+        document: { status: TASKS_READ.READY, task: started },
+      },
+    });
+    await settle();
+  };
+
+  act(() => tab.control().onNewTaskFrom(issue, true));
+  assert.deepEqual(tab.control().newTask.preset, { issue, agent: true });
+  act(() => tab.control().newTask.onClose());
+  act(() => tab.control().onNewTaskFrom(issue, true));
+  await act(async () => {
+    await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
+      issueId: issue.id,
+      agent: true,
+    });
+  });
+  await settle();
+  assert.deepEqual(agentStarts(), [], "no agent starts before its task stands open");
+  assert.deepEqual(tab.payloads.find(({ kind }) => kind === ACT_KIND.TASKS_START)?.payload, {
+    name: "Invites",
+    repository: "acme/web",
+    workspaceId: "workspace-acme",
+    issueId: issue.id,
+    planning: false,
+  });
+  tab.stand({
+    tasks: {
+      ...OPEN,
+      activeTaskId: OTHER_TASK_ID,
+      document: { status: TASKS_READ.READY, task: started },
+    },
+  });
+  await settle();
+
+  assert.equal(agentStarts().length, 1);
+  assert.equal(JSON.parse(JSON.stringify(agentStarts()[0]?.payload)).taskId, OTHER_TASK_ID);
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+
+  tab.stand({ tasks: OPEN });
+  await settle();
+  await startFrom();
+  assert.equal(agentStarts().length, 2);
+  assert.ok(tab.control().agents.start.note, "why the agent did not start stands beside the Start");
+});
+
+test("an agent asked of Start agent… whose task was left before it could start starts nothing when the task is opened again", async () => {
+  const started: Task = { ...TASK, id: OTHER_TASK_ID, name: "Invites", repository: "acme/web" };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
+      [ACT_KIND.CODING_AGENTS_START]: () =>
+        Promise.resolve({ agent: { ...RUNNING_AGENT, id: AGENT_ID } }),
+    },
+  );
+  await settle();
+  const standOn = (task: Task) =>
+    tab.stand({
+      tasks: { ...OPEN, activeTaskId: task.id, document: { status: TASKS_READ.READY, task } },
+    });
+
+  act(() =>
+    tab
+      .control()
+      .onNewTaskFrom(
+        { id: "issue-1", workspaceId: "workspace-acme", identifier: "ACME-7", title: "Invites" },
+        true,
+      ),
+  );
+  await act(async () => {
+    await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
+      issueId: "issue-1",
+      agent: true,
+    });
+  });
+  // The new task opens while its repository is still unread, and the developer leaves it for another.
+  standOn({ ...started, repository: null });
+  await settle();
+  standOn(TASK);
+  await settle();
+  standOn(started);
+  await settle();
+
+  assert.deepEqual(
+    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START),
+    [],
+  );
 });

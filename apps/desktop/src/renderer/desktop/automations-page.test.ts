@@ -27,25 +27,26 @@ import {
 } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { runAppCommand } from "@luke/panel/app-commands";
+import { OpenFeedbackProvider } from "@luke/panel/open-feedback";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { relayout } from "@luke/panel/testing/resize-observer";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { ToastHost } from "@luke/panel/toast";
+import { appStateNow } from "@luke/panel/use-app-state";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { handState } from "#testing/app-state";
 import { layContainersAt } from "#testing/container-width";
-import { onRegistry } from "#testing/copy-feedback";
-import { relayout } from "#testing/resize-observer";
-import { installScrollIntoView } from "#testing/scroll-into-view";
+import { playMotions } from "#testing/pane-motion";
 import { tasksControl } from "#testing/tasks-control";
-import { runAppCommand } from "../app-commands";
-import { OpenFeedbackProvider } from "../open-feedback";
 import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../tasks/use-tasks-tab";
-import { ToastHost } from "../toast";
-import { appStateNow } from "../use-app-state";
 import { AutomationsPage } from "./automations-page";
 
 /**
@@ -148,6 +149,8 @@ let agentsAsked: unknown[] = [];
 let runs: AutomationRunSummary[] = [];
 /** Every Run now asked, by the automation it runs. */
 let runsAsked: string[] = [];
+/** Whether a read of an automation's runs is held unanswered, as one still out on the wire. */
+let runsHeld = false;
 /** Whether a Run now is held unanswered, as one still out on the wire. */
 let runHeld = false;
 /** What a Run now answers where it does not start a run. */
@@ -160,6 +163,10 @@ let defaultRefused = false;
 let catalogReads = 0;
 /** Whether the account's tasks were about no repository lately, so a new automation starts with none. */
 let noRecent = false;
+/** Whether the read of the account's integrations is held unanswered, as one still out on the wire. */
+let integrationsHeld = false;
+/** How many reads of the account's integrations are refused before one answers. */
+let integrationsRefusals = 0;
 /** What a change answers: the automation as changed, or why not. */
 let changeRefusal:
   | (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE]
@@ -193,6 +200,7 @@ beforeEach(() => {
   agentsAsked = [];
   runs = [];
   runsAsked = [];
+  runsHeld = false;
   runHeld = false;
   runRefusal = undefined;
   agentsOpened = [];
@@ -201,6 +209,8 @@ beforeEach(() => {
   catalogReads = 0;
   changeRefusal = undefined;
   noRecent = false;
+  integrationsHeld = false;
+  integrationsRefusals = 0;
   fakeAppBridge({
     act: (request: Act) => {
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
@@ -252,6 +262,11 @@ beforeEach(() => {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
       }
       if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
+        if (integrationsHeld) return new Promise(() => undefined);
+        if (integrationsRefusals > 0) {
+          integrationsRefusals -= 1;
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Unreachable." });
+        }
         // Linear and Sentry are connected; the rest are not.
         const integrations = Object.fromEntries(
           INTEGRATION_PROVIDER_LIST.map((provider) => [
@@ -285,6 +300,7 @@ beforeEach(() => {
         });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_RUNS) {
+        if (runsHeld) return new Promise<never>(() => undefined);
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { runs } });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
@@ -579,6 +595,55 @@ test("with no automations the page says what one is, and with no workspace liste
   assert.deepEqual(listed, []);
 });
 
+test("while the list is first read it stands as quiet rows under its toolbar, said to a reader as being read", async () => {
+  listHeld = true;
+  const page = mount();
+  await settle();
+
+  const wait = page.querySelector(".automations-scroll [role=status]");
+  assert.equal(wait?.textContent, "Reading your automations…");
+  assert.ok((wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0);
+  assert.ok(
+    page.querySelector("h1")?.textContent === "Automations",
+    "its toolbar stands over them",
+  );
+});
+
+test("with no workspace listed the list and a linked automation stand as quiet blocks, never as empty or gone", async () => {
+  // Note that the tasks are read apart from the workspaces, so a listed task list says nothing of them.
+  const page = mount(tasksControl({ workspace: undefined, listRead: true, listFailed: false }));
+  await settle();
+  assert.equal(
+    page.querySelector(".automations-scroll [role=status]")?.textContent,
+    "Reading your automations…",
+  );
+  assert.doesNotMatch(page.textContent ?? "", /No automations yet/u);
+
+  act(() => root?.unmount());
+  root = undefined;
+  mount(
+    tasksControl({
+      workspace: undefined,
+      automationsView: {
+        open: true,
+        place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id },
+        onOpen: () => undefined,
+        onClose: () => undefined,
+      },
+    }),
+  );
+  await settle();
+  const linked = document.body;
+  assert.equal(
+    linked
+      .querySelector(".automations-scroll [role=status]")
+      ?.textContent?.startsWith("Reading the automation…"),
+    true,
+  );
+  assert.doesNotMatch(linked.textContent ?? "", /Not found/u);
+  assert.deepEqual(listed, [], "no workspace's list is asked for");
+});
+
 /** The workspace the account made first, its personal one, where everything is its own. */
 const PERSONAL: Workspace = { ...WORKSPACE, id: "workspace-personal", name: "Ada" };
 
@@ -682,6 +747,15 @@ function button(name: string): HTMLButtonElement {
   return found;
 }
 
+/** The option of the list standing open whose words are `words`. */
+function optionWords(words: string): HTMLElement {
+  const found = [...document.querySelectorAll<HTMLElement>("[role=option]")].find(
+    (each) => each.textContent === words,
+  );
+  assert.ok(found, `no option ${words}`);
+  return found;
+}
+
 /** The item of the menu standing open whose words are `name`. */
 function menuItem(name: string): HTMLButtonElement {
   const found = [
@@ -755,7 +829,7 @@ function pickerDescription(page: HTMLElement, label: string): (string | undefine
 function pick(page: HTMLElement, label: string, option: string): void {
   act(() => picker(page, label).click());
   const row = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
-    (each) => each.querySelector(".task-compose-menu-name")?.textContent === option,
+    (each) => each.querySelector(".luke-combobox-option-label")?.textContent === option,
   );
   assert.ok(row, `no ${option} in ${label}`);
   act(() => row.click());
@@ -1035,7 +1109,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
   );
   act(() => chip.click());
   const marks = [...document.querySelectorAll("[role=option]")].map((row) => [
-    row.querySelector(".task-compose-menu-name")?.textContent,
+    row.querySelector(".luke-combobox-option-label")?.textContent,
     row.querySelector(".actor-mark") !== null
       ? "person"
       : row.querySelector(".workspace-tile") !== null
@@ -1048,7 +1122,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
   ]);
 
   const acme = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
-    (row) => row.querySelector(".task-compose-menu-name")?.textContent === "Acme",
+    (row) => row.querySelector(".luke-combobox-option-label")?.textContent === "Acme",
   );
   assert.ok(acme, "the menu offers the workspace");
   act(() => acme.click());
@@ -1093,7 +1167,11 @@ test("a new agent's MCP servers are a field chip of the owner's connected ones u
   await settle();
   const chip = button("MCP servers");
   assert.match(page.textContent ?? "", /Every connected server is on\./u);
-  assert.equal(chip.querySelectorAll(".provider-mark").length, 2, "Linear's and Sentry's marks");
+  assert.equal(
+    chip.querySelectorAll(".luke-provider-mark").length,
+    2,
+    "Linear's and Sentry's marks",
+  );
 
   act(() => chip.click());
   await settle();
@@ -1103,7 +1181,7 @@ test("a new agent's MCP servers are a field chip of the owner's connected ones u
   assert.ok(sentry, "the agent box's own switches stand");
   act(() => sentry.click());
   assert.match(page.textContent ?? "", /Sentry off\./u);
-  assert.equal(chip.querySelectorAll(".provider-mark").length, 1, "Linear's mark alone");
+  assert.equal(chip.querySelectorAll(".luke-provider-mark").length, 1, "Linear's mark alone");
   act(() => button("Save").click());
   await settle();
 
@@ -1111,6 +1189,40 @@ test("a new agent's MCP servers are a field chip of the owner's connected ones u
     automationId: SWEEP.id,
     change: { action: { ...SWEEP.action, disabledServers: [INTEGRATION_PROVIDER.SENTRY] } },
   });
+});
+
+test("a new agent's MCP servers row claims nothing while the owner's connections are read", async () => {
+  standing = [{ ...SWEEP, mine: true }];
+  integrationsHeld = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  const reading = [...page.querySelectorAll("[role=status]")].map((each) => each.textContent);
+  assert.ok(reading.includes("Reading your connected servers…"), "the row says it is reading");
+  assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected server/u);
+  assert.equal(
+    [...page.querySelectorAll("button")].find(
+      (each) => each.getAttribute("aria-label") === "MCP servers",
+    ),
+    undefined,
+    "no chip claims None while the read is out",
+  );
+});
+
+test("a new agent's MCP servers row says a refused read of the owner's connections, and Retry reads them", async () => {
+  standing = [{ ...SWEEP, mine: true }];
+  integrationsRefusals = 1;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  const alert = page.querySelector("[role=alert]");
+  assert.match(alert?.textContent ?? "", /Your connected servers could not be read\./u);
+  assert.doesNotMatch(page.textContent ?? "", /None connected yet\./u);
+
+  act(() => button("Retry").click());
+  await settle();
+  assert.match(page.textContent ?? "", /Every connected server is on\./u);
+  assert.equal(button("MCP servers").querySelectorAll(".luke-provider-mark").length, 2);
 });
 
 test("another member's automation says which servers its creator switched off, offering no switch of the reader's own", async () => {
@@ -1154,50 +1266,6 @@ test("the Runs panel hides and shows by its toggle and by the side panel's chord
   assert.ok(again.querySelector("aside[aria-label='Runs']"), "⌥⌘B brings it back");
   window.localStorage.clear();
 });
-
-/** A motion the page played: the element it played on, its keyframes, and a way to have it finish. */
-interface Played {
-  element: Element;
-  keyframes: Keyframe[];
-  finish: () => void;
-}
-
-/** What the recording engine answers a motion with: no more of an Animation than the page reaches for. */
-interface RecordedMotion {
-  onfinish: (() => void) | null;
-  cancel: () => void;
-}
-
-/**
- * Gives the window the pane's motion tokens and an animation engine that
- * records what is played rather than playing it, since jsdom has neither;
- * answers what was played, and a way to take both away again.
- */
-function playMotions() {
-  const played: Played[] = [];
-  const root = document.documentElement.style;
-  root.setProperty("--duration-pane", "240ms");
-  root.setProperty("--motion-pane", "ease-out");
-  Object.defineProperty(Element.prototype, "animate", {
-    configurable: true,
-    value(this: Element, keyframes: Keyframe[]) {
-      const animation: RecordedMotion = {
-        onfinish: null,
-        cancel: () => undefined,
-      };
-      played.push({ element: this, keyframes, finish: () => animation.onfinish?.() });
-      return animation;
-    },
-  });
-  return {
-    played,
-    remove: () => {
-      root.removeProperty("--duration-pane");
-      root.removeProperty("--motion-pane");
-      Reflect.deleteProperty(Element.prototype, "animate");
-    },
-  };
-}
 
 test("the Runs panel slides out past the page's right edge as it is hidden, held drawn and out of reach until it has, and slides back in as it is shown", async () => {
   window.localStorage.clear();
@@ -1350,6 +1418,30 @@ test("a page naming an automation the list does not hold, as a link to another w
   );
 });
 
+test("an automation's page opened before the list is read stands its toolbar's way back over its form as quiet blocks", async () => {
+  listHeld = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  const wait = page.querySelector(".automations-scroll [role=status]");
+  assert.equal(wait?.textContent?.startsWith("Reading the automation…"), true);
+  assert.ok((wait?.querySelectorAll(".luke-settings-row .luke-skeleton").length ?? 0) > 0);
+  assert.match(crumbs(page), /^Automations/u);
+  act(() => button("Automations").click());
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+});
+
+test("Escape leaves an automation's page still waiting on the list for the list", async () => {
+  listHeld = true;
+  mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS), "its way out is offered");
+  });
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+});
+
 test("what is typed while a save is out stands, unsaved, once the save lands", async () => {
   heldChanges = [];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
@@ -1367,6 +1459,41 @@ test("what is typed while a save is out stands, unsaved, once the save lands", a
     "Fix the two flakiest tests.",
   );
   assert.equal(page.querySelector(".automation-editor-status")?.textContent, "Unsaved changes");
+});
+
+test("with no workspace listed because the workspaces could not be read, the list and a linked automation say so, and Retry reads them again", async () => {
+  let retries = 0;
+  const unread = (place: AutomationsPlace) =>
+    tasksControl({
+      workspace: undefined,
+      workspacesFailed: true,
+      onRetryWorkspaces: () => {
+        retries += 1;
+      },
+      automationsView: { open: true, place, onOpen: () => undefined, onClose: () => undefined },
+    });
+  const page = mount(unread({ kind: AUTOMATIONS_PAGE.LIST }));
+  await settle();
+  assert.match(page.textContent ?? "", /The workspaces could not be read\./u);
+  assert.equal(page.querySelector(".automations-scroll [role=status]"), null);
+  act(() => button("Retry").click());
+  assert.equal(retries, 1);
+
+  // The read Retry asked for lands, listing the workspace, whose automations are then read.
+  render(tasksControl({ workspace: WORKSPACE }));
+  await settle();
+  assert.deepEqual(listed, [WORKSPACE.id]);
+  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  assert.ok(rows(page).length > 0, "the workspace's automations are drawn");
+
+  act(() => root?.unmount());
+  root = undefined;
+  const linked = mount(unread({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id }));
+  await settle();
+  assert.match(linked.textContent ?? "", /The workspaces could not be read\./u);
+  assert.doesNotMatch(linked.textContent ?? "", /Reading the automation/u);
+  act(() => button("Retry").click());
+  assert.equal(retries, 2);
 });
 
 test("an automation's page whose list could not be read says so with Retry, rather than calling it gone", async () => {
@@ -1566,7 +1693,7 @@ test("the repository chosen first is not said again among the others its runs wo
   act(() => page.querySelector<HTMLButtonElement>(".repository-chip .luke-chip")?.click());
   await settle();
   // The repository's row names it, then its owner after it.
-  act(() => button("webacme").click());
+  act(() => optionWords("webacme").click());
   await settle();
 
   assert.doesNotMatch(page.textContent ?? "", /also work in/u);
@@ -1616,13 +1743,13 @@ test("the agent a same-agent automation was saved with is not offered once its r
   act(() => page.querySelector<HTMLButtonElement>(".repository-chip .luke-chip")?.click());
   await settle();
   // The repository's row names it, then its owner after it.
-  act(() => button("webacme").click());
+  act(() => optionWords("webacme").click());
   await settle();
   assert.equal(picked(page, "Agent"), "Choose an agent");
   act(() => picker(page, "Agent").click());
 
   assert.deepEqual(
-    [...document.querySelectorAll("[role=option] .task-compose-menu-name")].map(
+    [...document.querySelectorAll("[role=option] .luke-combobox-option-label")].map(
       (name) => name.textContent,
     ),
     ["CI digest"],
@@ -1661,7 +1788,7 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
 /** What each row's glyph draws, in order: GitHub's mark, or the lucide icon's name. */
 function glyphs(rows: readonly Element[]): string[] {
   return rows.map((row) => {
-    if (row.querySelector(".provider-mark") !== null) return "github";
+    if (row.querySelector(".luke-provider-mark") !== null) return "github";
     const icon = row.querySelector(".state-glyph svg");
     const named = [...(icon?.classList ?? [])].find(
       (name) => name.startsWith("lucide-") && name !== "lucide-icon",
@@ -1751,6 +1878,16 @@ test("an automation's runs stand on its page's right, newest first, a run that s
     1,
     "a run that started no agent is no press",
   );
+});
+
+test("an automation's runs stand as quiet rows under the panel's heading while they are first read", async () => {
+  runsHeld = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  const wait = page.querySelector("aside[aria-label='Runs'] [role=status]");
+  assert.equal(wait?.textContent, "Reading its runs…");
+  assert.ok((wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0);
 });
 
 test("Run now starts a run under a key of its own, and the run stands first once it settles", async () => {

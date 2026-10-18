@@ -137,6 +137,11 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "agents/pull-request-action",
     query: "id=$1",
   },
+  {
+    src: "/api/agents/([^/]+)/pull-request/viewed",
+    route: "agents/pull-request-viewed",
+    query: "id=$1",
+  },
   { src: "/api/agents/([^/]+)/changes", route: "agents/changes", query: "id=$1" },
   {
     src: "/api/agents/([^/]+)/overview/pull-request",
@@ -150,6 +155,11 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     query: "id=$1",
   },
   { src: "/api/agents/([^/]+)/github-image", route: "agents/github-image", query: "id=$1" },
+  {
+    src: "/api/agents/([^/]+)/review-options",
+    route: "agents/review-options",
+    query: "id=$1",
+  },
   { src: "/api/agents/([^/]+)/inbox", route: "agents/inbox", query: "id=$1" },
   {
     src: "/api/agents/([^/]+)/terminals/([^/]+)",

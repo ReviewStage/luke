@@ -48,32 +48,41 @@
 
 import { useAtomSet } from "@effect/atom-react";
 import { MOTION_DELAY_MS } from "@luke/brand";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { Shortcut } from "@luke/panel/shortcut";
 import {
   APP_SHORTCUTS,
   type KeyedCommand,
   type ShortcutChord,
   shortcutAria,
 } from "@luke/settings/shortcuts";
-import { TOOLTIP_LEAVING, TooltipCard, type TooltipLeaving, TooltipPill } from "@luke/ui";
+import {
+  type ListRowHint,
+  type OneLineHint,
+  TOOLTIP_LEAVING,
+  TooltipCard,
+  type TooltipLeaving,
+  TooltipPill,
+} from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import {
   cloneElement,
+  createContext,
   type FocusEventHandler,
   type PointerEventHandler,
   type ReactElement,
   type ReactNode,
   type RefObject,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useRef,
   useState,
 } from "react";
-import { rendererRuntime } from "./renderer-runtime";
-import { Shortcut } from "./shortcut";
 
 /**
  * How long after one pill goes the next shows at once. Note that it is the
@@ -216,7 +225,9 @@ function Hint({
     <TooltipPill
       {...placed}
       label={drawn.label}
-      shortcut={chord === undefined ? undefined : <Shortcut chord={chord} />}
+      shortcut={
+        chord === undefined ? undefined : <Shortcut chord={chord} className="tooltip-chord" />
+      }
     />
   );
 }
@@ -471,4 +482,53 @@ export function Tooltip({
       )}
     </>
   );
+}
+
+/**
+ * What a `ListRow`'s hint hangs beyond its words: whether it raises them at
+ * all (`shown`, as a title only cut short is hinted), the shortcut it names,
+ * and the card in the pill's place, beside the row, the row its control.
+ */
+interface RowHintOptions {
+  shown?: boolean;
+  command?: KeyedCommand;
+  card?: ReactNode;
+  cardBeside?: boolean;
+  cardRegion?: RefObject<HTMLElement | null>;
+}
+
+const RowHintContext = createContext<RowHintOptions>({});
+
+/** Hands the `RowHint` of the `ListRow` inside it what it hangs beyond its words. */
+export function RowHintOptions({
+  children,
+  ...options
+}: RowHintOptions & { children: ReactNode }): React.JSX.Element {
+  return <RowHintContext.Provider value={options}>{children}</RowHintContext.Provider>;
+}
+
+/**
+ * A `ListRow`'s hint: this window's tooltip over the row's press, hanging
+ * what `RowHintOptions` hands it. Note that the options come by context,
+ * because the row takes its hint as a component, which must stay one
+ * component across renders for the press it wraps to stay one press.
+ */
+export const RowHint: ListRowHint = ({ label, children }) => {
+  const { shown = true, ...options } = useContext(RowHintContext);
+  return (
+    <Tooltip label={shown ? label : undefined} {...options}>
+      {children}
+    </Tooltip>
+  );
+};
+
+/**
+ * The hint over words held to one line (`@luke/ui`'s `OneLine`): the pill
+ * reading them whole while the line cuts them short, and none while it
+ * draws them whole, since a line drawn whole says nothing twice. The words
+ * ride the pill rather than a `title`, which session replay would carry
+ * unmasked.
+ */
+export function wholeWordsHint(words: string): OneLineHint {
+  return (line, clipped) => <Tooltip label={clipped ? words : undefined}>{line}</Tooltip>;
 }

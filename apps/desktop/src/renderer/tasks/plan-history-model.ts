@@ -8,6 +8,7 @@ import {
   type PlanRevisionLine,
 } from "@luke/features/task-wire";
 import type { FormerMember, WorkspaceMember } from "@luke/features/workspace-wire";
+import { dayAndTimeText } from "@luke/panel/tasks/task-time";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -22,7 +23,6 @@ import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
 import { providerOf } from "./coding-agent-model";
-import { dayAndTimeText } from "./task-time";
 
 /**
  * plan-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.

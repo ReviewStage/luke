@@ -3,6 +3,10 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
@@ -10,10 +14,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { useAppCommand } from "../app-commands";
 import { OpenPersonProvider } from "../person-door";
 import { SidebarFoot } from "./sidebar-foot";
 
@@ -363,7 +363,9 @@ test("an update ready to install offers Restart in the sidebar on the desktop, a
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
-    const shown = document.querySelector('.sidebar-update[aria-label="Restart"]') !== null;
+    const shown = [...document.querySelectorAll("button")].some(
+      (button) => button.textContent === "Restart",
+    );
     for (const root of roots.splice(0)) act(() => root.unmount());
     return shown;
   };

@@ -3,14 +3,14 @@
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { editorBundleLanded, installEditorLayout } from "#testing/composer";
-import { DOCUMENT_TASK } from "#testing/document-task";
 import { MARKDOWN_MARK, type MarkdownMark, MarkdownMessage } from "../markdown-message";
 import { notesBefore } from "./file-note";
 import { PlanBody } from "./plan-body";

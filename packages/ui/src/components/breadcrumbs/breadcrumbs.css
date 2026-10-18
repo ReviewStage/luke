@@ -1,5 +1,5 @@
-/* breadcrumbs.css -- a path's crumbs in a row, the chevrons between them
-   plain. A bar's path narrows crumb by crumb, cut short at their ends,
+/* breadcrumbs.css -- a path's crumbs in a row, each its glyph where it
+   wears one then its words, the chevrons between them plain. A bar's path narrows crumb by crumb, cut short at their ends,
    clipped past the keyboard's ring on a crumb, and gives way at the widths
    of the `BreadcrumbBar` holding it; a
    toolbar's heading keeps its way back whole and cuts the page's name
@@ -23,7 +23,7 @@
     flex: 0 1 auto;
     overflow: clip;
     overflow-clip-margin: padding-box
-      calc(var(--focus-ring-width, 2px) + var(--focus-ring-offset, 1px));
+      calc(var(--luke-focus-ring-width) + var(--luke-focus-ring-offset));
   }
 
   .luke-breadcrumbs ol {
@@ -46,28 +46,47 @@
     align-items: center;
   }
 
+  /* A crumb's glyph, where it wears one, then its words, cut short at
+     their end. */
+  .luke-breadcrumb-words,
+  .luke-breadcrumb-button {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: var(--luke-space-4);
+  }
+
   .luke-breadcrumb-words {
+    color: var(--luke-color-text);
+  }
+
+  .luke-breadcrumb-glyph {
+    display: flex;
+    flex: none;
+  }
+
+  .luke-breadcrumb-glyph svg {
+    width: var(--luke-control-icon);
+    height: var(--luke-control-icon);
+  }
+
+  .luke-breadcrumb-label {
     min-width: 0;
     overflow: hidden;
-    color: var(--luke-color-text);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .luke-breadcrumb-button {
-    min-width: 0;
     padding: var(--luke-space-2) var(--luke-space-4);
-    overflow: hidden;
     border: 0;
     border-radius: var(--luke-radius-6);
     background: none;
     color: var(--luke-color-text-muted);
     font: inherit;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     transition:
-      background-color var(--duration-hover, 0s) ease,
-      color var(--duration-hover, 0s) ease;
+      background-color var(--luke-duration-hover) ease,
+      color var(--luke-duration-hover) ease;
   }
 
   .luke-breadcrumb-button:hover,

@@ -4,17 +4,17 @@ import assert from "node:assert/strict";
 import type { Task } from "@luke/features/task-wire";
 import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { appCommandOffered, runAppCommand } from "@luke/panel/app-commands";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
+import { relayout } from "@luke/panel/testing/resize-observer";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { editorBundleLanded, installEditorLayout } from "#testing/composer";
-import { DOCUMENT_TASK } from "#testing/document-task";
-import { relayout } from "#testing/resize-observer";
-import { appCommandOffered, runAppCommand } from "../app-commands";
 import { PlanBody } from "./plan-body";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 
@@ -190,10 +190,10 @@ test("a keep that failed says why with Retry and Remove, and Remove takes the pi
 
   await answerKeep({ failure: PICTURE_KEEP_FAILURE.TOO_MANY });
 
-  const failed = container.querySelector(".picture-block[data-upload='failed'] .picture-status");
+  const failed = container.querySelector(".picture-block[data-upload='failed'] [role='alert']");
   assert.equal(
-    failed?.querySelector(".failure-note-words")?.textContent,
-    "This plan already holds as many pictures as it can.",
+    failed?.textContent,
+    "This plan already holds as many pictures as it can.RetryRemove",
   );
   const [retry, remove] = [...(failed?.querySelectorAll("button") ?? [])];
   assert.equal(retry?.textContent, "Retry");

@@ -23,6 +23,12 @@
     padding-inline: max(var(--luke-space-12), calc((100% - var(--luke-page-measure)) / 2));
   }
 
+  /* A narrow column's row stands its tabs in from its edges as far as the
+     column's own rows stand their words. */
+  .luke-tabs[data-inset="column"] {
+    padding-inline: var(--luke-space-12);
+  }
+
   .luke-tab {
     display: inline-flex;
     flex: none;
@@ -44,8 +50,8 @@
     white-space: nowrap;
     cursor: pointer;
     transition:
-      color var(--duration-hover, 0s) ease,
-      border-color var(--duration-hover, 0s) ease;
+      color var(--luke-duration-hover) ease,
+      border-color var(--luke-duration-hover) ease;
   }
 
   [data-luke-profile="desktop"] .luke-tab {
@@ -100,6 +106,20 @@
 
   .luke-tab-count-part[data-tone="danger"] {
     color: var(--luke-color-danger-text);
+  }
+
+  /* A compact row draws its tabs in the caption's type, their room taken in
+     around their words and between a name and its count, so a narrow
+     column names every one. */
+  .luke-tabs[data-density="compact"] {
+    gap: 0;
+  }
+
+  .luke-tabs[data-density="compact"] .luke-tab {
+    gap: var(--luke-space-4);
+    padding: 0 var(--luke-space-4);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
   }
 
   @container luke-tabs (width < 520px) {

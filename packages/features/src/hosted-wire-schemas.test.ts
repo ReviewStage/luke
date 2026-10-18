@@ -136,6 +136,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentChangesAnswerSchema: codingAgentWire.codingAgentChangesAnswerSchema,
     codingAgentOverviewPullRequestAnswerSchema:
       codingAgentWire.codingAgentOverviewPullRequestAnswerSchema,
+    codingAgentReviewOptionsAnswerSchema: codingAgentWire.codingAgentReviewOptionsAnswerSchema,
     codingAgentOverviewChecksAnswerSchema: codingAgentWire.codingAgentOverviewChecksAnswerSchema,
     codingAgentOverviewConversationAnswerSchema:
       codingAgentWire.codingAgentOverviewConversationAnswerSchema,
@@ -216,6 +217,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentChangesAnswerViewSchema: codingAgentView.codingAgentChangesAnswerViewSchema,
     codingAgentOverviewPullRequestAnswerViewSchema:
       codingAgentView.codingAgentOverviewPullRequestAnswerViewSchema,
+    codingAgentReviewOptionsAnswerViewSchema:
+      codingAgentView.codingAgentReviewOptionsAnswerViewSchema,
     codingAgentOverviewChecksAnswerViewSchema:
       codingAgentView.codingAgentOverviewChecksAnswerViewSchema,
     codingAgentOverviewConversationAnswerViewSchema:
@@ -224,6 +227,8 @@ const EFFECT_MODULE_SCHEMAS = {
       codingAgentView.codingAgentPullRequestActionParamsSchema,
     codingAgentPullRequestWriteAnswerViewSchema:
       codingAgentView.codingAgentPullRequestWriteAnswerViewSchema,
+    codingAgentPullRequestViewedAnswerViewSchema:
+      codingAgentView.codingAgentPullRequestViewedAnswerViewSchema,
     codingAgentGitHubImageParamsSchema: codingAgentView.codingAgentGitHubImageParamsSchema,
     githubImageTypeSchema: codingAgentView.githubImageTypeSchema,
     codingAgentGitHubImageViewSchema: codingAgentView.codingAgentGitHubImageViewSchema,
@@ -233,6 +238,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentInboxAnsweredViewSchema: codingAgentView.codingAgentInboxAnsweredViewSchema,
     codingAgentInboxMessageParamsSchema: codingAgentView.codingAgentInboxMessageParamsSchema,
     codingAgentInboxMessagedViewSchema: codingAgentView.codingAgentInboxMessagedViewSchema,
+    codingAgentInboxReadStateParamsSchema: codingAgentView.codingAgentInboxReadStateParamsSchema,
     codingAgentInboxReadStateViewSchema: codingAgentView.codingAgentInboxReadStateViewSchema,
     codingAgentInboxReadAllViewSchema: codingAgentView.codingAgentInboxReadAllViewSchema,
     codingAgentAccountInboxParamsSchema: codingAgentView.codingAgentAccountInboxParamsSchema,
@@ -376,7 +382,9 @@ const EFFECT_MODULE_SCHEMAS = {
     planCommentAnchorsSchema: planCommentWire.planCommentAnchorsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planCommentWire>,
   "task-section-wire": {
+    taskSectionEmojiSchema: taskSectionWire.taskSectionEmojiSchema,
     taskSectionIconSchema: taskSectionWire.taskSectionIconSchema,
+    taskSectionTitleSchema: taskSectionWire.taskSectionTitleSchema,
     taskSectionSchema: taskSectionWire.taskSectionSchema,
     taskSectionEntrySchema: taskSectionWire.taskSectionEntrySchema,
     taskSectionsAnswerSchema: taskSectionWire.taskSectionsAnswerSchema,
@@ -387,6 +395,7 @@ const EFFECT_MODULE_SCHEMAS = {
     agentEditLineSchema: taskWire.agentEditLineSchema,
     planAssumptionSchema: taskWire.planAssumptionSchema,
     planDocumentSchema: taskWire.planDocumentSchema,
+    taskAgentStartSchema: taskWire.taskAgentStartSchema,
     taskCreateRequestSchema: taskWire.taskCreateRequestSchema,
     taskRenameRequestSchema: taskWire.taskRenameRequestSchema,
     taskUpdateRequestSchema: taskWire.taskUpdateRequestSchema,
@@ -403,6 +412,8 @@ const EFFECT_MODULE_SCHEMAS = {
     repositoryPinsAnswerSchema: taskWire.repositoryPinsAnswerSchema,
     repositoryPinRequestSchema: taskWire.repositoryPinRequestSchema,
     taskAnswerSchema: taskWire.taskAnswerSchema,
+    taskAgentRefusalSchema: taskWire.taskAgentRefusalSchema,
+    taskStartAnswerSchema: taskWire.taskStartAnswerSchema,
     taskDeleteAnswerSchema: taskWire.taskDeleteAnswerSchema,
     planRevisionSeqSchema: taskWire.planRevisionSeqSchema,
     planRevisionLineSchema: taskWire.planRevisionLineSchema,
@@ -432,8 +443,10 @@ const EFFECT_MODULE_SCHEMAS = {
     providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
   "pull-request-write-wire": {
+    mergeMethodSchema: pullRequestWriteWire.mergeMethodSchema,
     pullRequestActionRequestSchema: pullRequestWriteWire.pullRequestActionRequestSchema,
     pullRequestWriteAnswerSchema: pullRequestWriteWire.pullRequestWriteAnswerSchema,
+    pullRequestViewedAnswerSchema: pullRequestWriteWire.pullRequestViewedAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof pullRequestWriteWire>,
   "repository-reach-wire": {
     repositoryUnreachedSchema: repositoryReachWire.repositoryUnreachedSchema,

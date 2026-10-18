@@ -8,7 +8,7 @@ import { defineConfig } from "vitest/config";
  * Streamdown is inlined so that its imports are resolved here at all.
  */
 const MARKDOWN_HTML_PARSER = fileURLToPath(
-  new URL("./src/renderer/markdown-html-parser.ts", import.meta.url),
+  new URL("../../packages/panel/src/markdown-html-parser.ts", import.meta.url),
 );
 
 export default defineConfig({
@@ -25,7 +25,7 @@ export default defineConfig({
   test: {
     name: "desktop",
     include: ["src/**/*.test.ts"],
-    setupFiles: ["src/testing/resize-observer.ts"],
+    setupFiles: ["../../packages/panel/src/testing/resize-observer.ts"],
     server: { deps: { inline: ["streamdown"] } },
   },
 });

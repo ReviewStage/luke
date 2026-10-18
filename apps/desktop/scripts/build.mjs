@@ -57,10 +57,10 @@ const excalidrawTrim = {
 // parse5 under it, loaded after the panel's first paint rather than parsed
 // with the bundle every window opens with: Streamdown's own import of it is
 // answered with the module that loads it on demand
-// (`src/renderer/markdown-html-parser.ts`), whose `import()` of the library
+// (`@luke/panel`'s `markdown-html-parser.ts`), whose `import()` of the library
 // the splitting below makes a chunk of its own. `vitest.config.ts` answers
 // the import the same way, so the tests draw what the panel draws.
-const MARKDOWN_HTML_PARSER = path.join(appRoot, "src/renderer/markdown-html-parser.ts");
+const MARKDOWN_HTML_PARSER = path.join(appRoot, "../../packages/panel/src/markdown-html-parser.ts");
 const markdownHtmlParserOnDemand = {
   name: "markdown-html-parser-on-demand",
   setup(build) {
@@ -255,7 +255,7 @@ const WINDOW_ENTRIES = {
 const SIDE_BUNDLE_ENTRIES = {
   "plan-editor": "src/renderer/plan-editor/index.ts",
   whiteboard: "src/renderer/whiteboard/index.tsx",
-  "file-tree": "src/renderer/file-tree/index.ts",
+  "file-tree": "../../packages/panel/src/file-tree/index.ts",
   terminal: "src/renderer/terminal/index.ts",
   diagram: "src/renderer/diagram/index.ts",
   "diff-view": "src/renderer/diff-view/index.ts",

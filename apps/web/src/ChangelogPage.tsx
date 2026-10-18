@@ -3,8 +3,10 @@ import {
   ButtonLink,
   MARK_PROVIDER,
   Pagination,
+  Prose,
   ProviderMark,
   PUBLIC_PAGE_WIDTH,
+  PUBLIC_SECTIONS,
   PublicPage,
   PublicSection,
   TEXT_ELEMENT,
@@ -48,43 +50,28 @@ function formatReleaseDate(date: string): string {
   return RELEASE_DATE_FORMAT.format(new Date(`${date}T00:00:00Z`));
 }
 
-/**
- * What opens either view: an optional way back, the page's title, and its door
- * to GitHub, which is the landing hero's secondary button, so the two GitHub
- * doors read as the same control. The intro sets its own `h1` rather than
- * PublicPage's title, because a release's way back stands above it.
- */
-function ChangelogIntro({
-  back,
-  title,
-  github,
+/** The view's door to GitHub, the landing hero's secondary button, so the two GitHub doors read as the same control. */
+function GitHubDoor({
+  href,
+  children,
 }: {
-  readonly back?: React.ReactNode;
-  readonly title: React.ReactNode;
-  readonly github: { readonly href: string; readonly label: React.ReactNode };
+  readonly href: string;
+  readonly children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="pb-10">
-      {back === undefined ? null : <div className="mb-4">{back}</div>}
-      <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.H1}>
-        {title}
-      </Text>
-      <div className="mt-6">
-        <ButtonLink
-          variant={BUTTON_VARIANT.OUTLINE}
-          href={github.href}
-          icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}
-        >
-          {github.label}
-        </ButtonLink>
-      </div>
-    </div>
+    <ButtonLink
+      variant={BUTTON_VARIANT.OUTLINE}
+      href={href}
+      icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}
+    >
+      {children}
+    </ButtonLink>
   );
 }
 
 function ReleaseEntry({ release }: { readonly release: Release }): React.JSX.Element {
   return (
-    <section className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-10 py-12 max-[640px]:grid-cols-1 max-[640px]:gap-4 max-[640px]:py-10">
+    <div className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-10 max-[640px]:grid-cols-1 max-[640px]:gap-4">
       {/* `self-start` because a stretched grid item is as tall as the
           release and leaves sticky nowhere to travel. On one column the rail
           becomes the entry's own dated heading line. */}
@@ -108,14 +95,15 @@ function ReleaseEntry({ release }: { readonly release: Release }): React.JSX.Ele
           </Text>
         </time>
       </div>
-      <div className="document" dangerouslySetInnerHTML={{ __html: release.html }} />
-    </section>
+      <Prose html={release.html} />
+    </div>
   );
 }
 
 /* The navs stand under the notes' column, not centred on the page, so they
-   line up with what they page through; on one column there is no rail to clear. */
-const UNDER_NOTES = "ml-[calc(8.5rem+2.5rem)] pt-4 max-[640px]:ml-0";
+   line up with what they page through: clear of the entry's 8.5rem rail and
+   its `gap-10`, 176px in all; on one column there is no rail to clear. */
+const UNDER_NOTES = "ml-44 pt-4 max-[640px]:ml-0";
 
 /** The changelog's pages as numbers, the current one held, with a step to either side. */
 function PageNumbers({
@@ -175,76 +163,44 @@ function ReleaseSteps({
   );
 }
 
-function PageOfReleases({
-  view,
-}: {
-  readonly view: Extract<ChangelogView, { kind: typeof CHANGELOG_VIEW.PAGE }>;
-}): React.JSX.Element {
-  return (
-    <>
-      <ChangelogIntro
-        title="Changelog"
-        github={{ href: `${REPOSITORY_URL}/releases`, label: "View releases on GitHub" }}
-      />
-      <div className="divide-y divide-border border-t border-border">
-        {view.releases.map((release) => (
-          <ReleaseEntry key={release.version} release={release} />
-        ))}
-      </div>
-      <PageNumbers page={view.page} pageCount={view.pageCount} />
-    </>
-  );
-}
-
-function SingleRelease({
-  view,
-}: {
-  readonly view: Extract<ChangelogView, { kind: typeof CHANGELOG_VIEW.RELEASE }>;
-}): React.JSX.Element {
-  const { release, newer, older } = view;
-  return (
-    <>
-      <ChangelogIntro
-        back={
-          <TextLink href={CHANGELOG_PATH} variant={TEXT_VARIANT.LABEL}>
-            ← Changelog
-          </TextLink>
-        }
-        title={`Luke ${release.version}`}
-        github={{
-          href: `${REPOSITORY_URL}/releases/tag/v${release.version}`,
-          label: `View v${release.version} on GitHub`,
-        }}
-      />
-      <div className="border-t border-border">
-        <ReleaseEntry release={release} />
-      </div>
-      <ReleaseSteps newer={newer} older={older} />
-    </>
-  );
-}
-
 export function ChangelogPage({ view }: { readonly view: ChangelogView }): React.JSX.Element {
   // Note that only page one is the changelog's own address; later pages and releases sit beneath it.
   const place = {
     page: SITE_PAGE.CHANGELOG,
     beneath: view.kind !== CHANGELOG_VIEW.PAGE || view.page !== 1,
   };
+  const page = view.kind === CHANGELOG_VIEW.PAGE;
+  const releases = page ? view.releases : [view.release];
   // Wide: the rail and its gutter sit beside the notes, which keep about
-  // the reading column's own measure.
+  // the reading column's own measure. Each release stands under a rule.
   return (
     <PublicPage
       banner={<SiteNavigation current={place} />}
       footer={<SiteFooterLinks current={place} />}
-      width={PUBLIC_PAGE_WIDTH.WIDE}
-    >
-      <PublicSection>
-        {view.kind === CHANGELOG_VIEW.PAGE ? (
-          <PageOfReleases view={view} />
+      back={page ? undefined : { href: CHANGELOG_PATH, label: "Changelog" }}
+      title={page ? "Changelog" : `Luke ${view.release.version}`}
+      lead={
+        page ? (
+          <GitHubDoor href={`${REPOSITORY_URL}/releases`}>View releases on GitHub</GitHubDoor>
         ) : (
-          <SingleRelease view={view} />
-        )}
-      </PublicSection>
+          <GitHubDoor href={`${REPOSITORY_URL}/releases/tag/v${view.release.version}`}>
+            View v{view.release.version} on GitHub
+          </GitHubDoor>
+        )
+      }
+      width={PUBLIC_PAGE_WIDTH.WIDE}
+      sections={PUBLIC_SECTIONS.RULED}
+    >
+      {releases.map((release) => (
+        <PublicSection key={release.version}>
+          <ReleaseEntry release={release} />
+        </PublicSection>
+      ))}
+      {page ? (
+        <PageNumbers page={view.page} pageCount={view.pageCount} />
+      ) : (
+        <ReleaseSteps newer={view.newer} older={view.older} />
+      )}
     </PublicPage>
   );
 }

@@ -52,9 +52,12 @@
   }
 }
 
-/* A chip draws its own chevron (`chip.css`), which this unlayered rule
-   would otherwise win over. */
-.settings-chevron:where(:not(.luke-chip *)) {
+/* A chip, a menu item, and a picker's option draw their own chevron
+   (`chip.css`, `menu.css`, `combobox.css`), which this unlayered rule would
+   otherwise win over. */
+.settings-chevron:where(
+  :not(.luke-chip *, .luke-menu-item-end > *, .luke-combobox-option-end > *)
+) {
   width: 11px;
   height: 11px;
   flex: 0 0 auto;
@@ -69,16 +72,6 @@
   /* Note that a word longer than the room, a commit or an address, breaks
      rather than running under the control beside it. */
   overflow-wrap: break-word;
-}
-
-/* Words a row holds to one line, an address or a name with no room to
-   wrap well, ending in an ellipsis where they are cut short, the pointer
-   resting on them reading them whole (`one-line.tsx`). */
-.settings-one-line {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* A row's words take what the row leaves once its mark and controls stand,
@@ -110,20 +103,16 @@
    thing, and a shortcut whose chord answers nothing until it is supplied. The
    attention tint on purpose: unlike the changed word this is an urgency, the
    same standing a session waiting on a person has. The words are the hover's
-   and the hidden text's; the glyph alone is the mark. */
+   and the hidden text's; the shared alert glyph alone is the mark. */
 .settings-attention {
   display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--luke-color-attention);
+}
+
+.settings-attention > svg {
   width: 16px;
   height: 16px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--luke-color-attention) 22%, transparent);
-  color: var(--luke-color-attention);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-bold);
-  line-height: 1;
 }
 
 .settings-copy small {
@@ -133,21 +122,10 @@
   line-height: var(--luke-type-caption-leading);
 }
 
-.settings-copy small a,
-.settings-detail-act {
+.settings-copy small a {
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-
-/* A press among a row's detail words, drawn as an underlined link is: an
-   experiment's Send feedback, which opens a dialog rather than a page. */
-.settings-detail-act {
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  cursor: pointer;
 }
 
 /* A row's picker: the chip naming the value, and the app's own menu under
@@ -187,8 +165,8 @@
   bottom: calc(100% + var(--luke-space-6));
 }
 
-.settings-picker .settings-picker-menu .task-compose-menu-list {
-  max-height: min(288px, var(--settings-picker-list-max, 288px));
+.settings-picker {
+  --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
 }
 
 /* A row holding a segmented control (`@luke/ui`'s `Segmented`) wraps, so a
@@ -203,8 +181,10 @@
 }
 
 /* The one green thing on the line, in the same palette a finished session
-   uses, so connected reads the same way complete does. */
-.credential-check {
+   uses, so connected reads the same way complete does. A menu item and a
+   picker's option draw their own check (`menu.css`, `combobox.css`), which
+   this unlayered rule would otherwise win over. */
+.credential-check:where(:not(.luke-menu-item-end > *, .luke-combobox-option-end > *)) {
   width: 12px;
   height: 12px;
   flex: 0 0 auto;
@@ -229,11 +209,6 @@
   align-items: center;
   gap: var(--luke-space-4);
   white-space: nowrap;
-}
-
-.account-provider .provider-mark {
-  width: 12px;
-  height: 12px;
 }
 
 /* The small glyph that rides a link's words. Note that a shared button's glyph
@@ -279,24 +254,6 @@
    muted ink every other detail wears. */
 .settings-copy .error-message {
   color: var(--luke-color-danger-text);
-}
-
-/* Settings › Updates: how far a download is, a thin bar under the row's
-   words, which say the same in numbers. */
-.update-progress {
-  display: block;
-  width: 160px;
-  height: 3px;
-  margin-top: var(--luke-space-4);
-  overflow: hidden;
-  border-radius: 2px;
-  background: var(--luke-color-fill-strong);
-}
-
-.update-progress > span {
-  display: block;
-  height: 100%;
-  background: var(--luke-color-working);
 }
 
 /* Settings › Coding agents › API keys: a key being added or edited grows its
@@ -357,17 +314,6 @@
 .workspace-invite-role {
   display: flex;
   flex: none;
-}
-
-/* Settings › Workspace's first row (`.workspace-identity`, its refusal
-   standing under it as API keys' does) and an integration account's row
-   (`.integration-row`): the name, renamed in place on the name's own line,
-   the field's words where the name's stood and the field standing in the
-   label's 18px line, so the row keeps its height. */
-:is(.workspace-identity, .integration-row) .luke-inline-edit {
-  display: block;
-  width: 100%;
-  margin: -3px 0 -3px -9px;
 }
 
 /* Settings › Workspace › Members (`.workspace-member`, a role change's
@@ -517,12 +463,6 @@
   width: fit-content;
 }
 
-/* A sign-in waiting on the browser wears the window's ring, at the line's size. */
-.settings-state .luke-spinner {
-  width: 12px;
-  height: 12px;
-}
-
 /* Settings › Integrations: a connected row's tools opened in place under
    it, over a hairline. The chevron that opens a row, after its count, turns
    down while its tools show. The tools stand in a column of their own,
@@ -534,33 +474,6 @@
 .integration-tools-line {
   flex-wrap: wrap;
   white-space: nowrap;
-}
-
-.integration-tools-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-  margin: -1px calc(-1 * var(--luke-space-4));
-  padding: 1px var(--luke-space-4);
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: inherit;
-  font: inherit;
-}
-
-.integration-tools-toggle:hover {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-}
-
-.integration-tools-toggle svg {
-  width: 10px;
-  height: 10px;
-  transition: transform var(--duration-fast) var(--spring-fast);
-}
-
-.integration-tools-toggle[aria-expanded="true"] svg {
-  transform: rotate(90deg);
 }
 
 .integration-row > .integration-tools-panel {
@@ -577,6 +490,7 @@
 .integration-tools-list {
   min-height: 0;
   padding: var(--luke-space-4);
+  overflow-x: hidden;
   overflow-y: auto;
   border-right: 1px solid var(--luke-color-border);
   overscroll-behavior: contain;
@@ -636,7 +550,7 @@
 .picture-choice {
   display: grid;
   align-items: start;
-  gap: var(--space-16);
+  gap: var(--luke-space-16);
   grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
 }
 
@@ -644,9 +558,9 @@
   position: relative;
   overflow: hidden;
   aspect-ratio: 1;
-  border-radius: var(--control-radius);
-  background: var(--hairline);
-  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-border);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
 }
 
 .picture-choice-stage img,
@@ -664,11 +578,11 @@
   right: 0;
   bottom: 0;
   left: 0;
-  padding: var(--space-16) var(--space-8) var(--space-6);
-  background: linear-gradient(transparent, rgb(0 0 0 / 65%));
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
+  padding: var(--luke-space-16) var(--luke-space-8) var(--luke-space-6);
+  background: linear-gradient(transparent, var(--luke-color-veil));
+  color: var(--luke-color-on-veil);
+  font-size: var(--luke-type-section-size);
+  font-weight: var(--luke-weight-semibold);
 }
 
 .picture-choice-faces {
@@ -677,7 +591,7 @@
   margin: 0;
   padding: 0;
   border: 0;
-  gap: var(--space-12) var(--space-8);
+  gap: var(--luke-space-12) var(--luke-space-8);
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -687,11 +601,11 @@
   min-width: 0;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   cursor: pointer;
   font: inherit;
 }
@@ -709,35 +623,35 @@
   max-width: 88px;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: var(--hairline);
-  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  background: var(--luke-color-border);
+  box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
   transition: box-shadow var(--duration-quick) var(--motion-exit);
 }
 
 .picture-choice-face:hover .picture-choice-photo {
-  box-shadow: 0 0 0 2px var(--hairline-strong);
+  box-shadow: 0 0 0 2px var(--luke-color-border-strong);
 }
 
 .picture-choice-face:has(> :checked) .picture-choice-photo {
-  box-shadow: 0 0 0 2px var(--switch-on);
+  box-shadow: 0 0 0 2px var(--luke-color-switch-on);
 }
 
 :root[data-keyboard="true"] .picture-choice-face:has(> :focus-visible) .picture-choice-photo {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: calc(2px + var(--focus-ring-offset));
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+  outline-offset: calc(2px + var(--luke-focus-ring-offset));
 }
 
 .picture-choice-name {
   overflow: hidden;
   max-width: 100%;
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .picture-choice-face:has(> :checked) .picture-choice-name {
-  color: var(--text-primary);
-  font-weight: 600;
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-semibold);
 }
 
 /* A narrow row stacks the stage over the faces rather than squeezing both;

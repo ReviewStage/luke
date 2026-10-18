@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { SettingsWrites } from "@luke/panel/settings/writes";
+import { newestToastSays } from "@luke/panel/testing/toast";
+import { ToastHost } from "@luke/panel/toast";
 import { THEME } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
@@ -8,10 +11,7 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { newestToastSays } from "#testing/toast";
-import { ToastHost } from "../toast";
 import { pageResetControl } from "./reset";
-import type { SettingsWrites } from "./writes";
 
 /**
  * reset.test.ts -- a page's reset that the store refuses says why in a

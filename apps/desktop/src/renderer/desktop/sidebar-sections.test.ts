@@ -11,6 +11,9 @@ import {
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { applySectionWrite, sectionOrder } from "@luke/ui/task-sections-model";
@@ -19,9 +22,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { handState } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { tasksControl } from "#testing/tasks-control";
 import { DesktopSidebar } from "./desktop-sidebar";
@@ -217,8 +217,8 @@ function sectionHeader(sidebar: HTMLElement, title: string): HTMLElement {
 
 /** Opens the task named `name`'s menu, then its Move to section. */
 function openMoveToSection(sidebar: HTMLElement, name: string): void {
-  const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-task")].find((each) =>
-    each.textContent?.includes(name),
+  const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
+    (each) => each.textContent?.includes(name),
   );
   assert.ok(row);
   act(() => {
@@ -239,8 +239,8 @@ function dialogButton(label: string): HTMLButtonElement {
 /** The names of the tasks drawn under the region labelled `label`. */
 function namesIn(sidebar: HTMLElement, label: string): string[] {
   const region = sidebar.querySelector(`nav[aria-label="${label}"]`);
-  return [...(region?.querySelectorAll(".sidebar-task-name") ?? [])].map(
-    (name) => name.textContent ?? "",
+  return [...(region?.querySelectorAll(".luke-list-row-title") ?? [])].map(
+    (name) => name.firstChild?.textContent ?? "",
   );
 }
 
@@ -275,8 +275,8 @@ test("a task's Move to section puts it on top of the section chosen", async () =
   handState(experimentsOn(EXPERIMENT.SECTIONS));
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
-  const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-task")].find((each) =>
-    each.textContent?.includes("Retry audit"),
+  const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
+    (each) => each.textContent?.includes("Retry audit"),
   );
   assert.ok(row);
 
@@ -438,7 +438,7 @@ interface Asked {
  * stands over its own rows and no other's.
  */
 function layOutRows(): void {
-  const slots = () => [...document.querySelectorAll(".sidebar-task-item, .sidebar-section-empty")];
+  const slots = () => [...document.querySelectorAll(".sidebar-tasks > li, .sidebar-section-empty")];
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const all = slots();
     const own = all.indexOf(this);
@@ -491,7 +491,7 @@ const pointer = (type: string, y: number) =>
 
 /** Drags the row named `name` from its middle to `y` down the column and lets it go there. */
 function drag(sidebar: HTMLElement, name: string, y: number): void {
-  const label = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-task-name")].find(
+  const label = [...sidebar.querySelectorAll<HTMLElement>(".luke-list-row-title")].find(
     (each) => each.textContent === name,
   );
   const row = label?.closest("li") ?? assert.fail(`no ${name} in the sidebar`);
@@ -711,6 +711,63 @@ test("Enter in the Emoji tab's search chooses the first emoji it found", async (
   const made = writes[0];
   assert.equal(made?.kind, TASK_SECTION_WRITE.CREATE);
   assert.deepEqual(made.icon, { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🛻" });
+});
+
+test("Shift-Enter in the icon search chooses the first glyph it found, as Enter does", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes);
+
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section…").click());
+  typeInto(dialogField("Section title"), "Stars");
+  await settleLoaded();
+  const search = dialogField("Search icons");
+  typeInto(search, "telescope");
+  act(() => {
+    search.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true }),
+    );
+  });
+  await act(async () => dialogButton("Create section").click());
+
+  assert.deepEqual(writes[0]?.kind === TASK_SECTION_WRITE.CREATE ? writes[0].icon : undefined, {
+    kind: TASK_SECTION_ICON_KIND.GLYPH,
+    glyph: "telescope",
+  });
+});
+
+test("Clear search empties the icon search, every glyph is offered again, and the caret stays in the search", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([]);
+
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section…").click());
+  await settleLoaded();
+  const search = dialogField("Search icons");
+  typeInto(search, "telescope");
+  assert.equal(document.querySelector('button[aria-label="Folder"]'), null);
+  act(() => dialogButton("Clear search").click());
+
+  assert.equal(search.value, "");
+  assert.ok(dialogButton("Folder"));
+  assert.equal(document.activeElement, search);
+});
+
+test("ArrowDown in the icon search hands the focus to the grid's tab stop", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([]);
+
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section…").click());
+  await settleLoaded();
+  const search = dialogField("Search icons");
+  typeInto(search, "telescope");
+  act(() => {
+    search.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  });
+
+  assert.equal(document.activeElement?.getAttribute("aria-label"), "Telescope");
 });
 
 test("the arrows move the grid's one tab stop with the focus", async () => {

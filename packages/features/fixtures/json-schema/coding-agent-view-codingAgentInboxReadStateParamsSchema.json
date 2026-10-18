@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "itemId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "unread": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "itemId",
+    "unread"
+  ],
+  "additionalProperties": false
+}

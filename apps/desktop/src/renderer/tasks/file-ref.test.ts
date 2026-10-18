@@ -3,17 +3,17 @@
 import assert from "node:assert/strict";
 import type { Task } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
+import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { onRegistry } from "#testing/copy-feedback";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { DesktopTasks } from "../desktop/desktop-tasks";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
-import { NO_LOOKS } from "./use-task-looks";
 
 /**
  * file-ref.test.ts -- a file is named one way wherever it stands: its tab,
@@ -134,10 +134,10 @@ test("a file's tab, its row in the panel's +, and its code card's head wear its 
   assert.ok(add, "the strip's +");
   act(() => add.click());
   const row = [...document.querySelectorAll('.tab-add-menu [role="option"]')].find(
-    (each) => each.querySelector(".task-compose-menu-name")?.textContent === "accept.ts",
+    (each) => each.querySelector(".luke-combobox-option-label")?.textContent === "accept.ts",
   );
   assert.equal(
-    row?.querySelector(".menu-item-glyph")?.innerHTML,
+    row?.querySelector(".luke-combobox-option-glyph")?.innerHTML,
     icon,
     'the "+" row wears the tab\'s icon',
   );

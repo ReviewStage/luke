@@ -162,8 +162,11 @@ transcript and a copy of its work. While the old worker's PR is open, the
 new agent carries that work onto the PR's branch and opens no second PR;
 the note says so too, since Luke may not have recorded the PR yet. If
 `start_agent` refuses because the old worker is still running, stop it,
-wait until `list_agents` no longer reads it `running`, and call again; if it
-names an agent that already continued it, track that one. In Conductor, the
+wait until `list_agents` no longer reads it `running`, and call again. An
+agent already continued is continued again, and the answer's
+`earlierContinuations` names the earlier ones: if one of them is the worker
+you meant, archive the agent you just started and continue that one instead.
+In Conductor, the
 new session works in the old one's workspace, on its
 branch and PR; tell it to read the old transcript with `conductor session
 message <old sessionId>`.

@@ -99,10 +99,10 @@ export function callCardShown(input: {
 export function callTabVideoStatus(input: {
   view: Pick<VoiceView, "voiceStatus" | "callTaskId">;
   avatar: AvatarState;
-  planId: string;
+  taskId: string;
   videoCalls: boolean;
 }): AvatarStatus | undefined {
-  const { view, avatar, planId: taskId, videoCalls } = input;
+  const { view, avatar, taskId, videoCalls } = input;
   if (!callInProgress(view) || view.callTaskId !== taskId) return undefined;
   if (!videoCalls) return avatarStanding(avatar) ? avatar.status : undefined;
   return avatarTiled(avatar) ? avatar.status : AVATAR_STATUS.OFF;

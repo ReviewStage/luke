@@ -21,7 +21,9 @@ import {
  * still stands, because eve's door admits no one to the session of a
  * cleared conversation; so a task's delete retires its sessions before it
  * clears them, and an account's deletion before the account goes. Each is
- * asked as the developer, over the bearer the request carried.
+ * asked as the developer, over the bearer the request carried, which both
+ * deletes refuse to go on without (`http/http-effect.ts`'s
+ * `hostedBearerOnly`): a browser's session cookie carries none eve takes.
  *
  * A retire is a courtesy the delete does not wait on: an eve that cannot be
  * reached or does not confirm is logged by its outcome and status, and the

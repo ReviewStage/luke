@@ -22,6 +22,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* A field holding the caret wears no ring, as in the apps (desktop base.css). */
+:is(
+  textarea,
+  [contenteditable],
+  input:not([type="checkbox"], [type="radio"], [type="range"])
+):focus-visible {
+  outline: none; /* no ring: the caret marks the field */
+}
+
 /* A brand whose one-colour mark is published in named inks wears them by
    the ground, as each app sets them for its own (`marks/provider-mark.tsx`). */
 [data-luke-theme="dark"]
@@ -171,8 +180,7 @@ body {
   background: var(--luke-color-surface);
 }
 
-.catalog-glyph svg,
-.catalog-mark {
+.catalog-glyph svg {
   display: block;
   flex: none;
   width: 20px;
@@ -213,7 +221,8 @@ body {
   position: relative;
   max-width: 560px;
   height: 200px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 1px dashed var(--luke-color-border-strong);
   border-radius: var(--luke-radius-8);
 }
@@ -253,6 +262,12 @@ body {
   margin: 0;
   padding: var(--luke-space-12) 0 0;
   list-style: none;
+}
+
+/* The pointer's room over a line held to one line, as wide as the column. */
+.catalog-one-line {
+  display: block;
+  min-width: 0;
 }
 
 /* A column narrower than a phone, where long words have to wrap. */
@@ -321,6 +336,11 @@ body {
   width: 200px;
 }
 
+/* A toolbar's room, wider than its presses and short of its whole sentence. */
+.catalog-error-toolbar {
+  width: 400px;
+}
+
 /* A list's foot that is itself its press, as an app draws one around
    `RetryRowLabel`: a row in the caption's type, lit on hover. */
 .catalog-retry-row {
@@ -376,6 +396,7 @@ body {
    answers under them stay on the card. */
 .catalog-dialog-scroll {
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -450,13 +471,6 @@ body {
   flex: 1 1 var(--luke-select-field-width);
 }
 
-/* A provider's mark at the size a settings row's leading mark stands. */
-.catalog-settings-mark {
-  display: block;
-  width: 20px;
-  height: 20px;
-}
-
 /* The tooltip and hover card examples' control, whose wrapper is the hint's anchor and so wraps it exactly. */
 .catalog-hinted {
   display: inline-flex;
@@ -465,6 +479,11 @@ body {
 /* A toolbar folding its buttons, as an app's container query does. */
 .catalog-folded {
   --luke-fold: folded;
+}
+
+/* A toolbar shorter still, leaving a split button its main part's glyph. */
+.catalog-bare {
+  --luke-fold: bare;
 }
 
 /* A toolbar whose corner resizes it, folding its buttons below 360px. */
@@ -503,11 +522,6 @@ body {
   padding: var(--luke-space-4) var(--luke-space-8);
   border-radius: var(--luke-radius-6);
   box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
-}
-
-.catalog-inline-edit-well:focus-within {
-  outline: 2px solid var(--luke-color-focus-ring);
-  outline-offset: -1px;
 }
 
 .catalog-inline-edit-well > .luke-inline-edit {
@@ -633,6 +647,7 @@ body {
    document would, so its banner stands still at the top. */
 .catalog-screen-public {
   height: 480px;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -662,6 +677,12 @@ body {
   color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
+}
+
+/* A recording's stand-in in the landing's example, at the demo's own shape. */
+.catalog-public-media {
+  aspect-ratio: 1240 / 864;
+  background: var(--luke-color-fill-hover);
 }
 
 /* A release in the wide page's example: its version and date on a rail

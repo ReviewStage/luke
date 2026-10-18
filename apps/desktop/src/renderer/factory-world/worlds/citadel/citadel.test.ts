@@ -3,6 +3,15 @@ import { CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "@luke/features/coding-a
 import { FACTORY_WORLD_BOUNDS, type FactoryWorld } from "@luke/features/factory-world-wire";
 import { AREA_PATH } from "@luke/features/pull-request-area";
 import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  type WorldHost,
+  type WorldInstance,
+  type WorldLayers,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import {
   blastRadiusOf,
   factoryWorldAsOf,
   factoryWorldViewOf,
@@ -34,15 +43,6 @@ import {
 } from "three";
 import { test } from "vitest";
 import { type ScenePicking, scenePicking } from "../../scene/picking";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  type WorldHost,
-  type WorldInstance,
-  type WorldLayers,
-  type WorldState,
-} from "../../world";
 import { world } from "./index";
 
 /**
@@ -293,6 +293,22 @@ test("each layer switched off hides what it names, and nothing else; a failed ag
       assert.deepEqual(idsOf(found, kind), expected, `${layer} off: ${kind}`);
     }
   }
+});
+
+test("with one layer drawn alone, a failed agent stands under Defects and not under Planned, on the same world with no defect reported", () => {
+  const quiet = { ...SNAPSHOT, defects: [] };
+  const alone = (layer: keyof WorldLayers): WorldLayers => ({
+    planned: layer === "planned",
+    building: layer === "building",
+    shipped: layer === "shipped",
+    defects: layer === "defects",
+  });
+  const { instance, registrations } = drawn(stateOf(quiet, { layers: alone("planned") }));
+  assert.deepEqual(idsOf(pickable(registrations), PICK_KIND.AGENT), []);
+  instance.update(stateOf(quiet, { layers: alone("defects") }));
+  assert.deepEqual(idsOf(pickable(registrations), PICK_KIND.AGENT), [uuidOf(4)]);
+  instance.update(stateOf(quiet, { layers: alone("shipped") }));
+  assert.deepEqual(idsOf(pickable(registrations), PICK_KIND.AGENT), []);
 });
 
 test("a layer switched back on draws what it hid again, on the same world", () => {

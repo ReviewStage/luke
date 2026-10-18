@@ -6,14 +6,30 @@ import {
   Stack,
   Text,
 } from "@luke/ui";
+import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * disclosures.tsx -- a fold closed and open, its body indented under the
- * summary's words or flush with the row, and a summary long enough to wrap
- * in a pane narrower than its words.
+ * summary's words or flush with the row, a fold whose holder keeps its
+ * state, and a summary long enough to wrap in a pane narrower than its words.
  */
+
+/** A fold whose open state its holder keeps, as a tab keeps which of its notes it folded. */
+function HeldDisclosure(): React.JSX.Element {
+  const [open, setOpen] = useState(true);
+  return (
+    <Disclosure open={open} onOpenChange={setOpen}>
+      <DisclosureSummary>
+        <span>Luke · Lines 12–18</span>
+      </DisclosureSummary>
+      <DisclosureBody>
+        <Text>The retry loop starts here, before the first request is sent.</Text>
+      </DisclosureBody>
+    </Disclosure>
+  );
+}
 
 function Disclosures(): React.JSX.Element {
   return (
@@ -55,6 +71,11 @@ function Disclosures(): React.JSX.Element {
               </Text>
             </DisclosureBody>
           </Disclosure>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="disclosure-held" title="Held by its holder">
+        <div className="catalog-frame catalog-frame-wide">
+          <HeldDisclosure />
         </div>
       </CatalogSection>
       <CatalogSection id="disclosure-long" title="Long summary, narrow pane">

@@ -2,6 +2,13 @@ import { automationOwner, automationTriggerText } from "@luke/features/automatio
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { useAutomations } from "@luke/panel/desktop/use-automations";
+import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
+import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
+import { useOpenSettings } from "@luke/panel/open-settings";
+import { useMinute } from "@luke/panel/tasks/task-time";
+import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -10,6 +17,11 @@ import {
   Button,
   ErrorState,
   IconButton,
+  List,
+  ListRow,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -35,25 +47,17 @@ import {
 import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref";
-import { useAppCommand } from "../app-commands";
 import { LINK_COPY, useCopyToast } from "../copy-feedback";
-import { MemberDirectory, useMemberDirectory } from "../member-directory";
-import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { useOpenSettings } from "../open-settings";
-import { SPINNER_SIZE, Spinner } from "../spinner";
 import { lineSubject } from "../tasks/agent-ref";
-import { InboxItemRow } from "../tasks/inbox-list";
+import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
 import { holderName, INBOX_HOLDER, type InboxListed } from "../tasks/inbox-model";
 import { RelativeTime } from "../tasks/relative-time";
-import { useMinute } from "../tasks/task-time";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems } from "../tasks/use-waiting-items";
 import { Tooltip } from "../tooltip";
-import { useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { RecentRow } from "./desktop-home";
 import { useArchivedView, useTaskListView } from "./task-list-view";
-import { useAutomations } from "./use-automations";
 
 /**
  * person-page.tsx -- one person's page in the listed workspace: who they are there, and what of theirs the window already holds.
@@ -67,13 +71,37 @@ import { useAutomations } from "./use-automations";
  * agents, each from the listed workspace's task list and Inbox
  * (`@luke/ui/person-page-model`), and the workspace's automations they
  * made, a section with nothing in it left out.
- * Until the Inbox is read the page says so, and a read that failed says
- * that and offers Retry, so a page is called empty only once it is.
+ * Until the members, the task list, the Inbox, and the automations are read,
+ * placeholders stand where what each names will, and a read that failed
+ * says that and offers Retry, so a page names nobody as someone outside the
+ * workspace, and is called empty, only once its reads have answered.
  * Nothing on it is read for it: it shows a teammate only what the sidebar,
  * the Inbox, and an agent's card already show any member, never their
  * personal workspace, their answers, or another workspace's. A press on a
  * row opens what it names, as Home's do, and Escape leaves the page.
  */
+
+/** How wide a placeholder section's name stands, as a short section name does. */
+const SKELETON_SECTION = "120px";
+
+/** How wide the placeholder head's name and the line under it stand, as a name and a role and email do. */
+const SKELETON_HEAD = { NAME: "180px", LINE: "240px" } as const;
+
+/** The placeholder head's face, at the page's size (`.actor-mark[data-size="page"]`). */
+const SKELETON_FACE = "48px";
+
+/** A placeholder row's tile, an automation's or a repository's at its inline size (`.home-row-picture`). */
+const SKELETON_MARK = "16px";
+
+/** How wide each placeholder row's name and what is said beside it stand, so the rows read as rows of their own. */
+const SKELETON_ROWS = [
+  { name: "46%", context: "96px" },
+  { name: "38%", context: "120px" },
+  { name: "54%", context: "80px" },
+] as const;
+
+/** What the page is called where it cannot name the person yet. */
+const PROFILE = "Profile";
 
 /** What a page's head says under a name, by who the person is to the workspace. */
 function headLine(person: Actor): string | undefined {
@@ -112,8 +140,42 @@ function PersonSection({
           {count}
         </Text>
       </header>
-      <ul className="sidebar-tasks">{children}</ul>
+      <List label={title}>{children}</List>
     </section>
+  );
+}
+
+/** A section still being read: a block where its name will stand, over the placeholder rows in `children`. */
+function SectionSkeleton({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <div className="home-section">
+      <div className="person-section-head">
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
+          <Skeleton width={SKELETON_SECTION} />
+        </Text>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** A list still being read, which `label` names: rows of a tile, a name, and what is said beside it, as a task's or an automation's row stands. */
+function RowsSkeleton({ label }: { label: string }): React.JSX.Element {
+  return (
+    <SectionSkeleton>
+      <SkeletonRegion label={label}>
+        <ul className="sidebar-tasks">
+          {SKELETON_ROWS.map(({ name, context }) => (
+            <ListRow
+              key={name}
+              leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />}
+              title={<Skeleton width={name} />}
+              meta={<Skeleton width={context} />}
+            />
+          ))}
+        </ul>
+      </SkeletonRegion>
+    </SectionSkeleton>
   );
 }
 
@@ -127,29 +189,24 @@ function AgentRow({
   tasks: TasksControl;
   now: number;
 }): React.JSX.Element {
-  const { plan: task, agent } = each;
+  const { task, agent } = each;
   const subject = lineSubject(agent, tasks.agents.models, tasks.me);
   return (
-    <li className="sidebar-task-item home-row">
-      <button
-        type="button"
-        className="sidebar-task"
-        onClick={() => tasks.onShowAgent(task.id, agent.id)}
-      >
-        <span className="sidebar-task-line">
-          <span className="home-row-picture">
-            <ActorMark actor={subject.tile} />
-          </span>
-          <span className="sidebar-task-name">{subject.name}</span>
-          <span className="home-row-context">{task.name}</span>
-          {agent.at === undefined ? null : (
-            <span className="sidebar-task-time">
-              <RelativeTime at={agent.at} now={now} />
-            </span>
-          )}
+    <ListRow
+      leading={
+        <span className="home-row-picture">
+          <ActorMark actor={subject.tile} />
         </span>
-      </button>
-    </li>
+      }
+      title={subject.name}
+      meta={
+        <span className="home-row-meta">
+          <span className="home-row-context">{task.name}</span>
+          {agent.at === undefined ? null : <RelativeTime at={agent.at} now={now} />}
+        </span>
+      }
+      onPress={() => tasks.onShowAgent(task.id, agent.id)}
+    />
   );
 }
 
@@ -283,19 +340,22 @@ function AutomationRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <li className="sidebar-task-item home-row">
-      <button type="button" className="sidebar-task" onClick={onOpen}>
-        <span className="sidebar-task-line">
-          <span className="home-row-picture">
-            <ActorMark actor={automationActor(automation)} />
-          </span>
-          <span className="sidebar-task-name">{automation.name}</span>
+    <ListRow
+      leading={
+        <span className="home-row-picture">
+          <ActorMark actor={automationActor(automation)} />
+        </span>
+      }
+      title={automation.name}
+      meta={
+        <span className="home-row-meta">
           <span className="home-row-context">
             {automationTriggerText(automation.trigger, automation.repositories ?? [])}
           </span>
         </span>
-      </button>
-    </li>
+      }
+      onPress={onOpen}
+    />
   );
 }
 
@@ -322,6 +382,25 @@ function PersonHead({ person }: { person: Actor }): React.JSX.Element {
   );
 }
 
+/** The head while the members are read: a block where their face, their name, and who they are here will stand. */
+function PersonHeadSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label="Reading who they are…">
+      <header className="person-head">
+        <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_FACE} />
+        <div className="person-head-copy">
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.TITLE}>
+            <Skeleton width={SKELETON_HEAD.NAME} />
+          </Text>
+          <Text variant={TEXT_VARIANT.CAPTION}>
+            <Skeleton width={SKELETON_HEAD.LINE} />
+          </Text>
+        </div>
+      </header>
+    </SkeletonRegion>
+  );
+}
+
 /** The page inside the workspace's member directory, which names the person. */
 function PersonColumn({
   tasks,
@@ -337,7 +416,7 @@ function PersonColumn({
   const now = useMinute();
   const listed = tasks.listed.tasks;
   // Named as the list names them, else as the members read does, else by the name the page was opened with, else as the former members read does; nobody's name where none does.
-  const { members, readerId, former } = useMemberDirectory();
+  const { members, readerId, former, refused, retry } = useMemberDirectory();
   const member = members?.find((each) => each.userId === userId);
   const known = opened === undefined ? undefined : { userId, name: opened };
   // Note that someone who left having only revised or answered is named by the former members read alone, since a link to them opens with no name.
@@ -377,25 +456,37 @@ function PersonColumn({
         : { agentId: item.agentId, itemId: item.id },
     );
   };
-  const name = headName(person);
   // Nobody the workspace's members or those who left name, as a link to someone outside it opens, is not found here; until both are read, nobody is.
-  if (
-    person.kind === ACTOR_KIND.SOMEONE &&
-    person.reason === SOMEONE_REASON.UNNAMED &&
-    members !== undefined &&
-    former !== undefined
-  ) {
+  const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
+  if (unnamed && members !== undefined && former !== undefined) {
     return (
-      <section className="automations-view" aria-label="Profile">
+      <section className="automations-view" aria-label={PROFILE}>
         <NotFound thing={NOT_FOUND_THING.PERSON} />
       </section>
     );
   }
+  // Note that someone nothing names yet is drawn as a placeholder, because only settled reads may say they are not in the workspace.
+  const name = unnamed ? undefined : headName(person);
+  const theirs = you ? "your" : "their";
+  // A refused read will not name them, so the head says so and offers Retry rather than wait.
+  const head = !unnamed ? (
+    <PersonHead person={person} />
+  ) : refused ? (
+    <div className="home-note">
+      <ErrorState
+        onRetry={retry}
+      >{`${you ? "Your" : "Their"} profile could not be read.`}</ErrorState>
+    </div>
+  ) : (
+    <PersonHeadSkeleton />
+  );
   return (
-    <section className="automations-view" aria-label={name}>
+    <section className="automations-view" aria-label={name ?? PROFILE}>
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">{name}</h1>
+          <h1 className="desktop-toolbar-title">
+            {name ?? (refused ? PROFILE : <Skeleton width={SKELETON_HEAD.NAME} />)}
+          </h1>
         </div>
         <PersonActions
           tasks={tasks}
@@ -407,7 +498,16 @@ function PersonColumn({
       </header>
       <div className="home-scroll scroll-fade-top">
         <div className="home-column person-column">
-          <PersonHead person={person} />
+          {head}
+          {tasks.listFailed ? (
+            <div className="home-note">
+              <ErrorState onRetry={tasks.onRetryList}>
+                {`${you ? "Your" : "Their"} tasks could not be read.`}
+              </ErrorState>
+            </div>
+          ) : !tasks.listRead && personPageEmpty(page) ? (
+            <RowsSkeleton label={`Reading ${theirs} tasks…`} />
+          ) : null}
           {page.working.length === 0 ? null : (
             <PersonSection title="Working now" count={page.working.length}>
               {page.working.map((each) => (
@@ -481,7 +581,9 @@ function PersonColumn({
               <ErrorState onRetry={read.onRetry}>Some Inbox items could not be read.</ErrorState>
             </div>
           ) : waiting.length === 0 && read.reading ? (
-            <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
+            <SectionSkeleton>
+              <InboxListSkeleton />
+            </SectionSkeleton>
           ) : null}
           {theirAutomations.failed ? (
             <div className="home-note">
@@ -490,10 +592,12 @@ function PersonColumn({
               </ErrorState>
             </div>
           ) : theirAutomations.reading ? (
-            <Spinner label="Loading automations" size={SPINNER_SIZE.INLINE} />
+            <RowsSkeleton label={`Reading ${theirs} automations…`} />
           ) : null}
-          {/* Note that the page is said to be empty only once both reads have answered, since either may yet name something. */}
-          {read.failed ||
+          {/* Note that the page is said to be empty only once it names someone and the task list, the Inbox, and the automations have answered, since any may yet name something, or nobody may be found. */}
+          {unnamed ||
+          !tasks.listRead ||
+          read.failed ||
           read.reading ||
           theirAutomations.failed ||
           theirAutomations.reading ? null : personPageEmpty(page) &&

@@ -4,6 +4,7 @@ import {
   type FactoryPlanned,
   LINEAR_PRIORITY,
 } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget, type WorldPicking } from "@luke/panel/factory-world/world";
 import type { SIGNAL_COLOR, TimelineEntry } from "@luke/ui/factory-world";
 import {
   AdditiveBlending,
@@ -31,7 +32,6 @@ import {
   Vector3,
 } from "three";
 import { mergeGeometries, mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
-import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
 import { GLOW_BLEND, GLOW_SHAPE, type GlowField, glowField } from "./glow";
 import {
   between,

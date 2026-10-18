@@ -1,3 +1,5 @@
+import { AttentionMark } from "@luke/panel/settings/marks";
+import type { SettingsWrites } from "@luke/panel/settings/writes";
 import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
@@ -20,9 +22,7 @@ import {
 } from "@luke/voice/microphone-access";
 import type { MicrophoneControl } from "@luke/voice/settings-controls";
 import { Tooltip } from "../tooltip";
-import { AttentionMark } from "./marks";
 import { SchemaSettingRows } from "./schema-rows";
-import type { SettingsWrites } from "./writes";
 
 /**
  * How Luke sounds and what he says unprompted. Permission comes first, then

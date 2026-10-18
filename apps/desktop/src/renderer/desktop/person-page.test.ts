@@ -20,6 +20,10 @@ import {
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { OpenSettingsProvider } from "@luke/panel/open-settings";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
@@ -27,12 +31,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { handState } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
-import { OpenSettingsProvider } from "../open-settings";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
 import { PersonPage } from "./person-page";
 
@@ -194,6 +194,16 @@ let inboxRefused = false;
 let automationsRefused = false;
 /** Whether the Inbox's reads are still out, answering nothing yet. */
 let inboxHeld = false;
+/** Whether the automations' reads are still out, answering nothing yet. */
+let automationsHeld = false;
+/** Whether the members read is held until the test answers it with `answerMembers`. */
+let membersHeld = false;
+/** Whether the members read is refused, as a read that failed is. */
+let membersRefused = false;
+/** Whether the read of who left is refused, as a read that failed is. */
+let formerRefused = false;
+/** Answers the held members read with the fixture's members. */
+let answerMembers: () => void = () => undefined;
 /** Every text the page asked the window to copy, in order. */
 let copied: string[] = [];
 
@@ -201,6 +211,10 @@ beforeEach(() => {
   inboxRefused = false;
   automationsRefused = false;
   inboxHeld = false;
+  automationsHeld = false;
+  membersHeld = false;
+  membersRefused = false;
+  formerRefused = false;
   copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   window.localStorage.clear();
@@ -210,7 +224,15 @@ beforeEach(() => {
         request.kind === ACT_KIND.CODING_AGENTS_INBOX ||
         request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX;
       if (inbox && inboxHeld) return new Promise(() => undefined);
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+      if (request.kind === ACT_KIND.AUTOMATIONS_LIST && automationsHeld) {
+        return new Promise(() => undefined);
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && membersHeld) {
+        return new Promise((resolve) => {
+          answerMembers = () => resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
+        });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && !membersRefused) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
@@ -223,7 +245,7 @@ beforeEach(() => {
           value: { automations: AUTOMATIONS },
         });
       }
-      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
+      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ && !formerRefused) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: FORMER });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
@@ -246,7 +268,7 @@ afterEach(() => {
 
 /** Every door the page opens, in order. */
 interface Opened {
-  readonly plans: string[];
+  readonly tasks: string[];
   readonly agents: [string, string][];
   readonly inbox: (InboxChoice | "inbox")[];
   readonly settings: SettingsLink[];
@@ -264,14 +286,14 @@ function mountWith(
   name?: string,
   memberCount = MEMBERS.length,
 ) {
-  const opened: Opened = { plans: [], agents: [], inbox: [], settings: [] };
+  const opened: Opened = { tasks: [], agents: [], inbox: [], settings: [] };
   const tasks = tasksControl({
     me: DEAN.userId,
     workspace: { ...ACME, memberCount },
     tasks: TASKS,
     listed: { tasks: TASKS, archived: [], ...HOLDING },
     ...HOLDING,
-    onSelect: (taskId) => opened.plans.push(taskId),
+    onSelect: (taskId) => opened.tasks.push(taskId),
     onShowAgent: (taskId, agentId) => opened.agents.push([taskId, agentId]),
     inboxView: {
       open: false,
@@ -294,7 +316,7 @@ function mountWith(
         createElement(
           OpenSettingsProvider,
           { value: (link: SettingsLink) => opened.settings.push(link) },
-          createElement(PersonPage, { tasks: tasks, userId, name }),
+          createElement(PersonPage, { tasks, userId, name }),
         ),
       ),
     ),
@@ -322,6 +344,13 @@ function sections(page: HTMLElement): Record<string, string[]> {
 
 function head(page: HTMLElement): string[] {
   return [...page.querySelectorAll(".person-head p")].map((line) => line.textContent ?? "");
+}
+
+/** What each placeholder on the page says it is waiting on, in order. */
+function waits(page: HTMLElement): string[] {
+  return [...page.querySelectorAll('[role="status"][aria-busy="true"]')].map(
+    (region) => region.textContent ?? "",
+  );
 }
 
 function button(page: HTMLElement, text: string): HTMLButtonElement {
@@ -384,7 +413,7 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
 
   assert.deepEqual(opened.agents, [[RETRIES.id, BACKOFF.id]]);
   assert.deepEqual(opened.inbox, ["inbox", { taskId: RETRIES.id, itemId: RETRY_429.id }]);
-  assert.deepEqual(opened.plans, [DASHBOARD.id]);
+  assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 
 test("a person's tasks wear no face of theirs, since the page's head already says whose they are", async () => {
@@ -582,7 +611,87 @@ test("automations that could not be read leave the Inbox still being read saying
 
   assert.match(page.textContent ?? "", /Their automations could not be read\./u);
   // The Inbox still being read stands as its own wait beside the automations' failure.
-  assert.equal(page.querySelectorAll('.person-column .luke-spinner[role="status"]').length, 1);
+  assert.deepEqual(waits(page), ["Reading your inbox…"]);
+  assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
+});
+
+test("while the Inbox and the automations are read, placeholder rows stand for each, never a spinner", async () => {
+  handState(experimentsOn(EXPERIMENT.AUTOMATIONS));
+  inboxHeld = true;
+  automationsHeld = true;
+  const { page } = mount("user-sam");
+  await settle();
+
+  assert.deepEqual(waits(page), ["Reading your inbox…", "Reading their automations…"]);
+  assert.equal(page.querySelector(".luke-spinner"), null);
+  assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
+});
+
+test("a page opened by a member's id alone stands a placeholder head while the members are read, never Someone not in this workspace nor an empty page", async () => {
+  membersHeld = true;
+  const { page } = mount("user-sam");
+  await settle();
+
+  assert.deepEqual(waits(page), ["Reading who they are…"]);
+  assert.doesNotMatch(page.textContent ?? "", /Someone|Not in this workspace|Nothing of theirs/u);
+
+  answerMembers();
+  await settle();
+
+  assert.deepEqual(waits(page), []);
+  assert.deepEqual(head(page), ["Sam Ortiz", "Member · sam@example.com"]);
+});
+
+test("a members read that was refused says so and offers Retry in the head's place, and Retry names them", async () => {
+  membersRefused = true;
+  const { page } = mount("user-sam");
+  await settle();
+
+  assert.match(page.textContent ?? "", /Their profile could not be read\./u);
+  assert.deepEqual(waits(page), []);
+  assert.equal(page.querySelector(".desktop-toolbar-title")?.textContent, "Profile");
+  assert.doesNotMatch(page.textContent ?? "", /Someone|Not in this workspace|Nothing of theirs/u);
+
+  membersRefused = false;
+  act(() => button(page, "Retry").click());
+  await settle();
+
+  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  assert.deepEqual(head(page), ["Sam Ortiz", "Member · sam@example.com"]);
+  assert.equal(page.querySelector(".desktop-toolbar-title")?.textContent, "Sam Ortiz");
+});
+
+test("a read of who left that was refused says so and offers Retry, and Retry names them as a former member", async () => {
+  formerRefused = true;
+  const { page } = mount(OLA.userId);
+  await settle();
+
+  assert.match(page.textContent ?? "", /Their profile could not be read\./u);
+  assert.deepEqual(waits(page), []);
+  assert.doesNotMatch(page.textContent ?? "", /Not found/u);
+
+  formerRefused = false;
+  act(() => button(page, "Retry").click());
+  await settle();
+
+  assert.deepEqual(head(page), [OLA.name, "Former member"]);
+});
+
+test("while the task list is read, placeholder rows stand for their tasks and the page is never called empty", async () => {
+  const { page } = mountWith({ listRead: false }, "user-sam");
+  await settle();
+
+  assert.deepEqual(waits(page), ["Reading their tasks…"]);
+  assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
+});
+
+test("a task list that could not be read says so and offers Retry, never calling the page empty", async () => {
+  const { page } = mountWith({ listRead: false, listFailed: true }, "user-sam");
+  await settle();
+
+  assert.match(page.textContent ?? "", /Their tasks could not be read\./u);
+  assert.ok(button(page, "Retry"));
+  assert.deepEqual(waits(page), []);
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
 });
 

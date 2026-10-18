@@ -1,9 +1,9 @@
+import type { ComposerQuote } from "@luke/panel/plan-editor/contract";
 import { BUTTON_SIZE, Button, IconButton } from "@luke/ui";
 import { replyOf } from "@luke/ui/reply-quote";
 import { ReplyIcon, XIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import type { ComposerQuote } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 
 /**
@@ -25,6 +25,10 @@ import { Tooltip } from "../tooltip";
  * selection as the log scrolls, and goes as the selection does. Note that
  * the press takes no focus and leaves the selection as it was until it is
  * pressed, because a press that took either would end what it answers.
+ * An Inbox item's thread offers the same Reply over the agent's part of it,
+ * its question's Markdown, its messages, and why it took the item back, and
+ * lays the quote into the item's box (`inbox-pane.tsx`,
+ * `inbox-answer-box.tsx`).
  */
 
 /** The attribute that marks an agent's own words in a transcript, which a selection inside may be replied to. */

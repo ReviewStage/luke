@@ -172,6 +172,20 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
     }),
   );
 
+  it.effect("a plan's listed pull request names the agent that opened it, whose tab it opens", () =>
+    Effect.gen(function* () {
+      const { userId, taskId } = yield* openTask;
+      const agent = started(yield* createCodingAgent(userId, start(taskId)));
+      yield* recordCodingAgentPublished(userId, agent.id, PULL_REQUEST);
+
+      const [listed] = yield* withTaskAgents(userId, yield* listTasks(userId));
+      assert.deepEqual(
+        listed?.agents?.pullRequests.map(({ url, agentId }) => ({ url, agentId })),
+        [{ url: PULL_REQUEST.url, agentId: agent.id }],
+      );
+    }),
+  );
+
   it.effect(
     "a plan whose agent was archived still reads that agent's activity, naming the agent no more",
     () =>

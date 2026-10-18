@@ -1,23 +1,34 @@
 import {
   PULL_REQUEST_ACTION,
-  PULL_REQUEST_WRITE_BOUNDS,
   REVIEW_EVENT,
   type ReviewEvent,
 } from "@luke/features/pull-request-write-wire";
-import { AnchoredPopover, BUTTON_VARIANT, Button, POPOVER_ALIGN } from "@luke/ui";
-import { MessageSquarePlusIcon } from "lucide-react";
+import {
+  AnchoredPopover,
+  BUTTON_VARIANT,
+  Button,
+  ChoiceList,
+  type ChoiceOption,
+  ConfirmDialog,
+  type DialogQuestion,
+  POPOVER_ALIGN,
+  useConfirmDialog,
+} from "@luke/ui";
+import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { PopoverPanel } from "../popover-panel";
-import { Segmented } from "../segmented";
+import type { PendingReview } from "./line-comment";
+import { MarkdownField } from "./markdown-field";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes";
-import { TranscriptWords } from "./transcript-blocks";
 
 /**
  * pull-request-review.tsx -- the review a member submits on an agent's pull request from its Pull request tab: the bar's Review press and the panel it opens, as stage-cli's review panel.
  *
  * The panel asks what the review says of the pull request, Comment,
  * Approve, or Request changes, and its optional words, written as
- * Markdown with a preview, and sends both as one change
+ * Markdown with a preview (`markdown-field.tsx`), and sends both as one change
  * (`PULL_REQUEST_ACTION.SUBMIT_REVIEW`), which the service submits on
  * GitHub as the member pressing it: their own pending review where they
  * hold one, else a new one (`pull-request-writes.ts`). Nothing is refused
@@ -36,30 +47,40 @@ const REVIEW_WORDS = {
   LEAD: "Submitted on GitHub as you.",
   CLOSE: "Close",
   BODY: "Review comment",
-  MODE: "Review comment view",
-  WRITE: "Write",
-  PREVIEW: "Preview",
-  NOTHING: "Nothing to preview.",
   EVENTS: "What the review says",
   CANCEL: "Cancel",
   SUBMIT: "Submit review",
   SUBMITTING: "Submitting review",
+  DISCARD: "Discard",
+  /** What the panel says of the comments the member's pending review holds, which submitting publishes. */
+  pending: (count: number) =>
+    `${count} pending ${count === 1 ? "comment" : "comments"} will be published.`,
+  /** The Review press's name to a reader, with the pending comments it holds. */
+  openWith: (count: number) => `Review, ${count} pending ${count === 1 ? "comment" : "comments"}`,
 } as const;
+
+/** What Discard asks before it throws the member's pending review away. */
+const DISCARD_QUESTION: DialogQuestion = {
+  title: "Discard your pending review?",
+  body: "This deletes every pending comment you added to it. This can't be undone.",
+  verb: "Discard review",
+  running: "Discarding",
+};
 
 /** What the review may say, in the order GitHub's own review box offers it, and what each means. */
 const EVENT_OPTIONS = [
   {
-    event: REVIEW_EVENT.COMMENT,
+    value: REVIEW_EVENT.COMMENT,
     label: "Comment",
     detail: "Submit general feedback without approval.",
   },
-  { event: REVIEW_EVENT.APPROVE, label: "Approve", detail: "Approve this pull request." },
+  { value: REVIEW_EVENT.APPROVE, label: "Approve", detail: "Approve this pull request." },
   {
-    event: REVIEW_EVENT.REQUEST_CHANGES,
+    value: REVIEW_EVENT.REQUEST_CHANGES,
     label: "Request changes",
     detail: "Submit feedback that must be addressed.",
   },
-] as const satisfies readonly { event: ReviewEvent; label: string; detail: string }[];
+] as const satisfies readonly ChoiceOption<ReviewEvent>[];
 
 /** The field's prompt, by what the review says: changes asked for want their summary. */
 function placeholderOf(event: ReviewEvent): string {
@@ -67,14 +88,6 @@ function placeholderOf(event: ReviewEvent): string {
     ? "Summarize the requested changes…"
     : "Leave a summary comment (optional)…";
 }
-
-/** Whether the field shows what is written or how it reads. */
-const BODY_MODE = {
-  WRITE: "write",
-  PREVIEW: "preview",
-} as const;
-
-type BodyMode = (typeof BODY_MODE)[keyof typeof BODY_MODE];
 
 /** The width the panel asks for, stage-cli's own; the side panel may narrow it. */
 const PANEL_WIDTH = 480;
@@ -98,19 +111,22 @@ function ReviewPanel({
   id,
   draft,
   writes,
+  pending,
+  onDiscard,
   onClose,
   onLeave,
 }: {
   id: string;
   draft: ReviewDraft;
   writes: PullRequestWrites;
+  pending: PendingReview;
+  /** Asks to throw the pending review away; offered only while one is held. */
+  onDiscard: () => void;
   onClose: () => void;
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
-  const [mode, setMode] = useState<BodyMode>(BODY_MODE.WRITE);
   const sending = writes.pending !== undefined;
-  const eventsName = useId();
 
   const onKey = (event: React.KeyboardEvent) => {
     if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
@@ -128,58 +144,41 @@ function ReviewPanel({
       onLeave={onLeave}
       onKeyDown={onKey}
     >
-      <p className="pull-request-review-lead">{REVIEW_WORDS.LEAD}</p>
-      <div className="pull-request-review-body">
-        <Segmented
-          legend={REVIEW_WORDS.MODE}
-          options={[
-            { value: BODY_MODE.WRITE, label: REVIEW_WORDS.WRITE },
-            { value: BODY_MODE.PREVIEW, label: REVIEW_WORDS.PREVIEW },
-          ]}
-          value={mode}
-          onChange={setMode}
-        />
-        {mode === BODY_MODE.WRITE ? (
-          <textarea
-            ref={field}
-            className="settings-input pull-request-review-field"
-            aria-label={REVIEW_WORDS.BODY}
-            placeholder={placeholderOf(draft.event)}
-            value={draft.body}
-            maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS}
-            readOnly={sending}
-            onChange={(event) => draft.setBody(event.target.value)}
-          />
-        ) : (
-          <div className="pull-request-review-preview pull-request-words">
-            {draft.body.trim() === "" ? (
-              <p className="pull-request-quiet">{REVIEW_WORDS.NOTHING}</p>
-            ) : (
-              <TranscriptWords text={draft.body} />
-            )}
-          </div>
-        )}
-      </div>
-      <fieldset className="pull-request-review-events" disabled={sending}>
-        <legend className="visually-hidden">{REVIEW_WORDS.EVENTS}</legend>
-        {EVENT_OPTIONS.map((option) => (
-          <label key={option.event} className="pull-request-review-event">
-            <input
-              type="radio"
-              name={eventsName}
-              value={option.event}
-              checked={draft.event === option.event}
-              onChange={() => draft.setEvent(option.event)}
-            />
-            <span className="pull-request-review-event-words">
-              <span className="pull-request-review-event-label">{option.label}</span>
-              <span className="pull-request-quiet">{option.detail}</span>
-            </span>
-          </label>
-        ))}
-      </fieldset>
+      <p className="pull-request-review-lead">
+        {REVIEW_WORDS.LEAD}
+        {pending == null || pending.comments === 0
+          ? null
+          : ` ${REVIEW_WORDS.pending(pending.comments)}`}
+      </p>
+      <MarkdownField
+        label={REVIEW_WORDS.BODY}
+        placeholder={placeholderOf(draft.event)}
+        value={draft.body}
+        onChange={draft.setBody}
+        busy={sending}
+        fieldRef={field}
+      />
+      <ChoiceList<ReviewEvent>
+        legend={REVIEW_WORDS.EVENTS}
+        options={EVENT_OPTIONS}
+        value={[draft.event]}
+        disabled={sending}
+        onChange={([event]) => {
+          if (event !== undefined) draft.setEvent(event);
+        }}
+      />
       <PullRequestWriteNote writes={writes} className="pull-request-review-note" />
       <div className="pull-request-review-foot">
+        {pending == null ? null : (
+          <Button
+            variant={BUTTON_VARIANT.DANGER_OUTLINE}
+            icon={<Trash2Icon aria-hidden="true" />}
+            disabled={sending}
+            onClick={onDiscard}
+          >
+            {REVIEW_WORDS.DISCARD}
+          </Button>
+        )}
         <Button onClick={onClose}>{REVIEW_WORDS.CANCEL}</Button>
         <Button
           variant={BUTTON_VARIANT.PRIMARY}
@@ -199,7 +198,14 @@ function ReviewPanel({
  * written for as long as the tab stands, so a panel closed by a stray
  * click opens again on the same words.
  */
-export function PullRequestReview({ writes }: { writes: PullRequestWrites }): React.JSX.Element {
+export function PullRequestReview({
+  writes,
+  pending,
+}: {
+  writes: PullRequestWrites;
+  /** The member's own pending review, which the panel publishes or discards. */
+  pending: PendingReview;
+}): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [event, setEvent] = useState<ReviewEvent>(REVIEW_EVENT.COMMENT);
   const [body, setBody] = useState("");
@@ -210,7 +216,18 @@ export function PullRequestReview({ writes }: { writes: PullRequestWrites }): Re
   // Note that a press outside closes it too, as a menu's does, because the
   // field keeps the focus through a press on words nothing can focus, so no
   // blur says it was left; a review on its way holds it open all the same.
-  const sending = writes.pending !== undefined;
+  // Note that the question stands, busy, until GitHub answers the discard, says its refusal in GitHub's words, and holds the panel open meanwhile as a review on its way does.
+  const discarding = useConfirmDialog({ subject: pending != null, surfaceOpen: open }, () =>
+    writes
+      .write({ action: PULL_REQUEST_ACTION.DISCARD_REVIEW })
+      .then(
+        (outcome): ActionResult =>
+          outcome.done
+            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+            : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
+      ),
+  );
+  const sending = writes.pending !== undefined || discarding.stage !== CONFIRM_STAGE.RESTING;
   useEffect(() => {
     if (!open || sending) return undefined;
     const pressed = (event: PointerEvent) => {
@@ -241,9 +258,19 @@ export function PullRequestReview({ writes }: { writes: PullRequestWrites }): Re
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
+        label={
+          pending == null || pending.comments === 0
+            ? undefined
+            : REVIEW_WORDS.openWith(pending.comments)
+        }
         onClick={() => setOpen(!open)}
       >
         {REVIEW_WORDS.OPEN}
+        {pending == null || pending.comments === 0 ? null : (
+          <span className="pull-request-review-count" aria-hidden="true">
+            {pending.comments}
+          </span>
+        )}
       </Button>
       {open ? (
         <AnchoredPopover align={POPOVER_ALIGN.END} width={PANEL_WIDTH}>
@@ -251,6 +278,8 @@ export function PullRequestReview({ writes }: { writes: PullRequestWrites }): Re
             id={panelId}
             draft={{ event, body, setEvent, setBody, submit }}
             writes={writes}
+            pending={pending}
+            onDiscard={discarding.ask}
             onClose={close}
             onLeave={(left) => {
               // Note that a review on its way holds the panel open, because the
@@ -263,6 +292,7 @@ export function PullRequestReview({ writes }: { writes: PullRequestWrites }): Re
           />
         </AnchoredPopover>
       ) : null}
+      <ConfirmDialog confirm={discarding} question={DISCARD_QUESTION} />
     </div>
   );
 }

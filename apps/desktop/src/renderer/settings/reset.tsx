@@ -1,3 +1,5 @@
+import type { SettingsWrites } from "@luke/panel/settings/writes";
+import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "@luke/panel/toast";
 import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, settingsScopeChanged } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type {
@@ -10,8 +12,6 @@ import { appSettingsView, SETTINGS_RESET_SCOPE } from "@luke/settings/wire";
 import { BUTTON_VARIANT, Button, ResetIcon } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
-import type { SettingsWrites } from "./writes";
 
 /** What the toast says once a page's reset landed, by the group it reset. */
 const RESET_NOTES = {

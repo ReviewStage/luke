@@ -1,9 +1,12 @@
 import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { useSettledReads } from "@luke/panel/tasks/inbox-settling";
+import { useTasklessInboxItems } from "@luke/panel/tasks/use-taskless-inbox-items";
 import { useCallback, useMemo } from "react";
-import { useAct } from "../act";
 import {
   INBOX_GROUPING,
+  INBOX_SHOW,
   type InboxListed,
   inboxList,
   listedItems,
@@ -11,7 +14,6 @@ import {
   tasklessGroups,
 } from "./inbox-model";
 import { useInboxItems } from "./use-inbox-items";
-import { useTasklessInboxItems } from "./use-taskless-inbox-items";
 import type { TasksControl } from "./use-tasks-tab";
 
 /**
@@ -60,7 +62,10 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
     [inboxTasks, listed],
   );
   const read = useInboxItems({ holdings, readInbox });
-  const taskless = useTasklessInboxItems(tasks.inboxTaskless);
+  const tasklessReads = useTasklessInboxItems(tasks.inboxTaskless);
+  // Note that the window's own answers and messages stand over the agents' reads until they hold them, so a stale read never brings an answered item back.
+  const tasklessItems = useSettledReads(tasklessReads.items);
+  const taskless = { ...tasklessReads, items: tasklessItems };
   const entries = [
     ...holdings.flatMap((holding) => {
       const task = listed.find((each) => each.id === holding.taskId);
@@ -73,8 +78,8 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
   // Note that no reader is named, so every open item is kept as one that waits, whoever started its agent.
   const items = listedItems(
     inboxList(entries, {
-      grouping: INBOX_GROUPING.NEWEST,
-      waitingOnly: true,
+      grouping: INBOX_GROUPING.NONE,
+      show: INBOX_SHOW.NEEDS_YOU,
       chosen: undefined,
       readerId: undefined,
     }),

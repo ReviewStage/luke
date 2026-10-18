@@ -1,6 +1,6 @@
 {
   "name": "@luke/service",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -89,6 +89,7 @@
     "./agents/coder-host/transcript": "./src/agents/coder-host/transcript.js",
     "./agents/coder-host/usage": "./src/agents/coder-host/usage.js",
     "./agents/coding-agent-tools": "./src/agents/coding-agent-tools.js",
+    "./agents/task-section-tools": "./src/agents/task-section-tools.js",
     "./agents/coding-agents-app": "./src/agents/coding-agents-app.js",
     "./agents/command-description": "./src/agents/command-description.js",
     "./agents/mac-command": "./src/agents/mac-command.js",
@@ -142,6 +143,7 @@
     "./github/workspace-repository": "./src/github/workspace-repository.js",
     "./http/http": "./src/http/http.js",
     "./http/http-effect": "./src/http/http-effect.js",
+    "./http/origin-guard": "./src/http/origin-guard.js",
     "./http/rate-brake": "./src/http/rate-brake.js",
     "./http/store-failure": "./src/http/store-failure.js",
     "./inbox/inbox-store": "./src/inbox/inbox-store.js",
@@ -196,6 +198,7 @@
     "./terminal/service": "./src/terminal/service.js",
     "./testing/clock-driven": "./src/testing/clock-driven.js",
     "./testing/coder-scripted-model": "./src/testing/coder-scripted-model.js",
+    "./testing/content-policy": "./src/testing/content-policy.js",
     "./testing/eve-events": "./src/testing/eve-events.js",
     "./testing/eve-scripted-model": "./src/testing/eve-scripted-model.js",
     "./testing/eve-turns": "./src/testing/eve-turns.js",

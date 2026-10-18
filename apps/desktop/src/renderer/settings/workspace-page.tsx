@@ -15,6 +15,13 @@ import {
   workspacePhotoOfDataUrl,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { TILE_SIZE, WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
+import { encodeImage } from "@luke/panel/feedback-images";
+import { MacRepositoriesGroup } from "@luke/panel/settings/mac-repository-settings";
+import { dayAndTimeText } from "@luke/panel/tasks/task-time";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
+import { useCapability } from "@luke/panel/use-app-state";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
@@ -31,12 +38,14 @@ import {
   INLINE_EDIT_LOOK,
   InlineEdit,
   type InlineEditEnd,
+  OneLine,
   ProviderMark,
-  SETTINGS_LINE_KIND,
   SETTINGS_ROW_INDENT,
   SettingsLine,
   SettingsRow,
+  SettingsRowsSkeleton,
   SettingsSection,
+  SettingsSectionsSkeleton,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
   TextField,
@@ -58,20 +67,13 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useAct } from "../act";
 import { ACTOR_SIZE, ActorMark, YouBadge } from "../actor-ref";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu } from "../desktop/action-menu";
 import { sharedWords } from "../desktop/workspace-ref";
-import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
-import { encodeImage } from "../feedback-images";
 import { useOpenPerson } from "../person-door";
-import { dayAndTimeText } from "../tasks/task-time";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
-import { useCapability } from "../use-app-state";
-import { MacRepositoriesGroup } from "./mac-repository-settings";
+import { wholeWordsHint } from "../tooltip";
 import { MenuRow } from "./menu-row";
-import { OneLine } from "./one-line";
 
 /**
  * workspace-page.tsx -- Settings' Workspace page: the workspace the sidebar lists, its members, its invitations, its integrations, and the way out of it.
@@ -259,13 +261,14 @@ function refusedWith(refused: Error): ActionResult {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason: refused.message };
 }
 
+/** The most rows that stand for the members while they are read, however many the workspace counts. */
+const MEMBERS_SKELETON_MOST = 5;
+
+/** How many rows each section stands before the workspaces are read: the identity, the members, and the integrations. */
+const WORKSPACE_SKELETON = [1, 2, 2] as const;
+
 /** A list as the page reads it: still reading, read, or refused with a line. */
 type ListRead<Item> = { readonly items: readonly Item[] } | { readonly failed: string } | undefined;
-
-/** The line a page draws while it reads, which holds the whole page back until every read is in. */
-function Reading({ label }: { label: string }): React.JSX.Element {
-  return <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>{label}</SettingsLine>;
-}
 
 /** A card's line where the read of its rows did not land: the read failure, then Retry, in the rows' place. */
 function ReadFailed({ line, onRetry }: { line: string; onRetry: () => void }): React.JSX.Element {
@@ -452,7 +455,7 @@ function MemberRow({
               {userId === readerId ? <YouBadge /> : null}
             </span>
           ),
-          description: <OneLine as="span" text={member.email} />,
+          description: <OneLine hint={wholeWordsHint(member.email)}>{member.email}</OneLine>,
           error: refusal,
           control: (
             <>
@@ -785,7 +788,15 @@ function TeamMembers({
   onChanged: (members: readonly WorkspaceMember[]) => void;
 }): React.JSX.Element {
   const manages = managesWorkspace(workspace);
-  if (members === undefined) return <Reading label="Loading the members" />;
+  if (members === undefined) {
+    return (
+      <SettingsRowsSkeleton
+        label="Loading the members"
+        rows={Math.min(workspace.memberCount ?? 1, MEMBERS_SKELETON_MOST)}
+        marked
+      />
+    );
+  }
   if ("failed" in members) return <ReadFailed line={members.failed} onRetry={onRetry} />;
   return (
     <>
@@ -994,7 +1005,7 @@ function Invitations({
       {firstReadFailed !== undefined ? (
         <ReadFailed line={firstReadFailed} onRetry={read} />
       ) : pending === undefined ? (
-        <Reading label="Loading the invitations" />
+        <SettingsRowsSkeleton label="Loading the invitations" marked />
       ) : pending.length === 0 ? (
         <SettingsLine>{INVITATIONS_EMPTY}</SettingsLine>
       ) : null}
@@ -1012,7 +1023,7 @@ function Invitations({
           ]}
           row={{
             leading: <ActorMark actor={INVITED_ACTOR} size={ACTOR_SIZE.CARD} />,
-            label: <OneLine as="span" text={one.email} />,
+            label: <OneLine hint={wholeWordsHint(one.email)}>{one.email}</OneLine>,
             description: `Invited as ${ROLE_WORDS[one.role]} · Expires ${dayAndTimeText(Date.parse(one.expiresAt))}`,
             // Luke sends no mail: the accept link is copied and sent by hand.
             control: (
@@ -1505,9 +1516,9 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
  * The page for the listed workspace, one kind of thing to a group: its
  * identity, its members, its invitations for an owner or an admin, its
  * GitHub, and last the leave for anyone but an owner, the members and
- * GitHub under the anchors their links have always named; held back, as a
- * page still reading is, before the workspaces are read, and Retry where
- * that read failed.
+ * GitHub under the anchors their links have always named; placeholder
+ * sections in the page's shape before the workspaces are read, and Retry
+ * where that read failed.
  */
 export function WorkspacePage({
   control,
@@ -1519,14 +1530,16 @@ export function WorkspacePage({
 }): React.JSX.Element {
   const workspace = shownWorkspace(control);
   if (workspace === undefined) {
-    return (
+    return control.listFailed ? (
       <SettingsSection>
-        {control.listFailed ? (
-          <ReadFailed line="Your workspaces could not be read." onRetry={control.onRetryList} />
-        ) : (
-          <Reading label="Loading your workspaces" />
-        )}
+        <ReadFailed line="Your workspaces could not be read." onRetry={control.onRetryList} />
       </SettingsSection>
+    ) : (
+      <SettingsSectionsSkeleton
+        label="Loading your workspaces"
+        sections={WORKSPACE_SKELETON}
+        marked
+      />
     );
   }
   // Keyed to the workspace, so another one listed reads its own members and asks nothing left over.

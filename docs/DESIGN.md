@@ -26,11 +26,11 @@ for a frame. Durations and delays come only from the tokens in
 rule: reduced motion and capture runs zero the tokens, and a literal is a
 motion those runs cannot stop. The one sanctioned exception is an endless loop
 (a spinner, a breathing idle, the face's own motions) whose
-`animation-play-state` answers `--loop-motion` or `--face-motion`: those runs
+`animation-play-state` answers `--loop-motion` or `--luke-face-motion`: those runs
 stop it by pausing rather than by zeroing, so its duration may be a literal,
 and a loop that carries one must answer a play-state token. A finite companion
 timed to a generated face gesture may also use the gesture's literal phase,
-but it must answer `--face-motion`, live beside a comment naming the generated
+but it must answer `--luke-face-motion`, live beside a comment naming the generated
 cycle and phase it follows, and do no work when that gesture is not selected.
 A TypeScript constant that mirrors a CSS timing (`WARM_MS` in `tooltip.tsx`)
 names the `MOTION_DURATION_MS` or `MOTION_DELAY_MS` tokens it mirrors.

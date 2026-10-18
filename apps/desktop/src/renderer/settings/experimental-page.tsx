@@ -1,4 +1,7 @@
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { useOpenFeedback } from "@luke/panel/open-feedback";
+import type { SettingsWrites } from "@luke/panel/settings/writes";
 import {
   EXPERIMENT,
   type Experiment,
@@ -11,13 +14,18 @@ import {
   type SettingsRowsInput,
 } from "@luke/settings";
 import { EXPERIMENT_ANCHOR } from "@luke/settings/settings-anchors";
-import { EmptyState, SettingsSection, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  EmptyState,
+  SettingsSection,
+  TEXT_BUTTON_TONE,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  TextButton,
+} from "@luke/ui";
 import { FlaskConicalIcon } from "lucide-react";
-import { useAct } from "../act";
-import { useOpenFeedback } from "../open-feedback";
 import { SchemaSettingRows } from "./schema-rows";
 import { SwitchRow } from "./switch-row";
-import type { SettingsWrites } from "./writes";
 
 /**
  * experimental-page.tsx -- Settings › Experimental: a switch for each feature the account can try before it is finished, or the empty state between them.
@@ -66,13 +74,9 @@ function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): 
       detail={
         <>
           {`${entry.detail} `}
-          <button
-            type="button"
-            className="settings-detail-act"
-            onClick={() => openFeedback(entry.key)}
-          >
+          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openFeedback(entry.key)}>
             Send feedback
-          </button>
+          </TextButton>
         </>
       }
       checked={on}

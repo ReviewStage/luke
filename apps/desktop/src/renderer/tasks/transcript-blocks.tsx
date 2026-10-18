@@ -21,9 +21,13 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
+import { Fold, FoldBody, FoldSummary } from "@luke/panel/ai-elements/fold";
+import { Shimmer } from "@luke/panel/ai-elements/shimmer";
+import { opensAsLink, useOpenLink } from "@luke/panel/tasks/use-open-link";
 import {
   Disclosure,
   DisclosureBody,
+  DisclosureChevron,
   DisclosureSummary,
   INLINE_REF_LOOK,
   InlineRef,
@@ -51,6 +55,9 @@ import {
   EyeIcon,
   FilePenIcon,
   FileTextIcon,
+  FolderInputIcon,
+  FolderMinusIcon,
+  FolderPlusIcon,
   GlobeIcon,
   HourglassIcon,
   ImageIcon,
@@ -86,10 +93,8 @@ import {
   type ExtraProps,
 } from "streamdown";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef } from "../actor-ref";
-import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
-import { Shimmer } from "../ai-elements/shimmer";
 import {
   TOOL_BLOCK,
   TOOL_STATE,
@@ -117,7 +122,6 @@ import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
   TranscriptMarkdownSource,
 } from "./transcript-markdown";
-import { opensAsLink, useOpenLink } from "./use-open-link";
 import { WorkingTime } from "./working-time";
 
 /**
@@ -582,6 +586,12 @@ const CALL_ICON = {
   [CALL_KIND.UNARCHIVE_AGENT]: ArchiveRestoreIcon,
   [CALL_KIND.LIST_MODELS]: CpuIcon,
   [CALL_KIND.STOP_AGENT]: CircleStopIcon,
+  [CALL_KIND.CREATE_SECTION]: FolderPlusIcon,
+  [CALL_KIND.DELETE_SECTION]: FolderMinusIcon,
+  [CALL_KIND.MOVE_TASK]: FolderInputIcon,
+  [CALL_KIND.ARCHIVE_TASK]: ArchiveIcon,
+  [CALL_KIND.UNARCHIVE_TASK]: ArchiveRestoreIcon,
+  [CALL_KIND.UPDATE_TASK]: FilePenIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.SHOW_PAGE]: AppWindowIcon,
   [CALL_KIND.READ_PAGE]: AppWindowIcon,
@@ -897,7 +907,9 @@ export function TranscriptTodosDock({
         <ListTodoIcon className="todos-dock-icon" aria-hidden="true" />
         <span className="todos-dock-summary">{summary}</span>
         {focus === undefined ? null : <span className="todos-dock-focus">{focus}</span>}
-        <FoldChevron className="todos-dock-chevron" />
+        <span className="todos-dock-chevron">
+          <DisclosureChevron />
+        </span>
       </FoldSummary>
       <FoldBody className="todos-dock-body">
         <TodoItems todos={todos} live />

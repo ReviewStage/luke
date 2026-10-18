@@ -43,6 +43,9 @@ import {
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
   type CodingAgentInboxParams,
+  type CodingAgentInboxReadAllView,
+  type CodingAgentInboxReadStateParams,
+  type CodingAgentInboxReadStateView,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -59,8 +62,10 @@ import {
   type CodingAgentPullRequestActionParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
+  type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
+  type CodingAgentReviewOptionsAnswerView,
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
@@ -76,6 +81,8 @@ import {
   codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentViewSchema,
   codingAgentInboxMessagedViewSchema,
+  codingAgentInboxReadAllViewSchema,
+  codingAgentInboxReadStateViewSchema,
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
@@ -84,7 +91,9 @@ import {
   codingAgentOverviewPullRequestAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPullRequestAnswerViewSchema,
+  codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
+  codingAgentReviewOptionsAnswerViewSchema,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
@@ -108,6 +117,7 @@ import {
   type FactoryWorldView,
   factoryWorldViewSchema,
 } from "@luke/features/factory-world-view";
+import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationAccountView,
@@ -563,10 +573,18 @@ export interface HostOperator {
   codingAgentPullRequestAction(
     params: CodingAgentPullRequestActionParams,
   ): Effect.Effect<CodingAgentPullRequestWriteAnswerView>;
+  /** Which of one agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in; or why there is no answer. */
+  codingAgentPullRequestViewed(
+    params: CodingAgentPullRequestParams,
+  ): Effect.Effect<CodingAgentPullRequestViewedAnswerView>;
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them; or why there is none. */
   codingAgentOverviewPullRequest(
     params: CodingAgentPullRequestParams,
   ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
+  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, collaborators, and teams; or why there is no answer. */
+  codingAgentReviewOptions(
+    params: CodingAgentPullRequestParams,
+  ): Effect.Effect<CodingAgentReviewOptionsAnswerView>;
   /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
   codingAgentOverviewChecks(
     params: CodingAgentPullRequestParams,
@@ -613,6 +631,12 @@ export interface HostOperator {
   codingAgentInboxMessage(
     params: CodingAgentInboxMessageParams,
   ): Effect.Effect<CodingAgentInboxMessagedView>;
+  /** One item marked read or unread for the account; its read state, or why there is no answer. */
+  codingAgentInboxReadState(
+    params: CodingAgentInboxReadStateParams,
+  ): Effect.Effect<CodingAgentInboxReadStateView>;
+  /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
+  codingAgentInboxReadAll(params: InboxReadAllRequest): Effect.Effect<CodingAgentInboxReadAllView>;
   /** What waits on the developer across the account past a cursor, held by the service while nothing changed; or why there is none. */
   codingAgentAccountInbox(
     params: CodingAgentAccountInboxParams,
@@ -1389,7 +1413,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("repository" in request ? { repository: request.repository } : undefined),
           ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
           ...("linearIssueId" in request ? { linearIssueId: request.linearIssueId } : undefined),
+          ...("issueId" in request ? { issueId: request.issueId } : undefined),
           ...("planning" in request ? { planning: request.planning } : undefined),
+          ...("agent" in request ? { agent: request.agent } : undefined),
         }),
         (answer): TasksStartAnswer =>
           (answer.ok
@@ -1609,12 +1635,22 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         codingAgentAnswer(codingAgentPullRequestWriteAnswerViewSchema),
       ),
+    codingAgentPullRequestViewed: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentPullRequestViewedAnswerViewSchema),
+      ),
     codingAgentOverviewPullRequest: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, {
           agentId: params.agentId,
         }),
         codingAgentAnswer(codingAgentOverviewPullRequestAnswerViewSchema),
+      ),
+    codingAgentReviewOptions: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentReviewOptionsAnswerViewSchema),
       ),
     codingAgentOverviewChecks: (params) =>
       Effect.map(
@@ -1722,6 +1758,22 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           clientKey: params.clientKey,
         }),
         codingAgentAnswer(codingAgentInboxMessagedViewSchema),
+      ),
+    codingAgentInboxReadState: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, {
+          itemId: params.itemId,
+          unread: params.unread,
+        }),
+        codingAgentAnswer(codingAgentInboxReadStateViewSchema),
+      ),
+    codingAgentInboxReadAll: (params) =>
+      Effect.map(
+        client.call(
+          GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL,
+          params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId },
+        ),
+        codingAgentAnswer(codingAgentInboxReadAllViewSchema),
       ),
     codingAgentAccountInbox: (params) =>
       Effect.map(

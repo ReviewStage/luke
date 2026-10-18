@@ -2,6 +2,11 @@ import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@luke/features/an
 import { INTEGRATION_NAME, INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import { managesWorkspace } from "@luke/features/workspace-role";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { appPlatform } from "@luke/panel/app-platform";
+import { drawnVisibly, focusSeek } from "@luke/panel/focus-seek";
+import { settingsPageOf, settingsPageShown } from "@luke/panel/settings/pages";
+import { Shortcut } from "@luke/panel/shortcut";
 import {
   APP_SETTING_SCHEMA,
   describedSettings,
@@ -28,12 +33,7 @@ import { integrationLines } from "@luke/ui/integration-search";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { useEffect, useRef } from "react";
-import { useAppCommand } from "./app-commands";
-import { appPlatform } from "./app-platform";
-import { drawnVisibly, focusSeek } from "./focus-seek";
 import { focusSearchField, Highlighted } from "./search-field";
-import { settingsPageOf, settingsPageShown } from "./settings/pages";
-import { Shortcut } from "./shortcut";
 import { commandKeyshortcuts } from "./tooltip";
 
 /**

@@ -10,7 +10,13 @@ import { Schema as EffectSchema } from "effect";
  * answer says it was made, that the member must sign in with GitHub again
  * because they hold no sign-in GitHub takes, or that GitHub refused the
  * change itself, in GitHub's own words: a branch protection, a conflict, or
- * a permission the member's account does not hold. A refusal of Luke's own,
+ * a permission the member's account does not hold. A merge, and turning
+ * auto-merge on, name the head commit the member saw, so GitHub refuses one
+ * made against a head pushed since. Which of the pull request's files the
+ * member marked viewed on GitHub is read the same way, on their own sign-in,
+ * since GitHub keeps the mark per account
+ * (`GET /api/agents/{id}/pull-request/viewed`), and set by two of the
+ * changes. A refusal of Luke's own,
  * an agent out of reach or a service that could not answer, travels as the
  * hosted vocabulary's refusal as every other call's does.
  */
@@ -18,11 +24,52 @@ import { Schema as EffectSchema } from "effect";
 export const PULL_REQUEST_WRITE_BOUNDS = {
   /** The most of GitHub's own words on a refused change the answer carries. */
   MAX_REFUSAL_CHARS: 1_000,
+  /** A commit's id as GitHub spells one: forty hex digits for SHA-1, sixty-four for SHA-256. */
+  MAX_COMMIT_CHARS: 64,
+  /** GitHub's own bound on a pull request's title. */
+  MAX_TITLE_CHARS: 256,
   /** The longest body a review may carry, GitHub's own bound on a comment's. */
   MAX_BODY_CHARS: 65_536,
+  /** The most characters of a reviewer's login, a team's slug, or a label's name a change names. */
+  MAX_NAME_CHARS: 100,
   /** The longest GitHub id for a review thread the request names; GitHub's run near thirty. */
   MAX_NODE_ID_CHARS: 256,
+  /** The longest path a line comment names; GitHub's own paths stop well short of it. */
+  MAX_PATH_CHARS: 4_096,
+  /** The most files whose viewed marks one read carries, as many as a read of the changes lists. */
+  MAX_VIEWED_FILES: 300,
 } as const;
+
+/** How a pull request is merged, as GitHub offers each where the repository allows it. */
+export const MERGE_METHOD = {
+  MERGE: "merge",
+  SQUASH: "squash",
+  REBASE: "rebase",
+} as const;
+
+export type MergeMethod = (typeof MERGE_METHOD)[keyof typeof MERGE_METHOD];
+
+export const mergeMethodSchema = EffectSchema.Literals(Object.values(MERGE_METHOD));
+
+/** The head commit a merge is made against, as GitHub spells it. */
+const headShaSchema = EffectSchema.String.check(
+  EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_COMMIT_CHARS),
+  EffectSchema.isPattern(/^[0-9a-f]+$/u),
+);
+
+/** The reactions GitHub offers on a comment, in the order it draws them; a reaction is read with the conversation (`coding-agent-wire.ts`) and changed here. */
+export const REACTION = {
+  THUMBS_UP: "thumbs_up",
+  THUMBS_DOWN: "thumbs_down",
+  LAUGH: "laugh",
+  HOORAY: "hooray",
+  CONFUSED: "confused",
+  HEART: "heart",
+  ROCKET: "rocket",
+  EYES: "eyes",
+} as const;
+
+export type Reaction = (typeof REACTION)[keyof typeof REACTION];
 
 /** The changes the Pull request tab makes, each one press. */
 export const PULL_REQUEST_ACTION = {
@@ -30,14 +77,54 @@ export const PULL_REQUEST_ACTION = {
   READY_FOR_REVIEW: "ready-for-review",
   /** An open pull request turned back into a draft. */
   CONVERT_TO_DRAFT: "convert-to-draft",
+  /** Merged now, by the method named, against the head named. */
+  MERGE: "merge",
+  /**
+   * Merged by GitHub once what it waits on passes, against the head named: by
+   * the method named, or, on a base merged through a merge queue, added to
+   * the queue once ready, by the queue's own method.
+   */
+  ENABLE_AUTO_MERGE: "enable-auto-merge",
+  /** Auto-merge turned off again. */
+  DISABLE_AUTO_MERGE: "disable-auto-merge",
+  /** Taken out of the merge queue. */
+  DEQUEUE: "dequeue",
+  /** Closed without merging. */
+  CLOSE: "close",
+  /** A closed pull request opened again. */
+  REOPEN: "reopen",
+  /** Its title changed to the one named. */
+  EDIT_TITLE: "edit-title",
   /** A review submitted: the member's own pending review where they hold one, else a new one. */
   SUBMIT_REVIEW: "submit-review",
+  /** A user or a team asked for a review. */
+  REQUEST_REVIEW: "request-review",
+  /** A review asked of a user or a team asked no longer. */
+  REMOVE_REVIEW_REQUEST: "remove-review-request",
+  /** One of the repository's labels put on the pull request. */
+  ADD_LABEL: "add-label",
+  /** A label taken off the pull request. */
+  REMOVE_LABEL: "remove-label",
   /** A reply on a review thread of the pull request. */
   REPLY_TO_THREAD: "reply-to-thread",
   /** A review thread of the pull request marked resolved. */
   RESOLVE_THREAD: "resolve-thread",
   /** A resolved review thread of the pull request opened again. */
   UNRESOLVE_THREAD: "unresolve-thread",
+  /** A comment on the pull request itself, at the foot of its conversation. */
+  COMMENT: "comment",
+  /** A reaction given to the description, a comment, a review, or a review comment. */
+  ADD_REACTION: "add-reaction",
+  /** The member's own reaction taken back. */
+  REMOVE_REACTION: "remove-reaction",
+  /** A comment on a line or lines of a changed file, published at once or added to the member's pending review. */
+  ADD_REVIEW_COMMENT: "add-review-comment",
+  /** The member's own pending review thrown away, the comments it held with it. */
+  DISCARD_REVIEW: "discard-review",
+  /** One of the pull request's files marked viewed by the member, as GitHub's own Viewed box does. */
+  MARK_FILE_VIEWED: "mark-file-viewed",
+  /** One of the pull request's files the member marked viewed unmarked. */
+  UNMARK_FILE_VIEWED: "unmark-file-viewed",
 } as const;
 
 export type PullRequestAction = (typeof PULL_REQUEST_ACTION)[keyof typeof PULL_REQUEST_ACTION];
@@ -52,17 +139,72 @@ export const REVIEW_EVENT = {
 
 export type ReviewEvent = (typeof REVIEW_EVENT)[keyof typeof REVIEW_EVENT];
 
+/** Where a line comment goes, as GitHub's own line comment offers: published at once as a review of its own, or added to the member's pending review, which one is started for where they hold none. */
+export const REVIEW_COMMENT_MODE = {
+  SINGLE: "single",
+  REVIEW: "review",
+} as const;
+
+export type ReviewCommentMode = (typeof REVIEW_COMMENT_MODE)[keyof typeof REVIEW_COMMENT_MODE];
+
+/** The side of a diff a line comment counts its line on: the old file's, or the new file's. */
+export const REVIEW_COMMENT_SIDE = {
+  LEFT: "left",
+  RIGHT: "right",
+} as const;
+
+export type ReviewCommentSide = (typeof REVIEW_COMMENT_SIDE)[keyof typeof REVIEW_COMMENT_SIDE];
+
+const reviewCommentSideSchema = EffectSchema.Literals(Object.values(REVIEW_COMMENT_SIDE));
+
+/** A line of a file, counted from one. */
+const fileLineSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
+
 /** A review's words, Markdown, which may be empty where GitHub allows it; GitHub's bound. */
 const reviewBodySchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS),
 );
+
+/** Who a review is asked of: a user by their login, or a team of the repository's organization by its slug. */
+export const REVIEWER_KIND = {
+  USER: "user",
+  TEAM: "team",
+} as const;
+
+/** A name a change names, as GitHub spells it. */
+const writeName = EffectSchema.String.check(
+  EffectSchema.isMinLength(1),
+  EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_NAME_CHARS),
+);
+
+/** A reviewer a change names: a user's login or a team's slug. */
+const reviewerSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literals(Object.values(REVIEWER_KIND)),
+  name: writeName,
+});
+
+export type PullRequestReviewerRef = typeof reviewerSchema.Type;
 
 /** GitHub's own id for a review thread of the pull request, as the conversation's read carries it. */
 const threadIdSchema = EffectSchema.NonEmptyString.check(
   EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_NODE_ID_CHARS),
 );
 
-/** A reply's words, Markdown, never blank; GitHub's bound. */
+/**
+ * GitHub's own id for what wears a reaction, as the conversation's read
+ * carries it (`subject`); the service holds it to this pull request before
+ * it reacts.
+ */
+const subjectIdSchema = EffectSchema.NonEmptyString.check(
+  EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_NODE_ID_CHARS),
+);
+
+/** A file of the pull request, by its path from the repository's root; GitHub's own paths stop well short of the bound. */
+const filePathSchema = EffectSchema.NonEmptyString.check(
+  EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_PATH_CHARS),
+);
+
+/** A reply's or a comment's words, Markdown, never blank; GitHub's bound. */
 const replyBodySchema = reviewBodySchema.check(EffectSchema.isPattern(/\S/u));
 
 /** One change, as the tab asks the service to make it (POST). */
@@ -70,9 +212,46 @@ export const pullRequestActionRequestSchema = EffectSchema.Union([
   EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.READY_FOR_REVIEW) }),
   EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.CONVERT_TO_DRAFT) }),
   EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.MERGE),
+    method: mergeMethodSchema,
+    headSha: headShaSchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE),
+    method: EffectSchema.optionalKey(mergeMethodSchema),
+    headSha: headShaSchema,
+  }),
+  EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE) }),
+  EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.DEQUEUE) }),
+  EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.CLOSE) }),
+  EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.REOPEN) }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.EDIT_TITLE),
+    title: EffectSchema.Trim.check(
+      EffectSchema.isNonEmpty(),
+      EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_TITLE_CHARS),
+    ),
+  }),
+  EffectSchema.Struct({
     action: EffectSchema.Literal(PULL_REQUEST_ACTION.SUBMIT_REVIEW),
     event: EffectSchema.Literals(Object.values(REVIEW_EVENT)),
     body: reviewBodySchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.REQUEST_REVIEW),
+    reviewer: reviewerSchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.REMOVE_REVIEW_REQUEST),
+    reviewer: reviewerSchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.ADD_LABEL),
+    label: writeName,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.REMOVE_LABEL),
+    label: writeName,
   }),
   EffectSchema.Struct({
     action: EffectSchema.Literal(PULL_REQUEST_ACTION.REPLY_TO_THREAD),
@@ -86,6 +265,45 @@ export const pullRequestActionRequestSchema = EffectSchema.Union([
   EffectSchema.Struct({
     action: EffectSchema.Literal(PULL_REQUEST_ACTION.UNRESOLVE_THREAD),
     threadId: threadIdSchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.COMMENT),
+    body: replyBodySchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literals([
+      PULL_REQUEST_ACTION.ADD_REACTION,
+      PULL_REQUEST_ACTION.REMOVE_REACTION,
+    ]),
+    subject: subjectIdSchema,
+    content: EffectSchema.Literals(Object.values(REACTION)),
+  }),
+  /**
+   * A comment on the lines from `startLine` on `startSide` to `line` on
+   * `side` of the file at `path`, as the diff read at `headSha` counts them;
+   * one line where no start is named.
+   */
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT),
+    mode: EffectSchema.Literals(Object.values(REVIEW_COMMENT_MODE)),
+    path: EffectSchema.NonEmptyString.check(
+      EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_PATH_CHARS),
+    ),
+    line: fileLineSchema,
+    side: reviewCommentSideSchema,
+    startLine: EffectSchema.optionalKey(fileLineSchema),
+    startSide: EffectSchema.optionalKey(reviewCommentSideSchema),
+    body: replyBodySchema,
+    headSha: headShaSchema,
+  }),
+  EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.DISCARD_REVIEW) }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.MARK_FILE_VIEWED),
+    path: filePathSchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED),
+    path: filePathSchema,
   }),
 ]);
 
@@ -117,3 +335,44 @@ export const pullRequestWriteAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PullRequestWriteAnswer = typeof pullRequestWriteAnswerSchema.Type;
+
+/**
+ * Where a file stands for the member on GitHub: marked viewed, not, or
+ * marked viewed and changed since, which GitHub unticks until marked again.
+ */
+export const FILE_VIEWED_STATE = {
+  VIEWED: "viewed",
+  UNVIEWED: "unviewed",
+  DISMISSED: "dismissed",
+} as const;
+
+export type FileViewedState = (typeof FILE_VIEWED_STATE)[keyof typeof FILE_VIEWED_STATE];
+
+/**
+ * Which of the pull request's files the member marked viewed, as the service
+ * answers it (GET): each file by its path and where it stands for them, none
+ * where the agent has opened no pull request; or why there is no answer, as
+ * a change's.
+ */
+export const pullRequestViewedAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    outcome: EffectSchema.Literal(PULL_REQUEST_WRITE_OUTCOME.DONE),
+    files: EffectSchema.Array(
+      EffectSchema.Struct({
+        path: EffectSchema.String,
+        state: EffectSchema.Literals(Object.values(FILE_VIEWED_STATE)),
+      }),
+    ).check(EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_VIEWED_FILES)),
+  }),
+  EffectSchema.Struct({
+    outcome: EffectSchema.Literal(PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED),
+  }),
+  EffectSchema.Struct({
+    outcome: EffectSchema.Literal(PULL_REQUEST_WRITE_OUTCOME.REFUSED),
+    words: EffectSchema.String.check(
+      EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_REFUSAL_CHARS),
+    ),
+  }),
+]);
+
+export type PullRequestViewedAnswer = typeof pullRequestViewedAnswerSchema.Type;

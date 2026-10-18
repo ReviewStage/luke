@@ -4,12 +4,12 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import type { TasksControl } from "../tasks/use-tasks-tab";
@@ -139,9 +139,10 @@ test("a repository's header folds on its name, says its pin, counts its plans fo
   assert.equal(ellipsis?.getAttribute("aria-expanded"), "true");
 });
 
-test("the Inbox row counts what waits on a plan and what waits from an agent with no plan alike", () => {
+test("the Inbox row counts what waits on a plan and what waits from an agent with no plan alike, and not a teammate's agent's with no plan, which waits on them", () => {
   const page = mountSidebar(
     tasksControl({
+      me: "user-dean",
       inbox: [
         {
           taskId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -159,6 +160,19 @@ test("the Inbox row counts what waits on a plan and what waits from an agent wit
           automationId: null,
           automationName: null,
           repository: "acme/relay",
+          startedBy: "user-dean",
+        },
+        {
+          id: "item-3",
+          agentId: "agent-3",
+          title: "Bump the Node image?",
+          postedAt: 3,
+          agentTitle: null,
+          agentModel: "anthropic/claude-opus-5.5",
+          automationId: null,
+          automationName: null,
+          repository: "acme/relay",
+          startedBy: "user-charles",
         },
       ],
     }),

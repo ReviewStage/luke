@@ -6,6 +6,8 @@ import {
   browserAddressOf,
 } from "@luke/features/browser-acts";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { appBridge } from "@luke/panel/app-bridge";
 import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import {
   ArrowLeftIcon,
@@ -24,8 +26,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useAct } from "../act";
-import { appBridge } from "../app-bridge";
 import { Tooltip } from "../tooltip";
 import type { OpenBrowser } from "./use-side-panel";
 

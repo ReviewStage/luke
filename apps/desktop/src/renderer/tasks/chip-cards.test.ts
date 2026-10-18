@@ -20,19 +20,19 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
+import { MemberDirectory } from "@luke/panel/member-directory";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { stateWith } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { EXPERIMENT } from "@luke/settings";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { fakeAppPlatform } from "#testing/app-platform";
-import { stateWith } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { markdownHtmlParserLanded } from "#testing/markdown";
 import { TaskCard } from "../desktop/task-card";
-import { MemberDirectory } from "../member-directory";
 import { ChipCards, type TaskFocus } from "./chip-cards";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
@@ -266,7 +266,9 @@ async function cardOf(chip: Element | undefined) {
     corner: card.querySelector(".luke-hover-card-corner")?.textContent,
     notes: [...card.querySelectorAll(".luke-hover-card-note")].map((note) => note.textContent),
     focus: card.querySelector("[data-task-card-focus]")?.textContent,
-    details: [...card.querySelectorAll(".task-card-detail")].map((detail) => detail.textContent),
+    details: [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
+      (detail) => detail.textContent,
+    ),
   };
   assert.equal(carriesWords(card, look.name ?? ""), false, "the card's words ride no attribute");
   act(() => {

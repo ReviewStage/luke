@@ -1,5 +1,12 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { CodeToken, TaskCode, TaskCodeShowing } from "@luke/features/tasks-view";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@luke/panel/ai-elements/conversation";
+import { FIND_SKIP_ATTRIBUTE } from "@luke/panel/find-matches";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { cssCustomProperties, IconButton } from "@luke/ui";
 import {
   type CodeFeedCall,
@@ -11,19 +18,12 @@ import {
 } from "@luke/voice/code-pane-model";
 import { FileInputIcon } from "lucide-react";
 import { type CSSProperties, Fragment, memo, type ReactNode, useLayoutEffect, useRef } from "react";
-import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-} from "../ai-elements/conversation";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
-import { FIND_SKIP_ATTRIBUTE } from "../find-matches";
 import { MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import { CallCheckpoint, CallEnded } from "./call-card";
 import { FileRef } from "./file-ref";
 import { useMentionLink } from "./task-mentions";
-import { useOpenLink } from "./use-open-link";
 
 /**
  * code-pane.tsx -- the code Luke put on screen on a task's calls: the side panel's Code tab, every snippet he showed, one card each, in the order he showed them.

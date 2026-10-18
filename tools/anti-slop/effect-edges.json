@@ -2,7 +2,7 @@
   "runtimeEdges": [
     "apps/desktop/src/main/main.ts",
     "apps/desktop/src/main/services/compose-desktop.ts",
-    "apps/desktop/src/renderer/renderer-runtime.ts",
+    "packages/panel/src/renderer-runtime.ts",
     "apps/desktop/src/renderer/voice/live-call.ts",
     "apps/desktop/src/renderer/voice/use-voice-session.ts",
     "apps/desktop/src/renderer/window-root.tsx",
@@ -51,8 +51,8 @@
     "apps/desktop/src/main/native/native-helper.ts",
     "apps/desktop/src/main/services/window-service.ts",
     "apps/desktop/src/main/window/voice-window.ts",
-    "apps/desktop/src/renderer/feedback-images.ts",
-    "apps/desktop/src/renderer/luke-face-mood.ts",
+    "packages/panel/src/feedback-images.ts",
+    "packages/panel/src/luke-face-mood.ts",
     "apps/desktop/src/renderer/use-caption-presentation.ts",
     "apps/web/src/admin/use-admin-read.ts",
     "packages/service/src/testing/voice-fakes.ts"

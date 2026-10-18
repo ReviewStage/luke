@@ -1,6 +1,10 @@
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { ISSUE_BOUNDS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { useAppCommand } from "@luke/panel/app-commands";
+import type { IssueChange } from "@luke/panel/desktop/use-issues";
+import { usePerson } from "@luke/panel/member-directory";
+import { useMinute } from "@luke/panel/tasks/task-time";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BREADCRUMBS_VARIANT,
@@ -8,18 +12,18 @@ import {
   ConfirmDialog,
   EllipsisIcon,
   IconButton,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { ListTodoIcon } from "lucide-react";
-import { useRef } from "react";
-import { ActorRef } from "../actor-ref";
-import { useAppCommand } from "../app-commands";
+import { type ReactNode, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag } from "../experiment-marks";
-import { usePerson } from "../member-directory";
+import { DocumentByline, DocumentScroll } from "../tasks/document-frame";
 import { RelativeTime } from "../tasks/relative-time";
-import { useMinute } from "../tasks/task-time";
 import { Tooltip } from "../tooltip";
 import { ActionMenu } from "./action-menu";
 import {
@@ -30,17 +34,32 @@ import {
 } from "./issue-actions";
 import { IssueDescription } from "./issue-description";
 import { PriorityMenu, StatusMenu } from "./issue-pickers";
-import type { IssueChange } from "./use-issues";
+import { IssueWorkRow, useStartItems } from "./issue-work";
 
 /**
- * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, who filed it and when it was filed and last changed, its status and priority changed from their chips, its description written in place, its link copied, and its archive.
+ * issue-detail.tsx -- one issue's page: its identifier, its title renamed in place, who filed it and when it was filed and last changed, its status and priority changed from their chips, the tasks started from it, its description written in place, a task started from it, its link copied, and its archive.
  *
- * Every change is sent at once and the page draws the issue the service
+ * The issue itself (`IssueDocument`) and its ⋯ menu (`IssueMenu`) are
+ * drawn by the peek beside the board as well (`issue-peek.tsx`), so the
+ * two never differ. Every change is sent at once and the page draws the issue the service
  * answers, so what stands is what was kept; a change the service refused
  * leaves the issue as it stood and says so in a toast the page raises.
  * Archiving asks first, and once it lands the page goes back to the list,
- * which no longer holds the issue.
+ * which no longer holds the issue. The issue is a document, drawn as a
+ * plan is (`../tasks/document-frame.tsx`): it scrolls in the plan's own
+ * column, at its measure and inset, its title, byline, and text in the
+ * plan's type, so a plan and an issue stand alike.
  */
+
+/** How wide the placeholder title and the line under it stand, as shares of their lines. */
+const SKELETON_TITLE = "55%";
+const SKELETON_BYLINE = "40%";
+
+/** How wide the placeholder Status and Priority chips stand, as wide as a chip naming one. */
+const SKELETON_CHIPS = ["112px", "96px"] as const;
+
+/** How wide each placeholder line of the description stands, as a share of its line. */
+const SKELETON_DESCRIPTION = ["92%", "86%", "64%"] as const;
 
 /**
  * The toolbar's path, as the automation editor's: the Issues list a press
@@ -66,41 +85,55 @@ export function IssueCrumbs({
   );
 }
 
-/** The toolbar: the path back to the list, and the issue's ⋯ menu: Copy link, and Archive. */
-function DetailToolbar({
-  issueId,
+/**
+ * The issue's ⋯ menu, on its page's toolbar and on its peek's head: Start
+ * task… and Start agent…, Copy link, and Archive, which asks first and, once kept, hands back to
+ * `onArchived`, since the issue no longer stands where it was drawn.
+ */
+export function IssueMenu({
+  issue,
   identifier,
-  onBack,
-  onArchive,
+  surfaceOpen = true,
+  onChange,
+  onArchived,
 }: {
-  issueId: string;
+  issue: Issue;
   identifier: string;
-  onBack: () => void;
-  onArchive: () => void;
+  /** Whether what it hangs from still stands, which its menu and question do not outlive: a page for as long as it does, a peek until it starts to leave. */
+  surfaceOpen?: boolean;
+  /** Sends a change, answering whether it was kept. */
+  onChange: (change: IssueChange) => Promise<boolean>;
+  onArchived: () => void;
 }): React.JSX.Element {
-  const menu = useMenu(true);
-  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.ISSUE, issueId });
-  const archive = archiveItem(onArchive);
+  const menu = useMenu(surfaceOpen);
+  const starts = useStartItems(issue, identifier);
+  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.ISSUE, issueId: issue.id });
+  const archiving = useConfirmDialog({ subject: true, surfaceOpen }, () =>
+    onChange({ archived: true }).then((archived) => {
+      if (archived) onArchived();
+      return archiveAnswered(archived);
+    }),
+  );
+  const archive = archiveItem(archiving.ask);
   return (
-    <header className="desktop-toolbar">
-      <div className="desktop-toolbar-heading">
-        <IssueCrumbs identifier={identifier} onBack={onBack} />
-        <ExperimentTag />
-      </div>
-      <div className="desktop-toolbar-actions">
-        <Tooltip label={ISSUE_ACTIONS_LABEL}>
-          <IconButton icon={<EllipsisIcon />} label={ISSUE_ACTIONS_LABEL} {...menu.trigger()} />
-        </Tooltip>
-        {menu.drawn === undefined ? null : (
-          <ActionMenu
-            label={ISSUE_ACTIONS_LABEL}
-            menu={menu.drawn}
-            groups={copyLink === undefined ? [[archive]] : [[copyLink], [archive]]}
-            onClose={menu.close}
-          />
-        )}
-      </div>
-    </header>
+    <>
+      <Tooltip label={ISSUE_ACTIONS_LABEL}>
+        <IconButton icon={<EllipsisIcon />} label={ISSUE_ACTIONS_LABEL} {...menu.trigger()} />
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={ISSUE_ACTIONS_LABEL}
+          menu={menu.drawn}
+          groups={[
+            ...(starts.length === 0 ? [] : [starts]),
+            ...(copyLink === undefined ? [] : [[copyLink]]),
+            [archive],
+          ]}
+          onClose={menu.close}
+        />
+      )}
+      <ConfirmDialog confirm={archiving} question={archiveQuestion(identifier)} />
+    </>
   );
 }
 
@@ -175,7 +208,7 @@ function IssueTitle({
 
 /**
  * Who filed the issue and when, and when it last changed, under its title,
- * in a task's own words (`task-actions.tsx`'s menu foot): "Created by
+ * in the line every document draws there (`DocumentByline`): "Created by
  * [Charles] Charles Pan · 3d ago" and "Last edited · 2h ago", the times
  * moving on with the window's minute. An issue whose creator's account is
  * gone says only when it was created, and one unchanged since it was filed
@@ -185,24 +218,79 @@ function IssueByline({ issue }: { issue: Issue }): React.JSX.Element {
   const now = useMinute();
   const creator = usePerson(issue.creator ?? undefined);
   return (
-    <p className="issue-byline">
-      <span className="actor-line">
-        {issue.creator === null ? "Created" : "Created by "}
-        {issue.creator === null ? null : <ActorRef actor={creator} sentence />}
-        {" · "}
-        <RelativeTime at={issue.createdAt} now={now} ago />
-      </span>
-      {/* Note that the space between the phrases is read, not drawn: the line's gap draws it. */}
-      {issue.updatedAt <= issue.createdAt ? null : (
-        <>
-          {" "}
-          <span className="actor-line">
+    <DocumentByline
+      creator={issue.creator === null ? undefined : creator}
+      createdAt={issue.createdAt}
+      now={now}
+      edited={
+        issue.updatedAt <= issue.createdAt ? undefined : (
+          <>
             {"Last edited · "}
             <RelativeTime at={issue.updatedAt} now={now} ago />
-          </span>
-        </>
-      )}
-    </p>
+          </>
+        )
+      }
+    />
+  );
+}
+
+/**
+ * An issue's page: its toolbar over its document, which scrolls in the
+ * column every document of the window does (`DocumentScroll`), so the
+ * issue, and its blocks while it is read, stand at a plan's measure and
+ * inset rather than in a page frame of their own.
+ */
+export function IssueDocumentPage({
+  label,
+  toolbar,
+  children,
+}: {
+  label: string;
+  toolbar: ReactNode;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <section className="issue-page" aria-label={label}>
+      {toolbar}
+      <div className="desktop-document">
+        <DocumentScroll>{children}</DocumentScroll>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The issue itself, wherever it is drawn, its page or its peek beside the
+ * board: its title, who filed it and when, its Status and Priority chips,
+ * the tasks started from it, and its description, in a plan's own type; its
+ * page and its peek each scroll it in the column every document of the
+ * window does (`DocumentScroll`).
+ */
+export function IssueDocument({
+  issue,
+  onChange,
+}: {
+  issue: Issue;
+  /** Sends a change, answering whether it was kept. */
+  onChange: (change: IssueChange) => Promise<boolean>;
+}): React.JSX.Element {
+  return (
+    <article className="plan-body">
+      <IssueTitle issue={issue} onChange={onChange} />
+      <IssueByline issue={issue} />
+      <div className="issue-properties">
+        <StatusMenu status={issue.status} onPick={(status) => void onChange({ status })} />
+        <PriorityMenu
+          priority={issue.priority}
+          onPick={(priority) => void onChange({ priority })}
+        />
+      </div>
+      <IssueWorkRow issue={issue} />
+      <IssueDescription
+        description={issue.description}
+        onSave={(description) => onChange({ description })}
+      />
+    </article>
   );
 }
 
@@ -220,42 +308,62 @@ export function IssueDetail({
   onBack: () => void;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ISSUES, onBack);
-  const archiving = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    onChange({ archived: true }).then((archived) => {
-      if (archived) onBack();
-      return archiveAnswered(archived);
-    }),
-  );
   const identifier = issueIdentifier(workspaceName, issue.number);
   return (
-    <section className="automations-view" aria-label={identifier}>
-      <DetailToolbar
-        issueId={issue.id}
-        identifier={identifier}
-        onBack={onBack}
-        onArchive={archiving.ask}
-      />
-      {/* The issue is drawn as a task's document is (`version-view.tsx`): its title, then its body, at the document's measure. */}
-      <div className="desktop-document">
-        <div className="plan-document-scroll scroll-fade">
-          <article className="plan-body">
-            <IssueTitle issue={issue} onChange={onChange} />
-            <IssueByline issue={issue} />
-            <div className="issue-properties">
-              <StatusMenu status={issue.status} onPick={(status) => void onChange({ status })} />
-              <PriorityMenu
-                priority={issue.priority}
-                onPick={(priority) => void onChange({ priority })}
-              />
-            </div>
-            <IssueDescription
-              description={issue.description}
-              onSave={(description) => onChange({ description })}
+    <IssueDocumentPage
+      label={identifier}
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <IssueCrumbs identifier={identifier} onBack={onBack} />
+            <ExperimentTag />
+          </div>
+          <div className="desktop-toolbar-actions">
+            <IssueMenu
+              issue={issue}
+              identifier={identifier}
+              onChange={onChange}
+              onArchived={onBack}
             />
-          </article>
+          </div>
+        </header>
+      }
+    >
+      <IssueDocument issue={issue} onChange={onChange} />
+    </IssueDocumentPage>
+  );
+}
+
+/**
+ * One issue's document while its issue is first read, opened from a link or a
+ * notification before the list holds it, for `IssueDocumentPage`: a block
+ * where the title will stand in its heading's type, one for the line under
+ * it, the two chips' boxes, and a few lines of description, so the issue
+ * lands where the blocks stood. The region says what is being read.
+ */
+export function IssueDetailSkeleton({ label }: { label: string }): React.JSX.Element {
+  return (
+    <SkeletonRegion label={label}>
+      <div className="plan-body">
+        <div className="markdown task-title">
+          <div className="markdown-heading task-title-text" data-level="1">
+            <Skeleton width={SKELETON_TITLE} />
+          </div>
+        </div>
+        <div className="plan-byline">
+          <Skeleton width={SKELETON_BYLINE} />
+        </div>
+        <div className="issue-properties">
+          {SKELETON_CHIPS.map((width) => (
+            <Skeleton key={width} shape={SKELETON_SHAPE.CONTROL} width={width} />
+          ))}
+        </div>
+        <div>
+          {SKELETON_DESCRIPTION.map((width) => (
+            <Skeleton key={width} width={width} />
+          ))}
         </div>
       </div>
-      <ConfirmDialog confirm={archiving} question={archiveQuestion(identifier)} />
-    </section>
+    </SkeletonRegion>
   );
 }

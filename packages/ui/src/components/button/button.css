@@ -29,10 +29,10 @@
     white-space: nowrap;
     cursor: pointer;
     transition:
-      background-color var(--duration-hover) ease,
-      color var(--duration-hover) ease,
-      filter var(--duration-hover) ease,
-      opacity var(--duration-hover) ease;
+      background-color var(--luke-duration-hover) ease,
+      color var(--luke-duration-hover) ease,
+      filter var(--luke-duration-hover) ease,
+      opacity var(--luke-duration-hover) ease;
   }
 
   /* A desktop control answers a press the way a Mac's does, without the
@@ -73,6 +73,20 @@
     border-radius: var(--luke-radius-6);
   }
 
+  /* Compact with words, a row mark's height in the caption's type, its
+     glyph nearer its words. */
+  .luke-button[data-size="compact"]:not([data-icon-only="true"]) {
+    height: var(--luke-space-24);
+    padding-inline: var(--luke-space-8);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  .luke-button[data-size="compact"]:not([data-icon-only="true"]) .luke-button-face {
+    gap: var(--luke-space-4);
+  }
+
   .luke-button[data-variant="outline"] {
     --luke-button-edge: var(--luke-color-border-strong);
   }
@@ -97,6 +111,16 @@
     --luke-button-ink: var(--luke-color-ground);
   }
 
+  .luke-button[data-variant="working-tint"] {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-working) 14%, transparent);
+    --luke-button-ink: var(--luke-color-working);
+  }
+
+  .luke-button[data-variant="danger-tint"] {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
+    --luke-button-ink: var(--luke-color-danger-text);
+  }
+
   /* Round, a glyph alone is a disc and words a pill, held off its round
      ends by half its height. */
   .luke-button[data-shape="round"] {
@@ -105,6 +129,10 @@
 
   .luke-button[data-shape="round"]:not([data-icon-only="true"]) {
     padding-inline: calc(var(--luke-control-height) / 2);
+  }
+
+  .luke-button[data-shape="round"][data-size="compact"]:not([data-icon-only="true"]) {
+    padding-inline: var(--luke-space-8);
   }
 
   /* A danger toggle is quiet while off, and on the danger tint while on. */
@@ -139,12 +167,12 @@
   /* A compact quiet mark lights its glyph alone, under the pointer, while
      its menu is open, and while a toggle stands on, because the row it
      stands in is already lit. */
-  .luke-button[data-size="compact"][data-variant="quiet"]:where(
+  .luke-button[data-icon-only="true"][data-size="compact"][data-variant="quiet"]:where(
     :hover:not(:disabled, [aria-disabled="true"]),
     [aria-expanded="true"],
     [aria-pressed="true"]
   ),
-  .luke-button[data-size="compact"][data-variant="quiet"]:active:not(
+  .luke-button[data-icon-only="true"][data-size="compact"][data-variant="quiet"]:active:not(
     :disabled,
     [aria-disabled="true"]
   ) {
@@ -179,6 +207,14 @@
     [aria-disabled="true"]
   ) {
     --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 24%, transparent);
+  }
+
+  .luke-button[data-variant="working-tint"]:hover:not(:disabled, [aria-disabled="true"]) {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-working) 22%, transparent);
+  }
+
+  .luke-button[data-variant="danger-tint"]:hover:not(:disabled, [aria-disabled="true"]) {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 22%, transparent);
   }
 
   .luke-button[data-variant="danger-outline"]:hover:not(:disabled, [aria-disabled="true"]) {
@@ -270,9 +306,9 @@
     border-top-color: currentColor;
     border-radius: var(--luke-radius-full);
     /* An endless loop with no end to wait for, so its duration is a literal;
-       it holds still on --loop-motion with every other. */
+       it holds still on --luke-loop-motion with every other. */
     animation: luke-button-turn 0.8s linear infinite;
-    animation-play-state: var(--loop-motion, running);
+    animation-play-state: var(--luke-loop-motion);
     content: "";
   }
 

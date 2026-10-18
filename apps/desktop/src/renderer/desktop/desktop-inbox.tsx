@@ -7,6 +7,16 @@ import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
+import { useAct } from "@luke/panel/act";
+import { appPlatform } from "@luke/panel/app-platform";
+import { AutomationDirectory } from "@luke/panel/automation-directory";
+import { MemberDirectory } from "@luke/panel/member-directory";
+import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
+import { useSettledReads } from "@luke/panel/tasks/inbox-settling";
+import { useMinute } from "@luke/panel/tasks/task-time";
+import { type OpenHere, OpenHereProvider, useOpenLink } from "@luke/panel/tasks/use-open-link";
+import { useTasklessInboxItems } from "@luke/panel/tasks/use-taskless-inbox-items";
+import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { EmptyState, ErrorState } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
@@ -14,22 +24,21 @@ import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useAct } from "../act";
-import { appPlatform } from "../app-platform";
-import { AutomationDirectory } from "../automation-directory";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
-import { MemberDirectory } from "../member-directory";
-import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
-import { InboxList, InboxListSkeleton, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
+import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list";
 import {
-  anyNeedsYou,
+  anyUnread,
   firstChoice,
   INBOX_HOLDER,
+  INBOX_SHOW,
+  INBOX_WHOSE,
+  type InboxCounts,
   type InboxGroup,
   type InboxHolder,
   type InboxListed,
+  inboxCounts,
   inboxList,
   itemWorkspaceId,
   listedItems,
@@ -46,17 +55,14 @@ import {
   tasklessMentions,
   useMentionAgentsReader,
 } from "../tasks/task-mentions";
-import { useMinute } from "../tasks/task-time";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { type CodingAgentsControl, useCodingAgents } from "../tasks/use-coding-agents";
 import { useInboxItems } from "../tasks/use-inbox-items";
-import { type OpenHere, OpenHereProvider, useOpenLink } from "../tasks/use-open-link";
+import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel";
 import { useTaskInbox } from "../tasks/use-task-inbox";
-import { useTasklessInboxItems } from "../tasks/use-taskless-inbox-items";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab";
-import { useExperiment } from "../use-app-state";
-import { type InboxWaitingOnly, useInboxTaskFolds, useInboxViewChoices } from "./folded-groups";
+import { type InboxViewChoices, useInboxTaskFolds, useInboxViewChoices } from "./folded-groups";
 import {
   COLUMN,
   SIDE_PANEL_HOLDER,
@@ -78,8 +84,11 @@ import { taskCardOf } from "./task-card";
  * folders. The list (`inbox-list.tsx`) holds the items of each task of the
  * workspace the sidebar lists that main says holds one (the switcher counts
  * what waits in the others), needing the developer or settled, each task read whole
- * as main says it changed (`use-inbox-items.ts`), under its task or newest
- * first, all or only what needs them, as the developer last chose; Needs
+ * as main says it changed (`use-inbox-items.ts`), under its task, its
+ * person, its status, or in one run, the latest first or the longest
+ * waiting first, what needs them, what is unread, every open item, or
+ * everything, of everyone's, theirs, or one teammate's, as the developer
+ * last chose; Needs
  * you is the Inbox's one name for an item not yet answered
  * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
  * same items. A press on a row chooses it, and the pane beside the
@@ -94,8 +103,8 @@ import { taskCardOf } from "./task-card";
  * pages, or one of its agents' pull requests (`inbox-panel-link.ts`). The
  * panel's toggle, its width, and its keys are a task's own, and ⌘F finds in
  * the panel while it holds the keys, as on a task. With nothing listed, it says so under the Inbox's
- * glyph (`@luke/ui`'s `EmptyState`); with Needs you leaving out every item, the list
- * says so and offers Show all, while the pane goes on showing the item
+ * glyph (`@luke/ui`'s `EmptyState`); with its tab leaving out every item, the list
+ * says so and offers the tab beside it, while the pane goes on showing the item
  * chosen, answered, though the list draws it no row. Escape never leaves it, a stray press
  * being no reason to lose the item being read; any row of the sidebar does, and so does Back. Too narrow for the list and the item
  * side by side, it shows one at a time (`inbox-columns.ts`): the chosen
@@ -123,13 +132,14 @@ function listedHoldings(
   return holdings.filter((holding) => listed.some((task) => task.id === holding.taskId));
 }
 
-/** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, Needs you's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
+/** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the tab's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
 function ListNote({
   failed,
   reading,
   empty,
   alone,
   filteredOut,
+  counts,
   onList,
   onRetry,
 }: {
@@ -138,9 +148,11 @@ function ListNote({
   empty: boolean;
   /** Whether the list stands alone, the Inbox too narrow for the pane beside it. */
   alone: boolean;
-  /** Needs you, where it leaves out every item the Inbox holds, for its empty state to turn off. */
-  filteredOut: InboxWaitingOnly | undefined;
-  /** Asks for the list, so Show all leaves it standing. */
+  /** The tab shown and whose items, where they leave out every item the Inbox holds, for its empty state to show another. */
+  filteredOut: InboxViewChoices | undefined;
+  /** How many items each tab lists, for the empty state to offer one that lists something. */
+  counts: InboxCounts;
+  /** Asks for the list, so the tab its empty state shows leaves it standing. */
   onList: () => void;
   onRetry: () => void;
 }): React.JSX.Element | null {
@@ -153,7 +165,8 @@ function ListNote({
   }
   if (!empty) return null;
   if (reading) return <InboxListSkeleton />;
-  if (filteredOut !== undefined) return <NeedsYouEmpty needsYou={filteredOut} onList={onList} />;
+  if (filteredOut !== undefined)
+    return <ShowEmpty show={filteredOut} counts={counts} whose={filteredOut} onList={onList} />;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
   if (alone) return <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>;
   return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
@@ -202,7 +215,10 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     [inboxTasks, listedTasks],
   );
   const read = useInboxItems({ holdings, readInbox });
-  const taskless = useTasklessInboxItems(tasks.inboxTaskless);
+  const tasklessReads = useTasklessInboxItems(tasks.inboxTaskless);
+  // Note that the window's own answers and messages stand over the agents' reads until they hold them, so a stale read never brings an answered item back.
+  const tasklessItems = useSettledReads(tasklessReads.items);
+  const taskless = { ...tasklessReads, items: tasklessItems };
   const asked = view.chosen;
   const chosenTask =
     asked !== undefined && "taskId" in asked
@@ -276,22 +292,41 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
           },
         ]
       : [];
-  const entries = [
-    ...taskEntries,
-    ...tasklessGroups([...tasks.inboxTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
-  ];
+  const { onReread: rereadTasks } = read;
+  const { onReread: rereadTaskless } = taskless;
+  // Note that every item marked read moves nothing main hears of, so the Inbox reads its items again once the service took it.
+  const marks = useInboxReadMarks({
+    act,
+    workspaceId: tasks.workspace?.id,
+    groups: [
+      ...taskEntries,
+      ...tasklessGroups(
+        [...tasks.inboxTaskless, ...settledAgent],
+        tasklessRead,
+        tasks.workspace?.id,
+      ),
+    ],
+    onMarkedAll: () => {
+      rereadTasks();
+      rereadTaskless();
+    },
+  });
+  const entries = marks.groups;
+  const counts = inboxCounts(entries, tasks.me, choices.whose);
   const filter = {
     grouping: choices.grouping,
-    waitingOnly: choices.waitingOnly,
+    show: choices.show,
+    sort: choices.sort,
+    whose: choices.whose,
     readerId: tasks.me,
   };
   // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
   const list = inboxList(entries, { ...filter, chosen: undefined });
   const steps = inboxList(entries, { ...filter, chosen: asked?.itemId });
   const chosen = listedItems(steps).find(({ item }) => item.id === asked?.itemId);
-  // Note that Needs you leaving out every item listed is said apart from an Inbox holding none.
+  // Note that a tab leaving out every item listed is said apart from an Inbox holding none.
   const filteredOut =
-    choices.waitingOnly &&
+    (choices.show !== INBOX_SHOW.ALL || choices.whose.kind !== INBOX_WHOSE.EVERYONE) &&
     listedItems(list).length === 0 &&
     entries.some(({ items }) => items.length > 0);
   // Note that a chosen item whose task or agent is listed but not read yet keeps its place, because
@@ -310,7 +345,10 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
       !taskless.current.has(chosenAgentId) &&
       !live.read &&
       !agents.listMissing);
+  // Note that the holdings are filtered against the task list, so until it is read they hold nothing and prove nothing.
+  const listUnread = !tasks.listRead && !tasks.listFailed;
   const reading =
+    listUnread ||
     holdings.some((holding) => !read.items.has(holding.taskId)) ||
     tasks.inboxTaskless.some((each) => !taskless.items.has(each.agentId));
   // An item asked for by a link or a notification that no read holds once every read has landed is
@@ -323,7 +361,13 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
       : chosenAgentId !== undefined
         ? live.read || taskless.current.has(chosenAgentId) || holderEmpty
         : true;
-  const missing = asked?.opened === true && chosen === undefined && !chosenWaits && holderRead;
+  // Note that only a task's item waits on the task list, since an agent with no task is read apart from it.
+  const missing =
+    asked?.opened === true &&
+    chosen === undefined &&
+    !chosenWaits &&
+    holderRead &&
+    (chosenAgentId !== undefined || !listUnread);
   // Note that an item a link or a notification asked for is never given way to, found or not, because the reader asked for that one.
   const standIn =
     chosen === undefined && !chosenWaits && !missing && asked?.opened !== true
@@ -349,6 +393,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     choose(listed);
     columns.onOpen(listed.item.id);
   };
+  const { onMark: markItem } = marks;
   const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown: tasks.shown,
     folded: folds.folded,
@@ -395,6 +440,16 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   const { onArea, focus } = useColumnFocus();
   // The panel holds the keys while the focus went into it last, or while it fills the window over the Inbox.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
+  // The item shown is read as it opens, and U marks it, only while the Inbox holds the keys and the panel does not cover it.
+  useReadOnOpen({
+    shown:
+      tasks.shown && !sidePanel.fullScreen && columns.shown !== INBOX_COLUMNS.LIST
+        ? chosen?.item
+        : undefined,
+    chosen: chosen?.item,
+    active: tasks.shown && !sideFocused,
+    onMark: markItem,
+  });
   // The panel stands for the item asked for, by its task, or its agent where it has none (`use-tasks-tab.ts`).
   const panelFor = taskId ?? chosenAgentId;
   const pullRequests = [...named.pullRequests].map(([agentId, opened]) => ({
@@ -460,9 +515,13 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                   rows={columns.rows}
                   head={{
                     shown: tasks.shown,
-                    needsYou: choices,
+                    show: choices,
+                    counts,
                     view: { choices, folds },
-                    waiting: anyNeedsYou(entries, tasks.me),
+                    readAll: {
+                      unread: anyUnread(entries),
+                      onMarkAll: () => marks.onMarkAll(entries.flatMap(({ items }) => items)),
+                    },
                   }}
                   models={named.models}
                   readerId={tasks.me}
@@ -473,11 +532,13 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                       empty={listedItems(list).length === 0}
                       alone={columns.shown === INBOX_COLUMNS.LIST}
                       filteredOut={filteredOut ? choices : undefined}
+                      counts={counts}
                       onList={columns.onList}
                       onRetry={onRetry}
                     />
                   }
                   onChoose={open}
+                  onMark={(listed, unread) => markItem(listed.item, unread)}
                 />
                 {chosen === undefined ? (
                   <section
@@ -623,6 +684,7 @@ function InboxSidePanel({
   const { panel } = drawing;
   const openTarget = (target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.PAGE) return panel.onChoose({ page: target.page });
+    if (target.kind === TOOL_TARGET.TASK) return tasks.onShowTask(target.task);
     if (target.kind === TOOL_TARGET.AGENT) {
       return taskId === undefined
         ? tasks.agentView.onOpen(target.agent)
@@ -649,10 +711,11 @@ function InboxSidePanel({
       {...drawing}
       unread={NO_UNREAD}
       holder={SIDE_PANEL_HOLDER.INBOX}
-      planId={panelFor ?? ""}
+      taskId={panelFor ?? ""}
       repository={repository}
       board={undefined}
       shownCode={undefined}
+      codeFailed={undefined}
       pages={pages}
       transcript={NO_CALLS}
       work={work}

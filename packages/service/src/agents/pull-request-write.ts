@@ -97,6 +97,16 @@ const memberToken = (userId: string) =>
     }),
   );
 
+/**
+ * The member's own token for a read that marks what is theirs, such as the
+ * reactions they gave; none where they hold no sign-in GitHub takes or it
+ * could not be read, which leaves the read unmarked rather than failing it.
+ */
+export const memberReadToken = (
+  userId: string,
+): Effect.Effect<Redacted.Redacted | undefined, never, WriteServices> =>
+  memberToken(userId).pipe(Effect.catch(() => Effect.succeed(undefined)));
+
 /** A write's failure as how it went: the token refused, GitHub's refusal, or a GitHub that did not answer. */
 function writtenOf<A>(failure: GitHubWriteFailure): Effect.Effect<MemberWritten<A>, HostedRefusal> {
   switch (failure._tag) {

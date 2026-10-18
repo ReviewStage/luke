@@ -1,7 +1,16 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { HoverCard, HoverCardHead, HoverCardNote, IconButton, useMenu } from "@luke/ui";
+import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
+import {
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  IconButton,
+  LIST_DENSITY,
+  List,
+  ListRow,
+  useMenu,
+} from "@luke/ui";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { useClipped } from "@luke/ui/use-clipped";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
@@ -15,10 +24,9 @@ import { FileCard, newestFileNote } from "../tasks/file-ref";
 import { type InboxBoardView, NEEDS_YOU } from "../tasks/inbox-model";
 import { PageCard } from "../tasks/page-card";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
-import { MAIN_TAB } from "../tasks/use-main-tabs";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { workRowsOf } from "../tasks/work-model";
-import { Tooltip } from "../tooltip";
+import { RowHint, RowHintOptions, Tooltip } from "../tooltip";
 import { ActionMenu } from "./action-menu";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs";
@@ -489,10 +497,10 @@ export function summaryHolds(tasks: TasksControl, inbox: InboxBoardView): boolea
 
 /**
  * A row of the column or the card: its glyph, its label, and what tells it
- * apart, a file's folder, as its "+" row says it, faded at its end where it
- * is cut short, then a failed agent's mark or the Inbox's count. A row with
- * a card hangs it on hover beside the row, before its start where the
- * window ends past it, as the sidebar's rows hang theirs.
+ * apart, a file's folder, as its "+" row says it, after the label on its
+ * line, then a failed agent's mark or the Inbox's count. A row with a card
+ * hangs it on hover beside the row, before its start where the window ends
+ * past it, as the sidebar's rows hang theirs.
  */
 function SummaryRow({
   entry,
@@ -501,36 +509,20 @@ function SummaryRow({
 }: {
   entry: SummaryEntry;
   onPick: () => void;
-  onContextMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onContextMenu?: (event: React.MouseEvent<HTMLElement>) => void;
 }) {
-  const [words, clipped] = useClipped();
-  const row = (
-    <button
-      type="button"
-      className="task-summary-row"
-      onClick={onPick}
-      onContextMenu={onContextMenu}
-    >
-      <span className="task-summary-glyph">{entry.row.icon}</span>
-      <span ref={words} className="task-summary-label" data-overflow={String(clipped)}>
-        {entry.row.label}
-        {entry.row.detail === undefined ? null : (
-          <span className="task-summary-detail">{entry.row.detail}</span>
-        )}
-      </span>
-      {entry.endMark}
-    </button>
-  );
   return (
-    <li>
-      {entry.card === undefined ? (
-        row
-      ) : (
-        <Tooltip label={entry.row.label} card={entry.card} cardBeside>
-          {row}
-        </Tooltip>
-      )}
-    </li>
+    <RowHintOptions card={entry.card} cardBeside>
+      <ListRow
+        leading={<span className="task-summary-glyph">{entry.row.icon}</span>}
+        title={entry.row.label}
+        description={entry.row.detail}
+        meta={entry.endMark}
+        hint={entry.card === undefined ? undefined : { Hint: RowHint, label: entry.row.label }}
+        onPress={onPick}
+        onContextMenu={onContextMenu}
+      />
+    </RowHintOptions>
   );
 }
 
@@ -600,11 +592,7 @@ function SummaryList({
       {sections.map(({ heading, entries }) => (
         <div key={heading} className="task-summary-section">
           <p className="section-heading">{heading}</p>
-          <ul
-            className="task-summary-rows"
-            aria-label={heading}
-            data-tree={String(heading === ADD_SECTION.FILES)}
-          >
+          <List label={heading} density={LIST_DENSITY.DENSE}>
             {entries.map((entry) => {
               const onPick = () => {
                 onPicked?.();
@@ -623,7 +611,7 @@ function SummaryList({
                 />
               );
             })}
-          </ul>
+          </List>
           {heading === AGENTS_SECTION ? <ArchivedAgents agents={agents} shown={shown} /> : null}
         </div>
       ))}
@@ -672,7 +660,7 @@ function SummaryCard({
   useLayoutEffect(() => {
     if (leaving) return;
     const element = card.current;
-    (element?.querySelector<HTMLElement>(".task-summary-row") ?? element)?.focus({
+    (element?.querySelector<HTMLElement>("li > button") ?? element)?.focus({
       preventScroll: true,
     });
   }, [leaving]);

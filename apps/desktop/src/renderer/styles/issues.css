@@ -1,15 +1,105 @@
 /* The Issues page (`issues-page.tsx`). Its frame, headings, rows, chips, and
    title are the window's own: the list's page is @luke/ui's CollectionPage
-   under the toolbar, an issue's the Automations page's view and scroll, and
-   Home's sections and rows and a task's heading. Only
+   under the toolbar, an issue's a task's own document under the toolbar
+   (`document-frame.tsx`), its column, measure, byline, and editor the
+   plan's, and Home's sections and rows and a task's heading. Only
    what an issue adds is drawn here: its group's heading, its identifier, its
    status and priority marks, its properties' row, and its description's
    editor. Tokens only. */
 
-/* The pages and the new issue's card share one root, which C and the
-   arrows are read against; it draws no box of its own. */
+/* The pages, the peek, and the new issue's card share one root, which C
+   and the arrows are read against: the page beside the peek, which the
+   page gives its room to at once (`issue-peek.tsx`). Whatever slides past
+   its edge is clipped, never scrolled (renderer AGENTS.md, Panel motion). */
 .issues-pages {
-  display: contents;
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: clip;
+}
+
+/* The peek's pane, its width the developer's (`usePeekWidth`), its left
+   edge the side panel's own resize edge. A window narrower than the kept
+   width leaves the board a column and its insets, PEEK_RESERVE, and the
+   kept width comes back as the window grows. */
+.issue-peek-pane {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  max-width: max(360px, calc(100% - 320px)); /* off-scale: PEEK_WIDTH.MIN, PEEK_RESERVE */
+  flex: none;
+}
+
+/* The peek on its way out has left the layout, the board already standing
+   in its room, and slides out over the board's edge on its own ground
+   (`usePaneSlide`). */
+.issue-peek-pane[data-leaving] {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+}
+
+/* The peek: its head level with the page's toolbar, over the issue's own
+   document, which scrolls under the head. */
+.issue-peek {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  border-left: 1px solid var(--luke-color-border);
+  background: var(--luke-color-ground);
+}
+
+/* Level with the page's toolbar and, like it and the side panel's own top
+   row (`.side-panel-bar`), the window's drag handle wherever no control
+   stands. */
+.issue-peek-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  min-height: var(--desktop-bar-height);
+  padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-8) var(--column-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+  -webkit-app-region: drag;
+}
+
+.issue-peek-identifier {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-body-size);
+  font-weight: var(--luke-weight-medium);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-peek-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  -webkit-app-region: no-drag;
+}
+
+/* The card read in the peek is marked as the sidebar marks the open plan. */
+.issue-board .sidebar-task[aria-current="true"] {
+  background: var(--luke-color-fill-strong);
+}
+
+/* An issue's page: its toolbar over its document, which fills the rest
+   and scrolls in the plan's own column. */
+.issue-page {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 /* The list's status groups, a section's gap apart, as Home's are. Note
@@ -96,55 +186,11 @@
   gap: var(--luke-space-8);
 }
 
-/* Who filed the issue and when, and when it last changed, under its title:
-   the quiet words of the plan's own line over its document
-   (`.plan-edit-note`). Each phrase wraps whole onto the next line rather
-   than leaving a name cut from its time. */
-.issue-byline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--luke-space-4) var(--luke-space-16);
-  margin: 0 0 var(--luke-space-12);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* An issue with no description says so in the words the empty editor
    says it in, at the text's own size, so opening it moves nothing. */
 .issue-description-empty {
   margin: 0;
   color: var(--luke-color-text-subtle);
-}
-
-/* The description at rest is drawn as the plan's text is
-   (`.plan-document-block`): the words take the text cursor and nothing
-   else marks them, since a click into them edits them in place, and the
-   keyboard's focus wears the plan's soft tint a little past its words. */
-.issue-description {
-  position: relative;
-  isolation: isolate;
-  cursor: text;
-}
-
-.issue-description:focus-visible {
-  outline: none; /* no ring: the tint below marks it */
-}
-
-.issue-description:focus-visible::before {
-  position: absolute;
-  z-index: -1;
-  inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
-  border-radius: var(--luke-radius-6);
-  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
-  content: "";
-  pointer-events: none;
-}
-
-.issue-description-refused {
-  margin: 0;
-  color: var(--luke-color-danger-text);
-  font-size: var(--luke-type-caption-size);
 }
 
 /* The board fills the page's height, so it never scrolls down and each
@@ -187,51 +233,22 @@
     var(--luke-color-surface);
 }
 
-/* A card being dragged stays in its column as its own placeholder, faded,
-   while its copy follows the pointer over the board. */
-.issue-column .sidebar-tasks > .sidebar-task-item[data-dragging="true"] {
-  z-index: auto;
-  background: none;
-  box-shadow: none;
-  opacity: 0.4;
-  transition: opacity var(--duration-quick) var(--motion-exit);
-}
-
-.issue-column .sidebar-tasks > .sidebar-task-item {
-  transition:
-    transform var(--duration-fast) var(--spring-fast),
-    opacity var(--duration-quick) var(--motion-exit);
-}
-
-/* The copy of a card carried over the board: lifted as the sidebar lifts a
-   row it drags, on the column's ground, at the card's place and width, and
-   moved only by its transform, frame for frame, so it eases nothing. */
-.issue-board > [data-carried="true"] {
-  position: absolute;
-  z-index: 2;
-  margin: 0;
-  padding: 0;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.issue-board > [data-carried="true"] > .sidebar-task-item[data-dragging="true"] {
-  background:
-    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--luke-color-surface), var(--luke-color-well);
-  box-shadow:
-    0 0 0 1px var(--luke-color-border-strong),
-    0 4px 12px var(--luke-color-shadow);
+/* A card dragged off the board is carried as the sidebar's rows are
+   (desktop.css), its copy lifted on the column's ground. */
+.issue-board {
+  --carried-ground: var(--luke-color-surface);
 }
 
 /* A column's head: its status's glyph, its name, how many it holds, and its
    +, on its cards' inset. The name takes what the line leaves, cut short
-   rather than wrapped, so the count and the + end the line. */
+   rather than wrapped, so the count and the + end the line. Every head
+   stands the + button's height, one with no + and a placeholder's alike,
+   so no head moves as the board arrives. */
 .issue-column-head {
   display: flex;
   align-items: center;
   gap: var(--luke-icon-gap);
-  min-height: 24px;
+  min-height: var(--luke-control-height);
   margin: 0;
   padding: 0 var(--row-inset);
   font-variant-numeric: tabular-nums;
@@ -241,12 +258,14 @@
   flex: 1;
 }
 
-/* The + is a control's full size held to the head's height, so the head does
-   not grow, and reaches past the head's inset by its glyph's margin, so the
-   glyph ends on the edge the cards' times end on. */
-.issue-column-head > .luke-button {
-  margin-block: calc((24px - var(--luke-control-height)) / 2);
-  margin-right: calc((var(--luke-control-icon) - var(--luke-control-height)) / 2);
+/* A head ending on its + gives up the room around the +'s glyph at its end,
+   so the glyph ends on the edge the cards' times end on. */
+.issue-column-head:has(> .luke-button) {
+  padding-right: calc(
+    var(--row-inset) -
+    (var(--luke-control-height) - var(--luke-control-icon)) /
+    2
+  );
 }
 
 /* A column with no issue says so in one quiet line, as an idle station does. */
@@ -262,6 +281,7 @@
   flex: 0 1 auto;
   margin: 0 calc(-1 * var(--luke-focus-ring-reach)) calc(-1 * var(--luke-focus-ring-reach));
   padding: var(--luke-focus-ring-reach);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -287,4 +307,55 @@
 /* A card's time ends its line, wherever the identifier and mark leave off. */
 .issue-board .sidebar-task-time {
   margin-left: auto;
+}
+
+/* The board while its issues are read (`IssueBoardSkeleton`): the reading
+   region and the box around it hold to the page's height as the board
+   does, so its columns stand as tall as the board's will. */
+.issue-board-reading,
+.issue-board-reading > [role="status"] {
+  display: flex;
+  min-width: min-content;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+}
+
+/* A placeholder column's name takes what its glyph's block leaves, as the
+   name does. */
+.issue-column-head > .luke-skeleton + .luke-text {
+  flex: 1;
+}
+
+/* A placeholder card stands a card's room: its identifier and time on a
+   caption's line over its title on the body's, at the card's own inset. */
+.issue-card-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-8) var(--row-inset);
+  font-size: var(--luke-type-body-size);
+}
+
+.issue-card-skeleton-line {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--luke-space-8);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* The tasks started from the issue, under its status and priority: a quiet
+   word, then a pill for each, wrapping as the chips above them do. */
+.issue-work {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-8);
+  margin-top: var(--luke-space-12);
+}
+
+.issue-work-label {
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }

@@ -1,12 +1,35 @@
+import {
+  DIFF_SELECTION_SIDE,
+  type DiffAnnotation,
+  type DiffListFile,
+  type DiffListHandle,
+  type DiffListProps,
+  type DiffListSelection,
+  type DiffLook,
+  type DiffSelection,
+  type DiffViewHandle,
+  type DiffViewModule,
+  type DiffViewProps,
+  sameListSelection,
+  sameLook,
+  sameNotes,
+} from "@luke/panel/diff-view/contract";
+import { FIND_SHADOW_ATTRIBUTE } from "@luke/panel/find-matches";
 import { DIFF_FONT, DIFF_LAYOUT, DIFF_LINE_HEIGHT } from "@luke/settings/diff-view";
 import {
+  CodeView,
+  type CodeViewDiffItem,
+  type CodeViewOptions,
   type DiffLineAnnotation,
+  type FileContents,
+  type FileDiffMetadata,
   type FileDiffOptions,
   getSingularPatch,
+  type File as PierreFile,
   FileDiff as PierreFileDiff,
+  type PostRenderPhase,
+  type SelectedLineRange,
 } from "@pierre/diffs";
-import { FIND_SHADOW_ATTRIBUTE } from "../find-matches";
-import type { DiffLook, DiffViewHandle, DiffViewModule, DiffViewProps } from "./contract";
 import { adoptShadowStyles } from "./inline-styles";
 
 /**
@@ -42,10 +65,27 @@ import { adoptShadowStyles } from "./inline-styles";
  * Between two hunks of a file stands how many unchanged lines they leave
  * out, with no offer to show them, since the service reads the patch alone
  * and those lines are not at hand; an excerpt, a review thread's lines,
- * says nothing of the lines around it. A note under a line, a review
- * thread's, is the element the view keeps for its key, which Pierre stands
- * in the host's light DOM, slotted under its line, so the panel's own
- * stylesheets draw it and the view fills it as it does any of its own.
+ * says nothing of the lines around it.
+ *
+ * Files changed draws its pull request's files as one list (`mountList`),
+ * through Pierre's own `CodeView`: every file under a header that sticks to
+ * the top while its lines scroll past, only the files near the view drawn at
+ * all, each in a shadow root of its own that the find reads and the same
+ * sheet dresses, and a collapsed file drawn as its header alone. The header
+ * is the element the view keeps for the file, which Pierre stands in the
+ * file's light DOM, so the panel's own stylesheets draw it and the view
+ * fills it as it does any of its own; a note under a line, a review
+ * thread's, is the same, by its key, and a note on the whole file stands
+ * under its header (`FILE_NOTE_LINE`). A file that draws no lines of its own,
+ * one binary or too large, or an image the view draws as a picture, stands
+ * as its notes on the whole file alone (`DiffListFile.lead`): Pierre draws
+ * such notes only above a line, and measures them there, so the file is
+ * handed one empty line, hidden with the old side and the numbers, and its
+ * notes run across the whole of its width. Note that nothing is put in the
+ * header beyond its one row, because Pierre reserves the header a height of
+ * its own and holds it at the top while the file scrolls by. The view is
+ * told which file stands at the top as the list scrolls, and scrolls it to
+ * a file's header.
  */
 
 /** Each font's stack, ending in the window's own code type should the Mac lack it. */
@@ -70,6 +110,9 @@ const LIGATURES = { ON: "'liga' 1, 'calt' 1", OFF: "'liga' 0, 'calt' 0" } as con
 /** The longest line, in characters, whose changed words are marked; a longer one is tinted whole. */
 const MAX_LINE_DIFF_LENGTH = 1000;
 
+/** The attribute a list's file wears while it is drawn as its notes alone. */
+const LEAD_ATTRIBUTE = "data-lead";
+
 /** What the find leaves out of the shadow root's words: the gutter of numbers, as a File tab's numbers are. */
 const FIND_SKIPPED = "[data-gutter]";
 
@@ -83,6 +126,7 @@ const FIND_SKIPPED = "[data-gutter]";
 const LOOK_CSS = `
 @layer unsafe {
   :host {
+    display: block;
     --diffs-addition-color-override: var(--diff-added-mark);
     --diffs-deletion-color-override: var(--diff-removed-mark);
     --diffs-bg-addition-override: var(--diff-added-ground);
@@ -93,14 +137,8 @@ const LOOK_CSS = `
     --diffs-bg-deletion-emphasis-override: var(--diff-removed-word);
     --diffs-modified-color-override: var(--code-pointed-edge);
   }
-  /* The theme's ground runs to the foot of the box a diff is drawn in, however few its lines. */
-  :host {
-    display: block;
-    min-height: 100%;
-  }
   pre {
     box-sizing: border-box;
-    min-height: 100%;
     -webkit-user-select: text;
     user-select: text;
   }
@@ -112,44 +150,65 @@ const LOOK_CSS = `
   [data-gutter] {
     scrollbar-width: thin;
   }
+  /* A file drawn as its notes alone, laid out as blocks: its one empty line, the old side, the numbers, and the hatching beside a side's missing lines are hidden, so its notes run across its whole width, as tall as Pierre measured them. */
+  :host([${LEAD_ATTRIBUTE}]) pre,
+  :host([${LEAD_ATTRIBUTE}]) [data-code],
+  :host([${LEAD_ATTRIBUTE}]) [data-content] {
+    display: block;
+  }
+  :host([${LEAD_ATTRIBUTE}]) pre {
+    padding-bottom: 0;
+  }
+  :host([${LEAD_ATTRIBUTE}]) [data-deletions],
+  :host([${LEAD_ATTRIBUTE}]) [data-gutter],
+  :host([${LEAD_ATTRIBUTE}]) [data-line],
+  :host([${LEAD_ATTRIBUTE}]) [data-content-buffer] {
+    display: none;
+  }
   ::highlight(find-match) {
-    background-color: var(--find-match);
+    background-color: var(--luke-color-find-match);
   }
   ::highlight(find-current) {
-    background-color: var(--find-current);
-    color: var(--find-current-text);
+    background-color: var(--luke-color-find-current);
+    color: var(--luke-color-on-find-current);
   }
 }
 `;
 
-let lookSheet: CSSStyleSheet | undefined;
+/** One diff alone: the theme's ground runs to the foot of the box it is drawn in, however few its lines. */
+const FILL_CSS = `
+@layer unsafe {
+  :host {
+    min-height: 100%;
+  }
+  pre {
+    min-height: 100%;
+  }
+}
+`;
 
-/** The look's sheet, made once and adopted by every diff's shadow root. */
-function look(): CSSStyleSheet {
-  if (lookSheet !== undefined) return lookSheet;
-  lookSheet = new CSSStyleSheet();
-  lookSheet.replaceSync(LOOK_CSS);
-  return lookSheet;
+/** How tall a list's file header stands, in pixels, which Pierre reserves for it before it is measured: the view's `.diff-list-head` (`styles/tasks.css`). */
+const LIST_HEADER_HEIGHT = 34;
+
+/** The room below a list's last file, in pixels, so its last lines can be scrolled up off the foot of the pane. */
+const LIST_FOOT_ROOM = 48;
+
+let sheets: { look: CSSStyleSheet; fill: CSSStyleSheet } | undefined;
+
+/** The look's sheets, made once and adopted by every diff's shadow root: the look every diff in a list wears, and the same with the fill one diff alone wears. */
+function lookSheets(): { look: CSSStyleSheet; fill: CSSStyleSheet } {
+  if (sheets !== undefined) return sheets;
+  const look = new CSSStyleSheet();
+  look.replaceSync(LOOK_CSS);
+  const fill = new CSSStyleSheet();
+  fill.replaceSync(`${LOOK_CSS}${FILL_CSS}`);
+  sheets = { look, fill };
+  return sheets;
 }
 
-/** A note's place as Pierre takes it, its key carried as the note's own. */
-function annotationsOf(props: DiffViewProps): DiffLineAnnotation<string>[] {
-  return (props.annotations ?? []).map((note) => ({
-    side: note.side,
-    lineNumber: note.line,
-    metadata: note.key,
-  }));
-}
-
-/**
- * Pierre's options for what is drawn and how: a whole file's patch, or an
- * excerpt with nothing said of the lines around it, and each note drawn in
- * the element the view keeps for its key.
- */
-function optionsOf(props: DiffViewProps): FileDiffOptions<string, undefined> {
-  const { look: drawn, renderAnnotation } = props;
-  const excerpt = props.excerpt === true;
-  const options: FileDiffOptions<string, undefined> = {
+/** The options a single diff and a list share: the theme, the layout, and how a changed line is marked. */
+function sharedOptions(drawn: DiffLook) {
+  return {
     theme: drawn.themes,
     themeType: "system",
     preferredHighlighter: "shiki-js",
@@ -160,14 +219,16 @@ function optionsOf(props: DiffViewProps): FileDiffOptions<string, undefined> {
     disableBackground: !drawn.backgrounds,
     disableLineNumbers: !drawn.lineNumbers,
     overflow: drawn.wrap ? "wrap" : "scroll",
-    hunkSeparators: excerpt ? "simple" : "line-info-basic",
+  } as const satisfies FileDiffOptions<string, undefined>;
+}
+
+/** Pierre's options for one patch: a whole file's, or an excerpt with nothing said of the lines around it. */
+function optionsOf(props: DiffViewProps): FileDiffOptions<string, undefined> {
+  return {
+    ...sharedOptions(props.look),
+    hunkSeparators: props.excerpt === true ? "simple" : "line-info-basic",
     disableFileHeader: true,
   };
-  if (renderAnnotation !== undefined) {
-    options.renderAnnotation = (note: DiffLineAnnotation<string>) =>
-      renderAnnotation(note.metadata);
-  }
-  return options;
 }
 
 /** Sets the diff's type on its host, through the CSSOM, whose `--diffs-*` properties the shadow root inherits over its own. */
@@ -185,12 +246,12 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
   container.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
   host.append(container);
   const root = container.shadowRoot ?? container.attachShadow({ mode: "open" });
-  const release = adoptShadowStyles(root, look());
+  const release = adoptShadowStyles(root, lookSheets().fill);
   typeset(container, props.look);
   const view = new PierreFileDiff<string, undefined>(optionsOf(props));
   let patch = props.patch;
   let fileDiff = getSingularPatch(patch);
-  view.render({ fileDiff, fileContainer: container, lineAnnotations: annotationsOf(props) });
+  view.render({ fileDiff, fileContainer: container });
   view.setSelectedLines(props.selected ?? null);
   return {
     update: (next) => {
@@ -200,12 +261,7 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
       }
       typeset(container, next.look);
       view.setOptions(optionsOf(next));
-      view.render({
-        fileDiff,
-        fileContainer: container,
-        forceRender: true,
-        lineAnnotations: annotationsOf(next),
-      });
+      view.render({ fileDiff, fileContainer: container, forceRender: true });
       view.setSelectedLines(next.selected ?? null);
     },
     unmount: () => {
@@ -216,4 +272,200 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
   };
 }
 
-export const diffView: DiffViewModule = { mount };
+/** A note's place as Pierre takes it, its key carried as the note's own. */
+function annotationsOf(notes: readonly DiffAnnotation[]): DiffLineAnnotation<string>[] {
+  return notes.map((note) => ({ side: note.side, lineNumber: note.line, metadata: note.key }));
+}
+
+/** A file drawn as its notes alone, as Pierre takes it: a new file of one empty line, which Pierre draws its notes on the whole file above. */
+function leadPatchOf(path: string): FileDiffMetadata {
+  return getSingularPatch(
+    `diff --git a/${path} b/${path}\n--- /dev/null\n+++ b/${path}\n@@ -0,0 +1 @@\n+\n`,
+  );
+}
+
+/** A file's patch read, or, where it does not read as one, the file with no hunks, so one unreadable patch costs its own lines and not the list. */
+function patchOf(file: DiffListFile): FileDiffMetadata {
+  if (file.lead) return leadPatchOf(file.path);
+  try {
+    return getSingularPatch(file.patch);
+  } catch {
+    const path = file.path;
+    return getSingularPatch(`diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n`);
+  }
+}
+
+/** A file as the list last drew it: what it was handed, and the item Pierre was given for it. */
+interface DrawnFile {
+  readonly file: DiffListFile;
+  readonly item: CodeViewDiffItem<string>;
+}
+
+/** A range Pierre picked, in the contract's words: a side Pierre leaves unsaid is the new file's. */
+function selectionOf(range: SelectedLineRange): DiffSelection {
+  const side = range.side ?? DIFF_SELECTION_SIDE.ADDITIONS;
+  return { start: range.start, side, end: range.end, endSide: range.endSide ?? side };
+}
+
+/**
+ * Pierre's own picking of lines, where the view comments on them: a press
+ * of a line's number picks it and a ⇧-press or a drag picks a range, as
+ * GitHub's diff does, and the gutter's + on the line under the pointer, or
+ * on the range picked, tells the view, which opens its comment there. A file
+ * drawn as its notes alone has no line of its own to pick, so its pick is
+ * let go.
+ */
+function commentOptions(
+  latest: () => DiffListProps,
+  commentable: (path: string) => boolean,
+): CodeViewOptions<string, undefined> {
+  if (latest().onComment === undefined) return {};
+  return {
+    enableLineSelection: true,
+    enableGutterUtility: true,
+    lineHoverHighlight: "number",
+    onGutterUtilityClick: (range: SelectedLineRange, context: { item: { id: string } }) => {
+      const path = context.item.id;
+      if (commentable(path)) latest().onComment?.({ path, selection: selectionOf(range) });
+    },
+  };
+}
+
+/**
+ * Pierre's options for a list: the look, each file's header and notes drawn
+ * in the elements the view keeps for them, read off the latest props, and
+ * each file's element dressed as it is drawn.
+ */
+function listOptions(
+  drawn: DiffLook,
+  latest: () => DiffListProps,
+  dress: (element: HTMLElement, path: string) => void,
+  commentable: (path: string) => boolean,
+): CodeViewOptions<string, undefined> {
+  return {
+    ...sharedOptions(drawn),
+    ...commentOptions(latest, commentable),
+    hunkSeparators: "line-info-basic",
+    stickyHeaders: true,
+    itemMetrics: {
+      lineHeight: Number(drawn.fontSize) * Number(LINE_HEIGHT_RATIO[drawn.lineHeight]),
+      diffHeaderHeight: LIST_HEADER_HEIGHT,
+    },
+    layout: { paddingTop: 0, paddingBottom: LIST_FOOT_ROOM, gap: 0 },
+    renderCustomHeader: (
+      _drawn: FileDiffMetadata | FileContents,
+      context: { item: { id: string } },
+    ) => latest().renderHeader(context.item.id),
+    renderAnnotation: (note: { metadata: string }, context: { item: { id: string } }) =>
+      latest().renderAnnotation(context.item.id, note.metadata),
+    onPostRender: (
+      node: HTMLElement,
+      _instance: PierreFileDiff<string, undefined> | PierreFile<string, undefined>,
+      _phase: PostRenderPhase,
+      context: { item: { id: string } },
+    ) => dress(node, context.item.id),
+  };
+}
+
+/**
+ * Draws a list of files, as Files changed shows its pull request's. Note
+ * that a file's patch is read again only when it changes, and its item
+ * handed anew, its version counted up, only when what it draws changes,
+ * because Pierre draws again whatever it is handed anew.
+ */
+function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
+  let latest = props;
+  const drawnFiles = new Map<string, DrawnFile>();
+  const releases: Array<() => void> = [];
+  const dressed = new WeakSet<HTMLElement>();
+  // Note that Pierre keeps a file's element for another file once the first
+  // scrolls away, so each element's shadow root is dressed once, the first
+  // time it is drawn, and whether it is drawn as notes alone every time.
+  const dress = (element: HTMLElement, path: string) => {
+    element.toggleAttribute(LEAD_ATTRIBUTE, drawnFiles.get(path)?.file.lead === true);
+    if (dressed.has(element) || element.shadowRoot === null) return;
+    dressed.add(element);
+    element.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
+    releases.push(adoptShadowStyles(element.shadowRoot, lookSheets().look));
+  };
+  const itemsOf = (files: readonly DiffListFile[]) =>
+    files.map((file) => {
+      const held = drawnFiles.get(file.path);
+      if (
+        held !== undefined &&
+        held.file.patch === file.patch &&
+        held.file.lead === file.lead &&
+        held.file.collapsed === file.collapsed &&
+        sameNotes(held.file.annotations, file.annotations)
+      ) {
+        return held.item;
+      }
+      const item: CodeViewDiffItem<string> = {
+        id: file.path,
+        type: "diff",
+        fileDiff:
+          held?.file.patch === file.patch && held.file.lead === file.lead
+            ? held.item.fileDiff
+            : patchOf(file),
+        collapsed: file.collapsed,
+        annotations: annotationsOf(file.annotations),
+        version: (held?.item.version ?? 0) + 1,
+      };
+      drawnFiles.set(file.path, { file, item });
+      return item;
+    });
+  typeset(host, props.look);
+  const commentable = (path: string) => drawnFiles.get(path)?.file.lead === false;
+  const optionsFor = (next: DiffListProps) =>
+    listOptions(next.look, () => latest, dress, commentable);
+  const view = new CodeView<string, undefined>(optionsFor(props));
+  view.setup(host);
+  view.setItems(itemsOf(props.files));
+  view.render(true);
+  // The file whose header stands at the top of the list, told when it changes.
+  let top: string | undefined;
+  const tellTop = (scrollTop: number) => {
+    const standing = latest.files.findLast(
+      (file) => (view.getTopForItem(file.path) ?? Number.POSITIVE_INFINITY) <= scrollTop + 1,
+    );
+    const path = standing?.path ?? latest.files[0]?.path;
+    if (path === undefined || path === top) return;
+    top = path;
+    latest.onTopFile(path);
+  };
+  const unsubscribe = view.subscribeToScroll((scrollTop) => tellTop(scrollTop));
+  tellTop(0);
+  // The lines being commented on, lit; Pierre's own pick stands while none is.
+  const light = (selected: DiffListSelection | undefined) => {
+    if (selected === undefined) return view.clearSelectedLines();
+    const { start, side, end, endSide } = selected.selection;
+    view.setSelectedLines({ id: selected.path, range: { start, side, end, endSide } });
+  };
+  if (props.selected !== undefined) light(props.selected);
+  return {
+    update: (next) => {
+      const was = latest;
+      latest = next;
+      typeset(host, next.look);
+      if (
+        !sameLook(next.look, was.look) ||
+        (next.onComment === undefined) !== (was.onComment === undefined)
+      )
+        view.setOptions(optionsFor(next));
+      view.setItems(itemsOf(next.files));
+      view.render();
+      tellTop(host.scrollTop);
+      if (!sameListSelection(next.selected, was.selected)) light(next.selected);
+    },
+    reveal: (path) =>
+      view.scrollTo({ type: "item", id: path, align: "start", behavior: "smooth-auto" }),
+    unmount: () => {
+      unsubscribe();
+      view.cleanUp();
+      for (const release of releases) release();
+      host.replaceChildren();
+    },
+  };
+}
+
+export const diffView: DiffViewModule = { mount, mountList };

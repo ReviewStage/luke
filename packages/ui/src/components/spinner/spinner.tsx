@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
  * Every wait is drawn with this one ring, so a region still reading, a menu
  * still listing, and a button whose press is out read as one object. The
  * ring is an arc in the ink around it over a faint track, and holds still on
- * `--loop-motion` under reduced motion and a capture run, still reading as a
+ * `--luke-loop-motion` under reduced motion and a capture run, still reading as a
  * wait. Its words are said to a reader alone, in a fixed phrase ("Loading
  * transcript"), from a status line that stands from the start, empty until
  * the ring shows, because a reader announces a line filling more surely than
@@ -17,17 +17,28 @@ import type { ReactNode } from "react";
  * which is true unless it says otherwise.
  */
 
-/** How large the ring is drawn: beside words or inside a control, or alone in a region. */
+/** How large the ring is drawn: on a caption's line, beside words or inside a control, or alone in a region. */
 export const SPINNER_SIZE = {
+  SMALL: "small",
   INLINE: "inline",
   REGION: "region",
 } as const;
 
 export type SpinnerSize = (typeof SPINNER_SIZE)[keyof typeof SPINNER_SIZE];
 
-/** The ring alone, decorative: a mark that is itself the wait, such as a sign-in waiting on the browser. */
-export function SpinnerRing(): React.JSX.Element {
-  return <span className="luke-spinner-ring" aria-hidden="true" />;
+/**
+ * The ring alone, decorative: a mark that is itself the wait, such as a
+ * sign-in waiting on the browser, filling the box it stands in, or drawn at
+ * `size` where words beside it already say the wait.
+ */
+export function SpinnerRing({ size }: { size?: SpinnerSize }): React.JSX.Element {
+  const ring = <span className="luke-spinner-ring" aria-hidden="true" />;
+  if (size === undefined) return ring;
+  return (
+    <span className="luke-spinner" data-size={size} aria-hidden="true">
+      {ring}
+    </span>
+  );
 }
 
 /** A wait, said to a reader in `label` and drawn as the ring while `shown`. */

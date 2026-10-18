@@ -37,6 +37,12 @@ export const AGENT_TOOL = {
   UNARCHIVE_AGENT: "unarchive_agent",
   STOP_AGENT: "stop_agent",
   LIST_TASKS: "list_tasks",
+  // The sections the member keeps tasks in in the workspace's sidebar, named for any agent offered `list_tasks`.
+  CREATE_SECTION: "create_section",
+  DELETE_SECTION: "delete_section",
+  MOVE_TASK: "move_task",
+  // A task of the workspace renamed, given a repository, pinned, or archived, named for any agent offered `list_tasks`.
+  UPDATE_TASK: "update_task",
   // The models an agent may be started on, named for any agent offered `start_agent`.
   LIST_MODELS: "list_models",
   // The public reads, every role's.

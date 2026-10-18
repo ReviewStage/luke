@@ -8,8 +8,10 @@
    utility a component spells on a button or a textarea wins over the reset. */
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "@luke/panel/sources.css";
 
-/* Where the utilities are gathered from: every renderer module, and the
+/* Where the utilities are gathered from: every renderer module, the panel's
+   own (`@luke/panel/sources.css`), and the
    markdown renderer the components draw a reply with, whose own classes are
    in the same vocabulary. */
 @source "../";
@@ -33,7 +35,6 @@
   --color-selected-edge: var(--luke-color-border-selected);
   --color-card: var(--luke-color-sidebar);
   --color-well: var(--luke-color-well);
-  --color-developer: var(--voice-developer);
   --color-luke: var(--voice-luke);
   --color-danger: var(--luke-color-danger-text);
 

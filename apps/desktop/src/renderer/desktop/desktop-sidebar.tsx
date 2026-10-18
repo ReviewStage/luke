@@ -9,6 +9,23 @@ import {
 } from "@luke/features/pin-order";
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
+import { runAppCommand, useAppCommand } from "@luke/panel/app-commands";
+import { type HoverPane, useHoverPane } from "@luke/panel/desktop/hover-pane";
+import {
+  EDGE_SIDE,
+  type ResizableEdgeProps,
+  useResizableEdge,
+} from "@luke/panel/desktop/use-resizable-edge";
+import { useRowDrag } from "@luke/panel/desktop/use-row-drag";
+import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
+import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import { RepositoryPicture } from "@luke/panel/repository-picture";
+import { Shortcut } from "@luke/panel/shortcut";
+import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { type SettledWaiting, useSettledWaiting } from "@luke/panel/tasks/inbox-settling";
+import { useMinute } from "@luke/panel/tasks/task-time";
+import { useUnreadTasks } from "@luke/panel/tasks/use-task-looks";
+import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
@@ -72,27 +89,17 @@ import {
 } from "lucide-react";
 import { useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { runAppCommand, useAppCommand } from "../app-commands";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LinkWorkspaceProvider } from "../copy-link-item";
-import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import type { NavigationHistory } from "../navigation-history";
-import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { RepositoryPicture } from "../repository-picture";
-import { Shortcut } from "../shortcut";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
-import { useChatOn } from "../tasks/chat-gate";
-import { NEEDS_YOU } from "../tasks/inbox-model";
-import { useMinute } from "../tasks/task-time";
+import { NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel";
-import { useUnreadTasks } from "../tasks/use-task-looks";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { useFailedRunsMark } from "./failed-runs";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
-import { type HoverPane, useHoverPane } from "./hover-pane";
 import { LukeIdentity } from "./luke-identity";
 import { SidebarAgent } from "./sidebar-agent";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
@@ -114,8 +121,6 @@ import {
 } from "./sidebar-task-view";
 import { SidebarTask } from "./task-actions";
 import { useArchivedView, useTaskListView } from "./task-list-view";
-import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
-import { useRowDrag } from "./use-row-drag";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**
@@ -254,17 +259,17 @@ function TaskRows({
       {rows.map((row) =>
         row.kind === TASK_ROW.TASK ? (
           <SidebarTask
-            key={row.plan.id}
+            key={row.task.id}
             tasks={context.tasks}
-            task={row.plan}
-            current={context.marked(row.plan.id, undefined)}
-            open={context.current(row.plan.id)}
-            unread={context.unread(row.plan)}
+            task={row.task}
+            current={context.marked(row.task.id, undefined)}
+            open={context.current(row.task.id)}
+            unread={context.unread(row.task)}
             now={context.now}
             at={taskRowTime(row, context.order)}
             repository={repository?.(row)}
             face={face}
-            onOpen={() => context.onOpen(row.plan.id)}
+            onOpen={() => context.onOpen(row.task.id)}
           />
         ) : (
           <SidebarAgent
@@ -297,7 +302,7 @@ function pinOf(tasks: TasksControl, agent: TasklessAgent): ((pinned: boolean) =>
 type PinnedRow =
   | {
       readonly kind: typeof TASK_ROW.TASK;
-      readonly plan: TaskSummary;
+      readonly task: TaskSummary;
       readonly pin: PinnedTab | undefined;
       readonly place: PinPlace;
     }
@@ -325,7 +330,7 @@ function pinnedRows(
   const taskRows = pinned.map(
     (task): PinnedRow => ({
       kind: TASK_ROW.TASK,
-      plan: task,
+      task,
       pin: undefined,
       place: { position: task.pinPosition, at: task.pinnedAt ?? 0 },
     }),
@@ -341,7 +346,7 @@ function pinnedRows(
     const task = tasks.listed.tasks.find((each) => each.id === pin.task);
     return task === undefined
       ? []
-      : [{ kind: TASK_ROW.TASK, plan: task, pin, place: { position: pin.position, at: pin.at } }];
+      : [{ kind: TASK_ROW.TASK, task, pin, place: { position: pin.position, at: pin.at } }];
   });
   return inPinOrder([...taskRows, ...agentRows, ...tabRows], placeOf);
 }
@@ -357,7 +362,7 @@ function placePins(positions: ReadonlyMap<PinnedRow, string>, tasks: TasksContro
   const before = new Map<number, string | undefined>();
   const moves = [...positions].flatMap(([row, position]) => {
     if (row.kind === TASK_ROW.AGENT) return [{ agent: true, id: row.agent.id, position }];
-    if (row.pin === undefined) return [{ agent: false, id: row.plan.id, position }];
+    if (row.pin === undefined) return [{ agent: false, id: row.task.id, position }];
     tabs.set(row.pin.at, position);
     before.set(row.pin.at, row.pin.position);
     return [];
@@ -387,16 +392,16 @@ function pinAt(rows: readonly PinnedRow[], row: TaskRow, at: number, tasks: Task
   const moving: PinnedRow =
     row.kind === TASK_ROW.AGENT
       ? { kind: TASK_ROW.AGENT, agent: row.agent, place }
-      : { kind: TASK_ROW.TASK, plan: row.plan, pin: undefined, place };
+      : { kind: TASK_ROW.TASK, task: row.task, pin: undefined, place };
   if (row.kind === TASK_ROW.AGENT) tasks.onPinAgent(row.agent.id, true);
-  else tasks.onMarkTask(row.plan.id, TASK_MARK.PIN);
+  else tasks.onMarkTask(row.task.id, TASK_MARK.PIN);
   placePins(pinPositionsForInsert(rows, moving, at, placeOf), tasks);
 }
 
 /** Takes a row out of Pinned: a plan's or an agent's pin on the account, a tab's on this Mac. */
 function unpin(row: PinnedRow, tasks: TasksControl): void {
   if (row.kind === TASK_ROW.AGENT) tasks.onPinAgent(row.agent.id, false);
-  else if (row.pin === undefined) tasks.onMarkTask(row.plan.id, TASK_MARK.UNPIN);
+  else if (row.pin === undefined) tasks.onMarkTask(row.task.id, TASK_MARK.UNPIN);
   else tasks.sidePanel.onUnpin(row.pin.task, row.pin.tab);
 }
 
@@ -411,7 +416,7 @@ function leaveSection(tasks: TasksControl, taskId: string): TaskSectionWrite[] {
 function pinnedTaskRows(rows: readonly PinnedRow[]): TaskRow[] {
   return rows.flatMap((row): TaskRow[] => {
     if (row.kind === TASK_ROW.AGENT) return [agentRow(row.agent)];
-    return row.pin === undefined ? [taskRow(row.plan)] : [];
+    return row.pin === undefined ? [taskRow(row.task)] : [];
   });
 }
 
@@ -471,7 +476,7 @@ function PinnedRows({
             />
           );
         }
-        const { plan: task, pin } = row;
+        const { task, pin } = row;
         return pin === undefined ? (
           <SidebarTask
             key={task.id}
@@ -577,7 +582,7 @@ function repositoryActionGroups(
 ): MenuAction[][] {
   const { repository } = group;
   // Note that only the group's plans are archived from here, because an agent is archived from its own page.
-  const taskIds = group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.plan.id] : []));
+  const taskIds = group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task.id] : []));
   const archive: MenuAction[] =
     archived || taskIds.length === 0
       ? []
@@ -750,7 +755,7 @@ function CreatorSection({
 
 /** Who created a row, as its creator's face and name are read: a task's creator and owner, or whoever started the agent. */
 function creatorOf(row: TaskRow): Pick<TaskSummary, "createdBy" | "ownerId"> {
-  if (row.kind === TASK_ROW.TASK) return row.plan;
+  if (row.kind === TASK_ROW.TASK) return row.task;
   const { startedBy } = row.agent;
   return startedBy === undefined ? {} : { createdBy: startedBy, ownerId: startedBy.userId };
 }
@@ -894,12 +899,15 @@ function ListSkeleton(): React.JSX.Element {
 /**
  * How many items wait on the developer: those of the listed workspace's
  * tasks, the sum of the Inbox's row counts, and every one from an agent
- * with no task, which names no workspace to be counted in.
+ * with no task that the developer started (`waitsOnReader`), which names no
+ * workspace to be counted in; a teammate's is listed in the Inbox, and waits
+ * on the teammate. An item the window answered is counted no longer from the
+ * moment it was sent (`inbox-settling.ts`).
  */
-function waitingItems(tasks: TasksControl): number {
-  return tasks.listed.inbox.reduce(
+function waitingItems({ waiting, taskless }: SettledWaiting, readerId: string | undefined): number {
+  return waiting.reduce(
     (sum, task) => sum + task.items.length,
-    tasks.inboxTaskless.length,
+    taskless.filter((each) => waitsOnReader(each, readerId)).length,
   );
 }
 
@@ -1289,6 +1297,7 @@ function SidebarColumn({
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
+  const settledWaiting = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -1362,7 +1371,7 @@ function SidebarColumn({
   // An agent with no plan stands on its own page, which is the place shown while it stands.
   const agentShown = onTasks ? tasks.agentView.agentId : undefined;
   const currentRow = (row: TaskRow) =>
-    row.kind === TASK_ROW.TASK ? current(row.plan.id) : row.agent.id === agentShown;
+    row.kind === TASK_ROW.TASK ? current(row.task.id) : row.agent.id === agentShown;
   const openAgent = (agentId: string) => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.agentView.onOpen(agentId);
@@ -1385,7 +1394,7 @@ function SidebarColumn({
       row.kind === TASK_ROW.TASK &&
       row.pin !== undefined &&
       chosenPin !== undefined &&
-      current(row.plan.id) &&
+      current(row.task.id) &&
       row.pin.task === chosenPin.task &&
       row.pin.at === chosenPin.at,
   );
@@ -1404,12 +1413,12 @@ function SidebarColumn({
   // stands where it was let go, under Tasks or in a section.
   const dropRow = (row: TaskRow, zone: string, at: number) => {
     if (zone === PINNED_DROP_ZONE) {
-      if (row.kind === TASK_ROW.TASK) tasks.onWriteSections(leaveSection(tasks, row.plan.id));
+      if (row.kind === TASK_ROW.TASK) tasks.onWriteSections(leaveSection(tasks, row.task.id));
       pinAt(pinnedSection, row, at, tasks);
       return;
     }
     if (row.kind !== TASK_ROW.TASK) return;
-    const taskId = row.plan.id;
+    const taskId = row.task.id;
     if (zone === TASKS_DROP_ZONE) {
       if (!sectioned.taskIds.has(taskId)) return;
       tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null }]);
@@ -1425,7 +1434,7 @@ function SidebarColumn({
   };
   // A tab pinned to the sidebar is no task, so it goes into no section, though Tasks unpins it as any pin.
   const dropPinned = (row: PinnedRow, zone: string, at: number) => {
-    const task = row.kind === TASK_ROW.TASK && row.pin === undefined ? row.plan : undefined;
+    const task = row.kind === TASK_ROW.TASK && row.pin === undefined ? row.task : undefined;
     if (zone === TASKS_DROP_ZONE) {
       unpin(row, tasks);
       if (task !== undefined) tasks.onWriteSections(leaveSection(tasks, task.id));
@@ -1464,7 +1473,7 @@ function SidebarColumn({
   // does a pinned agent while its page stands.
   const pinnedShown = (row: PinnedRow) => {
     if (row.kind === TASK_ROW.AGENT) return row.agent.id === agentShown;
-    const { plan: task, pin } = row;
+    const { task, pin } = row;
     return (
       (pin !== undefined && pin === markedPin) ||
       (current(task.id) &&
@@ -1520,13 +1529,13 @@ function SidebarColumn({
   // no row is open, is the first row. The ends go no further.
   const at = drawn.findIndex((row) =>
     agentShown === undefined
-      ? row.kind === TASK_ROW.TASK && row.plan.id === tasks.activeTaskId
+      ? row.kind === TASK_ROW.TASK && row.task.id === tasks.activeTaskId
       : row.kind === TASK_ROW.AGENT && row.agent.id === agentShown,
   );
   const step = (by: number) => {
     const row = drawn[at + by];
     if (row === undefined) return;
-    if (row.kind === TASK_ROW.TASK) openTask(row.plan.id);
+    if (row.kind === TASK_ROW.TASK) openTask(row.task.id);
     else openAgent(row.agent.id);
   };
   const listed = tasks.signedIn && drawn.length > 0;
@@ -1537,6 +1546,7 @@ function SidebarColumn({
     <aside
       ref={overlay.ref}
       className="desktop-sidebar"
+      data-row-drop-scope=""
       inert={!overlay.inSight}
       onPointerDown={onPressWithin}
       onPointerLeave={overlay.onPointerLeave}
@@ -1566,7 +1576,7 @@ function SidebarColumn({
         </NavItem>
         <SidebarHomeRow current={atHome} disabled={!tasks.signedIn} onOpen={chosen(goHome)} />
         <SidebarInboxRow
-          waiting={tasks.signedIn ? waitingItems(tasks) : 0}
+          waiting={tasks.signedIn ? waitingItems(settledWaiting, tasks.me) : 0}
           current={inInbox}
           disabled={!tasks.signedIn}
           onOpen={chosen(openInbox)}

@@ -9,13 +9,13 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { relayout } from "@luke/panel/testing/resize-observer";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { onRegistry } from "#testing/copy-feedback";
-import { relayout } from "#testing/resize-observer";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
 import { LinkWorkspaceProvider } from "../copy-link-item";
 import type { TasksControl } from "../tasks/use-tasks-tab";
@@ -136,7 +136,7 @@ function mount(shown: "agent" | "plan", linkWorkspace?: string) {
           LinkWorkspaceProvider,
           { value: linkWorkspace },
           createElement(TaskSummary, {
-            tasks: tasks,
+            tasks,
             layout: PINNED,
             cardId: "summary-card",
             inbox: { open: [], settled: [] },
@@ -247,7 +247,7 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount("plan", "acme");
-  const row = [...page.querySelectorAll<HTMLElement>(".task-summary-row")].find((each) =>
+  const row = [...page.querySelectorAll<HTMLElement>(".task-summary li > button")].find((each) =>
     each.textContent?.includes(AGENT.title ?? ""),
   );
   assert.ok(row, "the agent's row is listed");
@@ -268,7 +268,7 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
 const NO_INBOX = { open: [], settled: [] };
 
 /** The plan's column as the shell lays it out: the toolbar's button over the summary, laid out by the column's own width. */
-function TaskColumn({ plans: tasks }: { plans: TasksControl }): React.JSX.Element {
+function TaskColumn({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   const pin = useSummaryPin(true);
   const [column, setColumn] = useState<HTMLElement | null>(null);
   const layout = useSummaryLayout(pin, column, false, summaryHolds(tasks, NO_INBOX));
@@ -277,7 +277,7 @@ function TaskColumn({ plans: tasks }: { plans: TasksControl }): React.JSX.Elemen
     { ref: setColumn },
     createElement(SummaryButton, { layout, cardId: "summary-card" }),
     createElement(TaskSummary, {
-      tasks: tasks,
+      tasks,
       layout,
       cardId: "summary-card",
       inbox: NO_INBOX,
@@ -296,7 +296,7 @@ function columnAt(width: number, tasks: TasksControl = tasksControl()) {
   root = createRoot(page);
   const draw = (shown: TasksControl) =>
     act(() =>
-      root?.render(onRegistry(AtomRegistry.make(), createElement(TaskColumn, { plans: shown }))),
+      root?.render(onRegistry(AtomRegistry.make(), createElement(TaskColumn, { tasks: shown }))),
     );
   draw(tasks);
   return {
@@ -321,7 +321,7 @@ test("a column too narrow to spare the rail draws none, and the toolbar's button
   act(() => toggle.click());
   const card = document.querySelector('[role="dialog"][aria-label="Summary"]');
   assert.ok(card, "the card hangs");
-  assert.ok(card.querySelectorAll(".task-summary-row").length > 0, "the card lists the summary");
+  assert.ok(card.querySelectorAll("li > button").length > 0, "the card lists the summary");
 });
 
 test("Escape takes the card the toolbar's button hung back down and hands the focus back to that button", () => {

@@ -4,6 +4,7 @@ import {
 } from "@luke/features/coding-agent-view";
 import { INBOX_CURSOR_START, type InboxItem } from "@luke/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
+import { useSettledReads } from "@luke/panel/tasks/inbox-settling";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InboxReader } from "./use-task-inbox";
 
@@ -18,7 +19,9 @@ import type { InboxReader } from "./use-task-inbox";
  * task: main's own read is already held open on the account, and is what
  * hears a change. The task whose item is chosen holds its own read open
  * besides (`use-task-inbox.ts`), which answers and is drawn in this one's
- * place, so an answer shows at once. An answer to a read a newer one
+ * place, and the window's own answers stand over every task's read until
+ * it holds them (`inbox-settling.ts`), so a stale read never brings an
+ * answered item back. An answer to a read a newer one
  * overtook is let go, items and failure alike. A read that did not answer leaves the
  * task as it was last read, or unread, and says so, with Try again; a
  * later change of the task's asks again of its own accord.
@@ -27,6 +30,8 @@ import type { InboxReader } from "./use-task-inbox";
 /** One task's items as last read, and the moment main said its latest item changed when they were asked for. */
 interface Read {
   readonly at: number;
+  /** The re-read it answered, so a read every task is asked again for (`onReread`) is asked once more. */
+  readonly round: number;
   readonly items: readonly InboxItem[];
 }
 
@@ -43,6 +48,8 @@ export interface InboxItemsControl {
   /** The plans whose items are read as of main's latest word of them, or read and listed no more, so an item they do not hold is not theirs. */
   readonly current: ReadonlySet<string>;
   readonly onRetry: () => void;
+  /** Reads every listed task again, as of now, though main says none changed: what a write main does not hear of, every item marked read, needs. */
+  readonly onReread: () => void;
 }
 
 export function useInboxItems(input: {
@@ -54,6 +61,8 @@ export function useInboxItems(input: {
   const [reads, setReads] = useState<ReadonlyMap<string, Read>>(new Map());
   const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
   const [attempt, setAttempt] = useState(0);
+  // How many times every task was asked to be read again, each read answering for the round it was asked in.
+  const round = useRef(0);
   // The read out for each task, by the moment it asks for, so a task is asked once per change.
   const asking = useRef(new Map<string, number>());
   // The latest moment each task was asked for, so an answer to an earlier ask, landing last, is let go.
@@ -71,9 +80,11 @@ export function useInboxItems(input: {
   // A retry's press asks again of the tasks whose read failed, the ones not yet read.
   useEffect(() => {
     for (const { taskId, updatedAt } of holdings) {
-      if (latest.current.reads.get(taskId)?.at === updatedAt) continue;
+      const read = latest.current.reads.get(taskId);
+      if (read?.at === updatedAt && read.round === round.current) continue;
       if (asking.current.get(taskId) === updatedAt) continue;
       asking.current.set(taskId, updatedAt);
+      const asked = round.current;
       newest.current.set(taskId, Math.max(newest.current.get(taskId) ?? updatedAt, updatedAt));
       latest.current
         .readInbox({ taskId: taskId, after: INBOX_CURSOR_START })
@@ -91,7 +102,9 @@ export function useInboxItems(input: {
             return next;
           });
           if (failure) return;
-          setReads((was) => new Map(was).set(taskId, { at: updatedAt, items: answer.items }));
+          setReads((was) =>
+            new Map(was).set(taskId, { at: updatedAt, round: asked, items: answer.items }),
+          );
         });
     }
   }, [holdings, attempt]);
@@ -100,10 +113,18 @@ export function useInboxItems(input: {
     setFailed(new Set());
     setAttempt((count) => count + 1);
   }, []);
-  const items = useMemo(
+  // Note that each task's last read stays drawn until the new one lands.
+  const onReread = useCallback(() => {
+    round.current += 1;
+    asking.current.clear();
+    setAttempt((count) => count + 1);
+  }, []);
+  const readItems = useMemo(
     () => new Map([...reads].map(([taskId, read]) => [taskId, read.items])),
     [reads],
   );
+  // Note that the window's own answers and messages stand over a read until it holds them, so a stale read never brings an answered item back.
+  const items = useSettledReads(readItems);
   // Note that only a task still listed fails the list, because one another workspace listed is not drawn.
   const pending = holdings.some(
     ({ taskId, updatedAt }) => reads.get(taskId)?.at !== updatedAt && !failed.has(taskId),
@@ -121,5 +142,6 @@ export function useInboxItems(input: {
     pending,
     current,
     onRetry,
+    onReread,
   };
 }

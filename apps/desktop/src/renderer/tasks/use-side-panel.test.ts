@@ -2,10 +2,10 @@
 
 import assert from "node:assert/strict";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import {
   type OpenTask,
   SIDE_PANEL_TAB,

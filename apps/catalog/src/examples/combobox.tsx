@@ -2,11 +2,14 @@ import {
   Combobox,
   ComboboxList,
   type ComboboxOption,
+  ComboboxOptionItem,
   ComposeIcon,
+  comboboxOptionId,
   DocumentIcon,
   FolderIcon,
   MARK_PROVIDER,
   ProviderMark,
+  useComboboxField,
 } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
@@ -17,7 +20,11 @@ import { CatalogSection } from "../section";
  * the words as typed offered after them, open on a query; in a narrow
  * column with a long title; and a list standing alone on a popover, as an
  * editor's `@` hangs one, a row that opens a further list wearing its
- * chevron, and its note where nothing matches.
+ * chevron, and its note where nothing matches; and a list too short to
+ * search, holding the keys itself, with a model that cannot be chosen now,
+ * the one chosen checked, and a note after them; and rows a list engine of
+ * the app's owns, each drawn as `ComboboxOptionItem`, the second lit as the
+ * engine's `aria-selected` says.
  */
 
 /** Synthetic issues, as a tracker would list them. */
@@ -97,6 +104,62 @@ function Mentions({ options }: { options: readonly ComboboxOption[] }): React.JS
   );
 }
 
+/** Synthetic models, as a picker would list them: one not on the plan, and the one chosen. */
+const MODELS: readonly ComboboxOption[] = [
+  { id: "opus", label: "Opus", detail: "High", current: true },
+  { id: "sonnet", label: "Sonnet", hint: "Not on this plan", disabled: true, current: false },
+  { id: "haiku", label: "Haiku", hint: "⌘3", current: false },
+];
+
+/** A list with no field, steering itself as a picker too short to search does. */
+function Models(): React.JSX.Element {
+  const [active, setActive] = useState(0);
+  const keys = useComboboxField({
+    open: true,
+    active,
+    count: MODELS.length,
+    skipped: (index) => MODELS[index]?.disabled === true,
+    controls: "catalog-models",
+    activeId: comboboxOptionId("catalog-models", active),
+    onActiveChange: setActive,
+    onChoose: setActive,
+  });
+  return (
+    <div className="catalog-popover catalog-column">
+      <ComboboxList
+        id="catalog-models"
+        label="Model"
+        groups={[{ label: "Models", options: MODELS }]}
+        active={active}
+        onActiveChange={setActive}
+        onChoose={setActive}
+        steer={keys}
+        note="Reading more models…"
+      />
+    </div>
+  );
+}
+
+/** Rows as a list engine (cmdk) would hand them through its `asChild`, the second the engine's selected one. */
+function EngineRows(): React.JSX.Element {
+  return (
+    <div className="catalog-popover catalog-column" role="listbox" aria-label="Results">
+      <ComboboxOptionItem
+        option={{ id: "new-task", label: "New task", icon: <ComposeIcon />, hint: "⌘N" }}
+        aria-selected={false}
+      />
+      <ComboboxOptionItem
+        option={{ id: "readme", label: "README.md", icon: <DocumentIcon />, detail: "docs" }}
+        aria-selected
+      />
+      <ComboboxOptionItem
+        option={{ id: "src", label: "src/", icon: <FolderIcon />, detail: "packages/ui" }}
+        aria-selected={false}
+      />
+    </div>
+  );
+}
+
 function Comboboxes(): React.JSX.Element {
   return (
     <>
@@ -115,6 +178,15 @@ function Comboboxes(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="combobox-list-empty" title="A list standing alone, nothing matching">
         <Mentions options={[]} />
+      </CatalogSection>
+      <CatalogSection
+        id="combobox-list-steered"
+        title="A list with no field: a dimmed option, the chosen one, and a note"
+      >
+        <Models />
+      </CatalogSection>
+      <CatalogSection id="combobox-engine-rows" title="Rows a list engine owns">
+        <EngineRows />
       </CatalogSection>
     </>
   );

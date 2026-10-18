@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
+import { SignInGate } from "@luke/panel/sign-in-gate";
 import { ProviderMark } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { AccountSection } from "./settings/account-section";
-import { SignInGate } from "./sign-in-gate";
 
 /**
  * Every surface that names a provider the account signs in with draws that
@@ -22,14 +22,14 @@ function drawn(element: React.ReactElement): HTMLElement {
   return page;
 }
 
-/** The mark standing in `place`, as its markup. */
+/** The artwork of the mark standing in `place`, whatever size it stands at. */
 function markIn(place: Element | null | undefined): string | undefined {
-  return place?.querySelector("svg.provider-mark")?.outerHTML;
+  return place?.querySelector("svg.luke-provider-mark")?.innerHTML;
 }
 
-/** The provider's own mark, as its markup. */
-function markOf(provider: AccountProvider): string {
-  return drawn(createElement(ProviderMark, { provider })).innerHTML;
+/** The provider's own mark's artwork. */
+function markOf(provider: AccountProvider): string | undefined {
+  return drawn(createElement(ProviderMark, { provider })).querySelector("svg")?.innerHTML;
 }
 
 /** The Account section signed in with `provider`. */

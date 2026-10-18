@@ -3,7 +3,25 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
-import { CallIcon, EmptyState, ERROR_STATE_PLACEMENT, ErrorState, RetryRowLabel } from "@luke/ui";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "@luke/panel/ai-elements/conversation";
+import { usePerson } from "@luke/panel/member-directory";
+import { BusyLabel, SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
+import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { REVEAL_MARK, useRevealInLog } from "@luke/panel/tasks/reveal-in-log";
+import {
+  CallIcon,
+  EmptyState,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  RetryRowLabel,
+  TEXT_BUTTON_LINES,
+  TextButton,
+} from "@luke/ui";
 import { LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
   type CallTurn,
@@ -21,18 +39,8 @@ import {
 import { isRecord, isWireString, MESSAGE_ROLE } from "@luke/wire";
 import type { UIMessage } from "ai";
 import { Fragment, useEffect, useRef, useState } from "react";
-import {
-  Conversation,
-  ConversationContent,
-  ConversationEmptyState,
-  ConversationScrollButton,
-} from "../ai-elements/conversation";
-import { usePerson } from "../member-directory";
-import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
 import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab";
 import { CallCheckpoint, CallEnded } from "./call-card";
-import { useChatOn } from "./chat-gate";
-import { REVEAL_MARK, useRevealInLog } from "./reveal-in-log";
 import { TranscriptNote } from "./transcript-blocks";
 import {
   type TaskConversation,
@@ -129,7 +137,7 @@ function hasWork(message: CodingAgentMessage): boolean {
  * rather than asking again on its own.
  */
 function EarlierWork({ onLoad }: { onLoad: () => Promise<void> }): React.JSX.Element {
-  const row = useRef<HTMLButtonElement>(null);
+  const row = useRef<HTMLParagraphElement>(null);
   const [read, setRead] = useState<EarlierRead>(EARLIER_READ.IDLE);
   const load = useRef(() => {
     setRead(EARLIER_READ.READING);
@@ -148,21 +156,22 @@ function EarlierWork({ onLoad }: { onLoad: () => Promise<void> }): React.JSX.Ele
   }, [read]);
 
   return (
-    <button
-      ref={row}
-      type="button"
-      className="ai-trigger m-0 text-[11.5px] text-muted-foreground"
-      disabled={read === EARLIER_READ.READING}
-      onClick={() => load.current()}
-    >
-      <BusyLabel busy={read === EARLIER_READ.READING} label="Loading earlier work">
-        {read === EARLIER_READ.FAILED ? (
-          <RetryRowLabel failure={EARLIER_LINE[EARLIER_READ.FAILED]} />
-        ) : (
-          EARLIER_LINE[EARLIER_READ.IDLE]
-        )}
-      </BusyLabel>
-    </button>
+    <p ref={row} className="task-call-earlier">
+      <TextButton
+        lines={TEXT_BUTTON_LINES.TWO}
+        onClick={() => {
+          if (read !== EARLIER_READ.READING) load.current();
+        }}
+      >
+        <BusyLabel busy={read === EARLIER_READ.READING} label="Loading earlier work">
+          {read === EARLIER_READ.FAILED ? (
+            <RetryRowLabel failure={EARLIER_LINE[EARLIER_READ.FAILED]} />
+          ) : (
+            EARLIER_LINE[EARLIER_READ.IDLE]
+          )}
+        </BusyLabel>
+      </TextButton>
+    </p>
   );
 }
 

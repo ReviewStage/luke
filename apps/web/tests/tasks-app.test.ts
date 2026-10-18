@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { createIssue } from "@luke/database/models/issue-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
 import { createTask } from "@luke/database/models/task-store";
@@ -53,6 +54,11 @@ import {
   taskTranscriptAnswerSchema,
 } from "@luke/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
+import {
+  requestUserId,
+  type SessionEndpoint,
+  type UserInfoEndpoint,
+} from "@luke/service/auth/bearer";
 import { LINK_OUTCOME } from "@luke/service/github/github-installations";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
@@ -83,6 +89,7 @@ import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "eff
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import { DISPATCH_QUERY } from "../server/function-dispatch.js";
 import { dispatched } from "./support/platform-landing";
 
 /**
@@ -141,13 +148,45 @@ const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
     const owner = yield* openGithubUser();
     const other = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: other, name: "Test User", email: `${other}@luke.test` });
-    const bearers = new Map([
-      [`Bearer ${owner}`, owner],
-      [`Bearer ${other}`, other],
-    ]);
-    const ask = (request: Request, landedAs?: string) => answer(bearers, github, request, landedAs);
+    const signedIn: SignedIn = {
+      bearers: new Map([
+        [`Bearer ${owner}`, owner],
+        [`Bearer ${other}`, other],
+      ]),
+      sessions: new Map([
+        [sessionCookieOf(owner), owner],
+        [sessionCookieOf(other), other],
+      ]),
+    };
+    const ask = (request: Request, landedAs?: string) =>
+      answer(signedIn, github, request, landedAs);
     return { owner, other, ask };
   });
+
+/** How the suite's accounts sign in: each one's OAuth bearer, and the session cookie of a browser signed in to it. */
+interface SignedIn {
+  readonly bearers: ReadonlyMap<string, string>;
+  readonly sessions: ReadonlyMap<string, string>;
+}
+
+/** The cookie a browser signed in to the account sends, as the faked auth service reads it. */
+function sessionCookieOf(userId: string): string {
+  return `better-auth.session_token=${userId}`;
+}
+
+/** The auth service's userinfo over the suite's bearers. */
+function userInfoOf(bearers: ReadonlyMap<string, string>): UserInfoEndpoint {
+  return (input) => {
+    const sub = bearers.get(input.headers.get("authorization") ?? "");
+    return Effect.succeed(sub === undefined ? undefined : { sub });
+  };
+}
+
+/** The auth service's session read over the suite's session cookies. */
+function sessionOf(sessions: ReadonlyMap<string, string>): SessionEndpoint {
+  return (input) =>
+    Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? "")));
+}
 
 /**
  * The group over the test's own database and the GitHub given, answering
@@ -155,12 +194,7 @@ const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
  * a client sends it, landed by the platform on a function holding the group
  * under that key.
  */
-const answer = (
-  bearers: ReadonlyMap<string, string>,
-  github: FakeGitHub,
-  request: Request,
-  landedAs?: string,
-) =>
+const answer = (signedIn: SignedIn, github: FakeGitHub, request: Request, landedAs?: string) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
     // The handler runs on the router's own fiber, so it is handed the test's clock: the account rows hang off it.
@@ -174,10 +208,9 @@ const answer = (
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
       tasksApp({
+        // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
         resolveUserId: (incoming) =>
-          Effect.succeed(
-            Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
-          ),
+          requestUserId(incoming, userInfoOf(signedIn.bearers), sessionOf(signedIn.sessions)),
         workspaces: yield* fakeWorkspaceSeams,
         // A task here has no coding agent, so its delete has nothing to stop; `coding-agents-app.test.ts` deletes one that has.
         eveOrigin: () => undefined,
@@ -204,15 +237,20 @@ function request(
     id?: string;
     command?: string;
     query?: Readonly<Record<string, string>>;
+    /** A browser's session cookie, sent beside the bearer or, with no account named, in its place. */
+    cookie?: string;
   } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
   if (init.id !== undefined) url.searchParams.set("id", init.id);
   for (const [name, value] of Object.entries(init.query ?? {})) url.searchParams.set(name, value);
   if (init.command !== undefined) url.searchParams.set("command", init.command);
+  const headers = new Headers();
+  if (userId !== undefined) headers.set("authorization", `Bearer ${userId}`);
+  if (init.cookie !== undefined) headers.set("cookie", init.cookie);
   return new Request(url, {
     method: init.method ?? "GET",
-    headers: userId === undefined ? {} : { authorization: `Bearer ${userId}` },
+    headers,
     ...(init.body === undefined ? undefined : { body: JSON.stringify(init.body) }),
   });
 }
@@ -586,6 +624,89 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
+    "a session cookie opens its account's task but never deletes it, however the delete lands, and the bearer deletes it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const taskId = startedId(
+          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
+        );
+        const cookie = sessionCookieOf(owner);
+        const unauthenticated = refusal(
+          HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          HOSTED_API_ERROR.INVALID_TOKEN,
+        );
+
+        assert.equal(
+          (yield* ask(request(ONE_TASK, undefined, { id: taskId, cookie }))).status,
+          HOSTED_HTTP_STATUS.OK,
+          "the cookie names the account on a read",
+        );
+        assert.deepEqual(
+          yield* ask(request(ONE_TASK, undefined, { id: taskId, method: "DELETE", cookie })),
+          unauthenticated,
+        );
+        // Note that a client may name the one-task path in the query of another path the group's functions serve.
+        assert.deepEqual(
+          yield* ask(
+            request(`/api/plans/${taskId}/pages`, undefined, {
+              method: "DELETE",
+              cookie,
+              query: { [DISPATCH_QUERY.PATH]: "plans/plan" },
+            }),
+            "plans/pages",
+          ),
+          unauthenticated,
+        );
+        assert.equal(
+          (yield* ask(request(ONE_TASK, owner, { id: taskId }))).status,
+          HOSTED_HTTP_STATUS.OK,
+          "the task stands",
+        );
+        assert.deepEqual(yield* ask(request(ONE_TASK, owner, { id: taskId, method: "DELETE" })), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { deleted: true },
+        });
+      }),
+  );
+
+  it.effect(
+    "a session cookie starts a task but not one with an agent, whose session is opened over the bearer, and that start writes nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const cookie = sessionCookieOf(owner);
+        const agent = { idempotencyKey: randomUUID(), prompt: "Expire invitations." };
+
+        const plain = yield* ask(
+          request(TASKS, undefined, { method: "POST", body: RELAY, cookie }),
+        );
+        const withAgent = yield* ask(
+          request(TASKS, undefined, {
+            method: "POST",
+            body: { name: LEDGER.name, repository: "acme/relay", agent },
+            cookie,
+          }),
+        );
+        const listed = readAnswer(
+          taskListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(TASKS, owner)),
+        );
+
+        assert.equal(plain.status, HOSTED_HTTP_STATUS.CREATED);
+        assert.deepEqual(
+          withAgent,
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+        assert.deepEqual(
+          listed.plans.map((plan) => plan.name),
+          [RELAY.name],
+        );
+      }),
+  );
+
+  it.effect(
     "a plan never planned on reads as an empty conversation on the agent tab's wire, and as no code shown",
     () =>
       Effect.gen(function* () {
@@ -664,6 +785,40 @@ it.layer(getTestDB())("the plan routes", (it) => {
           status: HOSTED_HTTP_STATUS.OK,
           body: { plans: [], planlessAgents: [] },
         });
+      }),
+  );
+
+  it.effect(
+    "a start from an issue of the workspace names it, and one from an issue of a workspace the account is not in, or of another workspace of its own, is refused and starts no plan",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const workspaceId = yield* openWorkspace(owner);
+        const elsewhere = yield* openWorkspace(owner);
+        const theirs = yield* openWorkspace(other);
+        const filed = (userId: string, organizationId: string) =>
+          Effect.map(createIssue(userId, { organizationId, title: "Invites expire" }), (made) =>
+            Option.getOrElse(made, () => assert.fail("the issue was not filed")),
+          );
+        const mine = yield* filed(owner, workspaceId);
+        const another = yield* filed(owner, elsewhere);
+        const outside = yield* filed(other, theirs);
+        const start = (issueId: string) =>
+          ask(request(TASKS, owner, { method: "POST", body: { ...RELAY, workspaceId, issueId } }));
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        assert.deepEqual(yield* start(outside.id), notFound);
+        assert.deepEqual(yield* start(another.id), notFound);
+        assert.deepEqual(yield* ask(request(TASKS, owner)), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { plans: [], planlessAgents: [] },
+        });
+        const started = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* start(mine.id),
+        );
+        assert.equal(started.plan.issueId, mine.id);
       }),
   );
 

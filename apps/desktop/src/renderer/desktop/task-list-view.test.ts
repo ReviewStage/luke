@@ -5,19 +5,19 @@ import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-a
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { appCommandOffered, runAppCommand } from "@luke/panel/app-commands";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { newestToastSays } from "@luke/panel/testing/toast";
+import { ToastHost } from "@luke/panel/toast";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { tasksControl } from "#testing/tasks-control";
-import { newestToastSays } from "#testing/toast";
-import { appCommandOffered, runAppCommand } from "../app-commands";
-import { ToastHost } from "../toast";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
@@ -254,8 +254,8 @@ function taskRows(
 ): { name: string; repository: string | undefined; face: boolean }[] {
   const tasks = sidebar.querySelector(TASK_LIST);
   assert.ok(tasks, "the Tasks section stands");
-  return [...tasks.querySelectorAll(".sidebar-task")].map((row) => ({
-    name: row.querySelector(".sidebar-task-name")?.textContent ?? "",
+  return [...tasks.querySelectorAll(".sidebar-tasks > li > button")].map((row) => ({
+    name: row.querySelector(".luke-list-row-title")?.firstChild?.textContent ?? "",
     repository: row.querySelector(".sidebar-task-repository")?.textContent ?? undefined,
     face: row.querySelector(".actor-mark") !== null,
   }));
@@ -280,8 +280,10 @@ test("a shared workspace's tasks group by repository until View options groups t
     { name: "Billing empty states", repository: undefined, face: false },
     { name: "Fix flaky deploy", repository: undefined, face: false },
   ]);
-  const row = [...sidebar.querySelectorAll(`${TASK_LIST} .sidebar-task`)].find(
-    (each) => each.querySelector(".sidebar-task-name")?.textContent === "Billing empty states",
+  const row = [...sidebar.querySelectorAll(`${TASK_LIST} .sidebar-tasks > li > button`)].find(
+    (each) =>
+      each.querySelector(".luke-list-row-title")?.firstChild?.textContent ===
+      "Billing empty states",
   );
   assert.ok(row, "the task has a row");
   act(() => {
@@ -309,7 +311,7 @@ test("ordered by Created, the tasks run newest started first and each row shows 
     taskRows(sidebar).map((row) => row.name),
     ["Fix flaky deploy", "Billing empty states", "Retry webhooks"],
   );
-  const times = [...sidebar.querySelectorAll(`${TASK_LIST} .sidebar-task time`)];
+  const times = [...sidebar.querySelectorAll(`${TASK_LIST} .sidebar-tasks > li > button time`)];
   assert.deepEqual(
     times.map((time) => time.getAttribute("datetime")),
     [30, 20, 10].map((at) => new Date(at).toISOString()),
@@ -321,7 +323,9 @@ test("the pins stand in a section of their own above Tasks, whatever the view gr
   choose(sidebar, "Group by", "Creator");
   const pinned = sidebar.querySelector('nav[aria-label="Pinned"]');
   assert.deepEqual(
-    [...(pinned?.querySelectorAll(".sidebar-task-name") ?? [])].map((name) => name.textContent),
+    [...(pinned?.querySelectorAll(".luke-list-row-title") ?? [])].map(
+      (name) => name.firstChild?.textContent,
+    ),
     ["Release checklist"],
   );
   assert.ok(
@@ -391,7 +395,9 @@ test("Created by › Me lists only your tasks, wearing no faces, says so in a ch
   assert.equal(options?.getAttribute("aria-description"), "Filtered");
   const pinned = sidebar.querySelector('nav[aria-label="Pinned"]');
   assert.deepEqual(
-    [...(pinned?.querySelectorAll(".sidebar-task-name") ?? [])].map((name) => name.textContent),
+    [...(pinned?.querySelectorAll(".luke-list-row-title") ?? [])].map(
+      (name) => name.firstChild?.textContent,
+    ),
     ["Onboarding rewrite", "Release checklist"],
     "the pins stand unfiltered",
   );
@@ -695,9 +701,11 @@ test("a one-off agent stands among its repository's tasks by its last activity, 
       "Fix flaky deploy",
     ],
   );
-  const row = [...sidebar.querySelectorAll<HTMLButtonElement>(".sidebar-agent")].find(
-    (each) => each.textContent?.includes("Triage overnight issues") === true,
-  );
+  const row = [
+    ...sidebar.querySelectorAll<HTMLButtonElement>(
+      ".sidebar-tasks > li > button:has(.sidebar-agent-glyph)",
+    ),
+  ].find((each) => each.textContent?.includes("Triage overnight issues") === true);
   assert.ok(row, "the agent's row stands");
   assert.ok(row.querySelector(".sidebar-agent-glyph svg"), "it leads with its harness mark");
   assert.ok(row.querySelector(".sidebar-task-time .actor-mark"), "it ends with its starter");
@@ -743,7 +751,7 @@ test("an archived one-off agent stands only in the archived view, among the arch
 test("the agent whose page stands is the row the sidebar marks", () => {
   const sidebar = mountSidebar(ACME, TASKS, ARCHIVED, [TRIAGE], "a-1");
   const marked = [...sidebar.querySelectorAll('[aria-current="page"]')].map(
-    (row) => row.querySelector(".sidebar-task-name")?.textContent,
+    (row) => row.querySelector(".luke-list-row-title")?.firstChild?.textContent,
   );
   assert.deepEqual(marked, ["Triage overnight issues"]);
 });
@@ -760,9 +768,11 @@ test("with every task archived but a one-off agent standing, the list holds the 
 
 test("a one-off agent's row offers Copy link on a right-click, copying the agent's link under its workspace, and says Link copied", async () => {
   const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [TRIAGE]);
-  const row = [...sidebar.querySelectorAll<HTMLButtonElement>(".sidebar-agent")].find(
-    (each) => each.textContent?.includes("Triage overnight issues") === true,
-  );
+  const row = [
+    ...sidebar.querySelectorAll<HTMLButtonElement>(
+      ".sidebar-tasks > li > button:has(.sidebar-agent-glyph)",
+    ),
+  ].find((each) => each.textContent?.includes("Triage overnight issues") === true);
   assert.ok(row, "the agent's row stands");
   act(() => {
     row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
@@ -802,7 +812,9 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
     );
   float(SIDEBAR_OVERLAY.OPEN);
   await act(async () => undefined);
-  const row = container.querySelector<HTMLButtonElement>(".sidebar-agent");
+  const row = container.querySelector<HTMLButtonElement>(
+    ".sidebar-tasks > li > button:has(.sidebar-agent-glyph)",
+  );
   assert.ok(row, "the agent's row stands");
   act(() => {
     row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
@@ -817,9 +829,11 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
 
 /** The menu a right-click on the agent's row named `title` opens, by its items' words. */
 function agentMenu(sidebar: HTMLElement, title: string): string[] {
-  const row = [...sidebar.querySelectorAll<HTMLButtonElement>(".sidebar-agent")].find(
-    (each) => each.textContent?.includes(title) === true,
-  );
+  const row = [
+    ...sidebar.querySelectorAll<HTMLButtonElement>(
+      ".sidebar-tasks > li > button:has(.sidebar-agent-glyph)",
+    ),
+  ].find((each) => each.textContent?.includes(title) === true);
   assert.ok(row, `the row of ${title} stands`);
   act(() => {
     row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
@@ -832,10 +846,12 @@ test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest
   const sidebar = mountSidebar(ACME, TASKS, ARCHIVED, [pinned, SWEEP]);
   const section = sidebar.querySelector('nav[aria-label="Pinned"]');
   assert.deepEqual(
-    [...(section?.querySelectorAll(".sidebar-task-name") ?? [])].map((name) => name.textContent),
+    [...(section?.querySelectorAll(".luke-list-row-title") ?? [])].map(
+      (name) => name.firstChild?.textContent,
+    ),
     ["Triage overnight issues", "Release checklist"],
   );
-  assert.ok(section?.querySelector(".sidebar-agent .sidebar-agent-glyph svg"), "it wears its mark");
+  assert.ok(section?.querySelector(".sidebar-agent-glyph svg"), "it wears its mark");
   assert.ok(
     !taskRows(sidebar).some((row) => row.name === "Triage overnight issues"),
     "a pinned agent is not listed again under Tasks",

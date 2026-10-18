@@ -7,6 +7,7 @@ import {
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
+import { useRowDrag } from "@luke/panel/desktop/use-row-drag";
 import {
   BUTTON_SIZE,
   ConfirmDialog,
@@ -35,7 +36,6 @@ import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker";
 import { SidebarGroupHeader } from "./sidebar-group-header";
-import { useRowDrag } from "./use-row-drag";
 
 /**
  * sidebar-sections.tsx -- the account's own sections in the sidebar, between Pinned and Tasks: each a title, and an icon where one was chosen, over the tasks kept in it, the dialog that makes and edits one, and the task menu's Move to section.

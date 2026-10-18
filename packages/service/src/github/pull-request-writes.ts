@@ -1,24 +1,37 @@
 /**
- * pull-request-writes.ts -- a change to a pull request on GitHub, on the token of the member who asked for it: one GraphQL call, its refusals told apart.
+ * pull-request-writes.ts -- a change to a pull request on GitHub, on the token of the member who asked for it: one GraphQL or REST call, its refusals told apart.
  *
  * Every write here runs on a member's own GitHub App user token
  * (`github-app.ts`'s `userToken`), handed in by the one seam that resolves it
  * (`agents/pull-request-write.ts`), never on an installation token, so what
  * the member may do on GitHub bounds what they do through Luke. A write is
- * one call of GitHub's GraphQL API (`githubWrite`) composed over the App
- * module's own kit (`githubPost`, `send`), so a token leaves this module no
- * more than it leaves that one. What GitHub answers is told apart three
+ * one call of GitHub's GraphQL API (`githubWrite`), or, for its requested
+ * reviewers and its labels, of its REST API (`githubRestWrite`), composed
+ * over the App module's own kit (`githubPost`, `send`), so a token leaves
+ * this module no more than it leaves that one. What GitHub answers is told apart three
  * ways: a token GitHub will not take (401), which the member mends by
  * signing in with GitHub again; a change GitHub refused, in its own words,
  * whether as GraphQL errors on a 200 or as a refusal status with a message
  * (a missing permission, a branch protection, a rate limit); and a GitHub
  * that could not be reached or answered in no shape the call reads.
  * Nothing of the token, the request, or GitHub's body reaches a log line.
+ * Which files the member marked viewed is read through the same call, on
+ * the same token, since GitHub keeps that mark for each account alone.
  */
 
 import {
+  FILE_VIEWED_STATE,
+  type FileViewedState,
+  MERGE_METHOD,
+  type MergeMethod,
   PULL_REQUEST_WRITE_BOUNDS,
+  type PullRequestReviewerRef,
+  REVIEW_COMMENT_MODE,
+  REVIEW_COMMENT_SIDE,
   REVIEW_EVENT,
+  REVIEWER_KIND,
+  type ReviewCommentMode,
+  type ReviewCommentSide,
   type ReviewEvent,
 } from "@luke/features/pull-request-write-wire";
 import { Data, Effect, type Redacted, Schema } from "effect";
@@ -29,6 +42,7 @@ import {
   GITHUB_HTTP_STATUS,
   GitHubUnavailable,
   githubPost,
+  githubSendRequest,
   send,
 } from "./github-app.js";
 
@@ -75,25 +89,38 @@ function unreadable(status: number): GitHubUnavailable {
 }
 
 /**
- * The answer to a GraphQL call read for what it said: a 401 is the token
- * refused, any other status that is not OK a refusal in GitHub's words where
- * it gave some, and an OK answer carrying errors a refusal in theirs.
+ * A status that is not OK read for what it said: a 401 is the token
+ * refused, and any other a refusal in GitHub's words where it gave some.
+ */
+const refusedStatus = /* @__PURE__ */ Effect.fnUntraced(function* (
+  response: HttpClientResponse.HttpClientResponse,
+): Effect.fn.Return<never, GitHubWriteFailure> {
+  if (response.status === GITHUB_HTTP_STATUS.UNAUTHORIZED) {
+    return yield* new GitHubTokenRefused();
+  }
+  const refusal = yield* HttpClientResponse.schemaBodyJson(RefusalSchema)(response).pipe(
+    Effect.mapError(
+      () => new GitHubUnavailable({ reason: GITHUB_FAILURE.STATUS, status: response.status }),
+    ),
+  );
+  return yield* refusalOf([refusal.message]);
+});
+
+/** Whether a status is one of GitHub's OK answers. */
+function succeeded(response: HttpClientResponse.HttpClientResponse): boolean {
+  return response.status >= 200 && response.status < 300;
+}
+
+/**
+ * The answer to a GraphQL call read for what it said: a status that is not
+ * OK as `refusedStatus` reads it, and an OK answer carrying errors a
+ * refusal in GitHub's words.
  */
 const readWrite = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   response: HttpClientResponse.HttpClientResponse,
   data: Schema.Codec<A, unknown>,
 ): Effect.fn.Return<A, GitHubWriteFailure> {
-  if (response.status === GITHUB_HTTP_STATUS.UNAUTHORIZED) {
-    return yield* new GitHubTokenRefused();
-  }
-  if (response.status < 200 || response.status >= 300) {
-    const refusal = yield* HttpClientResponse.schemaBodyJson(RefusalSchema)(response).pipe(
-      Effect.mapError(
-        () => new GitHubUnavailable({ reason: GITHUB_FAILURE.STATUS, status: response.status }),
-      ),
-    );
-    return yield* refusalOf([refusal.message]);
-  }
+  if (!succeeded(response)) return yield* refusedStatus(response);
   const answer = yield* HttpClientResponse.schemaBodyJson(GraphqlAnswerSchema)(response).pipe(
     Effect.mapError(() => unreadable(response.status)),
   );
@@ -113,7 +140,7 @@ const readWrite = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
 const githubWrite = <A>(
   token: Redacted.Redacted,
   document: string,
-  variables: Readonly<Record<string, string | number | boolean>>,
+  variables: Readonly<Record<string, string | number | boolean | null>>,
   data: Schema.Codec<A, unknown>,
 ): Effect.Effect<A, GitHubWriteFailure, HttpClient.HttpClient> =>
   Effect.scoped(
@@ -189,7 +216,7 @@ const PENDING_REVIEWS_READ = 10;
 const PENDING_REVIEW_QUERY = `query($id: ID!) {
   node(id: $id) {
     ... on PullRequest {
-      reviews(states: PENDING, first: ${PENDING_REVIEWS_READ}) { nodes { id viewerDidAuthor } }
+      reviews(states: PENDING, first: ${PENDING_REVIEWS_READ}) { nodes { id viewerDidAuthor commit { oid } } }
     }
   }
 }`;
@@ -197,7 +224,13 @@ const PENDING_REVIEW_QUERY = `query($id: ID!) {
 const PendingReviewsSchema = Schema.Struct({
   node: Schema.Struct({
     reviews: Schema.Struct({
-      nodes: Schema.Array(Schema.Struct({ id: Schema.String, viewerDidAuthor: Schema.Boolean })),
+      nodes: Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          viewerDidAuthor: Schema.Boolean,
+          commit: Schema.optionalKey(Schema.NullOr(Schema.Struct({ oid: Schema.String }))),
+        }),
+      ),
     }),
   }),
 });
@@ -214,6 +247,13 @@ const ADD_REVIEW_MUTATION = `mutation($id: ID!, $event: PullRequestReviewEvent!,
   }
 }`;
 
+/** The member's own pending review on the pull request, by its GraphQL id; none where they hold none. GitHub shows a member only theirs, and `viewerDidAuthor` says so whatever it shows. */
+const ownPendingReview = (token: Redacted.Redacted, pullRequestId: string) =>
+  Effect.map(
+    githubWrite(token, PENDING_REVIEW_QUERY, { id: pullRequestId }, PendingReviewsSchema),
+    (pending) => pending.node.reviews.nodes.find((node) => node.viewerDidAuthor),
+  );
+
 /**
  * A review submitted on the member's token: their own pending review,
  * where they hold one, so the comments they started it with are what
@@ -228,13 +268,7 @@ export const submitPullRequestReview = /* @__PURE__ */ Effect.fn("web/submitPull
     pullRequestId: string,
     review: { readonly event: ReviewEvent; readonly body: string },
   ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
-    const pending = yield* githubWrite(
-      token,
-      PENDING_REVIEW_QUERY,
-      { id: pullRequestId },
-      PendingReviewsSchema,
-    );
-    const own = pending.node.reviews.nodes.find((node) => node.viewerDidAuthor);
+    const own = yield* ownPendingReview(token, pullRequestId);
     const event = GRAPHQL_REVIEW_EVENT[review.event];
     const body = review.body.trim() === "" ? {} : { body: review.body };
     yield* githubWrite(
@@ -245,6 +279,82 @@ export const submitPullRequestReview = /* @__PURE__ */ Effect.fn("web/submitPull
     );
   },
 );
+
+/** The REST methods a write on a pull request's people or labels uses. */
+const REST_METHOD = { POST: "POST", DELETE: "DELETE" } as const;
+
+type RestMethod = (typeof REST_METHOD)[keyof typeof REST_METHOD];
+
+/** What a REST write on a pull request's people or labels sends: the users or teams it names, or the labels. */
+type RestWriteBody =
+  | { readonly reviewers: readonly string[] }
+  | { readonly team_reviewers: readonly string[] }
+  | { readonly labels: readonly string[] };
+
+/** A path segment as GitHub takes it, so a label's name with a slash or a space stays one segment. */
+function segment(value: string): string {
+  return encodeURIComponent(value);
+}
+
+/** The repository's own path under the API, each half a segment of its own. */
+function repositoryPath(fullName: string): string {
+  const [owner = "", name = ""] = fullName.split("/");
+  return `/repos/${segment(owner)}/${segment(name)}`;
+}
+
+/**
+ * One call of GitHub's REST API on the member's token, its JSON body where
+ * one is given, its answer read only for whether GitHub took it, as a
+ * GraphQL write's refusals are told apart. Note that a requested reviewer
+ * is taken off only through REST, GraphQL offering no such mutation, so
+ * the people and labels writes are REST alike.
+ */
+const githubRestWrite = (
+  token: Redacted.Redacted,
+  method: RestMethod,
+  path: string,
+  body?: RestWriteBody,
+): Effect.Effect<void, GitHubWriteFailure, HttpClient.HttpClient> => {
+  return Effect.scoped(
+    Effect.flatMap(send(githubSendRequest(method, path, token, body)), (response) =>
+      succeeded(response) ? Effect.void : refusedStatus(response),
+    ),
+  );
+};
+
+/** A user or a team asked for a review on the pull request, or asked no longer where `requested` says not, on the member's token. */
+export const setReviewRequested = /* @__PURE__ */ Effect.fn("web/setReviewRequested")(function* (
+  token: Redacted.Redacted,
+  fullName: string,
+  number: number,
+  reviewer: PullRequestReviewerRef,
+  requested: boolean,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  const body: RestWriteBody =
+    reviewer.kind === REVIEWER_KIND.TEAM
+      ? { team_reviewers: [reviewer.name] }
+      : { reviewers: [reviewer.name] };
+  yield* githubRestWrite(
+    token,
+    requested ? REST_METHOD.POST : REST_METHOD.DELETE,
+    `${repositoryPath(fullName)}/pulls/${number}/requested_reviewers`,
+    body,
+  );
+});
+
+/** One of the repository's labels put on the pull request, or taken off where `labelled` says not, on the member's token. */
+export const setLabelled = /* @__PURE__ */ Effect.fn("web/setLabelled")(function* (
+  token: Redacted.Redacted,
+  fullName: string,
+  number: number,
+  label: string,
+  labelled: boolean,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  const labels = `${repositoryPath(fullName)}/issues/${number}/labels`;
+  yield* labelled
+    ? githubRestWrite(token, REST_METHOD.POST, labels, { labels: [label] })
+    : githubRestWrite(token, REST_METHOD.DELETE, `${labels}/${segment(label)}`);
+});
 
 const THREAD_PULL_REQUEST_QUERY = `query($id: ID!) {
   node(id: $id) { ... on PullRequestReviewThread { pullRequest { id } } }
@@ -324,5 +434,453 @@ export const setReviewThreadResolved = /* @__PURE__ */ Effect.fn("web/setReviewT
       { id: threadId },
       Schema.Unknown,
     );
+  },
+);
+
+/** Each merge method as GitHub's GraphQL spells it. */
+const GRAPHQL_MERGE_METHOD = {
+  [MERGE_METHOD.MERGE]: "MERGE",
+  [MERGE_METHOD.SQUASH]: "SQUASH",
+  [MERGE_METHOD.REBASE]: "REBASE",
+} as const satisfies Record<MergeMethod, string>;
+
+const MERGE_MUTATION = `mutation($id: ID!, $method: PullRequestMergeMethod!, $head: GitObjectID!) {
+  mergePullRequest(input: { pullRequestId: $id, mergeMethod: $method, expectedHeadOid: $head }) {
+    pullRequest { merged }
+  }
+}`;
+
+/**
+ * The pull request merged now by the method given, on the member's token,
+ * against the head they saw: GitHub refuses it where the head has moved
+ * since, the method is not allowed, or a rule still stands in the way.
+ */
+export const mergePullRequest = /* @__PURE__ */ Effect.fn("web/mergePullRequest")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  method: MergeMethod,
+  headSha: string,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* githubWrite(
+    token,
+    MERGE_MUTATION,
+    { id: pullRequestId, method: GRAPHQL_MERGE_METHOD[method], head: headSha },
+    Schema.Unknown,
+  );
+});
+
+const ENABLE_AUTO_MERGE_MUTATION = `mutation($id: ID!, $method: PullRequestMergeMethod, $head: GitObjectID!) {
+  enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: $method, expectedHeadOid: $head }) {
+    clientMutationId
+  }
+}`;
+
+const DISABLE_AUTO_MERGE_MUTATION = `mutation($id: ID!) {
+  disablePullRequestAutoMerge(input: { pullRequestId: $id }) { clientMutationId }
+}`;
+
+/** What auto-merge is turned on with: the method, none on a base a merge queue merges, and the head the member saw. */
+interface AutoMerge {
+  readonly method: MergeMethod | undefined;
+  readonly headSha: string;
+}
+
+/**
+ * Auto-merge turned on for the pull request as given, or off where none is
+ * given, on the member's token. On a base merged through a merge queue,
+ * turning it on is how a pull request is added to the queue once it is
+ * ready, as `gh pr merge --auto` adds one, the queue's method standing.
+ */
+export const setAutoMerge = /* @__PURE__ */ Effect.fn("web/setAutoMerge")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  autoMerge: AutoMerge | undefined,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  if (autoMerge === undefined) {
+    yield* githubWrite(token, DISABLE_AUTO_MERGE_MUTATION, { id: pullRequestId }, Schema.Unknown);
+    return;
+  }
+  yield* githubWrite(
+    token,
+    ENABLE_AUTO_MERGE_MUTATION,
+    {
+      id: pullRequestId,
+      head: autoMerge.headSha,
+      ...(autoMerge.method === undefined
+        ? undefined
+        : { method: GRAPHQL_MERGE_METHOD[autoMerge.method] }),
+    },
+    Schema.Unknown,
+  );
+});
+
+const DEQUEUE_MUTATION = `mutation($id: ID!) {
+  dequeuePullRequest(input: { id: $id }) { clientMutationId }
+}`;
+
+/** The pull request taken out of its base's merge queue, on the member's token. */
+export const takeOutOfMergeQueue = /* @__PURE__ */ Effect.fn("web/takeOutOfMergeQueue")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* githubWrite(token, DEQUEUE_MUTATION, { id: pullRequestId }, Schema.Unknown);
+});
+
+const COMMENT_MUTATION = `mutation($id: ID!, $body: String!) {
+  addComment(input: { subjectId: $id, body: $body }) { commentEdge { node { id } } }
+}`;
+
+/** A comment on the pull request itself, at the foot of its conversation, on the member's token. */
+export const commentOnPullRequest = /* @__PURE__ */ Effect.fn("web/commentOnPullRequest")(
+  function* (
+    token: Redacted.Redacted,
+    pullRequestId: string,
+    body: string,
+  ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+    yield* githubWrite(token, COMMENT_MUTATION, { id: pullRequestId, body }, Schema.Unknown);
+  },
+);
+
+/** GitHub's own word for each side of a diff a line comment counts on, as `DiffSide` spells it. */
+const GRAPHQL_DIFF_SIDE = {
+  [REVIEW_COMMENT_SIDE.LEFT]: "LEFT",
+  [REVIEW_COMMENT_SIDE.RIGHT]: "RIGHT",
+} as const satisfies Record<ReviewCommentSide, string>;
+
+/** A comment on a line or lines of a changed file, as the member wrote it against the head their diff was read at. */
+export interface LineComment {
+  readonly mode: ReviewCommentMode;
+  readonly path: string;
+  readonly line: number;
+  readonly side: ReviewCommentSide;
+  readonly startLine?: number;
+  readonly startSide?: ReviewCommentSide;
+  readonly body: string;
+  readonly headSha: string;
+}
+
+/** The thread's place and words, which every line comment's document names alike. */
+const THREAD_VARIABLES =
+  "$path: String!, $body: String!, $line: Int!, $side: DiffSide!, $startLine: Int, $startSide: DiffSide";
+const THREAD_FIELDS =
+  "path: $path, body: $body, line: $line, side: $side, startLine: $startLine, startSide: $startSide";
+
+const SINGLE_COMMENT_MUTATION = `mutation($id: ID!, $commit: GitObjectID!, ${THREAD_VARIABLES}) {
+  addPullRequestReview(input: { pullRequestId: $id, commitOID: $commit, event: COMMENT, threads: [{ ${THREAD_FIELDS} }] }) {
+    pullRequestReview { id }
+  }
+}`;
+
+const START_REVIEW_MUTATION = `mutation($id: ID!, $commit: GitObjectID!, ${THREAD_VARIABLES}) {
+  addPullRequestReview(input: { pullRequestId: $id, commitOID: $commit, threads: [{ ${THREAD_FIELDS} }] }) {
+    pullRequestReview { id }
+  }
+}`;
+
+const REVIEW_THREAD_MUTATION = `mutation($review: ID!, ${THREAD_VARIABLES}) {
+  addPullRequestReviewThread(input: { pullRequestReviewId: $review, ${THREAD_FIELDS} }) { thread { id } }
+}`;
+
+/** A line comment's place and words as its document's variables: one line where no start is named. */
+function threadVariables(comment: LineComment) {
+  return {
+    path: comment.path,
+    body: comment.body,
+    line: comment.line,
+    side: GRAPHQL_DIFF_SIDE[comment.side],
+    ...(comment.startLine === undefined ? undefined : { startLine: comment.startLine }),
+    ...(comment.startSide === undefined
+      ? undefined
+      : { startSide: GRAPHQL_DIFF_SIDE[comment.startSide] }),
+  };
+}
+
+/** What the member is told where the review they hold pending was started on a commit other than the one their diff was read at, whose lines may not be these. */
+const PENDING_ON_OTHER_COMMIT =
+  "Your pending review was started on another commit. Submit or discard it, then refresh changes to comment on these lines.";
+
+/**
+ * A comment on lines of a changed file, on the member's token, as GitHub's
+ * own line comment offers it: published at once as a review of its own
+ * (`single`), as "Add single comment" does; or added to the member's own
+ * pending review (`review`), or, where they hold none, one started with it
+ * on the head their diff was read at, in the one call, so a refused comment
+ * never leaves an empty review behind; that review is the one the Review
+ * panel submits (`submitPullRequestReview`). A pending review started on
+ * another commit is refused in words saying so rather than given lines
+ * counted on this one. GitHub's rules, a line outside the diff, a range
+ * across hunks, a head no longer the pull request's, are its refusal in
+ * its words.
+ */
+export const addLineComment = /* @__PURE__ */ Effect.fn("web/addLineComment")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  comment: LineComment,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  const thread = threadVariables(comment);
+  if (comment.mode === REVIEW_COMMENT_MODE.SINGLE) {
+    yield* githubWrite(
+      token,
+      SINGLE_COMMENT_MUTATION,
+      { id: pullRequestId, commit: comment.headSha, ...thread },
+      Schema.Unknown,
+    );
+    return;
+  }
+  const own = yield* ownPendingReview(token, pullRequestId);
+  if (own === undefined) {
+    yield* githubWrite(
+      token,
+      START_REVIEW_MUTATION,
+      { id: pullRequestId, commit: comment.headSha, ...thread },
+      Schema.Unknown,
+    );
+    return;
+  }
+  const started = own.commit?.oid;
+  if (started !== undefined && started !== comment.headSha) {
+    return yield* refusalOf([PENDING_ON_OTHER_COMMIT]);
+  }
+  yield* githubWrite(token, REVIEW_THREAD_MUTATION, { review: own.id, ...thread }, Schema.Unknown);
+});
+
+const DISCARD_REVIEW_MUTATION = `mutation($id: ID!) {
+  deletePullRequestReview(input: { pullRequestReviewId: $id }) { pullRequestReview { id } }
+}`;
+
+/** What the member is told where they hold no pending review on the pull request to throw away. */
+const NO_PENDING_REVIEW = "You have no pending review on this pull request.";
+
+/**
+ * The member's own pending review on the pull request thrown away, its
+ * comments with it, on their token: found by the pull request it is on and
+ * whether GitHub says they wrote it, so no other review is ever touched.
+ */
+export const discardPendingReview = /* @__PURE__ */ Effect.fn("web/discardPendingReview")(
+  function* (
+    token: Redacted.Redacted,
+    pullRequestId: string,
+  ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+    const own = yield* ownPendingReview(token, pullRequestId);
+    if (own === undefined) return yield* refusalOf([NO_PENDING_REVIEW]);
+    yield* githubWrite(token, DISCARD_REVIEW_MUTATION, { id: own.id }, Schema.Unknown);
+  },
+);
+
+const CLOSE_MUTATION = `mutation($id: ID!) {
+  closePullRequest(input: { pullRequestId: $id }) { pullRequest { state } }
+}`;
+
+const REOPEN_MUTATION = `mutation($id: ID!) {
+  reopenPullRequest(input: { pullRequestId: $id }) { pullRequest { state } }
+}`;
+
+/** The pull request closed without merging, or opened again where `open` asks, on the member's token. */
+export const setPullRequestOpen = /* @__PURE__ */ Effect.fn("web/setPullRequestOpen")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  open: boolean,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* githubWrite(
+    token,
+    open ? REOPEN_MUTATION : CLOSE_MUTATION,
+    { id: pullRequestId },
+    Schema.Unknown,
+  );
+});
+
+const TITLE_MUTATION = `mutation($id: ID!, $title: String!) {
+  updatePullRequest(input: { pullRequestId: $id, title: $title }) { pullRequest { title } }
+}`;
+
+/** The pull request's title changed to the one given, on the member's token. */
+export const setPullRequestTitle = /* @__PURE__ */ Effect.fn("web/setPullRequestTitle")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  title: string,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* githubWrite(token, TITLE_MUTATION, { id: pullRequestId, title }, Schema.Unknown);
+});
+
+/**
+ * The pull request what a reaction names is on, read on the member's token:
+ * the pull request itself, a comment on it, one of its reviews, or a
+ * review's comment, each by its GraphQL id.
+ */
+const SUBJECT_PULL_REQUEST_QUERY = `query($id: ID!) {
+  node(id: $id) {
+    ... on PullRequest { id }
+    ... on IssueComment { issue { id } }
+    ... on PullRequestReview { pullRequest { id } }
+    ... on PullRequestReviewComment { pullRequest { id } }
+  }
+}`;
+
+const NodeIdOfSchema = Schema.optionalKey(Schema.Struct({ id: Schema.String }));
+
+const SubjectPullRequestSchema = Schema.Struct({
+  node: Schema.NullOr(
+    Schema.Struct({
+      id: Schema.optionalKey(Schema.String),
+      issue: NodeIdOfSchema,
+      pullRequest: NodeIdOfSchema,
+    }),
+  ),
+});
+
+/** What the member is told where a reaction names nothing of this pull request, or nothing they can see. */
+const NOT_THIS_SUBJECT = "Could not resolve to a comment on this pull request.";
+
+const ADD_REACTION_MUTATION = `mutation($id: ID!, $content: ReactionContent!) {
+  addReaction(input: { subjectId: $id, content: $content }) { reaction { content } }
+}`;
+
+const REMOVE_REACTION_MUTATION = `mutation($id: ID!, $content: ReactionContent!) {
+  removeReaction(input: { subjectId: $id, content: $content }) { reaction { content } }
+}`;
+
+/**
+ * A reaction given, or the member's own taken back where `add` is false, on
+ * the member's token: what it names is first confirmed this pull request's,
+ * its description, a comment, a review, or a review comment, so nothing
+ * else on GitHub is reacted to through this one's tab. `content` is the
+ * reaction in GitHub's GraphQL words (`ReactionContent`).
+ */
+export const reactOnPullRequest = /* @__PURE__ */ Effect.fn("web/reactOnPullRequest")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  reaction: { readonly subject: string; readonly content: string; readonly add: boolean },
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  const { subject, content, add } = reaction;
+  const read = yield* githubWrite(
+    token,
+    SUBJECT_PULL_REQUEST_QUERY,
+    { id: subject },
+    SubjectPullRequestSchema,
+  );
+  const node = read.node;
+  // Note that the pull request itself answers its own id; anything on it answers its pull request's.
+  const on = node?.pullRequest?.id ?? node?.issue?.id ?? node?.id;
+  if (on !== pullRequestId) return yield* refusalOf([NOT_THIS_SUBJECT]);
+  yield* githubWrite(
+    token,
+    add ? ADD_REACTION_MUTATION : REMOVE_REACTION_MUTATION,
+    { id: subject, content },
+    Schema.Unknown,
+  );
+});
+
+const MARK_VIEWED_MUTATION = `mutation($id: ID!, $path: String!) {
+  markFileAsViewed(input: { pullRequestId: $id, path: $path }) { clientMutationId }
+}`;
+
+const UNMARK_VIEWED_MUTATION = `mutation($id: ID!, $path: String!) {
+  unmarkFileAsViewed(input: { pullRequestId: $id, path: $path }) { clientMutationId }
+}`;
+
+/** One of the pull request's files marked viewed, or unmarked where `viewed` is false, for the member alone, on their token. */
+export const setFileViewed = /* @__PURE__ */ Effect.fn("web/setFileViewed")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  path: string,
+  viewed: boolean,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* githubWrite(
+    token,
+    viewed ? MARK_VIEWED_MUTATION : UNMARK_VIEWED_MUTATION,
+    { id: pullRequestId, path },
+    Schema.Unknown,
+  );
+});
+
+/** GitHub lists a pull request's files a hundred to a page. */
+const VIEWED_PER_PAGE = 100;
+
+const VIEWED_QUERY = `query($owner: String!, $name: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      files(first: ${VIEWED_PER_PAGE}, after: $after) {
+        nodes { path viewerViewedState }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}`;
+
+/** GitHub's own word for where a file stands for the viewer, as `FileViewedState` spells it. */
+const GRAPHQL_VIEWED_STATE = {
+  VIEWED: FILE_VIEWED_STATE.VIEWED,
+  UNVIEWED: FILE_VIEWED_STATE.UNVIEWED,
+  DISMISSED: FILE_VIEWED_STATE.DISMISSED,
+} as const satisfies Record<string, FileViewedState>;
+
+/** GitHub's words for where a file stands, each one `GRAPHQL_VIEWED_STATE` reads. */
+const GRAPHQL_VIEWED_STATES = [
+  "VIEWED",
+  "UNVIEWED",
+  "DISMISSED",
+] as const satisfies readonly (keyof typeof GRAPHQL_VIEWED_STATE)[];
+
+const ViewedPageSchema = Schema.Struct({
+  repository: Schema.NullOr(
+    Schema.Struct({
+      pullRequest: Schema.NullOr(
+        Schema.Struct({
+          files: Schema.NullOr(
+            Schema.Struct({
+              nodes: Schema.Array(
+                Schema.Struct({
+                  path: Schema.String,
+                  viewerViewedState: Schema.Literals(GRAPHQL_VIEWED_STATES),
+                }),
+              ),
+              pageInfo: Schema.Struct({
+                hasNextPage: Schema.Boolean,
+                endCursor: Schema.NullOr(Schema.String),
+              }),
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
+});
+
+/** One file and where it stands for the member. */
+export interface FileViewed {
+  readonly path: string;
+  readonly state: FileViewedState;
+}
+
+/**
+ * Where each of the pull request's files stands for the member on GitHub,
+ * read on their token a page at a time, up to as many as a read of the
+ * changes lists; a pull request out of their sight is GitHub's refusal.
+ */
+export const pullRequestViewedStates = /* @__PURE__ */ Effect.fn("web/pullRequestViewedStates")(
+  function* (
+    token: Redacted.Redacted,
+    fullName: string,
+    number: number,
+  ): Effect.fn.Return<readonly FileViewed[], GitHubWriteFailure, HttpClient.HttpClient> {
+    const [owner = "", name = ""] = fullName.split("/");
+    const files: FileViewed[] = [];
+    let after: string | null = null;
+    while (files.length < PULL_REQUEST_WRITE_BOUNDS.MAX_VIEWED_FILES) {
+      const page: typeof ViewedPageSchema.Type = yield* githubWrite(
+        token,
+        VIEWED_QUERY,
+        { owner, name, number, after },
+        ViewedPageSchema,
+      );
+      const listed = page.repository?.pullRequest?.files;
+      if (listed === undefined || listed === null) return yield* refusalOf([NOT_RESOLVED]);
+      for (const node of listed.nodes) {
+        files.push({ path: node.path, state: GRAPHQL_VIEWED_STATE[node.viewerViewedState] });
+      }
+      if (!listed.pageInfo.hasNextPage || listed.pageInfo.endCursor === null) break;
+      after = listed.pageInfo.endCursor;
+    }
+    return files.slice(0, PULL_REQUEST_WRITE_BOUNDS.MAX_VIEWED_FILES);
   },
 );

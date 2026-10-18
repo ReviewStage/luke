@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
+import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
 import {
   CODING_AGENT_BOUNDS,
   codingAgentCallIdSchema,
@@ -403,6 +404,8 @@ export const tasksViewSchema = EffectSchema.Struct({
   listStatus: tasksReadSchema,
   /** The workspaces the account is a member of, its first one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),
+  /** Where the read of the workspaces stands, a failed one keeping those held; absent before the first is asked. */
+  workspacesStatus: EffectSchema.optionalKey(tasksReadSchema),
   /** Whether the account has GitHub connected, and its login, as last read beside the workspaces; absent before the first read lands. */
   github: EffectSchema.optionalKey(githubConnectionSchema),
   /** The repositories the account pinned in the sidebar, newest pinned first, as last read or pinned; absent before the first read lands. */
@@ -443,6 +446,8 @@ export const tasksViewSchema = EffectSchema.Struct({
   work: EffectSchema.optionalKey(EffectSchema.Array(taskWorkTurnSchema)),
   /** The turn the active task's next older page of work is read before; absent where none stands or before the first read. */
   workEarlier: EffectSchema.optionalKey(EffectSchema.String),
+  /** Where the read of the active task's newest work and code stands, a failed one keeping what is held; absent before the first is asked, and cleared with the activity. */
+  workStatus: EffectSchema.optionalKey(tasksReadSchema),
   /**
    * The active task's conversation as an agent's transcript is
    * read: the newest page read when the task opens, each page the held read
@@ -586,17 +591,25 @@ export type RepositoryCallFailure = (typeof REPOSITORY_CALL_FAILURES)[number];
 
 const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILURES);
 
-/** Why a start answered no plan: a repository call's reasons, or the Linear issue it was to start from could not be read. */
+/** Why a start answered no plan: a repository call's reasons, the Linear issue it was to start from could not be read, or the workspace's own issue it was to start from is none of the workspace's. */
 const START_CALL_FAILURES = [
   ...REPOSITORY_CALL_FAILURES,
   TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
+  TASK_CALL_FAILURE.NOT_FOUND,
 ] as const;
 
 export type StartCallFailure = (typeof START_CALL_FAILURES)[number];
 
-/** Starting a task, as the window hears it: the task now active, or why none started. */
+/**
+ * Starting a task, as the window hears it: the task now active, with the
+ * agent started on it, or why it was not, where the start named one, as an
+ * agent's Start answers; or why no task started.
+ */
 export const tasksStartAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ planId: EffectSchema.String }),
+  EffectSchema.Struct({
+    planId: EffectSchema.String,
+    agentStart: EffectSchema.optionalKey(codingAgentAgentAnswerSchema),
+  }),
   EffectSchema.Struct({ failure: EffectSchema.Literals(START_CALL_FAILURES) }),
 ]);
 

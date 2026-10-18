@@ -1,4 +1,4 @@
-/* spinner.css -- the ring, its two sizes, a region holding one at its
+/* spinner.css -- the ring, its three sizes, a region holding one at its
    centre, and a control's words sharing one cell with it, so the ring stands
    over the words' own room rather than taking a width of its own. */
 
@@ -13,9 +13,9 @@
     border-top-color: currentColor;
     border-radius: 50%;
     /* An endless loop with no end to wait for, so its duration is a literal;
-       it holds still on --loop-motion with every other. */
+       it holds still on --luke-loop-motion with every other. */
     animation: luke-spinner-turn 900ms linear infinite;
-    animation-play-state: var(--loop-motion, running);
+    animation-play-state: var(--luke-loop-motion);
   }
 
   @keyframes luke-spinner-turn {
@@ -24,14 +24,19 @@
     }
   }
 
-  /* A wait: 16px beside words or inside a control, 22px alone in a region,
-     in the muted ink a wait is said in. */
+  /* A wait: 12px on a caption's line, 16px beside words or inside a
+     control, 22px alone in a region, in the muted ink a wait is said in. */
   .luke-spinner {
     display: inline-flex;
     flex: 0 0 auto;
     width: 16px;
     height: 16px;
     color: var(--luke-color-text-muted);
+  }
+
+  .luke-spinner[data-size="small"] {
+    width: 12px;
+    height: 12px;
   }
 
   .luke-spinner[data-size="region"] {

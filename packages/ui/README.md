@@ -63,8 +63,21 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   `danger*`, `focus-ring`, …), set by both profiles in both themes.
 - **Display** (`display.css`): the site's marketing styles, `--luke-display-*`,
   set under the web profile only; the window has no display type.
-- **Motion** (`motion.css`): `--loop-motion`, the play state an endless loop
-  holds, paused under reduced motion.
+- **Motion** (`motion-tokens.css`, generated from `@luke/brand`'s tables by
+  `pnpm --filter @luke/brand generate`; `motion.css`): `--luke-duration-*`,
+  `--luke-spring-fast`, `--luke-motion-exit|pane`, `--luke-hint-delay`, and
+  `--luke-loop-motion`, the play state an endless loop holds, and
+  `--luke-face-motion`, the face's. Reduced motion zeroes the durations but
+  hover's and pauses both loops. The face's own rules are `face/face.css`, and
+  its motions `face/face-motion.css`, which `@luke/brand`'s
+  `generate-brand-assets.mjs` writes; an app sets only the face's size where
+  it lays one out. A component reads
+  only `--luke-*` custom properties (`scripts/repository-checks.sh`).
+- **Placement hooks**: the few properties an app may set on a component's
+  container, each the one way a measurement of the app's reaches inside.
+  `--luke-combobox-list-max` caps a `ComboboxList`'s height (280px where
+  unset), so a picker placed against the window's edge hands its list the
+  room it found; nothing else inside the list is the app's to set.
 
 ## Using a component
 
@@ -89,6 +102,11 @@ import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text }
   `Stack` or `Inline` with a `GAP` role, or a page pattern.
 - **Data and callbacks in.** A component never reaches an app's bridge, its
   network, or its shortcuts; the app's adapter hands it values and handlers.
+- **A row a list engine owns.** Where a library of the app's owns a list's
+  items and their keys (cmdk's palette), each item is drawn as
+  `ComboboxOptionItem`, handed through the engine's `asChild`: the engine's
+  role, names, handlers, and ref pass through, no class or style does, and
+  the row is lit by the `aria-selected` the engine sets.
 - **Heavy dependencies stay off the barrel.** The chart is `@luke/ui/chart`;
   each view model is its own subpath (`@luke/ui/<name>`, see `package.json`).
 
@@ -96,16 +114,27 @@ What the barrel holds (`src/index.ts`):
 
 | Kind | Components |
 | --- | --- |
-| Type and layout | `Text`, `Stack`, `Inline`, `Card` |
-| Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `Chip`, `AttachmentChip`, `InlineRef`, `NavItem` |
-| Entry | `FormField`, `TextField`, `TextArea`, `SearchField`, `Checkbox`, `Switch`, `Segmented`, `Tabs` (with `TabCount`), `Select`, `Combobox` |
+| Type and layout | `Text`, `Stack`, `Inline`, `Card`, `Prose` |
+| Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
+| Entry | `FormField`, `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `Segmented`, `Tabs` (with `TabCount`), `Select`, `Combobox` (with `ComboboxList`, `ComboboxOptionItem`) |
 | Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `Skeleton`, `EmptyState`, `ErrorState` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |
-| Patterns | `SettingsRow`, `SettingsSection`, `SettingsPage`, `FormSection`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` |
+| Patterns | `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `FormSection`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
 | Brand | `WingFace`, the glyphs (`face/glyphs.tsx`), `ProviderMark` |
 
 Each component's design comment, at the top of its `.tsx`, says what it owns
 and what it leaves to its caller.
+
+### Folding in a narrow container
+
+A container short of room folds the controls in it with one inherited custom
+property, set from its own container query, and owns nothing inside them;
+each control answers it with a style query of its own:
+
+| `--luke-fold` | What answers it |
+| --- | --- |
+| `folded` | A `FoldingButton`'s words, and a `SplitButton` main part's, fold away, leaving the glyph and the name; a `SearchField`'s tally is said rather than drawn |
+| `bare` | A `SplitButton` is its main part's glyph alone, at the control's corner, with no chevron |
 
 ## Adding a component
 

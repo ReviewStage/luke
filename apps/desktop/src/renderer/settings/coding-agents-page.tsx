@@ -11,12 +11,16 @@ import {
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { HarnessMark } from "@luke/panel/harness-marks";
+import { Segmented } from "@luke/panel/segmented";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
   ErrorState,
-  SETTINGS_LINE_KIND,
   SettingsLine,
   SettingsRow,
+  SettingsRowsSkeleton,
   SettingsSection,
   TEXT_LINK_LOOK,
   TextLink,
@@ -24,9 +28,6 @@ import {
 import { actionRejection } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
-import { useAct } from "../act";
-import { HarnessMark } from "../harness-marks";
-import { Segmented } from "../segmented";
 import {
   choiceModelId,
   choiceOn,
@@ -45,7 +46,6 @@ import {
   windowLabel,
   windowOf,
 } from "../tasks/coding-agent-model";
-import { useOpenLink } from "../tasks/use-open-link";
 import { ApiKeysSection } from "./api-keys-section";
 import { PickerRow } from "./picker-row";
 import { SwitchRow } from "./switch-row";
@@ -89,6 +89,9 @@ const PAGE_LINE = {
   SIGNED_OUT: "Sign in to choose the model your coding agents run on.",
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;
+
+/** How many rows stand in the Default model group's place while it is read: the model's, effort's, and context's, which every model draws. */
+const DEFAULT_SKELETON_ROWS = 3;
 
 /** The link under a resting Fast row that asks Anthropic for fast mode. */
 const FAST_ACCESS_WORD = "Request access";
@@ -389,7 +392,7 @@ function CodingAgentsSection({
           </ErrorState>
         </SettingsLine>
       ) : (
-        <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>Loading your default</SettingsLine>
+        <SettingsRowsSkeleton label="Loading your default" rows={DEFAULT_SKELETON_ROWS} />
       )}
     </SettingsSection>
   );

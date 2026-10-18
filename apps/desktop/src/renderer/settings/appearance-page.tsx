@@ -1,3 +1,4 @@
+import type { SettingsWrites } from "@luke/panel/settings/writes";
 import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
@@ -5,7 +6,6 @@ import {
 } from "@luke/settings";
 import { SettingsSection } from "@luke/ui";
 import { SchemaSettingRows } from "./schema-rows";
-import type { SettingsWrites } from "./writes";
 
 /**
  * How Luke looks and when he starts: his theme, his zoom, and whether he

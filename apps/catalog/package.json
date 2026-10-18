@@ -1,6 +1,6 @@
 {
   "name": "@luke/catalog",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "private": true,
   "type": "module",
   "description": "Every shared component of @luke/ui, drawn at both profiles in both themes on synthetic data; built, never deployed",
@@ -13,7 +13,6 @@
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
     "@fontsource-variable/geist": "5.3.0",
     "@fontsource-variable/jetbrains-mono": "5.3.0",
-    "@luke/brand": "workspace:*",
     "@luke/ui": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"

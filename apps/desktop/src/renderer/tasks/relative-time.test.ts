@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { lineWords } from "@luke/panel/testing/actor-line";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { lineWords } from "#testing/actor-line";
-import { onRegistry } from "#testing/copy-feedback";
-import { DOCUMENT_TASK } from "#testing/document-task";
 import { tasksControl } from "#testing/tasks-control";
 import { SidebarTask } from "../desktop/task-actions";
 import { PlanBody } from "./plan-body";
@@ -66,7 +66,7 @@ function saidOf(at: number) {
   );
   return {
     row: row.querySelector(".sidebar-task-time time")?.textContent,
-    edited: lineWords(body.querySelector(".plan-edit-note")),
+    edited: lineWords(body.querySelector(".plan-byline-edited")),
   };
 }
 
@@ -74,9 +74,12 @@ test("a plan's Edited line says its age as its sidebar row does, a month old as 
   // Note that only the date is fixed, so the task's minute reads `NOW` and nothing waits on a timer.
   vi.useFakeTimers({ now: NOW, toFake: ["Date"] });
 
-  assert.deepEqual(saidOf(NOW - 10 * SECOND), { row: "now", edited: "Edited by you · now" });
-  assert.deepEqual(saidOf(NOW - 3 * DAY), { row: "3d", edited: "Edited by you · 3d ago" });
-  assert.deepEqual(saidOf(NOW - 45 * DAY), { row: "Aug 30", edited: "Edited by you · Aug 30" });
+  assert.deepEqual(saidOf(NOW - 10 * SECOND), { row: "now", edited: "Last edited by you · now" });
+  assert.deepEqual(saidOf(NOW - 3 * DAY), { row: "3d", edited: "Last edited by you · 3d ago" });
+  assert.deepEqual(saidOf(NOW - 45 * DAY), {
+    row: "Aug 30",
+    edited: "Last edited by you · Aug 30",
+  });
 });
 
 test("a time hangs its full moment in the window's tooltip, not the system's", () => {

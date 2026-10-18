@@ -2,6 +2,8 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -9,8 +11,6 @@ import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { editorBundleLanded, installEditorLayout, QUIET_COMPOSER } from "#testing/composer";
-import { markdownHtmlParserLanded } from "#testing/markdown";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 import { SentWords, SkillFiles } from "./skill-chip";
@@ -155,7 +155,10 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   );
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "/release");
   assert.equal(card.querySelector(".luke-hover-card-note")?.textContent, RELEASE.description);
-  assert.equal(card.querySelector(".task-card-detail")?.textContent, RELEASE.path);
+  assert.equal(
+    card.querySelector('.luke-hover-card-row[data-look="detail"]')?.textContent,
+    RELEASE.path,
+  );
   assert.equal(
     card.querySelector("button")?.textContent,
     undefined,

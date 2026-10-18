@@ -37,6 +37,7 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
+  hostedBearerOnly,
   hostedJsonResponse,
   hostedMethod,
   hostedNotFoundRoute,
@@ -207,12 +208,15 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(functio
 /**
  * POST: erases the signed-in desktop's account. The bearer token is the
  * whole authority, so nothing a caller sends can choose a different account
- * to erase. Where the deployment can, the analytics person is asked to be
+ * to erase, and a request that carries none, which only a browser's session
+ * cookie could name, is refused before anything is read (`hostedBearerOnly`):
+ * the retires below reach eve over that bearer, and a cookie carries none
+ * eve takes. Where the deployment can, the analytics person is asked to be
  * erased first, because nothing after the delete would still name it; a
  * refusal or an outage there must not hold up the delete, so it is logged as
  * a status and the delete proceeds. Every eve session the account's
  * standing conversations run in is retired before anything is deleted, as
- * the developer, while eve's door still admits them to it
+ * the developer over that bearer, while eve's door still admits them to it
  * (`retire-sessions.ts`); a session eve did not retire is logged and the
  * delete proceeds, and the delete itself queues the sandbox of every session
  * the account ran for the sweep. Every grant the account's integration rows
@@ -232,9 +236,10 @@ const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoi
   | HttpServerRequest.HttpServerRequest
 > {
   yield* hostedMethod(HTTP_METHOD.POST);
-  const userId = yield* resolvedUserId(seams);
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  yield* hostedBearerOnly(request);
+  const userId = yield* resolvedUserId(seams);
   const sessions = yield* hostedStoreOrUnavailable(seams.standingSessions(userId));
   yield* retireSessions((mount) => eveFor(seams, request, mount), sessions);
   yield* forgetAnalytics(userId);

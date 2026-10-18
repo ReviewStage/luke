@@ -5,6 +5,11 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { runAppCommand } from "@luke/panel/app-commands";
+import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
+import { DESKTOP_CAPABILITIES } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -17,12 +22,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { DESKTOP_CAPABILITIES } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { useAct } from "../act";
-import { runAppCommand } from "../app-commands";
 import { type CallCardInput, callControls } from "../call/call-card";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page";
@@ -654,6 +654,33 @@ test("the plan template's version history keeps a call's card at the foot of its
   assert.ok(back);
   act(() => back.click());
   assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_TASK]);
+});
+
+test("while the plan template is read its page stands its name over placeholder blocks, and the template lands in their place", async () => {
+  const { promise: read, resolve: land } = Promise.withResolvers<void>();
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: { kind: string }) =>
+      request.kind === ACT_KIND.PLAN_TEMPLATE_READ
+        ? read.then(() => ({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { template: "# Context\n", custom: false },
+          }))
+        : Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  const placeholder = () => page.querySelector('[role="status"][aria-busy="true"]')?.textContent;
+
+  assert.deepEqual(
+    [shownTitle(page), placeholder()],
+    ["Plan template", "Loading your plan template"],
+  );
+  land();
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  assert.equal(placeholder(), undefined);
+  assert.ok(page.querySelector('button[aria-label="Version history"]'), "the template is drawn");
 });
 
 test("a page's row in the sidebar offers Copy link on a right-click, copying the page's link under the listed workspace", async () => {

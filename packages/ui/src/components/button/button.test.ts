@@ -26,7 +26,8 @@ import {
  * a link named by its label, and one in a new tab opens there. A compact row
  * mark is a button named by its label like any other, its right-click heard
  * so it can offer its row's menu, and an unavailable one is pressed to no
- * effect. A submit sends its form while it takes a press, sends nothing
+ * effect, as is an unavailable compact labelled button, which is named by
+ * its words. A submit sends its form while it takes a press, sends nothing
  * while it is unavailable, and made a Stop does its own act without
  * sending the form.
  */
@@ -279,6 +280,35 @@ test("a compact row mark is found by its label, pressed, and right-clicked, and 
 
   expect(archive?.disabled).toBe(true);
   expect(pressed).toEqual(["Pin", "Row menu"]);
+});
+
+test("a compact labelled button is named by its words, pressed, and refuses its press while unavailable", () => {
+  const pressed: string[] = [];
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(Button, {
+        size: BUTTON_SIZE.COMPACT,
+        onClick: () => pressed.push("Restart"),
+        children: "Restart",
+      }),
+      createElement(Button, {
+        size: BUTTON_SIZE.COMPACT,
+        disabled: true,
+        onClick: () => pressed.push("Download"),
+        children: "Download",
+      }),
+    ),
+  );
+  const [restart, download] = [...container.querySelectorAll("button")];
+
+  act(() => restart?.click());
+  act(() => download?.click());
+
+  expect(restart?.textContent).toBe("Restart");
+  expect(download?.disabled).toBe(true);
+  expect(pressed).toEqual(["Restart"]);
 });
 
 /** Draws a form holding `submit`, and answers how many times the form was sent. */

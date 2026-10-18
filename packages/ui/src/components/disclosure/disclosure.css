@@ -25,8 +25,8 @@
     list-style: none;
     user-select: none;
     transition:
-      background-color var(--duration-hover, 0s) ease,
-      color var(--duration-hover, 0s) ease;
+      background-color var(--luke-duration-hover) ease,
+      color var(--luke-duration-hover) ease;
   }
 
   .luke-disclosure-summary::-webkit-details-marker {
@@ -62,14 +62,14 @@
     display: flex;
     flex: none;
     color: var(--luke-color-text-muted);
-    transition: transform var(--duration-hover, 0s) ease;
+    transition: transform var(--luke-duration-hover) ease;
   }
 
   .luke-disclosure-turn[data-open="true"] {
     transform: rotate(90deg);
   }
 
-  .luke-disclosure-body[data-inset] {
+  .luke-disclosure-body:is([data-inset="indented"], [data-inset="flush"]) {
     display: flex;
     flex-direction: column;
     gap: var(--luke-space-4);
@@ -97,12 +97,12 @@
      fold onto a match, or a row drawn again, appears at once. */
   [data-disclosure="opening"] > .luke-disclosure-body {
     animation:
-      luke-disclosure-fade var(--duration-quick, 0s) var(--motion-pane, ease-out) backwards,
-      luke-disclosure-unroll var(--duration-pane, 0s) var(--motion-pane, ease-out) backwards;
+      luke-disclosure-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards,
+      luke-disclosure-unroll var(--luke-duration-pane) var(--luke-motion-pane) backwards;
   }
 
   [data-disclosure="closing"] > .luke-disclosure-body {
-    animation: luke-disclosure-leave var(--duration-exit, 0s) var(--motion-exit, ease-out) forwards;
+    animation: luke-disclosure-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
     /* Note that the hold waits on every motion the body runs, and a body that
        held focus would start the scrollbar's own fade as it lost it, so the
        exit is the one motion it has. */

@@ -1,9 +1,10 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { Shortcut } from "@luke/panel/shortcut";
 import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
-import { IconButton } from "@luke/ui";
+import { IconButton, LIST_VARIANT, List, ListRow, type ListRowHint } from "@luke/ui";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
-import { useAppCommand } from "../app-commands";
-import { Shortcut } from "../shortcut";
+import { cloneElement } from "react";
 import { Tooltip } from "../tooltip";
 import { type InboxListed, type InboxListView, inboxSteps, nextNeedingYou } from "./inbox-model";
 import { cardTitle } from "./tool-call-model";
@@ -70,21 +71,29 @@ export function inboxNext(
   };
 }
 
-/** The row a settled item offers over its box: Next, the item's agent's tile and title, and J where J reaches it. */
+/** What a row J reaches says it is reached by: J, on the row's press. */
+const NextKey: ListRowHint = ({ children }) =>
+  cloneElement(children, { "aria-keyshortcuts": shortcutAria(NEXT_CHORD) });
+
+/** The row a settled item offers over its box, a card of one row: Next, the item's agent's tile and title, and J where J reaches it. */
 export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
   return (
     <div className="inbox-next-dock">
-      <button
-        type="button"
-        className="inbox-next"
-        aria-keyshortcuts={next.byKey ? shortcutAria(NEXT_CHORD) : undefined}
-        onClick={next.onOpen}
-      >
-        <span className="inbox-next-lead">Next</span>
-        <span className="inbox-row-mark">{next.mark}</span>
-        <span className="inbox-next-title">{next.title}</span>
-        {next.byKey ? <Shortcut chord={NEXT_CHORD} /> : null}
-      </button>
+      <List label="Next item" variant={LIST_VARIANT.CARD}>
+        <ListRow
+          leading={<span className="inbox-row-mark">{next.mark}</span>}
+          title={
+            <span className="inbox-next-words">
+              <span className="inbox-next-lead">Next</span>
+              <span>{next.title}</span>
+            </span>
+          }
+          meta={next.byKey ? <Shortcut chord={NEXT_CHORD} /> : null}
+          unread
+          hint={next.byKey ? { Hint: NextKey, label: next.title } : undefined}
+          onPress={next.onOpen}
+        />
+      </List>
     </div>
   );
 }

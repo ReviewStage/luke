@@ -1,6 +1,11 @@
-import { AGENT_STATE, type AgentView } from "@luke/ui/factory-world";
+import {
+  PICK_KIND,
+  type PickKind,
+  type WorldModule,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import { type AgentView, agentDrawnUnder } from "@luke/ui/factory-world";
 import { Color, type Vector3 } from "three";
-import { PICK_KIND, type PickKind, type WorldModule, type WorldState } from "../../world";
 import { agentsOf } from "./agents";
 import { type CityLayout, cityLayoutOf, laidOutFrom } from "./city";
 import { defectsOf } from "./defects";
@@ -55,7 +60,7 @@ function chosen(state: WorldState, kind: PickKind, id: string): boolean {
 
 /** Whether an agent stands drawn: every agent while building is shown, and a failed one while defects are. */
 function agentShown(state: WorldState, agent: AgentView): boolean {
-  return state.layers.building || (agent.state === AGENT_STATE.FAILED && state.layers.defects);
+  return agentDrawnUnder(agent, state.layers);
 }
 
 export const world: WorldModule = {

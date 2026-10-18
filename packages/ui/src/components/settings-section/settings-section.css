@@ -50,7 +50,20 @@
     overflow-wrap: anywhere;
   }
 
-  .luke-settings-line > .luke-spinner-region {
-    flex: 1;
+  .luke-settings-skeleton-rows {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .luke-settings-skeleton-rows > * + * {
+    border-top: 1px solid var(--luke-color-border);
+  }
+
+  .luke-settings-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: var(--luke-settings-section-gap);
+    min-width: 0;
   }
 }

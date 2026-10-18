@@ -1,6 +1,15 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { TaskCode, TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import {
+  type FloatingBox,
+  PANE_FLOAT,
+  type PaneFloat,
+  useFloatDismiss,
+  useHoverPane,
+} from "@luke/panel/desktop/hover-pane";
+import { type PaneSlide, usePaneSlide } from "@luke/panel/desktop/pane-motion";
+import type { ReadFolder } from "@luke/panel/file-tree/contract";
+import {
   ArrowLeftIcon,
   ArrowRightIcon,
   BreadcrumbBar,
@@ -10,15 +19,6 @@ import {
 } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { Fragment, type ReactNode, useCallback, useMemo, useRef, useState } from "react";
-import {
-  type FloatingBox,
-  PANE_FLOAT,
-  type PaneFloat,
-  useFloatDismiss,
-  useHoverPane,
-} from "../desktop/hover-pane";
-import { type PaneSlide, usePaneSlide } from "../desktop/pane-motion";
-import type { ReadFolder } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
 import { FileMenu } from "./file-menu";

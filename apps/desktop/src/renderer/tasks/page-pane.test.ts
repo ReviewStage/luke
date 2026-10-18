@@ -4,12 +4,12 @@ import assert from "node:assert/strict";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import { type CodeLines, TASK_CALL_FAILURE } from "@luke/features/tasks-view";
+import { runAppCommand } from "@luke/panel/app-commands";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppPlatform } from "#testing/app-platform";
-import { runAppCommand } from "../app-commands";
 import { PagePane, type ReadPageSource } from "./page-pane";
 
 /**

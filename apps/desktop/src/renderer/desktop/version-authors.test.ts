@@ -5,13 +5,13 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { DOCUMENT_TASK } from "#testing/document-task";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
 import { HISTORY_READ } from "../tasks/use-plan-history";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
@@ -126,7 +126,7 @@ test("a version by a member who left names them as one, in its row and over its 
 
   const said = (selector: string) =>
     [...view.querySelectorAll(selector)].map((each) => each.textContent);
-  assert.deepEqual(said(".version-item .version-row-author"), [
+  assert.deepEqual(said('[aria-label="Version list"] .version-row-author'), [
     "Lee Park (former member)",
     "Lee Park (former member)",
   ]);

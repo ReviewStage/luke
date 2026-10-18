@@ -246,6 +246,70 @@
                                   },
                                   "url": {
                                     "type": "string"
+                                  },
+                                  "reactions": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "content": {
+                                          "type": "string",
+                                          "enum": [
+                                            "thumbs_up",
+                                            "thumbs_down",
+                                            "laugh",
+                                            "hooray",
+                                            "confused",
+                                            "heart",
+                                            "rocket",
+                                            "eyes"
+                                          ]
+                                        },
+                                        "count": {
+                                          "type": "number",
+                                          "minimum": 0
+                                        },
+                                        "by": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "login": {
+                                                "type": "string"
+                                              },
+                                              "avatarUrl": {
+                                                "type": "string"
+                                              },
+                                              "bot": {
+                                                "type": "boolean"
+                                              },
+                                              "userId": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "login",
+                                              "bot"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "maxItems": 10
+                                        },
+                                        "mine": {
+                                          "type": "boolean"
+                                        }
+                                      },
+                                      "required": [
+                                        "content",
+                                        "count"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "maxItems": 8
+                                  },
+                                  "subject": {
+                                    "type": "string",
+                                    "maxLength": 255
                                   }
                                 },
                                 "required": [
@@ -284,6 +348,70 @@
                           "additionalProperties": false
                         },
                         "maxItems": 100
+                      },
+                      "reactions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "content": {
+                              "type": "string",
+                              "enum": [
+                                "thumbs_up",
+                                "thumbs_down",
+                                "laugh",
+                                "hooray",
+                                "confused",
+                                "heart",
+                                "rocket",
+                                "eyes"
+                              ]
+                            },
+                            "count": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "by": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "login": {
+                                    "type": "string"
+                                  },
+                                  "avatarUrl": {
+                                    "type": "string"
+                                  },
+                                  "bot": {
+                                    "type": "boolean"
+                                  },
+                                  "userId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "login",
+                                  "bot"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "maxItems": 10
+                            },
+                            "mine": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "content",
+                            "count"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 8
+                      },
+                      "subject": {
+                        "type": "string",
+                        "maxLength": 255
                       }
                     },
                     "required": [
@@ -301,6 +429,90 @@
                 "earlier": {
                   "type": "number",
                   "minimum": 0
+                },
+                "descriptionReactions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "content": {
+                        "type": "string",
+                        "enum": [
+                          "thumbs_up",
+                          "thumbs_down",
+                          "laugh",
+                          "hooray",
+                          "confused",
+                          "heart",
+                          "rocket",
+                          "eyes"
+                        ]
+                      },
+                      "count": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "by": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "login": {
+                              "type": "string"
+                            },
+                            "avatarUrl": {
+                              "type": "string"
+                            },
+                            "bot": {
+                              "type": "boolean"
+                            },
+                            "userId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "login",
+                            "bot"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 10
+                      },
+                      "mine": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "content",
+                      "count"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 8
+                },
+                "descriptionSubject": {
+                  "type": "string",
+                  "maxLength": 255
+                },
+                "pendingReview": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "comments": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "comments"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "required": [

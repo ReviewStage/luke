@@ -16,25 +16,28 @@ import {
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { GitHubConnectProvider } from "@luke/panel/github-connect";
+import { OpenSettingsProvider } from "@luke/panel/open-settings";
+import {
+  type RepositoryRemedyDoors,
+  RepositoryRemedyProvider,
+} from "@luke/panel/tasks/repository-remedy";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
   editorBundleLanded,
   installEditorLayout,
   pressInComposer,
 } from "#testing/composer";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { GitHubConnectProvider } from "../github-connect";
-import { OpenSettingsProvider } from "../open-settings";
 import { startFailureNote } from "./coding-agent-model";
 import { DraftAgentTab } from "./draft-agent-tab";
-import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 
 /**
@@ -132,6 +135,15 @@ async function settle(): Promise<void> {
   });
 }
 
+/** A failure's sentence alone: its alert's words without its presses'. */
+function sentence(alert: Element | null): string | undefined {
+  if (alert === null) return undefined;
+  return [...alert.children]
+    .filter((part) => part.querySelector("button") === null)
+    .map((part) => part.textContent)
+    .join("");
+}
+
 /** The draft's tab over Starts answered in turn by `answers`, each Start's words written down. */
 function mount(
   answers: (Failure | undefined)[],
@@ -216,8 +228,7 @@ function mount(
       await settle();
     },
     note: () => container.querySelector(".agent-composer-note")?.textContent ?? undefined,
-    words: () =>
-      container.querySelector(".agent-composer-note .failure-note-words")?.textContent ?? undefined,
+    words: () => sentence(container.querySelector(".agent-composer-note [role='alert']")),
     draft: () => composerEditor(container).textContent,
     button,
     press: async (words: string) => {
@@ -387,8 +398,8 @@ test("the MCP servers popover draws a row for each server the deployment offers 
   act(() => servers.click());
   await settle();
 
-  const rows = [...document.querySelectorAll(".agent-servers-row")].map(
-    (row) => row.querySelector(".task-compose-menu-name")?.textContent,
+  const rows = [...document.querySelectorAll(".agent-servers-list li")].map(
+    (row) => row.querySelector(".agent-servers-name")?.textContent,
   );
   assert.deepEqual(rows, ["Slack"]);
   assert.equal(tab.button("Connect"), undefined, "nothing offers a server not offered");
@@ -404,8 +415,8 @@ test("the MCP popover's GitHub row connects GitHub in place, and the popover sta
   await settle();
 
   const githubRow = () =>
-    [...document.querySelectorAll(".agent-servers-row")].find(
-      (row) => row.querySelector(".task-compose-menu-name")?.textContent === "GitHub",
+    [...document.querySelectorAll(".agent-servers-list li")].find(
+      (row) => row.querySelector(".agent-servers-name")?.textContent === "GitHub",
     ) ?? assert.fail("the popover draws GitHub's row");
   const connect =
     [...githubRow().querySelectorAll("button")].find(
@@ -428,7 +439,7 @@ test("the MCP popover waits on a Connect as Settings does, with Reopen and Cance
   act(() => servers.click());
   await settle();
   const slackRow = () => {
-    const row = document.querySelector(".agent-servers-row") ?? assert.fail("Slack has a row");
+    const row = document.querySelector(".agent-servers-list li") ?? assert.fail("Slack has a row");
     return {
       words:
         row.querySelector(".agent-servers-problem, .agent-servers-waiting")?.textContent ??

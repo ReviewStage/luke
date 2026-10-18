@@ -1,4 +1,5 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
 import {
   ArchiveIcon,
   BUTTON_SIZE,
@@ -16,7 +17,6 @@ import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref";
 import { agentStillWriting, agentTabLabel } from "../tasks/coding-agent-model";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";

@@ -6,6 +6,22 @@ import {
   type DocumentEditor,
 } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
+import {
+  type EditorDiagram,
+  type MentionNode,
+  PLACEMENT_END,
+  type PlanEditorHandle,
+  type PlanEditorModule,
+  type PlanEditorPlacement,
+  type PlanEditorProps,
+} from "@luke/panel/plan-editor/contract";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { useKnownNames } from "@luke/panel/tasks/use-known-names";
+import {
+  EDITOR_PLACE,
+  type EditorHost,
+  type PlanEditing,
+} from "@luke/panel/tasks/use-plan-editing";
 import { Button } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
@@ -13,14 +29,6 @@ import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "re
 import { createPortal } from "react-dom";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader";
 import { DiagramPreview } from "../plan-diagram";
-import type {
-  EditorDiagram,
-  MentionNode,
-  PlanEditorHandle,
-  PlanEditorModule,
-  PlanEditorProps,
-} from "../plan-editor/contract";
-import { rendererRuntime } from "../renderer-runtime";
 import { RetryButton } from "../retry-button";
 import { useEditorPictures } from "./editor-pictures";
 import {
@@ -31,15 +39,15 @@ import {
 } from "./mention-chip";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker";
 import { useTaskMentions } from "./task-mentions";
-import { useKnownNames } from "./use-known-names";
-import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-editing";
 
 /**
  * plan-document-editor.tsx -- the open plan, edited in place: its title, its sections as blocks, and its whole text in one editor.
  *
  * The text is drawn as its sections, and nothing on them marks them
  * editable. A click into a section's words opens the whole text in place,
- * the caret where the click landed; the editor is TipTap, from the editor
+ * the caret where the click landed, and so does a press on the empty room
+ * around the text (`useTextRoom`), which an issue's description shares; the
+ * editor is TipTap, from the editor
  * bundle the panel starts loading as it first paints, and again the first
  * time a section is hovered or selected (`../bundle-loader.ts`), and draws the words exactly as the
  * sections drew them, so nothing moves. Until the bundle has loaded the
@@ -106,6 +114,129 @@ export function editsOnClick(target: EventTarget): boolean {
   );
 }
 
+/** Where a text's words stand in the window. */
+export interface TextBox {
+  readonly top: number;
+  readonly bottom: number;
+  readonly left: number;
+  readonly right: number;
+}
+
+/** What every block of a document's text wears, the title's apart, so its room knows where the words stand. */
+const TEXT_BLOCK_ATTRIBUTE = "data-text-block";
+
+/** Where the text's blocks under `element` stand together, from the first's top to the last's bottom; none while none is drawn. */
+export function textBoxOf(element: HTMLElement | null): TextBox | undefined {
+  const blocks = element?.querySelectorAll(`[${TEXT_BLOCK_ATTRIBUTE}]`) ?? [];
+  const first = blocks[0]?.getBoundingClientRect();
+  const last = blocks[blocks.length - 1]?.getBoundingClientRect();
+  if (first === undefined || last === undefined) return undefined;
+  return { top: first.top, bottom: last.bottom, left: first.left, right: first.right };
+}
+
+/** The scrolling column a text stands in, whose empty room is the text's way in; none outside one. */
+function scrollRoomOf(element: HTMLElement): HTMLElement | undefined {
+  for (let at = element.parentElement; at !== null; at = at.parentElement) {
+    const { overflowY } = getComputedStyle(at);
+    if (overflowY === "auto" || overflowY === "scroll") return at;
+  }
+  return undefined;
+}
+
+/**
+ * Where a press on a text's room puts the caret: at the end where it lands
+ * under the text's last line, or no text is drawn; on the nearest line where
+ * it lands beside the text; and nowhere where it lands above it, among the
+ * lines over the text (a title, a byline, an issue's properties).
+ */
+function roomPlacement(
+  event: MouseEvent,
+  box: TextBox | undefined,
+): PlanEditorPlacement | undefined {
+  if (box === undefined || event.clientY > box.bottom) return PLACEMENT_END;
+  if (event.clientY < box.top) return undefined;
+  const x = Math.min(Math.max(event.clientX, box.left + 1), box.right - 1);
+  return { x, y: event.clientY };
+}
+
+/**
+ * Whether a press landed on the room around `text` rather than on anything
+ * drawn in it: on the text's own box or one holding it, as the column's
+ * margins and its scroller are, and not on the scroller's bar.
+ */
+function landsInRoom(event: MouseEvent, room: HTMLElement, text: HTMLElement): boolean {
+  const { target } = event;
+  if (event.button !== 0 || !(target instanceof Element) || !target.contains(text)) return false;
+  const bar = room.offsetWidth - room.clientWidth - room.clientLeft;
+  return target !== room || event.clientX < room.getBoundingClientRect().right - bar;
+}
+
+/**
+ * A text's empty room as its way in, as a document editor's page is
+ * (Notion's, Google Docs'): a press anywhere on the room around the text
+ * that lands on nothing drawn there puts the caret in the text, where
+ * `roomPlacement` says, through `onPlace`, which opens the editor there
+ * while it is closed and moves the caret while it is open. `text` is what
+ * holds the text, or the column it would stand in while none is drawn;
+ * `box` is where its words stand now. The room is `room` where given, and
+ * otherwise the scrolling column around the text. Note that while the
+ * editor is `open` the press itself is taken, so focus stays in it, and
+ * that a press made with words selected only clears them, as it would
+ * anywhere, and one that ends a selection places nothing.
+ */
+export function useTextRoom({
+  text,
+  box,
+  room,
+  open,
+  onPlace,
+}: {
+  text: React.RefObject<HTMLElement | null>;
+  box: () => TextBox | undefined;
+  /** Whether the editor stands open, whose focus a press on the room keeps. */
+  open: boolean;
+  room?: React.RefObject<HTMLElement | null> | undefined;
+  /** Puts the caret where a press on the room asks; none where the text takes no caret. */
+  onPlace: ((placement: PlanEditorPlacement) => void) | undefined;
+}): void {
+  const latest = useRef({ box, onPlace, open });
+  latest.current = { box, onPlace, open };
+  const placing = onPlace !== undefined;
+  // The text's element as last drawn, which the listeners are put on again once it changes, as an editor's bundle landing changes it.
+  const [held, setHeld] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (text.current !== held) setHeld(text.current);
+  });
+  useEffect(() => {
+    const column = room?.current ?? (held === null ? undefined : scrollRoomOf(held));
+    if (!placing || held === null || column === undefined || column === null) return;
+    const placement = (event: MouseEvent) =>
+      landsInRoom(event, column, held) ? roomPlacement(event, latest.current.box()) : undefined;
+    const selecting = () => {
+      const selection = window.getSelection();
+      return selection !== null && !selection.isCollapsed;
+    };
+    // Whether the press went down on words selected, which it clears and places nothing for.
+    let clearing = false;
+    const press = (event: MouseEvent) => {
+      clearing = selecting();
+      if (clearing || !latest.current.open || placement(event) === undefined) return;
+      event.preventDefault();
+    };
+    const click = (event: MouseEvent) => {
+      if (clearing || selecting()) return;
+      const at = placement(event);
+      if (at !== undefined) latest.current.onPlace?.(at);
+    };
+    column.addEventListener("mousedown", press);
+    column.addEventListener("click", click);
+    return () => {
+      column.removeEventListener("mousedown", press);
+      column.removeEventListener("click", click);
+    };
+  }, [held, room, placing]);
+}
+
 /** The block an editor closed from by the keyboard takes the keyboard back, once. */
 function useSelectedOnClose(editing: PlanEditing, key: EditorHost, take: () => void): void {
   useEffect(() => {
@@ -150,6 +281,8 @@ export function DocumentBlock({
     <div
       ref={block}
       className={DOCUMENT_BLOCK_CLASS}
+      // Note that the attribute is `TEXT_BLOCK_ATTRIBUTE`, which marks the block as the text's for its room.
+      data-text-block=""
       role="group"
       tabIndex={entry ? 0 : -1}
       aria-label={label}
@@ -562,6 +695,7 @@ export function PlanDocumentEditor({
   drawn,
   hostOf,
   mentions,
+  scroller,
 }: {
   task: Task;
   editor: DocumentEditor;
@@ -570,6 +704,8 @@ export function PlanDocumentEditor({
   hostOf: (section: number) => EditorHost;
   /** What the plan's mentions open, drawn as their chips in the editor, with `@` picking new ones; none where the text takes no mentions. */
   mentions?: MentionDoors | undefined;
+  /** The column the document scrolls in, whose empty room moves the caret (`useTextRoom`). */
+  scroller?: React.RefObject<HTMLElement | null> | undefined;
 }): React.JSX.Element {
   const doors = useDraftHandOver(editing, hostOf);
   const handle = useRef<PlanEditorHandle | undefined>(undefined);
@@ -579,6 +715,18 @@ export function PlanDocumentEditor({
   const chips = useEditorDrawings<MentionNode>();
   const diagrams = useEditorDrawings<EditorDiagram>();
   const pictures = useEditorPictures(task.id, mentions?.place.workspace, handle);
+  // A press on the document's empty room puts the caret there, at the text's end where it lands under it; one before the editor has loaded is where it opens.
+  const [pending, setPending] = useState<PlanEditorPlacement | undefined>(undefined);
+  useTextRoom({
+    text: room,
+    box: () => room.current?.getBoundingClientRect(),
+    room: scroller,
+    open: true,
+    onPlace: (placement) => {
+      if (handle.current === undefined) setPending(placement);
+      else handle.current.focusAt(placement);
+    },
+  });
   // Note that a finish or a leaving waits for a picture still being kept, since only the open editor can lay in its address; it goes once none is.
   const held = useRef<(() => void) | undefined>(undefined);
   const once = (close: () => void) => {
@@ -615,7 +763,7 @@ export function PlanDocumentEditor({
   });
   if (!AsyncResult.isSuccess(module)) {
     return (
-      <section className="plan-document-editor ph-no-capture" aria-busy="true">
+      <section ref={room} className="plan-document-editor ph-no-capture" aria-busy="true">
         {drawn}
         {AsyncResult.isFailure(module) ? (
           <p className="plan-editor-note" role="alert">
@@ -627,10 +775,10 @@ export function PlanDocumentEditor({
   }
   const props: PlanEditorProps = {
     markdown: editor.draft,
-    placement: editing.placement,
+    placement: pending ?? editing.placement,
     focus: true,
     label: "Plan",
-    className: "markdown plan-unit",
+    className: "markdown luke-prose plan-unit",
     onDraft: doors.onDraft,
     onFinish: (section) => once(() => doors.onFinish(section)),
     onLeaveUp: doors.onLeaveUp,
@@ -644,7 +792,7 @@ export function PlanDocumentEditor({
             retarget: (target, change) =>
               retargetedMention(task.id, mentions.place, target, change),
             pasted: (words) =>
-              pastedMentionNode(words, mentions.place, { known, planId: task.id, text }),
+              pastedMentionNode(words, mentions.place, { known, taskId: task.id, text }),
             namesMention: (target) =>
               decodeMention(target, mentions.place.repository) !== undefined,
           },

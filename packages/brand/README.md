@@ -53,7 +53,7 @@ theme changes.
 
 The panel draws the face itself rather than loading these SVGs, because it
 needs two things a baked asset cannot give it: `currentColor`, so it can take the
-microphone's colour, and CSS animation, so the renderer's `--face-motion` token can hold every loop still for
+microphone's colour, and CSS animation, so `@luke/ui`'s `--luke-face-motion` token can hold every loop still for
 a capture run or for reduced motion. SMIL answers to neither without JavaScript.
 
 So the generator emits its two inputs as well, from the same table these SVGs are
@@ -62,7 +62,7 @@ cut from. They are generated files and are not to be hand-edited either:
 | File | What it carries |
 |---|---|
 | `packages/brand/src/generated/face-art.ts` | The geometry, the motion names, their cycle lengths, which parts each one needs drawn, and the wordmark's letterforms for the introduction's signature reveal |
-| `apps/desktop/src/renderer/styles/generated/face-motion.css` | One `@keyframes` per moving part, with each interval's easing |
+| `packages/ui/src/face/face-motion.css` | One `@keyframes` per moving part, with each interval's easing |
 
 `scripts/repository-checks.sh` runs `pnpm --filter @luke/brand check`, i.e. `generate-brand-assets.mjs --check`, which
 compares every committed output against what the script produces now and fails if

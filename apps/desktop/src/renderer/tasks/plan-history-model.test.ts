@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type PlanRevisionLine } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { dayAndTimeText } from "@luke/panel/tasks/task-time";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { ACTOR_KIND, ACTOR_STATE, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { DOCUMENT_TASK } from "#testing/document-task";
 import { MARKDOWN_MARK, MarkdownMessage } from "../markdown-message";
 import {
   changedSections,
@@ -20,7 +21,6 @@ import {
   VERSION_CHANGE,
   versionDiff,
 } from "./plan-history-model";
-import { dayAndTimeText } from "./task-time";
 
 const HOUR = 3_600_000;
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";

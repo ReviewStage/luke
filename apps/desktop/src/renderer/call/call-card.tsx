@@ -12,6 +12,9 @@
  */
 
 import { ACT_KIND } from "@luke/host/acts";
+import type { ActHandle } from "@luke/panel/act";
+import { useAppState, useExperiment } from "@luke/panel/use-app-state";
+import { useVoiceView } from "@luke/panel/use-voice-view";
 import { EXPERIMENT } from "@luke/settings";
 import { IconButton, ReturnIcon } from "@luke/ui";
 import { type CallCardModel, callCardVideoStatus } from "@luke/ui/call-card-model";
@@ -19,11 +22,8 @@ import { useClipped } from "@luke/ui/use-clipped";
 import { AVATAR_OFF, AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
 import { type AnimationEvent, type MouseEvent, type ReactNode, useRef, useState } from "react";
-import type { ActHandle } from "../act";
 import { CALL_CONTROL_LABEL, CallBar } from "../tasks/tasks-parts";
 import { Tooltip } from "../tooltip";
-import { useAppState, useExperiment } from "../use-app-state";
-import { useVoiceView } from "../use-voice-view";
 import { CallVideoTile, VideoToggle } from "./call-video-tile";
 
 /** The way back's name, for a reader and its hover: the task it opens. */

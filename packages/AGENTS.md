@@ -2,7 +2,8 @@
 
 Application logic lives here; `apps/` holds only what is specific to a
 platform or deployable (root `AGENTS.md`'s Layout). **React may live in a
-package; the DOM and Electron may not, except in `packages/ui`** — everything
+package; the DOM may not, except in `packages/ui` and `packages/panel`, and
+Electron may not in any** — everything
 else is logic and tests under vitest with no harness,
 registered in the root project list by the package's own `vitest.config.ts`.
 `repository-checks.sh` fails a package that holds one config without the other,

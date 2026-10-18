@@ -1,8 +1,13 @@
 import type { GitHubRepository } from "@luke/features";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
+import { OPEN_SETTINGS_LABEL, useOpenSettings } from "@luke/panel/open-settings";
+import { RepositoryPicture } from "@luke/panel/repository-picture";
+import { Spinner } from "@luke/panel/spinner";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
+  BUTTON_VARIANT,
+  Button,
   CHIP_LOOK,
   Chip,
   type ChipLook,
@@ -11,15 +16,16 @@ import {
   ErrorState,
   GearIcon,
   ProviderMark,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
 } from "@luke/ui";
 import { repositoryFailureNote } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings";
-import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row";
-import { Spinner } from "../spinner";
 
 /**
  * repository-chip.tsx -- the chip that names a task's GitHub repository, and the menu that picks one.
@@ -271,34 +277,34 @@ export function RepositoryChip(props: {
     props.value ?? (rows.length === 0 && listed !== undefined ? NONE_LABEL : CHOOSE_LABEL);
   const note =
     failure !== undefined ? (
-      <div className="task-compose-menu-note">
-        <ErrorState onRetry={read}>{repositoryFailureNote(failure)}</ErrorState>
-      </div>
+      <ErrorState onRetry={read}>{repositoryFailureNote(failure)}</ErrorState>
     ) : listed !== undefined && !listed.installed ? (
       // Only an owner or an admin can connect the workspace's GitHub, so a member is told to ask.
       <>
         {unconnectedNotes(chooser).map((words) => (
-          <p key={words} className="task-compose-menu-note">
+          <Text
+            key={words}
+            as={TEXT_ELEMENT.P}
+            variant={TEXT_VARIANT.CAPTION}
+            tone={TEXT_TONE.SUBTLE}
+          >
             {words}
-          </p>
+          </Text>
         ))}
         {chooser.manages ? (
-          <button
-            type="button"
-            className="menu-item"
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            icon={<GearIcon />}
             onClick={() => choose(() => openSettings(workspaceGitHub))}
           >
-            <GearIcon />
-            <span className="task-compose-menu-name">{OPEN_SETTINGS_LABEL}</span>
-          </button>
+            {OPEN_SETTINGS_LABEL}
+          </Button>
         ) : null}
       </>
     ) : list === undefined ? (
-      <div className="task-compose-menu-note">
-        <Spinner label="Loading repositories" />
-      </div>
+      <Spinner label="Loading repositories" />
     ) : rows.length === 0 && listed?.installed ? (
-      <p className="task-compose-menu-note">{MENU_NOTE.NONE_REACHED}</p>
+      MENU_NOTE.NONE_REACHED
     ) : undefined;
 
   return (

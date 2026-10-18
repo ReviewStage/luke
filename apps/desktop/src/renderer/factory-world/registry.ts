@@ -1,3 +1,4 @@
+import type { WorldModule } from "@luke/panel/factory-world/world";
 import {
   Building2Icon,
   CastleIcon,
@@ -12,7 +13,6 @@ import {
   TrainFrontIcon,
   TreeDeciduousIcon,
 } from "lucide-react";
-import type { WorldModule } from "./world";
 
 /**
  * registry.ts -- every world the Factory's picker offers after Board: its name, its glyph, and how its bundle is reached.
@@ -22,12 +22,13 @@ import type { WorldModule } from "./world";
  * (`factory-world-<key>.js`, which `scripts/build.mjs` finds by its folder),
  * imported only the first time it is chosen, so one world's weight never
  * loads with another's. The picker lists the worlds in the order they stand
- * here. A key is the world's folder, and is never `FACTORY_BOARD`.
+ * here, after the board and the campus. A key is the world's folder, and is
+ * never `FACTORY_BOARD` or `FACTORY_CAMPUS`.
  */
 
 /** One world the picker offers. */
 export interface WorldEntry {
-  /** Its folder under `worlds/`, which names its bundle; never `FACTORY_BOARD`. */
+  /** Its folder under `worlds/`, which names its bundle; never `FACTORY_BOARD` or `FACTORY_CAMPUS`. */
   readonly key: string;
   /** What the picker calls it. */
   readonly name: string;
@@ -39,6 +40,9 @@ export interface WorldEntry {
 
 /** The picker's first entry, the Talk → Build → Ship board, which is no world. */
 export const FACTORY_BOARD = "board";
+
+/** The picker's second entry, the campus: the snapshot drawn in SVG as a town of the listed tasks, which is no world either (`campus/`). */
+export const FACTORY_CAMPUS = "campus";
 
 /** The worlds every build offers, in the picker's order. */
 const FACTORY_WORLDS = [
@@ -117,8 +121,8 @@ const DEV_WORLDS = [
 /** A world, by its key. */
 export type WorldKey = (typeof FACTORY_WORLDS)[number]["key"] | (typeof DEV_WORLDS)[number]["key"];
 
-/** What the Factory page shows: the board, or a world. */
-export type FactoryChoice = typeof FACTORY_BOARD | WorldKey;
+/** What the Factory page shows: the board, the campus, or a world. */
+export type FactoryChoice = typeof FACTORY_BOARD | typeof FACTORY_CAMPUS | WorldKey;
 
 /** The worlds a build offers, in the picker's order: every world, then the development one where this is no packaged app. */
 export function worldsOffered(

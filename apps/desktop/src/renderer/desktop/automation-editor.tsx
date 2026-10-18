@@ -62,6 +62,18 @@ import {
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { PaneGlide } from "@luke/panel/desktop/pane-motion";
+import { useAutomationRuns } from "@luke/panel/desktop/use-automation-runs";
+import {
+  type AgentsRead,
+  type RunChoices,
+  useRunChoices,
+} from "@luke/panel/desktop/use-run-choices";
+import { useIntegrationStatuses } from "@luke/panel/integration-statuses";
+import { useOpenSettings } from "@luke/panel/open-settings";
+import { Spinner } from "@luke/panel/spinner";
+import { dayAndTimeText, sinceText, useMinute } from "@luke/panel/tasks/task-time";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -78,14 +90,19 @@ import {
   ErrorState,
   IconButton,
   POPOVER_ALIGN,
+  PROVIDER_MARK_SIZE,
   ProviderMark,
   SETTINGS_SECTION_FRAME,
   SettingsRow,
   SettingsSection,
   SidePanelIcon,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
   Switch,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
+  TEXT_FIELD_SIZE,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -101,31 +118,23 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
 import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { useAppCommand } from "../app-commands";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks";
 import { FoldingButton } from "../folding-button";
-import { useIntegrationStatuses } from "../integration-statuses";
-import { useOpenSettings } from "../open-settings";
 import { Picker, PickerRow } from "../settings/picker-row";
 import { SelectRow } from "../settings/select-row";
 import { SwitchRow } from "../settings/switch-row";
-import { Spinner } from "../spinner";
 import { AgentModelChip } from "../tasks/agent-model-chip";
 import { AgentServersButton } from "../tasks/agent-servers";
 import { ModelMenu } from "../tasks/model-menu";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/repository-chip";
-import { dayAndTimeText, sinceText, useMinute } from "../tasks/task-time";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner";
 import { AutomationRunsPanel } from "./automation-runs-panel";
 import { type RunsPanel, useRunsPanel } from "./folded-groups";
-import { PaneGlide } from "./pane-motion";
-import { useAutomationRuns } from "./use-automation-runs";
-import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices";
 
 /**
  * automation-editor.tsx -- one automation's page, or a new one's: who owns it, its name, its schedule, its task, and its repository, saved by an explicit Create or Save.
@@ -232,16 +241,6 @@ const RUN_REFUSAL_WORDS = {
 } as const satisfies Record<AutomationCallFailure, string>;
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
-
-/**
- * A field's own Escape: it lets go of the caret and keeps the press, so
- * Escape while writing never leaves the page and the draft with it.
- */
-function releaseOnEscape(event: React.KeyboardEvent<HTMLElement>): void {
-  if (event.key !== "Escape") return;
-  event.preventDefault();
-  event.currentTarget.blur();
-}
 
 /** A time of day as the time field holds it, the hour and minute in two figures each. */
 function clockValue(hour: number, minute: number): string {
@@ -387,6 +386,42 @@ function namesSaid(providers: readonly IntegrationProvider[]): string {
 /** The most marks the servers chip holds before it counts the rest, so it stays a picker's width. */
 const SERVERS_CHIP_MARKS = 4;
 
+/** How wide the block standing in the servers chip is while the connections are read: a chip of a mark or two. */
+const SERVERS_CHIP_SKELETON_WIDTH = "96px";
+
+/**
+ * The servers row while no read of the owner's connections has answered:
+ * blocks where the words and the chip will stand, claiming nothing, or the
+ * failure and Retry where the read was refused.
+ */
+function UnreadServersRow({
+  failed,
+  onRetry,
+}: {
+  failed: boolean;
+  onRetry: () => void;
+}): React.JSX.Element {
+  if (failed) {
+    return (
+      <SettingsRow
+        label="MCP servers"
+        below={() => (
+          <ErrorState onRetry={onRetry}>Your connected servers could not be read.</ErrorState>
+        )}
+      />
+    );
+  }
+  return (
+    <SettingsRow label="MCP servers" description={<Skeleton width="40%" />}>
+      {() => (
+        <SkeletonRegion label="Reading your connected servers…">
+          <Skeleton shape={SKELETON_SHAPE.CONTROL} width={SERVERS_CHIP_SKELETON_WIDTH} />
+        </SkeletonRegion>
+      )}
+    </SettingsRow>
+  );
+}
+
 /** The servers row as the automation's creator sees it: their connections, switched in the agent box's own popover from a field chip. */
 function OwnServersRow({
   disabled,
@@ -397,6 +432,11 @@ function OwnServersRow({
 }): React.JSX.Element {
   const statuses = useIntegrationStatuses();
   const openSettings = useOpenSettings();
+  // Note that no provider standing yet is a read still to answer, so the row claims nothing until one does.
+  const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
+  if (!read) {
+    return <UnreadServersRow failed={statuses.readFailed} onRetry={() => void statuses.read()} />;
+  }
   const connected = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
   );
@@ -428,7 +468,7 @@ function OwnServersRow({
             ) : (
               <span className="automation-servers">
                 {shown.map((provider) => (
-                  <ProviderMark key={provider} provider={provider} />
+                  <ProviderMark key={provider} provider={provider} size={PROVIDER_MARK_SIZE.ICON} />
                 ))}
                 {on.length > shown.length ? (
                   <ChipName>{`+${on.length - shown.length}`}</ChipName>
@@ -477,7 +517,7 @@ function ScheduleRows({
   onSchedule: (schedule: ScheduleDraft) => void;
   onTimezone: (timezone: string) => void;
 }): React.JSX.Element {
-  // The cron's and the time's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
+  // The cron's and the time's Escape lets go of the caret and keeps the press, as every field's here does.
   const cron = useRef<HTMLInputElement>(null);
   const time = useRef<HTMLInputElement>(null);
   const { schedule, timezone } = draft;
@@ -863,7 +903,7 @@ function CodeReviewGroup({
   settings: CodeReviewSettings;
   onSettings: (settings: CodeReviewSettings) => void;
 }): React.JSX.Element {
-  // The rules file's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
+  // The rules file's Escape lets go of the caret and keeps the press, as every field's here does.
   const rulesFile = useRef<HTMLInputElement>(null);
   return (
     <SettingsSection title="Code review">
@@ -1262,11 +1302,9 @@ function AgentRow({
       rows={rows}
       note={
         agents === undefined ? (
-          <div className="task-compose-menu-note">
-            <Spinner label="Loading agents" />
-          </div>
+          <Spinner label="Loading agents" />
         ) : rows.length === 0 ? (
-          <p className="task-compose-menu-note">No agents of this workspace work in it yet.</p>
+          "No agents of this workspace work in it yet."
         ) : undefined
       }
       noMatch={NO_MATCH}
@@ -1413,7 +1451,7 @@ function EditorForm({
 }): React.JSX.Element {
   // A code review's own settings are the lines its task opens with, so its card reads them there and writes them back.
   const review = readCodeReviewSettings(draft.prompt);
-  // The prompt's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
+  // The prompt's Escape lets go of the caret and keeps the press, as every field's here does.
   const prompt = useRef<HTMLTextAreaElement>(null);
   const workspaceName = workspace?.name ?? "Workspace";
   const owners = [
@@ -1600,6 +1638,8 @@ export function AutomationEditor({
   const runsPanel = useRunsPanel();
   // The form glides to its new middle as the Runs panel comes and goes (pane-motion.tsx).
   const editorLayout = useRef<HTMLDivElement>(null);
+  // The name's Escape lets go of the caret and keeps the press, as every field's here does.
+  const nameField = useRef<HTMLInputElement>(null);
   // ⌥⌘B shows and hides the Runs panel, as it does a plan's side panel.
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, runsPanel.onToggle);
   // A link to a run shows the Runs panel it is listed in, once each time it is opened, so a fold after it stands.
@@ -1706,13 +1746,14 @@ export function AutomationEditor({
       <div ref={editorLayout} className="automation-editor-layout">
         <div className="automations-scroll scroll-fade-top">
           <div className="automation-editor">
-            <input
-              className="automation-editor-name"
-              aria-label="Automation name"
+            <TextField
+              ref={nameField}
+              label="Automation name"
+              size={TEXT_FIELD_SIZE.TITLE}
               placeholder="Untitled automation"
               value={draft.name}
-              onKeyDown={releaseOnEscape}
-              onChange={(event) => editDraft({ name: event.target.value })}
+              onEscape={() => nameField.current?.blur()}
+              onChange={(name) => editDraft({ name })}
             />
             {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
               <p className="error-message automation-form-problem" role="alert">

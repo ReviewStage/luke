@@ -8,7 +8,18 @@ import {
 } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
-import { Button, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
+import { useCreator } from "@luke/panel/member-directory";
+import { agoText, momentText, sinceText, useMinute } from "@luke/panel/tasks/task-time";
+import { TaskTitle } from "@luke/panel/tasks/task-title";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
+import {
+  EDITOR_PLACE,
+  type PlanEditDoor,
+  usePlanEditing,
+} from "@luke/panel/tasks/use-plan-editing";
+import { NO_LOOKS, type TaskLooks } from "@luke/panel/tasks/use-task-looks";
+import { prefersReducedMotion } from "@luke/panel/use-reduced-motion";
+import { Button, EllipsisIcon, IconButton, TextButton, useMenu } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -17,7 +28,7 @@ import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { type LinkDrawer, MarkdownMessage, type TaskToggler } from "../markdown-message";
 import { Tooltip } from "../tooltip";
-import { prefersReducedMotion } from "../use-reduced-motion";
+import { DocumentByline, DocumentScroll } from "./document-frame";
 import {
   type EditAgents,
   EditedBy,
@@ -32,6 +43,8 @@ import {
   DocumentBlock,
   EditableTitle,
   PlanDocumentEditor,
+  textBoxOf,
+  useTextRoom,
 } from "./plan-document-editor";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
 import {
@@ -50,11 +63,6 @@ import {
   chaseView,
   type UnitView,
 } from "./task-reveal";
-import { agoText, momentText, sinceText, useMinute } from "./task-time";
-import { TaskTitle } from "./task-title";
-import { useOpenLink } from "./use-open-link";
-import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing";
-import { NO_LOOKS, type TaskLooks } from "./use-task-looks";
 
 /**
  * plan-body.tsx -- the open task's document as it scrolls between the header and the microphone row, typing in each newer document as it arrives.
@@ -65,12 +73,13 @@ import { NO_LOOKS, type TaskLooks } from "./use-task-looks";
  * The view follows the caret, bringing a jump to the middle, unless the
  * developer has scrolled the document themselves, and lights each unit as it settles. Opening
  * a plan draws it whole, and reduced motion draws each document at once. The
- * typing grows the scrolled document and never the surface. A plan anyone has written
- * says who last did in one muted line above the document: a member, Luke
- * (the notetaker), or a coding agent, each on their own face hanging their
- * card (`edit-ref.tsx`), whose call it was on where Luke wrote it on one,
- * and how long ago, moved on once a minute. The time opens the plan's
- * version history, where each earlier version is. Each section says the
+ * typing grows the scrolled document and never the surface. Under the title
+ * one muted line says who created the task and how long ago, and, for a plan
+ * anyone has written, who last did: a member, Luke (the notetaker), or a
+ * coding agent, each on their own face hanging their card (`edit-ref.tsx`),
+ * whose call it was on where Luke wrote it on one, and how long ago, moved
+ * on once a minute, as an issue's page says it under its title. The edit's
+ * time opens the plan's version history, where each earlier version is. Each section says the
  * same of the save that last changed it in fewer letters, quietly, while the
  * pointer or the keyboard is on it: the writer's face, whose card names them,
  * and the time, "2h", at the end of a heading that always keeps room for
@@ -210,9 +219,7 @@ function EditTime({
     onShow === undefined ? (
       <span>{words}</span>
     ) : (
-      <button
-        type="button"
-        className="plan-edit-link"
+      <TextButton
         aria-label={label}
         onClick={(event) => {
           event.stopPropagation();
@@ -220,13 +227,13 @@ function EditTime({
         }}
       >
         {words}
-      </button>
+      </TextButton>
     );
   return short ? <Tooltip label={momentText(at)}>{time}</Tooltip> : time;
 }
 
 /**
- * The line over the document: "Edited by [Charles] Charles Pan · 2h ago".
+ * The plan template's line under its title: "Edited by [Charles] Charles Pan · 2h ago".
  * The writer hangs their card, and the time opens the plan's history where
  * the window offers it.
  */
@@ -255,14 +262,60 @@ function EditedLine({
   );
 }
 
-/** How many sections changed since the last look, as the line under "Edited by" counts them, and by whom where any is named. */
+/**
+ * Who started the task and when, and who last edited its plan and when,
+ * under its title, in the line every document draws there
+ * (`DocumentByline`): "Created by [Charles] Charles Pan · 3d
+ * ago" and "Last edited by [Luke] Luke · 2h ago", each phrase wrapping
+ * whole. The people hang their cards, and the edit's time opens the plan's
+ * version history where the window offers it. A plan nobody has edited
+ * says only who created it.
+ */
+function PlanByline({
+  task,
+  edit,
+  place,
+  onShowHistory,
+}: {
+  task: Task;
+  edit: PlanLastEdit | undefined;
+  place: EditPlace;
+  onShowHistory: ShowHistory | undefined;
+}): React.JSX.Element {
+  // Note that the creator is named as the task's ⋯ names them, so a task the service names by its owner's id alone is still the reader's own.
+  const creator = useCreator(task, place.reader.readerId);
+  return (
+    <DocumentByline
+      creator={creator}
+      createdAt={task.createdAt}
+      now={place.now}
+      edited={
+        edit === undefined ? undefined : (
+          <>
+            {edit.actor === PLAN_ACTOR.EARLIER ? "Last edited" : "Last edited by "}
+            <EditedBy edit={edit} place={place} sentence />
+            {" · "}
+            <EditTime
+              at={edit.at}
+              now={place.now}
+              label={`Edited ${agoText(edit.at, place.now)}. Show version history`}
+              onShow={onShowHistory === undefined ? undefined : () => onShowHistory(undefined)}
+            />
+          </>
+        )
+      }
+    />
+  );
+}
+
+/** How many sections changed since the last look, as the line under the byline counts them, and by whom where any is named. */
 function changedLine(count: number, named: boolean): string {
   const sections = `${count} ${count === 1 ? "section" : "sections"}`;
   return `Changed since you last looked · ${sections}${named ? " by " : ""}`;
 }
 
 /**
- * The line under "Edited by" while sections changed since the last look
+ * The line under the title's byline while sections changed since the last look
  * stand lit, a face for each who last changed them, with their dismissal.
  * Note that the faces are named in words a screen reader reads, since a
  * facepile is hidden from it.
@@ -381,19 +434,6 @@ const SCROLL_INTENT_EVENTS = ["wheel", "pointerdown", "keydown"] as const;
 
 /** The class of the column the title and the text stand in. */
 const BODY_CLASS = "plan-body";
-
-/**
- * Whether a click in the document's scroller landed on its empty room: the
- * scroller itself, or the column around the title, rather than on anything
- * drawn in it, and with no selection made by the press.
- */
-function landsOnEmptyRoom(event: React.MouseEvent<HTMLElement>): boolean {
-  const { target, currentTarget } = event;
-  const selection = window.getSelection();
-  if (selection !== null && !selection.isCollapsed) return false;
-  if (target === currentTarget) return true;
-  return target instanceof Element && target.classList.contains(BODY_CLASS);
-}
 
 function opened(task: Task): Chase {
   const { body } = task.document;
@@ -694,13 +734,14 @@ function DocumentUnit({
  * The task's document: its name as the title over its text. `live` is the
  * task's call in progress, which keeps the caret waiting where the typing
  * last stopped; `onShowHistory` opens the plan's version history from the
- * "Edited by" line, on the plan as it stands, and from a section's, on the
+ * byline's "Last edited by", on the plan as it stands, and from a section's, on the
  * revision of the save it names. With `onEdit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the task's
  * name through `onDraftName` as they are typed; without them the document is
- * drawn read-only. An editable plan with no text yet opens it, the caret at
- * its start, from a click anywhere on the panel's empty room, since it has no
- * section to click into. With `page` the document is drawn as a Settings page,
+ * drawn read-only. An editable plan opens its text from a press on the
+ * panel's empty room, as a document editor's page does (`useTextRoom`): at
+ * the end under its last line, or anywhere where it has no text yet, and on
+ * the nearest line beside it. With `page` the document is drawn as a Settings page,
  * as the plan template is: the page's actions end the title's line, and the
  * "Edited by" line and the page's note stand under the title. `looks` are the sections changed since the developer last
  * looked, which the task's region keeps (`use-task-looks.ts`); without them
@@ -755,6 +796,18 @@ export function PlanBody({
     onShowHistory,
   };
   const scroller = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  // A press on the document's empty room opens its text there, at its end
+  // where it lands under the last line, or anywhere on a plan with no text
+  // yet, which has no section to click into; the open editor's own room
+  // moves its caret (`PlanDocumentEditor`).
+  useTextRoom({
+    text: body,
+    box: () => textBoxOf(body.current),
+    room: scroller,
+    open: false,
+    onPlace: editable && editing.editor === undefined ? editing.open : undefined,
+  });
   // How many times Rename was chosen from the title's ⋯, each putting the caret in the title.
   const [renaming, setRenaming] = useState(0);
   const anchors = sectionAnchors(views.map((view) => view.heading));
@@ -926,9 +979,6 @@ export function PlanBody({
       <EditedLine edit={edited} place={place} onShowHistory={onShowHistory} />
     );
   const titled = editable && onRename !== undefined;
-  // An editable plan with no text yet has no section to click into, so a
-  // click on the panel's empty room opens the text with the caret at its start.
-  const blank = editable && editing.editor === undefined && task.document.body.trim() === "";
   const titleMenu =
     linked === undefined || page !== undefined ? null : (
       <TitleMenu
@@ -942,26 +992,13 @@ export function PlanBody({
     );
   return (
     <PlanPictures
-      planId={task.id}
+      taskId={task.id}
       text={task.document.body}
       sectionNote={(heading) => pictureNoteOf(marks, heading)}
     >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: the click is the pointer's way into an empty plan; the keyboard's is the title's Return or ↓. */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard reaches the text through the title, which Tab enters. */}
-      <div
-        ref={scroller}
-        className="plan-document-scroll scroll-fade"
-        onClick={
-          blank
-            ? (event) => {
-                if (landsOnEmptyRoom(event)) editing.open();
-              }
-            : undefined
-        }
-      >
-        {page === undefined ? editedNote : null}
-        <ChangedLine looks={looks} marks={marks} />
-        <div className={BODY_CLASS}>
+      <DocumentScroll ref={scroller}>
+        {page === undefined ? null : <ChangedLine looks={looks} marks={marks} />}
+        <div ref={body} className={BODY_CLASS}>
           {titled ? (
             attributed(
               // Keyed by the plan, so words typed for one are saved to it as another opens.
@@ -989,6 +1026,12 @@ export function PlanBody({
               {page.note}
             </header>
           )}
+          {page === undefined ? (
+            <>
+              <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
+              <ChangedLine looks={looks} marks={marks} />
+            </>
+          ) : null}
           {editing.editor === undefined ? (
             sections
           ) : (
@@ -999,10 +1042,11 @@ export function PlanBody({
               drawn={sections}
               hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
               mentions={mentionDoors}
+              scroller={scroller}
             />
           )}
         </div>
-      </div>
+      </DocumentScroll>
     </PlanPictures>
   );
 }

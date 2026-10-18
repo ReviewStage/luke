@@ -1,10 +1,11 @@
 import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/features/terminal-model";
+import { Shortcut } from "@luke/panel/shortcut";
+import { TERMINAL_FIND, type TerminalFind } from "@luke/panel/terminal/contract";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
+import { TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
 import { useMemo } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader";
 import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab";
-import { Shortcut } from "../shortcut";
-import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { TreeToggle, usePaneRoom } from "./file-view";
 import { AgentGlyph } from "./tab-look";
@@ -86,17 +87,13 @@ function StateBar({
         )}
         {bar.note === undefined ? null : <span className="terminal-bar-note">{bar.note}</span>}
         {action === undefined ? null : (
-          <button
-            type="button"
-            className="terminal-bar-action"
-            onClick={() => onAction(action.kind)}
-          >
+          <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={() => onAction(action.kind)}>
             {action.label}
             <Shortcut
               chord={{ key: SHORTCUT_KEY.ENTER, bare: true }}
               className="terminal-bar-key"
             />
-          </button>
+          </TextButton>
         )}
       </span>
     </div>

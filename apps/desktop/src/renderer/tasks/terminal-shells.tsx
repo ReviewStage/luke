@@ -1,21 +1,35 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { TERMINAL_STATE, type TerminalState } from "@luke/features/terminal-model";
 import { sandboxRead } from "@luke/features/terminal-store";
-import { SANDBOX_STATE, type TerminalSummary } from "@luke/features/terminal-wire";
+import {
+  SANDBOX_STATE,
+  type TerminalSummary,
+  type TerminalsAnswer,
+} from "@luke/features/terminal-wire";
+import type { FloatingBox } from "@luke/panel/desktop/hover-pane";
 import {
   CloseIcon,
   ConfirmDialog,
+  ErrorState,
   IconButton,
   InlineEdit,
+  LIST_DENSITY,
+  LIST_ROW_ACTIONS,
+  LIST_ROW_CURRENT,
+  List,
+  ListRow,
   PlusIcon,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
 import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { ActionMenu } from "../desktop/action-menu";
-import type { FloatingBox } from "../desktop/hover-pane";
 import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject } from "./agent-ref";
 import { agentStillWriting } from "./coding-agent-model";
@@ -41,6 +55,21 @@ const CARD_FOOT = "Terminal in this agent’s sandbox";
 /** The most characters of a shell's name, as the service holds it. */
 const TITLE_MAX = 60;
 
+/** What the list says to a reader while the shells are first read. */
+const READING_SHELLS = "Reading the shells…";
+
+/** What the list says where the shells could not be read; the screen's bar beside it holds Retry. */
+const SHELLS_UNREAD = "The shells could not be read.";
+
+/** The rows standing in for shells while they are read: a name's and a folder's widths each, as a list of a few reads. */
+const SKELETON_ROWS = [
+  { name: "55%", detail: "35%" },
+  { name: "45%", detail: "50%" },
+] as const;
+
+/** How wide a row's glyph stands while it is read: the glyph's own size. */
+const SKELETON_GLYPH = "var(--luke-control-icon)";
+
 /** What the foot says of the agent: at work, or how its sandbox stands while it is not. */
 function standingWords(subject: AgentSubject, sandbox: string | undefined): string {
   if (subject.agent !== undefined && agentStillWriting(subject.agent.status)) return "Working…";
@@ -60,6 +89,79 @@ function shellDetail(shell: TerminalSummary): string {
   );
 }
 
+/**
+ * The list while the shells are first read: rows in a shell's own row, a
+ * block where its glyph, its name, and its folder will stand, so the shells
+ * land where the blocks stood. The rows open nothing and the region says
+ * what is being read.
+ */
+function ShellsSkeleton(): React.JSX.Element {
+  return (
+    <div className="terminal-shells-wait">
+      <SkeletonRegion label={READING_SHELLS}>
+        <div className="terminal-shells-rows">
+          <List label="Shell list" density={LIST_DENSITY.COMPACT}>
+            {SKELETON_ROWS.map(({ name, detail }) => (
+              <ListRow
+                key={name}
+                leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_GLYPH} />}
+                title={<Skeleton width={name} />}
+                description={<Skeleton width={detail} />}
+              />
+            ))}
+          </List>
+        </div>
+      </SkeletonRegion>
+    </div>
+  );
+}
+
+/**
+ * The list's body before a read has listed the shells: blocks while one is
+ * out, none where the sandbox stopped, or the failure where the read did not
+ * land, which the screen's bar offers Retry for. Note that a refused list leaves the tab unreachable
+ * rather than listed, so the tab's state is what says the read failed.
+ */
+function UnlistedShells({ state }: { state: TerminalState }): React.JSX.Element {
+  // A sandbox stopped before the list answered holds no shells until it is resumed.
+  if (state.kind === TERMINAL_STATE.STOPPED)
+    return <p className="terminal-shells-none">No shells.</p>;
+  if (state.kind !== TERMINAL_STATE.UNREACHABLE) return <ShellsSkeleton />;
+  return (
+    <div className="terminal-shells-wait" data-failed="">
+      <ErrorState>{SHELLS_UNREAD}</ErrorState>
+    </div>
+  );
+}
+
+/** The list's body once the shells are listed: a row each, or none said. */
+function ListedShells({
+  listed,
+  session,
+  surfaceOpen,
+}: {
+  listed: TerminalsAnswer;
+  session: TerminalSession;
+  surfaceOpen: boolean;
+}): React.JSX.Element {
+  if (listed.terminals.length === 0) return <p className="terminal-shells-none">No shells.</p>;
+  return (
+    <div className="terminal-shells-rows">
+      <List label="Shell list" density={LIST_DENSITY.COMPACT}>
+        {listed.terminals.map((shell) => (
+          <ShellRow
+            key={shell.id}
+            shell={shell}
+            shown={shell.id === session.shell}
+            surfaceOpen={surfaceOpen}
+            session={session}
+          />
+        ))}
+      </List>
+    </div>
+  );
+}
+
 /** One shell's row: its press shows it, its × ends it, and its right-click opens its menu. */
 function ShellRow({
   shell,
@@ -73,48 +175,54 @@ function ShellRow({
   surfaceOpen: boolean;
   session: Pick<TerminalSession, "onChoose" | "onCreate" | "onRename" | "onKill">;
 }): React.JSX.Element {
-  const row = useRef<HTMLButtonElement>(null);
+  const row = useRef<HTMLElement | null>(null);
   const menu = useMenu(true);
   const [renaming, setRenaming] = useState(false);
   const kill = `End ${shell.title}`;
   // Ending a shell ends what runs in it, which nothing brings back, so it asks first.
   const ending = useConfirmDialog({ subject: true, surfaceOpen }, () => session.onKill(shell.id));
   return (
-    <li className="terminal-shell" aria-current={shown ? "true" : undefined}>
-      <TerminalIcon className="terminal-shell-glyph" aria-hidden="true" />
-      <InlineEdit
-        value={shell.title}
-        label="Shell name"
-        editing={renaming}
-        maxLength={TITLE_MAX}
-        onEnd={({ value }) => {
-          setRenaming(false);
-          if (value !== undefined) session.onRename(shell.id, value);
+    <>
+      <ListRow
+        ref={(element) => {
+          row.current = element;
         }}
-      >
-        <button
-          ref={row}
-          type="button"
-          className="terminal-shell-row"
-          onClick={() => session.onChoose(shell.id)}
-          onContextMenu={menu.contextMenu(row)}
-        >
-          <span className="terminal-shell-name">{shell.title}</span>
-          <span className="terminal-shell-detail">{shellDetail(shell)}</span>
-        </button>
-      </InlineEdit>
-      <span className="terminal-shell-mark">
-        {shell.running ? (
-          <span className="terminal-shell-running" role="img" aria-label="Running" />
-        ) : null}
-      </span>
-      {/* Note that the × stands in a box of its own, because the box is what
-          the stylesheet lays over the mark and a barrel button wears no mark. */}
-      <span className="terminal-shell-kill">
-        <Tooltip label={kill}>
-          <IconButton icon={<CloseIcon />} label={kill} onClick={ending.ask} />
-        </Tooltip>
-      </span>
+        leading={<TerminalIcon />}
+        title={
+          renaming ? (
+            <InlineEdit
+              value={shell.title}
+              label="Shell name"
+              editing
+              maxLength={TITLE_MAX}
+              onEnd={({ value }) => {
+                setRenaming(false);
+                if (value !== undefined) session.onRename(shell.id, value);
+              }}
+            />
+          ) : (
+            shell.title
+          )
+        }
+        description={<span className="terminal-shell-detail">{shellDetail(shell)}</span>}
+        meta={
+          shell.running ? (
+            <span className="terminal-shell-running" role="img" aria-label="Running" />
+          ) : null
+        }
+        current={shown ? LIST_ROW_CURRENT.ITEM : undefined}
+        onPress={renaming ? undefined : () => session.onChoose(shell.id)}
+        onContextMenu={renaming ? undefined : menu.contextMenu(row)}
+        actionsAt={LIST_ROW_ACTIONS.HOVER}
+        menuOpen={menu.open !== undefined}
+        actions={
+          renaming ? null : (
+            <Tooltip label={kill}>
+              <IconButton icon={<CloseIcon />} label={kill} onClick={ending.ask} />
+            </Tooltip>
+          )
+        }
+      />
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={shell.title}
@@ -148,7 +256,7 @@ function ShellRow({
         confirm={ending}
         question={{ title: `${kill}?`, verb: "End shell", running: "Ending the shell" }}
       />
-    </li>
+    </>
   );
 }
 
@@ -175,7 +283,6 @@ export function TerminalShells({
   surfaceOpen: boolean;
 }): React.JSX.Element {
   const { listed } = session;
-  const shells = listed?.terminals ?? [];
   return (
     <aside
       ref={pane}
@@ -198,20 +305,10 @@ export function TerminalShells({
           />
         </Tooltip>
       </div>
-      {listed === undefined ? null : shells.length === 0 ? (
-        <p className="terminal-shells-none">No shells.</p>
+      {listed === undefined ? (
+        <UnlistedShells state={session.state} />
       ) : (
-        <ul className="terminal-shells-rows">
-          {shells.map((shell) => (
-            <ShellRow
-              key={shell.id}
-              shell={shell}
-              shown={shell.id === session.shell}
-              surfaceOpen={surfaceOpen && !leaving}
-              session={session}
-            />
-          ))}
-        </ul>
+        <ListedShells listed={listed} session={session} surfaceOpen={surfaceOpen && !leaving} />
       )}
       <div className="terminal-shells-foot">
         <AgentRef

@@ -4,11 +4,11 @@ import assert from "node:assert/strict";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
 import { NewTaskDialog } from "./new-task-dialog";
 import type { RepositoryChooser } from "./repository-chip";
@@ -147,7 +147,7 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
   assert.deepEqual(
     // A row names the repository, then its owner after it.
     [...document.querySelectorAll('[role="option"]')].map((row) =>
-      [".task-compose-menu-detail", ".task-compose-menu-name"]
+      [".luke-combobox-option-detail", ".luke-combobox-option-label"]
         .map((part) => row.querySelector(part)?.textContent)
         .join("/"),
     ),
@@ -243,7 +243,7 @@ test("switching New plan to a workspace with no GitHub connected lets the other 
   act(() => dialog.repositoryChip().click());
   await settle();
   const offered = [...document.querySelectorAll("button")].map((button) => button.textContent);
-  const note = document.querySelector(".task-compose-menu-note")?.textContent;
+  const note = document.querySelector(".luke-combobox-note p")?.textContent;
   const after = dialog.repositoryChip().textContent;
   await dialog.create("Tmp");
 

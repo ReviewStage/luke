@@ -1,25 +1,29 @@
 import { useAtomValue } from "@effect/atom-react";
 import { ISSUE_BOUNDS } from "@luke/features/issue-wire";
 import { planSections } from "@luke/features/plan-document";
+import {
+  type EditorDiagram,
+  PLACEMENT_END,
+  type PlanEditorHandle,
+  type PlanEditorPlacement,
+  type PlanEditorProps,
+} from "@luke/panel/plan-editor/contract";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { AsyncResult } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader";
 import { MarkdownMessage } from "../markdown-message";
 import { DiagramPreview } from "../plan-diagram";
-import type {
-  EditorDiagram,
-  PlanEditorHandle,
-  PlanEditorPlacement,
-  PlanEditorProps,
-} from "../plan-editor/contract";
+import { RetryButton } from "../retry-button";
 import {
+  DOCUMENT_BLOCK_CLASS,
   EDITOR_LOAD_FAILED,
   editsOnClick,
   MountedPlanEditor,
   useEditorDrawings,
+  useTextRoom,
 } from "../tasks/plan-document-editor";
-import { useOpenLink } from "../tasks/use-open-link";
 
 /**
  * issue-description.tsx -- an issue's description, drawn as Markdown and edited in place in the plan's own editor.
@@ -27,13 +31,17 @@ import { useOpenLink } from "../tasks/use-open-link";
  * At rest the description is drawn in the plan's read view, or a quiet line
  * asking for one where there is none; a click into its words opens the
  * plan's editor (`../plan-editor/`) in their place, the caret where the
- * click landed, and Return on the description opens it at the end. The
+ * click landed, and Return on the description opens it at the end, as does
+ * a press anywhere on the page's empty room under it; a press on the room
+ * beside it opens it on the nearest line (`useTextRoom`), and one while it
+ * is open moves its caret there. The
  * editor draws the words exactly as they were drawn, so nothing moves, and
  * writes the same Markdown: headings, lists, task items, tables, code, a
  * Mermaid block previewed as its diagram. Leaving the editor, Esc, or ⌘↩
  * sends what was typed, and so does the page going while it is open; text
  * left as it was sends nothing. The editor stays open until the service
- * keeps the save, so a refused save keeps every word and says so under it.
+ * keeps the save, so a refused save keeps every word and says so under it
+ * with a Retry, in the plan's own note.
  * A save asked for while another is out, by a finish, a leaving, or the page
  * going, waits for it and then sends the words as they stand by then, so
  * nothing typed meanwhile is lost. Its words are document text, which the
@@ -44,18 +52,19 @@ import { useOpenLink } from "../tasks/use-open-link";
 const PLACEHOLDER = "Add a description…";
 
 /** What a refused save says under the editor. */
-const REFUSED_LINE = "Couldn't save the description. Try again.";
+const REFUSED_LINE = "Couldn't save the description.";
 
 /** What a description past its bound says under the editor, which the service would refuse. */
-const TOO_LONG_LINE = `The description is too long: keep it under ${ISSUE_BOUNDS.MAX_DESCRIPTION_CHARS.toLocaleString("en-US")} characters.`;
+const TOO_LONG_LINE = `Not saved: the description is too long. Keep it under ${ISSUE_BOUNDS.MAX_DESCRIPTION_CHARS.toLocaleString("en-US")} characters.`;
+
+/** What stands under the editor, in the plan's own note (`DocumentNote`): its words, and whether its Retry sends the words again. */
+interface DescriptionNote {
+  readonly words: string;
+  readonly retry: boolean;
+}
 
 /** The read view's class, which the editor's words wear too, so they stand where the drawn words stood. */
 const READ_CLASS = "plan-unit";
-
-/** The caret at the end of a description's words: the end of its last section. */
-function atEnd(description: string): PlanEditorPlacement {
-  return { section: Math.max(planSections(description).length - 1, 0) };
-}
 
 /**
  * The description in one room, open or not, so the words drawn while the
@@ -74,7 +83,7 @@ export function IssueDescription({
   // Note that the editor stands only while it is open, so at rest the issue's own description is drawn.
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<PlanEditorPlacement | undefined>(undefined);
-  const [note, setNote] = useState<string | undefined>(undefined);
+  const [note, setNote] = useState<DescriptionNote | undefined>(undefined);
   const saving = useRef(false);
   // Whether a save was asked for while one was out, which goes once that one is kept.
   const queued = useRef(false);
@@ -93,6 +102,7 @@ export function IssueDescription({
   const prefetchEditorBundle = usePrefetchEditorBundle();
   const openLink = useOpenLink();
   const diagrams = useEditorDrawings<EditorDiagram>();
+  const room = useRef<HTMLElement>(null);
 
   const typed = () => handle.current?.markdown() ?? drafted.current ?? description;
   const begin = (at: PlanEditorPlacement) => {
@@ -120,7 +130,7 @@ export function IssueDescription({
       return;
     }
     if (text.length > ISSUE_BOUNDS.MAX_DESCRIPTION_CHARS) {
-      setNote(TOO_LONG_LINE);
+      setNote({ words: TOO_LONG_LINE, retry: false });
       return;
     }
     saving.current = true;
@@ -129,7 +139,7 @@ export function IssueDescription({
       const again = queued.current;
       queued.current = false;
       if (!taken) {
-        setNote(REFUSED_LINE);
+        setNote({ words: REFUSED_LINE, retry: true });
         return;
       }
       kept.current = text;
@@ -159,11 +169,23 @@ export function IssueDescription({
     }
   });
 
+  useTextRoom({
+    text: room,
+    box: () => room.current?.getBoundingClientRect(),
+    open,
+    onPlace: (at) => {
+      if (!open) begin(at);
+      else if (handle.current === undefined) setPlacement(at);
+      else handle.current.focusAt(at);
+    },
+  });
+
   const drawn = (
     // biome-ignore lint/a11y/useSemanticElements: the description holds its words, headings and lists among them, not a form's controls, so it is no `<fieldset>`.
     <div
       ref={block}
-      className="issue-description"
+      // Note that the description at rest is a block of the issue's document, as a plan's section is, in its look.
+      className={`${DOCUMENT_BLOCK_CLASS} document-sections issue-description`}
       role="group"
       // biome-ignore lint/a11y/noNoninteractiveTabindex: the description is a Tab stop as a plan's section block is, whose Return opens its editor.
       tabIndex={0}
@@ -177,13 +199,22 @@ export function IssueDescription({
       onKeyDown={(event) => {
         if (event.key !== "Enter" || event.target !== event.currentTarget) return;
         event.preventDefault();
-        begin(atEnd(description));
+        begin(PLACEMENT_END);
       }}
     >
       {description === "" ? (
         <p className="issue-description-empty">{PLACEHOLDER}</p>
       ) : (
-        <MarkdownMessage words={description} className={READ_CLASS} openLink={openLink} diagrams />
+        // Note that the words are drawn a section at a time, as a plan's are, so its sections stand the plan's gap apart, as the editor stands them.
+        planSections(description).map((section) => (
+          <MarkdownMessage
+            key={section.from}
+            words={section.text}
+            className={READ_CLASS}
+            openLink={openLink}
+            diagrams
+          />
+        ))
       )}
     </div>
   );
@@ -207,6 +238,7 @@ export function IssueDescription({
   // Note that the room stands open or not, so the words drawn while the bundle loads are the ones pressed.
   return (
     <section
+      ref={room}
       className={open ? "plan-document-editor ph-no-capture" : undefined}
       aria-label={editor === undefined ? undefined : "Editing the description"}
       aria-busy={open && editor === undefined ? true : undefined}
@@ -222,14 +254,15 @@ export function IssueDescription({
         <MountedPlanEditor module={editor} props={props} handle={handle} />
       )}
       {open && AsyncResult.isFailure(module) ? (
-        <p className="issue-description-refused" role="alert">
+        <p className="plan-editor-note" role="alert">
           {EDITOR_LOAD_FAILED}
         </p>
       ) : null}
       {note === undefined ? null : (
-        <p className="issue-description-refused" role="status">
-          {note}
-        </p>
+        <div className="plan-editor-note" role="alert">
+          <span>{note.words}</span>
+          {note.retry ? <RetryButton onRetry={save} /> : null}
+        </div>
       )}
       {diagrams.drawn.map((each) =>
         createPortal(

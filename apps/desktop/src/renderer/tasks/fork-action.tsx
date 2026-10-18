@@ -1,6 +1,7 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { IconButton } from "@luke/ui";
+import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
+import { IconButton, TextButton } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { ArrowRightIcon, SplitIcon, XIcon } from "lucide-react";
@@ -13,7 +14,6 @@ import { agentActor, agentTabLabel } from "./coding-agent-model";
 import { type AgentFork, FORK_WORDS, type ForkCut, forksOf, messageOpening } from "./fork-model";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { useOpenPlace } from "./use-open-link";
 
 /**
  * fork-action.tsx -- a coding agent forked at one of its messages: the message's Fork to new agent, the draft's chip naming what it forks, and the line under a message saying which agents it was forked to.
@@ -234,9 +234,9 @@ export function ForkChip({
               <span className="draft-fork-quote">{quote}</span>
             ) : (
               <Tooltip label={FORK_WORDS.OPEN_SOURCE}>
-                <button type="button" className="draft-fork-quote" onClick={open}>
-                  {quote}
-                </button>
+                <span className="draft-fork-quote">
+                  <TextButton onClick={open}>{quote}</TextButton>
+                </span>
               </Tooltip>
             )}
           </>

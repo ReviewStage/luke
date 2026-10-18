@@ -3,7 +3,7 @@ import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_BOUNDS,
 } from "@luke/features/pull-request-write-wire";
-import { BUTTON_VARIANT, Button } from "@luke/ui";
+import { BUTTON_VARIANT, Button, TextArea } from "@luke/ui";
 import { CircleCheckIcon, RotateCcwIcon } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes";
@@ -53,8 +53,13 @@ const ThreadWritesContext = createContext<ThreadWrites | undefined>(undefined);
 /** Gives every review thread drawn under it its controls, on the agent named. */
 export const ThreadWritesProvider = ThreadWritesContext.Provider;
 
+/** Which agent's pull request the tab around the caller writes to, and what it reads again after; none outside a tab. A reaction's controls take it too (`pull-request-reactions.tsx`). */
+export function useThreadWriting(): ThreadWrites | undefined {
+  return useContext(ThreadWritesContext);
+}
+
 /** What a thread drawn outside a tab reads again once changed: nothing, since it offers no change. */
-function noop(): void {}
+export function noop(): void {}
 
 /**
  * The reply being written: a field, Cancel, and Reply; ⌘↩ sends it and
@@ -88,27 +93,17 @@ function ReplyForm({
 
   return (
     <div className="pull-request-thread-reply">
-      <textarea
+      <TextArea
         ref={field}
-        className="settings-input pull-request-thread-reply-field"
-        aria-label={THREAD_WORDS.REPLY_FIELD}
+        label={THREAD_WORDS.REPLY_FIELD}
         placeholder={THREAD_WORDS.REPLY_PLACEHOLDER}
         value={body}
         maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS}
-        readOnly={busy}
-        onChange={(event) => setBody(event.target.value)}
-        onKeyDown={(event) => {
-          // Note that Escape goes no further than the field, because the window's own Escape would leave the tab as well.
-          if (event.key === "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
-            if (!busy) onCancel();
-          }
-          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-            event.preventDefault();
-            send();
-          }
-        }}
+        rows={3}
+        busy={busy}
+        onChange={setBody}
+        onEscape={onCancel}
+        onSubmit={send}
       />
       <div className="pull-request-thread-reply-foot">
         <Button disabled={busy} onClick={onCancel}>
@@ -141,7 +136,7 @@ function resolveWords(resolved: boolean, out: boolean): string {
  * the read named no id for it.
  */
 export function ThreadActions({ thread }: { thread: ReviewThread }): React.JSX.Element | null {
-  const writing = useContext(ThreadWritesContext);
+  const writing = useThreadWriting();
   const writes = usePullRequestWrites(writing?.agentId ?? "", writing?.onWritten ?? noop);
   const [replying, setReplying] = useState(false);
   const { id } = thread;
@@ -166,13 +161,9 @@ export function ThreadActions({ thread }: { thread: ReviewThread }): React.JSX.E
       ) : null}
       <div className="pull-request-thread-actions-row">
         {replying ? null : (
-          <button
-            type="button"
-            className="pull-request-thread-reply-open"
-            onClick={() => setReplying(true)}
-          >
+          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setReplying(true)}>
             {THREAD_WORDS.REPLY_OPEN}
-          </button>
+          </Button>
         )}
         <Button
           variant={BUTTON_VARIANT.OUTLINE}

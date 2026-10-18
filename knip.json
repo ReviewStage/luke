@@ -14,7 +14,7 @@
   "ignore": [".opencode/**"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/fixtures/discarded-effect/*.ts"],
+      "entry": ["scripts/fixtures/discarded-effect/*.ts", "scripts/fixtures/task-names/*.ts"],
       "project": ["scripts/**"]
     },
     "apps/desktop": {

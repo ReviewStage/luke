@@ -86,3 +86,32 @@ test("while a find looks through it, a closed fold draws its body for the find a
   assert.equal(summaryOf(container).getAttribute("aria-expanded"), "false");
   assert.ok(container.textContent?.includes("Read package.json"));
 });
+
+function heldFold(open: boolean, heard: boolean[]): ReactElement {
+  return createElement(Disclosure, {
+    open,
+    onOpenChange: (next: boolean) => heard.push(next),
+    children: [
+      createElement(DisclosureSummary, { key: "summary", children: "Luke · Lines 3–9" }),
+      createElement(DisclosureBody, { key: "body", children: "Why these lines" }),
+    ],
+  });
+}
+
+test("a fold its holder keeps tells the holder of a press and stays as the holder says", () => {
+  const heard: boolean[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(heldFold(false, heard)));
+  act(() => summaryOf(container).click());
+  assert.deepEqual(heard, [true]);
+  assert.equal(summaryOf(container).getAttribute("aria-expanded"), "false");
+  assert.ok(!container.textContent?.includes("Why these lines"));
+
+  act(() => root.render(heldFold(true, heard)));
+  assert.equal(summaryOf(container).getAttribute("aria-expanded"), "true");
+  assert.ok(container.textContent?.includes("Why these lines"));
+  act(() => summaryOf(container).click());
+  assert.deepEqual(heard, [true, false]);
+});

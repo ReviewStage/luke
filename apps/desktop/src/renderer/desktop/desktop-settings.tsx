@@ -3,6 +3,17 @@ import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { appPlatform } from "@luke/panel/app-platform";
+import { WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
+import { AttentionMark } from "@luke/panel/settings/marks";
+import {
+  settingsGroupHeadingOf,
+  settingsPageOf,
+  shownSettingsPageGroups,
+} from "@luke/panel/settings/pages";
+import { useSettingsWrites } from "@luke/panel/settings/writes";
+import { Shortcut } from "@luke/panel/shortcut";
 import { SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
 import {
   SETTINGS_PAGE_GROUP,
@@ -15,13 +26,9 @@ import { BackIcon, NAV_CURRENT, NavItem, SettingsPage, useMenu } from "@luke/ui"
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
-import { useAppCommand } from "../app-commands";
-import { appPlatform } from "../app-platform";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import type { NavigationHistory } from "../navigation-history";
-import { AttentionMark } from "../settings/marks";
-import { settingsGroupHeadingOf, settingsPageOf, shownSettingsPageGroups } from "../settings/pages";
 import { TemplateVersionHistory } from "../settings/plan-template-history";
 import { PlanTemplatePage } from "../settings/plan-template-page";
 import { pageResetControl } from "../settings/reset";
@@ -32,7 +39,6 @@ import {
   voicePageAttention,
 } from "../settings/settings-panel";
 import { shownWorkspace } from "../settings/workspace-page";
-import { useSettingsWrites } from "../settings/writes";
 import {
   landOnSettingsRow,
   type SettingsSearchEntry,
@@ -41,12 +47,10 @@ import {
   searchSettings,
   settingsSearchEntries,
 } from "../settings-search";
-import { Shortcut } from "../shortcut";
 import { commandKeyshortcuts } from "../tooltip";
 import { ActionMenu } from "./action-menu";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
-import { WorkspaceTile } from "./workspace-tile";
 
 /** What a page's row's right-click menu is called. */
 const PAGE_ACTIONS = "Settings page actions";

@@ -16,7 +16,33 @@ import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
 import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "@luke/panel/ai-elements/conversation";
+import { Fold, FoldBody, FoldSummary } from "@luke/panel/ai-elements/fold";
+import { appPlatform } from "@luke/panel/app-platform";
+import { useAutomation } from "@luke/panel/automation-directory";
+import { useMemberDirectory, usePerson } from "@luke/panel/member-directory";
+import { SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
+import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { SentTime } from "@luke/panel/tasks/sent-time";
+import { useMinute } from "@luke/panel/tasks/task-time";
+import {
+  UndeliveredLines,
+  UndeliveredMark,
+  useUndeliveredLines,
+} from "@luke/panel/tasks/undelivered-mark";
+import { useKnownNames } from "@luke/panel/tasks/use-known-names";
+import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
+import {
+  BUTTON_VARIANT,
+  Button,
+  DisclosureChevron,
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -32,7 +58,6 @@ import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef } from "react";
-import { useAct } from "../act";
 import {
   ACTOR_SIZE,
   ActorLine,
@@ -41,24 +66,12 @@ import {
   AutomationCard,
   automationActor,
 } from "../actor-ref";
-import {
-  Conversation,
-  ConversationContent,
-  ConversationEmptyState,
-  ConversationScrollButton,
-} from "../ai-elements/conversation";
-import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
-import { appPlatform } from "../app-platform";
-import { useAutomation } from "../automation-directory";
 import { useCopyToast } from "../copy-feedback";
 import { InlineRef } from "../inline-ref";
-import { useMemberDirectory, usePerson } from "../member-directory";
-import { SPINNER_SIZE, Spinner } from "../spinner";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { AgentComposer } from "./agent-composer";
 import {
   AgentPicturesProvider,
@@ -71,7 +84,6 @@ import type { AgentServersControl } from "./agent-servers";
 import type { HeldTranscript } from "./agent-tab-card";
 import { ArchivedComposerNote } from "./archived-task";
 import { AttachedFileChips, messageFileChips } from "./attached-file-chips";
-import { useChatOn } from "./chat-gate";
 import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice";
 import {
   AGENT_PART,
@@ -83,24 +95,25 @@ import {
   agentTabLabel,
   agentWorkingPhase,
   archivedByReading,
+  CONTINUE_AGAIN_LABEL,
+  CONTINUE_LABEL,
   chatNoticeOf,
   continuedByIds,
   continuedByTitles,
   delegates,
   dockedTodos,
   type EndLineParts,
-  endLineContinues,
+  endLineOffersContinue,
   endLineParts,
   endLineReason,
   lineSender,
   macOwnerOf,
   messageWords,
   newestTodos,
-  newTaskCallIds,
   placedMessages,
   providerOf,
   settledPlanEdits,
-  showsPublishedRow,
+  sidebarCallIds,
   teammateStarter,
   turnStretches,
   WORKING_PHASE_WORDS,
@@ -124,13 +137,11 @@ import { PlanPictures } from "./plan-pictures";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
 import { briefAgent, replayOpening } from "./replay-card-model";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection";
-import { SentTime } from "./sent-time";
 import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
 import { useMentionDoors } from "./task-mentions";
-import { useMinute } from "./task-time";
 import {
   calledAgent,
   cardTitle,
@@ -158,15 +169,12 @@ import {
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
-import { UndeliveredLines, UndeliveredMark, useUndeliveredLines } from "./undelivered-mark";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model";
 import { useAgentPullRequest } from "./use-agent-pull-request";
 import { useAgentServers } from "./use-agent-servers";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { useKnownNames } from "./use-known-names";
-import { useOpenPlace } from "./use-open-link";
 import { WorkedFor, WorkingLine } from "./working-time";
 
 /**
@@ -213,15 +221,17 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * keeps to its newest line while it is scrolled there. A link in the
  * transcript opens in the browser where it is a page on GitHub, which is
  * where the pull request the agent opened lives; every other address is
- * drawn and goes nowhere. A finished transcript ends on a row summing the
- * pull request up, with what the turn cost where the service priced it,
- * as the stopped or failed line carries it too. Every word here is the agent's or the plan's, so the
+ * drawn and goes nowhere. No line here names a price: a price in the
+ * window is the whole run's, said only at the model menu's foot
+ * (`agentUsageLine`). Every word here is the agent's or the plan's, so the
  * root is left out of the screen recording (`ph-no-capture`) as a second
  * line behind the recording's text masking. Under the transcript stands
  * the composer (`agent-composer.tsx`), with no head above either: where
  * the agent stands is its tab's glyph and the transcript's own lines, what
  * it runs on is the model chip at the box's foot, and what it published
- * is the chip after it. A line the developer sends joins the transcript at
+ * is the pull request's row pinned over the box, under the docked to-do
+ * list, or the branch's chip at the box's foot before a pull request
+ * stands (`agent-published.tsx`). A line the developer sends joins the transcript at
  * once as theirs and is read back from the service's own row, and the
  * Stop is the composer's, the one the tab has. A worker's tab draws the
  * worker's transcript the same way, under the agent and the call that
@@ -547,6 +557,22 @@ function TodosDock({
   );
 }
 
+/** The agent's pull request, pinned over the box under the to-do list for as long as it stands, whether the agent works or has ended; nothing before one does. */
+function PublishedDock({
+  published,
+  doors,
+}: {
+  published: CodingAgentPullRequestAnswer | undefined;
+  doors: PublishedDoors;
+}): ReactNode {
+  if (published === undefined || published.pullRequest === null) return null;
+  return (
+    <div className="agent-published-dock">
+      <PublishedRow pullRequest={published.pullRequest} branch={published.branch} doors={doors} />
+    </div>
+  );
+}
+
 /**
  * A call that loaded a skill: the one button that opens the skill's
  * `SKILL.md`, hanging the card a sent message's chip of the skill hangs
@@ -676,7 +702,7 @@ function OriginBody({ body }: { body: string }): React.JSX.Element {
   return (
     <Fold className="agent-origin-body">
       <FoldSummary className="agent-origin-body-line">
-        <FoldChevron />
+        <DisclosureChevron />
         <WebhookIcon aria-hidden="true" />
         {WEBHOOK_BODY_LABEL}
       </FoldSummary>
@@ -704,7 +730,7 @@ function PlanCard({
   sentAt,
   body,
   messageId,
-  planId: taskId,
+  taskId,
 }: {
   text: string;
   lead: TranscriptLead;
@@ -719,7 +745,7 @@ function PlanCard({
   /** A webhook call's body, which rode in with an automation's prompt. */
   body?: string | undefined;
   /** The task the agent works on, whose plan's pictures the card draws; none where it works on none. */
-  planId?: string | undefined;
+  taskId?: string | undefined;
 }): ReactNode {
   const named = sender != null;
   const words = <TranscriptWords text={text} />;
@@ -734,7 +760,7 @@ function PlanCard({
           {taskId === undefined ? (
             words
           ) : (
-            <PlanPictures planId={taskId} text={text}>
+            <PlanPictures taskId={taskId} text={text}>
               {words}
             </PlanPictures>
           )}
@@ -1029,7 +1055,7 @@ export function AgentMessage({
   sender,
   origin,
   arrived = NO_ARRIVED,
-  planId: taskId,
+  taskId,
   forkable = true,
   forkCut,
 }: {
@@ -1041,7 +1067,7 @@ export function AgentMessage({
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
   plan: boolean;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
-  planId?: string | undefined;
+  taskId?: string | undefined;
   /** Who handed the agent the plan or the prompt it opens on, and the card's words where they are not the message's own. */
   origin?: TranscriptOrigin | undefined;
   /** The plan's or task's card line, where the transcript names it otherwise than by its first line. */
@@ -1070,7 +1096,7 @@ export function AgentMessage({
         sentAt={message.sentAt}
         body={origin?.body}
         messageId={message.id}
-        planId={taskId}
+        taskId={taskId}
       />
     );
   }
@@ -1190,9 +1216,9 @@ export function AgentMessage({
 
 /**
  * The line a transcript ends on once its turn was stopped or failed: a
- * failure's mark and its words in the danger ink, then what the turn cost,
- * quiet, after a dot; a stop's words quiet alike. A turn failed on the
- * reader's own refused key offers its API keys after them.
+ * failure's mark and its words in the danger ink; a stop's words quiet.
+ * A turn failed on the reader's own refused key offers its API keys after
+ * them.
  */
 function AgentEndLine({
   ended,
@@ -1204,15 +1230,6 @@ function AgentEndLine({
   onOpenApiKeys: (() => void) | undefined;
 }): React.JSX.Element {
   const mark = ended.failed ? stateEndMark(GLYPH_STATE.FAILED, false) : null;
-  const cost =
-    ended.cost === undefined ? null : (
-      <>
-        <span className="agent-end-dot" aria-hidden="true">
-          ·
-        </span>
-        <span className="agent-end-cost">{ended.cost}</span>
-      </>
-    );
   // Note that a key refused is mended in Settings, so its line offers the API keys after the words.
   const remedy =
     endReason === FAILURE_REASON.API_KEY
@@ -1227,17 +1244,38 @@ function AgentEndLine({
     >
       {mark}
       <span className="agent-end-words">{ended.words}</span>
-      {cost}
       {remedy === undefined ? null : (
-        <button
-          type="button"
-          className="toolbar-button bordered-button failure-note-remedy agent-end-remedy"
-          onClick={onOpenApiKeys}
-        >
-          {remedy}
-        </button>
+        <span className="agent-end-remedy">
+          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onOpenApiKeys}>
+            {remedy}
+          </Button>
+        </span>
       )}
     </p>
+  );
+}
+
+/**
+ * The end line's row: the line, then the press it ends on (Continue in new
+ * agent), on one row, centred on the line's words, which wraps the press
+ * under them only where the column is too narrow for both.
+ */
+function AgentEndRow({
+  ended,
+  endReason,
+  onOpenApiKeys,
+  press,
+}: {
+  ended: EndLineParts;
+  endReason: FailureReason | undefined;
+  onOpenApiKeys: (() => void) | undefined;
+  press: ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className="agent-end-row">
+      <AgentEndLine ended={ended} endReason={endReason} onOpenApiKeys={onOpenApiKeys} />
+      {press}
+    </div>
   );
 }
 
@@ -1256,15 +1294,15 @@ function AgentTranscriptView({
   endReason = FAILURE_REASON.OTHER,
   onOpenApiKeys,
   onRetry,
-  footer,
   overComposer = false,
   earlierOmitted = false,
   briefTitle,
   briefSender,
   origin,
   readerId,
-  planId: taskId,
+  taskId,
   replay,
+  endPress,
   endTrail,
 }: {
   messages: readonly CodingAgentMessage[];
@@ -1289,8 +1327,6 @@ function AgentTranscriptView({
   /** Turns to the page holding the API keys, which an end line telling of a key refused offers. */
   onOpenApiKeys?: (() => void) | undefined;
   onRetry: () => void;
-  /** What ends the transcript once the agent has: the row summing its pull request up. */
-  footer?: ReactNode;
   /** Whether the composer stands right under the log, which the log's foot then fades into. */
   overComposer?: boolean;
   /** Whether older steps than these were left out, which a note says after the card. */
@@ -1304,10 +1340,12 @@ function AgentTranscriptView({
   /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
   readerId?: string | undefined;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
-  planId?: string | undefined;
+  taskId?: string | undefined;
   /** Where a replay its first message holds is drawn as its own card, between the brief and the note (`replay-card.tsx`); none where no replay is read, as on a worker's tab. */
   replay?: ReplayPlace | undefined;
-  /** The row under the end line, or at the transcript's end where it has none: Continue in new agent, or the agents that continued it (`continue-agent.tsx`). */
+  /** What the end line's row ends on, after its words: Continue in new agent (`continue-agent.tsx`); nothing where it has no end line. */
+  endPress?: ReactNode;
+  /** The row under the end line, or at the transcript's end where it has none: the agents that continued it, where an archive took the box (`continue-agent.tsx`). */
   endTrail?: ReactNode;
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
@@ -1343,7 +1381,7 @@ function AgentTranscriptView({
               <AgentMessage
                 message={message === first && opening !== undefined ? opening.brief : message}
                 plan={message === plan}
-                planId={message === plan ? taskId : undefined}
+                taskId={message === plan ? taskId : undefined}
                 lead={lead}
                 moving={working && index === placed.length - 1}
                 forkCut={forkCutOf(message, open)}
@@ -1367,7 +1405,7 @@ function AgentTranscriptView({
                     replay={opening.replay}
                     sentAt={first.sentAt}
                     place={replay}
-                    planId={taskId}
+                    taskId={taskId}
                   />
                   {opening.note === undefined ? null : (
                     <AgentMessage
@@ -1395,12 +1433,16 @@ function AgentTranscriptView({
           {ended === undefined && endTrail === undefined ? null : (
             <div className="agent-end" data-ended={ended === undefined ? undefined : ""}>
               {ended === undefined ? null : (
-                <AgentEndLine ended={ended} endReason={endReason} onOpenApiKeys={onOpenApiKeys} />
+                <AgentEndRow
+                  ended={ended}
+                  endReason={endReason}
+                  onOpenApiKeys={onOpenApiKeys}
+                  press={endPress}
+                />
               )}
               {endTrail}
             </div>
           )}
-          {footer}
           {failed ? <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState> : null}
         </ConversationContent>
         <ConversationScrollButton />
@@ -1424,7 +1466,12 @@ function AgentTranscriptView({
           {ended === undefined ? (
             <Text tone={TEXT_TONE.MUTED}>{lead.startingLine}</Text>
           ) : (
-            <AgentEndLine ended={ended} endReason={endReason} onOpenApiKeys={onOpenApiKeys} />
+            <AgentEndRow
+              ended={ended}
+              endReason={endReason}
+              onOpenApiKeys={onOpenApiKeys}
+              press={endPress}
+            />
           )}
           {endTrail}
         </>
@@ -1465,9 +1512,11 @@ function AgentTabView({
   readerId,
   run,
   replay,
+  endPress,
   endTrail,
   closedRemedy,
   continuedNote,
+  continuable = false,
 }: {
   agent: CodingAgentSummary;
   /** Where a replay the agent opens on is drawn (`replay-card.tsx`); none where none is read. */
@@ -1509,12 +1558,16 @@ function AgentTabView({
   starter?: string | undefined;
   /** The reader's own account id, whose messages the transcript names nobody over, and whose Mac its Mac commands say is theirs. */
   readerId?: string | undefined;
-  /** What a failed turn's end line ends on (`continue-agent.tsx`); none where it ends on its words. */
+  /** What a failed turn's end line ends on, on its row (`continue-agent.tsx`); none where it ends on its words. */
+  endPress?: ReactNode;
+  /** The row under the end line, or at the transcript's end: the agents that continued it, where an archive took the box. */
   endTrail?: ReactNode;
   /** What mends the box once it closed for good (`continue-agent.tsx`). */
   closedRemedy?: ReactNode;
-  /** What stands in the box's place once another agent continued this one (`ContinuedComposerNote`), which also drops the end line's advice to start a new one; none while none has. */
+  /** What stands in the box's place once another agent continued this one (`ContinuedComposerNote`); none while none has. */
   continuedNote?: ReactNode;
+  /** Whether the tab offers Continue somewhere, or another agent continued this one, so the end line tells no one to start a new one. */
+  continuable?: boolean;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const chatOn = useChatOn();
@@ -1554,7 +1607,7 @@ function AgentTabView({
                 briefSender={starter === undefined ? undefined : starterActor}
                 origin={origin}
                 readerId={readerId}
-                planId={agent.planId ?? undefined}
+                taskId={agent.planId ?? undefined}
                 replay={replay}
                 delegation={{
                   models,
@@ -1572,22 +1625,12 @@ function AgentTabView({
                 working={working}
                 sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
                 startedAt={startedAt}
-                ended={endLineParts(
-                  agent.status,
-                  transcript.failure,
-                  transcript.turnUsage,
-                  starter,
-                  continuedNote !== undefined,
-                )}
+                ended={endLineParts(agent.status, transcript.failure, starter, continuable)}
                 endReason={endLineReason(transcript.failure, starter)}
                 onOpenApiKeys={onOpenApiKeys}
+                endPress={endPress}
                 endTrail={endTrail}
                 onRetry={transcript.onRetry}
-                footer={
-                  showsPublishedRow(agent.status, published) ? (
-                    <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
-                  ) : null
-                }
                 overComposer
               />
             </UndeliveredLines>
@@ -1596,6 +1639,7 @@ function AgentTabView({
       </MacOwnerProvider>
       <footer className="agent-tab-foot">
         <TodosDock messages={lines} working={working} />
+        <PublishedDock published={published} doors={doors} />
         {onUnarchive !== undefined ? (
           <ArchivedComposerNote
             onUnarchive={onUnarchive}
@@ -1713,14 +1757,15 @@ export function AgentTab({
     seenListCalls.current = new Set(listCalls);
     if (landed) readAgents();
   }, [listCalls, readAgents]);
-  // A start that made a new task adds it to the sidebar only once the tasks are read again.
-  const newTaskCalls = useMemo(() => newTaskCallIds(transcript.messages), [transcript.messages]);
-  const seenNewTaskCalls = useRef<ReadonlySet<string>>(new Set(newTaskCalls));
+  // A start that made a new task, or a call that made, deleted, or filled a section, changes the
+  // sidebar only once the tasks are read again.
+  const sidebarCalls = useMemo(() => sidebarCallIds(transcript.messages), [transcript.messages]);
+  const seenSidebarCalls = useRef<ReadonlySet<string>>(new Set(sidebarCalls));
   useEffect(() => {
-    const landed = newTaskCalls.some((id) => !seenNewTaskCalls.current.has(id));
-    seenNewTaskCalls.current = new Set(newTaskCalls);
+    const landed = sidebarCalls.some((id) => !seenSidebarCalls.current.has(id));
+    seenSidebarCalls.current = new Set(sidebarCalls);
     if (landed) tell(ACT_KIND.TASKS_REFRESH);
-  }, [newTaskCalls, tell]);
+  }, [sidebarCalls, tell]);
   const composer = useAgentComposer({
     agentId: agent.id,
     taskId: agent.planId,
@@ -1768,6 +1813,19 @@ export function AgentTab({
     control,
     onOpenAgent: openAgent,
   };
+  // The box's words and files, which a press carries into the continue where it takes the box's place.
+  const carry = {
+    words: composer.unsent.words,
+    attachments: composer.unsent.attachments,
+    taskId: agent.planId,
+  };
+  // The failed end line holds the press, Continue again once another agent continued this one.
+  const pressed = endLineOffersContinue({
+    status: agent.status,
+    endReason: endLineReason(transcript.failure, starter),
+    continued: continued.length > 0,
+    boxClosed: composer.closed !== undefined,
+  });
   return (
     <MessagePlaceProvider value={agentMessagePlace(agent, messages)}>
       <AgentTabView
@@ -1807,20 +1865,23 @@ export function AgentTab({
           onOpenTarget,
           openGitHub,
         })}
-        endTrail={
-          continued.length > 0 ? (
-            // Note that the box's note names them while it stands, so the transcript names them only where an archive took the box.
-            control.onUnarchive === undefined ? undefined : (
-              <ContinuedTrail {...continuedDoors} />
-            )
-          ) : endLineContinues(agent.status, endLineReason(transcript.failure, starter)) ? (
-            // Note that a box closed on an ended agent offers the press itself, carrying its words.
+        endPress={
+          pressed ? (
+            // Note that once continued, the press carries the box's words, which the continued note hides.
             <ContinueAgent
               agentId={agent.id}
               control={control}
-              offers={composer.closed === undefined}
+              carry={continued.length > 0 ? carry : undefined}
+              label={continued.length > 0 ? CONTINUE_AGAIN_LABEL : CONTINUE_LABEL}
             />
           ) : undefined
+        }
+        continuable={continued.length > 0 || control.continueAgent !== undefined}
+        endTrail={
+          // Note that the box's note names them while it stands, so the transcript names them only where an archive took the box.
+          continued.length === 0 || control.onUnarchive === undefined ? undefined : (
+            <ContinuedTrail {...continuedDoors} />
+          )
         }
         continuedNote={
           continued.length === 0 ? undefined : (
@@ -1837,17 +1898,7 @@ export function AgentTab({
             />
           )
         }
-        closedRemedy={
-          <ContinueAgent
-            agentId={agent.id}
-            control={control}
-            carry={{
-              words: composer.unsent.words,
-              attachments: composer.unsent.attachments,
-              planId: agent.planId,
-            }}
-          />
-        }
+        closedRemedy={<ContinueAgent agentId={agent.id} control={control} carry={carry} />}
       />
     </MessagePlaceProvider>
   );

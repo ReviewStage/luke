@@ -4,15 +4,15 @@ import {
   macTerminalPortOutboundSchema,
 } from "@luke/features/mac-terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { onMacTerminalPort } from "@luke/panel/tasks/mac-terminal-port";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
+import type { TerminalHandle } from "@luke/panel/terminal/contract";
 import type { MacTerminalStripTab } from "@luke/ui/tab-strip-model";
 import { Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef, useState } from "react";
-import { useAct } from "../act";
 import { TERMINAL_LOAD_FAILED, useSideBundles } from "../bundle-loader";
-import type { TerminalHandle } from "../terminal/contract";
-import { onMacTerminalPort } from "./mac-terminal-port";
-import { useOpenLink } from "./use-open-link";
 
 /**
  * mac-terminal-tab.tsx -- a terminal of this Mac, opened on an agent's pushed branch, drawn in the side panel.

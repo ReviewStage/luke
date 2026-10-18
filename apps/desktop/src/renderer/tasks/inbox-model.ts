@@ -10,6 +10,7 @@ import {
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
+  type InboxChoice,
   type InboxCodeBlock,
   type InboxFieldValue,
   type InboxForm,
@@ -37,10 +38,12 @@ import { plainWords } from "./tool-call-model";
  *
  * The list holds every item of every plan it is handed, the latest changed
  * first, under its plan, under the person whose agent asks it, or in one
- * run. An item is the reader's where they started the agent that asks it,
+ * run with no groups, the items its tab takes: what needs the reader, what
+ * is unread, every open item, or everything, each tab counting its own.
+ * An item is the reader's where they started the agent that asks it,
  * or where the service does not say who did, as main counts what waits on
  * the account (`agent-notices.ts`), and only the reader's open items need
- * them: Needs you lists only those, though the steps through it keep the
+ * them: Needs you lists only those, though the steps through any tab keep the
  * item chosen, while a teammate's open item stands in the list as waiting
  * on them. A settled item keeps everything its agent offered,
  * the developer's pick marked, and says who settled it and what they
@@ -110,13 +113,6 @@ export function inboxBoard(items: readonly InboxItem[]): InboxBoardView {
   };
 }
 
-/** The draft with the option pressed: picked where it was not, let go where it was; one at a time unless the choice allows several. */
-export function withChoice(draft: InboxDraft, label: string, multiple: boolean): InboxDraft {
-  const picked = draft.choices.includes(label);
-  if (picked) return { ...draft, choices: draft.choices.filter((each) => each !== label) };
-  return { ...draft, choices: multiple ? [...draft.choices, label] : [label] };
-}
-
 /** What the draft holds for the field, or nothing where it is untouched. */
 export function fieldValueOf(draft: InboxDraft, label: string): InboxFieldValue | undefined {
   return draft.values.find((each) => each.label === label)?.value;
@@ -132,7 +128,12 @@ export function withValue(
   return { ...draft, values: value === undefined ? others : [...others, { label, value }] };
 }
 
-/** The answer's kind for what the card holds: a press where the response is answered by one, else the options picked, the form filled, or the developer's words or files. */
+/**
+ * The answer's kind for what the card holds: a press where one was given,
+ * else the decision an approval or a to-do holds, the nod a note is
+ * answered by, the options picked, the form filled, or the developer's
+ * words or files.
+ */
 function replyKindOf(
   item: Pick<InboxItem, "response">,
   draft: InboxDraft,
@@ -140,6 +141,11 @@ function replyKindOf(
 ): InboxReplyKind | undefined {
   if (press !== undefined) return press;
   const response = item.response;
+  if (!knownResponse(response)) return undefined;
+  if (response.type === INBOX_RESPONSE.APPROVAL || response.type === INBOX_RESPONSE.TODO) {
+    return decidedOf(response, draft);
+  }
+  if (response.type === INBOX_RESPONSE.NONE) return INBOX_REPLY.ACKNOWLEDGED;
   if (response.type === INBOX_RESPONSE.CHOICE && draft.choices.length > 0) return INBOX_REPLY.CHOSE;
   if (response.type === INBOX_RESPONSE.FORM) return INBOX_REPLY.SUBMITTED;
   return draft.note.trim() === "" && draft.attachments.length === 0
@@ -162,8 +168,9 @@ function sentValues(form: InboxForm, draft: InboxDraft): readonly InboxFormValue
 /**
  * The answer the card holds, or nothing where it holds none the item
  * takes: a choice is answered by its options, with the note beside them,
- * or by the developer's own words; an approval, a task, and an item asking
- * nothing by their presses, with the note beside them; words by words; a
+ * or by the developer's own words; an approval and a task by the decision
+ * picked, or a press given, and an item asking nothing by its nod, with the
+ * note beside them; words by words; a
  * form by its fields, with the note beside them. The files attached go
  * beside any of these, and stand for the developer's own words where they
  * wrote none, as a message's do; they travel apart from the answer.
@@ -189,6 +196,148 @@ export function inboxReply(
     ...(note === "" ? undefined : { note }),
   };
   return inboxReplyRefusal(item, answer, draft.attachments) === undefined ? answer : undefined;
+}
+
+/** What an open item's answer still lacks: an option picked, a required field filled, or the developer's own words. */
+export const INBOX_MISSING = {
+  OPTION: "option",
+  FIELD: "field",
+  WORDS: "words",
+} as const;
+
+/** What the answer lacks, with the line the box's foot says it in; a field's by its label. */
+export type InboxMissing =
+  | { readonly kind: typeof INBOX_MISSING.OPTION; readonly line: string }
+  | { readonly kind: typeof INBOX_MISSING.FIELD; readonly label: string; readonly line: string }
+  | { readonly kind: typeof INBOX_MISSING.WORDS; readonly line: string };
+
+/** What the box's foot says an answer lacks, by what it lacks. */
+const MISSING_LINE = {
+  ONE: "Pick an option",
+  MANY: "Pick at least one",
+  APPROVAL: "Approve or decline",
+  TODO: "Tick it, or say you couldn't",
+  WORDS: "Write your answer",
+} as const;
+
+/**
+ * What the card's answer still lacks, the first thing in the item's order,
+ * or nothing where it lacks nothing it can be told to fill: a choice with
+ * no pick and no words of the developer's own lacks an option, a form its
+ * first required field left empty, an approval or a to-do its decision,
+ * and words their words. A note lacks nothing, its nod being its answer.
+ */
+export function inboxMissing(
+  item: Pick<InboxItem, "response">,
+  draft: InboxDraft,
+): InboxMissing | undefined {
+  const response = item.response;
+  if (!knownResponse(response)) return undefined;
+  const ownWords = draft.note.trim() !== "" || draft.attachments.length > 0;
+  switch (response.type) {
+    case INBOX_RESPONSE.CHOICE:
+      if (draft.choices.length > 0 || ownWords) return undefined;
+      return {
+        kind: INBOX_MISSING.OPTION,
+        line: response.multiple === true ? MISSING_LINE.MANY : MISSING_LINE.ONE,
+      };
+    case INBOX_RESPONSE.FORM: {
+      const sent = new Set(sentValues(response, draft).map((value) => value.label));
+      const empty = response.fields.find(
+        (field) => field.required === true && !sent.has(field.label),
+      );
+      return empty === undefined
+        ? undefined
+        : { kind: INBOX_MISSING.FIELD, label: empty.label, line: `Fill in ${empty.label}` };
+    }
+    case INBOX_RESPONSE.TEXT:
+      return ownWords ? undefined : { kind: INBOX_MISSING.WORDS, line: MISSING_LINE.WORDS };
+    case INBOX_RESPONSE.APPROVAL:
+    case INBOX_RESPONSE.TODO:
+      if (decidedOf(response, draft) !== undefined) return undefined;
+      return {
+        kind: INBOX_MISSING.OPTION,
+        line: response.type === INBOX_RESPONSE.APPROVAL ? MISSING_LINE.APPROVAL : MISSING_LINE.TODO,
+      };
+    default:
+      return undefined;
+  }
+}
+
+/** A response decided by a pick of two, the one going ahead and the one holding back: an approval, or a to-do. */
+export type InboxDecided = Extract<
+  InboxResponse,
+  { type: typeof INBOX_RESPONSE.APPROVAL | typeof INBOX_RESPONSE.TODO }
+>;
+
+/** What an approval or a to-do may be decided as, the one going ahead first, as its cards stand. */
+export function decisionsOf(
+  response: InboxDecided,
+): readonly { readonly reply: InboxReplyKind; readonly label: string }[] {
+  const { ahead, back } = INBOX_PRESSES[response.type];
+  return [ahead, back];
+}
+
+/**
+ * The decision the card holds for an approval or a to-do, or none yet.
+ * Note that the draft holds it as its one pick, by its reply's kind, so it
+ * is kept with the card's words as a choice's pick is.
+ */
+export function decidedOf(response: InboxDecided, draft: InboxDraft): InboxReplyKind | undefined {
+  const held = draft.choices[0];
+  return decisionsOf(response).find((decision) => decision.reply === held)?.reply;
+}
+
+/** The draft holding the decision given, in place of any before it. */
+export function withDecision(draft: InboxDraft, reply: InboxReplyKind): InboxDraft {
+  return { ...draft, choices: [reply] };
+}
+
+/**
+ * The draft after the open item's option numbered `number`, counted from
+ * one, is picked by its key: a choice's option, as `withChoice` picks it,
+ * or an approval's or a to-do's decision, the one going ahead first; none
+ * where the item has no such option.
+ */
+export function numberedPick(
+  item: Pick<InboxItem, "response">,
+  draft: InboxDraft,
+  number: number,
+): InboxDraft | undefined {
+  const response = item.response;
+  if (!knownResponse(response)) return undefined;
+  if (response.type === INBOX_RESPONSE.CHOICE) {
+    const option = response.options[number - 1];
+    return option === undefined ? undefined : withChoice(response, draft, option.label);
+  }
+  if (response.type !== INBOX_RESPONSE.APPROVAL && response.type !== INBOX_RESPONSE.TODO) {
+    return undefined;
+  }
+  const decision = decisionsOf(response)[number - 1];
+  return decision === undefined ? undefined : withDecision(draft, decision.reply);
+}
+
+/**
+ * The draft after the option labelled is picked by its number: the one
+ * pick of a choice of one, which picking again keeps, or one more of a
+ * choice of several, which picking again lets go, as a press on its row
+ * would.
+ */
+export function withChoice(
+  choice: Pick<InboxChoice, "multiple">,
+  draft: InboxDraft,
+  label: string,
+): InboxDraft {
+  if (choice.multiple !== true) return { ...draft, choices: [label] };
+  const choices = draft.choices.includes(label)
+    ? draft.choices.filter((each) => each !== label)
+    : [...draft.choices, label];
+  return { ...draft, choices };
+}
+
+/** What the box's foot says of a choice of several: how many are picked, or that any may be. */
+export function pickedWords(count: number): string {
+  return count === 0 ? "Pick any that apply" : `${count} picked`;
 }
 
 /** What follows an item's question on its thread: a message on it, or where it was settled. */
@@ -258,14 +407,19 @@ export function inboxMessageOf(draft: InboxDraft): InboxMessageDraft | undefined
   return { text, attachments: draft.attachments };
 }
 
-/** The presses each response answered by a press offers: the one that holds back where there is one, then the one that goes ahead. */
+/**
+ * The two ways an approval and a to-do are decided, the one that holds
+ * back and the one that goes ahead, and the nod a note is answered by:
+ * the Inbox's cards in the question and a chat ask's presses (`chat-ask.tsx`)
+ * name them alike, and a settled item keeps them as what it offered.
+ */
 export const INBOX_PRESSES = {
   [INBOX_RESPONSE.APPROVAL]: {
     back: { reply: INBOX_REPLY.DECLINED, label: "Decline" },
     ahead: { reply: INBOX_REPLY.APPROVED, label: "Approve" },
   },
   [INBOX_RESPONSE.TODO]: {
-    back: { reply: INBOX_REPLY.NOT_DONE, label: "Can't do this" },
+    back: { reply: INBOX_REPLY.NOT_DONE, label: "Couldn't do it" },
     ahead: { reply: INBOX_REPLY.DONE, label: "Done" },
   },
   [INBOX_RESPONSE.NONE]: {
@@ -274,7 +428,7 @@ export const INBOX_PRESSES = {
   },
 } as const;
 
-/** The presses that answer the response, or nothing where words, a pick, or a form answer it. */
+/** The presses a chat ask answers the response by, or nothing where words, a pick, or a form answer it. */
 export function pressesOf(
   response: InboxReadResponse,
 ): (typeof INBOX_PRESSES)[keyof typeof INBOX_PRESSES] | undefined {
@@ -657,14 +811,89 @@ export function tasklessGroups(
   }));
 }
 
-/** How the window's Inbox lists its items: under each task, or in one list. */
+/**
+ * How the window's Inbox groups its items: under each task, under each
+ * person, under where each stands, or in one list with no groups. Note that
+ * None keeps the value "Newest first" was kept by, so a list kept that way
+ * stays so.
+ */
 export const INBOX_GROUPING = {
   TASK: "plan",
-  NEWEST: "newest",
   PERSON: "person",
+  STATUS: "status",
+  NONE: "newest",
 } as const;
 
 export type InboxGrouping = (typeof INBOX_GROUPING)[keyof typeof INBOX_GROUPING];
+
+/**
+ * Which items an Inbox lists, as the tabs under its title choose: what needs
+ * the reader (`needsReader`), anything unread, anyone's, every open item, or
+ * everything, open and settled.
+ */
+export const INBOX_SHOW = {
+  NEEDS_YOU: "needs-you",
+  UNREAD: "unread",
+  OPEN: "open",
+  ALL: "all",
+} as const;
+
+export type InboxShow = (typeof INBOX_SHOW)[keyof typeof INBOX_SHOW];
+
+/**
+ * How the window's Inbox orders its items: the latest changed first, or
+ * the open items first, the one waiting longest first, as a triage reads
+ * them, the settled ones after them the latest changed first.
+ */
+export const INBOX_SORT = {
+  LATEST: "latest",
+  WAITING: "waiting",
+} as const;
+
+export type InboxSort = (typeof INBOX_SORT)[keyof typeof INBOX_SORT];
+
+/** Whose items the window's Inbox lists: everyone's, the reader's own, or one teammate's, by their account and the name they had when chosen, which names them once they leave. */
+export const INBOX_WHOSE = {
+  EVERYONE: "everyone",
+  MINE: "mine",
+  PERSON: "person",
+} as const;
+
+export type InboxWhose =
+  | { readonly kind: typeof INBOX_WHOSE.EVERYONE }
+  | { readonly kind: typeof INBOX_WHOSE.MINE }
+  | { readonly kind: typeof INBOX_WHOSE.PERSON; readonly userId: string; readonly name: string };
+
+/** Everyone's items, as an Inbox lists them until told otherwise. */
+export const EVERYONES: InboxWhose = { kind: INBOX_WHOSE.EVERYONE };
+
+/**
+ * Where an item stands, as a list grouped by status heads it: needing the
+ * reader, waiting on the teammate whose agent asks it, or answered, which
+ * an item its agent took back stands under too.
+ */
+export const INBOX_STATUS_GROUP = {
+  NEEDS_YOU: "needs-you",
+  WAITING: "waiting",
+  ANSWERED: "answered",
+} as const;
+
+export type InboxStatusGroupKind = (typeof INBOX_STATUS_GROUP)[keyof typeof INBOX_STATUS_GROUP];
+
+/** What each status group is folded by, apart from any task's, automation's, or person's key, in the order the groups stand. */
+const STATUS_KEY = {
+  [INBOX_STATUS_GROUP.NEEDS_YOU]: "status:needs-you",
+  [INBOX_STATUS_GROUP.WAITING]: "status:waiting",
+  [INBOX_STATUS_GROUP.ANSWERED]: "status:answered",
+} as const satisfies Record<InboxStatusGroupKind, string>;
+
+/** How many items each tab lists, filtered out by the tab shown or not. */
+export interface InboxCounts {
+  readonly [INBOX_SHOW.NEEDS_YOU]: number;
+  readonly [INBOX_SHOW.UNREAD]: number;
+  readonly [INBOX_SHOW.OPEN]: number;
+  readonly [INBOX_SHOW.ALL]: number;
+}
 
 /** One holder, a task or an automation, and every item it holds, as the list is handed them. */
 export interface InboxGroup {
@@ -689,17 +918,30 @@ export interface InboxPersonGroup {
   readonly items: readonly InboxListed[];
 }
 
+/** One status's items, as a list grouped by status heads them. */
+export interface InboxStatusGroup {
+  /** What the group is folded by. */
+  readonly key: string;
+  readonly status: InboxStatusGroupKind;
+  readonly items: readonly InboxListed[];
+}
+
 /**
  * The list as it is drawn: a group for each task holding an item it shows,
- * one for each person whose agents ask one, or every item in one run; and
- * the reader it was drawn for, whose items alone need them.
+ * one for each person whose agents ask one, one for each status, or every
+ * item in one run; and the reader it was drawn for, whose items alone need
+ * them.
  */
 export type InboxListView = { readonly readerId: string | undefined } & (
   | { readonly grouping: typeof INBOX_GROUPING.TASK; readonly groups: readonly InboxGroup[] }
-  | { readonly grouping: typeof INBOX_GROUPING.NEWEST; readonly items: readonly InboxListed[] }
+  | { readonly grouping: typeof INBOX_GROUPING.NONE; readonly items: readonly InboxListed[] }
   | {
       readonly grouping: typeof INBOX_GROUPING.PERSON;
       readonly groups: readonly InboxPersonGroup[];
+    }
+  | {
+      readonly grouping: typeof INBOX_GROUPING.STATUS;
+      readonly groups: readonly InboxStatusGroup[];
     }
 );
 
@@ -713,6 +955,19 @@ export function readersItem(item: InboxItem, readerId: string | undefined): bool
   return starter === undefined || readerId === undefined || starter === readerId;
 }
 
+/**
+ * Whether an open item of an agent with no task, as main lists it, waits on
+ * the reader: its agent started by them, or by nobody the service names, or
+ * listed before the reader's own id is known, as `readersItem` reads an item.
+ * Main lists every member's, as the Inbox lists them, and counts only these.
+ */
+export function waitsOnReader(
+  entry: Pick<AppInboxTasklessItem, "startedBy">,
+  readerId: string | undefined,
+): boolean {
+  return entry.startedBy === undefined || readerId === undefined || entry.startedBy === readerId;
+}
+
 /** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */
 export function needsReader(item: InboxItem, readerId: string | undefined): boolean {
   return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId);
@@ -722,9 +977,9 @@ export function needsReader(item: InboxItem, readerId: string | undefined): bool
 const PERSON_KEY = { PREFIX: "person:", YOU: "person:you" } as const;
 
 /**
- * The items, the latest changed first, grouped by who started their agents:
- * the reader's own first, then each teammate's, the one whose item changed
- * latest first, each group's items in the order given.
+ * The items, in the order given, grouped by who started their agents: the
+ * reader's own first, then each teammate's, the one whose first item stands
+ * first, each group's items in the order given.
  */
 function personGroups(
   items: readonly InboxListed[],
@@ -741,7 +996,7 @@ function personGroups(
     if (held === undefined) groups.set(key, { key, starter, items: [listed] });
     else held.items.push(listed);
   }
-  // Note that the groups stand in the order their latest item changed, which a stable sort keeps behind the reader's own.
+  // Note that the groups stand in the order their first item does, which a stable sort keeps behind the reader's own.
   return [...groups.values()].toSorted(
     (a, b) => Number(a.starter !== undefined) - Number(b.starter !== undefined),
   );
@@ -752,12 +1007,56 @@ function newestFirst(a: InboxItem, b: InboxItem): number {
   return b.updatedAt - a.updatedAt;
 }
 
+/** The open items first, the one posted longest ago first, then the settled ones the latest changed first. */
+function waitingLongest(a: InboxItem, b: InboxItem): number {
+  const aOpen = a.status === INBOX_STATUS.OPEN;
+  const bOpen = b.status === INBOX_STATUS.OPEN;
+  if (aOpen !== bOpen) return aOpen ? -1 : 1;
+  return aOpen ? a.postedAt - b.postedAt : newestFirst(a, b);
+}
+
+/** The order a sort lists items in. */
+const SORT_ORDER = {
+  [INBOX_SORT.LATEST]: newestFirst,
+  [INBOX_SORT.WAITING]: waitingLongest,
+} as const satisfies Record<InboxSort, (a: InboxItem, b: InboxItem) => number>;
+
+/** Where an item stands for the reader, as a list grouped by status heads it. */
+function statusOf(item: InboxItem, readerId: string | undefined): InboxStatusGroupKind {
+  if (item.status !== INBOX_STATUS.OPEN) return INBOX_STATUS_GROUP.ANSWERED;
+  return readersItem(item, readerId) ? INBOX_STATUS_GROUP.NEEDS_YOU : INBOX_STATUS_GROUP.WAITING;
+}
+
+/** The items, in the order given, under where each stands: what needs the reader, what waits on others, and what is answered, a status with nothing in it left out. */
+function statusGroups(
+  items: readonly InboxListed[],
+  readerId: string | undefined,
+): readonly InboxStatusGroup[] {
+  return Object.values(INBOX_STATUS_GROUP).flatMap((status) => {
+    const held = items.filter(({ item }) => statusOf(item, readerId) === status);
+    return held.length === 0 ? [] : [{ key: STATUS_KEY[status], status, items: held }];
+  });
+}
+
+/** Whether an item is one the Whose choice lists: anyone's, the reader's own (`readersItem`), or one the teammate's agent asks. */
+function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefined): boolean {
+  switch (whose.kind) {
+    case INBOX_WHOSE.EVERYONE:
+      return true;
+    case INBOX_WHOSE.MINE:
+      return readersItem(item, readerId);
+    case INBOX_WHOSE.PERSON:
+      return item.startedBy?.userId === whose.userId;
+  }
+}
+
 /**
- * The list from every task's items: each item the latest changed first,
- * under its plan, under the person whose agent asks it, or in one run, the
- * tasks in the order their latest item changed and the people as
- * `personGroups` orders them. Needs you lists only what needs the reader,
- * and the item chosen where one is given. Note that the rows a list draws are given none,
+ * The list from every task's items: each item in the sort's order, the
+ * latest changed first or the one waiting longest first, under its plan,
+ * under the person whose agent asks it, under where it stands, or in one
+ * run, the tasks and the people in the order their first item stands and
+ * the statuses in theirs. The tab shown lists only the items it takes
+ * (`showsItem`) of the people Whose names, and the item chosen where one is given. Note that the rows a list draws are given none,
  * so a settled item leaves a list filtered to exclude it, while the steps
  * through the list are given the item the pane shows, which keeps its place
  * among them so K, J, and Next still reach the rows either side of it.
@@ -766,40 +1065,129 @@ export function inboxList(
   tasks: readonly InboxGroup[],
   view: {
     readonly grouping: InboxGrouping;
-    readonly waitingOnly: boolean;
+    readonly show: InboxShow;
     readonly chosen: string | undefined;
     /** The signed-in account's id, whose own open items alone need them; none counts every item as theirs. */
     readonly readerId: string | undefined;
+    /** The order the items stand in; the latest changed first where none is given. */
+    readonly sort?: InboxSort | undefined;
+    /** Whose items are listed; everyone's where none is given. */
+    readonly whose?: InboxWhose | undefined;
   },
 ): InboxListView {
-  const { readerId } = view;
+  const { readerId, sort = INBOX_SORT.LATEST, whose = EVERYONES } = view;
+  const order = SORT_ORDER[sort];
   const shows = (item: InboxItem) =>
-    !view.waitingOnly || needsReader(item, readerId) || item.id === view.chosen;
+    (showsItem(view.show, item, readerId) && whoseItem(whose, item, readerId)) ||
+    item.id === view.chosen;
   const groups = tasks
-    .map(({ holder, items }) => ({ holder, items: items.filter(shows).toSorted(newestFirst) }))
+    .map(({ holder, items }) => ({ holder, items: items.filter(shows).toSorted(order) }))
     .filter((group) => group.items.length > 0)
-    .toSorted((a, b) => (b.items[0]?.updatedAt ?? 0) - (a.items[0]?.updatedAt ?? 0));
+    .toSorted((a, b) => firstOrder(a.items[0], b.items[0], order));
   if (view.grouping === INBOX_GROUPING.TASK) {
     return { grouping: INBOX_GROUPING.TASK, groups, readerId };
   }
   const items = groups
     .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
-    .toSorted((a, b) => newestFirst(a.item, b.item));
-  if (view.grouping === INBOX_GROUPING.NEWEST) {
-    return { grouping: INBOX_GROUPING.NEWEST, items, readerId };
+    .toSorted((a, b) => order(a.item, b.item));
+  if (view.grouping === INBOX_GROUPING.NONE) {
+    return { grouping: INBOX_GROUPING.NONE, items, readerId };
+  }
+  if (view.grouping === INBOX_GROUPING.STATUS) {
+    return { grouping: INBOX_GROUPING.STATUS, groups: statusGroups(items, readerId), readerId };
   }
   return { grouping: INBOX_GROUPING.PERSON, groups: personGroups(items, readerId), readerId };
 }
 
-/** Whether any task's item needs the reader, listed or filtered out. */
-export function anyNeedsYou(tasks: readonly InboxGroup[], readerId: string | undefined): boolean {
-  return tasks.some(({ items }) => items.some((item) => needsReader(item, readerId)));
+/** Two groups in the order their first items stand; a group with none, which the list never draws, last. */
+function firstOrder(
+  a: InboxItem | undefined,
+  b: InboxItem | undefined,
+  order: (a: InboxItem, b: InboxItem) => number,
+): number {
+  if (a === undefined || b === undefined) return Number(a === undefined) - Number(b === undefined);
+  return order(a, b);
+}
+
+/** Whether an item is unread for the reader: changed since they last read it, or marked unread; an item from a service before read state reads as read. */
+export function isUnread(item: InboxItem): boolean {
+  return item.unread === true;
+}
+
+/** Whether a tab lists the item: Needs you the reader's own open items, Unread anyone's unread, All open every open one, and Everything all of them. */
+function showsItem(show: InboxShow, item: InboxItem, readerId: string | undefined): boolean {
+  switch (show) {
+    case INBOX_SHOW.NEEDS_YOU:
+      return needsReader(item, readerId);
+    case INBOX_SHOW.UNREAD:
+      return isUnread(item);
+    case INBOX_SHOW.OPEN:
+      return item.status === INBOX_STATUS.OPEN;
+    case INBOX_SHOW.ALL:
+      return true;
+  }
+}
+
+/** How many of every task's items each tab lists, of the people Whose names. */
+export function inboxCounts(
+  tasks: readonly InboxGroup[],
+  readerId: string | undefined,
+  whose: InboxWhose = EVERYONES,
+): InboxCounts {
+  const items = tasks
+    .flatMap((group) => group.items)
+    .filter((item) => whoseItem(whose, item, readerId));
+  const count = (show: InboxShow) => items.filter((item) => showsItem(show, item, readerId)).length;
+  return {
+    [INBOX_SHOW.NEEDS_YOU]: count(INBOX_SHOW.NEEDS_YOU),
+    [INBOX_SHOW.UNREAD]: count(INBOX_SHOW.UNREAD),
+    [INBOX_SHOW.OPEN]: count(INBOX_SHOW.OPEN),
+    [INBOX_SHOW.ALL]: count(INBOX_SHOW.ALL),
+  };
+}
+
+/**
+ * A read mark the window made that the reads may not hold yet: whether the
+ * item now reads as unread, and when it last changed as it was marked.
+ */
+export interface InboxReadMark {
+  readonly unread: boolean;
+  readonly updatedAt: number;
+}
+
+/**
+ * The groups with the window's own read marks laid over what the reads
+ * hold, so a dot flips the moment it is marked rather than when the
+ * service's held read next answers. A mark stands only over the item as it
+ * was marked: once the item changes again, a message landing on its thread
+ * say, the reads' word on it stands, since that change may make it unread
+ * again.
+ */
+export function withReadMarks(
+  groups: readonly InboxGroup[],
+  marks: ReadonlyMap<string, InboxReadMark>,
+): readonly InboxGroup[] {
+  if (marks.size === 0) return groups;
+  return groups.map(({ holder, items }) => ({
+    holder,
+    items: items.map((item) => {
+      const mark = marks.get(item.id);
+      if (mark === undefined || mark.updatedAt !== item.updatedAt) return item;
+      return isUnread(item) === mark.unread ? item : { ...item, unread: mark.unread };
+    }),
+  }));
+}
+
+/** Whether any task's item is unread, listed or filtered out. */
+export function anyUnread(tasks: readonly InboxGroup[]): boolean {
+  return tasks.some(({ items }) => items.some(isUnread));
 }
 
 /** Every item the list draws, in the order it draws them. */
 export function listedItems(view: InboxListView): readonly InboxListed[] {
-  if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
+  if (view.grouping === INBOX_GROUPING.NONE) return view.items;
   if (view.grouping === INBOX_GROUPING.PERSON) return view.groups.flatMap(({ items }) => items);
+  if (view.grouping === INBOX_GROUPING.STATUS) return view.groups.flatMap(({ items }) => items);
   return view.groups.flatMap(({ holder, items }) => items.map((item) => ({ holder, item })));
 }
 
@@ -822,9 +1210,11 @@ function rowedItems(
   folded: (key: string) => boolean,
   chosen: string | undefined,
 ): readonly InboxListed[] {
-  if (view.grouping === INBOX_GROUPING.NEWEST) return view.items;
-  if (view.grouping === INBOX_GROUPING.PERSON) {
-    return view.groups.flatMap(({ key, items }) =>
+  if (view.grouping === INBOX_GROUPING.NONE) return view.items;
+  if (view.grouping === INBOX_GROUPING.PERSON || view.grouping === INBOX_GROUPING.STATUS) {
+    const keyed: readonly { readonly key: string; readonly items: readonly InboxListed[] }[] =
+      view.groups;
+    return keyed.flatMap(({ key, items }) =>
       folded(key) ? items.filter(({ item }) => item.id === chosen) : items,
     );
   }

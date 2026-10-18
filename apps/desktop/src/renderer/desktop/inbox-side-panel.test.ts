@@ -22,6 +22,12 @@ import type { PageLine } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { useAppKeymap } from "@luke/panel/app-commands";
+import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { EXPERIMENT, type ExperimentChoices, NO_EXPERIMENTS } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { Effect } from "effect";
@@ -29,14 +35,8 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { handState } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
-import { markdownHtmlParserLanded } from "#testing/markdown";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
-import { useAppKeymap } from "../app-commands";
-import { OpenLinkProvider } from "../tasks/use-open-link";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel";
 import type { InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
@@ -119,6 +119,7 @@ let root: Root | undefined;
 
 beforeEach(() => {
   window.localStorage.clear();
+  readMarks = [];
 });
 
 afterEach(() => {
@@ -128,8 +129,17 @@ afterEach(() => {
 });
 
 /** Answers each act as the service would for the plan, its agent, and the pull request it opened. */
+/** Every read mark the Inbox sent, in order. */
+let readMarks: string[] = [];
+
 function answer(request: Act): Promise<ActOutcome> {
   switch (request.kind) {
+    case ACT_KIND.CODING_AGENTS_INBOX_READ_STATE:
+      readMarks.push(`${request.payload.unread ? "unread" : "read"}:${request.payload.itemId}`);
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { id: request.payload.itemId, unread: request.payload.unread },
+      });
     case ACT_KIND.CODING_AGENTS_INBOX:
       // A read past the cursor is held open while nothing changes, as the service holds it.
       return request.payload.after === "0"

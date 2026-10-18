@@ -9,6 +9,14 @@ import {
   knownBlock,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
+import {
+  AVATAR_SHAPE,
+  AVATAR_SIZE,
+  Avatar,
+  TEXT_BUTTON_TONE,
+  TextButton,
+  WingFace,
+} from "@luke/ui";
 import type { ChatTarget } from "@luke/ui/chat-mention";
 import {
   CHAT_PLACE,
@@ -85,22 +93,26 @@ function threadToggleWords(open: boolean, count: number): string {
 /** What the composer at a channel's foot says it takes. */
 const COMPOSER_HINTS = ["@ mention an agent, Luke, or a teammate", "# link a channel"] as const;
 
-/** The mark a member's lines lead with: an agent's glyph, Luke's initial, a person's initial. */
+/** The mark a member's lines lead with, on a square: an agent's glyph, Luke's face, a person's letter on their hue. */
 export function MemberMark({ who, small }: { who: ChatWho; small?: boolean }): React.JSX.Element {
   const kind = who.member?.kind;
-  const size = small === true ? "small" : "full";
-  if (kind === MEMBER_KIND.AGENT) {
-    return (
-      <span className="chat-mark" data-kind={kind} data-size={size} aria-hidden="true">
-        {/* Note that the mark is the agent's harness at rest, since a line says who wrote it, not where its agent stands now. */}
-        <AgentGlyph agent={who.agent === undefined ? undefined : { model: who.agent.model }} />
-      </span>
-    );
-  }
-  const initial = kind === MEMBER_KIND.LUKE ? "L" : (who.name.at(0)?.toUpperCase() ?? "?");
+  const glyph =
+    kind === MEMBER_KIND.AGENT ? (
+      // Note that the mark is the agent's harness at rest, since a line says who wrote it, not where its agent stands now.
+      <AgentGlyph agent={who.agent === undefined ? undefined : { model: who.agent.model }} />
+    ) : kind === MEMBER_KIND.LUKE ? (
+      <WingFace />
+    ) : undefined;
   return (
-    <span className="chat-mark" data-kind={kind ?? "unknown"} data-size={size} aria-hidden="true">
-      {initial}
+    <span className="chat-mark" data-kind={kind ?? "unknown"}>
+      <Avatar
+        id={who.member?.userId ?? who.member?.id ?? who.name}
+        name={who.name}
+        glyph={glyph}
+        shape={AVATAR_SHAPE.SQUARE}
+        size={small === true ? AVATAR_SIZE.STACK : AVATAR_SIZE.ACCOUNT}
+        decorative
+      />
     </span>
   );
 }
@@ -239,14 +251,13 @@ function ThreadRow({
   const { message, replies } = thread;
   const who = chatWho(context.chat, context.names, message.authorId);
   const toggle = (
-    <button
-      type="button"
-      className="chat-thread-toggle"
+    <TextButton
+      tone={TEXT_BUTTON_TONE.ACCENT}
       aria-expanded={open}
       onClick={() => setOpen((was) => !was)}
     >
       {threadToggleWords(open, replies.length)}
-    </button>
+    </TextButton>
   );
   // A message nobody has replied to offers Reply at its byline's end, out of the way until wanted.
   const quiet = replies.length === 0 && !open;
@@ -264,7 +275,7 @@ function ThreadRow({
         <Body message={message} context={context} />
         {quiet ? null : (
           <div className="chat-thread" data-open={String(open)}>
-            {toggle}
+            <p className="chat-thread-toggle">{toggle}</p>
             {open && replies.length > 0 ? (
               <ul className="chat-replies">
                 {replies.map((reply) => (
@@ -317,13 +328,13 @@ function channelMeta(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): 
     case CHANNEL_KIND.GENERAL:
     case CHANNEL_KIND.TOPIC:
       return CHANNEL_META[channel.kind];
-    case CHANNEL_KIND.PLAN:
-      return channel.planId === undefined ? undefined : names.plans.get(channel.planId);
+    case CHANNEL_KIND.TASK:
+      return channel.planId === undefined ? undefined : names.tasks.get(channel.planId);
     case CHANNEL_KIND.DM: {
       const other = channel.members?.find((id) => id !== chat.self);
       if (other === undefined) return undefined;
       const who = chatWho(chat, names, other);
-      return who.agent?.title ?? who.planName ?? undefined;
+      return who.agent?.title ?? who.taskName ?? undefined;
     }
   }
 }

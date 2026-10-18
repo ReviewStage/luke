@@ -1,4 +1,13 @@
-import { AGENT_STATE, type FactoryWorldView } from "@luke/ui/factory-world";
+import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  type WorldLayers,
+  type WorldModule,
+  type WorldPalette,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import { AGENT_STATE, agentDrawnUnder, type FactoryWorldView } from "@luke/ui/factory-world";
 import {
   Color,
   DirectionalLight,
@@ -9,15 +18,6 @@ import {
   Mesh,
   type Object3D,
 } from "three";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  type WorldLayers,
-  type WorldModule,
-  type WorldPalette,
-  type WorldState,
-} from "../../world";
 import {
   animateWrecks,
   defectMeshes,
@@ -395,7 +395,7 @@ export const world: WorldModule = {
         (agent) =>
           agent.primaryZone !== null &&
           layout.byPath.has(agent.primaryZone) &&
-          (state.layers.building || agent.state === AGENT_STATE.FAILED),
+          agentDrawnUnder(agent, state.layers),
       );
       // Note that the largest builds claim their lots first, so a small one never pushes a large one off its plot.
       const ranked = [...shownAgents].sort(

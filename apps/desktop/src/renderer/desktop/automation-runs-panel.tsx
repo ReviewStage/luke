@@ -12,6 +12,10 @@ import {
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { usePaneSlide } from "@luke/panel/desktop/pane-motion";
+import type { RunsRead } from "@luke/panel/desktop/use-automation-runs";
+import { EDGE_SIDE, useResizableEdge } from "@luke/panel/desktop/use-resizable-edge";
+import { momentText, sinceText, useMinute } from "@luke/panel/tasks/task-time";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -21,6 +25,9 @@ import {
   List,
   ListRow,
   ProviderMark,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -32,13 +39,9 @@ import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { centreWithin, scrollerOf } from "../tasks/code-pane";
-import { momentText, sinceText, useMinute } from "../tasks/task-time";
 import { Tooltip } from "../tooltip";
 import { ActionMenu } from "./action-menu";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups";
-import { usePaneSlide } from "./pane-motion";
-import type { RunsRead } from "./use-automation-runs";
-import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge";
 
 /**
  * automation-runs-panel.tsx -- the panel on an automation's page's right: its runs, newest first, each opening its agent.
@@ -64,6 +67,22 @@ const RUN_ACTIONS = "Run actions";
 
 /** What the panel says while the automation has no run, over how to have one. */
 const NO_RUNS_LINE = "No runs yet";
+
+/** What the placeholder rows say to a reader while the runs are first read. */
+const READING_RUNS = "Reading its runs…";
+
+/** How wide each placeholder run's title and the line under it stand, as shares of their lines. */
+const SKELETON_RUNS = [
+  { title: "58%", line: "78%" },
+  { title: "44%", line: "66%" },
+  { title: "52%", line: "72%" },
+] as const;
+
+/** How wide a placeholder run's glyph stands: the row's own glyph size. */
+const SKELETON_GLYPH = "var(--luke-control-icon)";
+
+/** How wide a placeholder run's time stands, as wide as a short "2h ago". */
+const SKELETON_TIME = "36px";
 
 /** The glyph each standing of a run wears. */
 export const STANDING_GLYPH = {
@@ -156,12 +175,37 @@ function RunRow({
   );
 }
 
+/**
+ * The runs while they are first read: rows in a run's own row, a block where
+ * its glyph, its title, its line, and when it fired will stand, so the runs
+ * land where the blocks stood. The rows open nothing, and the region says
+ * what is being read.
+ */
+function RunsSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label={READING_RUNS}>
+      <List label="Runs" density={LIST_DENSITY.COMPACT}>
+        {SKELETON_RUNS.map(({ title, line }) => (
+          <ListRow
+            key={title}
+            leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_GLYPH} />}
+            title={<Skeleton width={title} />}
+            description={<Skeleton width={line} />}
+            meta={<Skeleton width={SKELETON_TIME} />}
+          />
+        ))}
+      </List>
+    </SkeletonRegion>
+  );
+}
+
 /** What the room beside the panel keeps for the form, as the side panel keeps the document's. */
 const FORM_RESERVE = 480;
 
 /**
- * The runs panel: the runs, or that there are none yet, or that they could
- * not be read. Its left edge resizes it as the side panel's does, and a
+ * The runs panel: the runs, quiet blocks in their place while they are first
+ * read, or that there are none yet, or that they could not be read. Its left
+ * edge resizes it as the side panel's does, and a
  * drag past its least width folds it away; nothing stands while it is folded.
  * It comes and goes as the window's panes do (`usePaneSlide`): in from the
  * page's right edge as it is shown, and out past it as it is folded, held
@@ -222,7 +266,9 @@ export function AutomationRunsPanel({
         </div>
         {!created ? (
           <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
-        ) : runs === undefined ? null : "failed" in runs ? (
+        ) : runs === undefined ? (
+          <RunsSkeleton />
+        ) : "failed" in runs ? (
           <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
             Its runs could not be read.
           </ErrorState>

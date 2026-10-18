@@ -16,12 +16,12 @@
      the window's own: whose voice is live, the code's and the terminal's
      inks, a file icon's. */
 
-  /* Whose voice is live, so a glance says who is talking. Your turn is green,
-     which is nowhere else on the surface and so belongs to you alone; Luke
-     answers in the blue the rest of the surface already uses for something
-     live and in progress, which is what a reply is. Both the meter and the face
-     read from here, so the two can never disagree about who has the turn. */
-  --voice-developer: #7fe0ac;
+  /* Whose voice is live, so a glance says who is talking. Your turn is the
+     palette's green (`--luke-color-complete`); Luke answers in the blue the
+     rest of the surface already uses for something live and in progress,
+     which is what a reply is. The meter and the face (`@luke/ui`'s
+     `face/face.css`) read the same two roles, so the two can never disagree
+     about who has the turn. */
   --voice-luke: var(--luke-color-working);
   /* The keyboard's ring, how thick and how far off the edge, is the
      profile's `--luke-focus-ring-*` (`tokens/profiles.css`). */
@@ -108,15 +108,10 @@
      far it is asked to go, which is what makes every move read as the same
      hand. */
 
-  /* Luke's face is the one thing here that moves without being asked to.
-     Stopping it is a token rather than a selector, for the same reason the
-     durations are: a capture run and reduced motion both need it still, and
-     both already reach the tokens. Paused, every motion holds its first frame,
-     which is the resting pose every one of them starts from — head upright,
-     eyes open. */
-  --face-motion: running;
-  /* The other loop with no end to wait for: the spinner on a working row. Its
-     own token rather than the face's, because the face's is about Luke and this
+  /* Luke's face is the one thing here that moves without being asked to, and
+     stopping it is `@luke/ui`'s `--luke-face-motion`. The other loop with no
+     end to wait for: the spinner on a working row. Its own token rather than
+     the face's, because the face's is about Luke and this
      one is about the sessions, but it stops in the same two places for the same
      two reasons — a capture must land on one frame, and reduced motion asked
      for stillness. */
@@ -139,7 +134,6 @@
    `nativeTheme.themeSource`) on the frame it changes, without a re-render. */
 @media (prefers-color-scheme: light) {
   :root {
-    --voice-developer: #17784a;
     --code-ground: #fff;
     --code-text: #1f2328;
     --code-line-number: rgba(31, 35, 40, 0.5);
@@ -333,14 +327,14 @@
      no element given a tabindex is left to the engine's own ring.
      `:focus-visible` alone guesses wrong in a window Luke focuses for itself
      and rings a button after a plain press, so until the keyboard has
-     actually moved focus (`keyboard-modality.ts`) nothing but a field rings.
+     actually moved focus (`keyboard-modality.ts`) nothing rings.
      In the base layer, so a sheet's own rule for a control still wins: a
      menu row marks its focus with a fill, and says so where it is drawn. */
   :is(
     button,
     a[href],
     summary,
-    input[type="checkbox"],
+    input:is([type="checkbox"], [type="radio"], [type="range"]),
     [role="button"],
     [role="tab"],
     [role="switch"],
@@ -376,7 +370,7 @@
     button,
     a[href],
     summary,
-    input[type="checkbox"],
+    input:is([type="checkbox"], [type="radio"], [type="range"]),
     [role="button"],
     [role="tab"],
     [role="switch"],
@@ -388,21 +382,18 @@
     scroll-margin: var(--luke-focus-ring-reach);
   }
 
-  :root:not([data-keyboard="true"])
-    :focus-visible:not(textarea, [contenteditable], input:not([type="checkbox"])) {
+  :root:not([data-keyboard="true"]) :focus-visible {
     outline: none; /* no ring: a press moved focus, not the keyboard */
   }
 
-  /* A field holding the caret wears the same ring however the caret got
-     there, centred on its own edge the way a macOS text field takes the
-     keyboard. A field that sits borderless in a well of its own, a search's
-     or a composer's, rings the well instead (`.field-well`), except a
-     menu's own filter hanging from a chip inside the well, which holds the
-     caret without ringing the composer around it. */
-  :is(textarea, [contenteditable], input:not([type="checkbox"])):focus-visible,
-  .field-well:has(:is(textarea, [contenteditable], input):not(.menu-surface *):focus-visible) {
-    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-    outline-offset: calc(var(--luke-focus-ring-width) / -2);
+  /* A field holding the caret wears no ring, however the caret got there:
+     the caret and the field's own ground say where typing goes. */
+  :is(
+    textarea,
+    [contenteditable],
+    input:not([type="checkbox"], [type="radio"], [type="range"])
+  ):focus-visible {
+    outline: none; /* no ring: the caret marks the field */
   }
 }
 
@@ -446,67 +437,12 @@ body,
 
 /* Luke's face ------------------------------------------------------------ */
 
-/* Drawn in the primary ink because it is the app rather than one of the
-   things the app is watching. The loud motions leave the square the artwork
-   is drawn in — a pirouette and a duck both need more room than a face at
-   rest — so nothing is clipped here. */
-
+/* The face's ink, motion wiring, and generated motions are `@luke/ui`'s
+   (`face/face.css`); its size where nothing more particular lays it out is
+   the window's. */
 .luke-face {
   width: 18px;
   height: 18px;
-  flex: 0 0 auto;
-  overflow: visible;
-  color: var(--luke-color-text);
-  transition: color var(--duration-quick) var(--motion-exit);
-}
-
-/* The two motions the microphone owns, in the meters' own colours: the face
-   is green while it attends to you and blue while it is the one talking, so
-   the face alone says whose turn it is. */
-.luke-face[data-motion="listening"] {
-  color: var(--voice-developer);
-}
-
-.luke-face[data-motion="talking"] {
-  color: var(--voice-luke);
-}
-
-/* Everything the artwork moves wears `luke-face-part`. Which keyframes each
-   part plays, at what duration and about which pivot, is generated into
-   face-motion.css from the same table the SVGs in packages/brand/assets/ are cut from;
-   this is only the wiring those rules assume — how long they run, and what can
-   stop them.
-
-   Pivots arrive as points on the artwork's canvas, so the layers measure against
-   the viewBox. The eyes squeeze about their own centres instead, which is what
-   `fill-box` means here. Linear is the easing of a part that names none; a part
-   that eases every interval alike carries the curve on its generated rule, and
-   only mixed curves become per-keyframe timing functions, because a keySplines
-   list is a curve per interval and `animation-timing-function` is only one. */
-.luke-face-part {
-  animation-play-state: var(--face-motion);
-  /* A gesture is something that happens rather than something that is: it plays
-     once and leaves the face at the pose it started from, which is the drawn
-     rest every motion the app plays begins and ends at. What is left between
-     gestures is stillness, and stillness is the face's usual condition. */
-  animation-iteration-count: 1;
-  animation-timing-function: linear;
-}
-
-/* The exception, and the whole of it: a motion that says something continuously
-   true has to keep saying it. An open microphone and a sleeping face are states
-   rather than moments, so they repeat for as long as they hold. */
-.luke-face[data-repeat="true"] .luke-face-part {
-  animation-iteration-count: infinite;
-}
-
-.luke-face-layer {
-  transform-box: view-box;
-}
-
-.luke-face-eye {
-  transform-box: fill-box;
-  transform-origin: center;
 }
 
 /* The wait's three dots, one drawing wherever a run of Luke's is still going:
@@ -526,7 +462,7 @@ body,
    exchange. The stagger is cut into the keyframes rather
    than carried as a delay, so a paused loop holds every dot at rest, the pose
    the face itself holds paused; and being timed to a face gesture, they answer
-   --face-motion rather than --loop-motion, so the two can never stop apart. */
+   --luke-face-motion rather than --loop-motion, so the two can never stop apart. */
 .thinking-dots i {
   width: 5px;
   height: 5px;
@@ -536,7 +472,7 @@ body,
   animation-duration: 2s;
   animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1);
   animation-iteration-count: infinite;
-  animation-play-state: var(--face-motion);
+  animation-play-state: var(--luke-face-motion);
 }
 
 .thinking-dots i:nth-child(1) {
@@ -654,7 +590,7 @@ body,
 }
 
 .voice-caption[data-tone="developer"] .voice-caption-speaker {
-  color: var(--voice-developer);
+  color: var(--luke-color-complete);
 }
 
 /* Two lines at most, clipped rather than scrolled by hand: the renderer keeps
@@ -895,8 +831,11 @@ svg.working-mark[viewBox] {
    so without this a capture could land mid-transition and the PNGs would stop
    being reproducible.
    Zeroing the tokens every transition is written in terms of is enough — no
-   rule has to be overridden. */
-.app-stage[data-capture="true"] {
+   rule has to be overridden. They are zeroed on the body as well as on the
+   stage, so a hint, a menu, the palette, or a toast drawn at the body's end,
+   which none stands under, holds still too. */
+.app-stage[data-capture="true"],
+body:has(.app-stage[data-capture="true"]) {
   --duration-shape: 0s;
   --duration-exit: 0s;
   --duration-quick: 0s;
@@ -904,15 +843,26 @@ svg.working-mark[viewBox] {
   --duration-hover: 0s;
   --duration-pane: 0s;
   --row-stagger: 0s;
-  /* A late state shows at once, so a capture never waits on its delay. */
+  /* A late state and a hint show at once, so a capture never waits on
+     their delay. */
   --late-delay: 0s;
+  --hint-delay: 0s;
   /* Luke blinks and sways on a loop with no end to wait for, so a capture would
      otherwise land wherever in it the shutter happened to fall. Held on its
      first frame, he is the same face in every PNG. The working rows' spinners
      hold still for exactly the same reason. */
-  --face-motion: paused;
   --loop-motion: paused;
   --scroll-glide: auto;
+  /* The shared components' own names for the same motion (`@luke/ui`'s
+     tokens), held still with the rest. */
+  --luke-duration-exit: 0s;
+  --luke-duration-quick: 0s;
+  --luke-duration-fast: 0s;
+  --luke-duration-hover: 0s;
+  --luke-duration-pane: 0s;
+  --luke-hint-delay: 0s;
+  --luke-loop-motion: paused;
+  --luke-face-motion: paused;
 }
 
 /* Reduced motion is answered at the tokens rather than element by element: a
@@ -932,8 +882,9 @@ svg.working-mark[viewBox] {
        flash every blip on screen. */
     /* Idle motion is the one thing here that no one asked for, so it is the
        first thing to stop: Luke sits still, upright, with his eyes open. The
-       spinner holds too — a working row still says Working in words. */
-    --face-motion: paused;
+       spinner holds too — a working row still says Working in words. (The
+       face's own token, `--luke-face-motion`, is `@luke/ui`'s, which pauses
+       it here too.) */
     --loop-motion: paused;
     --scroll-glide: auto;
   }

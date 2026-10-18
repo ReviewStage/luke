@@ -47,6 +47,7 @@ import { createConnectIntent, GITHUB_CONNECT_ROLES } from "../github/github-inst
 import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
+  HOSTED_BYTES_HEADERS,
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedJsonResponse,
@@ -140,17 +141,6 @@ const PHOTO_SET_PATH = "/api/workspaces/photo/set";
 
 /** The query the photo's rewrite names its workspace under. */
 const PHOTO_QUERY = { ID: "id" } as const;
-
-/**
- * The headers a photo's bytes are served under beside their type: the
- * browser is told not to sniff them for another type, since the type is
- * the one the photo was kept under, and nothing on the way may keep a copy,
- * since the bytes are the workspace's members' alone.
- */
-const PHOTO_HEADERS = {
-  "x-content-type-options": "nosniff",
-  "cache-control": "private, no-store",
-} as const;
 
 /** The plugin's word for an invitation not yet accepted, rejected, or canceled. */
 const INVITATION_PENDING = "pending";
@@ -457,7 +447,7 @@ const photoEndpoint = Effect.fn("web/workspacePhotoEndpoint")(function* (
   return HttpServerResponse.uint8Array(photo.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,
     contentType: photo.value.contentType,
-    headers: PHOTO_HEADERS,
+    headers: HOSTED_BYTES_HEADERS,
   });
 });
 

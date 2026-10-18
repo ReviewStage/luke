@@ -19,6 +19,9 @@ import {
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { handState } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -26,9 +29,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { handState } from "#testing/app-state";
-import { onRegistry } from "#testing/copy-feedback";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab";
 import { commandKeyshortcuts } from "../tooltip";
@@ -267,6 +267,73 @@ function button(page: HTMLElement, text: string): HTMLButtonElement {
   return found;
 }
 
+/** What each region still being read says to a reader, in the order they stand. */
+function waits(page: HTMLElement): string[] {
+  return [...page.querySelectorAll('[role="status"][aria-busy="true"]')].map(
+    (region) => region.textContent ?? "",
+  );
+}
+
+test("while the task list is unread, Home stands in its own shape: New task, and placeholder rows under the Inbox and Recent, saying no greeting", () => {
+  const { page } = mount({ listRead: false });
+
+  assert.ok(button(page, "New task"));
+  assert.deepEqual(waits(page), ["Reading your inbox…", "Reading your tasks…"]);
+  assert.ok(page.querySelectorAll(".luke-list-row .luke-skeleton").length > 0, "rows of blocks");
+  assert.doesNotMatch(page.textContent ?? "", /Welcome back|Nothing needs you/u);
+  assert.equal(page.querySelector("h1"), null);
+});
+
+test("an account whose task list is unread is neither welcomed as new nor greeted back until the list says which it is", () => {
+  const { page } = mount({
+    listRead: false,
+    tasks: [],
+    listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] },
+    inbox: [],
+    inboxTasks: [],
+  });
+
+  assert.equal(page.querySelector("[aria-label='Welcome']"), null, "no welcome stands");
+  assert.doesNotMatch(page.textContent ?? "", /Start your first task|Welcome back/u);
+  assert.deepEqual(waits(page), ["Reading your inbox…", "Reading your tasks…"]);
+});
+
+test("once the task list lands, the page replaces its placeholder rows with the greeting, what waits, and the plans saved latest", async () => {
+  const { page } = mount({ listRead: false });
+  assert.equal(waits(page).length, 2, "the page stands in its own shape first");
+
+  const tasks = tasksControl({ tasks: TASKS, listed: { tasks: TASKS, archived: [], ...HOLDING } });
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopHome, { tasks, accountName: "Dean Stratakos" }),
+      ),
+    ),
+  );
+  await settle();
+
+  assert.deepEqual(waits(page), []);
+  assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
+  assert.equal(rows(page, "home-inbox").length, 2);
+  assert.equal(rows(page, "home-recent").length, 6);
+});
+
+test("while what waits is read, Home's Inbox stands a few placeholder rows under its name, and no ring", () => {
+  const { page } = mount();
+
+  const section = page.querySelector<HTMLElement>('section[aria-labelledby="home-inbox"]');
+  assert.ok(section, "Home's Inbox stands");
+  assert.equal(section.querySelector("#home-inbox")?.textContent, "Inbox");
+  assert.deepEqual(waits(section), ["Reading your inbox…"]);
+  assert.equal(section.querySelectorAll("li").length, 3, "fewer rows than a whole Inbox's five");
+  assert.equal(
+    section.querySelector(".luke-spinner"),
+    null,
+    "no ring stands at the section's edge",
+  );
+});
+
 test("the home page greets the account, lists what needs it with each item's plan, and the plans saved latest with their repositories", async () => {
   const { page } = mount();
   await settle();
@@ -310,7 +377,7 @@ test("a waiting item's row opens the Inbox on its item, a recent plan opens the 
   assert.equal(opened.newTasks, 1);
 });
 
-test("a waiting item's row on Home reads as the Inbox's own: what it asks under its title, its plan and the attention mark before its time, and no blue dot", async () => {
+test("a waiting item's row on Home reads as the Inbox's own: what it asks under its title, its plan and the attention mark before its time, and no unread dot on an item read", async () => {
   const { page } = mount();
   await settle();
 
@@ -324,7 +391,7 @@ test("a waiting item's row on Home reads as the Inbox's own: what it asks under 
   const head = row.querySelector(".luke-list-row-head");
   assert.equal(head?.querySelector(".home-row-context")?.textContent, "Teammate invitations");
   assert.ok(head?.querySelector(".attention-mark"), "it needs the reader");
-  assert.equal(row.querySelector(".inbox-row-dot"), null);
+  assert.equal(row.querySelector(".inbox-row-unread"), null, "a read item wears no unread dot");
 });
 
 test("the waiting items stand under the Inbox's name, the place a press on one opens", async () => {
@@ -380,6 +447,33 @@ test("an account with no plan yet is welcomed with New plan, and nothing the pag
   assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
   assert.ok(button(page, "New task"));
   assert.doesNotMatch(page.textContent ?? "", /sidebar/iu);
+});
+
+test("an account with no plan yet whose only waiting question is a teammate's agent's with no plan is still welcomed, the question waiting on the teammate", async () => {
+  const { page } = mount({
+    me: "user-dean",
+    tasks: [],
+    listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] },
+    inbox: [],
+    inboxTasks: [],
+    inboxTaskless: [
+      {
+        id: QUARANTINE.id,
+        agentId: SWEEP_AGENT,
+        title: QUARANTINE.title,
+        postedAt: QUARANTINE.postedAt,
+        agentTitle: null,
+        agentModel: "anthropic/claude-opus-5.5",
+        automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
+        automationName: "Nightly flake sweep",
+        repository: "acme/relay",
+        startedBy: CHARLES.userId,
+      },
+    ],
+  });
+  await settle();
+
+  assert.equal(page.querySelector("h1")?.textContent, "Start your first task");
 });
 
 test("↑ and ↓ move the focus through the rows from the window, and leave a key pressed elsewhere alone", async () => {

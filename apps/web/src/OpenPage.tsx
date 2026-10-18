@@ -1,6 +1,15 @@
 import { LINK_PLACE, type LinkPlaceKind } from "@luke/features/luke-link";
 import { openTargetOf } from "@luke/features/open-address";
-import { AuthPage, BUTTON_VARIANT, ButtonLink, TEXT_LINK_LOOK, TextLink } from "@luke/ui";
+import {
+  AuthPage,
+  BUTTON_VARIANT,
+  ButtonLink,
+  TEXT_LINK_LOOK,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  TextLink,
+} from "@luke/ui";
 import { useState } from "react";
 import { LukeMark } from "./SiteChrome";
 
@@ -92,27 +101,28 @@ export function OpenPage(): React.JSX.Element {
           {WORDS.OPEN}
         </ButtonLink>
       )}
-      <p className="m-0 text-center text-muted-foreground">
-        {WORDS.NO_APP}{" "}
-        <TextLink href={LANDING_URL} look={TEXT_LINK_LOOK.UNDERLINED}>
-          {WORDS.GET}
-        </TextLink>
-      </p>
+      <div className="text-center">
+        <Text tone={TEXT_TONE.MUTED}>
+          {WORDS.NO_APP}{" "}
+          <TextLink href={LANDING_URL} look={TEXT_LINK_LOOK.UNDERLINED}>
+            {WORDS.GET}
+          </TextLink>
+        </Text>
+      </div>
       {/* Note that the line's room stands from the first paint, two lines where the card is narrow enough to wrap it, because a card growing under a press would move the button from under the pointer. */}
-      <p
-        className="m-0 min-h-10 text-center text-muted-foreground text-sm min-[480px]:min-h-5"
-        role="status"
-      >
+      <div className="min-h-8 text-center min-[480px]:min-h-4" role="status">
         {pressed ? (
-          <span className="animate-arrive-late">
-            {WORDS.DID_NOT_OPEN}{" "}
-            <TextLink href={LANDING_URL} look={TEXT_LINK_LOOK.UNDERLINED}>
-              {WORDS.INSTALLED}
-            </TextLink>
-            .
-          </span>
+          <div className="animate-arrive-late">
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {WORDS.DID_NOT_OPEN}{" "}
+              <TextLink href={LANDING_URL} look={TEXT_LINK_LOOK.UNDERLINED}>
+                {WORDS.INSTALLED}
+              </TextLink>
+              .
+            </Text>
+          </div>
         ) : null}
-      </p>
+      </div>
     </AuthPage>
   );
 }

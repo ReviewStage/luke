@@ -36,6 +36,9 @@
  * is deleted, as it does a deleted plan.
  */
 
+import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import type { SettingsView } from "@luke/settings/settings-views";
 import type { HistoryAdapter, HistoryEntry, HistorySnapshot } from "@luke/ui/history-adapter";
@@ -47,8 +50,6 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import { useChatOn } from "./tasks/chat-gate";
 import type { HistorySpot } from "./tasks/use-plan-history";
 import {
   AUTOMATIONS_PAGE,
@@ -57,7 +58,6 @@ import {
   type LeaveGuard,
   type TasksControl,
 } from "./tasks/use-tasks-tab";
-import { useExperiment } from "./use-app-state";
 
 /** `MouseEvent.button` for the mouse's own back and forward buttons. */
 export const MOUSE_BUTTON = {

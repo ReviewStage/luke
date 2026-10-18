@@ -204,7 +204,7 @@ export interface ChatMessageToast {
   /** The workspace whose chat it waits in, whose Chat on screen withdraws the toast. */
   workspaceId: string;
   /** The plan whose channel it waits in, none outside one: that task's Chat tab on screen withdraws it too. */
-  planId: string | null;
+  taskId: string | null;
   words: string;
   detail: string;
 }
@@ -427,7 +427,9 @@ function inboxNoticeText(
  * started, a task's and one with no task alike, since an agent runs on its starter's keys and asks its starter,
  * and the tasks holding any item whole, since every member's Inbox lists
  * them. An item whose starter the service does not say, or an account whose
- * id is not known, is the account's own, as every item was before.
+ * id is not known, is the account's own, as every item was before. Note that
+ * what counts and is announced is this, while the window lists every
+ * member's items of agents with no task (`sliceOf`), as it does a task's.
  */
 function startedBy(answer: AccountInboxAnswer, accountId: string | undefined): AccountInboxAnswer {
   if (accountId === undefined) return answer;
@@ -454,7 +456,7 @@ function chatNoticeText(
 /** Whether a waiting message is on the Chat shown: anywhere in a workspace's whole Chat, or in its plan's channel on a task's Chat tab. */
 function chatShows(shown: ChatShown | null, entry: AccountChatEntry): boolean {
   if (shown === null || shown.workspaceId !== entry.workspaceId) return false;
-  return shown.planId === null || shown.planId === entry.planId;
+  return shown.taskId === null || shown.taskId === entry.planId;
 }
 
 /** The items each task holds waiting, the task whose item changed latest first, as the read answered them latest first. */
@@ -474,7 +476,7 @@ function waitingTasks(items: readonly AccountInboxEntry[]): AppInboxSlice["waiti
   return [...tasks].map(([taskId, held]) => ({ taskId, items: held }));
 }
 
-/** The open items of agents with no task as the window holds them: each with its agent and the automation and repository standing in a task's place. */
+/** The open items of agents with no task as the window holds them: each with its agent, who started it, and the automation and repository standing in a task's place. */
 function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice["taskless"] {
   return items.map((item) => ({
     id: item.id,
@@ -486,6 +488,7 @@ function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice[
     automationId: item.automationId,
     automationName: item.automationName,
     repository: item.repository,
+    ...(item.startedBy === undefined ? undefined : { startedBy: item.startedBy }),
     ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
   }));
 }
@@ -594,10 +597,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     let focused = false;
     /** Whose agents the ledger holds: read as it takes its first, and moved only by another account. */
     let holder: string | undefined;
-    /** The inbox read's last answer for the account signed in, and its items and chat messages by id; none before its first. */
+    /** The inbox read's last answer for the account signed in, as it waits on the account (`startedBy`), every member's items of agents with no task the window lists, and its items and chat messages by id; none before its first. */
     let waiting:
       | {
           readonly answer: AccountInboxAnswer;
+          readonly listed: readonly AccountTasklessEntry[];
           readonly items: ReadonlySet<string>;
           readonly chat: ReadonlySet<string>;
         }
@@ -692,15 +696,23 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     // Each announce suspends on the queue itself, so the loop need not yield between ends: the ends queued together are posted together.
     yield* Effect.forkScoped(Effect.forever(announce, { disableYield: true }));
 
-    /** What the window holds of an answer: each task's items and every task holding one, and beside them the items of agents with no task and the automations holding them. */
-    function sliceOf(answer: InboxAnswered): AppInboxSlice {
+    /**
+     * What the window holds of an answer: each task's items waiting on the
+     * account and every task holding one, and beside them the items of
+     * agents with no task, every member's listed as a task's are, and the
+     * automations holding them.
+     */
+    function sliceOf(
+      answer: InboxAnswered,
+      listed: readonly AccountTasklessEntry[],
+    ): AppInboxSlice {
       return {
         waiting: waitingTasks(answer.items),
         tasks: answer.plans.map(({ planId: taskId, ...holding }) => ({
           ...holding,
-          taskId: taskId,
+          taskId,
         })),
-        taskless: waitingTaskless(answer.planless ?? []),
+        taskless: waitingTaskless(listed),
         automations: answer.automations ?? [],
         failedRuns: answer.failedRuns ?? [],
       };
@@ -711,9 +723,9 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       return dependencies.chatOn() ? (answer.chat ?? []) : [];
     }
 
-    /** Writes what waits for the window, and its number, a task's items, an agent's with no task, and chat messages alike, for the Dock. */
-    function publishWaiting(answer: InboxAnswered): void {
-      dependencies.onInboxChanged(sliceOf(answer));
+    /** Writes what waits for the window, and its number, a task's items, an agent's with no task, and chat messages alike, the account's own alone, for the Dock. */
+    function publishWaiting(answer: InboxAnswered, listed: readonly AccountTasklessEntry[]): void {
+      dependencies.onInboxChanged(sliceOf(answer, listed));
       doors.badge(answer.items.length + (answer.planless?.length ?? 0) + chatOf(answer).length);
     }
 
@@ -763,7 +775,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         doors.toastChat({
           messageId: entry.messageId,
           workspaceId: entry.workspaceId,
-          planId: entry.planId,
+          taskId: entry.planId,
           words: text.body,
           detail: text.title,
         });
@@ -799,22 +811,27 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
      * revision no answer for the account held, that changed after the last
      * answer was read, because a task brought back from the archive brings
      * its items back unchanged, and they are not news; an item posted again
-     * after it was answered or closed moves its revision on, and is.
+     * after it was answered or closed moves its revision on, and is. Only
+     * what waits on the account (`startedBy`) is counted and announced, while
+     * every member's items of agents with no task are written for the window.
      */
-    function observeWaiting(answer: AccountInboxAnswer): void {
+    function observeWaiting(read: AccountInboxAnswer): void {
+      const answer = startedBy(read, dependencies.accountId());
+      const listed = read.planless ?? [];
       const was = waiting;
       // Note that an answer at the same cursor holding fewer of the account's own items is news, because the account's id, which picks them, may have arrived since.
       if (
         was?.answer.cursor === answer.cursor &&
         was.answer.items.length === answer.items.length &&
-        (was.answer.planless?.length ?? 0) === (answer.planless?.length ?? 0)
+        (was.answer.planless?.length ?? 0) === (answer.planless?.length ?? 0) &&
+        was.listed.length === listed.length
       ) {
         // Note that the tasks and automations holding items, and what an item with no task is named
         // by, may move with nothing waiting moving, an archive, a rename, or a hold let go, so they are written alone.
         if (
           sameTasks(was.answer.plans, answer.plans) &&
           sameAutomations(was.answer.automations ?? [], answer.automations ?? []) &&
-          sameTaskless(was.answer.planless ?? [], answer.planless ?? [])
+          sameTaskless(was.listed, listed)
         ) {
           return;
         }
@@ -824,18 +841,19 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
           automations: answer.automations ?? [],
           planless: answer.planless ?? [],
         };
-        waiting = { ...was, answer: moved };
-        dependencies.onInboxChanged(sliceOf(moved));
+        waiting = { ...was, answer: moved, listed };
+        dependencies.onInboxChanged(sliceOf(moved, listed));
         return;
       }
       const taskless = answer.planless ?? [];
       const chat = chatOf(answer);
       waiting = {
         answer,
+        listed,
         items: new Set([...answer.items, ...taskless].map((item) => item.id)),
         chat: new Set(chat.map((entry) => entry.messageId)),
       };
-      publishWaiting(answer);
+      publishWaiting(answer, listed);
       const since =
         was === undefined ? undefined : was.answer.readAt - Duration.toMillis(READ_SKEW);
       // A chat message is news once, as it first waits: the first answer is where the account stands.
@@ -880,7 +898,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       Effect.suspend(() => {
         waiting = undefined;
         seenRevision.clear();
-        publishWaiting({ items: [], plans: [] });
+        publishWaiting({ items: [], plans: [] }, []);
         if (reader === undefined) return Effect.void;
         let cursor = INBOX_CURSOR_START;
         const look = Effect.gen(function* () {
@@ -889,7 +907,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
             return yield* Effect.sleep(interval);
           }
           cursor = answer.cursor;
-          observeWaiting(startedBy(answer, dependencies.accountId()));
+          observeWaiting(answer);
         });
         // A look that died is reported and asked again on the watch's clock, as a tick of the watch is.
         return Effect.forever(

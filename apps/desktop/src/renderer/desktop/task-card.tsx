@@ -3,22 +3,30 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { HoverCard, HoverCardHead, HoverCardRule, ProviderMark } from "@luke/ui";
+import { AttentionMark } from "@luke/panel/attention-mark";
+import { useCreator, useMemberDirectory } from "@luke/panel/member-directory";
+import { RepositoryPicture } from "@luke/panel/repository-picture";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
+import {
+  HOVER_CARD_ROW_LOOK,
+  HoverCard,
+  HoverCardHead,
+  HoverCardList,
+  HoverCardRow,
+  HoverCardRule,
+  ProviderMark,
+} from "@luke/ui";
 import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { repositoryPageUrl } from "@luke/ui/tasks-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
-import { AttentionMark } from "../attention-mark";
-import { useCreator, useMemberDirectory } from "../member-directory";
 import { useActorDoor } from "../person-door";
-import { RepositoryPicture } from "../repository-picture";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph";
 import { agentTabLabel, pullRequestNumberLabel } from "../tasks/coding-agent-model";
 import { PullRequestMark } from "../tasks/pull-request-mark";
 import { RelativeTime } from "../tasks/relative-time";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { Tooltip } from "../tooltip";
 import { strandedHome } from "./move-task-dialog";
 import { WorkspaceRef } from "./workspace-ref";
 
@@ -39,12 +47,14 @@ import { WorkspaceRef } from "./workspace-ref";
  * list's row, so the card fetches nothing.
  *
  * Three of its lines are buttons, as a GitHub hover card's are: the
- * repository and a pull request open their pages on GitHub, and an agent
+ * repository opens its page on GitHub, a pull request its agent's Pull
+ * request tab where the window knows the agent and GitHub otherwise, and an agent
  * opens the task on its tab. Each is also offered where the card is not:
  * the task's menu opens the repository, and the agent's tab its pull
- * request. The rest are facts, left as text. Its rows are set as a menu's
- * rows are, and a pinned tab's card (`sidebar-pinned-tab.tsx`) is drawn
- * from the same rows (`CardDetail`, `RepositoryDetail`, `PullRequestLine`).
+ * request. The rest are facts, left as text. Its rows are `@luke/ui`'s
+ * `HoverCardRow`, set as a menu's rows are, and a pinned tab's card
+ * (`sidebar-pinned-tab.tsx`) is drawn from the same rows
+ * (`RepositoryDetail`, `PullRequestLine`).
  */
 
 /** The most rows each of the card's lists draws before it counts the rest. */
@@ -86,56 +96,6 @@ export function TaskStatusMark({
   }
 }
 
-/**
- * One row of a card's lists, set as a menu's row is: its glyph, its words,
- * and what stands at its end. It is a button where a press does something,
- * and text where nothing does, in the same place either way.
- */
-function CardLine({
-  glyph,
-  label,
-  end,
-  onPress,
-}: {
-  glyph: React.ReactNode;
-  label: React.ReactNode;
-  end?: React.ReactNode;
-  onPress?: (() => void) | undefined;
-}): React.JSX.Element {
-  const line = (
-    <>
-      <span className="task-card-glyph">{glyph}</span>
-      <span className="task-card-label">{label}</span>
-      {end}
-    </>
-  );
-  return onPress === undefined ? (
-    <span className="task-card-line">{line}</span>
-  ) : (
-    <button type="button" className="task-card-line" onClick={onPress}>
-      {line}
-    </button>
-  );
-}
-
-/** One of the quieter lines under a card's name, which a press opens: a task, or a repository on GitHub. */
-export function CardDetail({
-  glyph,
-  label,
-  onPress,
-}: {
-  glyph: React.ReactNode;
-  label: string;
-  onPress: () => void;
-}): React.JSX.Element {
-  return (
-    <button type="button" className="task-card-detail" onClick={onPress}>
-      <span className="task-card-glyph">{glyph}</span>
-      <span className="task-card-label">{label}</span>
-    </button>
-  );
-}
-
 /** A repository's line under a card's name, its owner's picture before it, which opens it on GitHub. */
 export function RepositoryDetail({
   repository,
@@ -148,7 +108,8 @@ export function RepositoryDetail({
   onOpenGitHub: (url: string) => void;
 }): React.JSX.Element {
   return (
-    <CardDetail
+    <HoverCardRow
+      look={HOVER_CARD_ROW_LOOK.DETAIL}
       glyph={
         <RepositoryPicture
           repository={repository}
@@ -169,34 +130,29 @@ export function RepositoryDetail({
  * opening their page where the window offers one.
  */
 function CreatorDetail({
-  plan: task,
+  task,
   readerId,
   now,
 }: {
-  plan: TaskSummary;
+  task: TaskSummary;
   readerId: string | undefined;
   now: number;
 }): React.JSX.Element {
   const creator = useCreator(task, readerId);
   const door = useActorDoor(creator);
   const left = creator.kind === ACTOR_KIND.SOMEONE && creator.reason === SOMEONE_REASON.FORMER;
-  const words = (
-    <>
-      <span className="task-card-glyph">
-        <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
-      </span>
-      <span className="task-card-label">
-        {`Created by ${actorName(creator, { sentence: true })}${left ? ", who left" : ""} · `}
-        <RelativeTime at={task.createdAt} now={now} hint={false} ago />
-      </span>
-    </>
-  );
-  return door === undefined ? (
-    <span className="task-card-detail task-card-creator">{words}</span>
-  ) : (
-    <button type="button" className="task-card-detail task-card-creator" onClick={door}>
-      {words}
-    </button>
+  return (
+    <HoverCardRow
+      look={HOVER_CARD_ROW_LOOK.DETAIL}
+      glyph={<ActorMark actor={creator} size={ACTOR_SIZE.MARK} />}
+      label={
+        <>
+          {`Created by ${actorName(creator, { sentence: true })}${left ? ", who left" : ""} · `}
+          <RelativeTime at={task.createdAt} now={now} hint={false} ago />
+        </>
+      }
+      onPress={door}
+    />
   );
 }
 
@@ -212,7 +168,7 @@ function AgentLine({
 }): React.JSX.Element {
   return (
     <li data-task-card-agent="">
-      <CardLine
+      <HoverCardRow
         glyph={<AgentGlyph agent={agent} />}
         label={agentTabLabel(agent, models)}
         end={agentEndMark(agent, false)}
@@ -225,20 +181,20 @@ function AgentLine({
 /**
  * One pull request's row: its glyph, which says where it stands, its
  * number muted before its title, and its size in green and red. It opens
- * the pull request on GitHub, where the service said its page; a row from
- * a service before it did is text.
+ * the pull request as a link to its page does, where the service said its
+ * page; a row from a service before it did is text.
  */
 export function PullRequestLine({
   pullRequest,
-  onOpenGitHub,
 }: {
   pullRequest: TaskPullRequestLine;
-  onOpenGitHub: (url: string) => void;
 }): React.JSX.Element {
+  // Its page opens as a link to it does: in its agent's Pull request tab where the place or the window knows the agent (`../tasks/use-open-link.ts`), else on GitHub.
+  const openLink = useOpenLink();
   const { url } = pullRequest;
   return (
     <li data-task-card-pull-request="">
-      <CardLine
+      <HoverCardRow
         glyph={<PullRequestMark pullRequest={pullRequest} className="task-mark-glyph" />}
         label={
           <>
@@ -247,21 +203,15 @@ export function PullRequestLine({
           </>
         }
         end={
-          <span className="task-card-corner">
+          <>
             <span className="agent-published-added">+{pullRequest.additions}</span>{" "}
             <span className="agent-published-removed">−{pullRequest.deletions}</span>
-          </span>
+          </>
         }
-        onPress={url === undefined ? undefined : () => onOpenGitHub(url)}
+        onPress={url === undefined ? undefined : () => openLink(url)}
       />
     </li>
   );
-}
-
-/** A count of what a list leaves out, under its rows; nothing where it leaves nothing out. */
-function More({ total, shown }: { total: number; shown: number }): React.JSX.Element | null {
-  const words = moreText(total, shown);
-  return words === undefined ? null : <li className="task-card-more">{words}</li>;
 }
 
 /**
@@ -325,31 +275,31 @@ export function TaskCard({
       )}
       {(shared ?? (members !== undefined && members.length > 1)) &&
       (task.createdBy !== undefined || task.ownerId !== undefined) ? (
-        <CreatorDetail plan={task} readerId={readerId} now={now} />
+        <CreatorDetail task={task} readerId={readerId} now={now} />
       ) : null}
       {stranded === undefined ? null : (
-        <span className="task-card-detail">
-          <span className="task-card-glyph">
-            <AttentionMark />
-          </span>
-          <span className="task-card-label">
-            Repository belongs to <WorkspaceRef workspace={stranded} />
-          </span>
-        </span>
+        <HoverCardRow
+          look={HOVER_CARD_ROW_LOOK.DETAIL}
+          glyph={<AttentionMark />}
+          label={
+            <>
+              Repository belongs to <WorkspaceRef workspace={stranded} />
+            </>
+          }
+        />
       )}
       {focus === undefined ? null : (
         <>
           <HoverCardRule />
-          <span className="task-card-line" data-task-card-focus="">
-            <span className="task-card-glyph">{focus.glyph}</span>
-            <span className="task-card-label">{focus.words}</span>
-          </span>
+          <div data-task-card-focus="">
+            <HoverCardRow glyph={focus.glyph} label={focus.words} />
+          </div>
         </>
       )}
       {focus !== undefined || agents === undefined || agentRows.length === 0 ? null : (
         <>
           <HoverCardRule />
-          <ul className="task-card-rows" aria-label="Agents">
+          <HoverCardList label="Agents" more={moreText(agents.total, agentRows.length)}>
             {agentRows.map((agent) => (
               <AgentLine
                 key={agent.id}
@@ -358,23 +308,23 @@ export function TaskCard({
                 onShow={() => onShowAgent(agent.id)}
               />
             ))}
-            <More total={agents.total} shown={agentRows.length} />
-          </ul>
+          </HoverCardList>
         </>
       )}
       {focus !== undefined || agents === undefined || pullRequestRows.length === 0 ? null : (
         <>
           <HoverCardRule />
-          <ul className="task-card-rows" aria-label="Pull requests">
+          <HoverCardList
+            label="Pull requests"
+            more={moreText(agents.pullRequestTotal, pullRequestRows.length)}
+          >
             {pullRequestRows.map((pullRequest) => (
               <PullRequestLine
                 key={pullRequest.url ?? pullRequest.number}
                 pullRequest={pullRequest}
-                onOpenGitHub={onOpenGitHub}
               />
             ))}
-            <More total={agents.pullRequestTotal} shown={pullRequestRows.length} />
-          </ul>
+          </HoverCardList>
         </>
       )}
     </HoverCard>
@@ -414,36 +364,5 @@ export function taskCardOf(
       onOpenGitHub={tasks.repositories.openGitHub}
       onShowAgent={(agentId) => tasks.onShowAgent(task.id, agentId)}
     />
-  );
-}
-
-/**
- * A task named in place: what it is drawn as, its document glyph and its
- * name as the place sets them, as one button that hangs the task's card
- * while the pointer rests on it and opens the task on a press, as
- * `AgentRef` names an agent. Note that the Inbox list's task heading, whose
- * press folds it, and ⌘K's task rows, whose card's buttons the modal
- * palette would leave unpressable, name the task without one.
- */
-export function TaskRef({
-  task,
-  card,
-  onOpen,
-  className,
-  children,
-}: {
-  task: Pick<TaskSummary, "name">;
-  /** The task's card (`planCardOf`). */
-  card: React.ReactNode;
-  onOpen: () => void;
-  className?: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <Tooltip label={task.name} card={card}>
-      <button type="button" className={className} data-task-ref="" onClick={onOpen}>
-        {children}
-      </button>
-    </Tooltip>
   );
 }

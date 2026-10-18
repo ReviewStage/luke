@@ -14,12 +14,13 @@
  * controls, so the ring it draws is seen and the name scrolls into view
  * above the faces.
  */
+
+import { ChangedMark } from "@luke/panel/settings/marks";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SettingsRow } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { useId } from "react";
-import { ChangedMark } from "./marks";
 
 /** Each face's token, its name, and the address of its picture. */
 interface PictureChoiceOption<Value extends string> {

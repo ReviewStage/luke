@@ -4,6 +4,10 @@ import assert from "node:assert/strict";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { lineWords } from "@luke/panel/testing/actor-line";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { useConfirmDialog } from "@luke/ui";
 import { forgetPictures } from "@luke/ui/picture-cache";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
@@ -11,10 +15,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { lineWords } from "#testing/actor-line";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
-import { DOCUMENT_TASK } from "#testing/document-task";
 import { MarkdownMessage } from "../markdown-message";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 import { PlanBody } from "./plan-body";
@@ -95,7 +95,7 @@ function taskOf(id: string, body: string): Task {
 }
 
 const picture = (taskId: string, id: string) =>
-  planAttachmentAddress({ taskId: taskId, attachmentId: id }, "acme");
+  planAttachmentAddress({ taskId, attachmentId: id }, "acme");
 
 test("a plan's picture is drawn from its bytes under its caption, and one this reader cannot reach as its words", async () => {
   const taskId = "7a1d4e90-0c3f-4b6a-9d2e-5f6a7b8c9d03";
@@ -156,7 +156,7 @@ test("who last changed a picture's section is said in the viewer over the window
       { section: "Approach", actor: PLAN_ACTOR.NOTETAKER, at: now - 2 * HOUR, duringCall: false },
     ],
   };
-  const view = await drawn(createElement(PlanBody, { task: task, live: false }));
+  const view = await drawn(createElement(PlanBody, { task, live: false }));
 
   assert.deepEqual(
     [...view.querySelectorAll(".plan-unit-byline")].map((line) => lineWords(line)),
@@ -230,7 +230,7 @@ test("a version draws the picture it struck and the one it wrote in, each in its
       },
       restore,
       task: {
-        taskId: taskId,
+        taskId,
         place: { workspace: "acme", repository: null },
         anchors: new Set<string>(),
       },
@@ -330,7 +330,7 @@ test("an agent's plan card draws the plan's pictures once opened, while the agen
     createElement(
       Fragment,
       null,
-      createElement(AgentMessage, { ...shared, message: handed, plan: true, planId: taskId }),
+      createElement(AgentMessage, { ...shared, message: handed, plan: true, taskId }),
       createElement(AgentMessage, { ...shared, message: turn, plan: false }),
     ),
   );

@@ -9,12 +9,20 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**
  * The hosted response vocabulary as an `HttpRouter` answers it, with the same
- * statuses and the same bytes `http.ts` answers with.
+ * statuses and the same bodies `http.ts` answers with. A JSON answer here also
+ * carries `cache-control: private, no-store`, which `http.ts` does not send.
  *
  * A refusal is the body itself rather than a `Schema.TaggedError`: `error` is
  * already the discriminant the desktop's hosted clients read, and the `_tag` a
  * tagged error encodes beside it would be a byte those clients never asked for.
  */
+
+/**
+ * What every hosted JSON answer is cached under: an answer is one account's
+ * data, so neither a browser nor a shared cache on the way may keep a copy,
+ * which matters once a browser reads it on a cookie.
+ */
+const HOSTED_CACHE_CONTROL = "private, no-store";
 
 /** The status each refusal is answered with, which is a function of the refusal alone. */
 const HOSTED_REFUSAL_STATUS = {
@@ -112,6 +120,43 @@ export const HOSTED_REFUSAL = {
 export function repositoryNotReachable(unreached: RepositoryUnreached): HostedRefusal {
   return { ...HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE, unreached };
 }
+
+/**
+ * Refuses, as unauthenticated, a request that carries no `Authorization`:
+ * one that only a browser's session cookie could name. A request that
+ * carries one is read by its bearer alone (`auth/bearer.ts`'s
+ * `requestUserId`), so an endpoint asks for this where its work reaches eve
+ * as the developer over that bearer and must not go on without it: a
+ * delete ends the eve sessions of what it deletes (`agents/retire-sessions.ts`),
+ * and a refusal there goes unnoticed. Note that the endpoint asks for it
+ * itself rather than its route file handing the group a bearer-only
+ * resolver, because every function holding a group answers every path the
+ * group declares (`apps/web/server/function-dispatch.ts`).
+ */
+export function hostedBearerOnly(request: Request): Effect.Effect<void, HostedRefusal> {
+  return request.headers.has("authorization")
+    ? Effect.void
+    : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+}
+
+/**
+ * The headers bytes a member, an agent, or GitHub wrote are served under
+ * beside the type the service checked them to be: a task's picture, an
+ * inbox attachment, a picture a tool answered, a workspace's photo, and an
+ * image GitHub's rendering of a pull request names. The browser is told not
+ * to sniff them for another type; nothing on the way may keep a copy, since
+ * they are one account's or one workspace's; and a document a browser opens
+ * from them runs no script, loads nothing, and stands in an origin of its
+ * own (`sandbox`). Note that the policy is what keeps markup among them, an
+ * SVG's, from acting as this origin, because every account route takes the
+ * browser's session cookie (`auth/bearer.ts`'s `resolveHostedUserId`) and a
+ * tab opened on one of these paths carries it.
+ */
+export const HOSTED_BYTES_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "cache-control": "private, no-store",
+  "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+} as const;
 
 /**
  * A store read or write the handler cannot answer without: its failure is
@@ -216,12 +261,18 @@ export const effectPassthrough = /* @__PURE__ */ Effect.fn("web/effectPassthroug
     : HttpServerResponse.raw(answer);
 });
 
-/** An answer as the response, the way `jsonResponse` answers one today. */
+/**
+ * An answer as the response, the way `jsonResponse` answers one today, under
+ * `private, no-store`.
+ */
 export function hostedJsonResponse<Body extends object>(
   status: number,
   body: Body,
 ): HttpServerResponse.HttpServerResponse {
-  return HttpServerResponse.jsonUnsafe(body, { status });
+  return HttpServerResponse.jsonUnsafe(body, {
+    status,
+    headers: { "cache-control": HOSTED_CACHE_CONTROL },
+  });
 }
 
 /** Refuses a request whose method is not the one the endpoint documents. */

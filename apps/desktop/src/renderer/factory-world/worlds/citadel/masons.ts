@@ -1,5 +1,12 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
 import {
+  PICK_KIND,
+  type PickTarget,
+  type WorldPalette,
+  type WorldPicking,
+  type WorldPoint,
+} from "@luke/panel/factory-world/world";
+import {
   AGENT_KIND,
   AGENT_STATE,
   type AgentKind,
@@ -24,13 +31,6 @@ import {
   SphereGeometry,
   Vector3,
 } from "three";
-import {
-  PICK_KIND,
-  type PickTarget,
-  type WorldPalette,
-  type WorldPicking,
-  type WorldPoint,
-} from "../../world";
 import type { ZoneSite } from "./layout";
 import type { CitadelMaterials } from "./materials";
 import { easeInOut, facingOut, hash2, placed, polar, seeded, seedOf, TAU } from "./math";

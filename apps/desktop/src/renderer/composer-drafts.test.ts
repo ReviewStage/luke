@@ -10,6 +10,12 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import type { Task } from "@luke/features/task-wire";
+import { DRAFT_WORD } from "@luke/panel/draft-mark";
+import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
+import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
@@ -17,7 +23,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
 import {
   composerEditor,
   editorBundleLanded,
@@ -25,23 +30,18 @@ import {
   pressInComposer,
   typeInComposer,
 } from "#testing/composer";
-import { onRegistry } from "#testing/copy-feedback";
 import { sidebarProps } from "#testing/desktop-sidebar";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { useDraftsOwner } from "./composer-drafts";
 import { DesktopSidebar } from "./desktop/desktop-sidebar";
 import { DesktopTasks } from "./desktop/desktop-tasks";
 import { SidebarTask } from "./desktop/task-actions";
-import { DRAFT_WORD } from "./draft-mark";
 import {
   type AgentComposerControl,
   type MessageSender,
   useAgentComposer,
 } from "./tasks/use-agent-composer";
-import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs";
 import { type TaskInboxControl, useTaskInbox } from "./tasks/use-task-inbox";
-import { NO_LOOKS } from "./tasks/use-task-looks";
 
 /**
  * A draft as the developer meets it: words typed in one task's agent's box
@@ -198,7 +198,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
   };
   /** The sidebar's row of a task. */
   const row = (name: string) =>
-    [...container.querySelectorAll<HTMLElement>(".sidebar-task-item")].find((each) =>
+    [...container.querySelectorAll<HTMLElement>("ul > li")].find((each) =>
       each.textContent?.includes(name),
     ) ?? assert.fail(`the sidebar lists ${name}`);
   return {
@@ -440,8 +440,8 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   await settle();
   return (name: string) =>
     (
-      [...container.querySelectorAll<HTMLElement>(".sidebar-task")].find(
-        (row) => row.querySelector(".sidebar-task-name")?.textContent === name,
+      [...container.querySelectorAll<HTMLElement>("ul > li > button")].find(
+        (row) => row.querySelector(".luke-list-row-title")?.firstChild?.textContent === name,
       ) ?? assert.fail(`the sidebar lists ${name}`)
     ).querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
 }
@@ -529,7 +529,7 @@ async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVIT
   await settle();
   const pencil = `[role="img"][aria-label="${DRAFT_WORD}"]`;
   return {
-    rowDrafted: () => container.querySelector(`.sidebar-task ${pencil}`) !== null,
+    rowDrafted: () => container.querySelector(`ul > li > button ${pencil}`) !== null,
     tabDrafted: (label: string) =>
       (
         [...container.querySelectorAll<HTMLElement>(".tab")].find(
@@ -673,7 +673,7 @@ async function inboxOn(item: InboxItem) {
       await settle();
     },
     drafted: () =>
-      container.querySelector(`.sidebar-task [role="img"][aria-label="${DRAFT_WORD}"]`) !== null,
+      container.querySelector(`ul > li > button [role="img"][aria-label="${DRAFT_WORD}"]`) !== null,
     reload: () => {
       for (const each of roots.splice(0)) act(() => each.unmount());
       container.remove();

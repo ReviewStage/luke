@@ -5,15 +5,26 @@ import {
   issueIdentifier,
 } from "@luke/features/issue-list-model";
 import { ISSUE_STATUS_ORDER, type Issue, type IssueStatus } from "@luke/features/issue-wire";
-import { IconButton, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text, useMenu } from "@luke/ui";
+import type { IssueChange } from "@luke/panel/desktop/use-issues";
+import { useRowDrag } from "@luke/panel/desktop/use-row-drag";
+import {
+  IconButton,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  useMenu,
+} from "@luke/ui";
 import { PlusIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { RelativeTime } from "../tasks/relative-time";
 import { Tooltip } from "../tooltip";
 import { IssueActions } from "./issue-actions";
+import { ISSUE_OPENING, type IssueOpening, openingOf, pageKey } from "./issue-peek";
 import { PriorityMark, StatusGlyph } from "./issue-pickers";
-import type { IssueChange } from "./use-issues";
-import { useRowDrag } from "./use-row-drag";
 
 /**
  * issue-board.tsx -- a workspace's issues as a board: a column for every status, in the order work moves through them, each column's cards in the list's order.
@@ -28,18 +39,33 @@ import { useRowDrag } from "./use-row-drag";
  * list's one line. A column's head ends in a + that opens the new issue's
  * card with that column's status chosen. ↑ and ↓ move through a column's cards,
  * ← and → to the nearest card of the next column holding any, from the
- * window itself as from a card, and Return opens the card reached. A
+ * window itself as from a card, and Return peeks the card reached, ⌘Return
+ * opening its page (`issue-peek.tsx`); the card peeked is marked. A
  * right-click on a card, or the menu key or ⇧F10 on it, opens its actions
  * (`issue-actions.tsx`). A card dragged onto another column is moved to
  * that column's status, sent as its menu's Status sends it, so it stands
  * where it was until the answer lands, and a column keeps the list's order
  * rather than one dragged. The drag is the sidebar's (`use-row-drag.ts`):
  * the board is its drop scope, each column a zone of it, and a card is
- * carried over the board as a copy, since its column scrolls and clips it.
+ * carried over the window as a copy, as a sidebar row is, while it stands
+ * faded in its column.
  */
 
 /** What a column with no issue says in its own place. */
 const NO_ISSUES = "No issues";
+
+/** How wide each placeholder column's heading stands, as a share of what its glyph leaves, and how wide each of its cards' titles, so the columns read as columns of their own. */
+const SKELETON_COLUMNS = [
+  { heading: "56%", cards: ["82%", "64%", "74%"] },
+  { heading: "36%", cards: ["70%", "88%"] },
+  { heading: "48%", cards: ["76%", "58%", "84%"] },
+  { heading: "34%", cards: ["66%"] },
+  { heading: "52%", cards: ["72%"] },
+] as const;
+
+/** How wide a placeholder card's identifier and its time stand, as wide as "ACME-12" and a short "2h". */
+const SKELETON_IDENTIFIER = "48px";
+const SKELETON_TIME = "20px";
 
 /** What a column's + is called, by the column it files into. */
 function newIssueIn(status: IssueStatus): string {
@@ -157,6 +183,7 @@ function IssueCard({
   workspaceName,
   now,
   focused,
+  peeked,
   shown,
   onOpen,
   onChange,
@@ -165,8 +192,10 @@ function IssueCard({
   workspaceName: string;
   now: number;
   focused: boolean;
+  /** Whether its issue is the one read in the peek beside the board. */
+  peeked: boolean;
   shown: boolean;
-  onOpen: () => void;
+  onOpen: (opening: IssueOpening) => void;
   onChange: (change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
   const menu = useMenu(shown);
@@ -184,9 +213,15 @@ function IssueCard({
         ref={card}
         type="button"
         className="sidebar-task"
-        onClick={onOpen}
+        aria-current={peeked ? true : undefined}
+        onClick={(event) => onOpen(openingOf(event))}
         onContextMenu={menu.contextMenu()}
-        onKeyDown={menu.keyMenu}
+        onKeyDown={(event) => {
+          // Note that ⌘Return is taken before the button's own Return, which would peek it.
+          if (!pageKey(event)) return menu.keyMenu(event);
+          event.preventDefault();
+          onOpen(ISSUE_OPENING.PAGE);
+        }}
       >
         <span className="sidebar-task-line">
           <span className="issue-row-identifier">{identifier}</span>
@@ -221,6 +256,7 @@ function IssueColumn({
   workspaceName,
   now,
   focused,
+  peeked,
   shown,
   onOpen,
   onCompose,
@@ -230,8 +266,9 @@ function IssueColumn({
   workspaceName: string;
   now: number;
   focused: string | undefined;
+  peeked: string | undefined;
   shown: boolean;
-  onOpen: (issue: Issue) => void;
+  onOpen: (issue: Issue, opening: IssueOpening) => void;
   onCompose: ((status: IssueStatus) => void) | undefined;
   onChange: (issue: Issue, change: IssueChange) => Promise<boolean>;
 }): React.JSX.Element {
@@ -283,8 +320,9 @@ function IssueColumn({
               workspaceName={workspaceName}
               now={now}
               focused={issue.id === focused}
+              peeked={issue.id === peeked}
               shown={shown}
-              onOpen={() => onOpen(issue)}
+              onOpen={(opening) => onOpen(issue, opening)}
               onChange={(change) => onChange(issue, change)}
             />
           ))}
@@ -305,6 +343,7 @@ export function IssueBoard({
   workspaceName,
   now,
   focused,
+  peeked,
   shown,
   onOpen,
   onCompose,
@@ -315,9 +354,12 @@ export function IssueBoard({
   now: number;
   /** The issue whose card takes the keyboard as the board is drawn: the one the page came back from. */
   focused: string | undefined;
+  /** The issue read in the peek beside the board, whose card is marked; none while none is. */
+  peeked: string | undefined;
   /** Whether the page stands, which a card's menu and question do not outlive. */
   shown: boolean;
-  onOpen: (issue: Issue) => void;
+  /** Opens an issue as its card was pressed: in the peek, or on its own page. */
+  onOpen: (issue: Issue, opening: IssueOpening) => void;
   /** Opens the new issue's card with a column's status chosen; none while no workspace is listed to file one in. */
   onCompose: ((status: IssueStatus) => void) | undefined;
   /** Sends a change to an issue from its menu, answering whether it was kept. */
@@ -332,12 +374,57 @@ export function IssueBoard({
           workspaceName={workspaceName}
           now={now}
           focused={focused}
+          peeked={peeked}
           shown={shown}
           onOpen={onOpen}
           onCompose={onCompose}
           onChange={onChange}
         />
       ))}
+    </div>
+  );
+}
+
+/**
+ * The board while its issues are first read: a column for every status in
+ * the board's own box, its head a block where the glyph and the name will
+ * stand, over a few cards each a block for its identifier and time over one
+ * for its title, so the cards land where the blocks stood rather than on a
+ * blank page. Nothing stands for the counts and the +, and the region says
+ * what is being read.
+ */
+export function IssueBoardSkeleton({ label }: { label: string }): React.JSX.Element {
+  return (
+    <div className="issue-board-reading">
+      <SkeletonRegion label={label}>
+        <div className="issue-board">
+          {ISSUE_STATUS_ORDER.map((status, at) => {
+            const shape = SKELETON_COLUMNS[at % SKELETON_COLUMNS.length] ?? SKELETON_COLUMNS[0];
+            return (
+              <div key={status} className="issue-column">
+                <div className="issue-column-head">
+                  <Skeleton shape={SKELETON_SHAPE.CIRCLE} width="var(--luke-control-icon)" />
+                  <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
+                    <Skeleton width={shape.heading} />
+                  </Text>
+                </div>
+                <div className="sidebar-tasks issue-column-cards">
+                  {shape.cards.map((title, card) => (
+                    // oxlint-disable-next-line react/no-array-index-key -- a placeholder's cards have nothing but their place.
+                    <div key={card} className="issue-card-skeleton">
+                      <span className="issue-card-skeleton-line">
+                        <Skeleton width={SKELETON_IDENTIFIER} />
+                        <Skeleton width={SKELETON_TIME} />
+                      </span>
+                      <Skeleton width={title} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </SkeletonRegion>
     </div>
   );
 }

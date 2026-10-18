@@ -1,18 +1,21 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { BusyLabel, SpinnerRegion } from "@luke/panel/spinner";
+import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   type ErrorStatePlacement,
   RetryRowLabel,
+  TEXT_BUTTON_LINES,
+  TextButton,
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useAppCommand } from "../app-commands";
 import { useFindOpen } from "../find-in-tab";
-import { BusyLabel, SpinnerRegion } from "../spinner";
 import { CodeLineRows, centreWithin } from "./code-pane";
 import { type FileNotes, notesBefore } from "./file-note";
 import {
@@ -28,7 +31,6 @@ import {
   windowUnread,
   withWindow,
 } from "./file-tab-model";
-import { useFileViewSettings } from "./file-view-settings";
 import { useMentionDrop, useTaskMentions } from "./task-mentions";
 import type { OpenFile } from "./use-side-panel";
 
@@ -90,7 +92,7 @@ function EdgeRow({
   label: string;
   onRead: () => Promise<boolean>;
 }): React.JSX.Element {
-  const row = useRef<HTMLButtonElement>(null);
+  const row = useRef<HTMLDivElement>(null);
   const [read, setRead] = useState<EdgeRead>(EDGE_READ.IDLE);
   const load = useRef(() => {
     setRead(EDGE_READ.READING);
@@ -111,21 +113,22 @@ function EdgeRow({
   }, [read]);
 
   return (
-    <button
-      ref={row}
-      type="button"
-      className="file-tab-edge"
-      disabled={read === EDGE_READ.READING}
-      onClick={() => load.current()}
-    >
-      <BusyLabel busy={read === EDGE_READ.READING} label="Loading lines">
-        {read === EDGE_READ.FAILED ? (
-          <RetryRowLabel failure="Could not read these lines." />
-        ) : (
-          label
-        )}
-      </BusyLabel>
-    </button>
+    <div ref={row} className="file-tab-edge">
+      <TextButton
+        lines={TEXT_BUTTON_LINES.TWO}
+        onClick={() => {
+          if (read !== EDGE_READ.READING) load.current();
+        }}
+      >
+        <BusyLabel busy={read === EDGE_READ.READING} label="Loading lines">
+          {read === EDGE_READ.FAILED ? (
+            <RetryRowLabel failure="Could not read these lines." />
+          ) : (
+            label
+          )}
+        </BusyLabel>
+      </TextButton>
+    </div>
   );
 }
 

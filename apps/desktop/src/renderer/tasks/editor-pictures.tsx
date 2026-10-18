@@ -2,26 +2,26 @@ import { PICTURE_BOUNDS } from "@luke/features/picture-wire";
 import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-attachment-link";
 import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BUTTON_VARIANT, Button } from "@luke/ui";
-import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
-import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
-import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { useAct } from "../act";
-import { useAppCommand } from "../app-commands";
-import { encodeImage } from "../feedback-images";
-import { FoldingButton } from "../folding-button";
-import { PictureBlock } from "../picture-block";
+import { useAct } from "@luke/panel/act";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { encodeImage } from "@luke/panel/feedback-images";
 import type {
   PictureNode,
   PictureNodeDoors,
   PictureTaken,
   PlanEditorHandle,
   PlanEditorPictures,
-} from "../plan-editor/contract";
-import { RetryButton } from "../retry-button";
-import { Spinner } from "../spinner";
+} from "@luke/panel/plan-editor/contract";
+import { Spinner } from "@luke/panel/spinner";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { BUTTON_VARIANT, ErrorState, FormField, TextField } from "@luke/ui";
+import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
+import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
+import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { FoldingButton } from "../folding-button";
+import { PictureBlock } from "../picture-block";
+import { DOCUMENT_SCROLL_CLASS } from "./document-frame";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures";
 
 /**
@@ -33,7 +33,7 @@ import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures";
  * its caption will stand, and keeps it on the plan (`planning.pictureKeep`).
  * Kept, the picture takes its address and the text writes its line; until
  * then the text writes nothing of it. A keep that fails says so in the same
- * place, as every failure is said (`failure-note.tsx`): its sentence, then
+ * place, as every failure is said (`@luke/ui`'s `ErrorState`): its sentence, then
  * Retry and Remove. A picture of another plan pasted in is read as that
  * plan's and kept again on this one, so this plan's readers can see it.
  * Selected, a picture offers its tools: Alt text and Caption, each a field
@@ -52,7 +52,6 @@ const UPLOAD_WORDS = {
   TOO_MANY: "This plan already holds as many pictures as it can.",
   NOT_COPIED: "The picture could not be read from its plan.",
   FAILED: "The image could not be uploaded.",
-  REMOVE: "Remove",
 } as const;
 
 /** What each of a selected picture's tools is called. */
@@ -148,12 +147,13 @@ function UploadingPicture({
           <span>{UPLOAD_WORDS.SENDING}</span>
         </span>
       ) : (
-        <span className="picture-status failure-note error-message" role="alert">
-          <span className="failure-note-words">
+        <span className="picture-failure">
+          <ErrorState
+            onRetry={upload?.kind === UPLOAD.FAILED ? onRetry : undefined}
+            onRemove={onRemove}
+          >
             {upload?.kind === UPLOAD.FAILED ? upload.reason : UPLOAD_WORDS.FAILED}
-          </span>
-          {upload?.kind === UPLOAD.FAILED ? <RetryButton onRetry={onRetry} /> : null}
-          <Button onClick={onRemove}>{UPLOAD_WORDS.REMOVE}</Button>
+          </ErrorState>
         </span>
       )}
     </span>
@@ -172,31 +172,27 @@ function DescribeField({
   onSave: (words: string) => void;
   onClose: () => void;
 }): React.JSX.Element {
+  const [words, setWords] = useState(value);
+  const keep = () => {
+    onSave(words.trim());
+    onClose();
+  };
   return (
     <span className="picture-describe">
-      <label>
-        <span className="picture-describe-label">{describing.label}</span>
-        <input
-          className="picture-describe-field"
-          defaultValue={value}
-          // biome-ignore lint/a11y/noAutofocus: the field opens on a press of its own tool, which is where the keyboard is going.
-          autoFocus
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              onSave(event.currentTarget.value.trim());
-              onClose();
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              onClose();
-            }
-          }}
-          onBlur={(event) => {
-            onSave(event.currentTarget.value.trim());
-            onClose();
-          }}
-        />
-      </label>
+      <FormField label={describing.label}>
+        {(field) => (
+          <TextField
+            field={field}
+            value={words}
+            // Note that the field opens on a press of its own tool, which is where the keyboard is going.
+            autoFocus
+            onChange={setWords}
+            onEnter={keep}
+            onEscape={onClose}
+            onBlur={keep}
+          />
+        )}
+      </FormField>
     </span>
   );
 }
@@ -217,7 +213,7 @@ interface ToolsLayout {
 function useToolsLayout(column: HTMLElement): ToolsLayout {
   const [layout, setLayout] = useState<ToolsLayout>({ worded: true, above: true });
   useLayoutEffect(() => {
-    const scroller = column.closest<HTMLElement>(".plan-document-scroll");
+    const scroller = column.closest<HTMLElement>(`.${DOCUMENT_SCROLL_CLASS}`);
     const measure = () => {
       const box = column.getBoundingClientRect();
       if (box.width <= 0) return;
@@ -283,7 +279,7 @@ function KeptPicture({
   const named = planAttachmentOf(picture.src);
   const state = usePicture(named?.taskId ?? "", named?.attachmentId ?? "", door.read);
   const [describing, setDescribing] = useState<Describing | undefined>(undefined);
-  const own = named?.taskId === door.planId;
+  const own = named?.taskId === door.taskId;
   const tools: PictureTool[] = [
     {
       label: TOOL.ALT,
@@ -386,7 +382,7 @@ export function useEditorPictures(
       keepPictureRead(taskId, kept.id, url);
       handle.current?.settlePicture(
         taken.upload,
-        planAttachmentAddress({ taskId: taskId, attachmentId: kept.id }, workspace),
+        planAttachmentAddress({ taskId, attachmentId: kept.id }, workspace),
       );
       settled(taken.upload, undefined);
     },

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { CALL_KIND } from "@luke/features/turn-rows";
+import { CALL_KIND, callLine } from "@luke/features/turn-rows";
+import type { WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool";
 import { cardTitle, TOOL_TARGET, toolCallView, toolTarget } from "./tool-call-model";
@@ -527,6 +528,52 @@ test("an archive names the agent its answer titles and opens nothing, its tab be
   });
 });
 
+test("a task's change says it archived, unarchived, or updated the task its answer names, by what it asked, and opens it, while one still out or refused names none and opens nothing", () => {
+  const call = (input: WireRecord, output?: WireRecord) => ({
+    tool: "update_task",
+    callId: "call-1",
+    input: { taskId: "task-2", ...input },
+    output,
+  });
+  const answer = {
+    status: "accepted",
+    task: {
+      id: "task-2",
+      name: "Seat billing",
+      mention: "[@Seat billing](https://tryluke.dev/acme/plan/task-2)",
+    },
+    already: false,
+  };
+  const opened = { kind: TOOL_TARGET.TASK, task: "task-2" };
+  const line = (input: WireRecord, output?: WireRecord) => {
+    const view = toolCallView(call(input, output));
+    return [view.kind, callLine(view.kind, view.subject, undefined).verb, view.subject];
+  };
+
+  assert.deepEqual(line({ archived: true }, answer), [
+    CALL_KIND.ARCHIVE_TASK,
+    "Archived the task",
+    "Seat billing",
+  ]);
+  assert.deepEqual(line({ archived: false }, answer), [
+    CALL_KIND.UNARCHIVE_TASK,
+    "Unarchived the task",
+    "Seat billing",
+  ]);
+  assert.deepEqual(line({ name: "Seat billing", pinned: true }, answer), [
+    CALL_KIND.UPDATE_TASK,
+    "Updated the task",
+    "Seat billing",
+  ]);
+  assert.deepEqual(toolTarget(call({ archived: true }, answer)), opened);
+
+  assert.deepEqual(line({ archived: true }), [CALL_KIND.ARCHIVE_TASK, "Archived the task", ""]);
+  assert.equal(toolTarget(call({ archived: true })), undefined);
+  const refused = call({ archived: true }, { status: "rejected", reason: "Not archived." });
+  assert.equal(toolCallView(refused).subject, "");
+  assert.equal(toolTarget(refused), undefined);
+});
+
 test("a list of the models reads as one, not as a tool this build does not know, and opens nothing", () => {
   const call = {
     tool: "list_models",
@@ -555,6 +602,46 @@ test("a stop names the agent its answer titles and opens that agent's tab, which
   assert.deepEqual(toolTarget(stopped), { kind: TOOL_TARGET.AGENT, agent: "agent-2" });
   const refused = { ...asked, output: { status: "rejected", reason: "Not stopped." } };
   assert.equal(toolTarget(refused), undefined);
+});
+
+test("the section calls read as theirs, a made section by the title asked and a deleted one and a moved task by what the answer names, and open nothing", () => {
+  const made = {
+    tool: "create_section",
+    callId: "call-1",
+    input: { title: "Growth" },
+    output: { status: "accepted", section: { id: "section-1", title: "Growth" } },
+  };
+  const deleted = {
+    tool: "delete_section",
+    callId: "call-2",
+    input: { sectionId: "section-1" },
+    output: {
+      status: "accepted",
+      section: { id: "section-1", title: "Growth" },
+      tasksBackUnderTasks: 2,
+    },
+  };
+  const moved = {
+    tool: "move_task",
+    callId: "call-3",
+    input: { taskId: "task-1", sectionId: "section-2" },
+    output: {
+      status: "accepted",
+      task: { id: "task-1", name: "Bill by seat" },
+      section: { id: "section-2", title: "Billing" },
+    },
+  };
+
+  const rows = [made, deleted, moved].map((call) => {
+    const view = toolCallView(call);
+    return [view.kind, view.subject, toolTarget(call)];
+  });
+  assert.deepEqual(rows, [
+    [CALL_KIND.CREATE_SECTION, "Growth", undefined],
+    [CALL_KIND.DELETE_SECTION, "Growth", undefined],
+    [CALL_KIND.MOVE_TASK, "Bill by seat", undefined],
+  ]);
+  assert.equal(toolCallView({ ...moved, output: undefined }).subject, "");
 });
 
 test("a page read names the page its answer titles, and opens the page's tab only where it is on the call's own task", () => {

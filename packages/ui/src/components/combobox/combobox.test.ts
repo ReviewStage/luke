@@ -4,7 +4,10 @@ import assert from "node:assert/strict";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { Combobox, ComboboxList, type ComboboxOption } from "./combobox.js";
+// Note that the row a list engine owns is reached through the barrel, as an app reaches it.
+import { ComboboxOptionItem } from "../../index.js";
+import { Combobox, ComboboxList, type ComboboxOption, comboboxOptionId } from "./combobox.js";
+import { useComboboxField } from "./use-combobox-field.js";
 
 /**
  * combobox.test.ts -- the keys move the active option through the list and
@@ -14,7 +17,10 @@ import { Combobox, ComboboxList, type ComboboxOption } from "./combobox.js";
  * keys an input method is composing with never reach the list. A list
  * standing alone, under an editor of its caller's, names its one group to a
  * reader without drawing its heading, says so where nothing matches, and
- * keeps a press from taking the caret.
+ * keeps a press from taking the caret. An option that cannot be chosen now
+ * is passed over by the pointer and a press, the one chosen now is told as
+ * current, a note stands after the options, and a list with no field holds
+ * the focus and reads the keys itself.
  */
 
 declare global {
@@ -306,4 +312,130 @@ test("a list standing alone with headings draws them, and says so where nothing 
     none.container.querySelector('[role="listbox"]')?.textContent ?? "",
     /Nothing matches/u,
   );
+});
+
+/** Fruit where Banana cannot be chosen now and Cherry is the one chosen, with no field: the list steers itself. */
+function Steered({ chosen }: { chosen: string[] }): React.JSX.Element {
+  const [active, setActive] = useState(0);
+  const options: ComboboxOption[] = [
+    { id: "Apple", label: "Apple" },
+    { id: "Banana", label: "Banana", hint: "Out of season", disabled: true },
+    { id: "Cherry", label: "Cherry", current: true },
+  ];
+  const keys = useComboboxField({
+    open: true,
+    active,
+    count: options.length,
+    skipped: (index) => options[index]?.disabled === true,
+    controls: "fruit",
+    activeId: comboboxOptionId("fruit", active),
+    onActiveChange: setActive,
+    onChoose: (index) => chosen.push(options[index]?.id ?? ""),
+  });
+  return createElement(ComboboxList, {
+    id: "fruit",
+    label: "Fruit",
+    groups: [{ options }],
+    active,
+    onActiveChange: setActive,
+    onChoose: (_index: number, option: ComboboxOption) => chosen.push(option.id),
+    steer: keys,
+    note: "Reading more fruit…",
+  });
+}
+
+function mountSteered() {
+  const chosen: string[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(Steered, { chosen })));
+  const list = container.querySelector<HTMLElement>('[role="listbox"]') ?? assert.fail("the list");
+  const option = (name: string) =>
+    [...container.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
+      each.textContent?.startsWith(name),
+    ) ?? assert.fail(name);
+  return { list, option, chosen };
+}
+
+test("an option that cannot be chosen now is passed over by the pointer and a press, and the chosen one is current", () => {
+  const { option, chosen } = mountSteered();
+  act(() => {
+    option("Banana").dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+    option("Banana").click();
+  });
+
+  assert.equal(option("Apple").getAttribute("aria-selected"), "true");
+  assert.equal(option("Banana").getAttribute("aria-disabled"), "true");
+  assert.equal(option("Banana").textContent, "BananaOut of season");
+  assert.equal(option("Cherry").getAttribute("aria-current"), "true");
+  assert.deepEqual(chosen, []);
+});
+
+test("a list with no field holds the focus, names its active option, passes over one that cannot be chosen, and Enter chooses", () => {
+  const { list, chosen } = mountSteered();
+  act(() => list.focus());
+  press(list, { key: "ArrowDown" });
+  const id = list.getAttribute("aria-activedescendant");
+  const named = id === null ? undefined : document.getElementById(id)?.textContent;
+  press(list, { key: "Enter" });
+
+  assert.equal(document.activeElement, list);
+  assert.equal(named, "Cherry");
+  assert.deepEqual(chosen, ["Cherry"]);
+});
+
+test("a note stands after the options, whether or not any do", () => {
+  const { list } = mountSteered();
+
+  assert.match(list.textContent ?? "", /Cherry.*Reading more fruit…$/u);
+});
+
+test("an option a list engine owns is lit by the engine's aria-selected, and a press reaches the engine's handler", () => {
+  const pressed: string[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  let held: HTMLDivElement | null = null;
+  act(() =>
+    root.render(
+      createElement(ComboboxOptionItem, {
+        option: { id: "relay", label: "relay", detail: "ada", hint: "⌘1" },
+        id: "engine-relay",
+        "aria-selected": true,
+        onClick: () => pressed.push("relay"),
+        ref: (element: HTMLDivElement | null) => {
+          held = element;
+        },
+      }),
+    ),
+  );
+  const option = container.querySelector<HTMLElement>('[role="option"]') ?? assert.fail("option");
+  act(() => option.click());
+
+  assert.equal(option.getAttribute("aria-selected"), "true");
+  assert.equal(option.id, "engine-relay");
+  assert.equal(option.textContent, "relayada⌘1");
+  assert.equal(held, option);
+  assert.deepEqual(pressed, ["relay"]);
+});
+
+test("an option a list engine owns that cannot be chosen now passes no press on to the engine", () => {
+  const pressed: string[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(ComboboxOptionItem, {
+        option: { id: "sonnet", label: "Sonnet", disabled: true },
+        onClick: () => pressed.push("sonnet"),
+      }),
+    ),
+  );
+  const option = container.querySelector<HTMLElement>('[role="option"]') ?? assert.fail("option");
+  act(() => option.click());
+
+  assert.equal(option.getAttribute("aria-disabled"), "true");
+  assert.deepEqual(pressed, []);
 });

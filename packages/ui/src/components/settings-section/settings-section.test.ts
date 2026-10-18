@@ -6,18 +6,19 @@ import { afterEach, expect, test } from "vitest";
 import { Button } from "../button/button.js";
 import { SettingsRow } from "../settings-row/settings-row.js";
 import {
-  SETTINGS_LINE_KIND,
   SETTINGS_SECTION_FRAME,
   SettingsLine,
+  SettingsRowsSkeleton,
   SettingsSection,
+  SettingsSectionsSkeleton,
 } from "./settings-section.js";
 
 /**
  * settings-section.test.ts -- a headed section is a region its heading
  * names, holding its rows; a section with no heading, or an empty one, draws
  * its rows with no heading and names no region; one with no card is still
- * the region its heading names; and a line in the rows' place says its note,
- * or tells a reader what is still being read.
+ * the region its heading names; a line in the rows' place says its note;
+ * and placeholder rows and sections tell a reader what is still being read.
  */
 
 declare global {
@@ -101,27 +102,62 @@ test("a section with no card is still a region named by its heading, holding the
   expect(section?.querySelector("button")?.textContent).toBe("Write the prompt");
 });
 
-test("a line in the rows' place says its note, and a loading line tells a reader what is being read", () => {
+/** Draws `element` into the page. */
+function mount(element: React.JSX.Element): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(
-      createElement(SettingsSection, {
-        title: "Members",
-        children: [
-          createElement(SettingsLine, { key: "note", children: "Nobody is invited yet." }),
-          createElement(SettingsLine, {
-            key: "loading",
-            kind: SETTINGS_LINE_KIND.LOADING,
-            children: "Loading the members",
-          }),
-        ],
-      }),
-    ),
+  act(() => root.render(element));
+  return container;
+}
+
+/** How many placeholder blocks stand in `within`, each hidden from a reader. */
+const blocks = (within: Element) => within.querySelectorAll('[aria-hidden="true"]').length;
+
+test("a line in the rows' place says its note", () => {
+  const container = mount(
+    createElement(SettingsSection, {
+      title: "Members",
+      children: createElement(SettingsLine, { children: "Nobody is invited yet." }),
+    }),
   );
-  const section = container.querySelector("section");
-  expect(section?.textContent).toContain("Nobody is invited yet.");
-  expect(section?.querySelector('[role="status"]')?.textContent).toBe("Loading the members");
+  expect(container.querySelector("section")?.textContent).toContain("Nobody is invited yet.");
+});
+
+test("placeholder rows tell a reader what is being read, and stand a label, a description, and a control for each row, a mark first where asked", () => {
+  const container = mount(
+    createElement(SettingsSection, {
+      title: "Members",
+      children: [
+        createElement(SettingsRowsSkeleton, { key: "plain", label: "Loading the keys", rows: 3 }),
+        createElement(SettingsRowsSkeleton, {
+          key: "marked",
+          label: "Loading the members",
+          rows: 2,
+          marked: true,
+        }),
+      ],
+    }),
+  );
+  const [plain, marked] = [...container.querySelectorAll('[role="status"]')];
+  expect([plain?.textContent, plain?.getAttribute("aria-busy")]).toEqual([
+    "Loading the keys",
+    "true",
+  ]);
+  expect(marked?.textContent).toBe("Loading the members");
+  expect([plain && blocks(plain), marked && blocks(marked)]).toEqual([9, 8]);
+});
+
+test("placeholder sections are one status a reader hears, a heading's block over each card and no heading or region of their own", () => {
+  const container = mount(
+    createElement(SettingsSectionsSkeleton, {
+      label: "Loading the integrations",
+      sections: [2, 3],
+    }),
+  );
+  const regions = container.querySelectorAll('[role="status"]');
+  expect([...regions].map((region) => region.textContent)).toEqual(["Loading the integrations"]);
+  expect(container.querySelectorAll("h2, section").length).toBe(0);
+  expect(blocks(container)).toBe(2 + 5 * 3);
 });

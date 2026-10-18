@@ -1,7 +1,10 @@
 import {
+  AVATAR_SIZE,
+  Avatar,
   IconButtonLink,
   PublicPage,
   PublicSection,
+  TEXT_ELEMENT,
   TEXT_FONT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -13,8 +16,6 @@ type Founder = {
   readonly name: string;
   readonly role: string;
   readonly photoSrc: string;
-  /** Edge of the square source, so the image reserves its box before it loads. */
-  readonly photoEdge: number;
   readonly bio: string;
   readonly socials: {
     readonly linkedin: string;
@@ -36,7 +37,6 @@ const FOUNDERS: readonly Founder[] = [
     name: "Charles Pan",
     role: "Cofounder",
     photoSrc: "/assets/charles-pan.jpeg",
-    photoEdge: 500,
     bio: "Previously developer at Five Rings, early engineer at Yuzu Health.",
     socials: {
       linkedin: "https://www.linkedin.com/in/charleslpan/",
@@ -47,7 +47,6 @@ const FOUNDERS: readonly Founder[] = [
     name: "Dean Stratakos",
     role: "Cofounder",
     photoSrc: "/assets/dean-stratakos.jpeg",
-    photoEdge: 450,
     bio: "Previously building coding agents at Five Rings.",
     socials: {
       linkedin: "https://www.linkedin.com/in/dean-stratakos/",
@@ -80,22 +79,19 @@ export function AboutPage(): React.JSX.Element {
 function FounderCard({ founder }: { readonly founder: Founder }): React.JSX.Element {
   return (
     <article className="flex items-start gap-4">
-      <img
-        alt={founder.name}
-        className="size-16 shrink-0 rounded-full border border-border object-cover"
-        height={founder.photoEdge}
-        loading="lazy"
-        src={founder.photoSrc}
-        width={founder.photoEdge}
-      />
+      <Avatar name={founder.name} src={founder.photoSrc} size={AVATAR_SIZE.PORTRAIT} />
       <div className="min-w-0">
-        <h3 className="m-0 text-base font-semibold tracking-[-0.01em]">{founder.name}</h3>
+        <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.SECTION}>
+          {founder.name}
+        </Text>
         <div className="mt-0.5">
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} font={TEXT_FONT.MONO}>
             {founder.role}
           </Text>
         </div>
-        <p className="mt-2 mb-0 text-sm text-pretty text-muted-foreground">{founder.bio}</p>
+        <div className="mt-2 text-pretty">
+          <Text tone={TEXT_TONE.MUTED}>{founder.bio}</Text>
+        </div>
         <FounderSocials name={founder.name} socials={founder.socials} />
       </div>
     </article>

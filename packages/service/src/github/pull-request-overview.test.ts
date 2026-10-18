@@ -21,7 +21,9 @@ import {
   PULL_REQUEST_STATE,
   REVIEW_STATE,
 } from "@luke/features/coding-agent-wire";
-import { Effect, Option, Redacted } from "effect";
+import { REACTION } from "@luke/features/pull-request-write-wire";
+import { Duration, Effect, Fiber, Option, Redacted } from "effect";
+import { TestClock } from "effect/testing";
 import {
   GITHUB_FIXTURE_BOT,
   githubReaching,
@@ -34,6 +36,7 @@ import {
   pullRequestConversation,
   pullRequestDeployments,
   pullRequestOverview,
+  viewerReactionsOf,
 } from "./pull-requests.js";
 
 /**
@@ -68,6 +71,11 @@ function githubUser(id: number, login: string) {
 const CHARLES = githubUser(1001, "charlespan");
 const PRIYA = githubUser(1002, "priyan");
 const LUKE = githubUser(GITHUB_FIXTURE_BOT.id, GITHUB_FIXTURE_BOT.login);
+/** Another App's bot, which GitHub draws by its App's logo, at its App's address. */
+const DEVIN = {
+  ...githubUser(1004, "devin-ai-integration[bot]"),
+  avatar_url: "https://avatars.githubusercontent.com/in/811515?v=4",
+};
 
 /** What a test changes of the pull request GitHub answers. */
 interface PullOverrides {
@@ -378,6 +386,12 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
                 submitted_at: "2026-10-15T09:45:00Z",
                 html_url: `${PAGE}#pullrequestreview-4`,
               },
+              {
+                user: DEVIN,
+                state: "COMMENTED",
+                body: "",
+                submitted_at: "2026-10-15T11:05:00Z",
+              },
             ],
           }),
         );
@@ -420,8 +434,16 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           [
             { by: asPriya, state: REVIEW_STATE.CHANGES_REQUESTED },
             { by: asCharles, state: REVIEW_STATE.APPROVED },
+            {
+              by: {
+                login: DEVIN.login,
+                bot: true,
+                avatarUrl: "https://avatars.githubusercontent.com/in/811515?v=4",
+              },
+              state: REVIEW_STATE.COMMENTED,
+            },
           ],
-          "the conversation names where each stands by their reviews",
+          "the conversation names where each stands by their reviews, an App's bot by its App's logo",
         );
         assert.deepEqual(overview.conversation, [
           {
@@ -941,6 +963,334 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           },
         ]);
         assert.equal(overview.earlier, 1, "the thread GitHub holds past the bound is counted");
+      }),
+  );
+
+  it.effect(
+    "the reactions the description, a comment, a review, and a thread comment wear come with the conversation, in GitHub's order, those given only, each naming who gave it as the conversation names people; a thread comment's, and a comment's the GraphQL read did not reach, counted only",
+    () =>
+      Effect.gen(function* () {
+        const charles = yield* linkedAccount(CHARLES.id);
+        const workspace = yield* openWorkspace(charles);
+        const asNode = (who: typeof CHARLES) => ({
+          __typename: who.type,
+          login: who.login.replace("[bot]", ""),
+          avatarUrl: who.avatar_url,
+          databaseId: who.id,
+        });
+        /** A reaction as GitHub's GraphQL answers one, naming those given. */
+        const group = (content: string, totalCount: number, nodes?: readonly object[]) => ({
+          content,
+          reactors: nodes === undefined ? { totalCount } : { totalCount, nodes },
+        });
+        const overview = yield* overviewOf(
+          workspace,
+          repository({
+            pull: pull(),
+            comments: [
+              {
+                id: 11,
+                user: PRIYA,
+                body: "Ship it.",
+                body_html: '<p dir="auto">Ship it.</p>',
+                created_at: "2026-10-15T10:00:00Z",
+                html_url: `${PAGE}#issuecomment-11`,
+              },
+              {
+                id: 12,
+                user: PRIYA,
+                body: "Merged it locally.",
+                body_html: '<p dir="auto">Merged it locally.</p>',
+                created_at: "2026-10-15T12:00:00Z",
+                html_url: `${PAGE}#issuecomment-12`,
+                reactions: { "+1": 2, "-1": 0, heart: 1, url: "https://api.github.com/x" },
+              },
+            ],
+            reviews: [
+              {
+                id: 5,
+                user: PRIYA,
+                state: "APPROVED",
+                body: "",
+                submitted_at: "2026-10-15T11:00:00Z",
+                html_url: `${PAGE}#pullrequestreview-5`,
+              },
+            ],
+            graphql: {
+              data: {
+                repository: {
+                  pullRequest: {
+                    reactionGroups: [
+                      group("THUMBS_UP", 0, []),
+                      group("ROCKET", 1, [asNode(LUKE)]),
+                      group("HEART", 2, [asNode(CHARLES), asNode(PRIYA)]),
+                      group("SPARKLES", 1, [asNode(PRIYA)]),
+                    ],
+                    comments: {
+                      nodes: [
+                        { databaseId: 11, reactionGroups: [group("EYES", 12, [asNode(CHARLES)])] },
+                      ],
+                    },
+                    reviews: { nodes: [{ databaseId: 5, reactionGroups: [] }] },
+                    reviewThreads: {
+                      totalCount: 1,
+                      nodes: [
+                        {
+                          id: "PRRT_reacted",
+                          path: "src/invite.ts",
+                          line: 12,
+                          startLine: null,
+                          originalLine: 12,
+                          originalStartLine: null,
+                          diffSide: "RIGHT",
+                          startDiffSide: null,
+                          isResolved: false,
+                          isOutdated: false,
+                          comments: {
+                            totalCount: 1,
+                            nodes: [
+                              {
+                                author: asNode(PRIYA),
+                                body: "Why once?",
+                                bodyHTML: '<p dir="auto">Why once?</p>',
+                                createdAt: "2026-10-15T10:59:00Z",
+                                url: `${PAGE}#discussion_r1`,
+                                diffHunk: "@@ -1 +1 @@\n-twice();\n+once();",
+                                pullRequestReview: { databaseId: 5, state: "APPROVED" },
+                                reactionGroups: [group("THUMBS_DOWN", 3), group("LAUGH", 0)],
+                              },
+                            ],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          }),
+        );
+
+        assert.ok(overview !== undefined);
+        const asCharles = {
+          login: CHARLES.login,
+          bot: false,
+          avatarUrl: CHARLES.avatar_url,
+          userId: charles,
+        };
+        const asPriya = { login: PRIYA.login, bot: false, avatarUrl: PRIYA.avatar_url };
+        assert.deepEqual(overview.descriptionReactions, [
+          { content: REACTION.HEART, count: 2, by: [asCharles, asPriya] },
+          {
+            content: REACTION.ROCKET,
+            count: 1,
+            by: [{ login: LUKE.login, bot: true, avatarUrl: LUKE.avatar_url }],
+          },
+        ]);
+        const [said, approved, past] = overview.conversation;
+        assert.deepEqual(said?.reactions, [{ content: REACTION.EYES, count: 12, by: [asCharles] }]);
+        assert.equal(approved?.state, REVIEW_STATE.APPROVED);
+        assert.equal(
+          approved !== undefined && "reactions" in approved,
+          false,
+          "none given, none carried",
+        );
+        assert.deepEqual(approved?.threads?.[0]?.comments[0]?.reactions, [
+          { content: REACTION.THUMBS_DOWN, count: 3 },
+        ]);
+        assert.deepEqual(
+          past?.reactions,
+          [
+            { content: REACTION.THUMBS_UP, count: 2 },
+            { content: REACTION.HEART, count: 1 },
+          ],
+          "a comment the GraphQL read did not reach is counted by its REST rollup",
+        );
+      }),
+  );
+
+  it.effect(
+    "each comment, review, thread comment, and the description carry the GraphQL id a reaction is added by, and the member's own read, on their own token, marks which reactions are theirs",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+        const member = Redacted.make("ghu_member_fixture");
+        const bearers: string[] = [];
+        const group = (content: string, totalCount: number) => ({
+          content,
+          reactors: { totalCount, nodes: [] },
+        });
+        const viewed = (content: string, viewerHasReacted: boolean) => ({
+          content,
+          viewerHasReacted,
+        });
+        const script = repository({
+          pull: pull(),
+          comments: [
+            {
+              id: 11,
+              node_id: "IC_11",
+              user: PRIYA,
+              body: "Ship it.",
+              body_html: '<p dir="auto">Ship it.</p>',
+              created_at: "2026-10-15T10:00:00Z",
+              html_url: `${PAGE}#issuecomment-11`,
+            },
+          ],
+          reviews: [
+            {
+              id: 5,
+              node_id: "PRR_5",
+              user: PRIYA,
+              state: "APPROVED",
+              body: "",
+              submitted_at: "2026-10-15T11:00:00Z",
+              html_url: `${PAGE}#pullrequestreview-5`,
+            },
+          ],
+        });
+        const answered: RepositoryScript = (sent) => {
+          if (new URL(sent.url).pathname !== "/graphql") return script(sent);
+          bearers.push(sent.headers.get("authorization") ?? "");
+          const viewer = JSON.parse(sent.body).query.includes("viewerHasReacted");
+          return Response.json({
+            data: {
+              repository: {
+                pullRequest: viewer
+                  ? {
+                      id: "PR_7",
+                      reactionGroups: [viewed("HEART", true), viewed("ROCKET", false)],
+                      comments: {
+                        nodes: [{ id: "IC_11", reactionGroups: [viewed("EYES", false)] }],
+                      },
+                      reviews: { nodes: [] },
+                      reviewThreads: {
+                        nodes: [
+                          {
+                            comments: {
+                              nodes: [
+                                { id: "PRRC_1", reactionGroups: [viewed("THUMBS_UP", true)] },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    }
+                  : {
+                      id: "PR_7",
+                      reactionGroups: [group("HEART", 2), group("ROCKET", 1)],
+                      comments: {
+                        nodes: [{ databaseId: 11, reactionGroups: [group("EYES", 1)] }],
+                      },
+                      reviews: { nodes: [] },
+                      reviewThreads: {
+                        totalCount: 1,
+                        nodes: [
+                          {
+                            id: "PRRT_viewed",
+                            path: "src/invite.ts",
+                            line: 12,
+                            startLine: null,
+                            originalLine: 12,
+                            originalStartLine: null,
+                            diffSide: "RIGHT",
+                            startDiffSide: null,
+                            isResolved: false,
+                            isOutdated: false,
+                            comments: {
+                              totalCount: 1,
+                              nodes: [
+                                {
+                                  author: null,
+                                  body: "Why?",
+                                  bodyHTML: '<p dir="auto">Why?</p>',
+                                  createdAt: "2026-10-15T10:59:00Z",
+                                  url: `${PAGE}#discussion_r1`,
+                                  pullRequestReview: { databaseId: 5, state: "APPROVED" },
+                                  id: "PRRC_1",
+                                  reactionGroups: [
+                                    { content: "THUMBS_UP", reactors: { totalCount: 1 } },
+                                  ],
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+              },
+            },
+          });
+        };
+
+        const conversation = yield* Effect.flatMap(
+          pullRequestConversation(
+            TOKEN,
+            REPOSITORY,
+            { number: NUMBER, url: PAGE },
+            viewerReactionsOf(member, REPOSITORY, NUMBER),
+          ),
+          (read) => namedOverviewConversation({ organizationId: workspace }, NUMBER, read),
+        ).pipe(answering(answered));
+
+        assert.deepEqual(
+          [...bearers].sort(),
+          [`Bearer ${Redacted.value(TOKEN)}`, `Bearer ${Redacted.value(member)}`].sort(),
+          "the App's read on its token, the member's on theirs",
+        );
+        assert.equal(conversation.descriptionSubject, "PR_7");
+        assert.deepEqual(
+          conversation.descriptionReactions?.map(({ content, mine }) => [content, mine]),
+          [
+            [REACTION.HEART, true],
+            [REACTION.ROCKET, false],
+          ],
+        );
+        const [comment, approved] = conversation.conversation;
+        assert.equal(comment?.subject, "IC_11");
+        assert.deepEqual(
+          comment?.reactions?.map(({ content, mine }) => [content, mine]),
+          [[REACTION.EYES, false]],
+        );
+        assert.equal(approved?.subject, "PRR_5");
+        const threadComment = approved?.threads?.[0]?.comments[0];
+        assert.equal(threadComment?.subject, "PRRC_1");
+        assert.deepEqual(threadComment?.reactions, [
+          { content: REACTION.THUMBS_UP, count: 1, mine: true },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a member's own read that does not answer in time leaves the conversation answered without saying which reactions are theirs",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+        const script = repository({
+          pull: pull(),
+          graphql: {
+            data: {
+              repository: {
+                pullRequest: {
+                  id: "PR_7",
+                  reactionGroups: [{ content: "HEART", reactors: { totalCount: 1, nodes: [] } }],
+                  reviewThreads: { totalCount: 0, nodes: [] },
+                },
+              },
+            },
+          },
+        });
+        const reading = yield* Effect.forkChild(
+          Effect.flatMap(
+            pullRequestConversation(TOKEN, REPOSITORY, { number: NUMBER, url: PAGE }, Effect.never),
+            (read) => namedOverviewConversation({ organizationId: workspace }, NUMBER, read),
+          ).pipe(answering(script)),
+        );
+        yield* TestClock.adjust(Duration.seconds(1));
+        const conversation = yield* Fiber.join(reading);
+        assert.deepEqual(conversation.descriptionReactions, [
+          { content: REACTION.HEART, count: 1, by: [] },
+        ]);
       }),
   );
 

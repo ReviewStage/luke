@@ -2,6 +2,7 @@ import type { AdminDailyUsage } from "@luke/service/admin/admin-metrics";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "@luke/ui/activity-calendar";
 import { formatNumber, formatTooltipDay } from "@luke/ui/admin-format";
+import { ChartTooltipFrame } from "@luke/ui/chart";
 import { partialDayKey } from "@luke/ui/daily-series";
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { ChartFrame } from "./chart-frame";
@@ -14,11 +15,16 @@ import { USAGE_CHART } from "./usage-chart";
  */
 const CALENDAR_FILL_FLOOR_PERCENT = 8;
 
-function calendarCellStyle(total: number, maxTotal: number): React.CSSProperties {
+/**
+ * A day cell's corner, a quarter of its edge, as a small workspace tile's
+ * is: the cell is too small for a radius token, whose smallest would round
+ * it into a dot.
+ */
+const CALENDAR_CELL_RADIUS = "25%";
+
+function calendarCellFill(total: number, maxTotal: number): string {
   const fill = Math.max(CALENDAR_FILL_FLOOR_PERCENT, Math.round((total / maxTotal) * 100));
-  return {
-    backgroundColor: `color-mix(in oklab, var(--luke-color-chart-1) ${fill}%, transparent)`,
-  };
+  return `color-mix(in oklab, var(--luke-color-chart-1) ${fill}%, transparent)`;
 }
 
 /** Sunday first, the calendar's own week convention (`activity-calendar.ts`). */
@@ -38,14 +44,17 @@ function CalendarDayCell({
   onHide: () => void;
 }): React.JSX.Element {
   const provisional =
-    day.day === partialDay ? " border border-dashed border-muted-foreground/60" : "";
+    day.day === partialDay ? " border border-dashed border-(--luke-color-text-muted)/60" : "";
   return (
     <div
       role="img"
       aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatNumber(day.calls)} hosted calls`}
       data-calendar-day={day.day}
-      className={`rounded-[3px] outline-offset-2 ${day.calls === 0 ? "bg-muted/60" : ""}${provisional}`}
-      style={day.calls === 0 ? undefined : calendarCellStyle(day.calls, maxTotal)}
+      className={`outline-offset-2 ${day.calls === 0 ? "bg-(--luke-color-fill-hover)/60" : ""}${provisional}`}
+      style={{
+        borderRadius: CALENDAR_CELL_RADIUS,
+        backgroundColor: day.calls === 0 ? undefined : calendarCellFill(day.calls, maxTotal),
+      }}
       onPointerEnter={(event) => onShow(day, event.currentTarget)}
       onPointerLeave={(event) => {
         // A move straight onto a sibling cell fires that cell's enter next,
@@ -193,23 +202,18 @@ export function ActivityCalendar({
       title={`This account's ${spanLabel}, week by week`}
       overlay={
         anchor !== undefined ? (
-          <div
-            ref={tooltipRef}
-            className="pointer-events-none absolute z-10 grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-xs shadow-xl"
-          >
-            <div className="font-medium">{formatTooltipDay(anchor.day.day, partialDay)}</div>
-            <div className="flex w-full items-center gap-2">
-              <div
-                className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-                style={{ backgroundColor: USAGE_CHART.calls.color }}
-              />
-              <div className="flex flex-1 items-center justify-between gap-4 leading-none">
-                <span className="text-muted-foreground">{USAGE_CHART.calls.label}</span>
-                <span className="font-mono font-medium text-foreground tabular-nums">
-                  {formatNumber(anchor.day.calls)}
-                </span>
-              </div>
-            </div>
+          <div ref={tooltipRef} className="pointer-events-none absolute z-10">
+            <ChartTooltipFrame
+              label={formatTooltipDay(anchor.day.day, partialDay)}
+              rows={[
+                {
+                  key: "calls",
+                  color: USAGE_CHART.calls.color,
+                  name: USAGE_CHART.calls.label,
+                  value: formatNumber(anchor.day.calls),
+                },
+              ]}
+            />
           </div>
         ) : null
       }

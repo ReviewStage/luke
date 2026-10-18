@@ -28,6 +28,17 @@ import {
   type AppInboxTasklessItem,
   RUN_PROFILE,
 } from "@luke/host/app-state";
+import type { ActHandle } from "@luke/panel/act";
+import { appPlatform } from "@luke/panel/app-platform";
+import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { useInboxPages } from "@luke/panel/tasks/use-inbox-pages";
+import {
+  MAIN_TAB,
+  type MainTab,
+  type MainTabsControl,
+  useMainTabs,
+} from "@luke/panel/tasks/use-main-tabs";
+import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "@luke/panel/toast";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { callCard } from "@luke/ui/call-card-model";
@@ -116,13 +127,9 @@ import {
 import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ActHandle } from "../act";
-import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { useChosenWorkspace } from "../desktop/chosen-workspace";
-import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import type { FixtureChat, Staged } from "./chat-fixture";
-import { useChatOn } from "./chat-gate";
 import {
   CLOSED_TAB_STRIP,
   type ClosedTab,
@@ -143,9 +150,7 @@ import {
 } from "./tasks-fixture";
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
-import { useInboxPages } from "./use-inbox-pages";
 import { useLastTask } from "./use-last-task";
-import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs";
 import { usePanelArrivals } from "./use-panel-arrivals";
 import {
   type HistorySpot,
@@ -168,7 +173,7 @@ import {
 } from "./use-side-panel";
 import { useWorkspaceChat } from "./use-workspace-chat";
 import { sayRestored } from "./version-view";
-import { agentListCallIds, newTaskCallIds, workerCallIds, workRowsOf } from "./work-model";
+import { agentListCallIds, sidebarCallIds, workerCallIds, workRowsOf } from "./work-model";
 
 /** A change to the sections drawn before the service answered it, and when it was asked. */
 interface PendingSectionWrite {
@@ -384,6 +389,33 @@ type ChatStager = typeof import("./chat-fixture");
 /** What a post or an answer says where no chat is read to send it to. */
 const NO_CHAT_SERVICE = "Chat is not available yet.";
 
+/** One of the workspace's issues a new task starts from: its id and workspace, and its identifier and title, which the dialog names it by. */
+export interface NewTaskIssue {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly identifier: string;
+  readonly title: string;
+}
+
+/**
+ * What the press that opened New task chose: a repository (a repository
+ * group's +), or the issue the task starts from (an issue's Start task…),
+ * and whether an agent starts on the task at once (an issue's Start
+ * agent…), which starts it without its planning phase.
+ */
+export interface NewTaskPreset {
+  readonly repository?: string;
+  readonly issue?: NewTaskIssue;
+  readonly agent?: boolean;
+}
+
+/** What a start comes from beyond its name, repository, workspace, and planning: a Linear issue, one of the workspace's own issues, and whether an agent starts on it at once. */
+export interface NewTaskStart {
+  readonly linearIssueId?: string;
+  readonly issueId?: string;
+  readonly agent?: boolean;
+}
+
 /** Which Issues page stands: the list, or one issue's. */
 export const ISSUES_PAGE = {
   LIST: "list",
@@ -440,6 +472,10 @@ export interface TasksControl {
   };
   /** The workspaces the account is a member of, its first one first; none before the first read lands. */
   workspaces: readonly Workspace[];
+  /** Whether the last read of the workspaces did not land, those held still drawn. */
+  workspacesFailed: boolean;
+  /** Reads the workspaces again after a read that did not land. */
+  onRetryWorkspaces: () => void;
   /** The workspace the sidebar lists and New task starts in; absent while none is listed, when every task is listed. */
   workspace: Workspace | undefined;
   /** Lists another of the account's workspaces, and starts the next new task in it. */
@@ -490,6 +526,10 @@ export interface TasksControl {
   board: Board | undefined;
   /** Every code Luke showed on the open task, oldest first: what the service keeps, and each a call shows as it shows it. */
   shownCode: TasksView["shownCode"];
+  /** Whether the last read of the open task's work and code did not land, what is held still drawn. */
+  workFailed: boolean;
+  /** Reads the open task's work and code again after a read that did not land. */
+  onRetryWork: () => void;
   /** The pages agents wrote for the open task, each by its newest version; absent with none. */
   pages: TasksView["pages"];
   /** What was said on the open task's calls, the call standing now included, and the retry of a read that failed. */
@@ -615,24 +655,26 @@ export interface TasksControl {
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
+  /** New task started from one of the workspace's issues: named by it, in its workspace, and linked to it once started; what an issue's Start task… asks, and with `agent` its Start agent…, which starts an agent on the task at once. */
+  onNewTaskFrom: (issue: NewTaskIssue, agent?: boolean) => void;
   /** The New task dialog: whether it stands, what its press chose, and the two presses it makes. */
   newTask: {
     open: boolean;
-    /** The repository the press that opened the dialog chose, where it chose one. */
-    preset: { readonly repository: string } | undefined;
+    /** What the press that opened the dialog chose: a repository, or the issue the task starts from, where it chose one. */
+    preset: NewTaskPreset | undefined;
     /** The workspaces a task may start in, the account's every one. */
     workspaces: readonly Workspace[];
     /** The workspace the dialog starts the task in until another is chosen: the one listed; none before the workspaces are read. */
     workspaceId: string | undefined;
     /** The repository chip's list for a workspace, as the dialog chooses which the task starts in. */
     repositoriesIn: (workspaceId: string | undefined) => RepositoryChooser;
-    /** Starts the plan on the repository given, or none, in the workspace given, with its planning phase or without it, from the Linear issue given where one was picked, which closes the dialog and opens the plan; answers why it did not start, or nothing once it has. */
+    /** Starts the plan on the repository given, or none, in the workspace given, with its planning phase or without it, from the Linear issue given where one was picked, or from the workspace's own issue the dialog was opened on, which closes the dialog and opens the plan, pressing its Start once it stands open where an agent was asked to start on it at once; answers why it did not start, or nothing once it has. */
     start: (
       name: string,
       repository: string | null,
       workspaceId: string | undefined,
       planning: boolean,
-      linearIssueId?: string,
+      from?: NewTaskStart,
     ) => Promise<string | undefined>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
@@ -1252,6 +1294,29 @@ export function useTasksTab(input: {
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     keywords: dictationWords,
   });
+  // An agent asked to start on a task the moment it starts, as an issue's
+  // Start agent… asks, is the open task's own Start pressed once that task
+  // stands open with its repository: it is handed the task's plan, on the
+  // account's default choice, and its tab opens once it lands, while one
+  // that did not start says why beside the task's Start.
+  // Note that the ask goes once the developer leaves its task before it
+  // could start, so coming back to the task later starts nothing unasked.
+  const [agentAskedFor, setAgentAskedFor] = useState<string | undefined>(undefined);
+  const askedTaskOpened = useRef(false);
+  const pressStart = useRef(agents.start.onPress);
+  pressStart.current = agents.start.onPress;
+  const startable = agents.start.available && openDocument?.id === viewed.activeTaskId;
+  useEffect(() => {
+    if (agentAskedFor === undefined) return;
+    if (viewed.activeTaskId !== agentAskedFor) {
+      if (askedTaskOpened.current) setAgentAskedFor(undefined);
+      return;
+    }
+    askedTaskOpened.current = true;
+    if (!startable) return;
+    setAgentAskedFor(undefined);
+    pressStart.current();
+  }, [agentAskedFor, viewed.activeTaskId, startable]);
   // The calls heard on the open task, each held past its end until the
   // record's copy catches up; a fixture's open task is drawn with its own
   // call's words.
@@ -1284,32 +1349,32 @@ export function useTasksTab(input: {
   // an Archive; a call already in the work when the plan opens is read with
   // the plan.
   const startedByLuke = useMemo(() => agentListCallIds(viewed.conversation), [viewed.conversation]);
-  const startsSeen = useRef<{ planId: string | undefined; ids: ReadonlySet<string> }>({
-    planId: undefined,
+  const startsSeen = useRef<{ taskId: string | undefined; ids: ReadonlySet<string> }>({
+    taskId: undefined,
     ids: new Set(),
   });
   const readAgents = agents.onRetryList;
   useEffect(() => {
     const seen = startsSeen.current;
     const taskId = viewed.activeTaskId;
-    const landed = seen.planId === taskId && startedByLuke.some((callId) => !seen.ids.has(callId));
-    startsSeen.current = { planId: taskId, ids: new Set(startedByLuke) };
+    const landed = seen.taskId === taskId && startedByLuke.some((callId) => !seen.ids.has(callId));
+    startsSeen.current = { taskId, ids: new Set(startedByLuke) };
     if (landed) readAgents();
   }, [startedByLuke, viewed.activeTaskId, readAgents]);
-  // A start of Luke's that made a new task adds it to the sidebar only once the tasks are read
-  // again, as one lands in the work of the task it was made on.
-  const newTasksByLuke = useMemo(() => newTaskCallIds(viewed.conversation), [viewed.conversation]);
-  const newTasksSeen = useRef<{ planId: string | undefined; ids: ReadonlySet<string> }>({
-    planId: undefined,
+  // A call of Luke's that made a new task, or made, deleted, or filled a section, changes the
+  // sidebar only once the tasks are read again, as one lands in the work of the task it was made on.
+  const sidebarByLuke = useMemo(() => sidebarCallIds(viewed.conversation), [viewed.conversation]);
+  const sidebarSeen = useRef<{ taskId: string | undefined; ids: ReadonlySet<string> }>({
+    taskId: undefined,
     ids: new Set(),
   });
   useEffect(() => {
-    const seen = newTasksSeen.current;
+    const seen = sidebarSeen.current;
     const taskId = viewed.activeTaskId;
-    const landed = seen.planId === taskId && newTasksByLuke.some((callId) => !seen.ids.has(callId));
-    newTasksSeen.current = { planId: taskId, ids: new Set(newTasksByLuke) };
+    const landed = seen.taskId === taskId && sidebarByLuke.some((callId) => !seen.ids.has(callId));
+    sidebarSeen.current = { taskId, ids: new Set(sidebarByLuke) };
     if (landed) tell(ACT_KIND.TASKS_REFRESH);
-  }, [newTasksByLuke, viewed.activeTaskId, tell]);
+  }, [sidebarByLuke, viewed.activeTaskId, tell]);
   // A file's tab is held to the files Luke showed on the task the same way.
   const files = useMemo(
     () => shownFiles(viewed.shownCode ?? []).map((ref) => ref.path),
@@ -1412,7 +1477,7 @@ export function useTasksTab(input: {
   const tabChannel =
     columnShown && mainTabs.tab === MAIN_TAB.CHAT
       ? liveChat.chat?.channels.find(
-          (channel) => channel.kind === CHANNEL_KIND.PLAN && channel.planId === viewed.activeTaskId,
+          (channel) => channel.kind === CHANNEL_KIND.TASK && channel.planId === viewed.activeTaskId,
         )?.id
       : undefined;
   if (tabChannel !== tabReading) setTabReading(tabChannel);
@@ -1437,12 +1502,12 @@ export function useTasksTab(input: {
     !shown || listedWorkspace === undefined
       ? null
       : standIn?.kind === STAND_IN.CHAT
-        ? { workspaceId: listedWorkspace.id, planId: null }
+        ? { workspaceId: listedWorkspace.id, taskId: null }
         : columnShown && mainTabs.tab === MAIN_TAB.CHAT && viewed.activeTaskId !== undefined
-          ? { workspaceId: listedWorkspace.id, planId: viewed.activeTaskId }
+          ? { workspaceId: listedWorkspace.id, taskId: viewed.activeTaskId }
           : null;
   const chatShownWorkspace = chatShown?.workspaceId ?? null;
-  const chatShownTask = chatShown?.planId ?? null;
+  const chatShownTask = chatShown?.taskId ?? null;
   const reportedTab = useRef<
     | {
         agentId: string | null;
@@ -1474,7 +1539,7 @@ export function useTasksTab(input: {
       chatShown:
         chatShownWorkspace === null
           ? null
-          : { workspaceId: chatShownWorkspace, planId: chatShownTask },
+          : { workspaceId: chatShownWorkspace, taskId: chatShownTask },
     });
   }, [shownAgent, shownInbox, chatShownWorkspace, chatShownTask, tell]);
   // Note that the Inbox's choice is remembered as it is made, so leaving the Inbox and coming back stands on it.
@@ -1548,7 +1613,7 @@ export function useTasksTab(input: {
         onRefused();
       };
       if (fixture === undefined) setAsked(ask);
-      act(ACT_KIND.TASKS_SELECT, { taskId: taskId }).then((opened) => {
+      act(ACT_KIND.TASKS_SELECT, { taskId }).then((opened) => {
         if (!opened) {
           withdraw();
           return;
@@ -1658,7 +1723,7 @@ export function useTasksTab(input: {
   shownNow.current = shown;
   const deleteTask = async (taskId: string): Promise<ActionResult> => {
     if (fixture !== undefined) return DELETE_REFUSED;
-    const deleted = await act(ACT_KIND.TASKS_DELETE, { taskId: taskId }).catch(() => false);
+    const deleted = await act(ACT_KIND.TASKS_DELETE, { taskId }).catch(() => false);
     if (deleted) {
       toast({ words: TASK_DELETED_NOTE, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -1673,7 +1738,7 @@ export function useTasksTab(input: {
   const renameTask = async (taskId: string, name: string): Promise<boolean> => {
     if (fixture !== undefined) return false;
     setRenames((held) => new Map(held).set(taskId, name));
-    const renamed = await act(ACT_KIND.TASKS_RENAME, { taskId: taskId, name }).catch(() => false);
+    const renamed = await act(ACT_KIND.TASKS_RENAME, { taskId, name }).catch(() => false);
     if (!renamed) {
       setRenames((held) =>
         held.get(taskId) === name
@@ -1703,8 +1768,8 @@ export function useTasksTab(input: {
     setMarks((held) => new Map(held).set(taskId, next));
     const pinning = mark === TASK_MARK.PIN || mark === TASK_MARK.UNPIN;
     const asked = pinning
-      ? act(ACT_KIND.TASKS_PIN, { taskId: taskId, pinned: mark === TASK_MARK.PIN })
-      : act(ACT_KIND.TASKS_ARCHIVE, { taskId: taskId, archived: mark === TASK_MARK.ARCHIVE });
+      ? act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })
+      : act(ACT_KIND.TASKS_ARCHIVE, { taskId, archived: mark === TASK_MARK.ARCHIVE });
     asked
       .catch(() => false)
       .then((changed) => {
@@ -1911,7 +1976,7 @@ export function useTasksTab(input: {
       (held) => new Map([...held, ...asked.map(({ taskId, next }) => [taskId, next] as const)]),
     );
     const answers = asked.map(({ taskId }) =>
-      act(ACT_KIND.TASKS_ARCHIVE, { taskId: taskId, archived: true }).catch(() => false),
+      act(ACT_KIND.TASKS_ARCHIVE, { taskId, archived: true }).catch(() => false),
     );
     Promise.all(answers).then((changed) => {
       const refused = asked.filter((_, index) => !changed[index]);
@@ -2131,7 +2196,7 @@ export function useTasksTab(input: {
     repository: string | null,
   ): Promise<string | undefined> => {
     if (fixture !== undefined) return Promise.resolve(undefined);
-    return act(ACT_KIND.TASKS_SET_REPOSITORY, { taskId: taskId, repository }).then(
+    return act(ACT_KIND.TASKS_SET_REPOSITORY, { taskId, repository }).then(
       (answer) => ("failure" in answer ? repositoryFailureNote(answer.failure) : undefined),
       (refused: Error) => refused.message,
     );
@@ -2149,7 +2214,7 @@ export function useTasksTab(input: {
   ): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
     const choicesThen = workspaceChoices.current;
-    return act(ACT_KIND.TASKS_MOVE, { taskId: taskId, workspaceId })
+    return act(ACT_KIND.TASKS_MOVE, { taskId, workspaceId })
       .catch(() => ({ failure: TASK_CALL_FAILURE.UNANSWERED }) as const)
       .then((answer) => {
         if (!("failure" in answer)) {
@@ -2169,7 +2234,7 @@ export function useTasksTab(input: {
   // A fixture's tasks are read from nowhere, so an edit of one is never saved.
   const edit = (taskId: string, request: PlanEditRequest): Promise<TasksEditAnswer> => {
     if (fixture !== undefined) return Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
-    return act(ACT_KIND.TASKS_EDIT, { taskId: taskId, edit: request });
+    return act(ACT_KIND.TASKS_EDIT, { taskId, edit: request });
   };
 
   // The chip's menu stands on the open task's toolbar, so another task's is
@@ -2190,11 +2255,11 @@ export function useTasksTab(input: {
     (): PlanHistorySource => ({
       readPage: (taskId, before) =>
         act(ACT_KIND.TASKS_REVISIONS, {
-          taskId: taskId,
+          taskId,
           ...(before === undefined ? undefined : { before }),
         }),
-      readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId: taskId, seq }),
-      restore: (taskId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId: taskId, seq }),
+      readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId, seq }),
+      restore: (taskId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId, seq }),
     }),
     [act],
   );
@@ -2231,7 +2296,7 @@ export function useTasksTab(input: {
     repository: string | null,
     workspaceId: string | undefined,
     planning: boolean,
-    linearIssueId?: string,
+    from: NewTaskStart = {},
   ): Promise<string | undefined> => {
     const panelWasOpen = sidePanel.open;
     sidePanel.onSetOpen(false);
@@ -2243,7 +2308,8 @@ export function useTasksTab(input: {
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
-      ...(linearIssueId === undefined ? undefined : { linearIssueId }),
+      ...(from.linearIssueId === undefined ? undefined : { linearIssueId: from.linearIssueId }),
+      ...(from.issueId === undefined ? undefined : { issueId: from.issueId }),
       ...(planning ? undefined : { planning }),
     }).then(
       (answer) => {
@@ -2254,6 +2320,10 @@ export function useTasksTab(input: {
         if (planning && callingNow.current) {
           askOnOpen.current = answer.planId;
           setAskedFor(answer.planId);
+        }
+        if (from.agent === true) {
+          askedTaskOpened.current = false;
+          setAgentAskedFor(answer.planId);
         }
         return undefined;
       },
@@ -2305,6 +2375,18 @@ export function useTasksTab(input: {
     sidePanel.onShow(taskId, tab);
   };
 
+  // Note that a pull request two of the open task's agents share opens in the tab already open on it, whichever agent it stands under, as the panel's own door picks it (`changesTabOf`), so a link never stands a second tab on one pull request.
+  // Only a tab the task draws is taken, its agent one of the task's agents at hand: not an archived agent's, nor one of a page the panel stands beside instead.
+  const sharedChangesAgent = (planId: string, agentId: string): string => {
+    const url = planId === tasks.activeTaskId ? agents.pullRequests.get(agentId)?.url : undefined;
+    if (url === undefined) return agentId;
+    const drawn = agents.agentIds ?? [];
+    const open = sidePanel.changes.find(
+      (tab) => drawn.includes(tab.changes) && agents.pullRequests.get(tab.changes)?.url === url,
+    );
+    return open?.changes ?? agentId;
+  };
+
   // A link's workspace, by its slug or its id, listed where the account is in it and another is listed; answers the workspace listed after it.
   const listLinked = (workspace: string): string | undefined => {
     const home = viewed.workspaces.find((each) => each.slug === workspace || each.id === workspace);
@@ -2320,7 +2402,7 @@ export function useTasksTab(input: {
       showColumnTab(taskId, { agent: source.agentId });
       return;
     }
-    setReveal({ taskId: taskId, source });
+    setReveal({ taskId, source });
     showPanelTab(taskId, SIDE_PANEL_TAB.CALL);
   };
 
@@ -2385,7 +2467,7 @@ export function useTasksTab(input: {
         });
         return;
       case LINK_PLACE.CHANGES:
-        showPanelTab(place.planId, { changes: place.agentId });
+        showPanelTab(place.planId, { changes: sharedChangesAgent(place.planId, place.agentId) });
         return;
       case LINK_PLACE.AGENT:
         if (place.planId === undefined)
@@ -2683,6 +2765,9 @@ export function useTasksTab(input: {
     },
     listedAgents,
     workspaces: viewed.workspaces,
+    workspacesFailed: viewed.workspacesStatus === TASKS_READ.FAILED,
+    // A failed read is taken as stale, so the refresh reads the workspaces again at once.
+    onRetryWorkspaces: () => tell(ACT_KIND.TASKS_REFRESH),
     workspace: listedWorkspace,
     onChooseWorkspace: guard(switchWorkspace),
     onCreateWorkspace: createWorkspace,
@@ -2745,6 +2830,8 @@ export function useTasksTab(input: {
     unreadTabs,
     board: tasks.board,
     shownCode: tasks.shownCode,
+    workFailed: tasks.workStatus === TASKS_READ.FAILED,
+    onRetryWork: () => tell(ACT_KIND.TASKS_REFRESH),
     pages: tasks.pages,
     transcript: {
       region: transcript,
@@ -2920,7 +3007,7 @@ export function useTasksTab(input: {
     // The call card's way back lands where the task's call bar is in sight.
     secondCall: {
       confirm: secondCall,
-      question: secondCallQuestion(callCard({ view: voice.view, tasks: tasks }).taskName),
+      question: secondCallQuestion(callCard({ view: voice.view, tasks }).taskName),
     },
     onShowTask: guard((taskId: string) => showColumnTab(taskId, MAIN_TAB.PLAN)),
     // Each ask is its own, so the same section asked twice scrolls twice.
@@ -2979,6 +3066,8 @@ export function useTasksTab(input: {
     },
     onNewTask: () => newTaskWith(undefined),
     onNewTaskIn: (repository) => newTaskWith({ repository }),
+    onNewTaskFrom: (issue, agent) =>
+      newTaskWith({ issue, ...(agent === true ? { agent } : undefined) }),
     newTask: {
       open: newTaskAsk !== undefined,
       preset: newTaskAsk?.preset,

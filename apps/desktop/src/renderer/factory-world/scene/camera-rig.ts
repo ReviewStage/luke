@@ -1,6 +1,6 @@
+import type { WorldCameraRig, WorldPoint } from "@luke/panel/factory-world/world";
 import { MathUtils, type PerspectiveCamera, Vector3 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import type { WorldCameraRig, WorldPoint } from "../world";
 
 /**
  * camera-rig.ts -- the camera every world is seen through: orbit, pan, and zoom from the pointer with damping, a tweened flight to a point, and home to the establishing shot.

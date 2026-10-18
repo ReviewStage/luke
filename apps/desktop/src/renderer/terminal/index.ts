@@ -1,4 +1,4 @@
-import type { TerminalModule } from "./contract";
+import type { TerminalModule } from "@luke/panel/terminal/contract";
 import "./index.css";
 import { mountTerminal } from "./terminal-surface";
 

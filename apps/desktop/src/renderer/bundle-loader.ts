@@ -1,18 +1,18 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import type { DiffViewModule } from "@luke/panel/diff-view/contract";
+import type { WorldModule } from "@luke/panel/factory-world/world";
+import type { FileTreeModule } from "@luke/panel/file-tree/contract";
+import type { PlanEditorModule } from "@luke/panel/plan-editor/contract";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import type { TerminalModule } from "@luke/panel/terminal/contract";
+import type { WhiteboardModule } from "@luke/panel/whiteboard/contract";
 import type { DiagramModule } from "@luke/ui/diagram-contract";
 import { Effect } from "effect";
 import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { createContext, useCallback, useContext } from "react";
-import type { DiffViewModule } from "./diff-view/contract";
 import type { FactorySceneModule } from "./factory-world/contract";
 import type { WorldEntry } from "./factory-world/registry";
-import type { WorldModule } from "./factory-world/world";
-import type { FileTreeModule } from "./file-tree/contract";
-import type { PlanEditorModule } from "./plan-editor/contract";
-import { rendererRuntime } from "./renderer-runtime";
-import type { TerminalModule } from "./terminal/contract";
-import type { WhiteboardModule } from "./whiteboard/contract";
 
 /**
  * bundle-loader.ts -- the bundles of the panel's own that are too large for the one every window parses, each imported the first time it is needed and kept for the window's life.
@@ -92,7 +92,7 @@ const SIDE_BUNDLE_IMPORTERS: SideBundleImporters = {
     import("./whiteboard/asset-path")
       .then(() => import("./whiteboard/index"))
       .then((entry) => entry.whiteboard),
-  fileTree: () => import("./file-tree/index").then((entry) => entry.fileTree),
+  fileTree: () => import("@luke/panel/file-tree/index").then((entry) => entry.fileTree),
   terminal: () => import("./terminal/index").then((entry) => entry.terminal),
   diagram: () => import("./diagram/index").then((entry) => entry.diagram),
   diffView: () => import("./diff-view/index").then((entry) => entry.diffView),

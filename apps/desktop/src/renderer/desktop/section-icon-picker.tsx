@@ -9,7 +9,8 @@ import {
   type TaskSectionIconColor,
   taskSectionIconSchema,
 } from "@luke/features/task-section-wire";
-import { IconButton, Segmented, TextField } from "@luke/ui";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { IconButton, SearchField, Segmented, TextField } from "@luke/ui";
 import {
   emojiGroups,
   findEmoji,
@@ -38,7 +39,6 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
-import { rendererRuntime } from "../renderer-runtime";
 import { Tooltip } from "../tooltip";
 
 /**
@@ -433,16 +433,13 @@ export function SectionIconPicker({
     setColor(next);
     if (icon?.kind === TASK_SECTION_ICON_KIND.GLYPH) onIcon(glyphIcon(icon.glyph, next));
   };
-  const searchKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    // Enter chooses the first thing found, as a press on it would.
-    if (event.key === "Enter") {
-      event.preventDefault();
-      grid.current?.querySelector<HTMLButtonElement>("button")?.click();
-    }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      grid.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus();
-    }
+  // Enter, shifted or not, chooses the first thing found, as a press on it would.
+  const chooseFirst = () => grid.current?.querySelector<HTMLButtonElement>("button")?.click();
+  // Note that the search's own keys stop at Enter and Escape, so the arrow down into the grid is heard around it.
+  const toGrid = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "ArrowDown" || !(event.target instanceof HTMLInputElement)) return;
+    event.preventDefault();
+    grid.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus();
   };
   return (
     <fieldset className="section-icon-picker" disabled={disabled}>
@@ -467,16 +464,17 @@ export function SectionIconPicker({
           />
         </Tooltip>
       </div>
-      <input
-        type="search"
-        className="dialog-name-field section-icon-search"
-        aria-label={tab === ICON_TAB.ICONS ? "Search icons" : "Search emoji"}
-        placeholder={tab === ICON_TAB.ICONS ? "Search icons" : "Search emoji"}
-        spellCheck={false}
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        onKeyDown={searchKey}
-      />
+      <search onKeyDown={toGrid}>
+        <SearchField
+          label={tab === ICON_TAB.ICONS ? "Search icons" : "Search emoji"}
+          placeholder={tab === ICON_TAB.ICONS ? "Search icons" : "Search emoji"}
+          value={query}
+          onChange={setQuery}
+          onClear={() => setQuery("")}
+          onEnter={chooseFirst}
+          onShiftEnter={chooseFirst}
+        />
+      </search>
       {tab === ICON_TAB.ICONS ? <ColorChoices color={color} onColor={recolor} /> : null}
       <fieldset
         className="section-icon-choices"

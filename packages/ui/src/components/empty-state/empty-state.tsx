@@ -27,6 +27,8 @@ export interface EmptyStateAction {
   /** The glyph before its words, where one says what the press does. */
   readonly icon?: ReactNode;
   readonly onClick: () => void;
+  /** Whether the press is unavailable for now, as the same act elsewhere on the page is. */
+  readonly disabled?: boolean | undefined;
 }
 
 /**
@@ -63,7 +65,12 @@ export function EmptyState({
           <Text tone={TEXT_TONE.MUTED}>{children}</Text>
         </div>
         {action === undefined ? null : (
-          <Button variant={BUTTON_VARIANT.QUIET} icon={action.icon} onClick={action.onClick}>
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            icon={action.icon}
+            disabled={action.disabled}
+            onClick={action.onClick}
+          >
             {action.label}
           </Button>
         )}

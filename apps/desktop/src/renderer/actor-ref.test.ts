@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -13,7 +14,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { onRegistry } from "#testing/copy-feedback";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "./actor-ref";
 
 /**
@@ -58,7 +58,7 @@ function draw(element: ReactElement): HTMLElement {
 
 test("a person stands as their letter until their picture loads, and as the picture once it has", () => {
   const view = draw(createElement(ActorMark, { actor: { ...DANA, pictureUrl: PICTURE } }));
-  const face = () => view.querySelector(".actor-face") ?? assert.fail("a face stands");
+  const face = () => view.querySelector(".actor-mark") ?? assert.fail("a face stands");
   const picture = view.querySelector("img") ?? assert.fail("the picture is asked for");
 
   assert.equal(face().textContent, "D");
@@ -71,7 +71,7 @@ test("a picture that fails leaves the letter standing", () => {
   act(() => view.querySelector("img")?.dispatchEvent(new Event("error")));
 
   assert.equal(view.querySelector("img"), null);
-  assert.equal(view.querySelector(".actor-face")?.textContent, "D");
+  assert.equal(view.querySelector(".actor-mark")?.textContent, "D");
 });
 
 test("each kind of actor stands on its own kind of mark, which a screen reader skips for the name beside it", () => {
@@ -186,8 +186,8 @@ test("someone on GitHub stands by their avatar, a person on a circle with their 
   );
   const [person, bot] = [...view.querySelectorAll<HTMLElement>('.actor-mark[data-kind="github"]')];
   assert.ok(person && bot);
-  assert.equal(person.querySelector(".actor-face")?.textContent, "O");
-  assert.equal(bot.querySelector(".actor-face")?.textContent, "", "a bot's square holds no letter");
+  assert.equal(person?.textContent, "O");
+  assert.equal(bot?.textContent, "", "a bot's square holds no letter");
   assert.ok(bot.querySelector(".lucide-bot"), "a bot wears its robot until its avatar loads");
   const picture = bot.querySelector("img") ?? assert.fail("the avatar is asked for");
   act(() => picture.dispatchEvent(new Event("load")));
@@ -324,7 +324,7 @@ test("a person GitHub names by login alone stands by the avatar GitHub serves fo
   );
   act(() => picture.dispatchEvent(new Event("error")));
   assert.equal(person?.querySelector("img"), null);
-  assert.equal(person?.querySelector(".actor-face")?.textContent, "O");
+  assert.equal(person?.textContent, "O");
   assert.equal(bot?.querySelector("img"), null, "a bot's login names no picture of its App's");
   assert.ok(bot?.querySelector(".lucide-bot"));
 });
@@ -355,7 +355,7 @@ test("a member who left keeps their own face, their picture or else their letter
   const [withPicture, withLetter] = [...view.querySelectorAll<HTMLElement>(".actor-mark")];
 
   assert.equal(withPicture?.querySelector("img")?.getAttribute("src"), picture);
-  assert.equal(withLetter?.querySelector(".actor-face")?.textContent, "L");
+  assert.equal(withLetter?.textContent, "L");
   assert.equal(view.querySelector("[data-actor-ref]")?.textContent, "LLee Park (former member)");
 });
 

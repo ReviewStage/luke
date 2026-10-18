@@ -3,34 +3,42 @@
 import assert from "node:assert/strict";
 import { ISSUE_CALL_FAILURE, type IssueListView } from "@luke/features/issue-view";
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { runAppCommand, useAppKeymap } from "@luke/panel/app-commands";
+import {
+  PLACEMENT_END,
+  type PlanEditorModule,
+  type PlanEditorPlacement,
+  type PlanEditorProps,
+} from "@luke/panel/plan-editor/contract";
+import { lineWords } from "@luke/panel/testing/actor-line";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { relayout } from "@luke/panel/testing/resize-observer";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { ToastHost } from "@luke/panel/toast";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { lineWords } from "#testing/actor-line";
-import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { onRegistry } from "#testing/copy-feedback";
-import { installScrollIntoView } from "#testing/scroll-into-view";
+import { playMotions } from "#testing/pane-motion";
 import { landedBundles, onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
-import { runAppCommand, useAppKeymap } from "../app-commands";
-import type { SideBundles } from "../bundle-loader";
-import type { PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
-import { ISSUES_PAGE, type IssuesPlace } from "../tasks/use-tasks-tab";
-import { ToastHost } from "../toast";
+import { type SideBundles, sideBundles } from "../bundle-loader";
+import { ISSUES_PAGE, type IssuesPlace, type NewTaskIssue } from "../tasks/use-tasks-tab";
 import { IssuesPage } from "./issues-page";
 
 /**
- * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return opening a row, an issue's page saying who filed it and when it was filed and last changed, and a read that did not land said with a retry.
+ * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return peeking a row beside the board and ⌘Return opening its page, an issue's page saying who filed it and when it was filed and last changed and listing the tasks started from it, Start task… opening New task on an issue, and a read that did not land said with a retry.
  *
  * The service is a script at the act boundary; synthetic issues and words throughout.
  * The description's editor is the plan's TipTap bundle, tested beside it
@@ -51,6 +59,13 @@ const DAY = 24 * HOUR;
 
 /** The moment the window's clock stands at in a test that reads how long ago something was. */
 const NOW = Date.UTC(2026, 9, 14, 12);
+
+/**
+ * The moment the window's clock stands at otherwise: a day past the epoch,
+ * so the synthetic issues, stamped in its first seconds, are recent, and a
+ * settled one among them is not left out as gone quiet.
+ */
+const EARLY = DAY;
 
 /** The signed-in reader's account. */
 const READER = "user-grace";
@@ -92,6 +107,8 @@ interface StandInEditor {
   readonly element: HTMLElement;
   text: string;
   destroyed: boolean;
+  /** Where each press on the text's room put the caret while the editor stood. */
+  readonly placed: PlanEditorPlacement[];
 }
 
 /** Every editor the description mounted, newest last. */
@@ -106,13 +123,23 @@ const EDITOR_STAND_IN: PlanEditorModule = {
     element.setAttribute("aria-label", props.label);
     element.tabIndex = 0;
     host.append(element);
-    const editor: StandInEditor = { props, element, text: props.markdown, destroyed: false };
+    const editor: StandInEditor = {
+      props,
+      element,
+      text: props.markdown,
+      destroyed: false,
+      placed: [],
+    };
     editors.push(editor);
     if (props.focus) element.focus();
     return {
       take: (_sent, merged) => ({ base: merged, text: merged }),
       chooseMention: () => undefined,
       markdown: () => editor.text,
+      focusAt: (placement) => {
+        editor.placed.push(placement);
+        element.focus();
+      },
       insertPictures: () => undefined,
       settlePicture: () => undefined,
       removePicture: () => undefined,
@@ -162,8 +189,18 @@ let heldCreates: (() => void)[] | undefined;
 let changeRefused = false;
 /** Every text copied, in order. */
 let copied: string[] = [];
+/** The listed workspace's tasks, as the tab holds them, and its archived ones. */
+let tasksListed: TaskSummary[] = [];
+let tasksArchived: TaskSummary[] = [];
+/** Every issue New task was opened on, in order, with `agent` where it was opened as a new agent's card. */
+let newTasksFrom: (NewTaskIssue & { readonly agent?: boolean })[] = [];
+/** Every task opened, in order. */
+let tasksOpened: string[] = [];
+/** The account signed in as the page is drawn. */
+let signedIn = READER;
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"], now: EARLY });
   installScrollIntoView();
   window.localStorage.clear();
   standing = [];
@@ -179,6 +216,11 @@ beforeEach(() => {
   heldCreates = undefined;
   changeRefused = false;
   copied = [];
+  tasksListed = [];
+  tasksArchived = [];
+  newTasksFrom = [];
+  tasksOpened = [];
+  signedIn = READER;
   editors.length = 0;
   bundles = landed;
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
@@ -264,6 +306,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  for (const sheet of document.head.querySelectorAll("style[data-laid-out]")) sheet.remove();
 });
 
 /** The registry every render of one mount shares, so a render again is the same window. */
@@ -287,7 +330,11 @@ function Pages({
   const control = tasksControl({ workspace });
   const tasks = tasksControl({
     workspace,
-    me: READER,
+    me: signedIn,
+    tasks: tasksListed,
+    archived: tasksArchived,
+    onNewTaskFrom: (from, agent) => newTasksFrom.push(agent === true ? { ...from, agent } : from),
+    onSelect: (taskId) => tasksOpened.push(taskId),
     issuesView: {
       ...control.issuesView,
       open: true,
@@ -361,13 +408,36 @@ function showList(): void {
   act(() => menuItem("List").click());
 }
 
-/** The page opened on one issue, its own read answered. */
+/** A ⌘-press on a card or row, which opens its issue's page rather than peeking it. */
+function commandClick(target: HTMLElement): void {
+  act(() => {
+    target.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+    );
+  });
+}
+
+/** ⌘Return on the element holding the keyboard, as the window hears it. */
+function commandReturn(target: EventTarget = document.activeElement ?? document.body): void {
+  act(() => {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+}
+
+/** The page opened on one issue from its card with ⌘ held, its own read answered. */
 async function openIssue(issueId: string): Promise<HTMLElement> {
   const page = mount();
   await settle();
   const row = page.querySelector<HTMLButtonElement>(`[data-issue-id="${issueId}"] button`);
   assert.ok(row, `no row for ${issueId}`);
-  act(() => row.click());
+  commandClick(row);
   await settle();
   return page;
 }
@@ -379,7 +449,7 @@ function titleOf(page: HTMLElement): string | undefined {
 
 /** What the line under the issue's title says, a phrase at a time, each face left out. */
 function bylineOf(page: HTMLElement): (string | undefined)[] {
-  return [...page.querySelectorAll(".issue-byline .actor-line")].map(lineWords);
+  return [...page.querySelectorAll(".plan-byline .actor-line")].map(lineWords);
 }
 
 /** The button whose words or name are `name`, wherever it is drawn. */
@@ -431,7 +501,7 @@ function picked(page: HTMLElement, label: string): string | undefined {
 function pick(page: HTMLElement, label: string, option: string): void {
   act(() => picker(page, label).click());
   const row = [...document.querySelectorAll<HTMLButtonElement>("[role=option]")].find(
-    (each) => each.querySelector(".task-compose-menu-name")?.textContent === option,
+    (each) => each.querySelector(".luke-combobox-option-label")?.textContent === option,
   );
   assert.ok(row, `no ${option} in ${label}`);
   act(() => row.click());
@@ -602,7 +672,7 @@ test("C pressed on the page opens the card, and a c typed into the card's title,
 
   const row = page.querySelector<HTMLButtonElement>(`[data-issue-id="${issue(1).id}"] button`);
   assert.ok(row);
-  act(() => row.click());
+  commandClick(row);
   await settle();
   const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
   assert.ok(title);
@@ -614,7 +684,7 @@ test("C pressed on the page opens the card, and a c typed into the card's title,
   assert.equal(document.querySelectorAll("[role=dialog]").length, 0, "no card opened while typing");
 });
 
-test("↓ and Return open the issue reached, read on its own page; Escape comes back to the list with its row holding the keyboard, and Escape again closes the page", async () => {
+test("↓ and ⌘Return open the issue reached, read on its own page; Escape comes back to the list with its row holding the keyboard, and Escape again closes the page", async () => {
   standing = [
     issue(1, { status: ISSUE_STATUS.DONE }),
     issue(2, { status: ISSUE_STATUS.IN_PROGRESS, title: "Fix login" }),
@@ -627,7 +697,7 @@ test("↓ and Return open the issue reached, read on its own page; Escape comes 
   });
   const reached = document.activeElement;
   assert.ok(reached instanceof HTMLButtonElement && page.contains(reached));
-  act(() => reached.click());
+  commandReturn(reached);
   await settle();
 
   assert.deepEqual(reads, [issue(2).id]);
@@ -730,7 +800,7 @@ test("under the title an issue's page says who filed it, by their face as the me
   const page = await openIssue(filed.id);
 
   assert.deepEqual(bylineOf(page), ["Created by Ada Lovelace · 3d ago", "Last edited · 2h ago"]);
-  const picture = page.querySelector<HTMLImageElement>(".issue-byline .actor-mark img");
+  const picture = page.querySelector<HTMLImageElement>(".plan-byline .actor-mark img");
   assert.ok(picture?.src.startsWith("https://avatars.githubusercontent.com/u/1"), "her picture");
 });
 
@@ -839,6 +909,50 @@ test("an issue's page opened on an issue the service does not hand the reader, a
   assert.match(page.textContent ?? "", /This issue is gone, or not in this workspace\./u);
 });
 
+test("an issue's page opened before its issue is read, as a link opens it, stands the issue's page in blocks, said as reading, until the issue lands in their place", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = mount({ kind: ISSUES_PAGE.ISSUE, issueId: issue(1).id });
+  const reading = page.querySelector('[role="status"]');
+  const readingWords = reading?.textContent;
+  const readingTitle = titleOf(page);
+  await settle();
+
+  assert.equal(readingWords, "Reading the issue");
+  assert.ok(
+    reading?.closest(".desktop-document .plan-document-scroll"),
+    "the blocks stand in the issue's own document, in a plan's own column",
+  );
+  assert.equal(readingTitle, undefined);
+  assert.equal(page.querySelector('[role="status"]'), null);
+  assert.equal(titleOf(page), "Fix login");
+});
+
+test("an issue's description is drawn a section at a time, as a plan's text is, so its sections stand a plan's gap apart", async () => {
+  standing = [
+    issue(1, { description: "Fails on CI.\n\n## Steps\n\nRun it twice.\n\n## Fix\n\nRetry once." }),
+  ];
+  const page = await openIssue(issue(1).id);
+
+  assert.deepEqual(
+    [...descriptionOf(page).querySelectorAll(":scope > .plan-unit")].map(
+      (unit) => unit.textContent,
+    ),
+    ["Fails on CI.", "Steps\nRun it twice.", "Fix\nRetry once."],
+  );
+  assert.ok(descriptionOf(page).classList.contains("document-sections"));
+});
+
+test("an issue's document stands in a plan's own scrolling column and body, its title, byline, and description together, as a plan's do", async () => {
+  standing = [issue(1, { title: "Fix login", description: "Fails on CI." })];
+  const page = await openIssue(issue(1).id);
+
+  const body = page.querySelector(".desktop-document > .plan-document-scroll > .plan-body");
+  assert.ok(body, "the issue's body stands where a plan's does");
+  assert.equal(body.querySelector("[aria-label='Issue title']")?.textContent, "Fix login");
+  assert.ok(body.querySelector(".plan-byline"), "the line under the title is a plan's");
+  assert.equal(descriptionOf(page).closest(".plan-body"), body);
+});
+
 test("two changes at once draw the newest's answer, though the older one is answered after it", async () => {
   standing = [issue(1)];
   const page = await openIssue(issue(1).id);
@@ -893,7 +1007,117 @@ test("a click into the description opens the plan's editor in its place, the car
   );
 });
 
-test("Return on the description opens the editor with the caret at the end of its last section", async () => {
+/**
+ * The issue's page laid out as a window draws it: its document's column scrolls,
+ * as its stylesheet says, and stands from 0 to 1000 across, and the
+ * description's words from 100 to 800 across and 200 to 240 down. Laid out
+ * before the page is drawn, as a window's stylesheet is.
+ */
+function layPageOut(): void {
+  const sheet = document.createElement("style");
+  sheet.dataset.laidOut = "";
+  sheet.textContent = ".plan-document-scroll { overflow-y: auto; }";
+  document.head.append(sheet);
+  const wide = DOMRect.fromRect({ x: 0, y: 0, width: 1000, height: 900 });
+  const words = DOMRect.fromRect({ x: 100, y: 200, width: 700, height: 40 });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains("plan-document-scroll") ? wide : words;
+  });
+}
+
+/** The document's column, whose room is the description's way in. */
+function columnOf(page: HTMLElement): HTMLElement {
+  return (
+    page.querySelector<HTMLElement>(".plan-document-scroll") ?? assert.fail("the document's column")
+  );
+}
+
+/** A press on `target` at the point given, its button going down and coming up; answers whether the press was taken. */
+function pressAt(target: Element, x: number, y: number): boolean {
+  const down = new MouseEvent("mousedown", {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+  });
+  act(() => {
+    target.dispatchEvent(down);
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y }));
+  });
+  return down.defaultPrevented;
+}
+
+test("a press anywhere on the page's room under an empty description opens its editor at the end", async () => {
+  standing = [issue(1)];
+  layPageOut();
+  const page = await openIssue(issue(1).id);
+  const column = columnOf(page);
+
+  const taken = pressAt(column, 400, 700);
+
+  assert.ok(!taken, "a drag from the room still selects, as a press on a page does");
+  assert.equal(openEditor().props.markdown, "");
+  assert.deepEqual(openEditor().props.placement, PLACEMENT_END);
+});
+
+test("a press on the room beside the description opens it on the nearest line, and one above it, by the title, opens nothing", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  layPageOut();
+  const page = await openIssue(issue(1).id);
+  const column = columnOf(page);
+  const body = page.querySelector(".plan-body") ?? assert.fail("the issue's body");
+
+  const aboveTaken = pressAt(body, 400, 120);
+  const openedAbove = editors.length;
+  pressAt(column, 900, 220);
+
+  assert.ok(!aboveTaken);
+  assert.equal(openedAbove, 0, "a press above the description opens nothing");
+  assert.deepEqual(
+    openEditor().props.placement,
+    { x: 799, y: 220 },
+    "the nearest line, at the words' own edge",
+  );
+});
+
+test("a press on the room while the description's editor loads is where the editor opens", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  const gate = Promise.withResolvers<PlanEditorModule>();
+  bundles = sideBundles({ planEditor: () => gate.promise });
+  layPageOut();
+  const page = await openIssue(issue(1).id);
+  const column = columnOf(page);
+
+  pressAt(column, 400, 700);
+  pressAt(column, 900, 220);
+  await act(async () => {
+    gate.resolve(EDITOR_STAND_IN);
+    await gate.promise;
+  });
+  await settle();
+
+  assert.deepEqual(openEditor().props.placement, { x: 799, y: 220 });
+});
+
+test("a press on the room while the description is open moves its caret to the end and keeps it open", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  layPageOut();
+  const page = await openIssue(issue(1).id);
+  const column = columnOf(page);
+  const editor = openDescription(page);
+
+  const taken = pressAt(column, 400, 700);
+  await settle();
+
+  assert.ok(taken, "the press keeps the keyboard in the editor");
+  assert.deepEqual(editor.placed, [PLACEMENT_END]);
+  assert.ok(!editor.destroyed);
+  assert.deepEqual(changes, []);
+});
+
+test("Return on the description opens the editor with the caret at the end of its text", async () => {
   standing = [issue(1, { description: "Fails on CI.\n\n## Steps\n\nRun it twice." })];
   const page = await openIssue(issue(1).id);
 
@@ -901,7 +1125,7 @@ test("Return on the description opens the editor with the caret at the end of it
   act(() => description.focus());
   press("Enter", description);
 
-  assert.deepEqual(openEditor().props.placement, { section: 1 });
+  assert.deepEqual(openEditor().props.placement, PLACEMENT_END);
   assert.equal(openEditor().props.markdown, "Fails on CI.\n\n## Steps\n\nRun it twice.");
 });
 
@@ -938,7 +1162,7 @@ test("a description left as it opened sends nothing and closes", async () => {
   assert.equal(descriptionOf(page).textContent, "Fails on CI.");
 });
 
-test("a save the service refused keeps every word typed in the open editor and says so", async () => {
+test("a save the service refused keeps every word typed in the open editor and says so, with a Retry that sends them again", async () => {
   standing = [issue(1)];
   changeRefused = true;
   const page = await openIssue(issue(1).id);
@@ -951,6 +1175,16 @@ test("a save the service refused keeps every word typed in the open editor and s
   assert.ok(!editor.destroyed, "the editor stays open");
   assert.equal(editor.text, "Steps to reproduce");
   assert.match(page.textContent ?? "", /Couldn't save the description/u);
+
+  changeRefused = false;
+  act(() => button("Retry").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "Steps to reproduce" } },
+    { issueId: issue(1).id, change: { description: "Steps to reproduce" } },
+  ]);
+  assert.ok(editor.destroyed, "the editor closes once Retry's save is kept");
 });
 
 test("a description past its bound is not sent, and the open editor says why", async () => {
@@ -964,7 +1198,7 @@ test("a description past its bound is not sent, and the open editor says why", a
 
   assert.deepEqual(changes, []);
   assert.ok(!editor.destroyed, "the editor stays open");
-  assert.match(page.textContent ?? "", /The description is too long/u);
+  assert.match(page.textContent ?? "", /Not saved: the description is too long/u);
 });
 
 test("a finish while a save is out waits for it, then sends the words typed meanwhile, and the editor closes once those are kept", async () => {
@@ -1232,7 +1466,7 @@ test("the page opens as a board: a column for every status in the order work mov
   assert.equal(page.querySelector(".home-section"), null, "no list stands beside the board");
 });
 
-test("on the board ↓ and ↑ move down a column, ← and → to the nearest card of the next column holding any, and Return opens the card reached", async () => {
+test("on the board ↓ and ↑ move down a column, ← and → to the nearest card of the next column holding any, and ⌘Return opens the card reached on its page", async () => {
   standing = [
     issue(1, { status: ISSUE_STATUS.TODO, priority: ISSUE_PRIORITY.HIGH }),
     issue(2, { status: ISSUE_STATUS.TODO, priority: ISSUE_PRIORITY.LOW }),
@@ -1255,7 +1489,7 @@ test("on the board ↓ and ↑ move down a column, ← and → to the nearest ca
   const up = reached();
   const card = document.activeElement;
   assert.ok(card instanceof HTMLButtonElement, "a card holds the keyboard");
-  act(() => card.click());
+  commandReturn(card);
   await settle();
 
   assert.deepEqual(
@@ -1326,7 +1560,7 @@ test("on a board wider than the window, the column of the card reached stands wh
   const byArrow = scrolledTo();
   const card = document.activeElement;
   assert.ok(card instanceof HTMLButtonElement);
-  act(() => card.click());
+  commandReturn(card);
   await settle();
   act(() => {
     runAppCommand(APP_COMMAND.EXIT_ISSUES);
@@ -1351,7 +1585,7 @@ test("View options lays the page out as the list and back as the board, and an i
   showList();
   const listed = page.querySelector(".home-section") !== null;
   const row = listRowOf(page, issue(1));
-  act(() => row.click());
+  commandClick(row);
   await settle();
   act(() => button("Issues").click());
   await settle();
@@ -1365,7 +1599,7 @@ test("View options lays the page out as the list and back as the board, and an i
   assert.equal(page.querySelector(".home-section"), null);
 });
 
-test("while the issues are read the list stands rows of blocks, said as reading, and the board stands nothing until its columns can", async () => {
+test("while the issues are read the list stands rows of blocks and the board a column of blocks for every status, each said as reading", async () => {
   standing = [issue(1)];
   window.localStorage.setItem("luke.issuesLayout", JSON.stringify("list"));
   const list = mount();
@@ -1378,12 +1612,17 @@ test("while the issues are read the list stands rows of blocks, said as reading,
   window.localStorage.setItem("luke.issuesLayout", JSON.stringify("board"));
   const board = mount();
   const boardReading = board.querySelector('[role="status"]');
+  const readingColumns = boardReading?.querySelectorAll(".issue-column").length;
+  const readingCards = boardReading?.querySelectorAll("[data-issue-id]").length;
   await settle();
 
   assert.equal(reading, "Reading issues");
   assert.equal(read, null);
   assert.deepEqual(listedGroups, [["Backlog1", ["ACME-1 Issue 1"]]]);
-  assert.equal(boardReading, null);
+  assert.equal(boardReading?.textContent, "Reading issues");
+  assert.equal(readingColumns, 5, "a column for every status stands while the board is read");
+  assert.equal(readingCards, 0, "no issue's card stands before the issues are read");
+  assert.equal(board.querySelector('[role="status"]'), null);
   assert.deepEqual(columns(board)[0], ["Backlog1", ["ACME-1"]]);
 });
 
@@ -1410,23 +1649,49 @@ test("the page opens again in the layout last chosen, the list after List and th
   assert.equal(thirdTime.querySelector(".home-section"), null);
 });
 
-test("a workspace with no issue yet still stands the board's columns, each saying it holds none", async () => {
+/** The empty workspace's own New issue, under its line. */
+function emptyStateNewIssue(page: HTMLElement): HTMLButtonElement | null {
+  return page.querySelector<HTMLButtonElement>(".luke-empty-state button");
+}
+
+test("a workspace with no issue yet says so on the board and in the list, its New issue opening the card, and the first issue filed stands the board's columns", async () => {
   const page = mount();
   await settle();
+  const boardSays = page.querySelector(".luke-empty-state")?.textContent;
+  const boardColumns = columns(page).length;
+  showList();
+  const listSays = page.querySelector(".luke-empty-state")?.textContent;
+  act(() => button("View options").click());
+  act(() => menuItem("Board").click());
 
+  const newIssue = emptyStateNewIssue(page);
+  assert.ok(newIssue, "the empty state offers New issue");
+  act(() => newIssue.click());
+  const field = composerField();
+  assert.ok(field, "the empty state's New issue opens the card");
+  const whileOpen = emptyStateNewIssue(page)?.disabled;
+  typeInto(field, "First issue");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+
+  assert.equal(boardSays, "No issues yetNew issue");
+  assert.equal(boardColumns, 0, "no empty column stands on an empty workspace's board");
+  assert.equal(listSays, "No issues yetNew issue");
+  assert.equal(
+    whileOpen,
+    true,
+    "New issue is unavailable while the card stands, as the toolbar's is",
+  );
+  assert.equal(page.querySelector(".luke-empty-state"), null);
   assert.deepEqual(columns(page), [
-    ["Backlog", []],
+    ["Backlog1", ["ACME-1"]],
     ["Todo", []],
     ["In progress", []],
     ["Done", []],
     ["Canceled", []],
   ]);
-  assert.equal(
-    [...page.querySelectorAll("[data-issue-column] p")].filter(
-      (idle) => idle.textContent === "No issues",
-    ).length,
-    5,
-  );
 });
 
 test("once the page has come back from an issue, a layout chosen keeps the keyboard on View options rather than that issue's row", async () => {
@@ -1443,6 +1708,7 @@ test("once the page has come back from an issue, a layout chosen keeps the keybo
 });
 
 test("a column's + opens the new issue's card with that column's status chosen, the priority at its default, and the title holding the keyboard", async () => {
+  standing = [issue(1)];
   mount();
   await settle();
 
@@ -1746,7 +2012,7 @@ function dragCard(page: HTMLElement, issueId: string, to: { x: number; y: number
       marked:
         page.querySelector<HTMLElement>("[data-drop-target='true']")?.dataset.issueColumn ??
         undefined,
-      carried: page.querySelector(".issue-board > [data-carried]") !== null,
+      carried: document.querySelector("[data-carried] .issue-board .sidebar-task-item") !== null,
     };
     window.dispatchEvent(pointer("pointerup", to.x, to.y));
   });
@@ -1772,13 +2038,13 @@ test("a Todo card dragged onto Done is carried there, Done marked as where it la
     ["Canceled", []],
   ]);
   assert.equal(
-    page.querySelectorAll("[data-carried], [data-dragging], [data-drop-target]").length,
+    document.querySelectorAll("[data-carried], [data-dragging], [data-drop-target]").length,
     0,
   );
   assert.deepEqual(opened, [], "the drop opens nothing");
 });
 
-test("a card let go over its own column sends nothing, and a press that does not move still opens it", async () => {
+test("a card let go over its own column sends nothing, and a ⌘-press that does not move still opens its page", async () => {
   standing = [issue(1, { status: ISSUE_STATUS.TODO }), issue(2, { status: ISSUE_STATUS.TODO })];
   const page = mount();
   await settle();
@@ -1790,7 +2056,7 @@ test("a card let go over its own column sends nothing, and a press that does not
   act(() => {
     card.dispatchEvent(pointer("pointerdown", 350, 60));
     window.dispatchEvent(pointer("pointerup", 350, 60));
-    card.click();
+    card.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }));
   });
   await settle();
 
@@ -1831,4 +2097,707 @@ test("a card is sent the status of the column it is let go over, though the last
 
   assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
   assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
+});
+
+/** A task of the listed workspace, started from the issue given where one is. */
+function task(id: string, name: string, issueId?: string, createdAt = 1): TaskSummary {
+  return {
+    id,
+    workspaceId: WORKSPACE.id,
+    name,
+    createdAt,
+    updatedAt: createdAt,
+    repository: null,
+    ...(issueId === undefined ? undefined : { issueId }),
+  };
+}
+
+/** The tasks the issue's page lists as started from it, by name, in order; none where it draws no row. */
+function workOf(page: HTMLElement): string[] | undefined {
+  const row = page.querySelector(".issue-work");
+  if (row === null) return undefined;
+  return [...row.querySelectorAll("button")].map((each) => each.textContent ?? "");
+}
+
+test("an issue's ⋯ offers Start task…, which opens New task on the issue by its identifier and title, in its workspace", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  await openIssue(issue(1).id);
+
+  act(() => button("Issue actions").click());
+  act(() => menuItem("Start task…").click());
+
+  assert.deepEqual(newTasksFrom, [
+    { id: issue(1).id, workspaceId: WORKSPACE.id, identifier: "ACME-1", title: "Fix login" },
+  ]);
+  assert.deepEqual(changes, []);
+});
+
+test("a card's menu offers Start task… for its own issue", async () => {
+  standing = [issue(1), issue(2, { title: "Fix logout" })];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(2).id));
+  act(() => menuItem("Start task…").click());
+
+  assert.deepEqual(newTasksFrom, [
+    { id: issue(2).id, workspaceId: WORKSPACE.id, identifier: "ACME-2", title: "Fix logout" },
+  ]);
+});
+
+test("an issue's page lists the tasks started from it, and none of another issue's, each opening its task", async () => {
+  standing = [issue(1), issue(2)];
+  tasksListed = [
+    task("task-newer", "Fix login, again", issue(1).id, 2),
+    task("task-other", "Fix logout", issue(2).id, 2),
+    task("task-plain", "Tidy", undefined, 2),
+    task("task-older", "Fix login", issue(1).id, 1),
+  ];
+  const page = await openIssue(issue(1).id);
+
+  assert.deepEqual(workOf(page), ["Fix login, again", "Fix login"]);
+  act(() => button("Open Fix login").click());
+  assert.deepEqual(tasksOpened, ["task-older"]);
+});
+
+test("an issue no task was started from draws no row of tasks", async () => {
+  standing = [issue(1), issue(2)];
+  tasksListed = [task("task-other", "Fix logout", issue(2).id), task("task-plain", "Tidy")];
+  const page = await openIssue(issue(1).id);
+
+  assert.equal(workOf(page), undefined);
+});
+
+test("an issue's page lists its archived tasks too, and its tasks newest started first whatever the sidebar's pins put first", async () => {
+  standing = [issue(1)];
+  // The sidebar's order: a pinned task, the oldest, ahead of a newer one.
+  tasksListed = [
+    { ...task("task-pinned", "First try", issue(1).id, 1), pinnedAt: 5 },
+    task("task-newest", "Third try", issue(1).id, 3),
+  ];
+  tasksArchived = [{ ...task("task-archived", "Second try", issue(1).id, 2), archivedAt: 4 }];
+  const page = await openIssue(issue(1).id);
+
+  assert.deepEqual(workOf(page), ["Third try", "Second try", "First try"]);
+});
+
+/** The item whose label, its glyph and any detail left out, is `name`, of the newest menu standing open that holds one: a submenu before the menu it hangs from. */
+function labelledItem(name: string): HTMLButtonElement {
+  const found = [
+    ...document.querySelectorAll<HTMLElement>(
+      '[role="menu"]:not([data-leaving]) .luke-menu-item-label',
+    ),
+  ].findLast((each) => each.textContent === name);
+  const item = found?.closest<HTMLButtonElement>("button");
+  assert.ok(item, `no menu item labelled ${name}`);
+  return item;
+}
+
+/** One choice of View options taken: the submenu named opened, where one is, and the choice in it. */
+function chooseView(choice: string, submenu?: string): void {
+  act(() => button("View options").click());
+  if (submenu !== undefined) act(() => labelledItem(submenu).click());
+  act(() => labelledItem(choice).click());
+}
+
+/** Whether View options says the page is filtered. */
+function saysFiltered(page: HTMLElement): boolean {
+  const options = page.querySelector(".issues-view-options");
+  return (
+    options?.getAttribute("data-filtered") === "true" &&
+    button("View options").getAttribute("aria-description") === "Filtered"
+  );
+}
+
+test("a priority chosen in View options leaves the others off the board and the list, says the page is filtered, and stands when the page opens again", async () => {
+  standing = [
+    issue(1, { priority: ISSUE_PRIORITY.URGENT }),
+    issue(2, { priority: ISSUE_PRIORITY.LOW }),
+    issue(3, { priority: ISSUE_PRIORITY.NONE, status: ISSUE_STATUS.TODO }),
+  ];
+  const page = mount();
+  await settle();
+  const filteredAtFirst = saysFiltered(page);
+
+  chooseView("Urgent", "Priority");
+  const board = groups(page);
+  const filtered = saysFiltered(page);
+  showList();
+  const list = groups(page);
+  act(() => root?.unmount());
+  const reopened = mount();
+  await settle();
+
+  assert.equal(filteredAtFirst, false);
+  assert.deepEqual(board, [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.ok(filtered, "View options says a filter is on");
+  assert.deepEqual(list, [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.deepEqual(groups(reopened), [["Backlog1", ["ACME-1 Issue 1"]]], "the filter is kept");
+  assert.ok(saysFiltered(reopened));
+});
+
+test("Created by Me in View options shows only the issues the reader filed", async () => {
+  standing = [
+    issue(1, { creator: { userId: "user-ada", name: "Ada Lovelace" } }),
+    issue(2, { creator: { userId: READER, name: "Grace Hopper" } }),
+    issue(3, { creator: null }),
+  ];
+  const page = mount();
+  await settle();
+
+  chooseView("Me", "Created by");
+  const mine = groups(page);
+  chooseView("Ada Lovelace", "Created by");
+  const ada = groups(page);
+  chooseView("Anyone", "Created by");
+
+  assert.deepEqual(mine, [["Backlog1", ["ACME-2 Issue 2"]]]);
+  assert.deepEqual(ada, [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.deepEqual(groups(page), [
+    ["Backlog3", ["ACME-3 Issue 3", "ACME-2 Issue 2", "ACME-1 Issue 1"]],
+  ]);
+  assert.equal(saysFiltered(page), false);
+});
+
+test("a Done or Canceled issue last changed over a week ago is left off the board and the list at first while a recent one stands, and Show completed brings it back", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  standing = [
+    issue(1, { status: ISSUE_STATUS.DONE, updatedAt: NOW - 8 * DAY }),
+    issue(2, { status: ISSUE_STATUS.DONE, updatedAt: NOW - DAY }),
+    issue(3, { status: ISSUE_STATUS.CANCELED, updatedAt: NOW - 30 * DAY }),
+    issue(4, { status: ISSUE_STATUS.BACKLOG, updatedAt: NOW - 30 * DAY }),
+  ];
+  const page = mount();
+  await settle();
+  const atFirst = columns(page);
+  const filteredAtFirst = saysFiltered(page);
+  showList();
+  const listedAtFirst = groups(page);
+
+  chooseView("Show completed");
+  const listed = groups(page);
+  act(() => button("View options").click());
+  act(() => labelledItem("Board").click());
+
+  assert.deepEqual(atFirst.slice(3), [
+    ["Done1", ["ACME-2"]],
+    ["Canceled", []],
+  ]);
+  assert.deepEqual(atFirst[0], ["Backlog1", ["ACME-4"]], "open work stands however old");
+  assert.equal(filteredAtFirst, false, "the first filter is no change to say");
+  assert.deepEqual(listedAtFirst, [
+    ["Backlog1", ["ACME-4 Issue 4"]],
+    ["Done1", ["ACME-2 Issue 2"]],
+  ]);
+  assert.deepEqual(listed, [
+    ["Backlog1", ["ACME-4 Issue 4"]],
+    ["Done2", ["ACME-2 Issue 2", "ACME-1 Issue 1"]],
+    ["Canceled1", ["ACME-3 Issue 3"]],
+  ]);
+  assert.deepEqual(columns(page).slice(3), [
+    ["Done2", ["ACME-2", "ACME-1"]],
+    ["Canceled1", ["ACME-3"]],
+  ]);
+  assert.ok(saysFiltered(page));
+});
+
+test("where every issue is settled and gone quiet, the page says none matches and Clear filters shows them", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  standing = [issue(1, { status: ISSUE_STATUS.DONE, updatedAt: NOW - 30 * DAY })];
+  const page = mount();
+  await settle();
+  const said = page.querySelector(".luke-empty-state")?.textContent;
+
+  act(() => button("Clear filters").click());
+
+  assert.equal(said, "No issues matchClear filters");
+  assert.deepEqual(groups(page), [["Done1", ["ACME-1 Issue 1"]]]);
+});
+
+test("a filter that keeps none of the workspace's issues says no issue matches, and Clear filters shows every issue again", async () => {
+  standing = [issue(1), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+
+  chooseView("Urgent", "Priority");
+  const said = page.querySelector(".luke-empty-state")?.textContent;
+  const columnsWhileNone = page.querySelectorAll("[data-issue-column]").length;
+  act(() => button("Clear filters").click());
+
+  assert.equal(said, "No issues matchClear filters");
+  assert.equal(columnsWhileNone, 0, "the board's columns step aside for the line");
+  assert.deepEqual(groups(page), [
+    ["Backlog1", ["ACME-1 Issue 1"]],
+    ["Todo1", ["ACME-2 Issue 2"]],
+  ]);
+  assert.equal(saysFiltered(page), false);
+});
+
+test("a filter one account chose is not the filter of another account signed in on this Mac", async () => {
+  standing = [
+    issue(1, { creator: { userId: "user-ada", name: "Ada Lovelace" } }),
+    issue(2, { creator: { userId: READER, name: "Grace Hopper" } }),
+  ];
+  mount();
+  await settle();
+  chooseView("Me", "Created by");
+  act(() => root?.unmount());
+
+  signedIn = "user-ada";
+  const other = mount();
+  await settle();
+
+  assert.deepEqual(groups(other), [["Backlog2", ["ACME-2 Issue 2", "ACME-1 Issue 1"]]]);
+  assert.equal(saysFiltered(other), false);
+});
+
+test("Group by Priority in the List's View options heads its issues by priority, the most pressing first, stands when the page opens again, and Status heads them by status again", async () => {
+  standing = [
+    issue(1, { priority: ISSUE_PRIORITY.LOW, status: ISSUE_STATUS.TODO }),
+    issue(2, { priority: ISSUE_PRIORITY.URGENT }),
+    issue(3, { priority: ISSUE_PRIORITY.LOW, status: ISSUE_STATUS.IN_PROGRESS }),
+  ];
+  const page = mount();
+  await settle();
+  act(() => button("View options").click());
+  const offeredOnBoard = [...document.querySelectorAll(".luke-menu-item-label")].some(
+    (label) => label.textContent === "Group by",
+  );
+  act(() => button("View options").click());
+  await settle();
+  showList();
+
+  chooseView("Priority", "Group by");
+  const byPriority = groups(page);
+  act(() => root?.unmount());
+  const reopened = mount();
+  await settle();
+  const keptByPriority = groups(reopened);
+  chooseView("Status", "Group by");
+
+  assert.equal(
+    offeredOnBoard,
+    false,
+    "the board's columns are its statuses, so it offers no grouping",
+  );
+  assert.deepEqual(byPriority, [
+    ["Urgent1", ["ACME-2 Issue 2"]],
+    ["Low2", ["ACME-3 Issue 3", "ACME-1 Issue 1"]],
+  ]);
+  assert.deepEqual(keptByPriority, byPriority);
+  assert.deepEqual(groups(reopened), [
+    ["In progress1", ["ACME-3 Issue 3"]],
+    ["Todo1", ["ACME-1 Issue 1"]],
+    ["Backlog1", ["ACME-2 Issue 2"]],
+  ]);
+});
+
+/** What the window's Issues page measures across: room for the peek beside a column of the board, or too little. */
+const ROOMY = 1280;
+const CRAMPED = 600;
+
+/** The Issues page laid out `width` wide, as the window lays it; jsdom lays nothing out. */
+function layPagesAt(width: number): void {
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this.matches(".issues-pages") ? width : 0;
+  });
+}
+
+/** The peek standing beside the board or list, if one does. */
+function peekOf(page: HTMLElement): HTMLElement | null {
+  return page.querySelector<HTMLElement>(".issue-peek-pane:not([data-leaving]) .issue-peek");
+}
+
+/** What a peek reads: its issue's title, and the identifiers of the cards or rows marked as the one it reads. */
+interface Peeking {
+  readonly title: string | undefined;
+  readonly marked: readonly string[];
+}
+
+/** The issue the peek reads, by its title, and the card or row marked as the one it reads. */
+function peeking(page: HTMLElement): Peeking {
+  const peek = peekOf(page);
+  return {
+    title: peek?.querySelector("[aria-label='Issue title']")?.textContent ?? undefined,
+    marked: [...page.querySelectorAll("[aria-current='true']")].map(
+      (marked) =>
+        marked.querySelector(".issue-row-identifier")?.textContent ??
+        marked.closest("li")?.querySelector(".issue-row-identifier")?.textContent ??
+        "",
+    ),
+  };
+}
+
+test("a press on a card peeks its issue beside the board, which stands, its card marked, reading nothing of its own", async () => {
+  standing = [
+    issue(1, { status: ISSUE_STATUS.TODO, title: "Fix login" }),
+    issue(2, { status: ISSUE_STATUS.DONE }),
+  ];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+
+  assert.deepEqual(peeking(page), { title: "Fix login", marked: ["ACME-1"] });
+  assert.equal(picked(peekOf(page) ?? page, "Status"), "Todo");
+  assert.ok(page.querySelector("[data-issue-column]"), "the board still stands");
+  assert.deepEqual(opened, [], "no page is opened in the board's place");
+  assert.deepEqual(reads, [], "the peek draws the issue the list holds");
+});
+
+test("while a peek stands the arrows move through the cards and the peek follows, reading nothing; Escape puts it away with the card still holding the keyboard, and Escape again leaves the page", async () => {
+  standing = [
+    issue(1, { status: ISSUE_STATUS.TODO, title: "Fix login" }),
+    issue(2, { status: ISSUE_STATUS.TODO, title: "Fix logout" }),
+    issue(3, { status: ISSUE_STATUS.DONE, title: "Ship it" }),
+  ];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+
+  press("ArrowDown", window);
+  const reached = document.activeElement;
+  assert.ok(reached instanceof HTMLButtonElement, "a card holds the keyboard");
+  act(() => reached.click());
+  await settle();
+  const first = peeking(page);
+  press("ArrowDown");
+  const down = peeking(page);
+  press("ArrowRight");
+  const across = peeking(page);
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+  await settle();
+  const keyboard = document.activeElement
+    ?.closest("[data-issue-id]")
+    ?.getAttribute("data-issue-id");
+  const afterEscape = peekOf(page);
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+
+  assert.deepEqual(
+    [first, down, across],
+    [
+      { title: "Fix logout", marked: ["ACME-2"] },
+      { title: "Fix login", marked: ["ACME-1"] },
+      { title: "Ship it", marked: ["ACME-3"] },
+    ],
+  );
+  assert.deepEqual(reads, [], "moving the peek reads nothing");
+  assert.ok(afterEscape === null, "Escape put the peek away");
+  assert.equal(keyboard, issue(3).id);
+  assert.deepEqual(opened, []);
+  assert.equal(closed, 1, "the second Escape leaves the Issues page");
+});
+
+test("Close puts the peek away and hands the keyboard back to its card", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+  const close = peekOf(page)?.querySelector<HTMLButtonElement>("button[aria-label='Close']");
+  assert.ok(close, "the peek offers Close");
+  act(() => close.focus());
+  act(() => close.click());
+  await settle();
+
+  assert.ok(peekOf(page) === null);
+  assert.ok(document.activeElement === cardOf(page, issue(1).id), "its card holds the keyboard");
+  assert.equal(closed, 0);
+});
+
+test("⌘-press and ⌘Return on a card, and Open as page from the peek, open the issue's own page in the board's place", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2, { title: "Fix logout" })];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+
+  commandClick(cardOf(page, issue(1).id));
+  await settle();
+  act(() => button("Issues").click());
+  await settle();
+  act(() => cardOf(page, issue(2).id).focus());
+  commandReturn();
+  await settle();
+  act(() => button("Issues").click());
+  await settle();
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+  act(() => button("Open as page").click());
+  await settle();
+
+  assert.deepEqual(opened, [
+    { kind: ISSUES_PAGE.ISSUE, issueId: issue(1).id },
+    { kind: ISSUES_PAGE.LIST },
+    { kind: ISSUES_PAGE.ISSUE, issueId: issue(2).id },
+    { kind: ISSUES_PAGE.LIST },
+    { kind: ISSUES_PAGE.ISSUE, issueId: issue(1).id },
+  ]);
+  assert.equal(titleOf(page), "Fix login");
+  assert.ok(peekOf(page) === null, "the page stands alone, no peek beside it");
+});
+
+test("in a window with no room for the peek beside a column, a press opens the issue's page as it did before there was a peek", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = mount();
+  await settle();
+  layPagesAt(CRAMPED);
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+
+  assert.deepEqual(opened, [{ kind: ISSUES_PAGE.ISSUE, issueId: issue(1).id }]);
+  assert.ok(peekOf(page) === null);
+  assert.equal(titleOf(page), "Fix login");
+});
+
+test("a status picked in the peek is sent through the list, whose card moves to its new column while the peek goes on reading it", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO, title: "Fix login" })];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+  pick(peekOf(page) ?? page, "Status", "Done");
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
+  assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
+  assert.deepEqual(peeking(page), { title: "Fix login", marked: ["ACME-1"] });
+  assert.equal(picked(peekOf(page) ?? page, "Status"), "Done");
+});
+
+test("an issue archived from the peek's menu leaves the board, and the peek with it", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+  act(() => button("Issue actions").click());
+  act(() => menuItem("Archive").click());
+  act(() => dialogButton("Archive").click());
+  await settle();
+
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { archived: true } }]);
+  assert.ok(peekOf(page) === null);
+  assert.deepEqual(columns(page)[0], ["Backlog1", ["ACME-2"]]);
+  assert.deepEqual(opened, []);
+});
+
+test("in the list, a press on a row peeks its issue beside the list, the row current", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = mount();
+  await settle();
+  showList();
+  layPagesAt(ROOMY);
+
+  act(() => listRowOf(page, issue(1)).click());
+  await settle();
+
+  assert.equal(peeking(page).title, "Fix login");
+  assert.equal(listRowOf(page, issue(1)).getAttribute("aria-current"), "true");
+  assert.ok(page.querySelector(".home-section"), "the list still stands");
+  assert.deepEqual(opened, []);
+});
+
+test("a peek the window narrows past its room beside a column is put away, its card holding the keyboard", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = mount();
+  await settle();
+  let width = ROOMY;
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this.matches(".issues-pages") ? width : 0;
+  });
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+  const opened_ = peeking(page).title;
+  width = CRAMPED;
+  act(() => relayout());
+
+  assert.equal(opened_, "Fix login");
+  assert.ok(peekOf(page) === null, "the narrowed window put the peek away");
+  assert.ok(document.activeElement === cardOf(page, issue(1).id), "its card holds the keyboard");
+  assert.deepEqual(opened, []);
+});
+
+test("Archive's question asked in a peek goes with the peek as it slides out, and another workspace listed opens no peek of the last", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+  const motions = playMotions();
+  try {
+    act(() => cardOf(page, issue(1).id).click());
+    await settle();
+    act(() => button("Issue actions").click());
+    act(() => menuItem("Archive").click());
+    const asked = document.querySelector("[role=alertdialog], [role=dialog]") !== null;
+
+    list({ ...WORKSPACE, id: "workspace-initech", name: "Initech" });
+    await settle();
+
+    assert.ok(asked, "Archive asked first");
+    assert.ok(
+      page.querySelector(".issue-peek-pane[data-leaving]"),
+      "the peek is still sliding out",
+    );
+    assert.ok(
+      document.querySelector("[role=alertdialog], [role=dialog]") === null,
+      "its question went with it",
+    );
+    assert.ok(peekOf(page) === null, "Initech's list, though it holds the issue, opens no peek");
+  } finally {
+    motions.remove();
+  }
+});
+
+test("as the peek opens and closes, the board's columns glide from where they stood rather than jump", async () => {
+  standing = [issue(1, { status: ISSUE_STATUS.TODO }), issue(2, { status: ISSUE_STATUS.DONE })];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+  // Note that each column stands narrower once the peek has taken its room, so every column but the first moves left.
+  const COLUMN = { WIDE: 250, NARROW: 170 };
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const columns = [...document.querySelectorAll("[data-issue-column]")];
+    const at = columns.indexOf(this);
+    const narrowed = document.querySelector(".issue-peek-pane:not([data-leaving])") !== null;
+    const width = narrowed ? COLUMN.NARROW : COLUMN.WIDE;
+    return new DOMRect(at < 0 ? 0 : at * width, 0, at < 0 ? 0 : width, 0);
+  });
+  const motions = playMotions();
+  try {
+    act(() => cardOf(page, issue(1).id).click());
+    await settle();
+    const glides = () =>
+      motions.played
+        .filter((each) => each.element.matches("[data-issue-column]"))
+        .map((each) => each.keyframes[0]?.transform);
+    const opening = glides();
+    motions.played.length = 0;
+    act(() => {
+      runAppCommand(APP_COMMAND.EXIT_ISSUES);
+    });
+    const closing = glides();
+
+    // Note that the first column stands where it stood, so it plays nothing.
+    assert.deepEqual(
+      opening,
+      [80, 160, 240, 320].map((dx) => `translateX(${dx}px)`),
+    );
+    assert.deepEqual(
+      closing,
+      [-80, -160, -240, -320].map((dx) => `translateX(${dx}px)`),
+    );
+  } finally {
+    motions.remove();
+  }
+});
+
+test("the peek lists the tasks started from its issue and offers Start task… from its ⋯, as the issue's page does", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  tasksListed = [
+    task("task-mine", "Fix login", issue(1).id, 2),
+    task("task-other", "Fix logout", issue(2).id, 2),
+  ];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+  const listedInPeek = workOf(peekOf(page) ?? page);
+  act(() => button("Issue actions").click());
+  act(() => menuItem("Start task…").click());
+
+  assert.deepEqual(listedInPeek, ["Fix login"]);
+  assert.deepEqual(newTasksFrom, [
+    { id: issue(1).id, workspaceId: WORKSPACE.id, identifier: "ACME-1", title: "Fix login" },
+  ]);
+  assert.deepEqual(opened, [], "the board still stands");
+});
+
+test("a peeked issue a View options filter leaves off the board is peeked no more", async () => {
+  standing = [
+    issue(1, { priority: ISSUE_PRIORITY.URGENT, title: "Fix login" }),
+    issue(2, { priority: ISSUE_PRIORITY.LOW }),
+  ];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+  const before = peeking(page).title;
+  chooseView("Low", "Priority");
+  await settle();
+
+  assert.equal(before, "Fix login");
+  assert.deepEqual(groups(page), [["Backlog1", ["ACME-2 Issue 2"]]]);
+  assert.ok(peekOf(page) === null, "the filtered-out issue's peek is put away");
+});
+
+test("an issue's ⋯ offers Start agent…, which opens a new agent's card on the issue, and a card's menu offers it too", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2, { title: "Fix logout" })];
+  const page = await openIssue(issue(1).id);
+
+  act(() => button("Issue actions").click());
+  act(() => menuItem("Start agent…").click());
+  act(() => button("Issues").click());
+  await settle();
+  rightClick(cardOf(page, issue(2).id));
+  act(() => menuItem("Start agent…").click());
+
+  assert.deepEqual(newTasksFrom, [
+    {
+      id: issue(1).id,
+      workspaceId: WORKSPACE.id,
+      identifier: "ACME-1",
+      title: "Fix login",
+      agent: true,
+    },
+    {
+      id: issue(2).id,
+      workspaceId: WORKSPACE.id,
+      identifier: "ACME-2",
+      title: "Fix logout",
+      agent: true,
+    },
+  ]);
+  assert.deepEqual(changes, [], "the page moves no issue itself");
+});
+
+test("the peek's ⋯ offers Start agent… beside Start task…, as the issue's page does", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  const page = mount();
+  await settle();
+  layPagesAt(ROOMY);
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+  assert.ok(peekOf(page), "the issue is peeked");
+  act(() => button("Issue actions").click());
+  act(() => menuItem("Start agent…").click());
+
+  assert.deepEqual(newTasksFrom, [
+    {
+      id: issue(1).id,
+      workspaceId: WORKSPACE.id,
+      identifier: "ACME-1",
+      title: "Fix login",
+      agent: true,
+    },
+  ]);
+  assert.deepEqual(opened, [], "the board still stands");
 });

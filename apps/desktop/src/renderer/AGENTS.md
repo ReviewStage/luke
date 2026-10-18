@@ -21,7 +21,7 @@ a fiber of its own runs under the services it was built over, read through
 Effects leave on `app:act` alone, one invoke carrying one `{kind, payload}` from
 `ACT_KIND`, parsed here and again in `@luke/host/act-router`, answered as an
 `ActOutcome` so nothing an exception happened to carry ever crosses back.
-`renderer/act.ts` is the only caller — `act` when a row reads the answer, `tell`
+`@luke/panel`'s `act.ts` is the only caller — `act` when a row reads the answer, `tell`
 when nothing does. **A new command is a new `ACT_KIND` entry with its payload
 schema, its answer's guard, and its one router row. There is no second write path
 to add one on.**
@@ -95,7 +95,7 @@ dialog goes on showing; a row holding a bare `useState(false)` keeps neither.
 `repository-checks.sh` runs `packages/brand/scripts/generate-brand-assets.mjs --check` and fails
 on drift, so the generated outputs cannot be hand-edited. What the check does not
 say is why the app draws the face rather than loading the SVGs: it needs
-`currentColor` and CSS animation, and `--face-motion` is what holds every loop
+`currentColor` and CSS animation, and `@luke/ui`'s `--luke-face-motion` is what holds every loop
 still for a capture run and for reduced motion. SMIL answers to neither.
 
 The face is still unless something is happening. A gesture plays once and a rest

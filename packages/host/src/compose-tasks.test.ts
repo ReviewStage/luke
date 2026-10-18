@@ -6,6 +6,7 @@ import {
   type GitHubRepositoryIssueAnswer,
   type GitHubRepositoryPullRequestAnswer,
   type TaskCallResult,
+  type TaskStarted,
   VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
 } from "@luke/features";
@@ -125,7 +126,7 @@ interface FakeService extends TasksClient {
   deleteFails: boolean;
   /** Where a list read waits after reading the table and before answering, so a test can hold one on the wire. */
   listGate: Effect.Effect<void>;
-  createAnswer: TaskCallResult<Task, RepositoryCallFailure>;
+  createAnswer: TaskCallResult<TaskStarted, RepositoryCallFailure>;
   /** The repositories the account reaches, as the service answers them; a failure is the service refusing the read. */
   repositoriesAnswer: TaskCallResult<GitHubRepositoriesAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>;
   /** Whether a repository is refused as one the App does not reach. */
@@ -973,6 +974,47 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
   }),
 );
 
+it.effect(
+  "a task's code read as none is held as none, and a task whose work read did not answer holds its code unread",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const billing = task(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      service.works[INVITES] = { turns: [] };
+      const { call, last } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      assert.deepEqual(last()?.shownCode, []);
+
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING });
+      assert.equal(last()?.shownCode, undefined);
+    }),
+);
+
+it.effect(
+  "a task's work read that did not answer says so, keeping its code unread, and a refresh reads it again",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      const { call, last, told } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      assert.ok(
+        told.some((view) => view.workStatus === TASKS_READ.READING),
+        "the read says it is out",
+      );
+      assert.equal(last()?.workStatus, TASKS_READ.FAILED);
+      assert.equal(last()?.shownCode, undefined);
+
+      service.works[INVITES] = { turns: [] };
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      assert.equal(last()?.workStatus, TASKS_READ.READY);
+      assert.deepEqual(last()?.shownCode, []);
+    }),
+);
+
 it.effect("a refresh that reads what the view already holds tells the window nothing", () =>
   Effect.gen(function* () {
     const billing = task(BILLING, "Billing export", "# Billing export", 20);
@@ -1118,6 +1160,45 @@ it.effect(
 
       assert.deepEqual(afterStale, edited);
       assert.deepEqual(last()?.document.task?.document, saved);
+    }),
+);
+
+it.effect(
+  "a start naming an agent opens the task it made and answers the agent's start beside it, a refusal among them",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const { call, last } = yield* subject(service);
+      const made = task(INVITES, "Invitation expiry", "", 10);
+      const agent = {
+        id: "3c9e1d2a-6b7f-4e8a-9c0d-1e2f3a4b5c6d",
+        planId: INVITES,
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        title: null,
+        createdAt: 11,
+        status: CODING_AGENT_STATUS.STARTING,
+        turnId: null,
+      };
+      const params = {
+        repository: "acme/relay",
+        agent: { idempotencyKey: "start-1", prompt: "Expire invitations." },
+      };
+
+      service.createAnswer = { ok: true, answer: { task: made, agent: { agent } } };
+      const started = yield* call(GATEWAY_METHOD.TASKS_START, params);
+      service.createAnswer = {
+        ok: true,
+        answer: { task: made, agent: { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE } },
+      };
+      const refused = yield* call(GATEWAY_METHOD.TASKS_START, params);
+
+      assert.deepEqual(started, { planId: INVITES, agentStart: { agent } });
+      assert.deepEqual(refused, {
+        planId: INVITES,
+        agentStart: { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE },
+      });
+      assert.equal(last()?.activeTaskId, INVITES);
     }),
 );
 
@@ -1497,6 +1578,32 @@ it.effect("a workspaces read the service did not answer keeps the workspaces alr
     assert.deepEqual(last()?.tasks, []);
     assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
   }),
+);
+
+it.effect(
+  "a workspaces read that did not answer says so, and the next refresh reads them again and says them read",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.workspacesFail = true;
+      const held = yield* Deferred.make<void>();
+      service.workspacesGate = Deferred.await(held);
+      const { call, last } = yield* subject(service);
+
+      const refreshing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_REFRESH));
+      for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+      assert.equal(last()?.workspacesStatus, TASKS_READ.READING);
+      yield* Deferred.succeed(held, undefined);
+      yield* Fiber.join(refreshing);
+      assert.equal(last()?.workspacesStatus, TASKS_READ.FAILED);
+      assert.deepEqual(last()?.workspaces, []);
+
+      service.workspacesFail = false;
+      service.workspacesGate = Effect.void;
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      assert.equal(last()?.workspacesStatus, TASKS_READ.READY);
+      assert.deepEqual(last()?.workspaces, [PERSONAL]);
+    }),
 );
 
 it.effect(

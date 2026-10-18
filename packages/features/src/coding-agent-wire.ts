@@ -3,6 +3,11 @@ import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
+import {
+  mergeMethodSchema,
+  PULL_REQUEST_WRITE_BOUNDS,
+  REACTION,
+} from "./pull-request-write-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -394,7 +399,7 @@ function carriesFiles(
 }
 
 /** A Start's words or files: a prompt and its files afresh, never a note; from another agent, whose brief it is handed, no prompt, and a note and its files. */
-const startBrief = EffectSchema.makeFilter(
+export const startBrief = EffectSchema.makeFilter(
   ({
     prompt,
     attachments,
@@ -825,6 +830,9 @@ export const CHANGES_BOUNDS = {
  * and removes; and its patch, every hunk of a unified diff from the first
  * `@@` header on, or null with why where it carries none.
  */
+/** A commit as GitHub names it: forty hex digits. */
+const commitShaSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{40}$/u));
+
 const changedFileSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   previousPath: EffectSchema.NullOr(EffectSchema.String),
@@ -893,12 +901,18 @@ const reviewCommentSchema = EffectSchema.Struct({
  * reviewers and where each stands, who authored its commits, and its
  * reviews that said something ride beside the files, each absent from a
  * service before them, and who the agent writes as absent too for an agent
- * whose first session never settled it.
+ * whose first session never settled it. The commits a changed image is read
+ * at ride beside them too (`headSha`, the pull request's head, and
+ * `baseSha`, where its head and base branch part, which GitHub's diff is
+ * counted from), each absent where it could not be read, and `baseSha`
+ * absent where no image the files change stood before them.
  */
 export const codingAgentChangesAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
     EffectSchema.Struct({
       url: EffectSchema.String,
+      headSha: EffectSchema.optionalKey(commitShaSchema),
+      baseSha: EffectSchema.optionalKey(commitShaSchema),
       files: EffectSchema.Array(changedFileSchema).check(
         EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_FILES),
       ),
@@ -953,6 +967,39 @@ export const MERGE_STATE = {
 
 export type MergeState = (typeof MERGE_STATE)[keyof typeof MERGE_STATE];
 
+/** What the reviews a branch requires say of a pull request, as GitHub sums them up. */
+export const REVIEW_DECISION = {
+  APPROVED: "approved",
+  CHANGES_REQUESTED: "changes-requested",
+  REVIEW_REQUIRED: "review-required",
+} as const;
+
+export type ReviewDecision = (typeof REVIEW_DECISION)[keyof typeof REVIEW_DECISION];
+
+/**
+ * How an open pull request may be merged, as its merge box offers it: the
+ * methods the repository allows, whether it allows auto-merge, whether its
+ * base is merged through a merge queue, where the pull request stands in that
+ * queue or whether auto-merge is on for it, by which method, the head a merge
+ * is made against, what its required reviews say, and its checks as one word.
+ */
+const pullRequestMergingSchema = EffectSchema.Struct({
+  methods: EffectSchema.Array(mergeMethodSchema),
+  autoMergeAllowed: EffectSchema.Boolean,
+  queue: EffectSchema.Boolean,
+  queued: EffectSchema.NullOr(EffectSchema.Struct({ position: countedNumber })),
+  autoMerge: EffectSchema.NullOr(
+    EffectSchema.Struct({ method: EffectSchema.NullOr(mergeMethodSchema) }),
+  ),
+  headSha: EffectSchema.String.check(
+    EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_COMMIT_CHARS),
+  ),
+  review: EffectSchema.NullOr(EffectSchema.Literals(Object.values(REVIEW_DECISION))),
+  checks: EffectSchema.Literals(Object.values(CHECK_SUMMARY)),
+});
+
+export type PullRequestMerging = typeof pullRequestMergingSchema.Type;
+
 /** Where one check on a pull request's head stands: running or queued, passed, failed, or skipped or neutral, which passes nothing and fails nothing. */
 export const CHECK_STATE = {
   PENDING: "pending",
@@ -996,6 +1043,10 @@ export const OVERVIEW_BOUNDS = {
   MAX_LABELS: 100,
   /** The most pull requests of a stack one read names, the pull request itself among them. */
   MAX_STACK: 30,
+  /** The most people one reaction names, the first GitHub lists, the rest counted. */
+  MAX_REACTORS: 10,
+  /** The most labels, users, or teams the reviewer and label pickers are offered, each. */
+  MAX_OPTIONS: 300,
 } as const;
 
 /** The side of a diff a review thread's line counts on: the old file's, or the new file's. */
@@ -1049,9 +1100,40 @@ const pullRequestDeploymentSchema = EffectSchema.Struct({
 export type PullRequestDeployment = typeof pullRequestDeploymentSchema.Type;
 
 /**
+ * One reaction a comment wears, as GitHub draws it under the comment: which
+ * it is, how many reacted with it, and, where the read names them, the first
+ * of them up to the bound, in GitHub's order; and whether the member reading
+ * gave it, as GitHub answers their own sign-in, absent where it was not read
+ * so. A reaction nobody gave is not carried.
+ */
+const reactionGroupSchema = EffectSchema.Struct({
+  content: EffectSchema.Literals(Object.values(REACTION)),
+  count: countedNumber,
+  by: EffectSchema.optionalKey(
+    EffectSchema.Array(githubPersonSchema).check(
+      EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_REACTORS),
+    ),
+  ),
+  mine: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+/** GitHub's GraphQL id of what wears reactions, which a reaction is added to or taken from by; absent where the read named none. */
+const reactionSubjectSchema = EffectSchema.optionalKey(
+  EffectSchema.String.check(EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_NAME_CHARS)),
+);
+
+export type ReactionGroup = typeof reactionGroupSchema.Type;
+
+/** The reactions a comment wears, in GitHub's order, absent where it wears none or from a service before them. */
+const reactionsSchema = EffectSchema.Array(reactionGroupSchema).check(
+  EffectSchema.isMaxLength(Object.values(REACTION).length),
+);
+
+/**
  * One comment of a review thread: who; their words whole, as GitHub renders
  * them (`bodyHTML`), or, where GitHub sent no rendering, null with their
- * words as markdown in `body`; when, in epoch milliseconds; and its page.
+ * words as markdown in `body`; when, in epoch milliseconds; its page; and
+ * the reactions it wears, with what they are added to it by (`subject`).
  */
 const reviewThreadCommentSchema = EffectSchema.Struct({
   by: githubPersonSchema,
@@ -1059,6 +1141,8 @@ const reviewThreadCommentSchema = EffectSchema.Struct({
   body: EffectSchema.String,
   at: countedNumber,
   url: EffectSchema.String,
+  reactions: EffectSchema.optionalKey(reactionsSchema),
+  subject: reactionSubjectSchema,
 });
 
 const diffSideSchema = EffectSchema.Literals(Object.values(DIFF_SIDE));
@@ -1100,8 +1184,9 @@ export type ReviewThread = typeof reviewThreadSchema.Type;
  * and where it left its reviewer; who; their words whole, as GitHub renders
  * them (`body_html`), or, where GitHub sent no rendering, null with their
  * words as markdown in `body`, empty otherwise; when, in epoch
- * milliseconds; its page; and, on a review, the threads on lines it
- * started, absent where it started none or from a service before them.
+ * milliseconds; its page; on a review, the threads on lines it started,
+ * absent where it started none or from a service before them; and the
+ * reactions it wears, with what they are added to it by (`subject`).
  */
 const conversationEntrySchema = EffectSchema.Struct({
   kind: EffectSchema.Literals(Object.values(CONVERSATION_ENTRY)),
@@ -1116,6 +1201,8 @@ const conversationEntrySchema = EffectSchema.Struct({
       EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_THREADS),
     ),
   ),
+  reactions: EffectSchema.optionalKey(reactionsSchema),
+  subject: reactionSubjectSchema,
 });
 
 export type ConversationEntry = typeof conversationEntrySchema.Type;
@@ -1127,6 +1214,14 @@ const pullRequestLabelSchema = EffectSchema.Struct({
 });
 
 export type PullRequestLabel = typeof pullRequestLabelSchema.Type;
+
+/** A team of the repository's organization a review may be asked of: its slug, which a request names it by, and its name. */
+const reviewTeamSchema = EffectSchema.Struct({
+  slug: overviewName,
+  name: EffectSchema.String,
+});
+
+export type PullRequestReviewTeam = typeof reviewTeamSchema.Type;
 
 /** The agent whose pull request one of a stack is: its id, and its plan's, null for an agent on none. */
 const stackAgentSchema = EffectSchema.Struct({
@@ -1156,7 +1251,8 @@ export type PullRequestStackEntry = typeof stackEntrySchema.Type;
  * renders it (`body_html`), empty where it has none; the branch it merges
  * into and the one it merges from; when it was opened, and merged where it
  * was; whether it would merge as it stands; who opened it, who the agent
- * writes as on GitHub, and who it still asks for a review; its labels; and,
+ * writes as on GitHub, and who it still asks for a review, people and
+ * teams; its labels; and,
  * while it is open, the stack it stands in, base first and itself among it,
  * empty where it stands in none. Its labels and its stack are absent from a
  * service before them. Null where the agent has opened none yet, or the
@@ -1182,6 +1278,13 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
       requested: EffectSchema.Array(githubPersonSchema).check(
         EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
       ),
+      /** How it may be merged; absent where GitHub did not say, or from a service before the merge box. */
+      merging: EffectSchema.optionalKey(pullRequestMergingSchema),
+      requestedTeams: EffectSchema.optionalKey(
+        EffectSchema.Array(reviewTeamSchema).check(
+          EffectSchema.isMaxLength(CHANGES_BOUNDS.MAX_PEOPLE),
+        ),
+      ),
       labels: EffectSchema.optionalKey(
         EffectSchema.Array(pullRequestLabelSchema).check(
           EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_LABELS),
@@ -1195,6 +1298,27 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
     }),
   ),
 });
+
+/**
+ * What the reviewer and label pickers of an agent's Pull request tab offer
+ * (GET), read of its repository rather than its pull request: the
+ * repository's labels, the users who may be asked for a review (its
+ * collaborators), and its organization's teams that reach it, each up to
+ * the bound; each empty where the Luke GitHub App may not read it.
+ */
+export const codingAgentReviewOptionsAnswerSchema = EffectSchema.Struct({
+  labels: EffectSchema.Array(pullRequestLabelSchema).check(
+    EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_OPTIONS),
+  ),
+  users: EffectSchema.Array(githubPersonSchema).check(
+    EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_OPTIONS),
+  ),
+  teams: EffectSchema.Array(reviewTeamSchema).check(
+    EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_OPTIONS),
+  ),
+});
+
+export type CodingAgentReviewOptions = typeof codingAgentReviewOptionsAnswerSchema.Type;
 
 export type CodingAgentOverviewPullRequest = NonNullable<
   (typeof codingAgentOverviewPullRequestAnswerSchema.Type)["pullRequest"]
@@ -1232,7 +1356,13 @@ export type CodingAgentOverviewChecks = NonNullable<
  * read's reviewers still asked for override; and its comments and reviews,
  * oldest first, its newest entries kept up to the bound, with how many
  * earlier ones were left on GitHub (`earlier`), review threads past their
- * bound among them. Null where the agent has opened no pull request yet.
+ * bound among them; the reactions its description wears, read with the
+ * conversation rather than the description itself, since they are read in
+ * the same ask as the reactions of its comments; and, read beside it on the
+ * reader's own token, the review they hold pending on it, by how many
+ * comments it holds, null where they hold none or it could not be read as
+ * theirs, absent from a service before it. Null where the agent has opened
+ * no pull request yet.
  */
 export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
@@ -1244,6 +1374,11 @@ export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
         EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_ENTRIES),
       ),
       earlier: countedNumber,
+      descriptionReactions: EffectSchema.optionalKey(reactionsSchema),
+      descriptionSubject: reactionSubjectSchema,
+      pendingReview: EffectSchema.optionalKey(
+        EffectSchema.NullOr(EffectSchema.Struct({ comments: countedNumber })),
+      ),
     }),
   ),
 });
@@ -1672,6 +1807,11 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
   ),
   usage: EffectSchema.optionalKey(codingAgentUsageSchema),
+  /**
+   * What the newest turn alone cost. No service sends it any more, since a
+   * price the window draws means the whole run's (`usage`); it stays an
+   * optional key so the answer's shape is the one older desktops read.
+   */
   turnUsage: EffectSchema.optionalKey(codingAgentUsageSchema),
   context: EffectSchema.optionalKey(codingAgentContextSchema),
 });

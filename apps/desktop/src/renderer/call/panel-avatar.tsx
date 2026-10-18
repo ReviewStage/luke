@@ -14,14 +14,14 @@
 
 import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { useAppState, useExperiment } from "@luke/panel/use-app-state";
+import { useVoiceView } from "@luke/panel/use-voice-view";
 import { EXPERIMENT } from "@luke/settings";
 import { callTabVideoStatus } from "@luke/ui/call-card-model";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useAct } from "../act";
-import { useAppState, useExperiment } from "../use-app-state";
-import { useVoiceView } from "../use-voice-view";
 import { avatarViewShareAtom } from "./avatar-view";
 import {
   type CallAvatarTracks,
@@ -64,7 +64,7 @@ export function PanelAvatarVoice(): React.JSX.Element {
  * Restart video ask main to take the avatar down or put it up again on the
  * call standing.
  */
-export function CallTabVideo({ planId: taskId }: { planId: string }): React.JSX.Element | null {
+export function CallTabVideo({ taskId }: { taskId: string }): React.JSX.Element | null {
   const { tell } = useAct();
   const state = useAppState();
   const { view } = useVoiceView();
@@ -73,7 +73,7 @@ export function CallTabVideo({ planId: taskId }: { planId: string }): React.JSX.
   return (
     <CallVideoTile
       video={useAvatarTracks().video}
-      status={callTabVideoStatus({ view, avatar, planId: taskId, videoCalls })}
+      status={callTabVideoStatus({ view, avatar, taskId, videoCalls })}
       onSetVideo={(on) => tell(ACT_KIND.VOICE_SET_VIDEO, { on })}
     />
   );

@@ -2,6 +2,13 @@ import { useAtomValue } from "@effect/atom-react/Hooks";
 import { PRODUCT_EXCHANGE_KIND } from "@luke/features/analytics";
 import { sanitizedTraceEvent } from "@luke/gateway/devtrace";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { appBridge } from "@luke/panel/app-bridge";
+import { rendererRegistry, rendererServicesNow } from "@luke/panel/renderer-runtime";
+import { appSettingsNow, appStateNow, useAppState } from "@luke/panel/use-app-state";
+import { createBrowserSilence } from "@luke/panel/voice/live-peer";
+import { openPreferredMicrophone } from "@luke/panel/voice/microphone-choice";
+import { startVoiceLevelMeter } from "@luke/panel/voice/voice-level-meter";
 import { appSettingsView } from "@luke/settings/wire";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_STATUS } from "@luke/voice/avatar";
@@ -16,15 +23,8 @@ import { outputSilent } from "@luke/voice/volume-hint";
 import { Duration, Effect, Schedule } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
-import { useAct } from "../act";
-import { appBridge } from "../app-bridge";
 import { startAvatarFeed } from "../avatar-feed/start-avatar-feed";
-import { rendererRegistry, rendererServicesNow } from "../renderer-runtime";
-import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { type AvatarFeedActs, LiveCall, type LiveStreamSlot } from "./live-call";
-import { createBrowserSilence } from "./live-peer";
-import { openPreferredMicrophone } from "./microphone-choice";
-import { startVoiceLevelMeter } from "./voice-level-meter";
 
 /**
  * How long a refused remote-audio play waits before trying again. Chromium

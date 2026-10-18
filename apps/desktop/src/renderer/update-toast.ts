@@ -10,10 +10,10 @@
  */
 
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { TOAST_TONE, useToast } from "@luke/panel/toast";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
 import { useEffect } from "react";
-import { useAct } from "./act";
-import { TOAST_TONE, useToast } from "./toast";
 
 /** The storage key the version last announced is kept under. */
 const ANNOUNCED_KEY = "luke.update-announced";

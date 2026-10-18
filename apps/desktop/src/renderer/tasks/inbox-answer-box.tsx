@@ -6,10 +6,21 @@ import {
   INBOX_STATUS,
   type InboxItem,
   type InboxReadResponse,
-  type InboxReplyKind,
   knownResponse,
 } from "@luke/features/inbox-wire";
 import {
+  PromptInput,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTools,
+  submitPromptInput,
+} from "@luke/panel/ai-elements/prompt-input";
+import { imageFiles } from "@luke/panel/feedback-images";
+import { type IntegrationStatuses, useIntegrationStatuses } from "@luke/panel/integration-statuses";
+import { COMPOSER_INPUT, type ComposerEditorHandle } from "@luke/panel/plan-editor/contract";
+import { readFiles, withFiles } from "@luke/panel/tasks/attached-files";
+import {
+  BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
   IconButton,
@@ -20,30 +31,27 @@ import {
 } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useRef, useState } from "react";
-import {
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTools,
-  submitPromptInput,
-} from "../ai-elements/prompt-input";
+import { type RefObject, useRef, useState } from "react";
 import { useSideBundles } from "../bundle-loader";
-import { imageFiles } from "../feedback-images";
-import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
-import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
-import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";
 import { useComposerPickers } from "./composer-pickers";
 import { DictateButton, DictationStrip } from "./dictation-strip";
-import { type InboxDraft, inboxMessageOf, inboxReply, pressesOf } from "./inbox-model";
+import {
+  type InboxDraft,
+  type InboxMissing,
+  inboxMessageOf,
+  inboxMissing,
+  inboxReply,
+  pickedWords,
+} from "./inbox-model";
+import { ComposerQuoteView, ReplyToSelection } from "./reply-to-selection";
 import type { SkillSource } from "./skill-picker";
 import type { TaskInboxControl } from "./use-task-inbox";
 
 /**
- * inbox-answer-box.tsx -- the box docked under every Inbox item's thread: the agent's message box's card and field, answering an open item with its own presses at its foot, and writing a message on a settled one's thread.
+ * inbox-answer-box.tsx -- the box docked under every Inbox item's thread: the agent's message box's card and field, answering an open item with its one Send at its foot, and writing a message on a settled one's thread.
  *
  * The box is the agent composer's card (`ai-elements/prompt-input.tsx`)
  * around the agent composer's field (`composer-field.tsx`), and takes what
@@ -56,21 +64,33 @@ import type { TaskInboxControl } from "./use-task-inbox";
  * or Enter, or ✕ or Escape. The note goes to the agent in the "Inbox
  * answer" message as it was written, links and all, so what a mention names
  * reaches the agent as a message's does. Enter sends, Shift+Enter is a new
- * line, and Escape leaves the box, as in the agent's box. Files go with an
+ * line, and Escape leaves the box, as in the agent's box; Enter, or Send,
+ * on an answer that lacks something sends nothing, and says what it lacks
+ * on the quiet line, "Pick an option", taking the keyboard there, while a
+ * choice of several counts its picks there. Files go with an
  * answer as they go with a message (`attached-files.ts`): the "+" at the
  * foot's left opens the system's file picker, an image pasted into the box
  * is taken, and files dropped on the card are, each drawn as a chip above
  * the words with its way off; a file that cannot come says why under the
  * card. Files stand for the developer's own words where they wrote none,
- * and while they are read the answer waits for them. An approval, a
- * task, and an item asking nothing are answered by the presses in the
- * foot, the one that holds back and the one that goes ahead, so Enter
- * there sends nothing. Unlike the agent's box, the field never takes the
+ * and while they are read the answer waits for them. Every item is sent
+ * by the one Send at the foot's right, its pick made in the question above;
+ * a note's reads "Got it" while the box holds nothing, and "Send" once it
+ * does. Unlike the agent's box, the field never takes the
  * caret as an item opens, because K and J step the list while the caret
  * is elsewhere.
  *
+ * Words selected in the agent's part of the thread and answered with Reply
+ * are laid into the box as a quote block where the caret stands, the box
+ * then taking the caret, as the agent's own box takes them
+ * (`reply-to-selection.tsx`); a quote goes out as a Markdown blockquote,
+ * part of the answer or the message like any other words. The box stands
+ * Reply itself, over the thread it is handed, and only while its editor is
+ * loaded and takes a quote, never while an answer is out or a dictation
+ * holds it, since a press lets the selection go.
+ *
  * A card whose agent need not hear back says whether its answer will
- * message the agent: a bare press does not, and a typed note or an attached
+ * message the agent: a bare answer does not, and a typed note or an attached
  * file does. Why an answer did not go, a file did not come, or a dictation
  * left nothing, is said under the card.
  *
@@ -99,7 +119,7 @@ const EDITOR_LOAD_FAILED = "The answer box could not be loaded.";
 
 /**
  * What the box says on an item whose agent need not hear back: a bare
- * press, Done or Got it, is kept for the agent to read, and a typed note is
+ * answer, Done or Got it, is kept for the agent to read, and a typed note is
  * sent to it as a message, so the line says which the answer will be.
  */
 const QUIET_LINE = {
@@ -136,42 +156,68 @@ function quietLine(draft: InboxDraft): string {
   return draft.note.trim() === "" ? QUIET_LINE.BARE : QUIET_LINE.NOTED;
 }
 
-/** The presses that send a card, in the box's footer: its response's where it is answered by a press, Send for the rest. */
-function SendPresses({
+/**
+ * What the quiet line says of an open item, first what holds: what a send
+ * found the answer lacking, while it still lacks it; how many options a
+ * choice of several has picked; and, where the agent need not hear back,
+ * whether the answer will message it.
+ */
+function openQuietLine(
+  item: InboxItem,
+  draft: InboxDraft,
+  wanting: string | undefined,
+): { readonly line: string; readonly wanting: boolean } | undefined {
+  if (wanting !== undefined && inboxMissing(item, draft)?.line === wanting) {
+    return { line: wanting, wanting: true };
+  }
+  const response = item.response;
+  if (
+    knownResponse(response) &&
+    response.type === INBOX_RESPONSE.CHOICE &&
+    response.multiple === true
+  ) {
+    return { line: pickedWords(draft.choices.length), wanting: false };
+  }
+  return item.needsReply ? undefined : { line: quietLine(draft), wanting: false };
+}
+
+/** What a note's Send says while no word is written, the nod that answers it, and once one is. */
+const NOTE_SEND = {
+  NOD: "Got it",
+  WORDS: "Send",
+} as const;
+
+/**
+ * The Send that ends every open item's box: the round send of words, a
+ * choice, a form, an approval, and a to-do, held while the answer lacks
+ * something, since its Enter says what; a note's, which it always takes,
+ * in words, "Got it" while the box holds nothing and "Send" once it does.
+ */
+function AnswerSend({
   item,
   draft,
   sending,
   reading,
-  onAnswer,
 }: {
   item: InboxItem;
   draft: InboxDraft;
   sending: boolean;
   /** Whether files handed to the box are still being read, which the answer waits for. */
   reading: boolean;
-  onAnswer: (press?: InboxReplyKind) => void;
 }): React.JSX.Element {
   const held = sending || reading;
-  const presses = pressesOf(item.response);
-  if (presses !== undefined) {
-    const { back, ahead } = presses;
+  if (item.response.type === INBOX_RESPONSE.NONE) {
+    const said = draft.note.trim() === "" && draft.attachments.length === 0;
     return (
-      <div className="inbox-presses">
-        {back === undefined ? null : (
-          <Button disabled={held} onClick={() => onAnswer(back.reply)}>
-            {back.label}
-          </Button>
-        )}
-        <Button
-          variant={BUTTON_VARIANT.PRIMARY}
-          busy={sending}
-          busyLabel="Sending"
-          disabled={held}
-          onClick={() => onAnswer(ahead.reply)}
-        >
-          {ahead.label}
-        </Button>
-      </div>
+      <Button
+        type={BUTTON_TYPE.SUBMIT}
+        variant={BUTTON_VARIANT.PRIMARY}
+        busy={sending}
+        busyLabel="Sending"
+        disabled={held}
+      >
+        {said ? NOTE_SEND.NOD : NOTE_SEND.WORDS}
+      </Button>
     );
   }
   return (
@@ -206,6 +252,10 @@ interface AnswerBoxProps {
   skills: SkillSource | undefined;
   /** The words a dictation into the box is likely to say (`dictation-keywords.ts`). */
   keywords: readonly string[];
+  /** The thread whose agent's words the box stands Reply over, quoting them in. */
+  replyScope: RefObject<HTMLElement | null>;
+  /** Takes the keyboard to what a send found the answer lacking, in the item's question or in the box. */
+  onMissing: (missing: InboxMissing) => void;
 }
 
 /** One item's box, its editor, its lists, its dictation, and what its note says all its own. */
@@ -216,6 +266,8 @@ function AnswerCard({
   agentName,
   skills,
   keywords,
+  replyScope,
+  onMissing,
   statuses,
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
@@ -223,6 +275,8 @@ function AnswerCard({
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const picker = useRef<HTMLInputElement>(null);
   const [dropping, setDropping] = useState(false);
+  // What the last send found the answer lacking, which the quiet line says until it is filled.
+  const [wanting, setWanting] = useState<string | undefined>(undefined);
   // How many hand-offs of files are still being read, during which the answer waits.
   const [reading, setReading] = useState(0);
   const draft = control.draftOf(item);
@@ -233,7 +287,8 @@ function AnswerCard({
   latest.current = item;
   // Note that a settled item's box writes a message on its thread, which no response shapes.
   const answering = item.status === INBOX_STATUS.OPEN;
-  const byPress = answering && pressesOf(item.response) !== undefined;
+  // Note that a note's Send is its words, which the narrow card keeps in the foot rather than at the field's end.
+  const namedSend = answering && item.response.type === INBOX_RESPONSE.NONE;
   const placeholder = answering ? placeholderOf(item.response) : messagePlaceholder(agentName);
   const bundle = useAtomValue(useSideBundles().planEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
@@ -263,9 +318,19 @@ function AnswerCard({
     control.notes.get(item.id) ??
     refusal ??
     (AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined);
-  const answer = (press?: InboxReplyKind) => {
+  const answer = () => {
     setRefusal(undefined);
-    control.onAnswer(item, draft, press);
+    control.onAnswer(item, draft);
+  };
+  // A send of an answer that lacks something goes nowhere: it says what, and takes the keyboard there.
+  const send = () => {
+    const missing = inboxReply(item, draft) === undefined ? inboxMissing(item, draft) : undefined;
+    if (missing === undefined) {
+      answer();
+      return;
+    }
+    setWanting(missing.line);
+    onMissing(missing);
   };
   const message = () => {
     setRefusal(undefined);
@@ -295,8 +360,11 @@ function AnswerCard({
       })
       .finally(() => setReading((count) => count - 1));
   };
+  const quiet = answering ? openQuietLine(item, draft, wanting) : undefined;
   const takes = !answering || knownResponse(item.response);
   const takesFiles = takes && !sending;
+  // Note that Reply stands only while the editor stands and takes a quote, since a press lets the selection go.
+  const quotes = takes && !sending && !dictating && module !== undefined;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
     <div
@@ -322,12 +390,11 @@ function AnswerCard({
       {takes ? (
         <PromptInput
           className="inbox-answer"
-          data-presses={byPress ? "" : undefined}
+          data-named-send={namedSend ? "" : undefined}
           data-messages={answering ? undefined : ""}
-          // A press answers an approval, a task, and an item asking nothing, so its box's Enter sends nothing.
           onSubmit={() => {
-            if (byPress || reading > 0) return;
-            if (answering) answer();
+            if (reading > 0) return;
+            if (answering) send();
             else message();
           }}
         >
@@ -361,7 +428,10 @@ function AnswerCard({
             takesFocus={false}
             {...pickers.field}
             onEnter={() => {
-              if (room.current !== null) submitPromptInput(room.current);
+              if (room.current === null) return;
+              // Note that an answer's Enter sends whatever Send would say, since an answer that lacks something is told what.
+              if (answering) room.current.closest("form")?.requestSubmit();
+              else submitPromptInput(room.current);
             }}
             onPasteFiles={(files) => {
               // Only images are taken from the clipboard; text pastes as it always does.
@@ -370,6 +440,7 @@ function AnswerCard({
               attach(pasted);
               return true;
             }}
+            quote={(quote) => <ComposerQuoteView quote={quote} held={sending} />}
           />
           <PromptInputFooter className="inbox-answer-foot">
             {dictating ? (
@@ -398,21 +469,21 @@ function AnswerCard({
                     }}
                   />
                   <span className="inbox-answer-quiet">
-                    {item.needsReply || !answering ? null : (
-                      <span data-inbox-quiet="">{quietLine(draft)}</span>
+                    {quiet === undefined ? null : (
+                      <span
+                        data-inbox-quiet=""
+                        data-wanting={quiet.wanting ? "" : undefined}
+                        role={quiet.wanting ? "status" : undefined}
+                      >
+                        {quiet.line}
+                      </span>
                     )}
                   </span>
                 </PromptInputTools>
                 <div className="inbox-answer-actions">
                   <DictateButton dictation={dictation} disabled={sending || module === undefined} />
                   {answering ? (
-                    <SendPresses
-                      item={item}
-                      draft={draft}
-                      sending={sending}
-                      reading={reading > 0}
-                      onAnswer={answer}
-                    />
+                    <AnswerSend item={item} draft={draft} sending={sending} reading={reading > 0} />
                   ) : (
                     <Tooltip label={SEND_MESSAGE}>
                       <PromptInputSubmit
@@ -435,6 +506,14 @@ function AnswerCard({
           {note}
         </p>
       )}
+      {quotes ? (
+        <ReplyToSelection
+          scope={replyScope}
+          onReply={(words) => {
+            editor.current?.insertQuote(words);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

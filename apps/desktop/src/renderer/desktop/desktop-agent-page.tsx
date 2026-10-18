@@ -1,6 +1,17 @@
 import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import { useAct } from "@luke/panel/act";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { appPlatform } from "@luke/panel/app-platform";
+import { AutomationDirectory } from "@luke/panel/automation-directory";
+import { MemberDirectory } from "@luke/panel/member-directory";
+import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
+import { SpinnerRegion } from "@luke/panel/spinner";
+import { WordsWorkspace } from "@luke/panel/tasks/use-link-standing";
+import { OpenHereProvider, openPullRequestsHere } from "@luke/panel/tasks/use-open-link";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "@luke/panel/toast";
+import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, IconButton, useMenu } from "@luke/ui";
@@ -8,16 +19,9 @@ import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useAct } from "../act";
-import { useAppCommand } from "../app-commands";
-import { appPlatform } from "../app-platform";
-import { AutomationDirectory } from "../automation-directory";
 import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item";
 import { FindScope } from "../find-in-tab";
 import { usePageWorkspace } from "../links-at-hand";
-import { MemberDirectory } from "../member-directory";
-import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { SPINNER_SIZE, Spinner } from "../spinner";
 import { agentTabLabel } from "../tasks/coding-agent-model";
 import { SkillFiles } from "../tasks/skill-chip";
 import {
@@ -28,13 +32,9 @@ import {
 } from "../tasks/task-mentions";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { useCodingAgents } from "../tasks/use-coding-agents";
-import { WordsWorkspace } from "../tasks/use-link-standing";
-import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link";
 import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
-import { useExperiment } from "../use-app-state";
 import { ActionMenu } from "./action-menu";
 import { AgentPane } from "./main-tabs";
 import {
@@ -251,9 +251,11 @@ export function DesktopAgentPage({
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
     [onOpenAutomations],
   );
-  // Note that an inbox call is the one row of a coding agent's own that opens a tab, a worker's opening through its delegation.
+  // Note that an inbox call is the one row of a coding agent's own that opens a tab, and a task's archive the one that opens
+  // another task, as the sidebar opens it, a worker's opening through its delegation.
   const openTarget = (target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.INBOX) tasks.inboxView.onOpen();
+    if (target.kind === TOOL_TARGET.TASK) tasks.onShowTask(target.task);
   };
   // A delegation's row opens its worker in the side panel, and the pull request's chip the pull request, as on a task.
   const openDelegation = (
@@ -326,7 +328,7 @@ export function DesktopAgentPage({
             {NOT_READ}
           </ErrorState>
         ) : (
-          <Spinner label="Loading agent" size={SPINNER_SIZE.INLINE} />
+          <SpinnerRegion label="Loading agent" />
         )}
       </section>
     );
@@ -382,10 +384,11 @@ export function DesktopAgentPage({
                         panel={drawing.panel}
                         unread={NO_UNREAD}
                         holder={SIDE_PANEL_HOLDER.AGENT}
-                        planId={agentId}
+                        taskId={agentId}
                         repository={agentRepository ?? null}
                         board={undefined}
                         shownCode={undefined}
+                        codeFailed={undefined}
                         pages={undefined}
                         transcript={NO_CALLS}
                         work={work}

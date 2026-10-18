@@ -35,6 +35,8 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
   type CodingAgentInboxMessagedView,
+  type CodingAgentInboxReadAllView,
+  type CodingAgentInboxReadStateView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -43,7 +45,9 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
+  type CodingAgentReviewOptionsAnswerView,
   codingAgentAgentAnswerSchema,
   codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
@@ -65,6 +69,9 @@ import {
   codingAgentInboxMessagedViewSchema,
   codingAgentInboxMessageParamsSchema,
   codingAgentInboxParamsSchema,
+  codingAgentInboxReadAllViewSchema,
+  codingAgentInboxReadStateParamsSchema,
+  codingAgentInboxReadStateViewSchema,
   codingAgentListAnswerViewSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
@@ -81,8 +88,10 @@ import {
   codingAgentPullRequestActionParamsSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
+  codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentRenameParamsSchema,
+  codingAgentReviewOptionsAnswerViewSchema,
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
@@ -114,6 +123,7 @@ import {
   type FeedbackSubmission,
   feedbackSubmission,
 } from "@luke/features/feedback";
+import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import {
   type IntegrationAccountView,
   type IntegrationConnectView,
@@ -476,6 +486,7 @@ export const ACT_KIND = {
   CODING_AGENTS_CHANGES: "codingAgents.changes",
   /** One agent's pull request itself, its description, branches, mergeability, and people, which its Pull request tab's overview draws. */
   CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
+  CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",
   /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
   CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
@@ -484,6 +495,8 @@ export const ACT_KIND = {
   CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
   /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
   CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
+  /** Which of an agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in. */
+  CODING_AGENTS_PULL_REQUEST_VIEWED: "codingAgents.pullRequestViewed",
   /** The account's automations: listed, made, changed, deleted, run now, and one's runs read. */
   AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
@@ -538,6 +551,10 @@ export const ACT_KIND = {
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
   CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
+  /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
+  CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
+  /** Every item of the account's Inbox marked read, in one workspace or in all; the dots alone. */
+  CODING_AGENTS_INBOX_READ_ALL: "codingAgents.inboxReadAll",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   CODING_AGENTS_PICTURE: "codingAgents.picture",
@@ -775,7 +792,7 @@ const exactId = exactText(512);
  */
 const chatShownSchema = EffectSchema.Struct({
   workspaceId: exactId,
-  planId: EffectSchema.NullOr(exactId),
+  taskId: EffectSchema.NullOr(exactId),
 });
 
 export type ChatShown = typeof chatShownSchema.Type;
@@ -1322,6 +1339,13 @@ export const ACT = {
     ),
     refusal: "Could not read the agent's pull request on this system.",
   },
+  [ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS]: {
+    payload: actSchema(codingAgentPullRequestParamsSchema),
+    result: wireResult<CodingAgentReviewOptionsAnswerView>(
+      isReadable(codingAgentReviewOptionsAnswerViewSchema),
+    ),
+    refusal: "Could not read the repository's reviewers and labels on this system.",
+  },
   [ACT_KIND.CODING_AGENTS_CHANGES]: {
     payload: actSchema(codingAgentPullRequestParamsSchema),
     result: wireResult<CodingAgentChangesAnswerView>(
@@ -1361,6 +1385,13 @@ export const ACT = {
       isReadable(codingAgentPullRequestWriteAnswerViewSchema),
     ),
     refusal: "Could not change the pull request on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]: {
+    payload: actSchema(codingAgentPullRequestParamsSchema),
+    result: wireResult<CodingAgentPullRequestViewedAnswerView>(
+      isReadable(codingAgentPullRequestViewedAnswerViewSchema),
+    ),
+    refusal: "Could not read which files you viewed on this system.",
   },
   [ACT_KIND.AUTOMATIONS_LIST]: {
     payload: actSchema(automationListParamsSchema),
@@ -1496,6 +1527,18 @@ export const ACT = {
       isReadable(codingAgentInboxMessagedViewSchema),
     ),
     refusal: "Could not send the message on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: {
+    payload: actSchema(codingAgentInboxReadStateParamsSchema),
+    result: wireResult<CodingAgentInboxReadStateView>(
+      isReadable(codingAgentInboxReadStateViewSchema),
+    ),
+    refusal: "Could not mark the inbox item on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: {
+    payload: actSchema(inboxReadAllRequestSchema),
+    result: wireResult<CodingAgentInboxReadAllView>(isReadable(codingAgentInboxReadAllViewSchema)),
+    refusal: "Could not mark the inbox read on this system.",
   },
   [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: {
     payload: actSchema(codingAgentInboxAttachmentParamsSchema),

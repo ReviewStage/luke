@@ -85,7 +85,7 @@ function agents(
 
 function board(patch: Partial<FactoryInput>) {
   return factoryBoard({
-    plans: [],
+    tasks: [],
     waiting: [],
     callTaskId: undefined,
     oneOff: [],
@@ -96,15 +96,15 @@ function board(patch: Partial<FactoryInput>) {
 }
 
 /** Each row's task, or its automation for an agent with no task. */
-const names = (rows: readonly (FactoryStop | FactoryWork | { readonly plan: TaskSummary })[]) =>
-  rows.map((row) => ("plan" in row ? row.plan.name : (row.agent.automationName ?? "no task")));
+const names = (rows: readonly (FactoryStop | FactoryWork | { readonly task: TaskSummary })[]) =>
+  rows.map((row) => ("task" in row ? row.task.name : (row.agent.automationName ?? "no task")));
 
 /** Build's work as a reader scans it: an agent by its title, a pull request by its number, each with its plan. */
 const work = (rows: readonly FactoryWork[]) =>
   rows.map((row) =>
     row.kind === FACTORY_WORK.PULL_REQUEST
-      ? `#${row.pullRequest.number} (${row.plan.name})`
-      : `${row.agent.title} (${row.kind === FACTORY_WORK.AGENT ? row.plan.name : (row.agent.automationName ?? "no task")})`,
+      ? `#${row.pullRequest.number} (${row.task.name})`
+      : `${row.agent.title} (${row.kind === FACTORY_WORK.AGENT ? row.task.name : (row.agent.automationName ?? "no task")})`,
   );
 
 /** What stops an agent as a reader scans it: a question by its words, a failure by its agent. */
@@ -117,7 +117,7 @@ const stops = (rows: readonly FactoryStop[]) =>
 
 test("a task's agents at work stand in Build each on a row of their own, the latest moved first; a draft, an archived task, or a finished one stands nowhere", () => {
   const drawn = board({
-    plans: [
+    tasks: [
       task(1, "Usage alerts", 2 * HOUR),
       task(
         2,
@@ -151,8 +151,8 @@ test("the task on this Mac's call stands in Talk however long ago it was saved, 
     3 * LOOKBACK_MS,
     agents([agent(1, CODING_AGENT_STATUS.RUNNING)]),
   );
-  const drawn = board({ plans: [task(2, "Usage alerts", MINUTE), call], callTaskId: call.id });
-  assert.deepEqual(names(drawn.talking.map((each) => ({ plan: each }))), ["Factory tab"]);
+  const drawn = board({ tasks: [task(2, "Usage alerts", MINUTE), call], callTaskId: call.id });
+  assert.deepEqual(names(drawn.talking.map((each) => ({ task: each }))), ["Factory tab"]);
   assert.deepEqual(work(drawn.working), ["Agent 1 (Factory tab)"]);
 });
 
@@ -202,7 +202,7 @@ test("what stops an agent leads Build: each open Inbox item with its plan, the l
       ],
     },
   ];
-  const drawn = board({ plans: [billing, invites, push, pooling, stale], waiting });
+  const drawn = board({ tasks: [billing, invites, push, pooling, stale], waiting });
   assert.deepEqual(stops(drawn.stopped), [
     "Expire invites after a week?",
     "Which account pays out?",
@@ -228,7 +228,7 @@ test("what stops a merge leads Ship: failing checks, then pull requests ready to
       agents([agent(n, CODING_AGENT_STATUS.COMPLETED, NOW - n * MINUTE)], [line]),
     );
   const drawn = board({
-    plans: [
+    tasks: [
       withPullRequest(
         1,
         "Invitations",
@@ -280,7 +280,7 @@ test("a pull request merged in the last day stands in Ship at its task's last ac
       ),
     );
   const drawn = board({
-    plans: [
+    tasks: [
       merged(1, "CSV export", 5 * HOUR),
       merged(2, "Tax IDs", 40 * MINUTE),
       merged(3, "Old export", LOOKBACK_MS + MINUTE),
@@ -297,7 +297,7 @@ test("a pull request merged in the last day stands in Ship at its task's last ac
 });
 
 test("with nothing standing anywhere, the board is empty", () => {
-  const drawn = board({ plans: [task(1, "Old dashboard", 10 * LOOKBACK_MS)] });
+  const drawn = board({ tasks: [task(1, "Old dashboard", 10 * LOOKBACK_MS)] });
   assert.deepEqual(drawn, {
     talking: [],
     stopped: [],
@@ -321,16 +321,16 @@ test("an agent that failed before its first turn waits in Build as recent as its
     ...agents([turnless]),
     activityAt: NOW - 5 * MINUTE,
   });
-  assert.deepEqual(stops(board({ plans: [started] }).stopped), ["Agent 1 failed"]);
+  assert.deepEqual(stops(board({ tasks: [started] }).stopped), ["Agent 1 failed"]);
   // With no activity of its own since, the old task's failure has aged out.
-  assert.deepEqual(board({ plans: [old] }).stopped, []);
+  assert.deepEqual(board({ tasks: [old] }).stopped, []);
 });
 
 test("a draft's failing checks are its own work still, standing in Build; only an open pull request's wait in Ship", () => {
   const withPullRequest = (n: number, name: string, line: TaskPullRequestLine) =>
     task(n, name, HOUR, agents([agent(n, CODING_AGENT_STATUS.COMPLETED)], [line]));
   const drawn = board({
-    plans: [
+    tasks: [
       withPullRequest(1, "Draft", pullRequest(42, PULL_REQUEST_STATE.DRAFT, CHECK_SUMMARY.FAILING)),
       withPullRequest(2, "Open", pullRequest(43, PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.FAILING)),
     ],
@@ -426,7 +426,7 @@ test("an agent with no task stands in Build beside the tasks' agents: at work am
   const stale = oneOff(3, CODING_AGENT_STATUS.FAILED, NOW - LOOKBACK_MS - MINUTE, "Old run");
   const asking = oneOff(4, CODING_AGENT_STATUS.COMPLETED, NOW - 10 * MINUTE);
   const drawn = board({
-    plans: [task(1, "Search", HOUR, agents([agent(1, CODING_AGENT_STATUS.RUNNING, NOW - MINUTE)]))],
+    tasks: [task(1, "Search", HOUR, agents([agent(1, CODING_AGENT_STATUS.RUNNING, NOW - MINUTE)]))],
     oneOff: [working, failed, stale, asking],
     oneOffWaiting: [
       {

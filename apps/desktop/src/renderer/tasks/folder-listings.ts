@@ -1,6 +1,6 @@
 import { TASK_TREE_ENTRY, type TaskTreeEntry } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksTreeAnswer } from "@luke/features/tasks-view";
-import type { FolderEntry, FolderListing } from "../file-tree/contract";
+import type { FolderEntry, FolderListing } from "@luke/panel/file-tree/contract";
 import { refusalLine, refusalPasses } from "./file-tab-model";
 
 /**

@@ -1,5 +1,13 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
-import { AGENT_STATE, type FactoryWorldView, type ZoneView } from "@luke/ui/factory-world";
+import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  type WorldModule,
+  type WorldPalette,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import { agentDrawnUnder, type FactoryWorldView, type ZoneView } from "@luke/ui/factory-world";
 import {
   CircleGeometry,
   Color,
@@ -9,14 +17,6 @@ import {
   type Texture,
   Vector3,
 } from "three";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  type WorldModule,
-  type WorldPalette,
-  type WorldState,
-} from "../../world";
 import { createBlast } from "./blast";
 import { createCast } from "./cast";
 import { createCities, windowMaterial } from "./cities";
@@ -245,9 +245,7 @@ export const world: WorldModule = {
     };
 
     const drawnAgents = (state: WorldState) =>
-      state.view.agents.filter(
-        (agent) => state.layers.building || agent.state === AGENT_STATE.FAILED,
-      );
+      state.view.agents.filter((agent) => agentDrawnUnder(agent, state.layers));
 
     const recast = (state: WorldState, placed: PlanetLayout, reshaped: boolean) => {
       const before = last;
@@ -255,7 +253,8 @@ export const world: WorldModule = {
         reshaped ||
         before === undefined ||
         before.view.agents !== state.view.agents ||
-        before.layers.building !== state.layers.building;
+        before.layers.building !== state.layers.building ||
+        before.layers.defects !== state.layers.defects;
       if (agentsMoved) cast.cast(placed, drawnAgents(state), takenCopy());
       if (reshaped || before === undefined || before.view.timeline !== state.view.timeline) {
         shipped.show(placed, state.view.timeline, state.view.snapshotAt, takenCopy());

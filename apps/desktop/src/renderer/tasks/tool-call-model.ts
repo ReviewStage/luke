@@ -26,7 +26,13 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { CALL_KIND, type CallKind, commandDescription, pageName } from "@luke/features/turn-rows";
 import { skillWord } from "@luke/ui/skill-mention";
 import { fileRefText } from "@luke/voice/code-pane-model";
-import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire";
+import {
+  ACTION_RESULT_STATUS,
+  isRecord,
+  isWireNumber,
+  isWireString,
+  type WireValue,
+} from "@luke/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import { shortCommit } from "./file-tab-model";
@@ -615,6 +621,44 @@ function answeredAgentCall(
   return { ...namedCall(kind, input, output, undefined), subject: stringAt(agent, "title") ?? "" };
 }
 
+/** A call named by a field of what its answer names, as a section by its title; nothing before the answer, whose input holds only ids. */
+function answeredCall(
+  kind: CallKind,
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+  answered: string,
+  field: string,
+): ToolCallView {
+  const named = isRecord(output) ? output[answered] : undefined;
+  return { ...namedCall(kind, input, output, undefined), subject: stringAt(named, field) ?? "" };
+}
+
+/** How a task's change is said on its row: archived or unarchived where it named its archive, which is what such a call is for, and updated otherwise. */
+function taskUpdateKind(input: WireValue | undefined): CallKind {
+  const archived = isRecord(input) ? input.archived : undefined;
+  if (archived === true) return CALL_KIND.ARCHIVE_TASK;
+  return archived === false ? CALL_KIND.UNARCHIVE_TASK : CALL_KIND.UPDATE_TASK;
+}
+
+/** The tools that keep the member's sidebar sections or change a task, whose accepted call changes the sidebar. */
+const SECTION_TOOLS: ReadonlySet<string> = new Set([
+  AGENT_TOOL.CREATE_SECTION,
+  AGENT_TOOL.DELETE_SECTION,
+  AGENT_TOOL.MOVE_TASK,
+  AGENT_TOOL.UPDATE_TASK,
+]);
+
+/**
+ * Whether an answered call changed what the sidebar draws, so the window
+ * reads the tasks again: a start that made a new task, or a section made,
+ * deleted, or a task moved or changed, each only once it was accepted.
+ */
+export function changesSidebar(tool: string, output: WireValue | undefined): boolean {
+  if (!isRecord(output)) return false;
+  if (tool === AGENT_TOOL.START_AGENT) return isRecord(output.newTask);
+  return SECTION_TOOLS.has(tool) && output.status === ACTION_RESULT_STATUS.ACCEPTED;
+}
+
 /** The job of each worker, by eve's id for its task, which a stop names in the task's place. */
 export type WorkerJobs = ReadonlyMap<string, string>;
 
@@ -692,6 +736,14 @@ function tasksToolView(
       return namedCall(CALL_KIND.LIST_MODELS, input, output, undefined);
     case AGENT_TOOL.STOP_AGENT:
       return answeredAgentCall(CALL_KIND.STOP_AGENT, input, output);
+    case AGENT_TOOL.CREATE_SECTION:
+      return namedCall(CALL_KIND.CREATE_SECTION, input, output, "title");
+    case AGENT_TOOL.DELETE_SECTION:
+      return answeredCall(CALL_KIND.DELETE_SECTION, input, output, "section", "title");
+    case AGENT_TOOL.MOVE_TASK:
+      return answeredCall(CALL_KIND.MOVE_TASK, input, output, "task", "name");
+    case AGENT_TOOL.UPDATE_TASK:
+      return answeredCall(taskUpdateKind(input), input, output, "task", "name");
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
     case EVE_TOOL.TASK_WAIT:
@@ -774,6 +826,8 @@ export const TOOL_TARGET = {
   INBOX: "inbox",
   /** The plan's Chat tab, its channel of the workspace's chat. */
   CHAT: "chat",
+  /** Another task of the workspace, opened on its plan as the sidebar opens it. */
+  TASK: "task",
 } as const;
 
 export type ToolTarget =
@@ -783,7 +837,8 @@ export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.PLAN }
   | { readonly kind: typeof TOOL_TARGET.SHOWN_CODE; readonly call: string; readonly ref: CodeRef }
   | { readonly kind: typeof TOOL_TARGET.INBOX }
-  | { readonly kind: typeof TOOL_TARGET.CHAT };
+  | { readonly kind: typeof TOOL_TARGET.CHAT }
+  | { readonly kind: typeof TOOL_TARGET.TASK; readonly task: string };
 
 /** What the hover over a row says it opens, by its target's kind. */
 export const TARGET_HINT = {
@@ -794,6 +849,7 @@ export const TARGET_HINT = {
   [TOOL_TARGET.SHOWN_CODE]: "Open the file",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
   [TOOL_TARGET.CHAT]: "Open the task's chat",
+  [TOOL_TARGET.TASK]: "Open the task",
 } as const satisfies Record<ToolTarget["kind"], string>;
 
 /** A call as its target is read from it: the tool, the call's id, and its input and answer. */
@@ -847,6 +903,13 @@ function startedAgent(call: TargetedCall): ToolTarget | undefined {
   return { kind: TOOL_TARGET.AGENT, agent };
 }
 
+/** The task a change answered, which its row opens as the sidebar opens it. */
+function answeredTask(call: TargetedCall): ToolTarget | undefined {
+  const answer = isRecord(call.output) ? call.output.task : undefined;
+  const task = stringAt(answer, "id");
+  return task === undefined ? undefined : { kind: TOOL_TARGET.TASK, task };
+}
+
 /** The page a write made or moved on, which its answer names once it has. */
 function shownPage(call: TargetedCall): ToolTarget | undefined {
   const answer = isRecord(call.output) ? call.output.page : undefined;
@@ -898,6 +961,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.START_AGENT, startedAgent],
   [AGENT_TOOL.UNARCHIVE_AGENT, namedAgent],
   [AGENT_TOOL.STOP_AGENT, namedAgent],
+  [AGENT_TOOL.UPDATE_TASK, answeredTask],
   [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.START_CODING_AGENT, startedAgent],

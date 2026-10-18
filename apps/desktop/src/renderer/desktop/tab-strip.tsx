@@ -1,8 +1,12 @@
+import { useAppCommand } from "@luke/panel/app-commands";
+import { type TabMove, useTabDrag } from "@luke/panel/desktop/use-tab-drag";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   atPointer,
+  BUTTON_SIZE,
   CloseIcon,
   cssCustomProperties,
+  IconButton,
   MENU_ALIGN,
   MENU_DROP,
   type MenuPlacement,
@@ -12,10 +16,8 @@ import {
 import { useClipped } from "@luke/ui/use-clipped";
 import { Children, isValidElement, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useAppCommand } from "../app-commands";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction } from "./action-menu";
-import { type TabMove, useTabDrag } from "./use-tab-drag";
 
 /**
  * tab-strip.tsx -- the window's one tab strip, drawn alike across the task's column and the side panel, the way an editor draws its tabs.
@@ -451,21 +453,21 @@ export function Tab({
           {tab}
         </Tooltip>
       ) : (
-        <span className="tab-button field-well" data-editing="true">
+        <span className="tab-button" data-editing="true">
           {glyph}
           {editor}
         </span>
       )}
       {onClose === undefined || editor !== undefined ? null : (
-        <button
-          type="button"
-          className="tab-close"
-          aria-label={`Close ${label}`}
-          tabIndex={-1}
-          onClick={onClose}
-        >
-          <CloseIcon />
-        </button>
+        <span className="tab-close">
+          <IconButton
+            icon={<CloseIcon />}
+            label={`Close ${label}`}
+            size={BUTTON_SIZE.COMPACT}
+            tabbable={false}
+            onClick={onClose}
+          />
+        </span>
       )}
     </div>
   );

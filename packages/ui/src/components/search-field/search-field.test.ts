@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { SearchField, type SearchTally } from "./search-field.js";
+import { ComboboxList, comboboxOptionId } from "../combobox/combobox.js";
+import { useComboboxField } from "../combobox/use-combobox-field.js";
+import { SEARCH_FIELD_LOOK, SearchField, type SearchTally } from "./search-field.js";
 
 /**
  * search-field.test.ts -- a search draws the query its caller holds and
@@ -12,7 +14,8 @@ import { SearchField, type SearchTally } from "./search-field.js";
  * caller's callbacks and never while an input method is composing, keeps an
  * Escape it answers from the surface behind it, says its tally while a query
  * stands, shows its chord while empty, and clears a query through its clear
- * button, handing the caret back.
+ * button, handing the caret back. A search that steers a list under it
+ * is named as that list's combobox and hands its keys to it.
  */
 
 declare global {
@@ -189,4 +192,62 @@ test("Clear search empties the query and hands the caret back to the field", () 
   assert.equal(field.value, "");
   assert.equal(document.activeElement, field);
   assert.equal(clear(), null);
+});
+
+/** A menu's search over two rows, steering them while the caret stays in it, writing down what it chose. */
+function Steering({ chosen }: { chosen: string[] }): React.JSX.Element {
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const rows = ["Opus", "Sonnet"].filter((name) => name.toLowerCase().includes(query));
+  const keys = useComboboxField({
+    open: true,
+    active,
+    count: rows.length,
+    controls: "models",
+    activeId: comboboxOptionId("models", active),
+    onActiveChange: setActive,
+    onChoose: (index) => chosen.push(rows[index] ?? ""),
+    onEscape: () => chosen.push("closed"),
+  });
+  return createElement(
+    "div",
+    null,
+    createElement(SearchField, {
+      label: "Search models",
+      look: SEARCH_FIELD_LOOK.MENU,
+      value: query,
+      onChange: (typed: string) => {
+        setQuery(typed);
+        setActive(0);
+      },
+      combobox: keys,
+    }),
+    createElement(ComboboxList, {
+      id: "models",
+      label: "Model",
+      groups: [{ options: rows.map((name) => ({ id: name, label: name })) }],
+      active,
+      onActiveChange: setActive,
+      onChoose: () => undefined,
+    }),
+  );
+}
+
+test("a search that steers a list is named as its combobox, and its keys move and choose in the list", () => {
+  const chosen: string[] = [];
+  const container = render(createElement(Steering, { chosen }));
+  const field = container.querySelector("input") ?? assert.fail("the field");
+  press(field, { key: "ArrowDown" });
+  const id = field.getAttribute("aria-activedescendant");
+  const named = id === null ? undefined : document.getElementById(id)?.textContent;
+  press(field, { key: "Enter" });
+  type(field, "op");
+  press(field, { key: "Enter" });
+  const escaped = press(field, { key: "Escape" });
+
+  assert.equal(field.getAttribute("role"), "combobox");
+  assert.equal(field.getAttribute("aria-controls"), "models");
+  assert.equal(named, "Sonnet");
+  assert.deepEqual(chosen, ["Sonnet", "Opus", "closed"]);
+  assert.equal(escaped.stopped, true);
 });

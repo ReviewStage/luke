@@ -1,12 +1,11 @@
-import { BUTTON_VARIANT, Button } from "@luke/ui";
+import { AttentionMark } from "@luke/panel/attention-mark";
+import { BANNER_LOOK, BANNER_TONE, Banner, BUTTON_VARIANT, Button } from "@luke/ui";
 import type { ReactNode } from "react";
-import { AttentionMark } from "../attention-mark";
-import { BANNER_LOOK, Banner } from "../banner";
 
 /**
  * task-banner.tsx -- a notice about the whole task: one slim line under the task's toolbar, over every tab of it, which only mending what it says takes away.
  *
- * A banner over a document (`document-banner` in `desktop.css`) is about
+ * A banner over a document (`archived-task.tsx`) is about
  * that document, so it stands over the task's own tab and nowhere else; what
  * is wrong with the task itself, wherever the developer is reading it, is
  * said here instead. It spans the task's column under the toolbar, so it
@@ -18,7 +17,7 @@ import { BANNER_LOOK, Banner } from "../banner";
  * one press that mends it, an outlined button, on a faint attention tint. It has no close: it
  * goes once what it says no longer holds. Its words are text, never an
  * attribute, because the session recording masks text and nothing else. Where
- * the column is narrow it gives way as every banner does (`banner.tsx`):
+ * the column is narrow it gives way as every banner does (`@luke/ui`'s `Banner`):
  * the words wrap and the press takes a line of its own beneath them.
  */
 
@@ -39,7 +38,8 @@ export function TaskBanner({
 }): React.JSX.Element {
   return (
     <Banner
-      look={BANNER_LOOK.LINE}
+      look={BANNER_LOOK.STRIP}
+      tone={BANNER_TONE.ATTENTION}
       glyph={<AttentionMark />}
       actions={
         <Button variant={BUTTON_VARIANT.OUTLINE} onClick={action.onPress}>
@@ -47,7 +47,7 @@ export function TaskBanner({
         </Button>
       }
     >
-      <p className="task-banner-words">{children}</p>
+      <span className="task-banner-words">{children}</span>
     </Banner>
   );
 }

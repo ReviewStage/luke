@@ -4,17 +4,17 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { newestToastSays } from "@luke/panel/testing/toast";
+import { ToastHost } from "@luke/panel/toast";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { DOCUMENT_TASK } from "#testing/document-task";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl } from "#testing/tasks-control";
-import { newestToastSays } from "#testing/toast";
 import { HISTORY_READ } from "../tasks/use-plan-history";
-import { ToastHost } from "../toast";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse";
 
@@ -114,7 +114,9 @@ function drawn(): HTMLElement {
 
 test("a version's row offers Copy link, which copies its plan's address under the version's number and says Link copied", async () => {
   const container = drawn();
-  const second = container.querySelectorAll<HTMLButtonElement>(".version-row")[1];
+  const second = container.querySelectorAll<HTMLButtonElement>(
+    '[aria-label="Version list"] li > button',
+  )[1];
   assert.ok(second, "the second version is listed");
 
   act(() => {

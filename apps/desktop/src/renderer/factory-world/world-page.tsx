@@ -1,6 +1,19 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
+import { useFactoryWorld } from "@luke/panel/factory-world/use-factory-world";
+import {
+  PICK_KIND,
+  type PickTarget,
+  WORLD_LAYER,
+  type WorldLayer,
+  type WorldLayers,
+  type WorldModule,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import { SpinnerRegion } from "@luke/panel/spinner";
+import { usePrefersReducedMotion } from "@luke/panel/use-reduced-motion";
 import { cssCustomProperties, EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { taskBlastRadiusOf } from "@luke/ui/factory-campus";
 import {
   blastRadiusOf,
   factoryWorldAsOf,
@@ -20,31 +33,29 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useSideBundles, WORLD_LOAD_FAILED, worldBundleAtom } from "../bundle-loader";
-import { SpinnerRegion } from "../spinner";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { usePrefersReducedMotion } from "../use-reduced-motion";
-import type { FactorySceneHandle, FactorySceneModule, SceneHover } from "./contract";
+import { CampusScene } from "./campus/campus-scene";
+import type {
+  FactorySceneHandle,
+  FactorySceneModule,
+  SceneHover,
+  StageSceneProps,
+} from "./contract";
 import type { WorldEntry } from "./registry";
-import { useFactoryWorld } from "./use-factory-world";
-import {
-  PICK_KIND,
-  type PickTarget,
-  WORLD_LAYER,
-  type WorldLayer,
-  type WorldLayers,
-  type WorldModule,
-  type WorldState,
-} from "./world";
 import { HomeButton, HoverLabel, namingOf, PipelineBar, Scrubber, WorldCard } from "./world-chrome";
 
 /**
- * world-page.tsx -- a Factory world in the board's place: the workspace's snapshot read, the scene the world is drawn in, and the chrome every world shares over it.
+ * world-page.tsx -- a Factory world or the campus in the board's place: the workspace's snapshot read, the scene it is drawn in, and the chrome every one shares over it.
  *
  * Until the snapshot is read a ring stands where the world will; a read that
  * failed says so with Retry, and a workspace with no repository to draw is
  * the app's empty state, as the board says it holds nothing. Once read, the
- * scene bundle and the world's own are loaded, the world mounted over the
- * view the scrubber's instant reads, and the chrome drawn over it. What the
+ * scene is drawn over the view the scrubber's instant reads, and the chrome
+ * over it. A world's scene is Three.js's: its bundle and the world's own are
+ * loaded and the world mounted in it. The campus's is SVG drawn by React in
+ * the panel's own bundle (`campus/`), which loads no Three.js at all; the
+ * page hands either the same state and hears the same hover, press, and
+ * flight away from home, so the chrome serves both alike. What the
  * developer does here, choosing, hovering, switching a layer, winding the
  * clock, is the page's state and is handed to the world whole on each
  * change. Esc steps back one thing at a time: from a selection or a camera
@@ -64,6 +75,22 @@ const ALL_LAYERS: WorldLayers = {
   [WORLD_LAYER.SHIPPED]: true,
   [WORLD_LAYER.DEFECTS]: true,
 };
+
+/**
+ * The layers a world draws: the one the pipeline bar previews while the
+ * pointer or the keyboard rests on its count, else the one pressed, alone;
+ * every layer with neither.
+ */
+function layersShown(chosen: WorldLayer | undefined, preview: WorldLayer | undefined): WorldLayers {
+  const alone = preview ?? chosen;
+  if (alone === undefined) return ALL_LAYERS;
+  return {
+    [WORLD_LAYER.PLANNED]: alone === WORLD_LAYER.PLANNED,
+    [WORLD_LAYER.BUILDING]: alone === WORLD_LAYER.BUILDING,
+    [WORLD_LAYER.SHIPPED]: alone === WORLD_LAYER.SHIPPED,
+    [WORLD_LAYER.DEFECTS]: alone === WORLD_LAYER.DEFECTS,
+  };
+}
 
 const NO_BLAST: ReadonlyMap<string, number> = new Map();
 
@@ -169,29 +196,74 @@ function SceneCanvas({
   );
 }
 
-/** The world over one snapshot: the scene, and the chrome over it. */
+/** What the page draws: a world, or the campus. */
+export type FactoryScene = { readonly world: WorldEntry } | { readonly campus: true };
+
+/** A world's scene: the scene bundle and the world's own loaded, then the world mounted in it. */
+function WorldScene({
+  entry,
+  ...props
+}: StageSceneProps & { entry: WorldEntry }): React.JSX.Element {
+  const scene = useAtomValue(useSideBundles().factoryScene);
+  const world = useAtomValue(worldBundleAtom(entry.load));
+  const handle = useRef<FactorySceneHandle | undefined>(undefined);
+  const { home } = props;
+  useLayoutEffect(() => {
+    home.current = () => handle.current?.home();
+    return () => {
+      home.current = undefined;
+    };
+  }, [home]);
+  if (AsyncResult.isFailure(scene) || AsyncResult.isFailure(world)) {
+    return <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED}>{WORLD_LOAD_FAILED}</ErrorState>;
+  }
+  if (!AsyncResult.isSuccess(scene) || !AsyncResult.isSuccess(world)) {
+    return <SpinnerRegion label="Loading world" />;
+  }
+  return (
+    <SceneCanvas
+      scene={scene.value}
+      world={world.value}
+      state={props.state}
+      shown={props.shown}
+      handle={handle}
+      onHover={props.onHover}
+      onPick={props.onPick}
+      onAway={props.onAway}
+    />
+  );
+}
+
+/** The listed tasks' names, by id, which the hover label and a task's card name a building by. */
+function useTaskNames(tasks: TasksControl): ReadonlyMap<string, string> {
+  const listed = tasks.listed.tasks;
+  return useMemo(() => new Map(listed.map((task) => [task.id, task.name])), [listed]);
+}
+
+/** The world or the campus over one snapshot: the scene, and the chrome over it. */
 function WorldStage({
   snapshot,
-  entry,
+  scene,
   tasks,
   backOut,
 }: {
   snapshot: FactoryWorld;
-  entry: WorldEntry;
+  scene: FactoryScene;
   tasks: TasksControl;
   backOut: RefObject<(() => boolean) | undefined>;
 }): React.JSX.Element {
-  const scene = useAtomValue(useSideBundles().factoryScene);
-  const world = useAtomValue(worldBundleAtom(entry.load));
   const [root, setRoot] = useState<HTMLElement | null>(null);
   const [selected, setSelected] = useState<PickTarget | undefined>(undefined);
   const [hover, setHover] = useState<SceneHover | undefined>(undefined);
-  const [layers, setLayers] = useState<WorldLayers>(ALL_LAYERS);
+  const [chosenLayer, setChosenLayer] = useState<WorldLayer | undefined>(undefined);
+  const [previewLayer, setPreviewLayer] = useState<WorldLayer | undefined>(undefined);
+  const layers = useMemo(() => layersShown(chosenLayer, previewLayer), [chosenLayer, previewLayer]);
   const [instant, setInstant] = useState<number | undefined>(undefined);
   const [away, setAway] = useState(false);
-  const handle = useRef<FactorySceneHandle | undefined>(undefined);
+  const homeTo = useRef<(() => void) | undefined>(undefined);
   const still = useMotionStill(root);
   const dark = useDarkAppearance();
+  const taskNames = useTaskNames(tasks);
 
   const live = useMemo(() => factoryWorldViewOf(snapshot), [snapshot]);
   const asOf = useMemo(
@@ -202,13 +274,16 @@ function WorldStage({
     () => (instant === undefined ? live : factoryWorldViewOf(asOf)),
     [instant, live, asOf],
   );
-  const blast = useMemo(
-    () =>
-      selected?.kind === PICK_KIND.AGENT
-        ? new Map(blastRadiusOf(view, selected.id).map((zone) => [zone.path, zone.distance]))
-        : NO_BLAST,
-    [view, selected],
-  );
+  const blast = useMemo(() => {
+    if (selected === undefined) return NO_BLAST;
+    const reach =
+      selected.kind === PICK_KIND.AGENT
+        ? blastRadiusOf(view, selected.id)
+        : selected.kind === PICK_KIND.TASK
+          ? taskBlastRadiusOf(view, selected.id)
+          : [];
+    return reach.length === 0 ? NO_BLAST : new Map(reach.map((zone) => [zone.path, zone.distance]));
+  }, [view, selected]);
   const state = useMemo<WorldState>(
     () => ({
       view,
@@ -227,7 +302,7 @@ function WorldStage({
   const home = useCallback(() => {
     setSelected(undefined);
     setAway(false);
-    handle.current?.home();
+    homeTo.current?.();
   }, []);
   // Note that Esc reaches the overview first, and leaves Factory only from there.
   useLayoutEffect(() => {
@@ -241,31 +316,33 @@ function WorldStage({
     };
   }, [backOut, away, selected, home]);
 
-  const toggle = useCallback(
-    (layer: WorldLayer) => setLayers((was) => ({ ...was, [layer]: !was[layer] })),
-    [],
-  );
-  const hovered = hover === undefined ? undefined : namingOf(hover.target, view, asOf);
-  const loadFailed = AsyncResult.isFailure(scene) || AsyncResult.isFailure(world);
+  const choose = useCallback((layer: WorldLayer) => {
+    setChosenLayer((was) => (was === layer ? undefined : layer));
+    // Note that the press settles what the pointer previewed, so leaving the count shows the press, not the preview.
+    setPreviewLayer(undefined);
+  }, []);
+  const hovered = hover === undefined ? undefined : namingOf(hover.target, view, asOf, taskNames);
+  const sceneProps: StageSceneProps = {
+    state,
+    shown: tasks.shown,
+    home: homeTo,
+    onHover: setHover,
+    onPick: setSelected,
+    onAway: setAway,
+  };
   return (
     <div className="factory-world-stage" ref={setRoot} style={SIGNALS}>
-      {loadFailed ? (
-        <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED}>{WORLD_LOAD_FAILED}</ErrorState>
-      ) : AsyncResult.isSuccess(scene) && AsyncResult.isSuccess(world) ? (
-        <SceneCanvas
-          scene={scene.value}
-          world={world.value}
-          state={state}
-          shown={tasks.shown}
-          handle={handle}
-          onHover={setHover}
-          onPick={setSelected}
-          onAway={setAway}
-        />
+      {"world" in scene ? (
+        <WorldScene entry={scene.world} {...sceneProps} />
       ) : (
-        <SpinnerRegion label="Loading world" />
+        <CampusScene {...sceneProps} tasks={tasks.listed.tasks} />
       )}
-      <PipelineBar counts={view.pipeline} layers={layers} onToggle={toggle} />
+      <PipelineBar
+        counts={view.pipeline}
+        chosen={chosenLayer}
+        onChoose={choose}
+        onPreview={setPreviewLayer}
+      />
       {away || selected !== undefined ? <HomeButton onHome={home} /> : null}
       {hover === undefined || hovered === undefined ? null : (
         <HoverLabel hover={hover} naming={hovered} />
@@ -277,6 +354,7 @@ function WorldStage({
           world={asOf}
           blast={blast}
           tasks={tasks}
+          taskNames={taskNames}
           onClose={() => setSelected(undefined)}
         />
       )}
@@ -285,14 +363,14 @@ function WorldStage({
   );
 }
 
-/** A world in the board's place, over the listed workspace's snapshot. */
+/** A world or the campus in the board's place, over the listed workspace's snapshot. */
 export function FactoryWorldPage({
   tasks,
-  entry,
+  scene,
   backOut,
 }: {
   tasks: TasksControl;
-  entry: WorldEntry;
+  scene: FactoryScene;
   /** Where the page leaves its Esc: one step back toward the overview, answering whether it took one. */
   backOut: RefObject<(() => boolean) | undefined>;
 }): React.JSX.Element {
@@ -300,7 +378,7 @@ export function FactoryWorldPage({
   return (
     <div className="factory-world">
       {read === undefined ? (
-        <SpinnerRegion label="Reading the world" />
+        <SpinnerRegion label="Loading world" />
       ) : "failure" in read ? (
         <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {UNREAD_LINE}
@@ -308,7 +386,7 @@ export function FactoryWorldPage({
       ) : read.world === null ? (
         <EmptyState icon={<FactoryIcon />}>{NO_REPOSITORY_LINE}</EmptyState>
       ) : (
-        <WorldStage snapshot={read.world} entry={entry} tasks={tasks} backOut={backOut} />
+        <WorldStage snapshot={read.world} scene={scene} tasks={tasks} backOut={backOut} />
       )}
     </div>
   );

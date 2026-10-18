@@ -1,5 +1,6 @@
 import type { CodingAgentBrief, CodingAgentContext } from "@luke/features/coding-agent-wire";
-import { AnchoredPopover, POPOVER_ALIGN } from "@luke/ui";
+import { useMinute } from "@luke/panel/tasks/task-time";
+import { AnchoredPopover, IconButton, POPOVER_ALIGN } from "@luke/ui";
 import { useId, useRef, useState } from "react";
 import { PopoverPanel } from "../popover-panel";
 import { Tooltip } from "../tooltip";
@@ -14,7 +15,6 @@ import {
   rowCount,
   rowWidth,
 } from "./agent-context-model";
-import { useMinute } from "./task-time";
 
 /**
  * agent-context.tsx -- the ring at the agent box's foot that shows how full the agent's model's context is, and the popover that says what fills it.
@@ -161,21 +161,19 @@ export function AgentContextRing({
 
   return (
     <div className="agent-context" ref={root}>
-      <Tooltip label={contextHint(context)}>
-        <button
-          ref={trigger}
-          type="button"
-          className="icon-button agent-context-button"
-          aria-label={CONTEXT_LABEL}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? popoverId : undefined}
-          data-level={contextLevel(context)}
-          onClick={() => setOpen(!open)}
-        >
-          <ContextRing share={contextShare(context)} />
-        </button>
-      </Tooltip>
+      <span className="agent-context-button" data-level={contextLevel(context)}>
+        <Tooltip label={contextHint(context)}>
+          <IconButton
+            ref={trigger}
+            icon={<ContextRing share={contextShare(context)} />}
+            label={CONTEXT_LABEL}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            aria-controls={open ? popoverId : undefined}
+            onClick={() => setOpen(!open)}
+          />
+        </Tooltip>
+      </span>
       {open ? (
         <AnchoredPopover align={POPOVER_ALIGN.END}>
           <ContextPopover

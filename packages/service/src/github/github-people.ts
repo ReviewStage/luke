@@ -8,7 +8,9 @@
  * login a person may change. An account is named only where its holder is a
  * member of the agent's own workspace, so the answer never says which Luke
  * account stands behind someone outside it. Luke's own App's bot is named
- * as any other App's bot is: by its login, as GitHub names it.
+ * as any other App's bot is: by its login, as GitHub names it, and, where a
+ * commit's trailer names it a co-author, which gives no avatar, by its
+ * App's logo (`GitHubApp`'s `botAvatarUrl`).
  *
  * Who a pull request names rides beside its files and is never what the
  * files wait on: a read of the people that fails is said once in the log and
@@ -30,19 +32,24 @@ import type {
   CodingAgentChangesPeople,
   CodingAgentOverviewConversation,
   CodingAgentOverviewPullRequest,
+  CodingAgentReviewOptions,
   GitHubPerson,
   PullRequestStackEntry,
+  ReactionGroup,
 } from "@luke/features/coding-agent-wire";
 import { and, eq, inArray } from "drizzle-orm";
-import { Effect, type Redacted, Schema } from "effect";
+import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlSchema } from "effect/sql";
-import { GITHUB_PROVIDER_ID } from "./github-app.js";
+import { GITHUB_PROVIDER_ID, GitHubApp } from "./github-app.js";
 import type { StackEntry } from "./pull-request-stack.js";
 import {
   type GitHubAccount,
   type GitHubOverviewConversation,
   type GitHubOverviewPullRequest,
+  type GitHubReaction,
+  type GitHubReviewOptions,
+  type KnownBot,
   type PullRequestPeople,
   pullRequestPeople,
 } from "./pull-requests.js";
@@ -145,6 +152,15 @@ function changesPeopleOf(
   return answer;
 }
 
+/** Luke's own App's bot by its login and its App's logo; none where the App is not configured. */
+const lukeBot = /* @__PURE__ */ Effect.fnUntraced(function* () {
+  const app = yield* GitHubApp;
+  const bot = yield* Effect.option(
+    Effect.all({ login: app.botLogin, avatarUrl: app.botAvatarUrl }),
+  );
+  return Option.toArray(bot) satisfies readonly KnownBot[];
+});
+
 /**
  * Who the agent's pull request names, read on the token minted for its
  * repository and named against its workspace's members; nothing, said once
@@ -154,9 +170,10 @@ export const changesPeople = /* @__PURE__ */ Effect.fn("web/changesPeople")(func
   token: Redacted.Redacted,
   agent: { readonly repository: string; readonly organizationId: string },
   number: number,
-): Effect.fn.Return<ChangesPeople, never, HttpClient.HttpClient | DatabaseServices> {
+): Effect.fn.Return<ChangesPeople, never, HttpClient.HttpClient | DatabaseServices | GitHubApp> {
   return yield* Effect.gen(function* () {
-    const people = yield* pullRequestPeople(token, agent.repository, number);
+    const known = yield* lukeBot();
+    const people = yield* pullRequestPeople(token, agent.repository, number, known);
     const linked = yield* linkedMembers(agent.organizationId, idsOf(accountsOfPeople(people)));
     return changesPeopleOf(people, linked);
   }).pipe(
@@ -180,12 +197,13 @@ type Namer = (held: GitHubAccount) => GitHubPerson;
 const overviewNamer = /* @__PURE__ */ Effect.fnUntraced(function* (
   organizationId: string,
   accounts: readonly GitHubAccount[],
-  number: number,
+  /** What names the accounts, as the log says it: "pull request 7". */
+  about: string,
 ): Effect.fn.Return<Namer, never, DatabaseServices> {
   const linked = yield* linkedMembers(organizationId, idsOf(accounts)).pipe(
     Effect.catch((failure) =>
       Effect.as(
-        Effect.logWarning(`who pull request ${number} names was not linked: ${failure._tag}`),
+        Effect.logWarning(`who ${about} names was not linked: ${failure._tag}`),
         new Map<number, string>(),
       ),
     ),
@@ -264,7 +282,10 @@ export const namedOverviewPullRequest = /* @__PURE__ */ Effect.fn("web/namedOver
     const { pullRequest, author, requested, stack, ...rest } = read;
     const accounts = [...(author === undefined ? [] : [author]), ...requested];
     const [person, named] = yield* Effect.all(
-      [overviewNamer(agent.organizationId, accounts, pullRequest.number), namedStack(agent, stack)],
+      [
+        overviewNamer(agent.organizationId, accounts, `pull request ${pullRequest.number}`),
+        namedStack(agent, stack),
+      ],
       { concurrency: "unbounded" },
     );
     return {
@@ -285,11 +306,37 @@ export const namedOverviewPullRequest = /* @__PURE__ */ Effect.fn("web/namedOver
 function accountsOfConversation(read: GitHubOverviewConversation): readonly GitHubAccount[] {
   return [
     ...read.reviewers.map((reviewer) => reviewer.account),
+    ...accountsOfReactions(read.descriptionReactions),
     ...read.conversation.flatMap((entry) => [
       entry.account,
-      ...entry.threads.flatMap((thread) => thread.comments.map((comment) => comment.account)),
+      ...accountsOfReactions(entry.reactions),
+      ...entry.threads.flatMap((thread) =>
+        thread.comments.flatMap((comment) => [
+          comment.account,
+          ...accountsOfReactions(comment.reactions),
+        ]),
+      ),
     ]),
   ];
+}
+
+/** Everyone the reactions name. */
+function accountsOfReactions(reactions: readonly GitHubReaction[]): readonly GitHubAccount[] {
+  return reactions.flatMap((reaction) => reaction.accounts ?? []);
+}
+
+/** The reactions as the wire carries them, each who it names named; none where nothing was given. */
+function namedReactions(
+  reactions: readonly GitHubReaction[],
+  person: (held: GitHubAccount) => GitHubPerson,
+): readonly ReactionGroup[] | undefined {
+  if (reactions.length === 0) return undefined;
+  return reactions.map(({ content, count, accounts, mine }) => ({
+    content,
+    count,
+    ...(accounts === undefined ? undefined : { by: accounts.map(person) }),
+    ...(mine === undefined ? undefined : { mine }),
+  }));
 }
 
 /**
@@ -303,26 +350,66 @@ export const namedOverviewConversation = /* @__PURE__ */ Effect.fn("web/namedOve
     number: number,
     read: GitHubOverviewConversation,
   ): Effect.fn.Return<CodingAgentOverviewConversation, never, DatabaseServices> {
-    const person = yield* overviewNamer(agent.organizationId, accountsOfConversation(read), number);
+    const person = yield* overviewNamer(
+      agent.organizationId,
+      accountsOfConversation(read),
+      `pull request ${number}`,
+    );
+    // Note that a reaction key stands only where something was given, so a read before reactions and one with none read alike.
+    const reacted = (given: readonly GitHubReaction[], subject: string | undefined) => {
+      const named = namedReactions(given, person);
+      return {
+        ...(named === undefined ? undefined : { reactions: named }),
+        ...(subject === undefined ? undefined : { subject }),
+      };
+    };
+    const description = namedReactions(read.descriptionReactions, person);
     return {
       earlier: read.earlier,
       reviewers: read.reviewers.map(({ account: held, state }) => ({ by: person(held), state })),
-      conversation: read.conversation.map(({ account: held, state, threads, ...entry }) => ({
-        ...entry,
-        by: person(held),
-        ...(state === undefined ? undefined : { state }),
-        ...(threads.length === 0
-          ? undefined
-          : {
-              threads: threads.map(({ reviewId: _review, comments, ...thread }) => ({
-                ...thread,
-                comments: comments.map(({ account: author, ...comment }) => ({
-                  ...comment,
-                  by: person(author),
+      conversation: read.conversation.map(
+        ({ account: held, state, threads, reactions, subject, ...entry }) => ({
+          ...entry,
+          by: person(held),
+          ...(state === undefined ? undefined : { state }),
+          ...(threads.length === 0
+            ? undefined
+            : {
+                threads: threads.map(({ reviewId: _review, comments, ...thread }) => ({
+                  ...thread,
+                  comments: comments.map(
+                    ({ account: author, reactions: given, subject: on, ...comment }) => ({
+                      ...comment,
+                      by: person(author),
+                      ...reacted(given, on),
+                    }),
+                  ),
                 })),
-              })),
-            }),
-      })),
+              }),
+          ...reacted(reactions, subject),
+        }),
+      ),
+      ...(description === undefined ? undefined : { descriptionReactions: description }),
+      ...(read.descriptionSubject === undefined
+        ? undefined
+        : { descriptionSubject: read.descriptionSubject }),
     };
   },
 );
+
+/**
+ * What the reviewer and label pickers offer as the wire carries it, each
+ * user named as `overviewNamer` names them, so a teammate is offered as the
+ * member they are.
+ */
+export const namedReviewOptions = /* @__PURE__ */ Effect.fn("web/namedReviewOptions")(function* (
+  agent: { readonly organizationId: string },
+  read: GitHubReviewOptions,
+): Effect.fn.Return<CodingAgentReviewOptions, never, DatabaseServices> {
+  const person = yield* overviewNamer(
+    agent.organizationId,
+    read.users,
+    "the repository's collaborators",
+  );
+  return { labels: read.labels, users: read.users.map(person), teams: read.teams };
+});

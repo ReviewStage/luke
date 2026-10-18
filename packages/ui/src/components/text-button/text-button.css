@@ -1,0 +1,80 @@
+/* text-button.css -- TextButton: words among words with no box of their
+   own, in the line's own type, read at rest by their tone. The keyboard's
+   ring is the app's reset's, as it is for every control. */
+
+@layer components {
+  .luke-text-button {
+    display: inline-block;
+    vertical-align: baseline;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    /* A hairline corner, so the keyboard's ring hugs the words. */
+    border-radius: 2px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    text-decoration-line: none;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.24em;
+    /* Note that a clip, unlike a hidden overflow, keeps the words' own
+       baseline, so the press sits on the line it stands in. */
+    overflow: clip;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      color var(--luke-duration-hover) ease,
+      text-decoration-color var(--luke-duration-hover) ease;
+  }
+
+  /* Two lines, a card's name: the words wrap, and a third is cut short. */
+  .luke-text-button[data-lines="two"] {
+    display: -webkit-inline-box;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  /* A desktop control answers a press the way a Mac's does, without the
+     web's pointing hand. */
+  [data-luke-profile="desktop"] .luke-text-button {
+    cursor: default;
+  }
+
+  /* A glyph after the words, a disclosure's chevron, is set to their size. */
+  .luke-text-button svg {
+    width: 0.8em;
+    height: 0.8em;
+    margin-inline-start: var(--luke-space-2);
+    vertical-align: -0.05em;
+  }
+
+  .luke-text-button[data-tone="quiet"]:is(:hover, :focus-visible) {
+    color: var(--luke-color-text);
+    text-decoration-line: underline;
+  }
+
+  .luke-text-button[data-tone="link"] {
+    text-decoration-line: underline;
+    text-decoration-color: color-mix(in srgb, currentColor 32%, transparent);
+  }
+
+  .luke-text-button[data-tone="link"]:is(:hover, :focus-visible) {
+    text-decoration-color: currentColor;
+  }
+
+  .luke-text-button[data-tone="accent"] {
+    color: var(--luke-color-accent-text);
+    font-weight: var(--luke-weight-medium);
+  }
+
+  .luke-text-button[data-tone="accent"]:is(:hover, :focus-visible) {
+    text-decoration-line: underline;
+  }
+}

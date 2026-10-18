@@ -16,7 +16,7 @@ import { LINK_PLACE, type LinkPlace } from "./luke-link.js";
 
 /** The names the window holds, each by the id the service minted it under. */
 export interface KnownNames {
-  readonly plans: ReadonlyMap<string, string>;
+  readonly tasks: ReadonlyMap<string, string>;
   readonly agents: ReadonlyMap<string, string>;
   /** The catalog id of the model each agent the window holds runs on, which its harness's mark is read off; titled or not. */
   readonly agentModels: ReadonlyMap<string, string>;
@@ -59,9 +59,9 @@ const KIND_NAME = {
 function heldName(place: LinkPlace, known: KnownNames): string | undefined {
   switch (place.kind) {
     case LINK_PLACE.TASK:
-      return known.plans.get(place.planId);
+      return known.tasks.get(place.planId);
     case LINK_PLACE.VERSION: {
-      const taskName = known.plans.get(place.planId);
+      const taskName = known.tasks.get(place.planId);
       return taskName === undefined ? undefined : `${taskName}, version ${place.revision}`;
     }
     case LINK_PLACE.PAGE:
@@ -105,7 +105,7 @@ export function placeChipLook(
   known: KnownNames,
 ): PlaceChipLook {
   const taskId = taskOf(place);
-  const under = taskId === undefined ? undefined : known.plans.get(taskId);
+  const under = taskId === undefined ? undefined : known.tasks.get(taskId);
   const name = label ?? heldName(place, known) ?? KIND_NAME[place.kind];
   return { name, under };
 }

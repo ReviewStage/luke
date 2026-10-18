@@ -458,6 +458,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     shownCode: _shownCode,
     work: _work,
     workEarlier: _workEarlier,
+    workStatus: _workStatus,
     conversation: _conversation,
     pages: _pages,
     ...rest
@@ -555,18 +556,28 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * Note that only the latest read started is drawn, because reads overlap
    * (a refresh, a write's read after it) and an older one answering last
    * would put back what a write since then moved.
+   *
+   * Note that the read says it is reading only after none or a failed one,
+   * because a read that answers what is held tells the window nothing.
    */
   const readWorkspaces = Effect.gen(function* () {
     workspacesRead += 1;
     const read = workspacesRead;
     workspacesAskedAt = yield* Clock.currentTimeMillis;
     const current = () => read === workspacesRead;
+    if (view.workspacesStatus !== TASKS_READ.READY) {
+      write({ workspacesStatus: TASKS_READ.READING });
+    }
     const workspaces = Effect.tap(client.workspaces.list(), (answer) =>
       Effect.sync(() => {
         if (!current()) return;
         // A read that did not answer leaves the workspaces stale, so the next refresh reads them again at once.
-        if (answer === undefined) workspacesAskedAt = undefined;
-        else write({ workspaces: answer.workspaces });
+        if (answer === undefined) {
+          workspacesAskedAt = undefined;
+          write({ workspacesStatus: TASKS_READ.FAILED });
+        } else {
+          write({ workspaces: answer.workspaces, workspacesStatus: TASKS_READ.READY });
+        }
       }),
     );
     const github = Effect.tap(client.github.status(), (read) =>
@@ -705,7 +716,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /** Takes the active task's work as it now stands, and where its next older page is read from, none where no older turn stands. */
-  function writeWork(next: Pick<TasksView, "work" | "workEarlier" | "shownCode">): void {
+  function writeWork(
+    next: Pick<TasksView, "work" | "workEarlier" | "shownCode" | "workStatus">,
+  ): void {
     const { workEarlier: _was, ...rest } = view;
     view = { ...rest, ...next };
     publish();
@@ -771,12 +784,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * on it, as the service keeps them. Older pages already read stay, with
    * the place the next one is read from; a task read for the first time
    * takes the service's. Code a call put on screen that the record does not
-   * hold yet stays after the record's. A failed read keeps whatever is held.
+   * hold yet stays after the record's. A failed read keeps whatever is held,
+   * and says so; the read says it is reading only after none or a failed one,
+   * as the workspaces' does.
    */
   function readWork(taskId: string) {
     return Effect.gen(function* () {
+      if (view.activeTaskId === taskId && view.workStatus !== TASKS_READ.READY) {
+        write({ workStatus: TASKS_READ.READING });
+      }
       const stored = yield* served(client.readWork(taskId));
-      if (stored === undefined || view.activeTaskId !== taskId) return;
+      if (view.activeTaskId !== taskId) return;
+      if (stored === undefined) {
+        write({ workStatus: TASKS_READ.FAILED });
+        return;
+      }
       const work = withPage(stored.turns);
       const oldest = work[0]?.turnId;
       const olderHeld =
@@ -786,7 +808,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       writeWork({
         ...(work.length === 0 ? undefined : { work }),
         ...(workEarlier === undefined ? undefined : { workEarlier }),
-        ...(shownCode.length === 0 ? undefined : { shownCode }),
+        // Note that code is written even where none was shown, because none read is what the Code tab says and none unread is what it waits on.
+        shownCode,
+        workStatus: TASKS_READ.READY,
       });
     });
   }
@@ -1384,7 +1408,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const started = yield* served(client.create(request));
             if (!started.ok) return carried<TasksStartAnswer>({ failure: started.failure });
-            const task = started.answer;
+            const { task, agent } = started.answer;
             // A task just started has had no call. A call about another task
             // is left to the start's own Talk press, which moves it here.
             view = {
@@ -1396,7 +1420,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             publish();
             yield* openConversation(task.id);
             yield* readList;
-            return carried<TasksStartAnswer>({ planId: task.id });
+            return carried<TasksStartAnswer>({
+              planId: task.id,
+              ...(agent === undefined ? undefined : { agentStart: agent }),
+            });
           }),
         );
       }),

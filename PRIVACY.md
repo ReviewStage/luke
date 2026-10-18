@@ -436,13 +436,21 @@ nothing of the file is stored.
 pull request as GitHub holds it, in two views. Each time a view first opens, or
 you refresh it, our service reads it from GitHub with a token the Luke GitHub
 App mints for that one repository on the workspace's installation. The overview
-reads its title, branches, and whether it would merge; its description and up
+reads its title, branches, and whether it would merge, with how it may be
+merged: the merge methods and auto-merge its repository allows, whether a merge
+queue merges its base and its place in that queue, whether auto-merge is on,
+its head commit, what its required reviews say, and its checks as one word; its description and up
 to its 100 newest comments and reviews, each whole with its author, as GitHub
 renders them; the name, App, state, and times of up to 100 checks on its head;
 its reviewers; and up to its 100 newest review threads on lines, each with the
 file and lines it is on, the part of the diff it was made on, whether it was
 resolved or outdated, and up to its first 50 comments, each whole with its
-author, as GitHub renders them. An image in the description or a comment is read by our
+author, as GitHub renders them; and the reactions on the description, those
+comments and reviews, and those review comments, with up to 10 of who gave
+each, except on a review comment, where only how many. Beside it, where you
+hold a GitHub sign-in, our service reads with your own GitHub token which of
+those reactions are yours, so the tab can light them; it keeps none of it, and
+the answer is never kept for anyone else. An image in the description or a comment is read by our
 service too, never by your Mac: an upload with the same one-repository token,
 through a fresh signed address GitHub gives for it, and any other image through
 GitHub's own image proxy, each up to 8 MB; other images are shown as links.
@@ -450,12 +458,16 @@ Files changed reads each changed file's name and patch, for up to 300 files,
 leaving out a patch over 100,000 characters. It stores none of it, and Luke
 holds it in memory while the tab is open, never on disk, except that
 downloading a patch writes it where you save it. A button in the tab that
-changes the pull request, such as Ready for review or Convert to draft, is
+changes the pull request, such as Ready for review, Convert to draft, Merge,
+Enable auto-merge, or giving or taking back a reaction, is
 sent to GitHub by our service as you, on the token of your own GitHub sign-in,
 whoever started the agent, so it can do only what your GitHub account may; it
 is never sent as the Luke GitHub App, and where you hold no GitHub sign-in
 GitHub takes, nothing is sent and the tab asks you to sign in with GitHub
-again. Wherever Luke names someone on
+again. Files changed's Viewed boxes are GitHub's own, which GitHub keeps for
+each account: our service reads which files you marked viewed, and marks or
+unmarks one when you press its box, on the same token of your own GitHub
+sign-in and never as the Luke GitHub App, and stores none of it. Wherever Luke names someone on
 GitHub, as the tab does who opened, reviewed, and commented on the pull
 request, it draws them by their GitHub avatar, which your Mac loads straight
 from GitHub's avatar host, as github.com does, so GitHub sees your Mac's IP

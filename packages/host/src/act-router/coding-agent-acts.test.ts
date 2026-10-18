@@ -20,6 +20,7 @@ import {
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import {
+  FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
 } from "@luke/features/pull-request-write-wire";
@@ -227,6 +228,11 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           asked.push(`overview-pull-request:${agentId}`);
           return { pullRequest: null };
         }),
+      codingAgentReviewOptions: ({ agentId }) =>
+        Effect.sync(() => {
+          asked.push(`review-options:${agentId}`);
+          return { labels: [], users: [], teams: [] };
+        }),
       codingAgentOverviewChecks: ({ agentId }) =>
         Effect.sync(() => {
           asked.push(`overview-checks:${agentId}`);
@@ -241,6 +247,14 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
         Effect.sync(() => {
           asked.push(`pull-request-action:${agentId}:${request.action}`);
           return { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE } as const;
+        }),
+      codingAgentPullRequestViewed: ({ agentId }) =>
+        Effect.sync(() => {
+          asked.push(`pull-request-viewed:${agentId}`);
+          return {
+            outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+            files: [{ path: "src/seats.ts", state: FILE_VIEWED_STATE.VIEWED }],
+          } as const;
         }),
       codingAgentGitHubImage: ({ agentId }) =>
         Effect.sync(() => {
@@ -309,6 +323,16 @@ function fixture(answered: CodingAgentAgentAnswer = STARTED) {
           const files = (attachments ?? []).map((file) => file.name).join(",");
           asked.push(`message:${itemId}:${text}:${files}:${clientKey}`);
           return { item: ITEM };
+        }),
+      codingAgentInboxReadState: ({ itemId, unread }) =>
+        Effect.sync(() => {
+          asked.push(`read-state:${itemId}:${unread}`);
+          return { id: itemId, unread };
+        }),
+      codingAgentInboxReadAll: ({ workspaceId }) =>
+        Effect.sync(() => {
+          asked.push(`read-all:${workspaceId ?? "every workspace"}`);
+          return { marked: 3 };
         }),
       codingAgentInboxAttachment: ({ itemId, attachmentId }) =>
         Effect.sync(() => {
@@ -502,6 +526,34 @@ it.effect(
 );
 
 it.effect(
+  "a panel's read of which files it viewed reaches the host and hears each file's mark, and the voice window's is refused before it",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const act = {
+        kind: ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED,
+        payload: { agentId: AGENT_ID },
+      } as const;
+
+      const refused = yield* router.performAct(act, VOICE);
+      const read = yield* router.performAct(act, PANEL);
+
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED].refusal,
+      });
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: {
+          outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+          files: [{ path: "src/seats.ts", state: FILE_VIEWED_STATE.VIEWED }],
+        },
+      });
+      assert.deepEqual(asked, [`pull-request-viewed:${AGENT_ID}`]);
+    }),
+);
+
+it.effect(
   "a panel's message on an inbox item's thread reaches the host with its words, files, and key, and hears the item; the voice window's is refused before it",
   () =>
     Effect.gen(function* () {
@@ -606,6 +658,57 @@ it.effect(
       assert.deepEqual(asked, [
         `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
         `chat-post:${WORKSPACE_ID}:${JSON.stringify(write.payload.write)}`,
+      ]);
+    }),
+);
+
+it.effect(
+  "a panel marks an inbox item read or unread, or its whole Inbox read in one workspace or all, and hears the read state; the voice window's is refused before it",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const unread = {
+        kind: ACT_KIND.CODING_AGENTS_INBOX_READ_STATE,
+        payload: { itemId: ITEM.id, unread: true },
+      } as const;
+
+      const refused = yield* router.performAct(unread, VOICE);
+      const marked = yield* router.performAct(unread, PANEL);
+      const read = yield* router.performAct(
+        {
+          kind: ACT_KIND.CODING_AGENTS_INBOX_READ_STATE,
+          payload: { itemId: ITEM.id, unread: false },
+        },
+        PANEL,
+      );
+      const all = yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, payload: { workspaceId: "workspace-1" } },
+        PANEL,
+      );
+      const everywhere = yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, payload: {} },
+        PANEL,
+      );
+
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_INBOX_READ_STATE].refusal,
+      });
+      assert.deepEqual(marked, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { id: ITEM.id, unread: true },
+      });
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { id: ITEM.id, unread: false },
+      });
+      assert.deepEqual(all, { status: ACT_OUTCOME_STATUS.DONE, value: { marked: 3 } });
+      assert.deepEqual(everywhere, { status: ACT_OUTCOME_STATUS.DONE, value: { marked: 3 } });
+      assert.deepEqual(asked, [
+        `read-state:${ITEM.id}:true`,
+        `read-state:${ITEM.id}:false`,
+        "read-all:workspace-1",
+        "read-all:every workspace",
       ]);
     }),
 );

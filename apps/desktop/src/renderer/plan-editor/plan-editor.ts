@@ -1,3 +1,10 @@
+import type {
+  MentionNode,
+  PlanEditorHandle,
+  PlanEditorPictures,
+  PlanEditorPlacement,
+  PlanEditorProps,
+} from "@luke/panel/plan-editor/contract";
 import { TEXT_LINK_MARK_ATTRIBUTES } from "@luke/ui/link-face";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { type AnyExtension, Editor, Extension } from "@tiptap/core";
@@ -10,13 +17,6 @@ import { Markdown } from "@tiptap/markdown";
 import type { Node as PmNode } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
-import type {
-  MentionNode,
-  PlanEditorHandle,
-  PlanEditorPictures,
-  PlanEditorPlacement,
-  PlanEditorProps,
-} from "./contract";
 import { diagramPreview } from "./diagram-preview";
 import {
   documentManager,
@@ -215,6 +215,7 @@ function caretSection(editor: Editor): number {
 function placed(editor: Editor, placement: PlanEditorPlacement | undefined): Selection {
   const { doc } = editor.state;
   if (placement === undefined) return Selection.atStart(doc);
+  if ("end" in placement) return Selection.atEnd(doc);
   if ("x" in placement) {
     const point = editor.view.posAtCoords({ left: placement.x, top: placement.y });
     return point === null ? Selection.atStart(doc) : TextSelection.near(doc.resolve(point.pos));
@@ -319,6 +320,10 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     },
     chooseMention: (mention) => picking?.choose(editor, mention),
     markdown: () => documentMarkdown(manager, editor.state.doc, held),
+    focusAt: (placement) => {
+      editor.view.dispatch(editor.state.tr.setSelection(placed(editor, placement)));
+      editor.view.focus();
+    },
     insertPictures: (files) => {
       if (pictures !== undefined) laidInPictures(editor.view, files, pictures);
     },

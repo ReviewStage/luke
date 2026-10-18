@@ -32,7 +32,6 @@ import {
   messageFailureWords,
   messageWords,
   modelLabel,
-  newTaskCallIds,
   offeredModels,
   publishedUrl,
   pullRequestPillLabel,
@@ -40,7 +39,7 @@ import {
   readModelChoice,
   type SentLine,
   settledPlanEdits,
-  showsPublishedRow,
+  sidebarCallIds,
   startedAgentOf,
   unreadSentLines,
 } from "./coding-agent-model";
@@ -244,7 +243,7 @@ test("the checkout command fetches and switches to the branch, and the chip open
   );
 });
 
-test("the row says where the pull request stands only once it is a draft, merged, or closed, the chip says it to a reader without its colour, and the row is drawn only once the agent has ended with one", () => {
+test("the row says where the pull request stands only once it is a draft, merged, or closed, and the mark says it to a reader without its colour", () => {
   assert.deepEqual(Object.values(PULL_REQUEST_STATE).map(pullRequestStateWord), [
     undefined,
     "Draft",
@@ -255,15 +254,6 @@ test("the row says where the pull request stands only once it is a draft, merged
     pullRequestPillLabel({ ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED }),
     "Pull request #123, merged",
   );
-  const published = { repository: "acme/relay", branch: "luke/x", pullRequest: PULL_REQUEST };
-  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, published), true);
-  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.CANCELLED, published), true);
-  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.RUNNING, published), false);
-  assert.equal(
-    showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, { ...published, pullRequest: null }),
-    false,
-  );
-  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, undefined), false);
 });
 
 test("a fast version is folded into its base model by its id, read back as the base with Fast on, and named in the choice line", () => {
@@ -449,7 +439,7 @@ test("the calls that move a task's agents are its starts, archives, and unarchiv
   assert.deepEqual(agentListCallIds([]), []);
 });
 
-test("the starts that made a new task are named by call id once answered, and a start on a task, a call still out, or another tool's answer names none", () => {
+test("the starts that made a new task and the accepted section and task change calls are named by call id once answered, and a start on a task, a refused section or task change call, a call still out, or another tool's answer names none", () => {
   const call = (callId: string, tool: string, output?: WireRecord) => ({
     type: `tool-${tool}`,
     toolCallId: callId,
@@ -467,11 +457,18 @@ test("the starts that made a new task are named by call id once answered, and a 
         call("c2", "start_agent", { status: "accepted", agent: { id: "agent-3" } }),
         call("c3", "start_agent"),
         call("c4", "message_agent", made),
+        call("c5", "create_section", { status: "accepted", section: { id: "s-1" } }),
+        call("c6", "move_task", { status: "rejected", reason: "Not moved." }),
+        call("c7", "delete_section"),
+        call("c8", "move_task", { status: "accepted", task: { id: "task-2" }, section: null }),
+        call("c9", "update_task", { status: "accepted", task: { id: "task-3" } }),
+        call("c10", "update_task", { status: "rejected", reason: "Not archived." }),
+        call("c11", "update_task"),
       ],
     },
   ];
 
-  assert.deepEqual(newTaskCallIds(messages), ["c1"]);
+  assert.deepEqual(sidebarCallIds(messages), ["c1", "c5", "c8", "c9"]);
 });
 
 test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {

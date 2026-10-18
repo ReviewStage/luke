@@ -4,23 +4,23 @@ import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { MemberDirectory } from "@luke/panel/member-directory";
+import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
+import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
+import { lineWords } from "@luke/panel/testing/actor-line";
+import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { newestToastSays } from "@luke/panel/testing/toast";
+import { ToastHost } from "@luke/panel/toast";
 import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { lineWords } from "#testing/actor-line";
-import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import { newestToastSays } from "#testing/toast";
-import { MemberDirectory } from "../member-directory";
 import { OpenPersonProvider } from "../person-door";
-import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
-import { NO_LOOKS } from "../tasks/use-task-looks";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { ToastHost } from "../toast";
 import { DesktopTasks } from "./desktop-tasks";
 import { SidebarTask } from "./task-actions";
 import { taskCardOf } from "./task-card";
@@ -176,7 +176,7 @@ function mountSidebarTask(
   current = false,
 ): HTMLButtonElement {
   const container = mount(sidebarTask(tasks, task, asked, current));
-  const row = container.querySelector(".sidebar-task");
+  const row = container.querySelector("ul > li > button");
   assert.ok(row instanceof HTMLButtonElement);
   return row;
 }
@@ -329,9 +329,8 @@ test("a sidebar task someone else created wears its creator's face before its ti
     );
     const marks = container.querySelectorAll(".sidebar-task-time .actor-mark");
     // What the row says while it holds the keyboard, its time stepped out for Pin and Archive.
-    const line = container.querySelector(".sidebar-task-line");
+    const line = container.querySelector(".luke-list-row-title");
     const said = [...(line?.childNodes ?? [])]
-      .filter((part) => !(part instanceof Element && part.matches(".sidebar-task-time")))
       .map(heard)
       .join("")
       .match(/\(created by [^)]*\)/u)?.[0];
@@ -408,10 +407,10 @@ test("a sidebar plan whose repository belongs to another of the account's worksp
 
   assert.notEqual(mark(), null, "the row wears the attention mark");
   assert.match(heard(container), /\(repository belongs to Stage\)/u);
-  assert.deepEqual([...card.querySelectorAll(".task-card-detail")].map(heard), [
-    "acme-corp/relay",
-    "Repository belongs to Stage",
-  ]);
+  assert.deepEqual(
+    [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(heard),
+    ["acme-corp/relay", "Repository belongs to Stage"],
+  );
 
   act(() => roots[0]?.render(sidebarTask(tasks, { ...STRANDED, workspaceId: STAGE.id }, asked)));
   assert.equal(mark(), null, "moved to Stage, the row wears it no longer");
@@ -492,8 +491,8 @@ test("a task's card says who created it where others share its workspace, the re
         children: taskCardOf(tasks, { ...task, workspaceId: workspace.id }, task.updatedAt),
       }),
     );
-    const lines = [...card.querySelectorAll(".task-card-detail")].map((line) =>
-      heard(line).replace(/ · .*$/u, ""),
+    const lines = [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
+      (line) => heard(line).replace(/ · .*$/u, ""),
     );
     unmountAll();
     return lines;
@@ -515,7 +514,7 @@ test("a task's card's creator line opens the creator's page in the window, and i
   const charles = { ...OTHER, createdAt: 60_000, ownerId: CHARLES.userId, createdBy: CHARLES };
   const drawn = (inWindow: boolean) => {
     const card = taskCardOf(tasks, { ...charles, workspaceId: STAGE.id }, charles.updatedAt);
-    return mount(
+    const view = mount(
       createElement(MemberDirectory, {
         workspace: undefined,
         readerId: DEAN.userId,
@@ -523,7 +522,10 @@ test("a task's card's creator line opens the creator's page in the window, and i
           ? createElement(OpenPersonProvider, { value: (id: string) => opened.push(id) }, card)
           : card,
       }),
-    ).querySelector<HTMLElement>(".task-card-creator");
+    );
+    return [...view.querySelectorAll<HTMLElement>('.luke-hover-card-row[data-look="detail"]')].find(
+      (each) => each.textContent?.includes("Created by"),
+    );
   };
 
   const line = drawn(true);
@@ -555,8 +557,8 @@ test("a task's card says you of the reader's own task outside a member directory
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
     });
-    const said = [...card.querySelectorAll(".task-card-detail")].map((line) =>
-      heard(line).replace(/ · .*$/u, ""),
+    const said = [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(
+      (line) => heard(line).replace(/ · .*$/u, ""),
     );
     unmountAll();
     return said;

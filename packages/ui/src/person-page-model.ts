@@ -22,7 +22,7 @@ export const PERSON_TASKS_SHOWN = 5;
 
 /** One of a person's agents, with the task it works on. */
 export interface PersonAgent {
-  readonly plan: TaskSummary;
+  readonly task: TaskSummary;
   readonly agent: TaskAgentLine;
 }
 
@@ -41,7 +41,7 @@ const AT_WORK: ReadonlySet<TaskAgentLine["status"]> = new Set([
 ]);
 
 /** When an agent last moved, for ordering: its line's time, else its task's. */
-function agentTime({ plan: task, agent }: PersonAgent): number {
+function agentTime({ task, agent }: PersonAgent): number {
   return agent.at ?? taskTime(task, TASK_ORDER.UPDATED);
 }
 
@@ -50,7 +50,7 @@ export function personPage(userId: string, tasks: readonly TaskSummary[]): Perso
   const theirs = tasks.flatMap((task) =>
     (task.agents?.agents ?? [])
       .filter((agent) => agent.startedBy?.userId === userId)
-      .map((agent) => ({ plan: task, agent })),
+      .map((agent) => ({ task, agent })),
   );
   const newest = (a: PersonAgent, b: PersonAgent) => agentTime(b) - agentTime(a);
   return {

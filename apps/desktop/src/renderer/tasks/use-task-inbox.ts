@@ -19,9 +19,16 @@ import {
   inboxAnswerHeard,
   knownBlock,
 } from "@luke/features/inbox-wire";
+import { useInboxSettler, useSettledItems } from "@luke/panel/tasks/inbox-settling";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DRAFT_PLACE, type InboxPlace, useDraftWriter, useInboxDrafts } from "../composer-drafts";
+import {
+  DRAFT_PLACE,
+  draftOfItem,
+  type InboxPlace,
+  useDraftWriter,
+  useInboxDrafts,
+} from "../composer-drafts";
 import { messageFailureWords } from "./coding-agent-model";
 import {
   EMPTY_INBOX_DRAFT,
@@ -46,8 +53,12 @@ import {
  * so, with Try again, rather than asking again at once.
  *
  * An answer goes under a key minted here and kept with its words, so the
- * same answer sent again after a lost reply is taken once; the service
- * answers with the item as it then stands, which replaces the one held. An
+ * same answer sent again after a lost reply is taken once. It stands over
+ * every read the window draws the item from the moment it is sent
+ * (`inbox-settling.ts`), so the item leaves what needs the developer at
+ * once and no read behind it brings it back; the service answers with the
+ * item as it then stands, which replaces the one held, or, where it refused,
+ * the item stands again as it was, its draft kept. An
  * answer to an item its agent changed first is not taken, and the card says
  * so above the item as it now stands. An answer the agent was to hear
  * reached it as one of the developer's messages, which may have started
@@ -56,7 +67,8 @@ import {
  * A message on an item's thread goes the same way, open or settled, under
  * a key of its own kept with its words, and comes back as the item with
  * its thread, which replaces the one held; a message never answers the
- * item, nor changes where it stands. It reaches the agent as one of the
+ * item, nor changes where it stands, and once taken it stands over the
+ * window's other reads of the item until they hold it. It reaches the agent as one of the
  * developer's messages, which may wake it, so the agents are read again
  * too. A message refused leaves nothing on the thread, and the box says
  * why.
@@ -224,15 +236,6 @@ function draftPlace(item: InboxItem, taskId: string | null): InboxPlace {
   return item.status === INBOX_STATUS.OPEN ? place : { ...place, thread: true };
 }
 
-/** Whether a kept draft is the one the item's card reads as it now stands. */
-function draftOfItem(place: InboxPlace, item: InboxItem): boolean {
-  return (
-    place.itemId === item.id &&
-    place.revision === item.revision &&
-    (place.thread === true) === (item.status !== INBOX_STATUS.OPEN)
-  );
-}
-
 /** The items with one replaced by the service's newer word on it. */
 function withItem(items: readonly InboxItem[], item: InboxItem): readonly InboxItem[] {
   return items.some((each) => each.id === item.id)
@@ -286,6 +289,7 @@ export function useTaskInbox(input: {
   const readAgent = input.reader === undefined ? undefined : taskId;
   const drafts = useInboxDrafts(draftsOn);
   const writer = useDraftWriter();
+  const settler = useInboxSettler();
   const attempts = useRef(new Map<string, Attempt>());
   const latest = useRef({ ...agents, taskId, reader: input.reader });
   latest.current = { ...agents, taskId, reader: input.reader };
@@ -344,6 +348,8 @@ export function useTaskInbox(input: {
       attempts.current.set(item.id, { key, words });
       setSending((standing) => new Set(standing).add(item.id));
       note(item.id, undefined);
+      // Note that the answer stands over every read the moment it is sent, so no read the window draws from brings the item back while it lands.
+      const sent = settler.answer(item, reply);
       const askedOn = taskId;
       latest.current
         .answerInbox({
@@ -361,6 +367,7 @@ export function useTaskInbox(input: {
             return next;
           });
           if ("failure" in answer) {
+            settler.refuse(sent);
             note(item.id, messageFailureWords(answer.failure));
             return;
           }
@@ -371,15 +378,17 @@ export function useTaskInbox(input: {
               : standing,
           );
           if (!answer.taken) {
+            settler.refuse(sent);
             note(item.id, notTakenNote(answer.item));
             return;
           }
+          settler.take(sent, answer.item);
           writer.drop((place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id);
           // Note that an answer the agent hears may open its turn, so the agents are read again.
           if (inboxAnswerHeard(item, reply, attachments)) latest.current.onRetryList();
         });
     },
-    [sending, note, taskId, writer],
+    [sending, note, taskId, writer, settler],
   );
 
   const onMessage = useCallback(
@@ -417,6 +426,8 @@ export function useTaskInbox(input: {
               ? { ...standing, items: withItem(standing.items, answer.item) }
               : standing,
           );
+          // Note that the message stands over every other read until it holds it, so none draws the thread without it meanwhile.
+          settler.message(answer.item);
           writer.drop((place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id);
           // Note that the key is let go with the words, because the same words written again are a new message, which the service refuses under a key already spent.
           attempts.current.delete(item.id);
@@ -424,7 +435,7 @@ export function useTaskInbox(input: {
           latest.current.onRetryList();
         });
     },
-    [sending, note, taskId, writer],
+    [sending, note, taskId, writer, settler],
   );
 
   // An item of an agent the list has not read yet, one started from another
@@ -494,7 +505,9 @@ export function useTaskInbox(input: {
     drop((place) => stale.some((kept) => Equal.equals(kept.place, place)));
   }, [held.read, held.items, ownTask, readAgent, drafts, drop]);
 
-  const board = useMemo(() => inboxBoard(held.items), [held.items]);
+  // The board draws the window's own answers and messages over the read until it holds them.
+  const settled = useSettledItems(held.items);
+  const board = useMemo(() => inboxBoard(settled), [settled]);
   const draftOf = useCallback(
     (item: InboxItem): InboxDraft => {
       const kept = drafts.find((each) => draftOfItem(each.place, item));

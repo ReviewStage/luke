@@ -31,15 +31,20 @@ import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { MemberDirectory } from "@luke/panel/member-directory";
+import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
+import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
+import { stateWith } from "@luke/panel/testing/app-state";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge, fakeAppBridgeCalls } from "#testing/app-bridge";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
-import { stateWith } from "#testing/app-state";
 import {
   composerEditor,
   editorBundleLanded,
@@ -48,10 +53,6 @@ import {
   QUIET_COMPOSER,
   typeInComposer,
 } from "#testing/composer";
-import { onRegistry } from "#testing/copy-feedback";
-import { markdownHtmlParserLanded } from "#testing/markdown";
-import { installScrollIntoView } from "#testing/scroll-into-view";
-import { MemberDirectory } from "../member-directory";
 import { AgentComposer } from "./agent-composer";
 import type { SkillSource } from "./skill-picker";
 import {
@@ -63,7 +64,6 @@ import {
 } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 import { type MessageSender, useAgentComposer } from "./use-agent-composer";
-import { OpenLinkProvider } from "./use-open-link";
 
 /**
  * `@` in an agent's message box and its transcript, on a task's page and

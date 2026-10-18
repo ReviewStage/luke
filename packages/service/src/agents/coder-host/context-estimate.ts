@@ -16,9 +16,11 @@ import {
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
   UNARCHIVE_AGENT_TOOL,
+  UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
+import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL, MOVE_TASK_TOOL } from "../task-section-tools.js";
 import { CODER } from "./bounds.js";
 import { CHAT_TOOLS } from "./chat.js";
 import { DELEGATE_TOOL } from "./delegation.js";
@@ -148,6 +150,22 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.LIST_TASKS]: {
     description: LIST_TASKS_TOOL.description,
     inputSchema: emitJsonSchema(LIST_TASKS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.CREATE_SECTION]: {
+    description: CREATE_SECTION_TOOL.description,
+    inputSchema: emitJsonSchema(CREATE_SECTION_TOOL.inputSchema),
+  },
+  [CODER_TOOL.DELETE_SECTION]: {
+    description: DELETE_SECTION_TOOL.description,
+    inputSchema: emitJsonSchema(DELETE_SECTION_TOOL.inputSchema),
+  },
+  [CODER_TOOL.MOVE_TASK]: {
+    description: MOVE_TASK_TOOL.description,
+    inputSchema: emitJsonSchema(MOVE_TASK_TOOL.inputSchema),
+  },
+  [CODER_TOOL.UPDATE_TASK]: {
+    description: UPDATE_TASK_TOOL.description,
+    inputSchema: emitJsonSchema(UPDATE_TASK_TOOL.inputSchema),
   },
   [CODER_TOOL.POST_CHAT]: {
     description: CHAT_TOOLS.POST.description,

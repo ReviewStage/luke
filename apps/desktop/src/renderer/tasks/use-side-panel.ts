@@ -1,5 +1,7 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { useAct } from "@luke/panel/act";
+import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
 import { BoardIcon, CallIcon, CodeIcon } from "@luke/ui";
 import {
   type AgentStripTab,
@@ -30,8 +32,6 @@ import {
 import { fileName } from "@luke/voice/code-pane-model";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAct } from "../act";
-import { MAIN_TAB } from "./use-main-tabs";
 
 /**
  * use-side-panel.ts -- the open task's side panel: whether it is shown, which tabs it holds and which is chosen, and how wide, kept across launches.
@@ -1457,8 +1457,8 @@ function sameHolds(a: TaskHolds, b: TaskHolds): boolean {
 /**
  * Whether a kind the task did not hold holds something now. Note that a
  * kind not yet read counts as one held nothing, because the host leaves the
- * task's work and code absent both before their read and when it found
- * none, so a first snippet or turn arrives from nothing known; a read
+ * task's work absent both before its read and when it found none, so a
+ * first turn arrives from nothing known; a read
  * landing after another tab shows is held to the same rule, and the tab
  * shown stands rather than flickering to the one that landed.
  */

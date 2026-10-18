@@ -1,23 +1,24 @@
 import { useAtomValue } from "@effect/atom-react";
+import {
+  type DiffLook,
+  type DiffSelection,
+  type DiffViewHandle,
+  sameLook,
+} from "@luke/panel/diff-view/contract";
+import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from "react";
 import { DIFF_LOAD_FAILED, useSideBundles } from "../bundle-loader";
-import type {
-  DiffAnnotation,
-  DiffLook,
-  DiffSelection,
-  DiffViewHandle,
-} from "../diff-view/contract";
-import { useFileViewSettings } from "./file-view-settings";
 
 /**
- * file-diff.tsx -- a patch as Luke draws every diff: Pierre's diff (`../diff-view/`) mounted in a File tab's place in Files changed, or in a review thread's card in the overview, laid out and marked as the File tabs' settings say, and unified wherever a split would not fit.
+ * file-diff.tsx -- a patch as Luke draws every diff: Pierre's diff (`../diff-view/`) mounted in a review thread's card in the overview, laid out and marked as the File tabs' settings say, and unified wherever a split would not fit.
  *
- * The bundle is loaded the first time a diff is shown and mounted once per
- * file; a change of setting or of patch draws the same diff again rather
- * than mounting another. A split diff sets the old side beside the new, so
+ * Files changed draws its files as a list through the same bundle
+ * (`diff-list.tsx`), in the same look and room. The bundle is loaded the
+ * first time a diff is shown and mounted once per diff; a change of setting
+ * or of patch draws the same diff again rather than mounting another. A
+ * split diff sets the old side beside the new, so
  * each side has half the room: below `SPLIT_MIN_WIDTH` it is drawn unified
  * whatever the setting says, and the ⋯ offers Split view dimmed, the choice
  * kept for a wider panel.
@@ -58,53 +59,6 @@ export function useDiffLook(roomy: boolean): DiffLook {
   };
 }
 
-/** No notes, one run for every diff that has none. */
-const NO_NOTES: readonly DiffNote[] = [];
-
-/** Whether two looks draw a diff alike: every setting the same, each appearance's theme among them. */
-function sameLook(a: DiffLook, b: DiffLook): boolean {
-  return (
-    a.layout === b.layout &&
-    a.indicators === b.indicators &&
-    a.inlineDiff === b.inlineDiff &&
-    a.backgrounds === b.backgrounds &&
-    a.lineNumbers === b.lineNumbers &&
-    a.wrap === b.wrap &&
-    a.themes.dark === b.themes.dark &&
-    a.themes.light === b.themes.light &&
-    a.font === b.font &&
-    a.fontSize === b.fontSize &&
-    a.lineHeight === b.lineHeight &&
-    a.ligatures === b.ligatures
-  );
-}
-
-/** A note drawn under a line of the diff, a review thread's: where it stands, and what it says. */
-export interface DiffNote extends DiffAnnotation {
-  readonly content: ReactNode;
-}
-
-/** Whether two runs of notes stand under the same lines by the same keys. */
-function sameNotes(a: readonly DiffAnnotation[], b: readonly DiffAnnotation[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every((note, at) => {
-      const other = b[at];
-      return (
-        other !== undefined &&
-        note.key === other.key &&
-        note.side === other.side &&
-        note.line === other.line
-      );
-    })
-  );
-}
-
-/** A note's place alone, which is all the bundle is handed of it. */
-function placeOf({ key, side, line }: DiffAnnotation): DiffAnnotation {
-  return { key, side, line };
-}
-
 /** Whether two selections light the same lines. */
 function sameSelection(a: DiffSelection | undefined, b: DiffSelection | undefined): boolean {
   if (a === undefined || b === undefined) return a === b;
@@ -121,9 +75,7 @@ export function PierreDiff({
   look,
   selected,
   excerpt = false,
-  notes = NO_NOTES,
-  className = "file-tab-lines diff-view scroll-fade-top",
-  boxRef,
+  className,
 }: {
   patch: string;
   look: DiffLook;
@@ -131,41 +83,18 @@ export function PierreDiff({
   selected?: DiffSelection | undefined;
   /** Whether the patch is a few lines out of a file, drawn with nothing said of the lines around them. */
   excerpt?: boolean;
-  /** The notes drawn under lines, a review thread's on its line; none for none. */
-  notes?: readonly DiffNote[];
-  /** The box's classes: a File tab's place, filling it and scrolling, unless a card's are given. */
-  className?: string;
-  /** Handed the box the diff is drawn in, which the view measures for a split's room; a door that stays the same, as a state's setter does. */
-  boxRef?: (element: HTMLDivElement | null) => void;
+  /** The box's classes, a card's. */
+  className: string;
 }): React.JSX.Element {
   const loaded = useAtomValue(useSideBundles().diffView);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<DiffViewHandle | undefined>(undefined);
   // What the diff was last drawn with; the mount reads the latest, so it is mounted once.
-  // Note that each note is drawn into an element of its own, kept by its key for the diff's life, which the bundle stands under its line.
-  const noteElements = useRef(new Map<string, HTMLDivElement>());
-  const renderAnnotation = useCallback((key: string) => {
-    const held = noteElements.current.get(key);
-    if (held !== undefined) return held;
-    const element = document.createElement("div");
-    element.className = "diff-note";
-    noteElements.current.set(key, element);
-    return element;
-  }, []);
-  const annotations = notes.map(placeOf);
-  const props = { patch, look, selected, excerpt, annotations, renderAnnotation };
+  const props = { patch, look, selected, excerpt };
   const drawn = useRef(props);
   const latest = useRef(props);
   latest.current = props;
-  const hostRef = useCallback(
-    (element: HTMLDivElement | null) => {
-      host.current = element;
-      boxRef?.(element);
-    },
-    [boxRef],
-  );
-
   useEffect(() => {
     const element = host.current;
     if (module === undefined || element === null) return undefined;
@@ -185,8 +114,7 @@ export function PierreDiff({
       was.patch === patch &&
       sameLook(was.look, look) &&
       sameSelection(was.selected, selected) &&
-      was.excerpt === excerpt &&
-      sameNotes(was.annotations, annotations)
+      was.excerpt === excerpt
     ) {
       return;
     }
@@ -197,9 +125,5 @@ export function PierreDiff({
   if (AsyncResult.isFailure(loaded)) {
     return <p className="side-panel-empty">{DIFF_LOAD_FAILED}</p>;
   }
-  return (
-    <div ref={hostRef} className={className} data-diff-layout={look.layout}>
-      {notes.map((note) => createPortal(note.content, renderAnnotation(note.key), note.key))}
-    </div>
-  );
+  return <div ref={host} className={className} data-diff-layout={look.layout} />;
 }

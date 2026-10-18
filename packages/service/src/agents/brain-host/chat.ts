@@ -110,7 +110,7 @@ type BrainChatServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
 /** The plan's Luke as the account reaches the chat. */
 export function lukeOn(userId: string, taskId: string): ChatReader {
-  return { userId, planId: taskId, self: { kind: MEMBER_KIND.LUKE, planId: taskId } };
+  return { userId, taskId, self: { kind: MEMBER_KIND.LUKE, taskId } };
 }
 
 /** Runs one post as Luke, counted against the turn's bound, and let go of the count where it was refused. */

@@ -3,12 +3,12 @@
  */
 
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { useAct } from "@luke/panel/act";
+import { useKeyboardModality } from "@luke/panel/keyboard-modality";
+import { useAppState } from "@luke/panel/use-app-state";
+import { useVoiceView } from "@luke/panel/use-voice-view";
 import { callCard } from "@luke/ui/call-card-model";
 import { AVATAR_STATUS } from "@luke/voice/avatar";
-import { useAct } from "../act";
-import { useKeyboardModality } from "../keyboard-modality";
-import { useAppState } from "../use-app-state";
-import { useVoiceView } from "../use-voice-view";
 import { useAvatarView } from "./avatar-view";
 import {
   CALL_CARD_SURFACE,

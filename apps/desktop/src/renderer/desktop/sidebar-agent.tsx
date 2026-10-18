@@ -1,11 +1,19 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
-import { PinIcon, UnpinIcon, useMenu } from "@luke/ui";
+import { useMemberDirectory } from "@luke/panel/member-directory";
+import {
+  LIST_DENSITY,
+  LIST_ROW_CURRENT,
+  LIST_ROW_INK,
+  ListRow,
+  PinIcon,
+  UnpinIcon,
+  useMenu,
+} from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
 import { agentRow, taskRowName } from "@luke/ui/task-list-model";
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item";
-import { useMemberDirectory } from "../member-directory";
 import { RelativeTime } from "../tasks/relative-time";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look";
 import { Tooltip } from "../tooltip";
@@ -85,7 +93,10 @@ export function SidebarAgent({
   const reader = useMemberDirectory();
   const name = taskRowName(agentRow(agent));
   const starter = starterOf(agent, face, reader);
-  const row = useRef<HTMLButtonElement | null>(null);
+  const row = useRef<HTMLElement | null>(null);
+  const hold = useCallback((press: HTMLElement | null) => {
+    row.current = press;
+  }, []);
   const menu = useMenu(shown);
   const copyLink = useCopyLinkItem()(agentPlace(agent));
   const groups = [
@@ -93,41 +104,45 @@ export function SidebarAgent({
     onPin === undefined ? [] : [pinItem(agent, onPin)],
   ].filter((group) => group.length > 0);
   return (
-    <li className="sidebar-task-item">
-      <Tooltip label={name}>
-        <button
-          ref={row}
-          type="button"
-          className="sidebar-task sidebar-agent"
-          aria-current={current ? "page" : undefined}
-          data-menu-open={String(menu.open !== undefined)}
-          data-unread={String(unread)}
-          onClick={() => {
-            menu.close(false);
-            onOpen();
-          }}
-          onContextMenu={groups.length === 0 ? undefined : menu.contextMenu(row)}
-        >
-          <span className="sidebar-task-line">
-            <span className="sidebar-agent-glyph" aria-hidden="true">
-              <AgentGlyph agent={agent} />
-            </span>
-            <span className="sidebar-task-name">{name}</span>
-            {unread ? <span className="luke-visually-hidden">(unread)</span> : null}
-            <span className="sidebar-task-time">
-              {repository === undefined ? null : (
-                <span className="sidebar-task-repository">{repository}</span>
-              )}
-              {starter === undefined ? null : <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />}
-              {agentEndMark(agent, false)}
-              <RelativeTime at={at} now={now} hint={false} />
-            </span>
+    <>
+      <ListRow
+        ref={hold}
+        density={LIST_DENSITY.DENSE}
+        ink={LIST_ROW_INK.SIDEBAR}
+        leading={
+          <span className="sidebar-agent-glyph">
+            <AgentGlyph agent={agent} />
           </span>
-        </button>
-      </Tooltip>
+        }
+        title={
+          <>
+            {name}
+            {unread ? <span className="luke-visually-hidden">(unread)</span> : null}
+          </>
+        }
+        meta={
+          <span className="sidebar-task-time">
+            {repository === undefined ? null : (
+              <span className="sidebar-task-repository">{repository}</span>
+            )}
+            {starter === undefined ? null : <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />}
+            {agentEndMark(agent, false)}
+            <RelativeTime at={at} now={now} hint={false} />
+          </span>
+        }
+        current={current ? LIST_ROW_CURRENT.PAGE : undefined}
+        unread={unread}
+        menuOpen={menu.open !== undefined}
+        hint={{ Hint: Tooltip, label: name }}
+        onPress={() => {
+          menu.close(false);
+          onOpen();
+        }}
+        onContextMenu={groups.length === 0 ? undefined : menu.contextMenu(row)}
+      />
       {menu.drawn === undefined ? null : (
         <ActionMenu label={ACTIONS_LABEL} menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}
-    </li>
+    </>
   );
 }

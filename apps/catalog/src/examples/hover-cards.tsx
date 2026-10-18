@@ -1,14 +1,20 @@
 import {
   BUTTON_VARIANT,
   Button,
+  DocumentIcon,
+  FolderIcon,
   GAP,
+  HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
+  HoverCardList,
   HoverCardNote,
+  HoverCardRow,
   HoverCardRule,
   Inline,
   PinIcon,
   TooltipCard,
+  UserIcon,
 } from "@luke/ui";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type { Example } from "../examples";
@@ -17,8 +23,9 @@ import { CatalogSection } from "../section";
 /**
  * hover-cards.tsx -- the words of a card hung in a pill's place: a head with
  * its glyph, line, and corner; notes wrapped and on one line faded at its
- * end; and a rule before the rows it lists, one of them a button the pointer
- * crosses onto the card to press. Each card shows once the pointer rests on
+ * end; quieter rows under the name, one a press and one text; and a rule
+ * before the rows it lists, counting what it leaves out, each row a button
+ * the pointer crosses onto the card to press. Each card shows once the pointer rests on
  * its control or the keyboard reaches it, and stands while the pointer is on
  * the control, on the card, or between them: the catalog's own stand-in for
  * the linger an app gives its cards.
@@ -149,11 +156,35 @@ function HoverCards(): React.JSX.Element {
             card={
               <HoverCard>
                 <HoverCardHead name="Teammate invitations" corner="2 working" />
+                <HoverCardRow
+                  look={HOVER_CARD_ROW_LOOK.DETAIL}
+                  glyph={<FolderIcon />}
+                  label="acme/relay"
+                  onPress={() => undefined}
+                />
+                <HoverCardRow
+                  look={HOVER_CARD_ROW_LOOK.DETAIL}
+                  glyph={<UserIcon />}
+                  label="Created by Sam Rivera · 3d ago"
+                />
                 <HoverCardRule />
-                <Inline gap={GAP.CONTROL}>
-                  <Button variant={BUTTON_VARIANT.OUTLINE}>Open Invite flow</Button>
-                  <Button variant={BUTTON_VARIANT.OUTLINE}>Open Expiry sweep</Button>
-                </Inline>
+                <HoverCardList label="Agents" more="2 more">
+                  <li>
+                    <HoverCardRow
+                      glyph={<DocumentIcon />}
+                      label="Invite flow"
+                      onPress={() => undefined}
+                    />
+                  </li>
+                  <li>
+                    <HoverCardRow
+                      glyph={<DocumentIcon />}
+                      label="Expire every invitation a week after it was sent, and say so in the email"
+                      end="+120 −14"
+                      onPress={() => undefined}
+                    />
+                  </li>
+                </HoverCardList>
               </HoverCard>
             }
           />

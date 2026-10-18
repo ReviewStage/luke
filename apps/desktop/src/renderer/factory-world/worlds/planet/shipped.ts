@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget, type WorldPicking } from "@luke/panel/factory-world/world";
 import type { TimelineEntry } from "@luke/ui/factory-world";
 import {
   AdditiveBlending,
@@ -22,7 +23,6 @@ import {
   Vector3,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
 import { type Building, placeTower, towerMesh } from "./cities";
 import {
   groundAt,

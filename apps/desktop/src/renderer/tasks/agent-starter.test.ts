@@ -15,19 +15,19 @@ import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { MemberDirectory } from "@luke/panel/member-directory";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { ACTOR_KIND, SOMEONE_REASON } from "@luke/ui/actor-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
-import { MemberDirectory } from "../member-directory";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref";
 import {
   agentActor,
-  endLine,
+  endLineParts,
   endLineReason,
   lineSender,
   macOwnerOf,
@@ -321,7 +321,7 @@ test("an agent's card wears its tile beside its name and its pull request at the
 
 test("a key a teammate's agent failed on is named as theirs, with no Settings of the reader's to mend it", () => {
   const failed = (failure: typeof CODING_AGENT_FAILURE.PROVIDER_KEY, starter?: string) =>
-    endLine(CODING_AGENT_STATUS.FAILED, failure, undefined, starter);
+    endLineParts(CODING_AGENT_STATUS.FAILED, failure, starter)?.words;
 
   assert.equal(
     failed(CODING_AGENT_FAILURE.PROVIDER_KEY, "Charles Pan"),
@@ -334,12 +334,8 @@ test("a key a teammate's agent failed on is named as theirs, with no Settings of
   assert.match(failed(CODING_AGENT_FAILURE.PROVIDER_KEY) ?? "", /your API key was refused/u);
   assert.equal(endLineReason(CODING_AGENT_FAILURE.PROVIDER_KEY), FAILURE_REASON.API_KEY);
   assert.equal(
-    endLine(
-      CODING_AGENT_STATUS.FAILED,
-      CODING_AGENT_FAILURE.FAST_ON_OWN_KEY,
-      undefined,
-      "Charles Pan",
-    ),
+    endLineParts(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.FAST_ON_OWN_KEY, "Charles Pan")
+      ?.words,
     "Failed: Fast isn't available on Charles Pan's own API key; choose the model with Fast off",
   );
 });

@@ -18,6 +18,9 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/luke-link";
+import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -25,12 +28,9 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { onRegistry } from "#testing/copy-feedback";
-import { markdownHtmlParserLanded } from "#testing/markdown";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentTab, type TranscriptCards } from "./agent-tab";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
-import { OpenLinkProvider } from "./use-open-link";
 
 /**
  * replay-card.test.ts -- an agent started from another opens on the brief
@@ -315,7 +315,7 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   assert.match(call?.textContent ?? "", /"filePath":"src\/invite\.ts"/u);
   assert.match(call?.textContent ?? "", /export const INVITE_DAYS = 7;/u);
 
-  press(container.querySelector("[data-replay-open]"));
+  press(container.querySelector("[data-replay-open] button"));
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: SOURCE.id }]);
   assert.deepEqual(places, []);
 });
@@ -345,7 +345,7 @@ test("a fork trimmed of its earliest steps says Forked and its steps of how many
     container.querySelector("[data-replay-card] .luke-disclosure-body")?.textContent ?? "",
     /209 earlier steps were left out to keep the replay within its size limit\./u,
   );
-  press(container.querySelector("[data-replay-open]"));
+  press(container.querySelector("[data-replay-open] button"));
   assert.deepEqual(places, [
     { kind: LINK_PLACE.MESSAGE, planId: TASK_ID, agentId: SOURCE.id, messageId: FORKED_AT },
   ]);

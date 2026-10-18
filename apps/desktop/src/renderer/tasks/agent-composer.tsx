@@ -9,11 +9,30 @@ import {
   type CodingAgentUsage,
   hasWordsOrFiles,
 } from "@luke/features/coding-agent-wire";
-import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
+import {
+  FAILURE_REASON,
+  type Failure,
+  remedyLabel,
+  retriesBesideRemedy,
+} from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
+import {
+  PromptInput,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTools,
+  submitPromptInput,
+} from "@luke/panel/ai-elements/prompt-input";
+import { imageFiles } from "@luke/panel/feedback-images";
+import { GRANT_OUTCOME, useIntegrationGrant } from "@luke/panel/integration-grant";
+import { useIntegrationStatuses } from "@luke/panel/integration-statuses";
+import { COMPOSER_INPUT, type ComposerEditorHandle } from "@luke/panel/plan-editor/contract";
+import { readFiles, withFiles } from "@luke/panel/tasks/attached-files";
+import { useRepositoryRemedy } from "@luke/panel/tasks/repository-remedy";
 import {
   BUTTON_TYPE,
   EllipsisIcon,
+  ErrorState,
   IconButton,
   McpIcon,
   MicrophoneIcon,
@@ -25,33 +44,19 @@ import {
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
-import {
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTools,
-  submitPromptInput,
-} from "../ai-elements/prompt-input";
 import { useSideBundles } from "../bundle-loader";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { FailureNote } from "../failure-note";
-import { imageFiles } from "../feedback-images";
-import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant";
-import { useIntegrationStatuses } from "../integration-statuses";
-import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract";
 import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
 import { contextHint } from "./agent-context-model";
 import { AgentModelChip } from "./agent-model-chip";
-import { PublishedChip, type PublishedDoors } from "./agent-published";
+import { BranchChip, type PublishedDoors } from "./agent-published";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
-import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";
 import { useComposerPickers } from "./composer-pickers";
 import { DictateButton, DictationStrip } from "./dictation-strip";
 import { ComposerQuoteView } from "./reply-to-selection";
-import { useRepositoryRemedy } from "./repository-remedy";
 import type { SkillSource } from "./skill-picker";
 import { useMentionBox } from "./task-mentions";
 import type { AgentComposerControl } from "./use-agent-composer";
@@ -63,8 +68,10 @@ import type { AgentModelControl } from "./use-agent-model";
  * The box is the shared composer card (../ai-elements/prompt-input.tsx),
  * at its default type. Its foot is laid
  * out as ChatGPT's and Codex's are: at the left the "+" that attaches
- * files and, once the agent has pushed, the pull request's or the branch's
- * chip, which opens it on GitHub (`agent-published.tsx`); at the right,
+ * files and, once the agent has pushed a branch with no pull request yet,
+ * the branch's chip, which opens it on GitHub (`agent-published.tsx`); a
+ * pull request, once one stands, is the row pinned over the card rather
+ * than a chip here (`agent-tab.tsx`); at the right,
  * in this order, the model chip naming what the agent runs on, which opens
  * the menu that changes it for the next step (`agent-model-chip.tsx`),
  * the ring that shows, once a step has ended, how full the agent's model's
@@ -83,7 +90,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * there are words or files, disabled while there are neither and the agent
  * is idle, and Stop while there are neither and a turn runs, which is the
  * one Stop the tab has. A message that did not go stays in the box with why under the card
- * and what mends it (`../failure-note.tsx`): Retry, which sends it again
+ * and what mends it (`@luke/ui`'s `ErrorState`): Retry, which sends it again
  * under the same key, so a send whose answer was lost reaches the agent
  * once, or, for a repository out of reach, the press its reason names
  * (`repository-remedy.tsx`), a move of the task sending it again by itself
@@ -145,8 +152,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * The foot answers the card's own width, not the window's, so the box
  * holds in the main column and the side panel alike, the way Cursor's and
  * ChatGPT's narrow panes do (planning.css's `composer` container). As the
- * card narrows, the chips naming what the agent published draw their marks
- * alone; then a ⋯ takes in, in this order, the MCP
+ * card narrows, the branch's chip draws its mark alone; then a ⋯ takes in, in this order, the MCP
  * servers, the context ring, and the microphone; then the model chip draws
  * its harness's mark alone; and last the + goes into the ⋯ too. The field
  * and the round Send or Stop always stand whole. The chips drawing their
@@ -175,8 +181,8 @@ const BUTTON = {
 } as const;
 
 /**
- * The card widths below which a chip draws its mark alone: the published
- * chips first, then the model chip. Note that they are steps of the same
+ * The card widths below which a chip draws its mark alone: the branch's
+ * chip first, then the model chip. Note that they are steps of the same
  * order as the stylesheet's (tasks.css's `composer` queries, at 400 and 240),
  * because the room each leaves is counted on the steps before it.
  */
@@ -431,6 +437,8 @@ export function AgentComposer({
           repositoryRemedy(note, () => {
             if (latest.current.note === note) latest.current.retry();
           });
+  // Note that a remedy finished where Luke cannot watch keeps Retry beside it, since the same send goes once it is done.
+  const remedyWords = note === undefined ? undefined : remedyLabel(note);
   // Note that a closed box asks for nothing, since it takes nothing.
   const placeholder = closed ? "" : followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
 
@@ -655,7 +663,7 @@ export function AgentComposer({
                     attach(picked);
                   }}
                 />
-                <PublishedChip
+                <BranchChip
                   published={published}
                   doors={doors}
                   narrow={folds(FOLD_WIDTH.PUBLISHED)}
@@ -710,14 +718,23 @@ export function AgentComposer({
         </PromptInputFooter>
       </PromptInput>
       {note !== undefined ? (
-        <FailureNote
-          failure={note}
-          className="error-message agent-composer-note"
-          onRetry={retries ? composer.retry : undefined}
-          onRemedy={remedy}
-        >
+        <div className="agent-composer-note">
+          <ErrorState
+            remedy={
+              remedyWords === undefined || remedy === undefined
+                ? undefined
+                : { label: remedyWords, onClick: remedy }
+            }
+            onRetry={
+              retries && (remedyWords === undefined || retriesBesideRemedy(note))
+                ? composer.retry
+                : undefined
+            }
+          >
+            {note.text}
+          </ErrorState>
           {closed ? closedRemedy : null}
-        </FailureNote>
+        </div>
       ) : null}
     </div>
   );

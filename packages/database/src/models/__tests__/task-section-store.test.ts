@@ -14,7 +14,7 @@ import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { organization, user } from "../../schemas/auth.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
-import { listTaskSections, writeTaskSections } from "../task-section-store.js";
+import { deleteTaskSectionIn, listTaskSections, writeTaskSections } from "../task-section-store.js";
 import { createTask, deleteTask, updateTask } from "../task-store.js";
 
 /**
@@ -158,6 +158,36 @@ it.layer(getTestDB())("an account's task sections", (it) => {
       assert.deepEqual(answer, { sections: [], entries: [] });
       assert.equal(Option.isSome(yield* updateTask(dean, first, { name: "Invites" })), true);
     }),
+  );
+
+  it.effect(
+    "a delete in a workspace answers the section it took and the tasks that went back, once, and takes none of another workspace's or another account's",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, workspace, first, second } = yield* openSharedWorkspace;
+        const elsewhere = yield* openWorkspace(dean);
+        const id = randomUUID();
+        yield* written(dean, create(workspace, "Launch", id));
+        yield* written(dean, place(first, id));
+        yield* written(dean, place(second, id));
+
+        assert.ok(Option.isNone(yield* deleteTaskSectionIn(dean, elsewhere, id)));
+        assert.ok(Option.isNone(yield* deleteTaskSectionIn(charles, workspace, id)));
+        const deleted = yield* deleteTaskSectionIn(dean, workspace, id);
+        assert.deepEqual(
+          Option.map(deleted, ({ section, returnedTasks }) => [
+            section.id,
+            section.title,
+            returnedTasks,
+          ]),
+          Option.some([id, "Launch", 2]),
+        );
+        assert.ok(
+          Option.isNone(yield* deleteTaskSectionIn(dean, workspace, id)),
+          "a second delete takes nothing",
+        );
+        assert.deepEqual(yield* listTaskSections(dean), { sections: [], entries: [] });
+      }),
   );
 
   it.effect("a section is made only in a workspace its maker is a member of", () =>

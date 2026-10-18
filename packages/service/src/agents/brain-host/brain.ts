@@ -3,6 +3,8 @@ import type { LabelledAgentEdit, StoredTask } from "@luke/database/models/task-s
 import { RETIRED_TOOL } from "@luke/features/agent-tools";
 import { boardText } from "@luke/features/board-text";
 import type { Board } from "@luke/features/board-wire";
+import { issueIdentifier } from "@luke/features/issue-list-model";
+import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import {
   NOTE_KIND,
@@ -62,9 +64,11 @@ import {
   runStartAgent,
   runStopAgent,
   runUnarchiveAgent,
+  runUpdateTask,
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
   UNARCHIVE_AGENT_TOOL,
+  UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
@@ -80,6 +84,14 @@ import {
   RUN_IN_REPOSITORY_TOOL,
   runInRepository,
 } from "../repository-shell.js";
+import {
+  CREATE_SECTION_TOOL,
+  DELETE_SECTION_TOOL,
+  MOVE_TASK_TOOL,
+  runCreateSection,
+  runDeleteSection,
+  runMoveTask,
+} from "../task-section-tools.js";
 import {
   type BrainChatCall,
   type ChatSince,
@@ -243,7 +255,13 @@ On a request for a new agent, start it when the developer clearly asks for one (
 
 On a request to put agents away ("archive the agents whose PRs merged", "clean up the finished agents"), archive_agent archives each idle one the developer means, with a short reason such as its pull request having merged, and unarchive_agent brings one back. Archive only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent still working is refused; say so rather than stop it. Then say in your return which agents you archived.
 
+On a request to put tasks away or change one ("archive the tasks of the finished rollout", "clean up the done tasks", "rename this one", "pin the billing task"), update_task changes each task of the workspace the developer means, found with list_tasks (with includeArchived for one already archived), as their own task menu would: archived true archives it and false brings it back, and a name, a repository, or pinned change the rest. Change only what the developer asked for: never a task a teammate is still using, unless the developer named it, and never archive this task itself, which is refused; the developer archives it from its menu. Like the menu, an archive stops no agent: one still working on the task finishes the turn it is on. Then say in your return which tasks you changed and how.
+
 On a request to stop an agent ("stop the agent", "it's going the wrong way, stop it"), stop_agent stops the turn under way of the one the developer means, as their Stop button would: the agent stays, with its transcript and branch, and a message to it later starts a new turn. Stop only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent already idle is answered as idle and nothing changes. Then say in your return which agent you stopped.
+
+### The sidebar's sections
+
+The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. On a request to sort them ("make a section for the billing work", "move the invite tasks into Growth", "delete the Old section"), list_tasks names each task's section and the sections the developer keeps; create_section makes a section, move_task moves a task into one or back under Tasks, and delete_section deletes one, its tasks going back under Tasks and none of them deleted. Change only what the developer asked for, never on your own, then say in your return what you changed.
 
 ### The task's chat
 
@@ -273,7 +291,9 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - start_agent starts a new coding agent on this task, or on another task of the workspace by its taskId, handed the plan itself or a prompt in its place, and a note of anything else the developer said for it, as the developer's Start button would, all in its one first message.
 - stop_agent stops the turn under way of a coding agent of the workspace by its id, as the developer's Stop button would, leaving the agent available for a later message.
 - archive_agent archives an idle coding agent of the workspace by its id, with a short reason its archived banner shows, and unarchive_agent brings an archived one back.
-- list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, and who started it, so an agent can be started on another task by its taskId.
+- list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, who started it, and the sidebar section the developer keeps it in, and the sections themselves, so an agent can be started on another task by its taskId, or a task moved.
+- create_section makes a section in the developer's sidebar for this workspace, delete_section deletes one, its tasks going back under Tasks, and move_task moves a task into a section or back under Tasks.
+- update_task changes a task of the workspace by its id, as the developer's own task menu would: its name, its repository, the developer's pin, or its archive, found with list_tasks and includeArchived for an archived one.
 - post_chat posts a message in the workspace's chat as @luke, in the task's channel unless it names another place.
 - read_chat reads the workspace's chat: who is in it, its channels, and what you have not read, or a channel's or a thread's messages.
 - resolve_ask resolves an ask you posted in the chat, by its key.
@@ -350,6 +370,7 @@ const TASK_MARKER = "[task]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
 const LINEAR_ISSUE_MARKER = "[linear issue the task was started from]";
+const ISSUE_MARKER = "[workspace issue the task was started from]";
 const CHAT_SINCE_MARKER = "[chat since the last call]";
 /** The marker the sections the developer last wrote ride behind, which the brain and the notetaker are each told to keep as written. */
 export const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
@@ -422,8 +443,27 @@ function linearIssueText(stored: StoredTask): readonly string[] {
 }
 
 /**
+ * The workspace's own issue the plan was started from, as JSON, as it reads
+ * now: its identifier, title, Luke link, and description; nothing for a
+ * plan started from none, or once the issue is gone.
+ */
+function issueText(stored: StoredTask): readonly string[] {
+  const { issue } = stored;
+  if (issue === undefined) return [];
+  return [
+    ISSUE_MARKER,
+    JSON.stringify({
+      identifier: issueIdentifier(issue.workspaceName, issue.number),
+      title: issue.title,
+      url: linkOf({ kind: LINK_PLACE.ISSUE, issueId: issue.id }, issue.workspaceSlug),
+      description: issue.description,
+    }),
+  ];
+}
+
+/**
  * What a planning turn is handed beside its instructions every turn: the
- * plan's name, the Linear issue it was started from where it was, the saved
+ * plan's name, the Linear issue and the workspace's own issue it was started from where it was, the saved
  * document as JSON, the newest saves coding agents
  * made on it (so Luke can raise what an agent asked or decided), what was
  * said in the chat since Luke last read it (`chat.ts`), the sections
@@ -445,6 +485,7 @@ export function brainStandingContext(
     heading,
     `Name: ${task.name}`,
     ...linearIssueText(stored),
+    ...issueText(stored),
     DOCUMENT_MARKER,
     JSON.stringify(task.document),
     ...agentEditsText(stored.agentEdits),
@@ -602,6 +643,22 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   {
     ...LIST_TASKS_TOOL,
     run: (call, input) => runListTasks(call.agents, input),
+  },
+  {
+    ...CREATE_SECTION_TOOL,
+    run: (call, input) => runCreateSection(call.agents, input),
+  },
+  {
+    ...DELETE_SECTION_TOOL,
+    run: (call, input) => runDeleteSection(call.agents, input),
+  },
+  {
+    ...MOVE_TASK_TOOL,
+    run: (call, input) => runMoveTask(call.agents, input),
+  },
+  {
+    ...UPDATE_TASK_TOOL,
+    run: (call, input) => runUpdateTask(call.agents, input),
   },
   {
     ...LIST_MODELS_TOOL,

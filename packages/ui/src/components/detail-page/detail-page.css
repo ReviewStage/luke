@@ -134,6 +134,7 @@
     box-sizing: border-box;
     min-width: 0;
     min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
@@ -167,6 +168,21 @@
     padding-top: var(--luke-section-gap);
   }
 
+  /* A main column holding nothing but an empty or failed state (an
+     `EmptyState`, or a centred `ErrorState` where the thing could not be
+     read) fills the column, so the state stands a little above the room's
+     middle, as a collection's empty or failed state does. */
+  .luke-detail-page-main:has(> .luke-detail-page-content > .luke-empty-state:only-child) {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .luke-detail-page-content:has(> .luke-empty-state:only-child) {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+  }
+
   /* Content across the room scrolls sideways in its own column. */
   .luke-detail-page[data-width="full"] .luke-detail-page-main {
     overflow-x: auto;
@@ -178,6 +194,7 @@
     .luke-detail-page-body,
     .luke-detail-page-body:has(> .luke-detail-page-secondary) {
       display: block;
+      overflow-x: hidden;
       overflow-y: auto;
       overscroll-behavior: contain;
       scrollbar-gutter: stable;
@@ -188,6 +205,19 @@
     .luke-detail-page-secondary {
       overflow: visible;
       padding-inline: var(--luke-detail-page-side);
+    }
+
+    /* A lone empty or failed state fills the one scroll, as it fills the
+       main column above. */
+    .luke-detail-page-body:has(
+        > .luke-detail-page-main > .luke-detail-page-content > .luke-empty-state:only-child
+      ) {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .luke-detail-page-main:has(> .luke-detail-page-content > .luke-empty-state:only-child) {
+      flex: 1 0 auto;
     }
 
     /* The secondary column follows the main one's end gap, no more. */

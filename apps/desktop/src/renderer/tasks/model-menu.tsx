@@ -1,8 +1,8 @@
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
-import { HarnessMark } from "../harness-marks";
+import { HarnessMark } from "@luke/panel/harness-marks";
+import { Spinner } from "@luke/panel/spinner";
 import { type FootRow, type MenuRow, SearchableMenu } from "../searchable-menu";
-import { Spinner } from "../spinner";
 import {
   CONTEXT_WORD,
   choiceModelId,
@@ -218,11 +218,9 @@ export function ModelMenu(props: {
       value={read?.base}
       note={
         models === undefined ? (
-          <div className="task-compose-menu-note">
-            <Spinner label="Loading models" />
-          </div>
+          <Spinner label="Loading models" />
         ) : models.length === 0 ? (
-          <p className="task-compose-menu-note">{MENU_NOTE.NONE}</p>
+          MENU_NOTE.NONE
         ) : undefined
       }
       noMatch={MENU_NOTE.NO_MATCH}

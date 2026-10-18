@@ -1,5 +1,7 @@
 import type { PageLine } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
+import { appPlatform } from "@luke/panel/app-platform";
+import { SpinnerRegion } from "@luke/panel/spinner";
 import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import {
@@ -10,10 +12,8 @@ import {
   RotateCwIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { appPlatform } from "../app-platform";
 import { useCopyToast } from "../copy-feedback";
 import { FindScope } from "../find-in-tab";
-import { SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { CodeLineRows } from "./code-pane";
 import { LinesMenu } from "./file-menu";
