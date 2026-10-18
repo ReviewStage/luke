@@ -5079,20 +5079,10 @@ button.attached-file-face:hover img {
   color: var(--luke-color-text-subtle);
 }
 
-.terminal-bar-action {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-accent);
-  font: inherit;
-  font-weight: var(--luke-weight-semibold);
-}
-
+/* The action's key, after its words, in the action's own ink. */
 .terminal-bar-key {
   --shortcut-ink: currentColor;
+  margin-inline-start: var(--luke-space-4);
 }
 
 /* An agent named in place (`agent-ref.tsx`): its mark and name as one quiet
