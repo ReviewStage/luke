@@ -29,7 +29,7 @@
 }
 
 .markdown-heading {
-  font-weight: 680;
+  font-weight: var(--luke-weight-bold);
   letter-spacing: -0.01em;
 }
 
@@ -48,7 +48,7 @@
 /* A code span is `@luke/ui`'s prose one (`.luke-prose code`), on this
    Markdown's own tint, a step heavier because the thread's words are small. */
 .markdown code {
-  font-weight: 500;
+  font-weight: var(--luke-weight-medium);
   letter-spacing: 0;
 }
 
@@ -72,7 +72,7 @@
   padding: 0;
   border-radius: 0;
   background: transparent;
-  font-weight: 450;
+  font-weight: var(--luke-weight-regular);
   line-height: 1.45;
   white-space: pre;
 }
@@ -199,7 +199,7 @@ blockquote.markdown-quote > * + * {
 
 .markdown th {
   opacity: 0.8;
-  font-weight: 640;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .markdown tbody tr:last-child td {
@@ -270,14 +270,14 @@ a.text-link {
    its colour alone. The washes are the palette's finished green and its one
    red, which each appearance restates. */
 .markdown-inserted {
-  border-radius: 3px;
+  border-radius: var(--luke-radius-6);
   background: color-mix(in srgb, var(--luke-color-complete) 24%, transparent);
   color: inherit;
   text-decoration: none;
 }
 
 .markdown-deleted {
-  border-radius: 3px;
+  border-radius: var(--luke-radius-6);
   background: color-mix(in srgb, var(--luke-color-danger) 16%, transparent);
   color: var(--luke-color-text-muted);
   text-decoration: line-through;
