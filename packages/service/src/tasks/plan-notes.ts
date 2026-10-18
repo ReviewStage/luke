@@ -73,9 +73,10 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  *
  * An archived task takes no new edit or restore of the developer's, read
  * under the same lock as the save, so an older desktop or an archive racing
- * the edit cannot write it. The notes of a call or a coding agent already
- * running when the task was archived still land, as revisions in its
- * history: the archive takes no new work, and loses none under way.
+ * the edit cannot write it. The notes of a call already running when the
+ * task was archived, or of a coding agent's turn its archive stopped that eve
+ * has yet to end, still land, as revisions in its history: the archive takes
+ * no new work, and loses none under way.
  */
 
 /** The account and task a task call writes, as the service bound them. */
