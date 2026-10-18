@@ -1,4 +1,4 @@
-import { PublicPage, PublicSection } from "@luke/ui";
+import { Prose, PublicPage, PublicSection } from "@luke/ui";
 import { marked, Parser, type Token, type Tokens } from "marked";
 import privacyMarkdown from "../../../PRIVACY.md?raw";
 import { SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
@@ -66,7 +66,7 @@ export function PrivacyPage(): React.JSX.Element {
           key={section.title ?? ""}
           title={section.title === null ? undefined : <Inline html={section.title} />}
         >
-          <div className="document" dangerouslySetInnerHTML={{ __html: section.html }} />
+          <Prose html={section.html} />
         </PublicSection>
       ))}
     </PublicPage>

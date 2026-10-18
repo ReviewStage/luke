@@ -134,6 +134,46 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip;
 
+/** The tooltip's floating card, shared by the recharts tooltip and a chart that places its own. */
+const CHART_TOOLTIP_FRAME =
+  "grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-xs shadow-xl";
+
+/**
+ * A tooltip for a chart that is not recharts', one it places itself: the
+ * same floating card as `ChartTooltipContent`, over `label`, with one row per
+ * series under it, each its colour's dot, its name, and its value.
+ */
+function ChartTooltipFrame({
+  label,
+  rows,
+}: {
+  label: React.ReactNode;
+  rows: readonly {
+    readonly key: string;
+    readonly color: string;
+    readonly name: React.ReactNode;
+    readonly value: React.ReactNode;
+  }[];
+}) {
+  return (
+    <div className={CHART_TOOLTIP_FRAME}>
+      <div className="font-medium">{label}</div>
+      {rows.map((row) => (
+        <div key={row.key} className="flex w-full items-center gap-2">
+          <div
+            className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+            style={{ backgroundColor: row.color }}
+          />
+          <div className="flex flex-1 items-center justify-between gap-4 leading-none">
+            <span className="text-muted-foreground">{row.name}</span>
+            <span className="font-mono font-medium text-foreground tabular-nums">{row.value}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ChartTooltipContent({
   active,
   payload,
@@ -198,12 +238,7 @@ function ChartTooltipContent({
     // The tooltip floats above a chart that sits on a card, and the dark
     // theme's card is lighter than its page, so the stock `bg-background`
     // here would draw the one floating surface *below* the ground it covers.
-    <div
-      className={cn(
-        "grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-xs shadow-xl",
-        className,
-      )}
-    >
+    <div className={cn(CHART_TOOLTIP_FRAME, className)}>
       {!nestLabel ? tooltipLabel : null}
       <div className="grid gap-1.5">
         {payload
@@ -315,4 +350,4 @@ function getPayloadConfigFromPayload(config: ChartConfig, payload: unknown, key:
 
 /* oxlint-enable anti-slop/no-unknown-parameters, anti-slop/no-runtime-typeof, anti-slop/require-safety-comment-for-type-assertion */
 
-export { ChartContainer, ChartTooltip, ChartTooltipContent };
+export { ChartContainer, ChartTooltip, ChartTooltipContent, ChartTooltipFrame };
