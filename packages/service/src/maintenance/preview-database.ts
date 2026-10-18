@@ -70,6 +70,16 @@ function neonEndpointOf(value: string): string | undefined {
   return endpoint === undefined || endpoint === "" ? undefined : endpoint.toLowerCase();
 }
 
+/**
+ * Whether a connection's endpoint is production's: the endpoint itself, or
+ * one of its computes, whose hosts carry the endpoint id and a suffix of
+ * their own (`ep-…-sk7`). An endpoint id is Neon's random words, so another
+ * branch's never starts with production's.
+ */
+function reaches(endpoint: string, production: string): boolean {
+  return endpoint === production || endpoint.startsWith(`${production}-`);
+}
+
 /** The workspace slugs a comma-separated value names, trimmed, each once. */
 function slugsOf(value: string | undefined): readonly string[] {
   if (value === undefined) return [];
@@ -109,7 +119,7 @@ function stepOf(variables: Record<string, string | undefined>): Step {
     if (endpoint === undefined) {
       return { kind: "refuse", why: `${name} names no database host` };
     }
-    if (endpoint === production) {
+    if (reaches(endpoint, production)) {
       return {
         kind: "refuse",
         why: `${name} reaches production's database (${names.PRODUCTION_ENDPOINT}), which a Preview's build never cuts down`,

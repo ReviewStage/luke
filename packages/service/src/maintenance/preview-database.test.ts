@@ -115,6 +115,13 @@ it.layer(getTestDB())("a build that must leave its database as it stands", (it) 
             [PREVIEW_DATABASE_ENVIRONMENT.DATABASE_URL]: connection(PRODUCTION_ENDPOINT, true),
             [PREVIEW_DATABASE_ENVIRONMENT.PRODUCTION_ENDPOINT]: `${PRODUCTION_ENDPOINT}.us-east-1.aws.neon.tech`,
           },
+          {
+            ...preview,
+            [PREVIEW_DATABASE_ENVIRONMENT.DATABASE_URL]: connection(
+              `${PRODUCTION_ENDPOINT}-sk7`,
+              true,
+            ),
+          },
           { ...preview, [PREVIEW_DATABASE_ENVIRONMENT.DATABASE_URL]: undefined },
         ]) {
           const exit = yield* Effect.exit(preparePreviewDatabase(variables));
