@@ -13,6 +13,11 @@ import {
   ExternalIcon,
   IconButton,
   InlineEdit,
+  LIST_DENSITY,
+  LIST_ROW_ACTIONS,
+  LIST_ROW_CURRENT,
+  LIST_ROW_INK,
+  ListRow,
   PinIcon,
   ProviderMark,
   TrashIcon,
@@ -31,7 +36,7 @@ import {
 } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { FolderInputIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
 import { useAppCommand } from "../app-commands";
 import { usePlanDrafted } from "../composer-drafts";
@@ -52,7 +57,7 @@ import {
 import { useMinute } from "../tasks/task-time";
 import { useReadMarks } from "../tasks/use-task-looks";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { Tooltip } from "../tooltip";
+import { RowHint, RowHintOptions, Tooltip } from "../tooltip";
 import { useAppState, useExperiment } from "../use-app-state";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
@@ -147,17 +152,14 @@ function SidebarTaskMarks({
   task,
   current,
   disabled,
-  onContextMenu,
 }: {
   tasks: TasksControl;
   task: TaskSummary;
   current: boolean;
   disabled: boolean;
-  /** Offers the row's own menu, so a right-click on a button over its end still reaches it. */
-  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
 }): React.JSX.Element {
   return (
-    <span className="sidebar-task-marks">
+    <>
       {placeMarks(task).map(({ mark, label, icon }) => (
         <Tooltip
           key={mark}
@@ -170,11 +172,10 @@ function SidebarTaskMarks({
             size={BUTTON_SIZE.COMPACT}
             disabled={disabled}
             onClick={() => tasks.onMarkTask(task.id, mark)}
-            onContextMenu={onContextMenu}
           />
         </Tooltip>
       ))}
-    </span>
+    </>
   );
 }
 
@@ -493,8 +494,13 @@ export function SidebarTask({
   const teammate = teammateCreator(task, useMemberDirectory());
   const creator = face ? teammate : undefined;
   const drafted = usePlanDrafted(task.id) && !open;
-  const row = useRef<HTMLButtonElement | null>(null);
-  const item = useRef<HTMLLIElement | null>(null);
+  const row = useRef<HTMLElement | null>(null);
+  const item = useRef<HTMLElement | null>(null);
+  // Note that the row's item is its press's parent, which its card counts as its control.
+  const hold = useCallback((press: HTMLElement | null) => {
+    row.current = press;
+    item.current = press?.parentElement ?? null;
+  }, []);
   const refocus = useRef(false);
   useEffect(() => {
     if (rename.editing || !refocus.current) return;
@@ -505,40 +511,35 @@ export function SidebarTask({
   // when the right-click lands on Pin or Archive over its end.
   const showMenu = actions.contextMenu(row);
   return (
-    <li ref={item} className="sidebar-task-item">
-      {rename.editing ? (
-        <div className="sidebar-task" aria-current={current ? "page" : undefined}>
-          <InlineEdit
-            value={task.name}
-            label="Task name"
-            maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
-            editing
-            onEnd={(edit) => {
-              refocus.current = edit.byKey;
-              rename.end(edit.value);
-            }}
-          />
-        </div>
-      ) : (
-        <Tooltip label={task.name} card={taskCardOf(tasks, task, now)} cardBeside cardRegion={item}>
-          <button
-            ref={row}
-            type="button"
-            className="sidebar-task"
-            aria-current={current ? "page" : undefined}
-            data-menu-open={String(actions.open)}
-            data-unread={String(unread)}
-            disabled={actions.deletion.busy}
-            onClick={() => {
-              actions.close(false);
-              onOpen();
-            }}
-            onContextMenu={showMenu}
-          >
-            <span className="sidebar-task-line">
-              <span className="sidebar-task-name">{task.name}</span>
-              {unread ? <span className="visually-hidden">(unread)</span> : null}
-              {creator === undefined ? null : <CreatorHeard actor={creator} />}
+    <>
+      <RowHintOptions card={taskCardOf(tasks, task, now)} cardBeside cardRegion={item}>
+        <ListRow
+          ref={hold}
+          density={LIST_DENSITY.DENSE}
+          ink={LIST_ROW_INK.SIDEBAR}
+          title={
+            rename.editing ? (
+              <InlineEdit
+                value={task.name}
+                label="Task name"
+                maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
+                editing
+                onEnd={(edit) => {
+                  refocus.current = edit.byKey;
+                  rename.end(edit.value);
+                }}
+              />
+            ) : (
+              <>
+                {task.name}
+                {unread ? <span className="visually-hidden">(unread)</span> : null}
+                {creator === undefined ? null : <CreatorHeard actor={creator} />}
+              </>
+            )
+          }
+          description={rename.refused ? <span role="alert">{RENAME_FAILED_NOTE}</span> : undefined}
+          meta={
+            rename.editing ? null : (
               <span className="sidebar-task-time">
                 {repository === undefined ? null : (
                   <span className="sidebar-task-repository">{repository}</span>
@@ -550,26 +551,37 @@ export function SidebarTask({
                 <TaskStatusMark task={task} stranded={strandedHome(tasks, task)} />
                 <RelativeTime at={at} now={now} hint={false} />
               </span>
-            </span>
-          </button>
-        </Tooltip>
-      )}
-      {rename.editing ? null : (
-        <SidebarTaskMarks
-          tasks={tasks}
-          task={task}
-          current={current}
+            )
+          }
+          current={current ? LIST_ROW_CURRENT.PAGE : undefined}
+          unread={unread}
+          menuOpen={actions.open}
           disabled={actions.deletion.busy}
-          onContextMenu={showMenu}
+          hint={rename.editing ? undefined : { Hint: RowHint, label: task.name }}
+          onPress={
+            rename.editing
+              ? undefined
+              : () => {
+                  actions.close(false);
+                  onOpen();
+                }
+          }
+          onContextMenu={rename.editing ? undefined : showMenu}
+          actionsAt={LIST_ROW_ACTIONS.HOVER}
+          actions={
+            rename.editing ? null : (
+              <SidebarTaskMarks
+                tasks={tasks}
+                task={task}
+                current={current}
+                disabled={actions.deletion.busy}
+              />
+            )
+          }
         />
-      )}
-      {rename.refused ? (
-        <p className="sidebar-note" role="alert">
-          {RENAME_FAILED_NOTE}
-        </p>
-      ) : null}
+      </RowHintOptions>
       {actions.menu}
       {actions.dialog}
-    </li>
+    </>
   );
 }

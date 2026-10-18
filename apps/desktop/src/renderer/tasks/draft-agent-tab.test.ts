@@ -132,6 +132,15 @@ async function settle(): Promise<void> {
   });
 }
 
+/** A failure's sentence alone: its alert's words without its presses'. */
+function sentence(alert: Element | null): string | undefined {
+  if (alert === null) return undefined;
+  return [...alert.children]
+    .filter((part) => part.querySelector("button") === null)
+    .map((part) => part.textContent)
+    .join("");
+}
+
 /** The draft's tab over Starts answered in turn by `answers`, each Start's words written down. */
 function mount(
   answers: (Failure | undefined)[],
@@ -216,8 +225,7 @@ function mount(
       await settle();
     },
     note: () => container.querySelector(".agent-composer-note")?.textContent ?? undefined,
-    words: () =>
-      container.querySelector(".agent-composer-note .failure-note-words")?.textContent ?? undefined,
+    words: () => sentence(container.querySelector(".agent-composer-note [role='alert']")),
     draft: () => composerEditor(container).textContent,
     button,
     press: async (words: string) => {

@@ -190,10 +190,10 @@ test("a keep that failed says why with Retry and Remove, and Remove takes the pi
 
   await answerKeep({ failure: PICTURE_KEEP_FAILURE.TOO_MANY });
 
-  const failed = container.querySelector(".picture-block[data-upload='failed'] .picture-status");
+  const failed = container.querySelector(".picture-block[data-upload='failed'] [role='alert']");
   assert.equal(
-    failed?.querySelector(".failure-note-words")?.textContent,
-    "This plan already holds as many pictures as it can.",
+    failed?.textContent,
+    "This plan already holds as many pictures as it can.RetryRemove",
   );
   const [retry, remove] = [...(failed?.querySelectorAll("button") ?? [])];
   assert.equal(retry?.textContent, "Retry");

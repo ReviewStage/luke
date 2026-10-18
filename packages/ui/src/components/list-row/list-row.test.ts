@@ -4,7 +4,14 @@ import { act, cloneElement, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
-import { LIST_ROW_CURRENT, LIST_ROW_META, List, ListRow, type ListRowHint } from "./list-row.js";
+import {
+  LIST_ROW_ACTIONS,
+  LIST_ROW_CURRENT,
+  LIST_ROW_META,
+  List,
+  ListRow,
+  type ListRowHint,
+} from "./list-row.js";
 
 /**
  * list-row.test.ts -- a row's press and its acts are separate buttons, never
@@ -20,7 +27,12 @@ import { LIST_ROW_CURRENT, LIST_ROW_META, List, ListRow, type ListRowHint } from
  * the line under it. A row swiped right rests open on its act's button
  * after a short swipe and does the act on a long one's release, by pointer
  * or by a trackpad's wheel; a cancelled pointer, a swipe whose act changed
- * under it, a swipe left, and a press up or down never act. Synthetic
+ * under it, a swipe left, and a press up or down never act. A row that keeps
+ * focus leaves it on the field that held it; one out of the tab order still
+ * takes the focus it is handed; one unavailable refuses its press; one a
+ * field drives is found by its id; a chevron says nothing to a reader; acts
+ * shown on hover are still a Tab stop after the row; and an app hears
+ * whether the title is cut short. Synthetic
  * members.
  */
 
@@ -40,6 +52,7 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -328,6 +341,185 @@ test("the app's hint hung from a row's press raises its words while the press ho
   expect(container.querySelector("output")?.textContent).toBe("Review the release");
   press(row);
   expect(heard).toEqual(["open"]);
+});
+
+test("a row that keeps focus, pressed with the pointer, leaves the focus on the field and is pressed", () => {
+  const pressed: string[] = [];
+  const container = draw(
+    createElement(
+      "div",
+      null,
+      createElement("input", { "aria-label": "Search tools" }),
+      createElement(List, {
+        label: "Tools",
+        children: [
+          createElement(ListRow, {
+            key: "keeps",
+            title: "create_issue",
+            keepFocus: true,
+            onPress: () => pressed.push("create_issue"),
+          }),
+          createElement(ListRow, {
+            key: "takes",
+            title: "list_issues",
+            onPress: () => pressed.push("list_issues"),
+          }),
+        ],
+      }),
+    ),
+  );
+  const field = container.querySelector("input");
+  if (field === null) throw new Error("not drawn");
+  act(() => field.focus());
+  // Note that jsdom moves no focus on a mousedown, so the browser's move is read as the press's default action.
+  const pointerPress = (row: HTMLButtonElement) => {
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    act(() => {
+      row.dispatchEvent(down);
+      if (!down.defaultPrevented) row.focus();
+      row.click();
+    });
+  };
+  pointerPress(button(container, "create_issue"));
+  expect(document.activeElement).toBe(field);
+  pointerPress(button(container, "list_issues"));
+  expect(document.activeElement).toBe(button(container, "list_issues"));
+  expect(pressed).toEqual(["create_issue", "list_issues"]);
+});
+
+test("a row out of the tab order is skipped by Tab, yet takes the focus handed to it and its press", () => {
+  const pressed: string[] = [];
+  let handed: HTMLElement | null = null;
+  const container = draw(
+    createElement(List, {
+      label: "Tools",
+      children: createElement(ListRow, {
+        title: "create_issue",
+        tabbable: false,
+        ref: (element: HTMLElement | null) => {
+          handed = element;
+        },
+        onPress: () => pressed.push("create_issue"),
+      }),
+    }),
+  );
+  const row = button(container, "create_issue");
+  expect(row.tabIndex).toBe(-1);
+  act(() => handed?.focus());
+  expect(document.activeElement).toBe(row);
+  press(row);
+  expect(pressed).toEqual(["create_issue"]);
+});
+
+test("an unavailable row refuses its press and takes no focus", () => {
+  const pressed: string[] = [];
+  const container = draw(
+    createElement(List, {
+      label: "Plans",
+      children: createElement(ListRow, {
+        title: "Ship the release",
+        disabled: true,
+        onPress: () => pressed.push("open"),
+      }),
+    }),
+  );
+  const row = button(container, "Ship the release");
+  press(row);
+  act(() => row.focus());
+  expect(pressed).toEqual([]);
+  expect(document.activeElement).not.toBe(row);
+});
+
+test("a field driving the list names a row by its id, which finds that row's words", () => {
+  const container = draw(
+    createElement(
+      "div",
+      null,
+      createElement("input", { "aria-label": "Search tools", "aria-activedescendant": "tool-1" }),
+      createElement(List, {
+        label: "Tools",
+        children: [
+          createElement(ListRow, { key: "0", id: "tool-0", title: "create_issue" }),
+          createElement(ListRow, { key: "1", id: "tool-1", title: "list_issues" }),
+        ],
+      }),
+    ),
+  );
+  const active = container.querySelector("input")?.getAttribute("aria-activedescendant");
+  expect(document.getElementById(active ?? "")?.textContent).toBe("list_issues");
+});
+
+test("a row's chevron says nothing to a reader, so the row still reads as its words", () => {
+  const container = draw(
+    createElement(List, {
+      label: "Tools",
+      children: createElement(ListRow, {
+        title: "create_issue",
+        description: "Opens an issue",
+        chevron: true,
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  const row = button(container, "create_issueOpens an issue");
+  expect(row.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
+});
+
+test("acts shown only on hover are still met by Tab after their row, and pressed without it", () => {
+  const heard: string[] = [];
+  const container = draw(
+    createElement(List, {
+      label: "Shells",
+      children: createElement(ListRow, {
+        title: "zsh",
+        meta: "Running",
+        actionsAt: LIST_ROW_ACTIONS.HOVER,
+        onPress: () => heard.push("show"),
+        actions: createElement(IconButton, {
+          icon: glyph(),
+          label: "End zsh",
+          onClick: () => heard.push("end"),
+        }),
+      }),
+    }),
+  );
+  const order = [button(container, "zshRunning"), button(container, "End zsh")];
+  expect([...container.querySelectorAll("button")]).toEqual(order);
+  press(button(container, "End zsh"));
+  expect(heard).toEqual(["end"]);
+});
+
+test("an app hears whether a row's title is cut short, whenever its box resizes", () => {
+  const heard: boolean[] = [];
+  let resized: () => void = () => undefined;
+  // Note that jsdom lays nothing out, so the observer and the widths it would measure are the stand-ins here.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: () => void) {
+        resized = callback;
+      }
+      observe(): void {}
+      disconnect(): void {}
+    },
+  );
+  let width = 120;
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(() => width);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+  draw(
+    createElement(List, {
+      label: "Pull requests",
+      children: createElement(ListRow, {
+        title: "Draw the sidebar's rows with the shared ListRow",
+        onPress: () => undefined,
+        onTitleClipped: (clipped: boolean) => heard.push(clipped),
+      }),
+    }),
+  );
+  act(() => resized());
+  width = 320;
+  act(() => resized());
+  expect(heard).toEqual([false, true]);
 });
 
 /** How wide the swiped row stands, in CSS pixels: its act's line at 60% is 180px. */

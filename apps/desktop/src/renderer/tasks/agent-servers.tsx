@@ -652,7 +652,7 @@ function ServersPopover({
             idOf={(each) => `${rowsId}-tool-${pageTools.indexOf(each)}`}
             onCurrent={(each) => setPageHighlight(pageTools.indexOf(each))}
             onOpen={(each) => openTool(each.name)}
-            onPressStart={keepFieldFocus}
+            keepFocus
           />
         </div>
       </>

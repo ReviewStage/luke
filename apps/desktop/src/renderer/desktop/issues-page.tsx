@@ -12,6 +12,7 @@ import {
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
+  DetailPage,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -323,23 +324,26 @@ function DetailFrame({
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_ISSUES, onBack);
   return (
-    <section className="automations-view" aria-label="Issue">
-      <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading">
-          <IssueCrumbs onBack={onBack} />
-          <ExperimentTag />
-        </div>
-      </header>
+    <DetailPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Issue"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <IssueCrumbs onBack={onBack} />
+            <ExperimentTag />
+          </div>
+        </header>
+      }
+    >
       {failure === undefined ? (
         <IssueDetailSkeleton label={READING_ONE_LINE} />
       ) : (
-        <div className="automations-scroll scroll-fade-top">
-          <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-            {failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
-          </ErrorState>
-        </div>
+        <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          {failure === ISSUE_CALL_FAILURE.NOT_FOUND ? GONE_LINE : UNREAD_ONE_LINE}
+        </ErrorState>
       )}
-    </section>
+    </DetailPage>
   );
 }
 
@@ -348,7 +352,7 @@ function DetailFrame({
  * holds it until then, and every change sent through the list, so the list
  * it goes back to already holds what was kept.
  */
-function DetailPage({
+function IssuePage({
   tasks,
   issueId,
   issues,
@@ -473,7 +477,7 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
         />
       ) : (
         // Keyed by the issue, so another issue's page holds nothing of the last's.
-        <DetailPage
+        <IssuePage
           key={place.issueId}
           tasks={tasks}
           issueId={place.issueId}

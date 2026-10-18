@@ -264,11 +264,11 @@ async function cardOf(chip: Element | null | undefined) {
     count: card.querySelector(".agent-servers-count")?.textContent,
     on: drawnSwitch === null ? undefined : drawnSwitch.dataset.checked,
     note: card.querySelector(".agent-servers-row + .luke-hover-card-note")?.textContent,
-    tools: [...card.querySelectorAll(".integration-tool")].map((tool) => [
+    tools: [...card.querySelectorAll('ul[aria-label$=" tools"] > li')].map((tool) => [
       tool.querySelector(".integration-tool-title")?.textContent,
-      tool.querySelector(".integration-tool-description")?.textContent,
+      tool.querySelector(".luke-list-row-description")?.textContent,
     ]),
-    more: card.querySelector(".integration-tool-list ~ .luke-hover-card-note")?.textContent,
+    more: card.querySelector("ul ~ .luke-hover-card-note")?.textContent,
     presses: card.querySelectorAll("button, [role=switch]").length,
   };
   act(() => {

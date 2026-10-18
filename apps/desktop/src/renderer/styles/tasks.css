@@ -1905,20 +1905,8 @@
    content inset, its dismissal at the row's end. */
 .pull-request-write-note {
   flex: 0 0 auto;
-  margin: 0;
   padding: var(--luke-space-4) var(--column-inset) var(--luke-space-4) var(--content-inset);
   border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.pull-request-write-note .failure-note-words {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.pull-request-write-dismiss {
-  margin-inline-start: auto;
 }
 
 /* The bar's Review press and the panel it opens (`pull-request-review.tsx`):
@@ -1957,17 +1945,6 @@
 
 .markdown-field-preview > p:only-child {
   margin: 0;
-}
-
-.pull-request-review-note {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.pull-request-review-note .failure-note-words {
-  flex: 1 1 auto;
-  min-width: 0;
 }
 
 /* The pending comments the member's review holds, counted on the bar's
@@ -2328,24 +2305,6 @@
   border-radius: var(--luke-control-radius);
 }
 
-/* The checks, one boxed list, each row opening the check's page, folded
-   past five behind a quiet button under it. */
-.pull-request-checks {
-  overflow: clip;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-}
-
-.pull-request-check-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.pull-request-check-list > li + li {
-  border-top: 1px solid var(--luke-color-border);
-}
-
 /* A deployment's door to the address it serves, quiet at its row's end. */
 .pull-request-deployment-open > svg {
   display: block;
@@ -2353,26 +2312,22 @@
   height: 13px;
 }
 
-.pull-request-check {
-  display: flex;
-  width: 100%;
-  min-width: 0;
+/* The App that runs a check, by its square logo as GitHub draws an App. */
+.pull-request-check-avatar {
+  display: block;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-hover);
+  object-fit: cover;
+}
+
+/* A check's lead: its standing's glyph, then its App's avatar. */
+.pull-request-check-lead {
+  display: inline-flex;
   align-items: center;
   gap: var(--luke-space-8);
-  padding: var(--luke-space-6) var(--boxed-inset);
-  border: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  text-align: left;
-}
-
-button.pull-request-check {
-  transition: background-color var(--duration-hover) ease;
-}
-
-button.pull-request-check:hover {
-  background: var(--luke-color-fill-hover);
 }
 
 .pull-request-check-glyph {
@@ -2401,18 +2356,6 @@ button.pull-request-check:hover {
 
 [data-check-state="skipped"] {
   --check-tone: var(--luke-color-text-subtle);
-}
-
-.pull-request-check-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pull-request-check-time {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Words written on GitHub, drawn at the transcript's own size, a step over
@@ -2550,11 +2493,6 @@ button.pull-request-check:hover {
   font-size: var(--luke-type-caption-size);
 }
 
-.line-comment-note .failure-note-words {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 .line-comment-foot {
   display: flex;
   flex-wrap: wrap;
@@ -2690,17 +2628,6 @@ button.pull-request-check:hover {
   gap: var(--luke-control-gap);
 }
 
-.pull-request-thread-note {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.pull-request-thread-note .failure-note-words {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 /* The reactions under a description or a comment, as GitHub draws them:
    a row of pills, each its emoji and how many gave it, the reader's own lit
    in the accent. */
@@ -2742,22 +2669,12 @@ button.pull-request-check:hover {
 
 /* The comment box at the foot of the Conversation
    (`pull-request-comment-box.tsx`): the words with their preview, GitHub's
-   refusal under them, and Comment at the row's end. */
+   refusal under them, drawn as every refusal is (`ErrorState`), and
+   Comment at the row's end. */
 .pull-request-comment-box {
   display: flex;
   flex-direction: column;
   gap: var(--luke-space-8);
-}
-
-.pull-request-comment-note {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.pull-request-comment-note .failure-note-words {
-  flex: 1 1 auto;
-  min-width: 0;
 }
 
 .pull-request-comment-foot {
@@ -3990,9 +3907,8 @@ ol.transcript-list {
 }
 
 /* The shared composer card (../ai-elements/prompt-input.tsx): one card on
-   the sidebar's ground inside a hairline, ringed while its field holds the
-   caret (`.field-well`, base.css); under its field, the foot with the
-   owner's controls at its left and the round submit at its right. */
+   the sidebar's ground inside a hairline; under its field, the foot with
+   the owner's controls at its left and the round submit at its right. */
 .prompt-input {
   display: flex;
   width: 100%;
@@ -4029,10 +3945,13 @@ ol.transcript-list {
   padding: 0 var(--luke-space-16) var(--luke-space-12);
 }
 
+/* A message that did not go: the failure's line (`ErrorState`), and under
+   it, where the agent takes no more, the press that continues it. */
 .agent-composer-note {
   display: flex;
-  align-items: center;
-  gap: var(--luke-space-8);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-4);
   padding-left: var(--luke-space-4);
 }
 
@@ -4040,7 +3959,7 @@ ol.transcript-list {
    line to eight and then scrolling, with no space between its paragraphs,
    as a textarea's lines stand, and the placeholder the field draws at the
    editor's own insets while the words are empty, dimmed with the editor
-   while the box is held. No ring: the card around it rings (`.field-well`). */
+   while the box is held. */
 .agent-composer-field {
   position: relative;
   --agent-composer-field-block: calc(var(--luke-space-16) + var(--luke-space-8));
@@ -4802,15 +4721,10 @@ ol.transcript-list {
 }
 
 .terminal-shells-rows {
-  display: flex;
   min-height: 0;
   flex: 1;
-  flex-direction: column;
-  gap: 1px;
-  margin: 0;
   padding: var(--luke-space-4);
   overflow-y: auto;
-  list-style: none;
 }
 
 .terminal-shells-none {
@@ -4835,115 +4749,19 @@ ol.transcript-list {
   padding: var(--luke-space-8) var(--luke-space-12);
 }
 
-/* A row standing for a shell still being read opens nothing, so it takes no
-   pointer's fill. */
-.terminal-shells-wait .terminal-shell:hover {
-  background: none;
-}
-
-.terminal-shell {
-  position: relative;
-  display: flex;
-  min-height: 40px;
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: 0 var(--luke-space-4) 0 var(--luke-space-8);
-  border-radius: var(--luke-radius-8);
-}
-
-.terminal-shell:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-.terminal-shell[aria-current="true"] {
-  background: var(--luke-color-fill-strong);
-}
-
-.terminal-shell-glyph {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: none;
-  color: var(--luke-color-text-muted);
-}
-
-/* The row's press covers its words; the glyph, mark, and × stand on it. */
-.terminal-shell-row {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  align-self: stretch;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
-  text-align: left;
-}
-
-.terminal-shell-row::before {
-  position: absolute;
-  inset: 0;
-  content: "";
-}
-
-.terminal-shell-name,
+/* What runs in a shell, or where it stands, in the code face. */
 .terminal-shell-detail {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.terminal-shell-name {
-  font-weight: var(--luke-weight-medium);
-}
-
-.terminal-shell-detail {
-  color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
 }
 
-.terminal-shell > .luke-inline-edit {
-  flex: 1;
-}
-
-.terminal-shell-mark {
-  display: inline-flex;
-  width: 20px;
-  justify-content: center;
-}
-
+/* A dot while a command runs in the shell, centred where the × steps in. */
 .terminal-shell-running {
+  display: block;
   width: 6px;
   height: 6px;
+  margin-inline-end: var(--luke-space-12);
   border-radius: 50%;
   background: var(--luke-color-working);
-}
-
-/* The × stands in the mark's place while the row is pointed at or holds
-   focus, its control's square centred where the mark's is. */
-.terminal-shell-kill {
-  position: absolute;
-  right: calc(var(--luke-space-4) + 10px - var(--luke-control-height) / 2);
-  display: flex;
-  visibility: hidden;
-}
-
-.terminal-shell:is(:hover, :focus-within) .terminal-shell-kill {
-  visibility: visible;
-}
-
-.terminal-shell:has(> .luke-inline-edit) .terminal-shell-kill {
-  visibility: hidden;
-}
-
-.terminal-shell:is(:hover, :focus-within) .terminal-shell-mark {
-  visibility: hidden;
 }
 
 .terminal-shells-foot {
@@ -5405,57 +5223,22 @@ ol.transcript-list {
   color: var(--luke-color-text-subtle);
 }
 
-/* The pull request's row pinned over the composer: a boxed line, the
-   whole of it the button that opens the pull request, drawn as the
-   subagent's row is and for the same reason written here. The lines it
-   adds and removes read in the success green and the danger red, in
-   tabular numerals so a count does not shift as it grows. The row answers
-   its own width, as the composer does, so it holds in the main column and
-   the side panel alike, and clips, so nothing it draws paints past its
-   edge. */
-.agent-published-row {
+/* The pull request's row pinned over the composer, a card of one row
+   (`@luke/ui`'s List). The lines it adds and removes read in the success
+   green and the danger red, in tabular numerals so a count does not shift as
+   it grows. The row answers its own width, as the composer does, so it holds
+   in the main column and the side panel alike. */
+.agent-published {
   container: published-row / inline-size;
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  height: 36px; /* off-scale: a transcript's boxed row */
+}
+
+.agent-published-meta {
+  display: inline-flex;
   align-items: center;
   gap: var(--luke-icon-gap);
-  padding: 0 var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  background: none;
-  color: var(--luke-color-text);
-  overflow: hidden;
-  font-size: var(--luke-type-caption-size);
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
 }
 
-.agent-published-row:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-/* The number, never cut, then the title, which gives way first. */
-.agent-published-name {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  gap: 0.3em;
-  white-space: nowrap;
-}
-
-.agent-published-number {
-  flex: none;
-}
-
-.agent-published-title {
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* Too narrow for the checks' word: the mark's red still says they failed,
-   and its label says so to a reader. */
+/* Too narrow for the checks' word: the mark's red still says they failed. */
 @container published-row (max-width: 359px) {
   .agent-published-checks {
     display: none;
@@ -5470,21 +5253,13 @@ ol.transcript-list {
   }
 }
 
-.agent-published-state {
-  flex: 0 0 auto;
-  color: var(--luke-color-text-subtle);
-}
-
 /* The one word the checks still get: said, in the danger red, only once
    they have failed, since that is the one result that asks for a look. */
 .agent-published-checks {
-  flex: 0 0 auto;
   color: var(--luke-color-danger-text);
 }
 
 .agent-published-lines {
-  flex: 0 0 auto;
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -5791,13 +5566,9 @@ button.picture-frame {
   line-height: var(--luke-type-caption-leading);
 }
 
-.picture-status.failure-note {
-  gap: var(--luke-space-4);
-  color: var(--luke-color-danger-text);
-}
-
-.picture-status .failure-note-words {
-  margin-right: var(--luke-space-4);
+.picture-failure {
+  display: block;
+  margin-top: var(--luke-space-6);
 }
 
 /* Several pictures an agent showed at once (`agent-pictures.tsx`): one

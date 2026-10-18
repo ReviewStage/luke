@@ -380,9 +380,9 @@ test("a plan opened on its Inbox tab rather than its own is read at once, its ro
       ignore,
       { collapsed: false },
     );
-    const row = page.querySelector(".sidebar-task");
+    const row = page.querySelector(".sidebar-tasks > li > button");
     assert.ok(row, "the plan's row stands in the sidebar");
-    const unread = row.getAttribute("data-unread");
+    const unread = String(row.textContent?.includes("(unread)") === true);
     act(() => root?.unmount());
     window.localStorage.clear();
     return unread;
@@ -433,16 +433,16 @@ function mountListing(
 
 /** The sidebar's row for the plan of this name. */
 function sidebarRow(name: string): HTMLButtonElement {
-  const row = [...document.querySelectorAll<HTMLButtonElement>("button.sidebar-task")].find(
-    (each) => each.querySelector(".sidebar-task-name")?.textContent === name,
-  );
+  const row = [
+    ...document.querySelectorAll<HTMLButtonElement>(".sidebar-tasks > li > button"),
+  ].find((each) => each.querySelector(".luke-list-row-title")?.firstChild?.textContent === name);
   assert.ok(row, `the sidebar lists ${name}`);
   return row;
 }
 
 /** Whether the plan's row is drawn in the unread weight. */
 function rowUnread(name: string): string | null {
-  return sidebarRow(name).getAttribute("data-unread");
+  return String(sidebarRow(name).textContent?.includes("(unread)") === true);
 }
 
 /** The read mark the row's right-click menu offers, chosen when `choose` says so. */

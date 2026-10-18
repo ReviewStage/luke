@@ -118,4 +118,12 @@
     outline: 2px solid var(--luke-color-focus-ring);
     outline-offset: 3px;
   }
+
+  :is(
+    textarea,
+    [contenteditable],
+    input:not([type="checkbox"], [type="radio"], [type="range"])
+  ):focus-visible {
+    outline: none; /* no ring: the caret marks the field */
+  }
 }

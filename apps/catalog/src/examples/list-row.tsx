@@ -2,7 +2,9 @@ import {
   EllipsisIcon,
   IconButton,
   LIST_DENSITY,
+  LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
+  LIST_ROW_INK,
   LIST_VARIANT,
   List,
   ListRow,
@@ -17,8 +19,9 @@ import { CatalogSection } from "../section";
 
 /**
  * list-row.tsx -- a list's rows with their metadata and acts lined up, the
- * one open now, unread rows, rows that open nothing, rows in a card and
- * compact, and long words in a narrow column.
+ * one open now, unread rows, rows that open nothing, rows in a card,
+ * compact and dense, rows whose acts show on hover, rows that go deeper, and
+ * long words in a narrow column.
  */
 
 const MEMBERS = [
@@ -130,6 +133,68 @@ function ListRows(): React.JSX.Element {
               title="Scheduled run"
               description="Finished"
               meta="1d"
+              onPress={() => undefined}
+            />
+          </List>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="list-row-dense" title="Dense rows, acts on hover">
+        <div className="catalog-narrow">
+          <List label="Plans" density={LIST_DENSITY.DENSE}>
+            <ListRow
+              title="Ship the release"
+              description="luke"
+              meta="2h"
+              current={LIST_ROW_CURRENT.ITEM}
+              onPress={() => undefined}
+              actionsAt={LIST_ROW_ACTIONS.HOVER}
+              actions={<IconButton icon={<TrashIcon />} label="Archive Ship the release" />}
+            />
+            <ListRow
+              title="Draw the sidebar with the shared rows"
+              description="luke"
+              meta="1d"
+              onPress={() => undefined}
+              actionsAt={LIST_ROW_ACTIONS.HOVER}
+              menuOpen
+              actions={
+                <IconButton
+                  icon={<TrashIcon />}
+                  label="Archive Draw the sidebar with the shared rows"
+                />
+              }
+            />
+            <ListRow
+              title="Read the release notes"
+              meta="2d"
+              ink={LIST_ROW_INK.SIDEBAR}
+              unread
+              onPress={() => undefined}
+            />
+            <ListRow
+              title="A read plan in the sidebar's ink"
+              meta="2d"
+              ink={LIST_ROW_INK.SIDEBAR}
+              onPress={() => undefined}
+            />
+            <ListRow title="Deleting a plan" meta="3d" disabled onPress={() => undefined} />
+          </List>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="list-row-chevron" title="Rows that go deeper">
+        <div className="catalog-narrow">
+          <List label="Tools" density={LIST_DENSITY.COMPACT}>
+            <ListRow
+              title="create_issue"
+              description="Opens an issue in a repository"
+              chevron
+              current={LIST_ROW_CURRENT.ITEM}
+              onPress={() => undefined}
+            />
+            <ListRow
+              title="list_issues"
+              description="Lists a repository's issues"
+              chevron
               onPress={() => undefined}
             />
           </List>
