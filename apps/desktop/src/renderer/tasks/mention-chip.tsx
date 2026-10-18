@@ -60,7 +60,7 @@ import { FileCard } from "./file-ref";
 import { shortCommit } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
 import { IssueMark } from "./issue-mark";
-import { MentionedAgentCard } from "./mentioned-agent-card";
+import { MentionedAgentCard, ReadAgentModel } from "./mentioned-agent-card";
 import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes";
 import { PullRequestMark } from "./pull-request-mark";
 import { ServerCard } from "./server-card";
@@ -99,7 +99,8 @@ import { useOpenLink } from "./use-open-link";
  * mark, as the place drawing it knows it (`MentionDoors.agentOf`), and any
  * other agent, one of another task's or of none, or one named where the
  * place knows no agents, the mark of the harness the window last read it
- * running on (`useKnownNames`); either
+ * running on (`useKnownNames`), or, for one the window lists not, an
+ * archived agent say, the harness read for it (`mentioned-agent-card.tsx`); either
  * opens its tab through the window's opener for a Luke link, as a link
  * copied to it does, and an agent hangs its tab's own card where the place
  * has one, and otherwise the same card read as it is hung, on any task of
@@ -241,10 +242,33 @@ function pressOf(
   }
 }
 
-/** The harness an agent the window holds runs in, read off its model; none for one it holds not. */
-function knownProvider(known: KnownNames, agentId: string) {
+/** The harness an agent runs in, read off its model; the mark of no known harness where no model is known. */
+function harnessMark(model: string | undefined): React.JSX.Element {
+  return <AgentMark provider={model === undefined ? undefined : providerOf(model)} />;
+}
+
+/**
+ * The mark of an agent the place holds no tile of: the harness the window
+ * last read it running on, and where the window holds no model of it, an
+ * archived agent's or one past the few its task's row names, the one read
+ * for it (`ReadAgentModel`).
+ */
+function KnownAgentMark({
+  agentId,
+  taskId,
+  known,
+}: {
+  agentId: string;
+  taskId: string | undefined;
+  known: KnownNames;
+}): React.JSX.Element {
   const model = known.agentModels.get(agentId);
-  return model === undefined ? undefined : providerOf(model);
+  if (model !== undefined) return harnessMark(model);
+  return (
+    <ReadAgentModel agentId={agentId} taskId={taskId}>
+      {harnessMark}
+    </ReadAgentModel>
+  );
 }
 
 /** A person as the workspace's members around the chip draw them: their picture, or grayed where they left. */
@@ -293,7 +317,7 @@ function MentionGlyph({
     case MENTION_KIND.AGENT: {
       const look = mention.taskId === doors.taskId ? doors.agentOf?.(mention.agentId) : undefined;
       return look === undefined ? (
-        <AgentMark provider={knownProvider(known, mention.agentId)} />
+        <KnownAgentMark agentId={mention.agentId} taskId={mention.taskId} known={known} />
       ) : (
         <ActorMark actor={look.actor} size={ACTOR_SIZE.INLINE} />
       );
@@ -595,7 +619,7 @@ function PlaceGlyph({ place, known }: { place: LinkPlace; known: KnownNames }): 
     case LINK_PLACE.CALL:
       return <CallIcon />;
     case LINK_PLACE.AGENT:
-      return <AgentMark provider={knownProvider(known, place.agentId)} />;
+      return <KnownAgentMark agentId={place.agentId} taskId={place.planId} known={known} />;
     case LINK_PLACE.WORKER:
       return <BotIcon aria-hidden="true" />;
     case LINK_PLACE.CHANGES:

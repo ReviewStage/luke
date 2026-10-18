@@ -32,6 +32,13 @@ import { useKnownNames } from "./use-known-names";
  * says neither. While the read is out, or
  * where it failed or no workspace is known to read it in, the chip's own
  * card stands in its place.
+ *
+ * A mark the window holds no model for, an archived agent's or one past the
+ * few a task's row names, is read the same way as it is drawn
+ * (`ReadAgentModel`): an agent on a task by its task's agents, the very
+ * read its card takes, held once per task for every mark and card of it,
+ * and an agent on no task by its own id, so its harness is drawn without
+ * the card being hung first.
  */
 
 /** What a mentioned agent's card names it by: the catalog that names its model, and the reader, whose own agents name no starter. */
@@ -144,6 +151,65 @@ const tasklessAgentsAtom = Atom.family((workspaceId: string) =>
     ),
   ),
 );
+
+/** One agent read by its id, for a mark of an agent on no task the window holds no model for, read once for every mark of it while one stands. */
+const agentByIdAtom = Atom.family((agentId: string) => rendererRuntime.atom(agentById(agentId)));
+
+/** The model a read answered the agent runs on; none while it is out, where it failed, and where it found no such agent. */
+function modelOf(read: AsyncResult.AsyncResult<AgentsRead>, agentId: string): string | undefined {
+  if (!AsyncResult.isSuccess(read)) return undefined;
+  return read.value?.find((agent) => agent.id === agentId)?.model;
+}
+
+/** What a mark draws of the model read, or of none. */
+type ModelDrawer = (model: string | undefined) => ReactNode;
+
+function TaskAgentModel({
+  taskId,
+  agentId,
+  children,
+}: {
+  taskId: string;
+  agentId: string;
+  children: ModelDrawer;
+}): ReactNode {
+  return children(modelOf(useAtomValue(taskAgentsAtom(taskId)), agentId));
+}
+
+function AgentModelById({
+  agentId,
+  children,
+}: {
+  agentId: string;
+  children: ModelDrawer;
+}): ReactNode {
+  return children(modelOf(useAtomValue(agentByIdAtom(agentId)), agentId));
+}
+
+/**
+ * The model an agent the window holds no line of runs on, read for its
+ * mark: by its task's agents, archived ones among them, where it works on
+ * one, else by its own id; drawn with none while the read is out and where
+ * it answered nothing.
+ */
+export function ReadAgentModel({
+  agentId,
+  taskId,
+  children,
+}: {
+  agentId: string;
+  /** The task the agent works on; none for an agent on none, or where the place does not say. */
+  taskId: string | undefined;
+  children: ModelDrawer;
+}): ReactNode {
+  return taskId === undefined ? (
+    <AgentModelById agentId={agentId}>{children}</AgentModelById>
+  ) : (
+    <TaskAgentModel taskId={taskId} agentId={agentId}>
+      {children}
+    </TaskAgentModel>
+  );
+}
 
 /** The card read from the agents a read answered, or the chip's own while it is out or where it answered nothing. */
 function ReadAgentCard({

@@ -134,15 +134,20 @@ afterEach(() => {
 });
 
 /** The words drawn as a transcript draws them, in a window holding `STATE`, every place a chip opened kept. */
-async function drawn(text: string, opened: LinkPlace[]): Promise<HTMLElement> {
+async function drawn(
+  text: string,
+  opened: LinkPlace[],
+  reads: (request: Act) => ActOutcome | undefined = () => undefined,
+): Promise<HTMLElement> {
   fakeAppBridge({
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(STATE),
     act: (request: Act): Promise<ActOutcome> =>
       Promise.resolve(
-        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-          : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
+        reads(request) ??
+          (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+            ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+            : { status: ACT_OUTCOME_STATUS.DONE, value: undefined }),
       ),
   });
   const container = document.body.appendChild(document.createElement("div"));
@@ -276,4 +281,56 @@ test("an agent's chip the window holds wears its harness's mark, on another task
     [true, true],
     [true, true],
   ]);
+});
+
+/** An archived agent as the service reads it, on the task given or none, on the model given. */
+function archivedAgent(id: string, planId: string | null, model: string) {
+  return {
+    id,
+    planId,
+    model,
+    effort: "high",
+    title: "Retired sweep",
+    createdAt: AT,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    archivedAt: AT,
+  };
+}
+
+test("an archived agent's chip, which no list the window holds names, wears the harness read for it: on a task by its task's agents, on none by its own id", async () => {
+  const onTask = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+  const onNone = "6f5e4d3c-2b1a-4f0e-9d8c-7b6a5f4e3d2c";
+  const container = await drawn(
+    `${HOME}/plan/${PLAN}/agent/${onTask} and ${HOME}/agent/${onNone}`,
+    [],
+    (request) => {
+      if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
+        return {
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { agents: [archivedAgent(onTask, PLAN, "openai/gpt-6.1-sol")] },
+        };
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+        return {
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: {
+            agent: {
+              ...archivedAgent(onNone, null, "anthropic/claude-opus-5.5"),
+              automationId: null,
+              workspaceId: ACME.id,
+              repository: "acme/relay",
+            },
+          },
+        };
+      }
+      return undefined;
+    },
+  );
+
+  const marks = [
+    ...container.querySelectorAll<HTMLElement>('.mention-chip[data-kind="agent"]'),
+  ].map((chip) => chip.querySelector(".mention-chip-glyph .harness-mark")?.tagName.toLowerCase());
+  // Codex's mark is its picture, Claude Code's its Clawd drawn as an SVG.
+  assert.deepEqual(marks, ["img", "svg"]);
 });
