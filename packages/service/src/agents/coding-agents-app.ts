@@ -91,6 +91,8 @@ import {
   setAutoMerge,
   setFileViewed,
   setPullRequestDraft,
+  setPullRequestOpen,
+  setPullRequestTitle,
   setReviewThreadResolved,
   submitPullRequestReview,
   takeOutOfMergeQueue,
@@ -107,6 +109,7 @@ import {
 } from "../github/pull-requests.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
+  HOSTED_BYTES_HEADERS,
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedJsonResponse,
@@ -334,17 +337,6 @@ const QUERY = {
   ATTACHMENT: "attachment",
   PICTURE: "picture",
   SRC: "src",
-} as const;
-
-/**
- * The headers an attachment's bytes are served under beside their type: the
- * browser is told not to sniff them for another type, since the type is
- * what the service sniffed them to be as they were kept, and nothing on the
- * way may keep a copy, since the bytes are one account's.
- */
-const ATTACHMENT_HEADERS = {
-  "x-content-type-options": "nosniff",
-  "cache-control": "private, no-store",
 } as const;
 
 /** The files one message or Start may carry: their base64 together, and each one's name at JSON's widest escape with room for the keys around it. */
@@ -1122,6 +1114,12 @@ function writeOf(
       return setAutoMerge(token, id, undefined);
     case PULL_REQUEST_ACTION.DEQUEUE:
       return takeOutOfMergeQueue(token, id);
+    case PULL_REQUEST_ACTION.CLOSE:
+      return setPullRequestOpen(token, id, false);
+    case PULL_REQUEST_ACTION.REOPEN:
+      return setPullRequestOpen(token, id, true);
+    case PULL_REQUEST_ACTION.EDIT_TITLE:
+      return setPullRequestTitle(token, id, request.title);
     case PULL_REQUEST_ACTION.SUBMIT_REVIEW:
       return submitPullRequestReview(token, id, request);
     case PULL_REQUEST_ACTION.REPLY_TO_THREAD:
@@ -1265,7 +1263,7 @@ const githubImageEndpoint = /* @__PURE__ */ Effect.fn("web/agentGitHubImageEndpo
   return HttpServerResponse.uint8Array(read.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,
     contentType: read.value.contentType,
-    headers: ATTACHMENT_HEADERS,
+    headers: HOSTED_BYTES_HEADERS,
   });
 });
 
@@ -1351,7 +1349,7 @@ const inboxAttachmentEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAttachmentEn
   return HttpServerResponse.uint8Array(found.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,
     contentType: found.value.contentType,
-    headers: ATTACHMENT_HEADERS,
+    headers: HOSTED_BYTES_HEADERS,
   });
 });
 
@@ -1382,7 +1380,7 @@ const pictureEndpoint = /* @__PURE__ */ Effect.fn("web/agentPictureEndpoint")(fu
   return HttpServerResponse.uint8Array(found.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,
     contentType: found.value.contentType,
-    headers: ATTACHMENT_HEADERS,
+    headers: HOSTED_BYTES_HEADERS,
   });
 });
 

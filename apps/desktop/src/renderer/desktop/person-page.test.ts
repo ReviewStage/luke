@@ -198,6 +198,10 @@ let inboxHeld = false;
 let automationsHeld = false;
 /** Whether the members read is held until the test answers it with `answerMembers`. */
 let membersHeld = false;
+/** Whether the members read is refused, as a read that failed is. */
+let membersRefused = false;
+/** Whether the read of who left is refused, as a read that failed is. */
+let formerRefused = false;
 /** Answers the held members read with the fixture's members. */
 let answerMembers: () => void = () => undefined;
 /** Every text the page asked the window to copy, in order. */
@@ -209,6 +213,8 @@ beforeEach(() => {
   inboxHeld = false;
   automationsHeld = false;
   membersHeld = false;
+  membersRefused = false;
+  formerRefused = false;
   copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   window.localStorage.clear();
@@ -226,7 +232,7 @@ beforeEach(() => {
           answerMembers = () => resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
         });
       }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
+      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && !membersRefused) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
@@ -239,7 +245,7 @@ beforeEach(() => {
           value: { automations: AUTOMATIONS },
         });
       }
-      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
+      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ && !formerRefused) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: FORMER });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
@@ -634,6 +640,41 @@ test("a page opened by a member's id alone stands a placeholder head while the m
 
   assert.deepEqual(waits(page), []);
   assert.deepEqual(head(page), ["Sam Ortiz", "Member · sam@example.com"]);
+});
+
+test("a members read that was refused says so and offers Retry in the head's place, and Retry names them", async () => {
+  membersRefused = true;
+  const { page } = mount("user-sam");
+  await settle();
+
+  assert.match(page.textContent ?? "", /Their profile could not be read\./u);
+  assert.deepEqual(waits(page), []);
+  assert.equal(page.querySelector(".desktop-toolbar-title")?.textContent, "Profile");
+  assert.doesNotMatch(page.textContent ?? "", /Someone|Not in this workspace|Nothing of theirs/u);
+
+  membersRefused = false;
+  act(() => button(page, "Retry").click());
+  await settle();
+
+  assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
+  assert.deepEqual(head(page), ["Sam Ortiz", "Member · sam@example.com"]);
+  assert.equal(page.querySelector(".desktop-toolbar-title")?.textContent, "Sam Ortiz");
+});
+
+test("a read of who left that was refused says so and offers Retry, and Retry names them as a former member", async () => {
+  formerRefused = true;
+  const { page } = mount(OLA.userId);
+  await settle();
+
+  assert.match(page.textContent ?? "", /Their profile could not be read\./u);
+  assert.deepEqual(waits(page), []);
+  assert.doesNotMatch(page.textContent ?? "", /Not found/u);
+
+  formerRefused = false;
+  act(() => button(page, "Retry").click());
+  await settle();
+
+  assert.deepEqual(head(page), [OLA.name, "Former member"]);
 });
 
 test("while the task list is read, placeholder rows stand for their tasks and the page is never called empty", async () => {

@@ -422,6 +422,41 @@ export const takeOutOfMergeQueue = /* @__PURE__ */ Effect.fn("web/takeOutOfMerge
   yield* githubWrite(token, DEQUEUE_MUTATION, { id: pullRequestId }, Schema.Unknown);
 });
 
+const CLOSE_MUTATION = `mutation($id: ID!) {
+  closePullRequest(input: { pullRequestId: $id }) { pullRequest { state } }
+}`;
+
+const REOPEN_MUTATION = `mutation($id: ID!) {
+  reopenPullRequest(input: { pullRequestId: $id }) { pullRequest { state } }
+}`;
+
+/** The pull request closed without merging, or opened again where `open` asks, on the member's token. */
+export const setPullRequestOpen = /* @__PURE__ */ Effect.fn("web/setPullRequestOpen")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  open: boolean,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* githubWrite(
+    token,
+    open ? REOPEN_MUTATION : CLOSE_MUTATION,
+    { id: pullRequestId },
+    Schema.Unknown,
+  );
+});
+
+const TITLE_MUTATION = `mutation($id: ID!, $title: String!) {
+  updatePullRequest(input: { pullRequestId: $id, title: $title }) { pullRequest { title } }
+}`;
+
+/** The pull request's title changed to the one given, on the member's token. */
+export const setPullRequestTitle = /* @__PURE__ */ Effect.fn("web/setPullRequestTitle")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  title: string,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* githubWrite(token, TITLE_MUTATION, { id: pullRequestId, title }, Schema.Unknown);
+});
+
 const MARK_VIEWED_MUTATION = `mutation($id: ID!, $path: String!) {
   markFileAsViewed(input: { pullRequestId: $id, path: $path }) { clientMutationId }
 }`;
