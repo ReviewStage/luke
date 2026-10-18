@@ -10,7 +10,7 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**
@@ -60,7 +60,7 @@ afterEach(() => {
 function taskPage(
   opened: Mention[],
   files: { path: string; lines: MentionLines | undefined }[],
-): PlanMentionsValue {
+): TaskMentionsValue {
   return {
     taskId: TASK_ID,
     taskName: "Invitations",
@@ -78,7 +78,7 @@ function taskPage(
 }
 
 /** The words drawn as a transcript draws them, on the task's page given or off any. */
-function drawn(page: PlanMentionsValue | undefined, text: string = WORDS): HTMLElement {
+function drawn(page: TaskMentionsValue | undefined, text: string = WORDS): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -86,7 +86,7 @@ function drawn(page: PlanMentionsValue | undefined, text: string = WORDS): HTMLE
   const words = createElement(TranscriptWords, { text });
   act(() =>
     root.render(
-      page === undefined ? words : createElement(PlanMentions, { value: page, children: words }),
+      page === undefined ? words : createElement(TaskMentions, { value: page, children: words }),
     ),
   );
   return container;
@@ -94,9 +94,9 @@ function drawn(page: PlanMentionsValue | undefined, text: string = WORDS): HTMLE
 
 /** Each chip drawn: its kind and the name it says. */
 function chips(container: HTMLElement): [string | undefined, string | null][] {
-  return [...container.querySelectorAll<HTMLElement>(".mention-chip")].map((chip) => [
+  return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,
-    chip.querySelector(".mention-chip-label")?.textContent ?? null,
+    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
   ]);
 }
 
@@ -128,7 +128,7 @@ test("on a plan's page a plan's link, a file's lines, and a Linear page are chip
   );
   assert.equal(carriesTarget(container), false);
 
-  for (const chip of container.querySelectorAll<HTMLButtonElement>("button.mention-chip")) {
+  for (const chip of container.querySelectorAll<HTMLButtonElement>("button[data-mention-ref]")) {
     act(() => chip.click());
   }
   assert.deepEqual(opened, [{ kind: MENTION_KIND.SECTION, taskId: TASK_ID, anchor: "rollout" }]);
@@ -171,7 +171,7 @@ test("a reference link is read through its definition, and a file's page far lon
     [MENTION_KIND.FILE, "the store"],
     [MENTION_KIND.FILE, "the long one"],
   ]);
-  for (const chip of container.querySelectorAll<HTMLButtonElement>("button.mention-chip")) {
+  for (const chip of container.querySelectorAll<HTMLButtonElement>("button[data-mention-ref]")) {
     act(() => chip.click());
   }
   assert.deepEqual(

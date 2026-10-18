@@ -36,9 +36,6 @@ const METRIC_FIGURE = "whitespace-nowrap [overflow-wrap:normal]";
 
 const METRIC_VALUE = `${METRIC_FIGURE} text-3xl font-semibold tabular-nums`;
 
-/** A figure that is a state's word rather than a count, a step smaller. */
-export const METRIC_STATUS = `${METRIC_FIGURE} text-xl font-semibold`;
-
 /** A label bone's width, about the words it stands for. */
 const SKELETON_LABEL_WIDTH = "96px";
 

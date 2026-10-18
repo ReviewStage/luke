@@ -366,8 +366,8 @@ function mount(firstTaskless: readonly AppInboxTasklessItem[] = []) {
           pages: undefined,
           onRereadPages: () => undefined,
         },
-        onShowTask: (planId) => asked.shownTasks.push(planId),
-        onShowAgent: (planId, agentId) => asked.shownAgents.push([planId, agentId]),
+        onShowTask: (taskId) => asked.shownTasks.push(taskId),
+        onShowAgent: (taskId, agentId) => asked.shownAgents.push([taskId, agentId]),
         automationsView: {
           open: false,
           place: { kind: AUTOMATIONS_PAGE.LIST },
@@ -398,23 +398,33 @@ async function settle(): Promise<void> {
 const ROW_TITLE = ".luke-list-row-title";
 
 /**
- * What marks a row as needing the developer: `*` where it is drawn bold and
- * wears the dot read as "Needs you", nothing where it wears neither, and
- * `?` where it wears only one, so a half-drawn mark fails every listing.
+ * What marks a row as needing the developer: `*` where it wears the
+ * attention mark and says "Needs you" beside it, nothing where it does
+ * neither, and `?` where it does one alone or wears the blue dot that
+ * meant it before, so a half-drawn or stale mark fails every listing.
  */
 function needsYouMark(row: HTMLElement): string {
-  const bold = row.closest("li")?.dataset.unread === "true";
-  const dot = row.querySelector(".inbox-row-dot")?.textContent === "Needs you";
-  if (bold && dot) return "*";
-  return bold || dot ? "?" : "";
+  const mark = row.querySelector(".luke-list-row-meta .attention-mark") !== null;
+  const said =
+    row.querySelector(".luke-list-row-meta .visually-hidden")?.textContent === "Needs you";
+  if (row.querySelector(".inbox-row-dot") !== null) return "?";
+  if (mark && said) return "*";
+  return mark || said ? "?" : "";
+}
+
+/** The first of a button's words a reader hears: a row's or a fold's name, before its count and its chord. */
+function heardName(button: Element): string {
+  const heard = [...button.children].find((part) => part.getAttribute("aria-hidden") !== "true");
+  return heard?.textContent ?? "";
 }
 
 /** The list as a reader hears it: each group's name, then its rows, `▸ ` where chosen and `*` where marked as needing the developer. */
 function listed(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
-  return [...list.querySelectorAll(".sidebar-repository-name, li > button")].map((node) => {
-    if (!(node instanceof HTMLButtonElement)) return `# ${node.textContent}`;
+  const fold = ".sidebar-repository-header button[aria-expanded]:not([aria-haspopup])";
+  return [...list.querySelectorAll(`${fold}, li > button`)].map((node) => {
+    if (node.matches(fold) || !(node instanceof HTMLButtonElement)) return `# ${heardName(node)}`;
     const name = node.querySelector(ROW_TITLE)?.textContent ?? "";
     return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${name}`;
   });
@@ -437,7 +447,7 @@ function rowNamed(page: HTMLElement, title: string): HTMLButtonElement {
   return row;
 }
 
-test("the list holds every plan's items under the sidebar's group header for each, the latest changed first and marked bold with a dot while it needs you, the first such item chosen; Newest first from the view's menu lists them in one run, and the choice outlives a relaunch", async () => {
+test("the list holds every plan's items under the sidebar's group header for each, the latest changed first and wearing the attention mark while it needs you, the first such item chosen; Newest first from the view's menu lists them in one run, and the choice outlives a relaunch", async () => {
   let { page } = mount();
   await settle();
   assert.deepEqual(listed(page), [
@@ -534,7 +544,10 @@ test("a settled choice folds what its agent offered to one line saying who picke
     "person",
     "the answerer's face leads their comment",
   );
-  assert.ok(reply.querySelector(".actor-ref[data-kind='person']"), "the answerer by their name");
+  assert.ok(
+    reply.querySelector("[data-actor-ref][data-kind='person']"),
+    "the answerer by their name",
+  );
 });
 
 /** An item's options as a reader meets them: each label, then its Recommended badge's words where it wears one. */
@@ -690,7 +703,7 @@ test("a teammate's answer names them by their disc and name, beside their pick a
   assert.match(answerHead(page) ?? "", /^Charles Pan.+ · /u);
   assert.equal(reply.querySelector("[data-inbox-pick]")?.textContent, "Retry 3 times over an hour");
 
-  const answerer = reply.querySelector(".actor-ref") ?? assert.fail("the answerer is named");
+  const answerer = reply.querySelector("[data-actor-ref]") ?? assert.fail("the answerer is named");
   act(() => {
     answerer.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
@@ -838,7 +851,9 @@ function reach(control: HTMLElement): void {
 /** The agent's references in the pane's thread, each its tile and its name as one button. */
 function threadRefs(page: HTMLElement): HTMLButtonElement[] {
   return [
-    ...page.querySelectorAll<HTMLButtonElement>('.inbox-board button.actor-ref[data-kind="agent"]'),
+    ...page.querySelectorAll<HTMLButtonElement>(
+      '.inbox-board button[data-actor-ref][data-kind="agent"]',
+    ),
   ];
 }
 
@@ -870,7 +885,7 @@ test("the thread names its agent as one button wherever it does, its subject's l
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
   const sent = page.querySelector<HTMLButtonElement>(
-    '[data-inbox-comment="answered"] button.actor-ref[data-kind="agent"]',
+    '[data-inbox-comment="answered"] button[data-actor-ref][data-kind="agent"]',
   );
   assert.ok(sent, "the line saying the answer was sent names the agent");
   assert.equal(sent.textContent, "Alerts");
@@ -1071,7 +1086,9 @@ test("a folded plan counts what in it needs you, and one where nothing does coun
   );
   await settle();
   const headers = () => [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-repository-toggle"),
+    ...page.querySelectorAll<HTMLButtonElement>(
+      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+    ),
   ];
   for (const header of headers()) act(() => header.click());
   assert.deepEqual(
@@ -1179,6 +1196,38 @@ test("an Inbox with nothing in it stands its empty state in the pane beside the 
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.equal(emptyStateIn(page, ".inbox-tasks"), "Nothing needs you");
+});
+
+test("while its plans are first read, the list stands placeholder rows in its items' place, saying to a reader that the inbox is being read, with no row to press and no ring; once the reads land, the items stand where they stood", async () => {
+  const reads = new Map([
+    [BILLING.id, pending()],
+    [INVITES.id, pending()],
+  ]);
+  startRead = (taskId) => reads.get(taskId)?.promise;
+  const { page } = mount();
+  await settle();
+  const list = page.querySelector<HTMLElement>(".inbox-tasks");
+  assert.ok(list, "the list is drawn");
+  const wait = list.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
+  assert.equal(wait?.textContent, "Reading your inbox…");
+  assert.ok(
+    (wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0,
+    "placeholder rows stand in the items' place",
+  );
+  assert.deepEqual(listed(page), []);
+  assert.equal(list.querySelector(".luke-spinner"), null, "no ring stands in the list's corner");
+
+  reads.get(BILLING.id)?.settle({ items: [THRESHOLD, RETRY], cursor: "1" });
+  reads.get(INVITES.id)?.settle({ items: [EXPIRY], cursor: "1" });
+  await settle();
+  assert.equal(list.querySelector('[aria-busy="true"]'), null);
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "▸ *Alert at 80%?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
 });
 
 test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape does not leave the Inbox", async () => {
@@ -1784,7 +1833,7 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
   );
   pressInComposer(pane, "Enter");
   await settle();
-  const chips = [...composerEditor(pane).querySelectorAll(".mention-chip")].map(
+  const chips = [...composerEditor(pane).querySelectorAll("[data-mention-ref]")].map(
     (chip) => chip.textContent,
   );
   pressInComposer(pane, "Enter");
@@ -1826,7 +1875,7 @@ test("an answered item's note draws a mention it holds as the chip a sent messag
   act(() => rowNamed(page, "How is a failed email retried?").click());
   const note = itemPane(page).querySelector('[data-inbox-comment="answered"] [data-inbox-note]');
 
-  assert.equal(note?.querySelector(".mention-chip")?.textContent, "rollout-store.ts");
+  assert.equal(note?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
   assert.equal(note?.textContent, "See rollout-store.ts");
 });
 
@@ -2258,8 +2307,10 @@ const BUMP: InboxItem = {
 /** The header of a group in the list, by its name. */
 function headerNamed(page: HTMLElement, name: string): HTMLButtonElement {
   const header = [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-repository-toggle"),
-  ].find((each) => each.querySelector(".sidebar-repository-name")?.textContent === name);
+    ...page.querySelectorAll<HTMLButtonElement>(
+      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+    ),
+  ].find((each) => heardName(each) === name);
   assert.ok(header, `no header for ${name}`);
   return header;
 }
@@ -2293,7 +2344,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
 
   const sweep = headerNamed(page, "Nightly flake sweep");
   assert.ok(
-    sweep.querySelector('.sidebar-repository-glyph .actor-mark[data-kind="automation"]'),
+    sweep.querySelector(':scope > [aria-hidden="true"] .actor-mark[data-kind="automation"]'),
     "the automation's group wears its clock tile",
   );
   assert.match(hoveredCard(sweep, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
@@ -2309,7 +2360,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   const others = headerNamed(page, "Other agents");
   assert.ok(others.querySelector(".actor-mark") === null, "a group of agents names no actor");
   assert.ok(
-    others.querySelector(".sidebar-repository-glyph .lucide-factory"),
+    others.querySelector(':scope > [aria-hidden="true"] .lucide-factory'),
     "a group of agents wears the Factory's glyph, as the sidebar's row of every agent does",
   );
 
@@ -2534,8 +2585,8 @@ test("a link to a settled item of an agent with no plan, none of whose items wai
 });
 
 test("an item a link names is not found though another task's read failed, and in a narrow Inbox the notice stands alone, not the list, with a way back to it", async () => {
-  startRead = (planId) =>
-    planId === BILLING.id
+  startRead = (taskId) =>
+    taskId === BILLING.id
       ? Promise.resolve({
           status: ACT_OUTCOME_STATUS.DONE,
           value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
@@ -2626,8 +2677,8 @@ test("a link to an item newer than its task's last read waits for the read of it
   await settle();
   const posted = item("a1b2c3d4-0000-4000-8000-000000000005", "Page on-call too?", 7_000);
   let land: () => void = () => undefined;
-  startRead = (planId) =>
-    planId === INVITES.id
+  startRead = (taskId) =>
+    taskId === INVITES.id
       ? new Promise((resolve) => {
           land = () =>
             resolve({
@@ -2657,8 +2708,8 @@ test("a link to an item newer than its task's last read waits for the read of it
 
 test("an item a link names under a task whose own read fails is kept asked for, and no other task's item is chosen in its place", async () => {
   const quiet = { ...INVITES, id: "0f0e0d0c-0000-4000-8000-00000000a11f", name: "Quiet task" };
-  startRead = (planId) =>
-    planId === quiet.id
+  startRead = (taskId) =>
+    taskId === quiet.id
       ? Promise.resolve({
           status: ACT_OUTCOME_STATUS.DONE,
           value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
@@ -2837,7 +2888,7 @@ test("a thread draws its messages after the question in the order they were writ
     ["message", "person", "You", "See rollout-store.ts"],
   ]);
   const mine = itemPane(page).querySelectorAll('[data-inbox-comment="message"]')[2];
-  assert.equal(mine?.querySelector(".mention-chip")?.textContent, "rollout-store.ts");
+  assert.equal(mine?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
 });
 
 test("a message written on a settled item's thread from its box goes as a message, never an answer, and lands on the thread in place, scrolled into view, the item still answered and the box emptied", async () => {
@@ -3035,4 +3086,102 @@ test("an answer left unsent on an item a teammate answers meanwhile is let go ra
   );
   await settle();
   assert.equal(composerEditor(pane).textContent, "Thanks, Charles.");
+});
+
+/** A row's two lines as a reader meets them: whether its first holds its title and its time, and the muted words of its second. */
+function rowLines(page: HTMLElement, title: string): [boolean, string | null | undefined] {
+  const row = rowNamed(page, title);
+  const head = row.querySelector(".luke-list-row-head");
+  const first =
+    head?.querySelector(ROW_TITLE)?.textContent === title && head.querySelector("time") !== null;
+  return [first, row.querySelector(".luke-list-row-description")?.textContent];
+}
+
+test("an item's row reads as two lines, its title and time over the last word in its thread: what an open item asks, an answer by who gave it, You for the reader, a teammate's latest message by their name, and why its agent took one back", async () => {
+  const NIGHT: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000004", "Page on-call at night?", 2_000),
+    response: { type: INBOX_RESPONSE.TODO },
+    blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "Add the **rota** to PagerDuty." }],
+  };
+  const SEV: InboxItem = {
+    ...item("a1b2c3d4-0000-4000-8000-000000000005", "Which incidents page?", 1_500),
+    startedBy: TEAMMATE,
+    messages: [
+      threadMessage("a1b2c3d4-0000-4000-8000-000000000051", "agent", "Asked on #oncall.", 1_200),
+      threadMessage(
+        "a1b2c3d4-0000-4000-8000-000000000052",
+        { member: TEAMMATE },
+        "Only **sev1**,\nnever sev2.",
+        1_500,
+      ),
+    ],
+  };
+  inboxes.set(BILLING.id, [THRESHOLD, RETRY, NIGHT, SEV]);
+  inboxes.set(INVITES.id, [
+    { ...EXPIRY, status: INBOX_STATUS.CLOSED, closedReason: "The plan now says 7 days." },
+  ]);
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(rowLines(page, "Alert at 80%?"), [true, "Choice · 2 options, one recommended"]);
+  assert.deepEqual(rowLines(page, "How is a failed email retried?"), [
+    true,
+    "You: Retry 3 times over an hour · And page on-call if all three fail.",
+  ]);
+  assert.deepEqual(rowLines(page, "Page on-call at night?"), [
+    true,
+    "To-do · Add the rota to PagerDuty.",
+  ]);
+  assert.deepEqual(rowLines(page, "Which incidents page?"), [
+    true,
+    "Charles Pan: Only sev1, never sev2.",
+  ]);
+  assert.deepEqual(rowLines(page, "Expire after 7 days?"), [
+    true,
+    "Withdrawn: The plan now says 7 days.",
+  ]);
+});
+
+test("the attention mark stands before the time on the reader's own open item alone: a teammate's open item wears their face there with no mark and no ring, saying to a reader that it waits on them, a settled one wears neither, and none is drawn in the unread weight", async () => {
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
+  const { page } = mount();
+  await settle();
+  const ends = (title: string) => {
+    const row = rowNamed(page, title);
+    const meta = row.querySelector(".luke-list-row-meta");
+    return {
+      mark: meta?.querySelector(".attention-mark") !== null,
+      face: meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
+      said: meta?.querySelector(".visually-hidden")?.textContent,
+      dot: row.querySelector(".inbox-row-dot") !== null,
+      unread: row.closest("li")?.dataset.unread === "true",
+    };
+  };
+  assert.deepEqual(ends("Expire after 7 days?"), {
+    mark: true,
+    face: undefined,
+    said: "Needs you",
+    dot: false,
+    unread: false,
+  });
+  assert.deepEqual(ends("Alert at 80%?"), {
+    mark: false,
+    face: "person",
+    said: "Waiting on Charles Pan",
+    dot: false,
+    unread: false,
+  });
+  assert.deepEqual(ends("How is a failed email retried?"), {
+    mark: false,
+    face: undefined,
+    said: undefined,
+    dot: false,
+    unread: false,
+  });
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "Alert at 80%?",
+    "# Invites",
+    "▸ *Expire after 7 days?",
+  ]);
 });

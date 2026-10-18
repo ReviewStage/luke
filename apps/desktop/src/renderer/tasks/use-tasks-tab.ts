@@ -830,7 +830,7 @@ const NO_HOLDS: TaskHolds = {};
 const NO_IDS: readonly string[] = [];
 
 /** No agent with no plan, before the list carries any. */
-const NO_PLANLESS_AGENTS: readonly TasklessAgent[] = [];
+const NO_TASKLESS_AGENTS: readonly TasklessAgent[] = [];
 
 /** What the toast says once Copy plan has put the plan on the clipboard. */
 const TASK_COPIED_NOTE = "Plan copied";
@@ -1105,7 +1105,7 @@ export function useTasksTab(input: {
     () =>
       setAgentPins((held) =>
         accountSignedIn
-          ? unsettledAgentPins(held, viewed.tasklessAgents ?? NO_PLANLESS_AGENTS)
+          ? unsettledAgentPins(held, viewed.tasklessAgents ?? NO_TASKLESS_AGENTS)
           : NO_PENDING_AGENT_PINS,
       ),
     [viewed, accountSignedIn],
@@ -1167,16 +1167,16 @@ export function useTasksTab(input: {
   const listedWorkspaceId = listedWorkspace?.id;
   // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
   // each pinned as given here until main's view carries it.
-  const { tasklessAgents: planlessAgents } = tasks;
+  const { tasklessAgents } = tasks;
   const listedAgents = useMemo(() => {
-    const listed = agentsPinned(planlessAgents ?? NO_PLANLESS_AGENTS, agentPins).filter(
+    const listed = agentsPinned(tasklessAgents ?? NO_TASKLESS_AGENTS, agentPins).filter(
       (agent) => listedWorkspaceId === undefined || agent.workspaceId === listedWorkspaceId,
     );
     return {
       standing: listed.filter((agent) => agent.archivedAt === undefined),
       archived: listed.filter((agent) => agent.archivedAt !== undefined),
     };
-  }, [planlessAgents, agentPins, listedWorkspaceId]);
+  }, [tasklessAgents, agentPins, listedWorkspaceId]);
   const { inboxWaiting, inboxTasks } = input;
   const listedInbox = useMemo(
     () => ({
@@ -1441,13 +1441,13 @@ export function useTasksTab(input: {
           ? { workspaceId: listedWorkspace.id, planId: viewed.activeTaskId }
           : null;
   const chatShownWorkspace = chatShown?.workspaceId ?? null;
-  const chatShownPlan = chatShown?.planId ?? null;
+  const chatShownTask = chatShown?.planId ?? null;
   const reportedTab = useRef<
     | {
         agentId: string | null;
         inboxTaskId: string | null;
         chatShownWorkspace: string | null;
-        chatShownPlan: string | null;
+        chatShownTask: string | null;
       }
     | undefined
   >(undefined);
@@ -1457,7 +1457,7 @@ export function useTasksTab(input: {
       was?.agentId === shownAgent &&
       was.inboxTaskId === shownInbox &&
       was.chatShownWorkspace === chatShownWorkspace &&
-      was.chatShownPlan === chatShownPlan
+      was.chatShownTask === chatShownTask
     ) {
       return;
     }
@@ -1465,7 +1465,7 @@ export function useTasksTab(input: {
       agentId: shownAgent,
       inboxTaskId: shownInbox,
       chatShownWorkspace,
-      chatShownPlan,
+      chatShownTask,
     };
     tell(ACT_KIND.CODING_AGENTS_SHOWN, {
       agentId: shownAgent,
@@ -1473,9 +1473,9 @@ export function useTasksTab(input: {
       chatShown:
         chatShownWorkspace === null
           ? null
-          : { workspaceId: chatShownWorkspace, planId: chatShownPlan },
+          : { workspaceId: chatShownWorkspace, planId: chatShownTask },
     });
-  }, [shownAgent, shownInbox, chatShownWorkspace, chatShownPlan, tell]);
+  }, [shownAgent, shownInbox, chatShownWorkspace, chatShownTask, tell]);
   // Note that the Inbox's choice is remembered as it is made, so leaving the Inbox and coming back stands on it.
   useEffect(() => {
     if (inboxChosen !== undefined) {
@@ -2297,11 +2297,11 @@ export function useTasksTab(input: {
   };
 
   // A tab of the side panel, on its plan, out from under a version history or whatever stands in the plan's place.
-  const showPanelTab = (planId: string, tab: SidePanelTab) => {
-    if (planId !== tasks.activeTaskId) select(planId);
+  const showPanelTab = (taskId: string, tab: SidePanelTab) => {
+    if (taskId !== tasks.activeTaskId) select(taskId);
     setStandIn(undefined);
     setHistoryFor(undefined);
-    sidePanel.onShow(planId, tab);
+    sidePanel.onShow(taskId, tab);
   };
 
   // A link's workspace, by its slug or its id, listed where the account is in it and another is listed; answers the workspace listed after it.
@@ -2314,13 +2314,13 @@ export function useTasksTab(input: {
   // A version's Open lands where its writer wrote it: an agent's tab as a
   // notification opens it, or the side panel's Call tab, asked to
   // bring the call or the turn into view once it draws.
-  const showSource = (planId: string, source: RevisionSource) => {
+  const showSource = (taskId: string, source: RevisionSource) => {
     if (source.kind === REVISION_SOURCE.AGENT) {
-      showColumnTab(planId, { agent: source.agentId });
+      showColumnTab(taskId, { agent: source.agentId });
       return;
     }
-    setReveal({ taskId: planId, source });
-    showPanelTab(planId, SIDE_PANEL_TAB.CALL);
+    setReveal({ taskId: taskId, source });
+    showPanelTab(taskId, SIDE_PANEL_TAB.CALL);
   };
 
   // Each ask is its own, so the same section asked twice scrolls twice.
@@ -2433,7 +2433,7 @@ export function useTasksTab(input: {
         // An item of a task the account lists is shown in the task's own workspace, whatever the slug says.
         listLinked(
           ("planId" in place
-            ? viewed.tasks.find((plan) => plan.id === place.planId)?.workspaceId
+            ? viewed.tasks.find((task) => task.id === place.planId)?.workspaceId
             : undefined) ?? workspace,
         );
         standInFor({
@@ -2773,12 +2773,12 @@ export function useTasksTab(input: {
     // Note that the pin's own task opened by its row is the task the
     // sidebar marks again rather than the pin; another task's lets the pin
     // go only once it opens.
-    onSelect: guard((planId: string) => {
-      setChosen((held) => (held?.pin.task === planId ? undefined : held));
-      select(planId);
+    onSelect: guard((taskId: string) => {
+      setChosen((held) => (held?.pin.task === taskId ? undefined : held));
+      select(taskId);
     }),
-    onShowAgent: guard((planId: string, agentId: string) =>
-      showColumnTab(planId, { agent: agentId }),
+    onShowAgent: guard((taskId: string, agentId: string) =>
+      showColumnTab(taskId, { agent: agentId }),
     ),
     inbox: input.inboxWaiting,
     inboxShown: shownInbox,
@@ -2919,7 +2919,7 @@ export function useTasksTab(input: {
       confirm: secondCall,
       question: secondCallQuestion(callCard({ view: voice.view, tasks: tasks }).taskName),
     },
-    onShowTask: guard((planId: string) => showColumnTab(planId, MAIN_TAB.PLAN)),
+    onShowTask: guard((taskId: string) => showColumnTab(taskId, MAIN_TAB.PLAN)),
     // Each ask is its own, so the same section asked twice scrolls twice.
     onShowMention: guard(showMention),
     onOpenLink: guard((link: ReadLink) => openLink(link)),
@@ -2930,7 +2930,7 @@ export function useTasksTab(input: {
     // Only the ask shown is let go; a newer one stands until its own task shows it.
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
-    onShowInbox: guard((planId: string) => showColumnTab(planId, MAIN_TAB.INBOX)),
+    onShowInbox: guard((taskId: string) => showColumnTab(taskId, MAIN_TAB.INBOX)),
     onShowChat: guard((taskId: string) => showColumnTab(taskId, MAIN_TAB.CHAT)),
     // A pinned tab is in one of the task's columns, so a version history over it gives way as well.
     onOpenPinnedTab: guard((pin: PinnedTab) => {

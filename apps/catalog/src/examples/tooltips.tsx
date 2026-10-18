@@ -65,7 +65,7 @@ function Tooltips(): React.JSX.Element {
           <Hinted
             label="Archive"
             hint={(props) => (
-              <TooltipPill {...props} label="Archive plan" shortcut={<kbd>⌘E</kbd>} />
+              <TooltipPill {...props} label="Archive task" shortcut={<kbd>⌘E</kbd>} />
             )}
           />
           <Hinted label="Share" hint={(props) => <TooltipPill {...props} label="Copy link" />} />

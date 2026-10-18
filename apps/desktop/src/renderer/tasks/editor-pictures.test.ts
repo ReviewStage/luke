@@ -16,7 +16,7 @@ import { DOCUMENT_TASK } from "#testing/document-task";
 import { relayout } from "#testing/resize-observer";
 import { appCommandOffered, runAppCommand } from "../app-commands";
 import { PlanBody } from "./plan-body";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 
 /**
  * editor-pictures.test.ts -- a picture laid into the plan's editor is drawn
@@ -31,18 +31,18 @@ import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
 const TASK_ID = "4b1c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
 const KEPT_ID = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
 
-const PLAN: Task = {
+const TASK: Task = {
   ...DOCUMENT_TASK,
   id: TASK_ID,
   document: { body: "## Approach\n\nThe invite email follows the mock.\n", assumptions: [] },
 };
 
-const PAGE: PlanMentionsValue = {
+const PAGE: TaskMentionsValue = {
   taskId: TASK_ID,
   taskName: "Invitations",
   workspace: "acme",
   repository: null,
-  text: () => PLAN.document.body,
+  text: () => TASK.document.body,
   doors: {
     taskId: TASK_ID,
     place: { workspace: "acme", repository: null },
@@ -103,7 +103,7 @@ function drawn(node: ReactNode): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(PlanMentions, { value: PAGE, children: node })));
+  act(() => root.render(createElement(TaskMentions, { value: PAGE, children: node })));
   return container;
 }
 
@@ -111,7 +111,7 @@ function drawn(node: ReactNode): HTMLElement {
 async function editing(): Promise<HTMLElement> {
   const container = drawn(
     createElement(PlanBody, {
-      task: PLAN,
+      task: TASK,
       live: false,
       onEdit: (request) => {
         saved.push(request.document.value);
@@ -205,7 +205,7 @@ test("a keep that failed says why with Retry and Remove, and Remove takes the pi
 
 test("Insert image is offered while the plan's text is edited, and lays in the files chosen", async () => {
   const reading = drawn(
-    createElement(PlanBody, { task: PLAN, live: false, sectionLinks: SECTION_LINKS }),
+    createElement(PlanBody, { task: TASK, live: false, sectionLinks: SECTION_LINKS }),
   );
   assert.equal(appCommandOffered(APP_COMMAND.INSERT_PICTURE), false);
   act(() => roots.pop()?.unmount());

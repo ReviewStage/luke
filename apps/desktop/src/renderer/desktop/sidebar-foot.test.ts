@@ -11,7 +11,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
-import { DESKTOP_CAPABILITIES, handCapabilities } from "#testing/app-state";
+import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAppCommand } from "../app-commands";
 import { OpenPersonProvider } from "../person-door";
@@ -112,7 +112,7 @@ function mount(
     ),
   );
   return (
-    container.querySelector<HTMLButtonElement>(".sidebar-account") ??
+    container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
     assert.fail("the foot draws the account's button")
   );
 }
@@ -308,7 +308,7 @@ test("a Log out that fails keeps the dialog up saying so, and the account still 
 test("signed out, the account says so and its menu names no one and offers no Log out", () => {
   const button = mount({ status: ACCOUNT_STATUS.SIGNED_OUT });
 
-  assert.equal(button.querySelector(".sidebar-account-name")?.textContent, "Not signed in");
+  assert.match(button.textContent ?? "", /Not signed in$/u);
   act(() => button.click());
   assert.deepEqual(accountMenuLines(), [
     "Settings ⌘,",
@@ -373,4 +373,21 @@ test("an update ready to install offers Restart in the sidebar on the desktop, a
     await restartShown(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.UPDATES)),
     false,
   );
+});
+
+test("the Mac offline says so in the foot, and nothing does while it is online", async () => {
+  const offlineShown = async (online: boolean) => {
+    handState({}, { network: { online } });
+    mount(DEAN);
+    await act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+    const mark = document.querySelector('[role="status"][aria-label="Offline"]');
+    const words = mark?.textContent ?? null;
+    for (const root of roots.splice(0)) act(() => root.unmount());
+    return words;
+  };
+
+  assert.equal(await offlineShown(false), "Offline");
+  assert.equal(await offlineShown(true), null);
 });

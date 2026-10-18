@@ -442,6 +442,26 @@ body {
   max-width: 400px;
 }
 
+/* A key's field and its presses, grown under its row: the field takes the
+   line's room. */
+.catalog-settings-key {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--luke-control-gap);
+}
+
+.catalog-settings-key > .luke-text-field {
+  flex: 1 1 var(--luke-select-field-width);
+}
+
+/* A provider's mark at the size a settings row's leading mark stands. */
+.catalog-settings-mark {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
 /* The tooltip and hover card examples' control, whose wrapper is the hint's anchor and so wraps it exactly. */
 .catalog-hinted {
   display: inline-flex;

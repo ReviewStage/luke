@@ -16,7 +16,7 @@ import { fakeAppBridge } from "#testing/app-bridge";
 import { editorBundleLanded, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { PlanBody } from "./plan-body";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 
 /**
  * `@` in the plan's editor over the real editor bundle: the word typed
@@ -26,7 +26,7 @@ import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
  * repository.
  */
 
-const PLAN: Task = {
+const TASK: Task = {
   ...DOCUMENT_TASK,
   repository: "acme/relay",
   document: { body: "## Goal\n\nInvite by email.\n\n## Rollout\n\nStore first.", assumptions: [] },
@@ -70,13 +70,13 @@ afterEach(() => {
 });
 
 /** The plan's page drawn editable with its mentions, its editor opened on Rollout, under the page's mentions where given. */
-async function opened(page?: PlanMentionsValue, plan: Task = PLAN) {
+async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const body = createElement(PlanBody, {
-    task: plan,
+    task: task,
     live: false,
     onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
     sectionLinks: {
@@ -88,7 +88,7 @@ async function opened(page?: PlanMentionsValue, plan: Task = PLAN) {
   });
   act(() =>
     root.render(
-      page === undefined ? body : createElement(PlanMentions, { value: page, children: body }),
+      page === undefined ? body : createElement(TaskMentions, { value: page, children: body }),
     ),
   );
   const rollout = container.querySelector<HTMLElement>('[role="group"][aria-label="Rollout"]');
@@ -186,7 +186,7 @@ test("Enter writes the highlighted row as its mention, drawn in the editor as it
   task.press("Enter");
   await act(async () => undefined);
 
-  const chips = [...task.container.querySelectorAll(".plan-document-text .mention-chip")];
+  const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
   assert.deepEqual(
     chips.map((chip) => chip.textContent),
     ["Rollout"],
@@ -231,12 +231,12 @@ test("a heading just renamed is offered by its new words, before the editor hand
 });
 
 test("on the plan's page an @ typed in the plan offers its pages and its agents too", async () => {
-  const page: PlanMentionsValue = {
-    taskId: PLAN.id,
-    taskName: PLAN.name,
+  const page: TaskMentionsValue = {
+    taskId: TASK.id,
+    taskName: TASK.name,
     workspace: "acme",
-    repository: PLAN.repository,
-    text: () => PLAN.document.body,
+    repository: TASK.repository,
+    text: () => TASK.document.body,
     pages: [{ id: "page-1", title: "Invites by week" }],
     agents: [
       {
@@ -251,8 +251,8 @@ test("on the plan's page an @ typed in the plan offers its pages and its agents 
       },
     ],
     doors: {
-      taskId: PLAN.id,
-      place: { workspace: "acme", repository: PLAN.repository },
+      taskId: TASK.id,
+      place: { workspace: "acme", repository: TASK.repository },
       anchors: new Set(["goal", "rollout"]),
       onOpenTask: () => undefined,
       onOpenFile: undefined,
@@ -274,12 +274,12 @@ test("on the plan's page an @ typed in the plan offers the workspace's other age
     name,
     actor: { kind: ACTOR_KIND.AGENT, name, provider: undefined, state: ACTOR_STATE.REST },
   });
-  const page: PlanMentionsValue = {
-    taskId: PLAN.id,
-    taskName: PLAN.name,
+  const page: TaskMentionsValue = {
+    taskId: TASK.id,
+    taskName: TASK.name,
     workspace: "acme",
-    repository: PLAN.repository,
-    text: () => PLAN.document.body,
+    repository: TASK.repository,
+    text: () => TASK.document.body,
     agents: [agent("agent-2", "Wire the desktop")],
     readAgents: () =>
       Promise.resolve([
@@ -287,8 +287,8 @@ test("on the plan's page an @ typed in the plan offers the workspace's other age
         agent("agent-4", "Sweep flaky tests"),
       ]),
     doors: {
-      taskId: PLAN.id,
-      place: { workspace: "acme", repository: PLAN.repository },
+      taskId: TASK.id,
+      place: { workspace: "acme", repository: TASK.repository },
       anchors: new Set(["goal", "rollout"]),
       onOpenTask: () => undefined,
       onOpenFile: undefined,
@@ -307,14 +307,14 @@ test("on the plan's page an @ typed in the plan offers the workspace's other age
 test("a section's address pasted whole into the plan is laid in as its chip, called by its heading", async () => {
   const plan = await opened();
   const goal = encodeMention(
-    { kind: MENTION_KIND.SECTION, taskId: PLAN.id, anchor: "goal" },
-    { workspace: "acme", repository: PLAN.repository },
+    { kind: MENTION_KIND.SECTION, taskId: TASK.id, anchor: "goal" },
+    { workspace: "acme", repository: TASK.repository },
   );
 
   await plan.typeAtEnd(" See ");
   await plan.pasteAtEnd(goal);
 
-  const chips = [...plan.container.querySelectorAll(".plan-document-text .mention-chip")];
+  const chips = [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
   assert.deepEqual(
     chips.map((chip) => chip.textContent),
     ["Goal"],
@@ -327,7 +327,7 @@ function crumb(container: HTMLElement): string | undefined {
 }
 
 test("a plan with no repository offers no files and folders to narrow to", async () => {
-  const plan = await opened(undefined, { ...PLAN, repository: null });
+  const plan = await opened(undefined, { ...TASK, repository: null });
 
   await plan.typeAtEnd(" See @");
 
@@ -361,7 +361,7 @@ test("a bare @ in the plan narrows by its kind's row to the repository's paths, 
   assert.deepEqual(inWeb, ["apps/web", [["apps/web", ["web/", "rollout-store.ts"]]]]);
   assert.deepEqual(climbed, ["apps", [["apps", ["apps/", "web/"]]]]);
   assert.deepEqual(
-    [...plan.container.querySelectorAll(".plan-document-text .mention-chip")].map(
+    [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")].map(
       (chip) => chip.textContent,
     ),
     ["web/"],
@@ -381,12 +381,12 @@ test("@plan: typed in the plan narrows the list to the plan, searched by the wor
 });
 
 test("on the plan's page an @ typed in the plan offers the pull requests its agents published, a pick written as its link's chip", async () => {
-  const page: PlanMentionsValue = {
-    taskId: PLAN.id,
-    taskName: PLAN.name,
+  const page: TaskMentionsValue = {
+    taskId: TASK.id,
+    taskName: TASK.name,
     workspace: "acme",
-    repository: PLAN.repository,
-    text: () => PLAN.document.body,
+    repository: TASK.repository,
+    text: () => TASK.document.body,
     pullRequests: [
       {
         number: 3059,
@@ -398,8 +398,8 @@ test("on the plan's page an @ typed in the plan offers the pull requests its age
       },
     ],
     doors: {
-      taskId: PLAN.id,
-      place: { workspace: "acme", repository: PLAN.repository },
+      taskId: TASK.id,
+      place: { workspace: "acme", repository: TASK.repository },
       anchors: new Set(["goal", "rollout"]),
       onOpenTask: () => undefined,
       onOpenFile: undefined,
@@ -414,7 +414,7 @@ test("on the plan's page an @ typed in the plan offers the pull requests its age
 
   assert.deepEqual(offered, [["Pull requests", ["#3059 feat(billing): bill by seat"]]]);
   assert.deepEqual(
-    [...plan.container.querySelectorAll(".plan-document-text .mention-chip")].map(
+    [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")].map(
       (chip) => chip.textContent,
     ),
     ["#3059 feat(billing): bill by seat"],

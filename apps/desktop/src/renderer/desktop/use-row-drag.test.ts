@@ -121,6 +121,75 @@ test("a row held still while the sidebar scrolls beneath it lands where the scro
   assert.deepEqual(moves, [[0, 3]]);
 });
 
+/** Frames asked for, which a test runs by hand. */
+let frames: FrameRequestCallback[] = [];
+
+/** Runs the frames asked for, and those they ask for in turn, up to `most` of them. */
+function runFrames(most = 50): void {
+  for (let run = 0; run < most; run += 1) frames.shift()?.(0);
+}
+
+/**
+ * Six rows, 180 of them, in a column `height` tall that scrolls them, as far
+ * as 180 less its height; each move is reported to `moves`.
+ */
+function inColumn(height: number, moves: [number, number][]): HTMLElement {
+  frames = [];
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((frame) => frames.push(frame));
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+  const list = drawn(6, (from, to) => moves.push([from, to]));
+  const column = list.parentElement ?? assert.fail("the list stands in a column");
+  column.style.overflowY = "auto";
+  const most = 6 * ROW_HEIGHT - height;
+  Object.defineProperties(column, {
+    clientHeight: { value: height },
+    scrollHeight: { value: 6 * ROW_HEIGHT },
+    scrollTop: {
+      get: () => scrolled,
+      set: (to: number) => {
+        scrolled = Math.max(0, Math.min(most, to));
+      },
+    },
+  });
+  const laid = vi.spyOn(Element.prototype, "getBoundingClientRect");
+  const rowsLaid = laid.getMockImplementation() ?? assert.fail("the rows are laid out");
+  laid.mockImplementation(function (this: Element) {
+    return this === column ? DOMRect.fromRect({ width: 200, height }) : rowsLaid.call(this);
+  });
+  return list;
+}
+
+test("a row held at the foot of the column that scrolls its list runs the column down, and lands where that carried it", () => {
+  const moves: [number, number][] = [];
+  const list = inColumn(100, moves);
+  act(() => {
+    grip(list, 0).dispatchEvent(at("pointerdown", 10));
+    window.dispatchEvent(at("pointermove", 50));
+    runFrames();
+  });
+  assert.equal(scrolled, 0, "held away from the edges, the column stands still");
+  act(() => {
+    window.dispatchEvent(at("pointermove", 95));
+    runFrames();
+    window.dispatchEvent(at("pointerup", 95));
+  });
+  assert.equal(scrolled, 80);
+  assert.deepEqual(moves, [[0, 5]]);
+});
+
+test("a column too short for both edges' reach runs only toward the nearer edge, and stands still once it can go no further", () => {
+  const moves: [number, number][] = [];
+  const list = inColumn(50, moves);
+  act(() => {
+    grip(list, 0).dispatchEvent(at("pointerdown", 10));
+    window.dispatchEvent(at("pointermove", 20));
+    runFrames();
+  });
+  assert.equal(scrolled, 0);
+  assert.equal(frames.length, 0, "the column stands still");
+  act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+});
+
 /** Lays out every element wearing `data-box="top height"` there, 200 wide, and every other nowhere. */
 function layOutByBoxes(): void {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
@@ -132,9 +201,9 @@ function layOutByBoxes(): void {
 }
 
 /**
- * Two zones down a column: `a`, whose list of two rows is dragged, from 0
- * to 60, and `b`, from 100 to 190, whose three rows keep an order, at 100,
- * 130, and 160. Each drop out of `a` is reported to `outs`. Where `scoped`,
+ * Two zones down a column: `a`, from -40 to 60, a header over the list of
+ * two rows that is dragged, from 0 to 60, and `b`, from 100 to 190, whose
+ * three rows keep an order, at 100, 130, and 160, with a gap between them. Each drop out of `a` is reported to `outs`. Where `scoped`,
  * `b` stands in a drop scope of its own.
  */
 function twoZones(
@@ -157,7 +226,7 @@ function twoZones(
       null,
       createElement(
         "nav",
-        { "data-row-drop": "a", "data-box": "0 60" },
+        { "data-row-drop": "a", "data-box": "-40 100" },
         createElement("ul", { onPointerDown: drag, "data-box": "0 60" }, [
           row(0, "a0"),
           row(30, "a1"),
@@ -244,6 +313,42 @@ test("a list that keeps no order of its own lets a row go only out of it", () =>
     window.dispatchEvent(at("pointerup", 110));
   });
   assert.deepEqual(outs, [[0, "b", 0]]);
+});
+
+/** The transform the row named `name` is drawn at. */
+function drawnAt(container: HTMLElement, name: string): string | undefined {
+  return named(container, name).closest("li")?.style.transform;
+}
+
+test("a row of a list that keeps no order follows the pointer over its own zone's header, and lands nowhere there", () => {
+  const outs: [number, string, number][] = [];
+  const column = twoZones(outs, false);
+  let shown: string | undefined;
+  act(() => {
+    named(column, "a1").dispatchEvent(at("pointerdown", 40));
+    window.dispatchEvent(at("pointermove", -20));
+    shown = drawnAt(column, "a1");
+    window.dispatchEvent(at("pointerup", -20));
+  });
+  assert.equal(shown, "translateY(-60px)");
+  assert.deepEqual(outs, []);
+});
+
+test("a row carried into the gap between two zones follows the pointer, and lands nowhere there", () => {
+  const outs: [number, string, number][] = [];
+  const column = twoZones(outs, true);
+  let shown: string | undefined;
+  let marked = 0;
+  act(() => {
+    named(column, "a0").dispatchEvent(at("pointerdown", 10));
+    window.dispatchEvent(at("pointermove", 80));
+    shown = drawnAt(column, "a0");
+    marked = column.querySelectorAll("[data-drop-target], [data-drop-before]").length;
+    window.dispatchEvent(at("pointerup", 80));
+  });
+  assert.equal(shown, "translateY(70px)");
+  assert.equal(marked, 0);
+  assert.deepEqual(outs, []);
 });
 
 test("a zone in a drop scope takes no row from a list outside it, and is never marked for one", () => {

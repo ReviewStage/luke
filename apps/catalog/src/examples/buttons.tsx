@@ -1,5 +1,7 @@
 import {
+  ArchiveIcon,
   BUTTON_SHAPE,
+  BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
   ButtonLink,
@@ -11,10 +13,12 @@ import {
   Inline,
   MicrophoneIcon,
   MicrophoneOffIcon,
+  PinIcon,
   PlusIcon,
   SidebarIcon,
   SpeakerIcon,
   Stack,
+  SUBMIT_STATE,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -26,8 +30,10 @@ import { CatalogSection } from "../section";
 /**
  * buttons.tsx -- every Button look at rest, with a glyph, unavailable,
  * unavailable but focusable, and busy; the IconButton's looks and toggle;
- * ButtonLink's looks and an IconButtonLink; the round shape a call's controls take, a danger
- * toggle off and on; and a long label in a narrow column.
+ * ButtonLink's looks and an IconButtonLink; the round shape a call's
+ * controls take, a danger toggle off and on; the compact marks a row reveals
+ * at its end; a message's submit in each of its states, and unavailable; and
+ * a long label in a narrow column.
  */
 
 const STATES = [
@@ -58,7 +64,7 @@ function Buttons(): React.JSX.Element {
       <CatalogSection id="buttons-glyph" title="With a glyph">
         <Inline>
           <Button variant={BUTTON_VARIANT.PRIMARY} icon={<PlusIcon />}>
-            New plan
+            New task
           </Button>
           <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PlusIcon />}>
             Invite
@@ -72,7 +78,7 @@ function Buttons(): React.JSX.Element {
         <Inline>
           <IconButton icon={<EllipsisIcon />} label="More" />
           <IconButton icon={<SidebarIcon />} label="Sidebar" pressed />
-          <IconButton icon={<PlusIcon />} label="New plan" variant={BUTTON_VARIANT.OUTLINE} />
+          <IconButton icon={<PlusIcon />} label="New task" variant={BUTTON_VARIANT.OUTLINE} />
           <IconButton icon={<TrashIcon />} label="Delete" disabled />
           <IconButton icon={<EllipsisIcon />} label="Loading" busy busyLabel="Loading" />
         </Inline>
@@ -116,6 +122,28 @@ function Buttons(): React.JSX.Element {
             variant={BUTTON_VARIANT.INK}
             shape={BUTTON_SHAPE.ROUND}
           />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="buttons-compact" title="Compact, a row's marks">
+        <Inline gap={GAP.TIGHT}>
+          <IconButton icon={<PinIcon />} label="Pin" size={BUTTON_SIZE.COMPACT} />
+          <IconButton icon={<ArchiveIcon />} label="Archive" size={BUTTON_SIZE.COMPACT} />
+          <IconButton icon={<EllipsisIcon />} label="Actions" size={BUTTON_SIZE.COMPACT} />
+          <IconButton icon={<PinIcon />} label="Pin" size={BUTTON_SIZE.COMPACT} disabled />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="buttons-submit" title="A message's submit">
+        <Inline>
+          {Object.values(SUBMIT_STATE).map((state) => (
+            <IconButton key={state} submit={state} label={state} variant={BUTTON_VARIANT.INK} />
+          ))}
+          <IconButton
+            submit={SUBMIT_STATE.READY}
+            label="Send"
+            variant={BUTTON_VARIANT.INK}
+            disabled
+          />
+          <IconButton submit={SUBMIT_STATE.READY} label="Send" variant={BUTTON_VARIANT.PRIMARY} />
         </Inline>
       </CatalogSection>
       <CatalogSection id="buttons-narrow" title="Narrow column, long label">

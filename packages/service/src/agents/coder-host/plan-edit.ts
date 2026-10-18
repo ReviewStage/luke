@@ -304,10 +304,10 @@ function picturesInSandbox(
   return Effect.gen(function* () {
     const stored = yield* readTask(binding.userId, binding.taskId);
     if (Option.isNone(stored)) return Result.fail(PLAN_SAVE_REFUSAL.NO_TASK);
-    const { task: plan } = stored.value;
-    if (plan.archivedAt !== undefined) return Result.fail(PLAN_EDIT_REFUSAL.ARCHIVED);
-    const workspace = yield* workspaceOf(binding.userId, plan.workspaceId);
-    const slug = Option.getOrUndefined(workspace)?.slug ?? plan.workspaceId;
+    const { task } = stored.value;
+    if (task.archivedAt !== undefined) return Result.fail(PLAN_EDIT_REFUSAL.ARCHIVED);
+    const workspace = yield* workspaceOf(binding.userId, task.workspaceId);
+    const slug = Option.getOrUndefined(workspace)?.slug ?? task.workspaceId;
     const files = yield* readPictureFiles(pictures, sandbox);
     if (Result.isFailure(files)) return Result.fail(files.failure);
     return Result.succeed({ slug, files: files.success });

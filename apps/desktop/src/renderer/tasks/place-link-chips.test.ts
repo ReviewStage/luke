@@ -35,7 +35,7 @@ import { OpenLinkProvider } from "./use-open-link";
  * Nothing is read for a name. Synthetic workspace, task, and people.
  */
 
-const PLAN = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AGENT = "7b1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
 const UNNAMED_AGENT = "9c8b7a6f-5e4d-4c3b-8a2f-1e0d9c8b7a6f";
 const TRIAGE_AGENT = "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a";
@@ -63,7 +63,7 @@ const MEMBERS: readonly WorkspaceMember[] = [
 ];
 
 const TASK: TaskSummary = {
-  id: PLAN,
+  id: TASK_ID,
   workspaceId: ACME.id,
   name: "Teammate invitations",
   createdAt: AT,
@@ -117,7 +117,7 @@ const STATE: AppStateSnapshot = (() => {
       ...snapshot.inbox,
       waiting: [
         {
-          taskId: PLAN,
+          taskId: TASK_ID,
           items: [{ id: ITEM, agentId: AGENT, title: "Keep expired links?", postedAt: AT }],
         },
       ],
@@ -171,20 +171,20 @@ async function drawn(text: string, opened: LinkPlace[]): Promise<HTMLElement> {
 
 /** Each chip drawn: its kind and the name it says. */
 function chips(container: HTMLElement): [string | undefined, string | null][] {
-  return [...container.querySelectorAll<HTMLElement>(".mention-chip")].map((chip) => [
+  return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
     chip.dataset.kind,
-    chip.querySelector(".mention-chip-label")?.textContent ?? null,
+    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
   ]);
 }
 
 test("a bare link to a place the window knows is called by its name, the task's title, the agent's, the page's, the item's, the member's", async () => {
   const container = await drawn(
     [
-      `${HOME}/plan/${PLAN}`,
-      `${HOME}/plan/${PLAN}/agent/${AGENT}`,
-      `${HOME}/plan/${PLAN}/page/${PAGE}`,
-      `${HOME}/plan/${PLAN}/inbox/${ITEM}`,
-      `${HOME}/plan/${PLAN}/agent/${AGENT}/message/msg_1`,
+      `${HOME}/plan/${TASK_ID}`,
+      `${HOME}/plan/${TASK_ID}/agent/${AGENT}`,
+      `${HOME}/plan/${TASK_ID}/page/${PAGE}`,
+      `${HOME}/plan/${TASK_ID}/inbox/${ITEM}`,
+      `${HOME}/plan/${TASK_ID}/agent/${AGENT}/message/msg_1`,
       `${HOME}/person/${SAM}`,
       `${HOME}/agent/${TRIAGE_AGENT}`,
       `${HOME}/automation/${TRIAGE}`,
@@ -211,10 +211,10 @@ test("a bare link to a place the window knows is called by its name, the task's 
 test("a place the window holds no name for is called by its kind, and a labelled link by its label", async () => {
   const container = await drawn(
     [
-      `${HOME}/plan/${PLAN}/agent/${UNNAMED_AGENT}`,
+      `${HOME}/plan/${TASK_ID}/agent/${UNNAMED_AGENT}`,
       `${HOME}/automation/auto_1/run/run_1`,
       `${HOME}/inbox`,
-      `[the matrix](${HOME}/plan/${PLAN}/page/${PAGE})`,
+      `[the matrix](${HOME}/plan/${TASK_ID}/page/${PAGE})`,
     ].join(", "),
     [],
   );
@@ -230,37 +230,37 @@ test("a place the window holds no name for is called by its kind, and a labelled
 test("a press on a place's chip opens the place in the window", async () => {
   const opened: LinkPlace[] = [];
   const container = await drawn(
-    `${HOME}/plan/${PLAN}/agent/${AGENT} then ${HOME}/person/${SAM}`,
+    `${HOME}/plan/${TASK_ID}/agent/${AGENT} then ${HOME}/person/${SAM}`,
     opened,
   );
 
-  for (const chip of container.querySelectorAll<HTMLButtonElement>("button.mention-chip")) {
+  for (const chip of container.querySelectorAll<HTMLButtonElement>("button[data-mention-ref]")) {
     act(() => chip.click());
   }
   assert.deepEqual(opened, [
-    { kind: LINK_PLACE.AGENT, planId: PLAN, agentId: AGENT },
+    { kind: LINK_PLACE.AGENT, planId: TASK_ID, agentId: AGENT },
     { kind: LINK_PLACE.PERSON, userId: SAM },
   ]);
 });
 
 test("an agent's chip the window knows no harness for has its name say whose it is", async () => {
-  const container = await drawn(`${HOME}/plan/${PLAN}/agent/${UNNAMED_AGENT}`, []);
-  const chip = container.querySelector<HTMLElement>('.mention-chip[data-kind="agent"]');
+  const container = await drawn(`${HOME}/plan/${TASK_ID}/agent/${UNNAMED_AGENT}`, []);
+  const chip = container.querySelector<HTMLElement>('[data-mention-ref][data-kind="agent"]');
 
-  assert.equal(chip?.querySelector(".mention-chip-label")?.textContent, "Agent");
+  assert.equal(chip?.querySelector(".luke-inline-ref-label")?.textContent, "Agent");
 });
 
 test("an agent's chip the window holds wears its harness's mark, on another task's words or none, and the card it hangs wears it too", async () => {
   const container = await drawn(
-    `${HOME}/plan/${PLAN}/agent/${AGENT} and ${HOME}/agent/${TRIAGE_AGENT}`,
+    `${HOME}/plan/${TASK_ID}/agent/${AGENT} and ${HOME}/agent/${TRIAGE_AGENT}`,
     [],
   );
   const agentChips = [
-    ...container.querySelectorAll<HTMLElement>('.mention-chip[data-kind="agent"]'),
+    ...container.querySelectorAll<HTMLElement>('[data-mention-ref][data-kind="agent"]'),
   ];
 
   const worn = agentChips.map((chip) => {
-    const onChip = chip.querySelector(".mention-chip-glyph .harness-mark") !== null;
+    const onChip = chip.querySelector(".luke-inline-ref-glyph .harness-mark") !== null;
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });

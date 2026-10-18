@@ -51,7 +51,7 @@ import {
   type UnitView,
 } from "./task-reveal";
 import { agoText, momentText, sinceText, useMinute } from "./task-time";
-import { PlanTitle } from "./task-title";
+import { TaskTitle } from "./task-title";
 import { useOpenLink } from "./use-open-link";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks";
@@ -395,12 +395,12 @@ function landsOnEmptyRoom(event: React.MouseEvent<HTMLElement>): boolean {
   return target instanceof Element && target.classList.contains(BODY_CLASS);
 }
 
-function opened(plan: Task): Chase {
-  const { body } = plan.document;
+function opened(task: Task): Chase {
+  const { body } = task.document;
   return {
-    taskId: plan.id,
+    taskId: task.id,
     body,
-    lastEditAt: plan.lastEdit?.at,
+    lastEditAt: task.lastEdit?.at,
     state: chaseOpened(body),
   };
 }
@@ -978,11 +978,11 @@ export function PlanBody({
               titleMenu,
             )
           ) : page === undefined ? (
-            attributed(<PlanTitle name={task.name} />, null, titleMenu)
+            attributed(<TaskTitle name={task.name} />, null, titleMenu)
           ) : (
             <header className="task-page-head">
               <div className="task-title-line">
-                <PlanTitle name={task.name} />
+                <TaskTitle name={task.name} />
                 {page.actions}
               </div>
               {editedNote}

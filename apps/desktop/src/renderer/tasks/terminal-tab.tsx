@@ -135,10 +135,13 @@ export function TerminalTab({
     >
       <header className="file-view-bar">
         <span className="terminal-tab-title">
-          <AgentRef subject={subject} models={agents.models} onOpen={onOpenAgent}>
-            <AgentGlyph agent={subject.agent} />
-            <span className="agent-ref-name terminal-tab-agent">{subject.name}</span>
-          </AgentRef>
+          <AgentRef
+            subject={subject}
+            models={agents.models}
+            onOpen={onOpenAgent}
+            glyph={<AgentGlyph agent={subject.agent} />}
+            label={subject.name}
+          />
           <span className="terminal-tab-standing">
             <span className="terminal-tab-sandbox">· sandbox </span>· {look.words}
           </span>

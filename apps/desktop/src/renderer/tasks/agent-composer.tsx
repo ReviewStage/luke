@@ -17,6 +17,7 @@ import {
 } from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
+  BUTTON_TYPE,
   EllipsisIcon,
   ErrorState,
   IconButton,
@@ -24,14 +25,13 @@ import {
   MicrophoneIcon,
   PlusIcon,
   riseAboveEnd,
+  SUBMIT_STATE,
   useMenu,
 } from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { FileDiffIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import {
-  PROMPT_INPUT_STATUS,
   PromptInput,
   PromptInputFooter,
   PromptInputSubmit,
@@ -48,17 +48,17 @@ import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
 import { contextHint } from "./agent-context-model";
 import { AgentModelChip } from "./agent-model-chip";
-import { ChangesChip, PublishedChip, type PublishedDoors } from "./agent-published";
+import { PublishedChip, type PublishedDoors } from "./agent-published";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";
 import { useComposerPickers } from "./composer-pickers";
 import { DictateButton, DictationStrip } from "./dictation-strip";
-import { useMentionBox } from "./plan-mentions";
 import { ComposerQuoteView } from "./reply-to-selection";
 import { useRepositoryRemedy } from "./repository-remedy";
 import type { SkillSource } from "./skill-picker";
+import { useMentionBox } from "./task-mentions";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentModelControl } from "./use-agent-model";
 
@@ -151,7 +151,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * holds in the main column and the side panel alike, the way Cursor's and
  * ChatGPT's narrow panes do (planning.css's `composer` container). As the
  * card narrows, the chips naming what the agent published draw their marks
- * alone; then a ⋯ takes in, in this order, the Changes chip, the MCP
+ * alone; then a ⋯ takes in, in this order, the MCP
  * servers, the context ring, and the microphone; then the model chip draws
  * its harness's mark alone; and last the + goes into the ⋯ too. The field
  * and the round Send or Stop always stand whole. The chips drawing their
@@ -193,7 +193,6 @@ const FOLD_WIDTH = {
 /** The presses a narrow card's ⋯ takes in, by the class each wears on the foot. */
 const OVERFLOW_PRESS = {
   ATTACH: "agent-composer-attach",
-  CHANGES: "agent-changes-chip",
   SERVERS: "agent-servers-button",
   CONTEXT: "agent-context-button",
   DICTATE: "dictate-button",
@@ -527,18 +526,6 @@ export function AgentComposer({
         onSelect: () => picker.current?.click(),
       },
     },
-    ...(published !== undefined && published.pullRequest !== null && doors.openChanges !== undefined
-      ? [
-          {
-            press: OVERFLOW_PRESS.CHANGES,
-            action: {
-              label: "Show changes",
-              icon: <FileDiffIcon aria-hidden="true" />,
-              onSelect: doors.openChanges,
-            },
-          },
-        ]
-      : []),
     {
       press: OVERFLOW_PRESS.SERVERS,
       action: { label: "MCP servers", icon: <McpIcon />, onSelect: () => setServersOpen(true) },
@@ -680,11 +667,6 @@ export function AgentComposer({
                   doors={doors}
                   narrow={folds(FOLD_WIDTH.PUBLISHED)}
                 />
-                <ChangesChip
-                  published={published}
-                  doors={doors}
-                  narrow={folds(FOLD_WIDTH.PUBLISHED)}
-                />
               </PromptInputTools>
               <div className="agent-composer-actions">
                 {model === undefined ? null : (
@@ -713,11 +695,9 @@ export function AgentComposer({
                 {showsStop ? (
                   <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
                     <PromptInputSubmit
-                      type="button"
-                      status={
-                        stopping ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.STREAMING
-                      }
-                      aria-label={stopping ? BUTTON.STOPPING : BUTTON.STOP}
+                      type={BUTTON_TYPE.BUTTON}
+                      status={stopping ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.STREAMING}
+                      label={stopping ? BUTTON.STOPPING : BUTTON.STOP}
                       disabled={stopping}
                       onClick={stop}
                     />
@@ -725,10 +705,8 @@ export function AgentComposer({
                 ) : (
                   <Tooltip label={BUTTON.SEND}>
                     <PromptInputSubmit
-                      aria-label={BUTTON.SEND}
-                      status={
-                        composer.sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY
-                      }
+                      label={BUTTON.SEND}
+                      status={composer.sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
                       disabled={held || empty || reading > 0}
                     />
                   </Tooltip>

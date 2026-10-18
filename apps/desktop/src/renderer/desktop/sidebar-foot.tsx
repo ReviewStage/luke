@@ -12,6 +12,8 @@ import {
   GearIcon,
   IconButton,
   KeyboardIcon,
+  NAV_ITEM_VARIANT,
+  NavItem,
   ProviderMark,
   riseAbove,
   UpdateIcon,
@@ -38,18 +40,20 @@ import { useOpenPerson } from "../person-door";
 import { Tooltip } from "../tooltip";
 import { useCapability } from "../use-app-state";
 import { ActionMenu, type MenuEntry } from "./action-menu";
+import { OfflineMark } from "./offline-mark";
 
 /**
- * sidebar-foot.tsx -- the sidebar's last row: who is signed in and their menu, a release on its way in, and Settings' gear.
+ * sidebar-foot.tsx -- the sidebar's last row: who is signed in and their menu, the Mac offline, a release on its way in, and Settings' gear.
  *
  * The row every desktop devtool keeps at the foot of its sidebar, the way
  * Cursor keeps it: the account's face and name at its start, which opens the
  * account's menu upward over the column, and the gear at its end, which goes
- * to Settings at once. A newer release stands between them as a small pill
- * while there is one, and takes no room while there is not. The menu offers
- * what the menu bar's Help menu offers, by the same commands, with Settings
- * at its head, the ways to reach the people who make Luke under it, and
- * Log out last, which asks first as Settings' Sign out does.
+ * to Settings at once. The Mac offline, and a newer release, each stand
+ * between them as a small pill while they hold, and take no room while they
+ * do not. The menu offers what the menu bar's Help menu offers, by the same
+ * commands, with Settings at its head, the ways to reach the people who make
+ * Luke under it, and Log out last, which asks first as Settings' Sign out
+ * does.
  */
 
 /** Where Contact us > GitHub leads: Luke's own issues, where CONTRIBUTING.md sends bugs and feature requests. */
@@ -245,12 +249,13 @@ function AccountMenu({
   });
   return (
     <>
-      <button type="button" className="sidebar-item sidebar-account" {...trigger(riseAbove)}>
-        <AccountAvatar account={account} />
-        <span className="sidebar-account-name">
-          {signedIn ? (account.name ?? account.email) : "Not signed in"}
-        </span>
-      </button>
+      <NavItem
+        variant={NAV_ITEM_VARIANT.IDENTITY}
+        icon={<AccountAvatar account={account} />}
+        menu={trigger(riseAbove)}
+      >
+        {signedIn ? (account.name ?? account.email) : "Not signed in"}
+      </NavItem>
       {drawn === undefined ? null : (
         <ActionMenu
           label="Account"
@@ -275,7 +280,8 @@ function AccountMenu({
 
 /**
  * The foot of the column: the account, which opens its menu; a release on
- * its way in, while there is one; and the gear, the one press to Settings.
+ * its way in, and the Mac offline, while they hold; and the gear, the one
+ * press to Settings.
  */
 export function SidebarFoot({
   account,
@@ -297,6 +303,7 @@ export function SidebarFoot({
   return (
     <div className="sidebar-account-row">
       <AccountMenu account={account} shown={shown} onSettings={onSettings} onSignOut={onSignOut} />
+      <OfflineMark />
       <SidebarUpdate updates={updates} />
       <Tooltip label="Settings" command={APP_COMMAND.SETTINGS}>
         <IconButton

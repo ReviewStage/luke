@@ -79,10 +79,10 @@ const openAgent = (
       repositories: [RELAY],
     };
     const userId = yield* openGithubUser(row);
-    const plan = yield* startTask(userId, { name: "Invitations", repository: RELAY_FULL_NAME });
-    yield* connectWorkspaceGitHub(plan.workspaceId, installation);
+    const task = yield* startTask(userId, { name: "Invitations", repository: RELAY_FULL_NAME });
+    yield* connectWorkspaceGitHub(task.workspaceId, installation);
     const started = yield* createCodingAgent(userId, {
-      taskId: plan.id,
+      taskId: task.id,
       idempotencyKey: "start-1",
       model: "anthropic/claude-opus-5.5",
       effort: "high",
