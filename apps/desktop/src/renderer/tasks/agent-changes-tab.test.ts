@@ -1233,3 +1233,66 @@ test("unmarking a deleted file opens it, and a press GitHub refuses puts back th
   await flush();
   assert.deepEqual(folds()[0], ["new.ts", false], "a refused mark leaves the file as it was");
 });
+
+const REFUSED: PullRequestWriteAnswer = {
+  outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+  words: "Try again later.",
+};
+
+test("a mark GitHub took stands where the press queued after it is refused, as GitHub holds it", async () => {
+  viewedAnswer = MARKED;
+  const held = holdMarks();
+  files = [changed("c.ts")];
+  await drawTab();
+
+  act(() => viewedBox("c.ts").click());
+  act(() => viewedBox("c.ts").click());
+  held[0]?.answer(DONE);
+  await flush();
+  held[1]?.answer(REFUSED);
+  await flush();
+
+  assert.equal(viewedBox("c.ts").checked, true);
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /Try again later\./u);
+});
+
+test("a last press GitHub was never asked for is sent even where the press before it was refused", async () => {
+  viewedAnswer = MARKED;
+  const held = holdMarks();
+  files = [changed("c.ts")];
+  await drawTab();
+
+  act(() => viewedBox("c.ts").click());
+  act(() => viewedBox("c.ts").click());
+  act(() => viewedBox("c.ts").click());
+  held[0]?.answer(REFUSED);
+  await flush();
+  assert.equal(held.length, 2, "the last press, a mark, is asked for again");
+  held[1]?.answer(DONE);
+  await flush();
+
+  assert.equal(viewedBox("c.ts").checked, true);
+  assert.equal(document.querySelector('[role="alert"]') === null, true);
+});
+
+test("a refused mark leaves a fold chosen since, as Collapse all chose it", async () => {
+  viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
+  const held = holdMarks();
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab();
+
+  act(() => viewedBox("a.ts").click());
+  await flush();
+  const foldAll =
+    document.querySelector<HTMLButtonElement>('button[aria-label="Collapse all files"]') ??
+    assert.fail("the bar offers Collapse all");
+  act(() => foldAll.click());
+  await flush();
+  held[0]?.answer(REFUSED);
+  await flush();
+
+  assert.deepEqual(folds(), [
+    ["a.ts", true],
+    ["b.ts", true],
+  ]);
+});

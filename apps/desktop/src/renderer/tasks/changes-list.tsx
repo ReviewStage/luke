@@ -198,9 +198,18 @@ export function useChangesList(
   const keptStanding = standing !== undefined && paths.includes(standing) ? standing : undefined;
   const current = keptStanding ?? (top !== undefined && paths.includes(top) ? top : paths[0]);
 
+  // How many times each file's fold was chosen, so a press undone puts back only a fold nothing chose since.
+  const foldChoices = useRef(new Map<string, number>());
+  const choose = useCallback((paths: readonly string[]) => {
+    for (const path of paths)
+      foldChoices.current.set(path, (foldChoices.current.get(path) ?? 0) + 1);
+  }, []);
   const toggle = useCallback(
-    (path: string) => setChosen((was) => new Map(was).set(path, folds.get(path) !== true)),
-    [folds],
+    (path: string) => {
+      choose([path]);
+      setChosen((was) => new Map(was).set(path, folds.get(path) !== true));
+    },
+    [folds, choose],
   );
   // A file marked viewed folds, and one unmarked opens, whatever was chosen for it before, which comes back where GitHub would not take the press.
   const markViewed = useCallback(
@@ -208,9 +217,11 @@ export function useChangesList(
       if (marks === undefined) return;
       const before = chosen.get(path);
       const folding = !marks.viewed(path);
+      choose([path]);
+      const choice = foldChoices.current.get(path);
       setChosen((was) => new Map(was).set(path, folding));
       void marks.toggle(path).then((stood) => {
-        if (stood) return;
+        if (stood || foldChoices.current.get(path) !== choice) return;
         setChosen((was) => {
           const next = new Map(was);
           if (before === undefined) next.delete(path);
@@ -219,14 +230,14 @@ export function useChangesList(
         });
       });
     },
-    [marks, chosen],
+    [marks, chosen, choose],
   );
   const asSource = useCallback((path: string) => sources.has(path), [sources]);
   const toggleSource = useCallback((path: string) => setSources((was) => turned(was, path)), []);
-  const toggleAll = useCallback(
-    () => setChosen((was) => foldedAs(was, kept, !allCollapsed)),
-    [kept, allCollapsed],
-  );
+  const toggleAll = useCallback(() => {
+    choose(kept.map((file) => file.path));
+    setChosen((was) => foldedAs(was, kept, !allCollapsed));
+  }, [kept, allCollapsed, choose]);
   // A file the filter leaves out is chosen in the tree's crumbs, which list every changed file: the filter is cleared, and the list scrolled to it once it holds it again.
   const [revealing, setRevealing] = useState<string | undefined>(undefined);
   const go = useCallback(

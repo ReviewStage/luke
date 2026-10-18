@@ -29,10 +29,11 @@ import { noteOf, type WriteNote } from "./pull-request-writes";
  *
  * A press is drawn at once. Each file's marks go to GitHub one at a time,
  * so GitHub settles them in the order pressed: presses made while one is out
- * are folded into the last of them, sent once the one out is answered, and
- * a file's mark is taken from GitHub's answer only once its last press is.
- * Where GitHub would not take a press, the mark goes back to what GitHub
- * last said and the line under the bar says why, as any other change's does
+ * are folded into the last of them, which is sent once the one out is
+ * answered, taken or refused, wherever it still differs from what GitHub
+ * holds. Every mark GitHub takes is its word on the file at once, so where
+ * GitHub would not take the last press, the mark goes back to what GitHub
+ * holds and the line under the bar says why, as any other change's does
  * (`pull-request-writes.tsx`). A read never undoes a mark settled or pressed
  * since it was asked; a read that does not answer takes the marks away
  * rather than leave ones it can no longer vouch for, until one answers.
@@ -58,9 +59,10 @@ function took(answer: CodingAgentPullRequestWriteAnswerView): boolean {
   return !("failure" in answer) && answer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE;
 }
 
-/** A file's marks still to settle: the mark its last press asks for, and the doors told once it settles. */
+/** A file's marks still to settle: the mark its last press asks for, how many presses there were, and the doors told once it settles. */
 interface Pressing {
   readonly wanted: boolean;
+  readonly presses: number;
   readonly told: ReadonlyArray<(stood: boolean) => void>;
 }
 
@@ -84,6 +86,8 @@ export function useViewedFiles(
   // Note that the presses still to settle, and how far each file's marks have settled, are held in refs, because an answer reads them as they are when it lands.
   const pressing = useRef(new Map<string, Pressing>());
   const settled = useRef({ count: 0, at: new Map<string, number>() });
+  // How many of a file's presses there had been when its mark out now was sent.
+  const sentAt = useRef(new Map<string, number>()).current;
 
   useEffect(() => {
     if (reading === undefined) return undefined;
@@ -121,12 +125,13 @@ export function useViewedFiles(
     [pressed, states],
   );
 
-  // Sends the file's last press, and once GitHub answers, the next where one came meanwhile, else settles the file.
+  // Sends one mark for the file, GitHub's last word on it being `confirmed`, and once GitHub answers, sends the last press where it still differs from GitHub's word, else settles the file.
   const send = useCallback(
-    (path: string, wanted: boolean) => {
+    (path: string, wanted: boolean, confirmed: boolean) => {
       const action = wanted
         ? PULL_REQUEST_ACTION.MARK_FILE_VIEWED
         : PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED;
+      sentAt.set(path, pressing.current.get(path)?.presses ?? 0);
       void act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, { agentId, request: { action, path } })
         .catch(
           (): CodingAgentPullRequestWriteAnswerView => ({
@@ -136,22 +141,28 @@ export function useViewedFiles(
         .then((answer) => {
           const now = pressing.current.get(path);
           if (now === undefined) return;
-          if (took(answer) && now.wanted !== wanted) return send(path, now.wanted);
-          pressing.current.delete(path);
-          settled.current.count += 1;
-          settled.current.at.set(path, settled.current.count);
+          const sent = sentAt.get(path) ?? 0;
+          // Every mark GitHub took is GitHub's word at once, so a later refusal shows what GitHub holds.
+          const word = took(answer) ? wanted : confirmed;
           if (took(answer)) {
             const state = wanted ? FILE_VIEWED_STATE.VIEWED : FILE_VIEWED_STATE.UNVIEWED;
             setStates((was) => (was === undefined ? was : new Map(was).set(path, state)));
-          } else {
-            setNote(noteOf(answer));
           }
+          // A press made since this one was sent is sent, where GitHub does not yet hold what it asks, whatever became of this one.
+          if (now.wanted !== word && (now.presses > sent || now.wanted !== wanted)) {
+            return send(path, now.wanted, word);
+          }
+          pressing.current.delete(path);
+          settled.current.count += 1;
+          settled.current.at.set(path, settled.current.count);
+          const stood = now.wanted === word;
+          if (!stood) setNote(noteOf(answer));
           setPressed((was) => {
             const next = new Map(was);
             next.delete(path);
             return next;
           });
-          for (const tell of now.told) tell(took(answer));
+          for (const tell of now.told) tell(stood);
         });
     },
     [act, agentId],
@@ -162,13 +173,17 @@ export function useViewedFiles(
       const settles = Promise.withResolvers<boolean>();
       const wanted = !viewed(path);
       const out = pressing.current.get(path);
-      pressing.current.set(path, { wanted, told: [...(out?.told ?? []), settles.resolve] });
+      pressing.current.set(path, {
+        wanted,
+        presses: (out?.presses ?? 0) + 1,
+        told: [...(out?.told ?? []), settles.resolve],
+      });
       setPressed((was) => new Map(was).set(path, wanted));
       setNote(undefined);
-      if (out === undefined) send(path, wanted);
+      if (out === undefined) send(path, wanted, states?.get(path) === FILE_VIEWED_STATE.VIEWED);
       return settles.promise;
     },
-    [viewed, send],
+    [viewed, send, states],
   );
 
   const dismiss = useCallback(() => setNote(undefined), []);
