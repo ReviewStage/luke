@@ -6,7 +6,8 @@
    as it would in a narrow window; a container query cannot read a custom
    property, so the width it narrows under is a literal here. Under the
    window's toolbar the page draws no header, and a board's content stands
-   across the room, scrolling sideways past it. */
+   across the room, scrolling sideways past it, and holds to the page's
+   height. */
 
 @layer components {
   .luke-collection-page {
@@ -153,6 +154,23 @@
 
   .luke-collection-page[data-width="full"] > .luke-collection-page-scroll {
     overflow-x: auto;
+  }
+
+  /* A board's content holds to the page's height rather than its cards',
+     so a board whose columns scroll their own cards fills the page and
+     never scrolls it down; content taller than that runs past it, and the
+     page scrolls down as it would. Its end inset is a last item rather than
+     padding, so it still follows what runs past. */
+  .luke-collection-page[data-width="full"] .luke-collection-page-content {
+    flex: 1 1 0;
+    min-height: 0;
+    padding-bottom: 0;
+  }
+
+  .luke-collection-page[data-width="full"] .luke-collection-page-content::after {
+    flex: none;
+    height: var(--luke-collection-page-inset);
+    content: "";
   }
 
   /* A filter's search field stands at a search's width, not the line's. */
