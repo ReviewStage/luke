@@ -1,5 +1,3 @@
-import { AREA_PATH } from "@luke/features/pull-request-area";
-
 /**
  * zone-layout.ts -- where a zone stands on the floor, and how much of it it covers, in units a world maps into its own geometry.
  *
@@ -21,6 +19,8 @@ import { AREA_PATH } from "@luke/features/pull-request-area";
  * so its area grows with its bytes, and never under `FOOTPRINT_FLOOR`, so the
  * smallest zone is still there to see.
  */
+
+import { AREA_PATH } from "@luke/features/pull-request-area";
 
 export const ZONE_LAYOUT = {
   /** How far a zone stands off either edge of its ring's band, of the band's unit width. */

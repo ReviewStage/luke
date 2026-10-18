@@ -1,16 +1,3 @@
-import type { FactoryWorld } from "@luke/features/factory-world-wire";
-import { AGENT_STATE, type AgentState, type AgentView, agentViewOf } from "./agent-reading.js";
-import { aliveByZoneOf, type TimelineEntry, timelineOf } from "./shipped-reading.js";
-import {
-  reachOf,
-  type ZoneEdge,
-  type ZoneLayer,
-  zoneEdgesOf,
-  zoneOfAreaIn,
-  zoneReadingsOf,
-} from "./zone-graph.js";
-import { type ZonePlacement, zoneFootprintOf, zonePlacementOf } from "./zone-layout.js";
-
 /**
  * factory-world.ts -- one Factory world snapshot turned into what every world draws.
  *
@@ -29,6 +16,20 @@ import { type ZonePlacement, zoneFootprintOf, zonePlacementOf } from "./zone-lay
  * `shipped-reading.ts` for the glow and the timeline, `world-as-of.ts` for
  * the scrubber, and `signal-palette.ts` for the colours.
  */
+
+import type { FactoryWorld } from "@luke/features/factory-world-wire";
+import { AGENT_STATE, type AgentState, type AgentView, agentViewOf } from "./agent-reading.js";
+import { aliveByZoneOf, type TimelineEntry, timelineOf } from "./shipped-reading.js";
+import { scrubberOpenOf } from "./world-as-of.js";
+import {
+  reachOf,
+  type ZoneEdge,
+  type ZoneLayer,
+  zoneEdgesOf,
+  zoneOfAreaIn,
+  zoneReadingsOf,
+} from "./zone-graph.js";
+import { type ZonePlacement, zoneFootprintOf, zonePlacementOf } from "./zone-layout.js";
 
 /** @public The types the Factory's scene host and its worlds (PR 5 and the world PRs) name their props by. */
 export type { AgentKind, AgentState, AgentView, TouchedZone } from "./agent-reading.js";
@@ -98,7 +99,7 @@ export interface BlastZone {
 export interface FactoryWorldView {
   /** The instant the view reads, the scrubber's own where it was wound back. */
   readonly snapshotAt: number;
-  /** Where the scrubber's window opens. */
+  /** Where the scrubber's window opens: the snapshot's `shippedSince`, or its oldest merge where `shipped` is full (`factoryWorldAsOf`). */
   readonly shippedSince: number;
   /** Every zone, by path. */
   readonly zones: readonly ZoneView[];
@@ -156,7 +157,7 @@ export function factoryWorldViewOf(world: FactoryWorld): FactoryWorldView {
   const agents = world.agents.map((agent) => agentViewOf(agent, context));
   return {
     snapshotAt: world.snapshotAt,
-    shippedSince: world.shippedSince,
+    shippedSince: scrubberOpenOf(world),
     zones: [...readings.keys()].flatMap((path) => zoneByPath.get(path) ?? []),
     zoneByPath,
     edges: zoneEdgesOf(readings),

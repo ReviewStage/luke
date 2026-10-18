@@ -1,5 +1,3 @@
-import type { FactoryShipped } from "@luke/features/factory-world-wire";
-
 /**
  * shipped-reading.ts -- the pull requests merged within the window: how alive each zone is with them, and the order the scrubber plays them in.
  *
@@ -10,6 +8,8 @@ import type { FactoryShipped } from "@luke/features/factory-world-wire";
  * merged this instant, and towards 1, never past it, as more land. A pull
  * request merged after `now` adds nothing.
  */
+
+import type { FactoryShipped } from "@luke/features/factory-world-wire";
 
 /** How long a merge takes to lose half its glow. */
 const ALIVE_HALF_LIFE_MS = 3 * 24 * 60 * 60 * 1000;

@@ -1,6 +1,3 @@
-import type { FactoryZone } from "@luke/features/factory-world-wire";
-import { AREA_PATH } from "@luke/features/pull-request-area";
-
 /**
  * zone-graph.ts -- a world's zones read off their dependency graph: which layer each stands in, how deep, and what depends on what.
  *
@@ -28,6 +25,9 @@ import { AREA_PATH } from "@luke/features/pull-request-area";
  * nothing. A cycle is cut where the walk first meets it again, walking in
  * path order, so the same snapshot always reads the same depths.
  */
+
+import type { FactoryZone } from "@luke/features/factory-world-wire";
+import { AREA_PATH } from "@luke/features/pull-request-area";
 
 /** The four layers a zone stands in, the core innermost. */
 export const ZONE_LAYER = {

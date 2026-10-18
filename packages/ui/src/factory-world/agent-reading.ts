@@ -1,15 +1,3 @@
-import {
-  CODING_AGENT_STATUS,
-  type CodingAgentStatus,
-  PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
-import type {
-  FactoryAgent,
-  FactoryPullRequest,
-  FactoryShipped,
-} from "@luke/features/factory-world-wire";
-import type { PullRequestArea } from "@luke/features/pull-request-area";
-
 /**
  * agent-reading.ts -- one coding agent as a world draws it: where it stands, what kind of work it builds, where, and how large.
  *
@@ -29,6 +17,18 @@ import type { PullRequestArea } from "@luke/features/pull-request-area";
  * whose areas land in no zone, it is its task's zone: the zone where the
  * task's other agents and its merged pull requests changed the most lines.
  */
+
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentStatus,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
+import type {
+  FactoryAgent,
+  FactoryPullRequest,
+  FactoryShipped,
+} from "@luke/features/factory-world-wire";
+import type { PullRequestArea } from "@luke/features/pull-request-area";
 
 /** Where an agent stands, as every world draws it. */
 export const AGENT_STATE = {
@@ -176,16 +176,27 @@ function touchedOf(lines: ReadonlyMap<string, number>): TouchedZone[] {
   }));
 }
 
-/** The zone where the task's other agents and its merged pull requests changed the most lines; null for none. */
+/**
+ * The zone where the task's merged pull requests and its other agents' pull
+ * requests changed the most lines; null for none. Note that a pull request
+ * merged by one of the task's agents is in both lists, so each is counted
+ * once by its number, from its merged row.
+ */
 function taskZoneOf(agent: FactoryAgent, context: AgentContext): string | null {
   if (agent.taskId === null) return null;
   const lines = new Map<string, number>();
-  for (const other of context.agents) {
-    if (other.id === agent.id || other.taskId !== agent.taskId) continue;
-    linesByZone(other.pullRequest?.areas ?? [], context.zoneOfArea, lines);
-  }
+  const counted = new Set<number>();
   for (const merged of context.shipped) {
-    if (merged.taskId === agent.taskId) linesByZone(merged.areas, context.zoneOfArea, lines);
+    if (merged.taskId !== agent.taskId) continue;
+    counted.add(merged.number);
+    linesByZone(merged.areas, context.zoneOfArea, lines);
+  }
+  for (const other of context.agents) {
+    const pullRequest = other.pullRequest;
+    if (other.id === agent.id || other.taskId !== agent.taskId || pullRequest === null) continue;
+    if (counted.has(pullRequest.number)) continue;
+    counted.add(pullRequest.number);
+    linesByZone(pullRequest.areas, context.zoneOfArea, lines);
   }
   return mostLinesFirst(lines)[0]?.[0] ?? null;
 }

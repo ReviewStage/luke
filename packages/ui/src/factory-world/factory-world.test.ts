@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
 import { AREA_PATH } from "@luke/features/pull-request-area";
 import { test } from "vitest";
 import {
@@ -321,6 +322,37 @@ test("an agent with no pull request builds in its task's zone, where the task's 
   assert.equal(lone?.buildSize, 0);
 });
 
+test("a task's pull request an agent merged counts once toward the task's zone", () => {
+  const taskId = uuidOf(99);
+  const view = factoryWorldViewOf(
+    factoryWorldOf({
+      zones: PRODUCT_ZONES,
+      agents: [
+        factoryAgentOf(1, { taskId }),
+        factoryAgentOf(2, {
+          taskId,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          pullRequest: factoryPullRequestOf({
+            number: 10,
+            state: PULL_REQUEST_STATE.MERGED,
+            areas: [areaOf("apps/desk", 10)],
+          }),
+        }),
+      ],
+      shipped: [
+        factoryShippedOf(10, FACTORY_NOW - DAY_MS, {
+          taskId,
+          agentId: uuidOf(2),
+          areas: [areaOf("apps/desk", 10)],
+        }),
+        factoryShippedOf(11, FACTORY_NOW - DAY_MS, { taskId, areas: [areaOf("apps/site", 15)] }),
+      ],
+    }),
+  );
+
+  assert.equal(view.agentById.get(uuidOf(1))?.primaryZone, "apps/site");
+});
+
 test("an agent's kind is its title's Conventional Commits type, else unknown", () => {
   const titles = [
     "fix(ui)!: stop the flicker",
@@ -542,4 +574,20 @@ test("an instant outside the window is held to its nearer end", () => {
   assert.equal(factoryWorldAsOf(world, FACTORY_NOW + DAY_MS).shipped.length, 1);
   assert.equal(factoryWorldAsOf(world, 0).snapshotAt, world.shippedSince);
   assert.equal(factoryWorldAsOf(world, 0).shipped.length, 0);
+});
+
+test("a snapshot naming as many merges as it may opens its window at the oldest, before which it cannot say what merged", () => {
+  const oldest = FACTORY_NOW - 3 * DAY_MS;
+  const world = factoryWorldOf({
+    shipped: Array.from({ length: FACTORY_WORLD_BOUNDS.MAX_SHIPPED }, (_, index) =>
+      factoryShippedOf(index + 1, oldest + index * 60_000),
+    ),
+  });
+
+  const wound = factoryWorldAsOf(world, FACTORY_NOW - 10 * DAY_MS);
+
+  assert.equal(factoryWorldViewOf(world).shippedSince, oldest);
+  assert.equal(wound.snapshotAt, oldest);
+  assert.equal(factoryWorldViewOf(wound).shippedSince, oldest);
+  assert.equal(wound.shipped.length, 1);
 });

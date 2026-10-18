@@ -1,3 +1,12 @@
+/**
+ * factory-world.ts -- builders for a Factory world snapshot, each item filled with plain defaults a test overrides where it matters.
+ *
+ * `factoryWorldOf` decodes what it builds through `factoryWorldSchema`, so
+ * a fixture that breaks the contract (a malformed id, a bound passed) fails
+ * where it is built rather than passing a test the service could never
+ * answer.
+ */
+
 import {
   CHECK_SUMMARY,
   CODING_AGENT_STATUS,
@@ -15,15 +24,6 @@ import {
 } from "@luke/features/factory-world-wire";
 import type { PullRequestArea } from "@luke/features/pull-request-area";
 import { Schema } from "effect";
-
-/**
- * factory-world.ts -- builders for a Factory world snapshot, each item filled with plain defaults a test overrides where it matters.
- *
- * `factoryWorldOf` decodes what it builds through `factoryWorldSchema`, so
- * a fixture that breaks the contract (a malformed id, a bound passed) fails
- * where it is built rather than passing a test the service could never
- * answer.
- */
 
 export const MINUTE_MS = 60 * 1000;
 export const HOUR_MS = 60 * MINUTE_MS;

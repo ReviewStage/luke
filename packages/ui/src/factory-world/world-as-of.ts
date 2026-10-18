@@ -1,12 +1,12 @@
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
-import type { FactoryAgent, FactoryWorld } from "@luke/features/factory-world-wire";
-
 /**
  * world-as-of.ts -- a snapshot wound back to an instant on the scrubber.
  *
  * The scrubber runs over the window the snapshot looks back on, from
  * `shippedSince` to `snapshotAt`, and an instant outside it is held to its
- * nearer end. Winding back to an instant keeps what the snapshot can say
+ * nearer end. Note that a snapshot whose `shipped` is full names only the
+ * newest merges, so before the oldest of them it cannot say what merged,
+ * nor when an agent's pull request missing from the list did. Its window
+ * opens at that oldest merge instead (`scrubberOpenOf`). Winding back to an instant keeps what the snapshot can say
  * was so then:
  *
  *   - the pull requests merged by then, and no later ones;
@@ -18,6 +18,13 @@ import type { FactoryAgent, FactoryWorld } from "@luke/features/factory-world-wi
  * An agent's status, the planned issues, and the defects are kept as they
  * are now, since the snapshot holds no history of them.
  */
+
+import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import {
+  FACTORY_WORLD_BOUNDS,
+  type FactoryAgent,
+  type FactoryWorld,
+} from "@luke/features/factory-world-wire";
 
 function agentAsOf(
   agent: FactoryAgent,
@@ -40,15 +47,28 @@ function agentAsOf(
   return { ...agent, activityAt };
 }
 
-/** The snapshot as of `instant`, held within its window; its `snapshotAt` is that instant. */
+/** Where the scrubber's window opens: `shippedSince`, or the oldest merge named where `shipped` is full. */
+export function scrubberOpenOf(world: FactoryWorld): number {
+  if (world.shipped.length < FACTORY_WORLD_BOUNDS.MAX_SHIPPED) return world.shippedSince;
+  const oldest = Math.min(...world.shipped.map((merged) => merged.mergedAt));
+  return Math.min(world.snapshotAt, Math.max(world.shippedSince, oldest));
+}
+
+/**
+ * The snapshot as of `instant`, held within its window: its `snapshotAt` is
+ * that instant, and its `shippedSince` where the window opens, so a
+ * snapshot wound back twice keeps the window it began with.
+ */
 export function factoryWorldAsOf(world: FactoryWorld, instant: number): FactoryWorld {
-  const at = Math.min(world.snapshotAt, Math.max(world.shippedSince, instant));
+  const shippedSince = scrubberOpenOf(world);
+  const at = Math.min(world.snapshotAt, Math.max(shippedSince, instant));
   const mergedLater = new Set(
     world.shipped.filter((merged) => merged.mergedAt > at).map((merged) => merged.number),
   );
   return {
     ...world,
     snapshotAt: at,
+    shippedSince,
     shipped: world.shipped.filter((merged) => merged.mergedAt <= at),
     agents: world.agents.map((agent) => agentAsOf(agent, at, mergedLater)),
   };
