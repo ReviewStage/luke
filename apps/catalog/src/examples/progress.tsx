@@ -1,11 +1,11 @@
-import { GAP, Progress, Stack, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
-import type { Example } from "../examples";
-import { CatalogSection } from "../section";
-
 /**
  * progress.tsx -- a download's bar under the words that say it in numbers,
  * at its start, part way, and done, and a bar of its own named by its label.
  */
+
+import { GAP, Progress, Stack, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import type { Example } from "../examples";
+import { CatalogSection } from "../section";
 
 const SHARES = [0, 42, 100] as const;
 

@@ -1,3 +1,10 @@
+/**
+ * one-line.tsx -- words held to one line in a narrow column, ending in an
+ * ellipsis and in a fade, and a short line that ends on its last letter;
+ * the pointer resting on a line cut short reads it whole in a pill, the
+ * catalog's own stand-in for the timing an app gives its hints.
+ */
+
 import {
   GAP,
   ONE_LINE_ELEMENT,
@@ -10,13 +17,6 @@ import {
 import { type ReactNode, useId, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
-
-/**
- * one-line.tsx -- words held to one line in a narrow column, ending in an
- * ellipsis and in a fade, and a short line that ends on its last letter;
- * the pointer resting on a line cut short reads it whole in a pill, the
- * catalog's own stand-in for the timing an app gives its hints.
- */
 
 const ADDRESS = "sam.rivera+release-notifications@relay.example.com";
 

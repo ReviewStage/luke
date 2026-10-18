@@ -1,9 +1,9 @@
-import type { HTMLAttributes, ReactElement, ReactNode } from "react";
-import { useClipped } from "../../use-clipped.js";
-
 /**
  * clipped-line.tsx -- a line of words held to one line, measured for whether its box cuts it short, which `OneLine` and a hover card's one-line name and note are drawn from.
  */
+
+import type { HTMLAttributes, ReactElement, ReactNode } from "react";
+import { useClipped } from "../../use-clipped.js";
 
 /** How a line cut short ends: in an ellipsis, or fading out over its last few pixels as a browser's tab does. */
 export const ONE_LINE_END = {

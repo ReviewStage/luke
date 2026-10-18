@@ -1,3 +1,10 @@
+/**
+ * banners.tsx -- a notice in each look: a strip across a column in the
+ * attention tone, a card over a document in either tone, and a quiet row in
+ * its place's frame; then each in a narrow column, where the presses drop
+ * beneath the words.
+ */
+
 import {
   AlertIcon,
   ArchiveIcon,
@@ -14,13 +21,6 @@ import {
 } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
-
-/**
- * banners.tsx -- a notice in each look: a strip across a column in the
- * attention tone, a card over a document in either tone, and a quiet row in
- * its place's frame; then each in a narrow column, where the presses drop
- * beneath the words.
- */
 
 /** Every look, at the width the column gives them. */
 function Looks(): React.JSX.Element {

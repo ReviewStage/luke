@@ -1,5 +1,3 @@
-import { type ReactNode, useId } from "react";
-
 /**
  * banner.tsx -- the one strip a notice about a place is drawn as: a glyph, its words, and the presses that answer it, which drop beneath the words where the strip is narrow.
  *
@@ -21,6 +19,8 @@ import { type ReactNode, useId } from "react";
  * Where a banner stands, how wide it is and the room around it, is its
  * place's; the banner takes no class or style.
  */
+
+import { type ReactNode, useId } from "react";
 
 /** How a banner looks; its layout is the same for all three. */
 export const BANNER_LOOK = {

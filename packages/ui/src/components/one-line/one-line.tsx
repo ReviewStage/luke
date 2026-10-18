@@ -1,13 +1,3 @@
-import type { ReactNode } from "react";
-import {
-  ClippedLine,
-  ONE_LINE_ELEMENT,
-  ONE_LINE_END,
-  type OneLineElement,
-  type OneLineEnd,
-  type OneLineHint,
-} from "./clipped-line.js";
-
 /**
  * one-line.tsx -- words held to one line, ending in an ellipsis or a fade where their box cuts them short, and a hint reading them whole while it does.
  *
@@ -21,6 +11,16 @@ import {
  * ride the hint rather than a `title`, which a session recording would
  * carry unmasked.
  */
+
+import type { ReactNode } from "react";
+import {
+  ClippedLine,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  type OneLineElement,
+  type OneLineEnd,
+  type OneLineHint,
+} from "./clipped-line.js";
 
 export { ONE_LINE_ELEMENT, ONE_LINE_END, type OneLineElement, type OneLineEnd, type OneLineHint };
 
