@@ -331,10 +331,11 @@ function namedReactions(
   person: (held: GitHubAccount) => GitHubPerson,
 ): readonly ReactionGroup[] | undefined {
   if (reactions.length === 0) return undefined;
-  return reactions.map(({ content, count, accounts }) => ({
+  return reactions.map(({ content, count, accounts, mine }) => ({
     content,
     count,
     ...(accounts === undefined ? undefined : { by: accounts.map(person) }),
+    ...(mine === undefined ? undefined : { mine }),
   }));
 }
 
@@ -355,16 +356,19 @@ export const namedOverviewConversation = /* @__PURE__ */ Effect.fn("web/namedOve
       `pull request ${number}`,
     );
     // Note that a reaction key stands only where something was given, so a read before reactions and one with none read alike.
-    const reacted = (given: readonly GitHubReaction[]) => {
+    const reacted = (given: readonly GitHubReaction[], subject: string | undefined) => {
       const named = namedReactions(given, person);
-      return named === undefined ? undefined : { reactions: named };
+      return {
+        ...(named === undefined ? undefined : { reactions: named }),
+        ...(subject === undefined ? undefined : { subject }),
+      };
     };
     const description = namedReactions(read.descriptionReactions, person);
     return {
       earlier: read.earlier,
       reviewers: read.reviewers.map(({ account: held, state }) => ({ by: person(held), state })),
       conversation: read.conversation.map(
-        ({ account: held, state, threads, reactions, ...entry }) => ({
+        ({ account: held, state, threads, reactions, subject, ...entry }) => ({
           ...entry,
           by: person(held),
           ...(state === undefined ? undefined : { state }),
@@ -373,17 +377,22 @@ export const namedOverviewConversation = /* @__PURE__ */ Effect.fn("web/namedOve
             : {
                 threads: threads.map(({ reviewId: _review, comments, ...thread }) => ({
                   ...thread,
-                  comments: comments.map(({ account: author, reactions: given, ...comment }) => ({
-                    ...comment,
-                    by: person(author),
-                    ...reacted(given),
-                  })),
+                  comments: comments.map(
+                    ({ account: author, reactions: given, subject: on, ...comment }) => ({
+                      ...comment,
+                      by: person(author),
+                      ...reacted(given, on),
+                    }),
+                  ),
                 })),
               }),
-          ...reacted(reactions),
+          ...reacted(reactions, subject),
         }),
       ),
       ...(description === undefined ? undefined : { descriptionReactions: description }),
+      ...(read.descriptionSubject === undefined
+        ? undefined
+        : { descriptionSubject: read.descriptionSubject }),
     };
   },
 );
