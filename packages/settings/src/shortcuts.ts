@@ -64,6 +64,7 @@ export const APP_COMMAND = {
   INBOX_LIST: "inbox-list",
   PREVIOUS_INBOX_ITEM: "previous-inbox-item",
   NEXT_INBOX_ITEM: "next-inbox-item",
+  TOGGLE_INBOX_ITEM_READ: "toggle-inbox-item-read",
   EXIT_AGENT_PAGE: "exit-agent-page",
   EXIT_PERSON_PAGE: "exit-person-page",
   FACTORY: "factory",
@@ -416,6 +417,10 @@ export const APP_SHORTCUTS = {
     label: "Next inbox item",
     chord: { key: SHORTCUT_KEY.J, plain: true },
   },
+  [APP_COMMAND.TOGGLE_INBOX_ITEM_READ]: {
+    label: "Mark inbox item as read or unread",
+    chord: { key: SHORTCUT_KEY.U, plain: true },
+  },
   [APP_COMMAND.EXIT_AGENT_PAGE]: {
     label: "Exit agent page",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
@@ -507,6 +512,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.INBOX_LIST,
       APP_COMMAND.PREVIOUS_INBOX_ITEM,
       APP_COMMAND.NEXT_INBOX_ITEM,
+      APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
       APP_COMMAND.ISSUES,
       APP_COMMAND.EXIT_ISSUES,
       APP_COMMAND.NEW_ISSUE,

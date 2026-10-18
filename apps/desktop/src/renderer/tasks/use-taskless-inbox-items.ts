@@ -31,6 +31,8 @@ export interface TasklessInboxItems {
   /** The agents whose items are read as of main's latest word of what waits on them, or read and waited on no more, so an item they do not hold is not theirs. */
   readonly current: ReadonlySet<string>;
   readonly onRetry: () => void;
+  /** Reads every agent's items again, as of now, though nothing main hears of moved: what every item marked read needs. */
+  readonly onReread: () => void;
 }
 
 /** One agent's items as last read, and the waiting items that read answered for. */
@@ -123,6 +125,12 @@ export function useTasklessInboxItems(
     setFailed(new Set());
     setAttempt((count) => count + 1);
   }, []);
+  // Note that each agent's last read stays drawn until the new one lands.
+  const onReread = useCallback(() => {
+    readFor.current.clear();
+    asking.current.clear();
+    setAttempt((count) => count + 1);
+  }, []);
   const items = useMemo(
     () => new Map([...reads].map(([agentId, read]) => [agentId, read.items])),
     [reads],
@@ -139,5 +147,6 @@ export function useTasklessInboxItems(
     failed: [...standing.keys()].some((agentId) => failed.has(agentId)),
     current,
     onRetry,
+    onReread,
   };
 }

@@ -1015,9 +1015,9 @@ ul.actor-stack {
    they last looked at it on this Mac, a tab that something arrived on while
    another was chosen, and a Factory row that waits on them, reads in the
    heavier weight and the primary ink until they look, as a chat app's
-   channels do. Only what waits on them, the Factory's row, also wears the
-   blue dot (`.inbox-row-dot`); an Inbox item that needs them wears the
-   attention mark instead (`.inbox-row-attention`). In the sidebar, where a read name is in the
+   channels do. What waits on them also wears the attention mark
+   (`.inbox-row-attention`); an unread Inbox item wears the blue dot
+   (`.inbox-row-unread`). In the sidebar, where a read name is in the
    quieter ink, the ink carries half the step, so a semibold is enough. */
 .sidebar-task[data-unread="true"] .sidebar-task-name,
 .tab[data-unread="true"] .tab-label {
@@ -3786,30 +3786,25 @@ button.integration-tool-head:hover,
   flex: none;
 }
 
-/* An item that needs the developer wears a mail app's unread dot in the system
-   blue, beside its title's unread weight; an answered one wears neither. The
-   dot is the window's one mark for what waits on the developer, as a plan or
-   a tab with something unseen on it is unread, not waiting. The dots stand
-   in a column of their own past the times, kept on every row, so the times
-   line up whether a row wears one or not. */
-.inbox-row {
-  --inbox-dot: 7px;
+/* An unread Inbox item wears a mail app's blue dot in a gutter before its
+   tile (`inbox-list.tsx`); the gutter stands on every row, so the tiles
+   line up whether a row wears the dot or not. */
+.inbox-row-gutter {
+  display: inline-flex;
+  width: var(--inbox-unread-dot);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  margin-inline-end: var(--luke-space-6);
+
+  --inbox-unread-dot: 7px;
 }
 
-.inbox-row .sidebar-task-line {
-  position: relative;
-  padding-right: calc(var(--inbox-dot) + var(--luke-space-6));
-}
-
-.inbox-row-dot {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  width: var(--inbox-dot);
-  height: var(--inbox-dot);
+.inbox-row-unread {
+  width: var(--inbox-unread-dot);
+  height: var(--inbox-unread-dot);
   border-radius: 50%;
   background: var(--luke-color-accent);
-  transform: translateY(-50%);
 }
 
 /* An Inbox item that needs the developer wears the attention mark before
@@ -4346,13 +4341,6 @@ button.integration-tool-head:hover,
 
 .factory-glyph + .luke-text {
   flex: 1;
-}
-
-.factory-head-dot {
-  --inbox-dot: 7px;
-  position: static;
-  flex: none;
-  transform: none;
 }
 
 /* A station with nothing in it says so in one quiet line. */

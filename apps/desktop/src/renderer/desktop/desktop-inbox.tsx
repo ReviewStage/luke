@@ -25,6 +25,7 @@ import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
 import { InboxList, InboxListSkeleton, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
 import {
   anyNeedsYou,
+  anyUnread,
   firstChoice,
   INBOX_HOLDER,
   type InboxGroup,
@@ -50,6 +51,7 @@ import { useMinute } from "../tasks/task-time";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { type CodingAgentsControl, useCodingAgents } from "../tasks/use-coding-agents";
 import { useInboxItems } from "../tasks/use-inbox-items";
+import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks";
 import { type OpenHere, OpenHereProvider, useOpenLink } from "../tasks/use-open-link";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel";
 import { useTaskInbox } from "../tasks/use-task-inbox";
@@ -276,10 +278,26 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
           },
         ]
       : [];
-  const entries = [
-    ...taskEntries,
-    ...tasklessGroups([...tasks.inboxTaskless, ...settledAgent], tasklessRead, tasks.workspace?.id),
-  ];
+  const { onReread: rereadTasks } = read;
+  const { onReread: rereadTaskless } = taskless;
+  // Note that every item marked read moves nothing main hears of, so the Inbox reads its items again once the service took it.
+  const marks = useInboxReadMarks({
+    act,
+    workspaceId: tasks.workspace?.id,
+    groups: [
+      ...taskEntries,
+      ...tasklessGroups(
+        [...tasks.inboxTaskless, ...settledAgent],
+        tasklessRead,
+        tasks.workspace?.id,
+      ),
+    ],
+    onMarkedAll: () => {
+      rereadTasks();
+      rereadTaskless();
+    },
+  });
+  const entries = marks.groups;
   const filter = {
     grouping: choices.grouping,
     waitingOnly: choices.waitingOnly,
@@ -358,6 +376,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     choose(listed);
     columns.onOpen(listed.item.id);
   };
+  const { onMark: markItem } = marks;
   const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown: tasks.shown,
     folded: folds.folded,
@@ -404,6 +423,16 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   const { onArea, focus } = useColumnFocus();
   // The panel holds the keys while the focus went into it last, or while it fills the window over the Inbox.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
+  // The item shown is read as it opens, and U marks it, only while the Inbox holds the keys and the panel does not cover it.
+  useReadOnOpen({
+    shown:
+      tasks.shown && !sidePanel.fullScreen && columns.shown !== INBOX_COLUMNS.LIST
+        ? chosen?.item
+        : undefined,
+    chosen: chosen?.item,
+    active: tasks.shown && !sideFocused,
+    onMark: markItem,
+  });
   // The panel stands for the item asked for, by its task, or its agent where it has none (`use-tasks-tab.ts`).
   const panelFor = taskId ?? chosenAgentId;
   const pullRequests = [...named.pullRequests].map(([agentId, opened]) => ({
@@ -472,6 +501,10 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                     needsYou: choices,
                     view: { choices, folds },
                     waiting: anyNeedsYou(entries, tasks.me),
+                    readAll: {
+                      unread: anyUnread(entries),
+                      onMarkAll: () => marks.onMarkAll(entries.flatMap(({ items }) => items)),
+                    },
                   }}
                   models={named.models}
                   readerId={tasks.me}
@@ -487,6 +520,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                     />
                   }
                   onChoose={open}
+                  onMark={(listed, unread) => markItem(listed.item, unread)}
                 />
                 {chosen === undefined ? (
                   <section

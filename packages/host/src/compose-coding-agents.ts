@@ -12,6 +12,8 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
   type CodingAgentInboxMessagedView,
+  type CodingAgentInboxReadAllView,
+  type CodingAgentInboxReadStateView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -33,6 +35,7 @@ import {
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxMessageParamsSchema,
   codingAgentInboxParamsSchema,
+  codingAgentInboxReadStateParamsSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
@@ -58,6 +61,7 @@ import {
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
 } from "@luke/features/coding-agent-view";
+import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -124,6 +128,9 @@ export type CodingAgentClient = Pick<
   | "inbox"
   | "answerInbox"
   | "messageInbox"
+  | "markInboxItemRead"
+  | "markInboxItemUnread"
+  | "markInboxRead"
   | "accountInbox"
   | "inboxAttachment"
   | "agentPicture"
@@ -518,6 +525,28 @@ function composed(
         );
         const answer = yield* asked(client.messageInbox(itemId, request));
         return carried<CodingAgentInboxMessagedView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE]: (params) =>
+      Effect.gen(function* () {
+        const { itemId, unread } = yield* read(
+          codingAgentInboxReadStateParamsSchema,
+          params,
+          "marking an inbox item names the item and whether it reads as unread",
+        );
+        const answer = yield* asked(
+          unread ? client.markInboxItemUnread(itemId) : client.markInboxItemRead(itemId),
+        );
+        return carried<CodingAgentInboxReadStateView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL]: (params) =>
+      Effect.gen(function* () {
+        const request = yield* read(
+          inboxReadAllRequestSchema,
+          params,
+          "marking the inbox read names no more than the workspace it lists",
+        );
+        const answer = yield* asked(client.markInboxRead(request));
+        return carried<CodingAgentInboxReadAllView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_CHAT]: (params) =>
       Effect.gen(function* () {
