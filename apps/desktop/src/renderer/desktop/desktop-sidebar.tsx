@@ -1539,6 +1539,7 @@ function SidebarColumn({
     <aside
       ref={overlay.ref}
       className="desktop-sidebar"
+      data-row-drop-scope=""
       inert={!overlay.inSight}
       onPointerDown={onPressWithin}
       onPointerLeave={overlay.onPointerLeave}

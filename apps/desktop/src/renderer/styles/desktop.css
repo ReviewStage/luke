@@ -1137,26 +1137,48 @@ ul.actor-stack {
   z-index: 1;
 }
 
-/* A pinned row's transform is a drag's (use-row-drag.ts): sliding aside for
-   a row dragged past it on the motion tokens, and put back home the same
-   way, so reduced motion and a capture run hold it still. */
+/* A row's transform is a drag's (use-row-drag.ts): sliding aside for a row
+   dragged past it on the motion tokens, and put back home the same way, so
+   reduced motion and a capture run hold it still. The sidebar's rows and
+   the Issues board's cards share it. */
 .sidebar-tasks > li {
   position: relative;
   transition:
     transform var(--duration-fast) var(--spring-fast),
-    background-color var(--duration-hover) ease;
+    background-color var(--duration-hover) ease,
+    opacity var(--duration-quick) var(--motion-exit);
 }
 
-/* A row being dragged is lifted over the rows it passes: the open row's fill
-   made opaque on the sidebar's ground, and a shadow beneath. It follows the
-   pointer frame for frame, so its own transform eases nothing. */
-.sidebar-tasks > li[data-dragging="true"] {
-  z-index: 2;
+/* A row being dragged stays in its list as its own placeholder, faded, and
+   slides to where it would land, while its copy follows the pointer. */
+.sidebar-tasks > li[data-dragging="true"],
+.sidebar-sections > .sidebar-sections-item[data-dragging="true"] {
+  opacity: 0.4;
+}
+
+/* The layer a dragged row's copy is carried in (use-row-drag.ts): fixed over
+   the whole window, above both panes and under the menus, at the row's
+   place and width, and moved only by its transform, frame for frame, so it
+   eases nothing and takes no pointer. */
+[data-carried="true"] {
+  --carried-ground: var(--luke-color-sidebar);
+  position: fixed;
+  z-index: calc(var(--luke-z-menu) - 1);
+  margin: 0;
+  pointer-events: none;
+}
+
+/* The copy itself, lifted: the open row's fill made opaque on the ground it
+   was dragged from, ringed so it reads over either pane, and a shadow
+   beneath. The sidebar's rows, its sections, and the board's cards share it. */
+[data-lifted="true"] {
   border-radius: var(--luke-control-radius);
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--luke-color-sidebar);
-  box-shadow: 0 4px 12px var(--luke-color-shadow);
+    var(--carried-ground);
+  box-shadow:
+    0 0 0 1px var(--luke-color-border-strong),
+    0 4px 12px var(--luke-color-shadow);
   transition: none;
 }
 
@@ -1209,7 +1231,7 @@ ul.actor-stack {
 
 /* The account's own sections, between Pinned and Tasks (sidebar-sections.tsx).
    Each is dragged among the others by its header, on the rows' own timing,
-   and lifted while held as a row is. */
+   and carried as a copy while held as a row is. */
 .sidebar-sections {
   display: flex;
   flex-direction: column;
@@ -1221,17 +1243,13 @@ ul.actor-stack {
 
 .sidebar-sections > .sidebar-sections-item {
   position: relative;
-  transition: transform var(--duration-fast) var(--spring-fast);
+  transition:
+    transform var(--duration-fast) var(--spring-fast),
+    opacity var(--duration-quick) var(--motion-exit);
 }
 
-.sidebar-sections > .sidebar-sections-item[data-dragging="true"] {
-  z-index: 3;
+.sidebar-sections > .sidebar-sections-item[data-lifted="true"] {
   border-radius: var(--luke-radius-8);
-  background:
-    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--luke-color-sidebar);
-  box-shadow: 0 4px 12px var(--luke-color-shadow);
-  transition: none;
 }
 
 .sidebar-sections[data-dragging="true"] {

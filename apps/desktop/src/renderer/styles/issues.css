@@ -199,41 +199,10 @@
     var(--luke-color-surface);
 }
 
-/* A card being dragged stays in its column as its own placeholder, faded,
-   while its copy follows the pointer over the board. */
-.issue-column .sidebar-tasks > li[data-dragging="true"] {
-  z-index: auto;
-  background: none;
-  box-shadow: none;
-  opacity: 0.4;
-  transition: opacity var(--duration-quick) var(--motion-exit);
-}
-
-.issue-column .sidebar-tasks > li {
-  transition:
-    transform var(--duration-fast) var(--spring-fast),
-    opacity var(--duration-quick) var(--motion-exit);
-}
-
-/* The copy of a card carried over the board: lifted as the sidebar lifts a
-   row it drags, on the column's ground, at the card's place and width, and
-   moved only by its transform, frame for frame, so it eases nothing. */
-.issue-board > [data-carried="true"] {
-  position: absolute;
-  z-index: 2;
-  margin: 0;
-  padding: 0;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.issue-board > [data-carried="true"] > .sidebar-task-item[data-dragging="true"] {
-  background:
-    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--luke-color-surface), var(--luke-color-well);
-  box-shadow:
-    0 0 0 1px var(--luke-color-border-strong),
-    0 4px 12px var(--luke-color-shadow);
+/* A card dragged off the board is carried as the sidebar's rows are
+   (desktop.css), its copy lifted on the column's ground. */
+.issue-board {
+  --carried-ground: var(--luke-color-surface);
 }
 
 /* A column's head: its status's glyph, its name, how many it holds, and its

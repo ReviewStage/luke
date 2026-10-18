@@ -45,7 +45,8 @@ import { useRowDrag } from "./use-row-drag";
  * where it was until the answer lands, and a column keeps the list's order
  * rather than one dragged. The drag is the sidebar's (`use-row-drag.ts`):
  * the board is its drop scope, each column a zone of it, and a card is
- * carried over the board as a copy, since its column scrolls and clips it.
+ * carried over the window as a copy, as a sidebar row is, while it stands
+ * faded in its column.
  */
 
 /** What a column with no issue says in its own place. */

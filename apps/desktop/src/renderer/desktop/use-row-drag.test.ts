@@ -78,6 +78,21 @@ test("a row dragged past the middles of the rows below it lands after them", () 
   assert.deepEqual(moves, [[0, 2]]);
 });
 
+test("in a list that reorders, the placeholder slides to where the row would land and the rows it passed stand aside, while the copy follows the pointer", () => {
+  const list = drawn(4, () => undefined);
+  const shifts: string[] = [];
+  let carried: string | undefined;
+  act(() => {
+    grip(list, 0).dispatchEvent(at("pointerdown", 10));
+    window.dispatchEvent(at("pointermove", 72));
+    carried = copyAt();
+    for (const row of list.querySelectorAll("li")) shifts.push(row.style.transform);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  });
+  assert.equal(carried, "translate(0px, 62px)");
+  assert.deepEqual(shifts, ["translateY(60px)", "translateY(-30px)", "translateY(-30px)", ""]);
+});
+
 test("a row dragged up past the top of the list lands first", () => {
   const moves: [number, number][] = [];
   const list = drawn(4, (from, to) => moves.push([from, to]));
@@ -315,61 +330,77 @@ test("a list that keeps no order of its own lets a row go only out of it", () =>
   assert.deepEqual(outs, [[0, "b", 0]]);
 });
 
+/** Where the carried copy is drawn, moved from where it was lifted; none while nothing is carried. */
+function copyAt(): string | undefined {
+  return document.querySelector<HTMLElement>("[data-carried]")?.style.transform;
+}
+
 /** The transform the row named `name` is drawn at. */
 function drawnAt(container: HTMLElement, name: string): string | undefined {
   return named(container, name).closest("li")?.style.transform;
 }
 
-test("a row of a list that keeps no order follows the pointer over its own zone's header, and lands nowhere there", () => {
+test("a row of a list that keeps no order is carried as a copy that follows the pointer over its own zone's header, while the row stands home, and lands nowhere there", () => {
   const outs: [number, string, number][] = [];
   const column = twoZones(outs, false);
-  let shown: string | undefined;
+  let carried: string | undefined;
+  let home: string | undefined;
   act(() => {
     named(column, "a1").dispatchEvent(at("pointerdown", 40));
     window.dispatchEvent(at("pointermove", -20));
-    shown = drawnAt(column, "a1");
+    carried = copyAt();
+    home = drawnAt(column, "a1");
     window.dispatchEvent(at("pointerup", -20));
   });
-  assert.equal(shown, "translateY(-60px)");
+  assert.equal(carried, "translate(0px, -60px)");
+  assert.equal(home, "");
   assert.deepEqual(outs, []);
+  assert.equal(document.querySelector("[data-carried]"), null, "the copy comes down with the drop");
 });
 
-test("a row carried into the gap between two zones follows the pointer, and lands nowhere there", () => {
+test("a copy carried into the gap between two zones follows the pointer, every row standing home, and lands nowhere there", () => {
   const outs: [number, string, number][] = [];
   const column = twoZones(outs, true);
-  let shown: string | undefined;
+  let carried: string | undefined;
+  let home: string | undefined;
   let marked = 0;
   act(() => {
     named(column, "a0").dispatchEvent(at("pointerdown", 10));
     window.dispatchEvent(at("pointermove", 80));
-    shown = drawnAt(column, "a0");
+    carried = copyAt();
+    home = drawnAt(column, "a0");
     marked = column.querySelectorAll("[data-drop-target], [data-drop-before]").length;
     window.dispatchEvent(at("pointerup", 80));
   });
-  assert.equal(shown, "translateY(70px)");
+  assert.equal(carried, "translate(0px, 70px)");
+  assert.equal(home, "");
   assert.equal(marked, 0);
   assert.deepEqual(outs, []);
 });
 
-test("a row carried out of its list is held within the column that scrolls it, its rows fitting it or not, however far past its foot the pointer goes", () => {
+test("a copy carried far past the foot of the column that scrolls its list stands outside the column, drawn under its scope's classes, and the row never leaves its list", () => {
   vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 0);
   vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
   function Column() {
     const drag = useRowDrag(undefined, { onDropOut: () => undefined });
     return createElement(
       "div",
-      { style: { overflowY: "auto" }, "data-box": "0 100" },
+      { className: "scope-look", "data-row-drop-scope": "" },
       createElement(
-        "nav",
-        { "data-row-drop": "a", "data-box": "0 60" },
+        "div",
+        { style: { overflowY: "auto" }, "data-box": "0 100" },
         createElement(
-          "ul",
-          { onPointerDown: drag, "data-box": "0 60" },
-          ["a0", "a1"].map((name, index) =>
-            createElement(
-              "li",
-              { key: name, "data-box": `${index * ROW_HEIGHT} ${ROW_HEIGHT}` },
-              createElement("button", { type: "button" }, name),
+          "nav",
+          { "data-row-drop": "a", "data-box": "0 60" },
+          createElement(
+            "ul",
+            { onPointerDown: drag, "data-box": "0 60" },
+            ["a0", "a1"].map((name, index) =>
+              createElement(
+                "li",
+                { key: name, "data-box": `${index * ROW_HEIGHT} ${ROW_HEIGHT}` },
+                createElement("button", { type: "button" }, name),
+              ),
             ),
           ),
         ),
@@ -381,19 +412,27 @@ test("a row carried out of its list is held within the column that scrolls it, i
   roots.push(root);
   act(() => root.render(createElement(Column)));
   layOutByBoxes();
-  // The column's rows fit it as the press begins, so it has nothing to scroll yet.
-  const column = container.firstElementChild ?? assert.fail("the column stands");
-  Object.defineProperties(column, { clientHeight: { value: 100 }, scrollHeight: { value: 100 } });
   const list = container.querySelector("ul") ?? assert.fail("the list stands");
   Object.assign(list, { setPointerCapture: () => undefined });
-  let shown: string | undefined;
+  let carried: string | undefined;
+  let home: string | undefined;
+  let outside = false;
+  let looked = false;
   act(() => {
     named(container, "a0").dispatchEvent(at("pointerdown", 10));
     window.dispatchEvent(at("pointermove", 400));
-    shown = drawnAt(container, "a0");
+    carried = copyAt();
+    home = drawnAt(container, "a0");
+    const layer = document.querySelector("[data-carried]");
+    outside = layer !== null && !container.contains(layer);
+    looked = layer?.querySelector(".scope-look > ul > li[data-lifted]") != null;
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
   });
-  assert.equal(shown, "translateY(70px)");
+  assert.equal(carried, "translate(0px, 390px)");
+  assert.equal(home, "");
+  assert.ok(outside, "the copy is carried outside the column");
+  assert.ok(looked, "the copy is drawn under its scope's classes");
+  assert.equal(document.querySelector("[data-carried]"), null, "Escape takes the copy down");
 });
 
 test("a zone in a drop scope takes no row from a list outside it, and is never marked for one", () => {
