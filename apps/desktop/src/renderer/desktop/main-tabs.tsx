@@ -6,8 +6,9 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
-import type { TaskSummary } from "@luke/features/task-wire";
+import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { INLINE_EDIT_LOOK, InlineEdit } from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef } from "react";
 import { useAppCommand } from "../app-commands";
@@ -49,7 +50,7 @@ import {
   useTranscriptCopier,
 } from "./strip-tabs";
 import { TabStrip } from "./tab-strip";
-import { TaskNameField, useTaskRename } from "./task-name-field";
+import { useTaskRename } from "./task-name-field";
 
 /**
  * main-tabs.tsx -- the task's column's tabs: the plan's own, each coding agent's, the draft agent's, and the Inbox's after it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
@@ -175,13 +176,15 @@ function RenamableTab({
   }, [editing]);
   const editor =
     rename?.editing === true ? (
-      <TaskNameField
-        name={look.label}
-        className="tab-field"
-        {...field}
+      <InlineEdit
+        value={look.label}
+        label={field?.label ?? "Task name"}
+        maxLength={field?.maxLength ?? TASK_BOUNDS.MAX_NAME_CHARS}
+        look={INLINE_EDIT_LOOK.WELL}
+        editing
         onEnd={(edit) => {
           refocus.current = edit.byKey;
-          rename.end(edit);
+          rename.end(edit.value);
         }}
       />
     ) : undefined;
