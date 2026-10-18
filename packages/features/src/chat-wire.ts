@@ -223,8 +223,8 @@ export type MemberKind = (typeof MEMBER_KIND)[keyof typeof MEMBER_KIND];
 export const CHANNEL_KIND = {
   /** The workspace's one `#general`. */
   GENERAL: "general",
-  /** A plan's own channel, named from the plan on first use, where its agents post by default. */
-  PLAN: "plan",
+  /** A task's own channel, named from the task on first use, where its agents post by default; stored as `plan`. */
+  TASK: "plan",
   /** A channel a member opened on a topic. */
   TOPIC: "topic",
   /** Two members alone. */

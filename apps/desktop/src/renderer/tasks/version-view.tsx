@@ -178,7 +178,7 @@ function VersionContent({
       ) : (
         // A version struck a picture as well as wrote one in, so both texts name the pictures it draws.
         <PlanPictures
-          planId={task.taskId}
+          taskId={task.taskId}
           text={`${read.document.body}\n${read.previous?.body ?? ""}`}
         >
           <VersionBody diff={diff} title={title} section={section} task={task} />

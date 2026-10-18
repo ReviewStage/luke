@@ -7,6 +7,9 @@ import {
   FolderIcon,
   List,
   ListRow,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -21,8 +24,7 @@ import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref";
 import { MemberDirectory, useMemberDirectory } from "../member-directory";
 import { RepositoryPicture } from "../repository-picture";
 import { Shortcut } from "../shortcut";
-import { SPINNER_SIZE, Spinner } from "../spinner";
-import { InboxItemRow } from "../tasks/inbox-list";
+import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
 import {
   holderName,
   INBOX_HOLDER,
@@ -53,13 +55,41 @@ import { useRowKeys } from "./use-row-keys";
  * ↑ and ↓ move through its rows, a launcher's way, from the window itself
  * as well as from a row, and Return opens the row reached, so a launch is a
  * key or two from a task; a key pressed anywhere else, the sidebar or a
- * field, is left to it. Until the task list is read the page draws nothing,
- * since what it says hangs on the list; a read refused says so under Recent,
+ * field, is left to it. Until the task list is read the page stands in its
+ * own shape: New task, which the welcome offers too, and blocks where the
+ * greeting, the sections' headings, and their rows will stand. It says no
+ * word that hangs on the list, so a new account's welcome replaces it
+ * without having claimed otherwise. A read refused says so under Recent,
  * with Retry, over whatever an earlier read listed.
  */
 
 /** How many tasks Recent lists. */
 const RECENT_COUNT = 6;
+
+/** How many placeholder rows Home's Inbox stands while its items are read, fewer than a whole Inbox's. */
+const INBOX_SKELETON_ROWS = 3;
+
+/** What Recent's placeholder rows say to a reader while the task list is read. */
+const READING_TASKS = "Reading your tasks…";
+
+/** How wide the greeting's block stands, as wide as "Welcome back" and a first name in the title's type. */
+const SKELETON_GREETING = "9em";
+
+/** How wide each section heading's block stands, as wide as its word in the heading's type. */
+const SKELETON_HEADING = { INBOX: "3em", RECENT: "3.5em" } as const;
+
+/** How wide each of Recent's placeholder rows' names and repositories stand, one row for each task Recent lists, so the rows read as tasks of their own. */
+const SKELETON_RECENT = [
+  { name: "46%", repository: "5em" },
+  { name: "34%", repository: "6em" },
+  { name: "52%", repository: "5em" },
+  { name: "40%", repository: "7em" },
+  { name: "30%", repository: "5em" },
+  { name: "44%", repository: "6em" },
+] as const;
+
+/** How wide a placeholder row's time stands, as wide as a short "2h". */
+const SKELETON_TIME = "20px";
 
 /** What Recent says where the plan list could not be read, as the sidebar says it. */
 const UNREAD_LINE = "Your tasks could not be read.";
@@ -186,7 +216,7 @@ function HomeInbox({ tasks, now }: { tasks: TasksControl; now: number }): React.
           <ErrorState onRetry={waiting.onRetry}>Some items could not be read.</ErrorState>
         </div>
       ) : empty && waiting.reading ? (
-        <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />
+        <InboxListSkeleton rows={INBOX_SKELETON_ROWS} context />
       ) : empty ? (
         <div className="home-note">
           <Text tone={TEXT_TONE.MUTED}>{NEEDS_YOU.NONE}</Text>
@@ -248,6 +278,71 @@ function Welcome({ tasks }: { tasks: TasksControl }): React.JSX.Element {
   );
 }
 
+/** A section heading's block, in the heading's own type, where its word will stand. */
+function HeadingSkeleton({ width }: { width: string }): React.JSX.Element {
+  return (
+    <div className="home-section-title">
+      <Skeleton width={width} />
+    </div>
+  );
+}
+
+/** Recent's rows while the task list is read: blocks where each row's picture, name, repository, and time will stand. */
+function RecentSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label={READING_TASKS}>
+      <List label="Recent">
+        {SKELETON_RECENT.map(({ name, repository }) => (
+          <ListRow
+            key={name}
+            leading={
+              <span className="home-row-picture">
+                <Skeleton shape={SKELETON_SHAPE.BLOCK} />
+              </span>
+            }
+            title={<Skeleton width={name} />}
+            meta={
+              <span className="home-row-meta">
+                <Skeleton width={repository} />
+                <Skeleton width={SKELETON_TIME} />
+              </span>
+            }
+          />
+        ))}
+      </List>
+    </SkeletonRegion>
+  );
+}
+
+/**
+ * The page while the task list is first read, in the shape of the page an
+ * account with tasks lands on: the greeting's block beside New task, then
+ * the Inbox's and Recent's heading blocks over rows of blocks, so the page
+ * lands where the blocks stood.
+ */
+function HomeSkeleton({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+  return (
+    <div className="home-scroll scroll-fade-top">
+      <div className="home-column">
+        <header className="home-head">
+          <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.TITLE}>
+            <Skeleton width={SKELETON_GREETING} />
+          </Text>
+          <NewTaskButton tasks={tasks} />
+        </header>
+        <div className="home-section">
+          <HeadingSkeleton width={SKELETON_HEADING.INBOX} />
+          <InboxListSkeleton rows={INBOX_SKELETON_ROWS} context />
+        </div>
+        <div className="home-section">
+          <HeadingSkeleton width={SKELETON_HEADING.RECENT} />
+          <RecentSkeleton />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** The home page, in the task's place while no task is open. */
 export function DesktopHome({
   tasks,
@@ -256,11 +351,11 @@ export function DesktopHome({
   tasks: TasksControl;
   /** The signed-in account's name, which greets it. */
   accountName: string | undefined;
-}): React.JSX.Element | null {
+}): React.JSX.Element {
   const now = useMinute();
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
   useRowKeys(column, tasks.shown);
-  if (!tasks.listRead && !tasks.listFailed) return null;
+  if (!tasks.listRead && !tasks.listFailed) return <HomeSkeleton tasks={tasks} />;
   // Only an account with no task in any workspace, and nothing an agent with
   // no task waits on, is new; a workspace of its own with none still says
   // what needs it elsewhere.

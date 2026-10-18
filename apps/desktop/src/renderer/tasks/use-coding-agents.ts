@@ -403,7 +403,7 @@ function listRead(
   agentId: string | undefined,
 ): Promise<PageList> {
   if (taskId !== undefined) {
-    return act(ACT_KIND.CODING_AGENTS_LIST, { taskId: taskId, includeArchived: true });
+    return act(ACT_KIND.CODING_AGENTS_LIST, { taskId, includeArchived: true });
   }
   // Note that a page names no automation by null where a summary leaves the key out.
   return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then((answer): PageList => {
@@ -483,7 +483,7 @@ export function useCodingAgents(input: {
   const keptDraft = useNewAgentDraft(taskId, heldDraft?.id);
   const writer = useDraftWriter();
   const draft = taskId === undefined ? undefined : taskDraft(heldDraft, keptDraft);
-  const [note, setNote] = useState<{ planId: string; note: Failure } | undefined>(undefined);
+  const [note, setNote] = useState<{ taskId: string; note: Failure } | undefined>(undefined);
   const [reads, setReads] = useState(0);
   const pending = useRef<PendingStart | undefined>(undefined);
   // Each agent continued's press, by the agent's id, held until its Start lands.
@@ -584,7 +584,7 @@ export function useCodingAgents(input: {
       .then((answer) => {
         if ("failure" in answer && taskId !== undefined)
           setNote({
-            planId: taskId,
+            taskId,
             note: { reason: FAILURE_REASON.OTHER, text: MODEL_CHANGE_FAILED },
           });
         return answer;
@@ -641,7 +641,7 @@ export function useCodingAgents(input: {
       if ("failure" in answer) {
         // Only a service that never answered is asked again under the same key.
         if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
-        setNote({ planId: taskId, note: startFailureNote(answer, taskId) });
+        setNote({ taskId, note: startFailureNote(answer, taskId) });
         // The note waits beside the task's Start; a developer who left the
         // task while it was out hears of it now.
         if (latest.current.taskId !== taskId) failed(START_FAILED_AWAY);
@@ -1181,7 +1181,7 @@ export function useCodingAgents(input: {
       available: taskId !== undefined && repository !== null && !archived,
       reason: startReason(taskId, repository, archived),
       busy: starting,
-      note: note !== undefined && note.planId === taskId ? note.note : undefined,
+      note: note !== undefined && note.taskId === taskId ? note.note : undefined,
       onPress: pressStart,
     },
     onStop,

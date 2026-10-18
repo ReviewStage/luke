@@ -83,9 +83,13 @@ import {
   SettingsRow,
   SettingsSection,
   SidePanelIcon,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
   Switch,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
+  TEXT_FIELD_SIZE,
   TEXT_FIELD_TYPE,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -233,16 +237,6 @@ const RUN_REFUSAL_WORDS = {
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
-/**
- * A field's own Escape: it lets go of the caret and keeps the press, so
- * Escape while writing never leaves the page and the draft with it.
- */
-function releaseOnEscape(event: React.KeyboardEvent<HTMLElement>): void {
-  if (event.key !== "Escape") return;
-  event.preventDefault();
-  event.currentTarget.blur();
-}
-
 /** A time of day as the time field holds it, the hour and minute in two figures each. */
 function clockValue(hour: number, minute: number): string {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
@@ -387,6 +381,42 @@ function namesSaid(providers: readonly IntegrationProvider[]): string {
 /** The most marks the servers chip holds before it counts the rest, so it stays a picker's width. */
 const SERVERS_CHIP_MARKS = 4;
 
+/** How wide the block standing in the servers chip is while the connections are read: a chip of a mark or two. */
+const SERVERS_CHIP_SKELETON_WIDTH = "96px";
+
+/**
+ * The servers row while no read of the owner's connections has answered:
+ * blocks where the words and the chip will stand, claiming nothing, or the
+ * failure and Retry where the read was refused.
+ */
+function UnreadServersRow({
+  failed,
+  onRetry,
+}: {
+  failed: boolean;
+  onRetry: () => void;
+}): React.JSX.Element {
+  if (failed) {
+    return (
+      <SettingsRow
+        label="MCP servers"
+        below={() => (
+          <ErrorState onRetry={onRetry}>Your connected servers could not be read.</ErrorState>
+        )}
+      />
+    );
+  }
+  return (
+    <SettingsRow label="MCP servers" description={<Skeleton width="40%" />}>
+      {() => (
+        <SkeletonRegion label="Reading your connected servers…">
+          <Skeleton shape={SKELETON_SHAPE.CONTROL} width={SERVERS_CHIP_SKELETON_WIDTH} />
+        </SkeletonRegion>
+      )}
+    </SettingsRow>
+  );
+}
+
 /** The servers row as the automation's creator sees it: their connections, switched in the agent box's own popover from a field chip. */
 function OwnServersRow({
   disabled,
@@ -397,6 +427,11 @@ function OwnServersRow({
 }): React.JSX.Element {
   const statuses = useIntegrationStatuses();
   const openSettings = useOpenSettings();
+  // Note that no provider standing yet is a read still to answer, so the row claims nothing until one does.
+  const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
+  if (!read) {
+    return <UnreadServersRow failed={statuses.readFailed} onRetry={() => void statuses.read()} />;
+  }
   const connected = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
   );
@@ -477,7 +512,7 @@ function ScheduleRows({
   onSchedule: (schedule: ScheduleDraft) => void;
   onTimezone: (timezone: string) => void;
 }): React.JSX.Element {
-  // The cron's and the time's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
+  // The cron's and the time's Escape lets go of the caret and keeps the press, as every field's here does.
   const cron = useRef<HTMLInputElement>(null);
   const time = useRef<HTMLInputElement>(null);
   const { schedule, timezone } = draft;
@@ -863,7 +898,7 @@ function CodeReviewGroup({
   settings: CodeReviewSettings;
   onSettings: (settings: CodeReviewSettings) => void;
 }): React.JSX.Element {
-  // The rules file's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
+  // The rules file's Escape lets go of the caret and keeps the press, as every field's here does.
   const rulesFile = useRef<HTMLInputElement>(null);
   return (
     <SettingsSection title="Code review">
@@ -1413,7 +1448,7 @@ function EditorForm({
 }): React.JSX.Element {
   // A code review's own settings are the lines its task opens with, so its card reads them there and writes them back.
   const review = readCodeReviewSettings(draft.prompt);
-  // The prompt's Escape lets go of the caret and keeps the press, as every field's here does (releaseOnEscape).
+  // The prompt's Escape lets go of the caret and keeps the press, as every field's here does.
   const prompt = useRef<HTMLTextAreaElement>(null);
   const workspaceName = workspace?.name ?? "Workspace";
   const owners = [
@@ -1600,6 +1635,8 @@ export function AutomationEditor({
   const runsPanel = useRunsPanel();
   // The form glides to its new middle as the Runs panel comes and goes (pane-motion.tsx).
   const editorLayout = useRef<HTMLDivElement>(null);
+  // The name's Escape lets go of the caret and keeps the press, as every field's here does.
+  const nameField = useRef<HTMLInputElement>(null);
   // ⌥⌘B shows and hides the Runs panel, as it does a plan's side panel.
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, runsPanel.onToggle);
   // A link to a run shows the Runs panel it is listed in, once each time it is opened, so a fold after it stands.
@@ -1706,13 +1743,14 @@ export function AutomationEditor({
       <div ref={editorLayout} className="automation-editor-layout">
         <div className="automations-scroll scroll-fade-top">
           <div className="automation-editor">
-            <input
-              className="automation-editor-name"
-              aria-label="Automation name"
+            <TextField
+              ref={nameField}
+              label="Automation name"
+              size={TEXT_FIELD_SIZE.TITLE}
               placeholder="Untitled automation"
               value={draft.name}
-              onKeyDown={releaseOnEscape}
-              onChange={(event) => editDraft({ name: event.target.value })}
+              onEscape={() => nameField.current?.blur()}
+              onChange={(name) => editDraft({ name })}
             />
             {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
               <p className="error-message automation-form-problem" role="alert">

@@ -130,7 +130,7 @@ function noticeEntry(userId: string, rosters: Rosters) {
     const channel = channels.find((each) => each.id === message.value.channelId);
     const reason =
       channel?.kind === CHANNEL_KIND.DM ? ACCOUNT_CHAT_REASON.DIRECT : ACCOUNT_CHAT_REASON.MENTION;
-    return [entryOf(message.value, reason, channel?.planId ?? null, rosters)];
+    return [entryOf(message.value, reason, channel?.taskId ?? null, rosters)];
   });
 }
 
@@ -142,7 +142,7 @@ export function chatWaitingEntries(
     if (!(yield* chatEnabledFor(userId))) return [];
     const rosters = yield* rostersOf(userId);
     const byWorkspace = new Map(rosters.map((each) => [each.workspaceId, each]));
-    const asks = (yield* waitingOn(userId)).flatMap(({ message, planId: taskId }) => {
+    const asks = (yield* waitingOn(userId)).flatMap(({ message, taskId }) => {
       const of = byWorkspace.get(message.organizationId);
       return of === undefined ? [] : [entryOf(message, ACCOUNT_CHAT_REASON.ASK, taskId, of)];
     });

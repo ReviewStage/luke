@@ -26,6 +26,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestMerging,
   type PullRequestState,
+  REACTION,
   REVIEW_DECISION,
   REVIEW_STATE,
   type ReviewThread,
@@ -56,7 +57,7 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { codingAgentsControl } from "#testing/tasks-control";
 import type { SideBundles } from "../bundle-loader";
-import type { DiffViewModule, DiffViewProps } from "../diff-view/contract";
+import type { DiffListProps, DiffViewModule, DiffViewProps } from "../diff-view/contract";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect";
 import { MemberDirectory } from "../member-directory";
 import { rendererRuntime } from "../renderer-runtime";
@@ -205,6 +206,14 @@ const DIFF_STAND_IN: DiffViewModule = {
     previews.push(props);
     return { update: () => undefined, unmount: () => undefined };
   },
+  mountList: (_host, props) => {
+    lists.push(props);
+    return {
+      update: (next) => lists.push(next),
+      reveal: () => undefined,
+      unmount: () => undefined,
+    };
+  },
 };
 
 let bundles: SideBundles;
@@ -220,6 +229,8 @@ let changes: (readonly [string, PullRequestActionRequest])[] = [];
 let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
 /** What the service waits on before it answers a change, where a test holds it; none answers at once. */
 let changeHeld: Promise<void> | undefined;
+/** What Files changed handed the diff bundle's list, mount first, each draw after it. */
+let lists: DiffListProps[] = [];
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
@@ -230,6 +241,7 @@ beforeEach(() => {
   previews = [];
   changes = [];
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+  lists = [];
   changeHeld = undefined;
   fakeAppPlatform(DESKTOP_LINKS);
   fakeAppBridge({
@@ -567,7 +579,11 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
     "plain",
     "a comment GitHub sent no rendering of stands as its markdown",
   );
-  assert.equal(tab.querySelector(".pull-request-earlier"), null, "nothing was left on GitHub");
+  assert.equal(
+    tab.querySelector(".pull-request-earlier button"),
+    null,
+    "nothing was left on GitHub",
+  );
 
   await choose(tab, "Checks");
   const checks = tab.querySelector('[aria-label="Checks"]') ?? assert.fail("the checks stand");
@@ -759,7 +775,7 @@ test("the earlier entries a read left on GitHub are counted first, in the headin
     tab.querySelector('[aria-label="Conversation"]') ?? assert.fail("the conversation stands");
   assert.equal(conversation.querySelector(".pull-request-count")?.textContent, "5");
   const earlier =
-    conversation.querySelector<HTMLButtonElement>(".pull-request-earlier") ??
+    conversation.querySelector<HTMLButtonElement>(".pull-request-earlier button") ??
     assert.fail("the earlier entries are counted");
   assert.equal(earlier.textContent, "3 earlier comments on GitHub");
   await act(async () => earlier.click());
@@ -877,7 +893,7 @@ test("a review that only left line comments draws each thread under it: its file
     "once",
   );
   const more =
-    open.querySelector<HTMLButtonElement>(".pull-request-thread-more") ??
+    open.querySelector<HTMLButtonElement>(".pull-request-thread-more button") ??
     assert.fail("the replies left on GitHub are counted");
   assert.equal(more.textContent, "2 more replies on GitHub");
   await act(async () => more.click());
@@ -899,6 +915,83 @@ test("a review that only left line comments draws each thread under it: its file
     /Moved away\./u,
     "a press opens it",
   );
+});
+
+test("the description, a comment, a review, and a thread comment wear their reactions under their words, each its emoji and count, the reader's own lit only where the read named them among who gave it", async () => {
+  const dana = { login: "danak", bot: false, userId: "user-dana" };
+  const review = {
+    kind: CONVERSATION_ENTRY.REVIEW,
+    by: CHARLES_ON_GITHUB,
+    state: REVIEW_STATE.APPROVED,
+    html: '<p dir="auto">Good.</p>',
+    body: "",
+    at: 2_500,
+    url: `${PAGE}#pullrequestreview-9`,
+    reactions: [{ content: REACTION.HOORAY, count: 1, by: [CHARLES_ON_GITHUB] }],
+    threads: [
+      thread({
+        comments: [
+          {
+            by: CHARLES_ON_GITHUB,
+            html: '<p dir="auto">Why?</p>',
+            body: "",
+            at: 2_000,
+            url: `${PAGE}#discussion_r1`,
+            reactions: [{ content: REACTION.THUMBS_DOWN, count: 3 }],
+          },
+        ],
+      }),
+    ],
+  } as const;
+  const tab = await draw(
+    controlAnswering({
+      conversation: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...CONVERSATION,
+            descriptionReactions: [
+              { content: REACTION.THUMBS_UP, count: 12, by: [CHARLES_ON_GITHUB, dana] },
+              { content: REACTION.ROCKET, count: 1, by: [CHARLES_ON_GITHUB] },
+            ],
+            conversation: [
+              review,
+              {
+                kind: CONVERSATION_ENTRY.COMMENT,
+                by: CHARLES_ON_GITHUB,
+                html: '<p dir="auto">Thanks.</p>',
+                body: "",
+                at: 3_000,
+                url: `${PAGE}#issuecomment-2`,
+                reactions: [{ content: REACTION.EYES, count: 2, by: [dana, CHARLES_ON_GITHUB] }],
+              },
+            ],
+          },
+        }),
+    }),
+  );
+  /** Each pill under the element given: what it says to a reader, and whether it is lit as the reader's. */
+  const pills = (under: Element | null) =>
+    [...(under?.querySelectorAll(".pull-request-reaction") ?? [])].map((pill) => [
+      pill.textContent,
+      pill.getAttribute("aria-label"),
+      pill.getAttribute("data-mine"),
+    ]);
+  assert.deepEqual(pills(tab.querySelector('[aria-label="Description"]')), [
+    ["👍12", "Charles Pan, you, and 10 more reacted with thumbs up", "true"],
+    ["🚀1", "Charles Pan reacted with rocket", "false"],
+  ]);
+  const [reviewed, commented] = [...tab.querySelectorAll(".pull-request-entry")];
+  assert.deepEqual(pills(reviewed?.querySelector(":scope > .pull-request-reactions") ?? null), [
+    ["🎉1", "Charles Pan reacted with hooray", "false"],
+  ]);
+  assert.deepEqual(
+    pills(reviewed?.querySelector(".pull-request-thread-comment") ?? null),
+    [["👎3", "3 reacted with thumbs down", "false"]],
+    "a reaction the read only counted is never lit",
+  );
+  assert.deepEqual(pills(commented ?? null), [
+    ["👀2", "You and Charles Pan reacted with eyes", "true"],
+  ]);
 });
 
 /** The switch of the Conversation's filter named as given. */
@@ -2081,7 +2174,7 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
   });
   const sibling = { id: "5a7c9e1b-3d5f-4b7d-9f1b-3d5f7b9d1f3a", taskId: AGENT.planId };
   const away = { id: "7c9e1b3d-5f7b-4d9f-8b3d-5f7b9d1f3b5d", taskId: elsewhere };
-  const planless = { id: "9e1b3d5f-7b9d-4f1b-8d5f-7b9d1f3b5d7f", taskId: null };
+  const taskless = { id: "9e1b3d5f-7b9d-4f1b-8d5f-7b9d1f3b5d7f", taskId: null };
   const links: ReadLink[] = [];
   const tab = await draw(
     controlAnswering({
@@ -2093,7 +2186,7 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
               entry(38, away),
               entry(40, sibling),
               entry(42, { id: AGENT.id, taskId: AGENT.planId }),
-              entry(44, planless),
+              entry(44, taskless),
               entry(46),
             ],
           },
@@ -2141,7 +2234,7 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
       place: { kind: LINK_PLACE.CHANGES, planId: AGENT.planId, agentId: sibling.id },
     },
     { workspace: "", place: { kind: LINK_PLACE.CHANGES, planId: elsewhere, agentId: away.id } },
-    { workspace: "", place: { kind: LINK_PLACE.AGENT, agentId: planless.id } },
+    { workspace: "", place: { kind: LINK_PLACE.AGENT, agentId: taskless.id } },
   ]);
   assert.deepEqual(opened, ["https://github.com/acme/relay/pull/46"]);
 });
@@ -2466,14 +2559,12 @@ test("Files changed draws each review thread under its line, its comments throug
     act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="Diff settings"]')?.click());
   };
 
-  const file = previews.find(
-    (each) => each.annotations !== undefined && each.annotations.length > 0,
-  );
+  const drawn = lists.at(-1) ?? assert.fail("the files are drawn");
+  const file = drawn.files.find((each) => each.path === "src/invite.ts");
   assert.deepEqual(file?.annotations, [
     { key: `${PAGE}#discussion_r1`, side: "additions", line: 13 },
   ]);
-  const note =
-    file?.renderAnnotation?.(`${PAGE}#discussion_r1`) ?? assert.fail("the thread is drawn");
+  const note = drawn.renderAnnotation("src/invite.ts", `${PAGE}#discussion_r1`);
   assert.equal(
     note.querySelector('.pull-request-thread-comment [data-streamdown="strong"]')?.textContent,
     "once",
@@ -2512,11 +2603,12 @@ test("a review thread on its line in Files changed is replied on and resolved fr
   );
   await act(async () => option(tab, "Files changed").click());
   await settle();
-  const note =
-    previews
-      .find((each) => each.annotations?.some((one) => one.line === 13))
-      ?.renderAnnotation?.(`${PAGE}#discussion_r1`) ??
-    assert.fail("the thread is drawn on its line");
+  const drawn = lists.at(-1) ?? assert.fail("the files are drawn");
+  assert.ok(
+    drawn.files.some((file) => file.annotations.some((one) => one.line === 13)),
+    "the thread is drawn on its line",
+  );
+  const note = drawn.renderAnnotation("src/invite.ts", `${PAGE}#discussion_r1`);
 
   writeReply(note, "Renamed.");
   act(() => threadPress(note, "Reply").click());

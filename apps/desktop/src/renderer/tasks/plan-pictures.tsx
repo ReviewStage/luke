@@ -52,7 +52,7 @@ const DATA_URL_TYPE = /^data:([^;,]+)[;,]/u;
 
 /** What the pictures under a plan's words share: the plan, how a picture is read, and how one is opened. */
 export interface PlanPicturesDoor {
-  readonly planId: string;
+  readonly taskId: string;
   readonly read: (owner: string, id: string) => Promise<PictureAnswer>;
   readonly open: (id: string) => void;
   /** Remembers the alt text a picture is drawn with, which the viewer names it by. */
@@ -96,12 +96,12 @@ function sectionOfPicture(text: string, taskId: string, id: string): string | un
  * section it stands in.
  */
 export function PlanPictures({
-  planId: taskId,
+  taskId,
   text,
   sectionNote,
   children,
 }: {
-  planId: string;
+  taskId: string;
   text: string;
   sectionNote?: ((heading: string) => ReactNode) | undefined;
   children: ReactNode;
@@ -116,7 +116,7 @@ export function PlanPictures({
   );
   const door = useMemo<PlanPicturesDoor>(
     () => ({
-      planId: taskId,
+      taskId,
       read,
       name: (id, alt) => names.current.set(id, alt),
       // Note that the viewer walks the pictures read by the press, since one still being read has nothing to show.
@@ -174,7 +174,7 @@ function PlanPicture({
 }): React.JSX.Element {
   const state = usePicture(owner, id, door.read);
   door.name(id, alt);
-  const own = owner === door.planId;
+  const own = owner === door.taskId;
   return (
     <PictureBlock
       state={state}

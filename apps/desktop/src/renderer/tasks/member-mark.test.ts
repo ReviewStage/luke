@@ -40,7 +40,7 @@ function who(kind: MemberKind, name: string): ChatWho {
     name,
     handle: name.toLowerCase(),
     agent: undefined,
-    planName: undefined,
+    taskName: undefined,
   };
 }
 

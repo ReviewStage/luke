@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
-import { CHANGED_FILE_STATUS, DIFF_SIDE, PATCH_OMITTED } from "@luke/features/coding-agent-wire";
+import {
+  CHANGED_FILE_STATUS,
+  type CodingAgentChangedFile,
+  DIFF_SIDE,
+  PATCH_OMITTED,
+} from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
-import { threadPreview, threadsOn } from "./changes-model";
+import { filterFiles, startsCollapsed, threadPreview, threadsOn, treeOrder } from "./changes-model";
 
 /**
  * changes-model.test.ts -- a review thread previews the end of the hunk
  * GitHub froze for it, found on the side its line counts on, from a few
  * rows above its range to its line, though GitHub's header still counts
  * the whole hunk: written as a patch of the thread's file whose header
- * counts the rows kept, with the thread's own lines selected.
+ * counts the rows kept, with the thread's own lines selected. Files
+ * changed lists its files in the tree's order, keeps those whose path holds
+ * a filter, and folds what is rarely read.
  */
 
 /** A hunk as GitHub freezes one for a thread: its header counting the whole hunk, its lines cut at the thread's line. */
@@ -190,5 +197,76 @@ test("every thread on a file whose diff is not drawn stands above where its diff
   assert.deepEqual(
     above.map(({ key }) => key),
     [`${R}1`],
+  );
+});
+
+/** A changed file, modified, a few lines changed, unless told otherwise. */
+function changed(
+  path: string,
+  overrides: Partial<CodingAgentChangedFile> = {},
+): CodingAgentChangedFile {
+  return {
+    path,
+    previousPath: null,
+    status: CHANGED_FILE_STATUS.MODIFIED,
+    additions: 2,
+    deletions: 1,
+    omitted: null,
+    patch: "@@ -1 +1 @@\n-a\n+b",
+    ...overrides,
+  };
+}
+
+test("the files are listed as the tree lists them: folders first at each level, dotted names first, then by name whatever its case", () => {
+  const paths = [
+    "src/b.ts",
+    "README.md",
+    "src/A.ts",
+    ".github/ci.yml",
+    "src/lib/x.ts",
+    ".env",
+    "docs/a.md",
+  ];
+
+  assert.deepEqual(
+    treeOrder(paths.map((path) => changed(path))).map((file) => file.path),
+    [".github/ci.yml", "docs/a.md", "src/lib/x.ts", "src/A.ts", "src/b.ts", ".env", "README.md"],
+  );
+});
+
+test("a filter keeps the files whose path holds it whatever its case, as the tree's search does, not the path one moved from, and nothing but spaces keeps every file", () => {
+  const files = [
+    changed("src/seats.ts"),
+    changed("src/plan.ts", {
+      previousPath: "billing/plan.ts",
+      status: CHANGED_FILE_STATUS.RENAMED,
+    }),
+    changed("README.md"),
+  ];
+
+  assert.deepEqual(
+    filterFiles(files, " SEATS ").map((file) => file.path),
+    ["src/seats.ts"],
+  );
+  assert.deepEqual(
+    filterFiles(files, "PLAN").map((file) => file.path),
+    ["src/plan.ts"],
+  );
+  assert.deepEqual(filterFiles(files, "billing"), []);
+  assert.equal(filterFiles(files, "  ").length, 3);
+});
+
+test("a deleted file, a lockfile, and a file of more than a thousand changed lines start folded; a file with no hunks never does", () => {
+  assert.equal(startsCollapsed(changed("src/seats.ts")), false);
+  assert.equal(
+    startsCollapsed(changed("src/old.ts", { status: CHANGED_FILE_STATUS.DELETED })),
+    true,
+  );
+  assert.equal(startsCollapsed(changed("apps/web/package-lock.json")), true);
+  assert.equal(startsCollapsed(changed("src/big.ts", { additions: 900, deletions: 101 })), true);
+  assert.equal(startsCollapsed(changed("src/big.ts", { additions: 900, deletions: 100 })), false);
+  assert.equal(
+    startsCollapsed(changed("pnpm-lock.yaml", { patch: null, omitted: PATCH_OMITTED.TOO_LARGE })),
+    false,
   );
 });

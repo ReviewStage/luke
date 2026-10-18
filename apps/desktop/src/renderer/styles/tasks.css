@@ -354,7 +354,7 @@
    press drawn as the line over the document's is. Note that both take the
    pointer although the line fades out, because a pointer on them is on
    their section, which shows it. */
-.plan-unit-byline > :is([data-actor-ref], .plan-edit-link) {
+.plan-unit-byline > :is([data-actor-ref], button) {
   pointer-events: auto;
 }
 
@@ -1466,12 +1466,73 @@
   border-top: 1px solid var(--luke-color-border);
 }
 
-/* A Files changed diff (file-diff.tsx): Pierre draws it in a shadow root
-   of its own, in the panel's look (diff-view/index.ts); its box fills the
-   File tab's place and scrolls as a File tab's lines do. */
+/* A Files changed list of diffs (diff-list.tsx), or a review thread's lines
+   (file-diff.tsx): Pierre draws each file in a shadow root of its own, in
+   the panel's look (diff-view/index.ts); the list's box fills the File
+   tab's place and scrolls as a File tab's lines do. */
 .diff-view {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* Files changed's list of diffs (diff-list.tsx): every file under a header
+   of its own, which Pierre keeps at the top while the file's lines scroll
+   under it, so it is drawn opaque, on the code's ground, at the height the
+   bundle reserves for it (diff-view/index.ts's LIST_HEADER_HEIGHT). The file
+   stage-cli's keys stand on is ringed as a focused control is. */
+.diff-list-head {
+  border-top: 1px solid var(--luke-color-border);
+  background: var(--code-ground);
+  color: var(--luke-color-text);
+  font-family: var(--luke-font-sans);
+}
+
+.diff-list-head-row {
+  display: flex;
+  box-sizing: border-box;
+  height: 33px;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: 0 var(--luke-space-12) 0 var(--luke-space-6);
+  background: var(--luke-color-surface);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.diff-list-head:not([data-collapsed]) > .diff-list-head-row {
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.diff-list-head[data-standing] {
+  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+  outline-offset: var(--luke-focus-ring-inset);
+}
+
+.diff-list-fold > svg {
+  transform: rotate(90deg);
+  transition: transform var(--duration-quick) ease;
+}
+
+.diff-list-head[data-collapsed] .diff-list-fold > svg {
+  transform: none;
+}
+
+.diff-list-path {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-family: var(--luke-font-mono);
+  text-overflow: ellipsis;
+}
+
+/* Why a file has no hunks to draw, in their place under its header in the
+   list (diff-view/index.ts draws it across the file's width). */
+.diff-list-notice {
+  margin: 0;
+  padding: var(--luke-space-12) var(--luke-space-12) var(--luke-space-12) 38px;
+  color: var(--luke-color-text-muted);
+  font-size: 12.5px;
 }
 
 /* The tree's search field and its filter, in one row over the tree. */
@@ -1793,21 +1854,11 @@
   gap: var(--luke-space-8);
 }
 
-.pull-request-review-field,
 .pull-request-review-preview {
   box-sizing: border-box;
   width: 100%;
   min-height: 96px;
   max-height: 240px;
-}
-
-.pull-request-review-field {
-  resize: vertical;
-  letter-spacing: 0;
-  line-height: 1.5;
-}
-
-.pull-request-review-preview {
   overflow-y: auto;
   padding: 9px 11px;
   border: 1px solid var(--luke-color-border);
@@ -1853,7 +1904,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--luke-space-8);
 }
 
 .pull-request-branch-row > .pull-request-branches {
@@ -1865,20 +1916,20 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--luke-space-4);
   height: 22px;
-  margin-top: var(--space-2);
-  padding: 0 var(--space-6);
-  border: 1px solid var(--hairline);
+  margin-top: var(--luke-space-2);
+  padding: 0 var(--luke-space-6);
+  border: 1px solid var(--luke-color-border);
   border-radius: 6px;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--luke-color-text-muted);
   font-size: 11.5px;
 }
 
 .pull-request-stack:hover {
-  background: var(--raised);
-  color: var(--text-primary);
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
 }
 
 .pull-request-stack > svg {
@@ -1887,7 +1938,7 @@
 }
 
 .pull-request-stack-count {
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1898,8 +1949,8 @@
 .pull-request-labels {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
-  margin: var(--space-6) 0 var(--space-2);
+  gap: var(--luke-space-4);
+  margin: var(--luke-space-6) 0 var(--luke-space-2);
   padding: 0 var(--row-inset);
   list-style: none;
 }
@@ -1907,11 +1958,11 @@
 .pull-request-label {
   max-width: 100%;
   overflow: hidden;
-  padding: 1px var(--space-8);
-  border: 1px solid var(--label-edge-dark, var(--hairline));
+  padding: 1px var(--luke-space-8);
+  border: 1px solid var(--label-edge-dark, var(--luke-color-border));
   border-radius: 999px;
   background: var(--label-fill-dark, transparent);
-  color: var(--label-words-dark, var(--text-secondary));
+  color: var(--label-words-dark, var(--luke-color-text-muted));
   font-size: 11px;
   font-weight: 500;
   line-height: 1.45;
@@ -1921,9 +1972,9 @@
 
 @media (prefers-color-scheme: light) {
   .pull-request-label {
-    border-color: var(--label-edge-light, var(--hairline));
+    border-color: var(--label-edge-light, var(--luke-color-border));
     background: var(--label-fill-light, transparent);
-    color: var(--label-words-light, var(--text-secondary));
+    color: var(--label-words-light, var(--luke-color-text-muted));
   }
 }
 
@@ -1931,7 +1982,7 @@
 .pull-request-reviewers-glyph {
   width: 14px;
   height: 14px;
-  color: var(--text-tertiary);
+  color: var(--luke-color-text-subtle);
 }
 
 .pull-request-page {
@@ -2305,31 +2356,31 @@ button.pull-request-check:hover {
 /* A review thread on its line in Files changed (agent-pull-request-tab.tsx's
    InlineThread): Pierre stands it under its line, in the diff's light DOM,
    so the window's own type and card draw it, inset from the code's edges
-   as GitHub's are; an outdated one stands in a list above the diff. */
+   as GitHub's are; one the diff draws no row for stands in a list above it. */
 .diff-note {
-  padding: var(--space-6) var(--space-12);
+  padding: var(--luke-space-6) var(--luke-space-12);
   font-family: var(--luke-font-sans);
   white-space: normal;
 }
 
 .diff-inline-thread {
-  --focus-ring-offset: var(--focus-ring-inset);
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
   max-width: 720px;
   overflow: clip;
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--section-fill);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-surface);
 }
 
 .diff-outdated-threads {
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--luke-space-6);
   margin: 0;
-  padding: var(--space-8) var(--space-12);
+  padding: var(--luke-space-8) var(--luke-space-12);
   list-style: none;
-  border-bottom: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
 .pull-request-thread-head {
@@ -2443,15 +2494,6 @@ button.pull-request-check:hover {
   gap: var(--luke-space-8);
 }
 
-.pull-request-thread-reply-field {
-  box-sizing: border-box;
-  min-height: 72px;
-  max-height: 240px;
-  resize: vertical;
-  letter-spacing: 0;
-  line-height: 1.5;
-}
-
 .pull-request-thread-reply-foot {
   display: flex;
   justify-content: flex-end;
@@ -2469,20 +2511,58 @@ button.pull-request-check:hover {
   min-width: 0;
 }
 
+/* The reactions under a description or a comment, as GitHub draws them:
+   a row of pills, each its emoji and how many gave it, the reader's own lit
+   in the accent. */
+.pull-request-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pull-request-section > .pull-request-reactions {
+  margin-top: var(--luke-space-8);
+  padding-inline: var(--row-inset);
+}
+
+.pull-request-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-2) var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: 999px;
+  color: var(--luke-color-text-muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.pull-request-reaction-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.pull-request-reaction[data-mine="true"] {
+  border-color: color-mix(in srgb, var(--luke-color-focus-ring) 55%, transparent);
+  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
+  color: var(--luke-color-text);
+}
+
 /* The earlier entries a read left on GitHub, counted where they would stand. */
 .pull-request-earlier {
   margin: 0 0 var(--luke-space-8);
   padding-inline: var(--row-inset);
 }
 
+/* What a read left on GitHub, counted as a press in the caption's type. */
 .pull-request-more {
   align-self: flex-start;
-  padding: 0;
-  border: 0;
-  background: none;
+  max-width: 100%;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
-  text-decoration: underline;
+  line-height: var(--luke-type-caption-leading);
 }
 
 .file-tab-snippet-label {
@@ -3461,10 +3541,6 @@ ol.transcript-list {
   color: var(--luke-color-text);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-button.draft-fork-quote:hover {
-  text-decoration: underline;
 }
 
 .draft-fork-drop {
@@ -4618,6 +4694,25 @@ button.attached-file-face:hover img {
   line-height: var(--luke-type-caption-leading);
 }
 
+/* The list's room while no read has listed the shells: the blocks standing
+   for them, or the failure, with the foot kept at the list's end. */
+.terminal-shells-wait {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.terminal-shells-wait[data-failed] {
+  padding: var(--luke-space-8) var(--luke-space-12);
+}
+
+/* A row standing for a shell still being read opens nothing, so it takes no
+   pointer's fill. */
+.terminal-shells-wait .terminal-shell:hover {
+  background: none;
+}
+
 .terminal-shell {
   position: relative;
   display: flex;
@@ -4809,20 +4904,10 @@ button.attached-file-face:hover img {
   color: var(--luke-color-text-subtle);
 }
 
-.terminal-bar-action {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-accent);
-  font: inherit;
-  font-weight: var(--luke-weight-semibold);
-}
-
+/* The action's key, after its words, in the action's own ink. */
 .terminal-bar-key {
   --shortcut-ink: currentColor;
+  margin-inline-start: var(--luke-space-4);
 }
 
 /* An agent's mark heading a row (`agent-ref.tsx`'s `AgentMarkRef`), which
@@ -5554,33 +5639,11 @@ button.picture-frame {
   --luke-fold: folded;
 }
 
-/* A field under a picture that describes it anew, in Settings' well. */
+/* A field under a picture that describes it anew. */
 .picture-describe {
   display: grid;
   width: min(360px, 100%);
-  gap: var(--luke-space-6);
   margin: var(--luke-space-6) 0 var(--luke-space-12);
-  font-size: var(--luke-type-caption-size);
-}
-
-.picture-describe label {
-  display: grid;
-  gap: var(--luke-space-4);
-}
-
-.picture-describe-label {
-  color: var(--luke-color-text-muted);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.picture-describe-field {
-  padding: var(--luke-space-6) var(--luke-space-8);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-well);
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-body-size);
 }
 
 /* A picture waiting on its upload: the Mac's own bytes at half strength,
@@ -5731,11 +5794,4 @@ button.picture-frame {
   opacity: 0.45;
   outline: 2px dashed color-mix(in srgb, var(--luke-color-danger) 70%, transparent);
   outline-offset: 2px;
-}
-
-/* A form's text field takes Settings' well, but in the card's body type:
-   Settings' tracking is for a key's characters, not an answer's words. */
-.inbox-field-input {
-  font-size: var(--luke-type-body-size);
-  letter-spacing: 0;
 }

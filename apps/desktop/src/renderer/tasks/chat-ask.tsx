@@ -17,8 +17,10 @@ import {
   Button,
   ChoiceList,
   IconButton,
+  TEXT_AREA_SUBMIT,
   TEXT_TONE,
   Text,
+  TextArea,
 } from "@luke/ui";
 import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { Option, Schema } from "effect";
@@ -252,27 +254,28 @@ function Answer({
       ) : null}
       {ask.needsReply ? null : <p className="chat-ask-quiet">{QUIET}</p>}
       <form
-        className="chat-ask-note field-well"
+        className="chat-ask-note"
         onSubmit={(event) => {
           event.preventDefault();
           if (!byPress) send();
         }}
       >
-        <textarea
-          className="chat-ask-note-field ph-no-capture"
-          aria-label={placeholder}
-          placeholder={placeholder}
-          rows={1}
-          maxLength={CHAT_BOUNDS.MAX_NOTE_CHARS}
-          value={draft.note}
-          disabled={sending}
-          onChange={(event) => setDraft({ ...draft, note: event.currentTarget.value })}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
-            event.preventDefault();
-            if (!byPress) send();
-          }}
-        />
+        <span className="chat-ask-note-field ph-no-capture">
+          <TextArea
+            label={placeholder}
+            placeholder={placeholder}
+            rows={1}
+            grow
+            maxLength={CHAT_BOUNDS.MAX_NOTE_CHARS}
+            value={draft.note}
+            disabled={sending}
+            onChange={(note) => setDraft({ ...draft, note })}
+            submitKey={TEXT_AREA_SUBMIT.ENTER}
+            onSubmit={() => {
+              if (!byPress) send();
+            }}
+          />
+        </span>
         {byPress ? null : (
           <Presses response={response} draft={draft} sending={sending} onAnswer={send} />
         )}

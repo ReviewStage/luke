@@ -159,7 +159,7 @@ test("a press on a channel shows its messages in the order posted, a thread fold
     "Dean Stratakos",
   ]);
   const toggle = page.querySelector<HTMLButtonElement>(
-    '.chat-message[data-seq="43"] .chat-thread-toggle',
+    '.chat-message[data-seq="43"] button[aria-expanded]',
   );
   assert.equal(toggle?.textContent, "View thread · 2 replies");
   act(() => toggle?.click());
@@ -295,7 +295,7 @@ test("an approval is answered by its press, and a reply typed under an opened th
 
   act(() => railRow(page, "teammate-invitations").click());
   const toggle = page.querySelector<HTMLButtonElement>(
-    '.chat-message[data-seq="48"] .chat-thread-toggle',
+    '.chat-message[data-seq="48"] button[aria-expanded]',
   );
   act(() => toggle?.click());
   const reply = boxNamed(page, "Reply in thread");
@@ -362,7 +362,7 @@ test("a form's answer stands under its card field by field, and the reply in its
   );
   act(() =>
     page
-      .querySelector<HTMLButtonElement>('.chat-message[data-seq="51"] .chat-thread-toggle')
+      .querySelector<HTMLButtonElement>('.chat-message[data-seq="51"] button[aria-expanded]')
       ?.click(),
   );
   assert.match(words(page).join("\n"), /↳ Filled in the form\.\s*Region: US\s*Seats: 12/u);

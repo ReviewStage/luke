@@ -3047,7 +3047,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           mentionMarkdown(
             taskId === undefined
               ? { kind: MENTION_KIND.AGENT, agentId }
-              : { kind: MENTION_KIND.AGENT, taskId: taskId, agentId },
+              : { kind: MENTION_KIND.AGENT, taskId, agentId },
             name,
             place,
           );
@@ -4503,7 +4503,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         );
         agents.push({
           userId: opened.owner,
-          planId: opened.task.id,
+          taskId: opened.task.id,
           self: { kind: MEMBER_KIND.AGENT, agentId: started.agent.id },
           repository: RELAY_FULL_NAME,
           telling,
@@ -4575,7 +4575,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           },
         ]);
         assert.deepEqual(unread.channels, [
-          { name: "#teammate-invitations", kind: CHANNEL_KIND.PLAN, unread: 0 },
+          { name: "#teammate-invitations", kind: CHANNEL_KIND.TASK, unread: 0 },
         ]);
         const again = yield* chat.read(chat.second);
         assert.ok("messages" in again);
@@ -4704,7 +4704,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.deepEqual(read.channels.map((channel) => [channel.name, channel.kind]).toSorted(), [
           ["#general", CHANNEL_KIND.GENERAL],
           ["#releases", CHANNEL_KIND.TOPIC],
-          ["#teammate-invitations", CHANNEL_KIND.PLAN],
+          ["#teammate-invitations", CHANNEL_KIND.TASK],
         ]);
       }),
   );
@@ -4765,7 +4765,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           .update(codingAgent)
           .set({ taskId: null })
           .where(eq(codingAgent.id, "agentId" in chat.first.self ? chat.first.self.agentId : ""));
-        const taskless = { ...chat.first, planId: null };
+        const taskless = { ...chat.first, taskId: null };
         const posted = yield* chat.post(taskless, { text: "@luke who owns the invite table?" });
         assert.ok("seq" in posted);
         assert.deepEqual([posted.in, posted.unresolved], ["#general", ["@luke"]]);

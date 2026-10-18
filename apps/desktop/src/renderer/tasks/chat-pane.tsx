@@ -9,7 +9,14 @@ import {
   knownBlock,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
-import { AVATAR_SHAPE, AVATAR_SIZE, Avatar, WingFace } from "@luke/ui";
+import {
+  AVATAR_SHAPE,
+  AVATAR_SIZE,
+  Avatar,
+  TEXT_BUTTON_TONE,
+  TextButton,
+  WingFace,
+} from "@luke/ui";
 import type { ChatTarget } from "@luke/ui/chat-mention";
 import {
   CHAT_PLACE,
@@ -244,14 +251,13 @@ function ThreadRow({
   const { message, replies } = thread;
   const who = chatWho(context.chat, context.names, message.authorId);
   const toggle = (
-    <button
-      type="button"
-      className="chat-thread-toggle"
+    <TextButton
+      tone={TEXT_BUTTON_TONE.ACCENT}
       aria-expanded={open}
       onClick={() => setOpen((was) => !was)}
     >
       {threadToggleWords(open, replies.length)}
-    </button>
+    </TextButton>
   );
   // A message nobody has replied to offers Reply at its byline's end, out of the way until wanted.
   const quiet = replies.length === 0 && !open;
@@ -269,7 +275,7 @@ function ThreadRow({
         <Body message={message} context={context} />
         {quiet ? null : (
           <div className="chat-thread" data-open={String(open)}>
-            {toggle}
+            <p className="chat-thread-toggle">{toggle}</p>
             {open && replies.length > 0 ? (
               <ul className="chat-replies">
                 {replies.map((reply) => (
@@ -322,13 +328,13 @@ function channelMeta(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): 
     case CHANNEL_KIND.GENERAL:
     case CHANNEL_KIND.TOPIC:
       return CHANNEL_META[channel.kind];
-    case CHANNEL_KIND.PLAN:
-      return channel.planId === undefined ? undefined : names.plans.get(channel.planId);
+    case CHANNEL_KIND.TASK:
+      return channel.planId === undefined ? undefined : names.tasks.get(channel.planId);
     case CHANNEL_KIND.DM: {
       const other = channel.members?.find((id) => id !== chat.self);
       if (other === undefined) return undefined;
       const who = chatWho(chat, names, other);
-      return who.agent?.title ?? who.planName ?? undefined;
+      return who.agent?.title ?? who.taskName ?? undefined;
     }
   }
 }

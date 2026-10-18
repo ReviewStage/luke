@@ -254,17 +254,17 @@ function TaskRows({
       {rows.map((row) =>
         row.kind === TASK_ROW.TASK ? (
           <SidebarTask
-            key={row.plan.id}
+            key={row.task.id}
             tasks={context.tasks}
-            task={row.plan}
-            current={context.marked(row.plan.id, undefined)}
-            open={context.current(row.plan.id)}
-            unread={context.unread(row.plan)}
+            task={row.task}
+            current={context.marked(row.task.id, undefined)}
+            open={context.current(row.task.id)}
+            unread={context.unread(row.task)}
             now={context.now}
             at={taskRowTime(row, context.order)}
             repository={repository?.(row)}
             face={face}
-            onOpen={() => context.onOpen(row.plan.id)}
+            onOpen={() => context.onOpen(row.task.id)}
           />
         ) : (
           <SidebarAgent
@@ -297,7 +297,7 @@ function pinOf(tasks: TasksControl, agent: TasklessAgent): ((pinned: boolean) =>
 type PinnedRow =
   | {
       readonly kind: typeof TASK_ROW.TASK;
-      readonly plan: TaskSummary;
+      readonly task: TaskSummary;
       readonly pin: PinnedTab | undefined;
       readonly place: PinPlace;
     }
@@ -325,7 +325,7 @@ function pinnedRows(
   const taskRows = pinned.map(
     (task): PinnedRow => ({
       kind: TASK_ROW.TASK,
-      plan: task,
+      task,
       pin: undefined,
       place: { position: task.pinPosition, at: task.pinnedAt ?? 0 },
     }),
@@ -341,7 +341,7 @@ function pinnedRows(
     const task = tasks.listed.tasks.find((each) => each.id === pin.task);
     return task === undefined
       ? []
-      : [{ kind: TASK_ROW.TASK, plan: task, pin, place: { position: pin.position, at: pin.at } }];
+      : [{ kind: TASK_ROW.TASK, task, pin, place: { position: pin.position, at: pin.at } }];
   });
   return inPinOrder([...taskRows, ...agentRows, ...tabRows], placeOf);
 }
@@ -357,7 +357,7 @@ function placePins(positions: ReadonlyMap<PinnedRow, string>, tasks: TasksContro
   const before = new Map<number, string | undefined>();
   const moves = [...positions].flatMap(([row, position]) => {
     if (row.kind === TASK_ROW.AGENT) return [{ agent: true, id: row.agent.id, position }];
-    if (row.pin === undefined) return [{ agent: false, id: row.plan.id, position }];
+    if (row.pin === undefined) return [{ agent: false, id: row.task.id, position }];
     tabs.set(row.pin.at, position);
     before.set(row.pin.at, row.pin.position);
     return [];
@@ -387,16 +387,16 @@ function pinAt(rows: readonly PinnedRow[], row: TaskRow, at: number, tasks: Task
   const moving: PinnedRow =
     row.kind === TASK_ROW.AGENT
       ? { kind: TASK_ROW.AGENT, agent: row.agent, place }
-      : { kind: TASK_ROW.TASK, plan: row.plan, pin: undefined, place };
+      : { kind: TASK_ROW.TASK, task: row.task, pin: undefined, place };
   if (row.kind === TASK_ROW.AGENT) tasks.onPinAgent(row.agent.id, true);
-  else tasks.onMarkTask(row.plan.id, TASK_MARK.PIN);
+  else tasks.onMarkTask(row.task.id, TASK_MARK.PIN);
   placePins(pinPositionsForInsert(rows, moving, at, placeOf), tasks);
 }
 
 /** Takes a row out of Pinned: a plan's or an agent's pin on the account, a tab's on this Mac. */
 function unpin(row: PinnedRow, tasks: TasksControl): void {
   if (row.kind === TASK_ROW.AGENT) tasks.onPinAgent(row.agent.id, false);
-  else if (row.pin === undefined) tasks.onMarkTask(row.plan.id, TASK_MARK.UNPIN);
+  else if (row.pin === undefined) tasks.onMarkTask(row.task.id, TASK_MARK.UNPIN);
   else tasks.sidePanel.onUnpin(row.pin.task, row.pin.tab);
 }
 
@@ -411,7 +411,7 @@ function leaveSection(tasks: TasksControl, taskId: string): TaskSectionWrite[] {
 function pinnedTaskRows(rows: readonly PinnedRow[]): TaskRow[] {
   return rows.flatMap((row): TaskRow[] => {
     if (row.kind === TASK_ROW.AGENT) return [agentRow(row.agent)];
-    return row.pin === undefined ? [taskRow(row.plan)] : [];
+    return row.pin === undefined ? [taskRow(row.task)] : [];
   });
 }
 
@@ -471,7 +471,7 @@ function PinnedRows({
             />
           );
         }
-        const { plan: task, pin } = row;
+        const { task, pin } = row;
         return pin === undefined ? (
           <SidebarTask
             key={task.id}
@@ -577,7 +577,7 @@ function repositoryActionGroups(
 ): MenuAction[][] {
   const { repository } = group;
   // Note that only the group's plans are archived from here, because an agent is archived from its own page.
-  const taskIds = group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.plan.id] : []));
+  const taskIds = group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task.id] : []));
   const archive: MenuAction[] =
     archived || taskIds.length === 0
       ? []
@@ -750,7 +750,7 @@ function CreatorSection({
 
 /** Who created a row, as its creator's face and name are read: a task's creator and owner, or whoever started the agent. */
 function creatorOf(row: TaskRow): Pick<TaskSummary, "createdBy" | "ownerId"> {
-  if (row.kind === TASK_ROW.TASK) return row.plan;
+  if (row.kind === TASK_ROW.TASK) return row.task;
   const { startedBy } = row.agent;
   return startedBy === undefined ? {} : { createdBy: startedBy, ownerId: startedBy.userId };
 }
@@ -1362,7 +1362,7 @@ function SidebarColumn({
   // An agent with no plan stands on its own page, which is the place shown while it stands.
   const agentShown = onTasks ? tasks.agentView.agentId : undefined;
   const currentRow = (row: TaskRow) =>
-    row.kind === TASK_ROW.TASK ? current(row.plan.id) : row.agent.id === agentShown;
+    row.kind === TASK_ROW.TASK ? current(row.task.id) : row.agent.id === agentShown;
   const openAgent = (agentId: string) => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.agentView.onOpen(agentId);
@@ -1385,7 +1385,7 @@ function SidebarColumn({
       row.kind === TASK_ROW.TASK &&
       row.pin !== undefined &&
       chosenPin !== undefined &&
-      current(row.plan.id) &&
+      current(row.task.id) &&
       row.pin.task === chosenPin.task &&
       row.pin.at === chosenPin.at,
   );
@@ -1404,12 +1404,12 @@ function SidebarColumn({
   // stands where it was let go, under Tasks or in a section.
   const dropRow = (row: TaskRow, zone: string, at: number) => {
     if (zone === PINNED_DROP_ZONE) {
-      if (row.kind === TASK_ROW.TASK) tasks.onWriteSections(leaveSection(tasks, row.plan.id));
+      if (row.kind === TASK_ROW.TASK) tasks.onWriteSections(leaveSection(tasks, row.task.id));
       pinAt(pinnedSection, row, at, tasks);
       return;
     }
     if (row.kind !== TASK_ROW.TASK) return;
-    const taskId = row.plan.id;
+    const taskId = row.task.id;
     if (zone === TASKS_DROP_ZONE) {
       if (!sectioned.taskIds.has(taskId)) return;
       tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null }]);
@@ -1425,7 +1425,7 @@ function SidebarColumn({
   };
   // A tab pinned to the sidebar is no task, so it goes into no section, though Tasks unpins it as any pin.
   const dropPinned = (row: PinnedRow, zone: string, at: number) => {
-    const task = row.kind === TASK_ROW.TASK && row.pin === undefined ? row.plan : undefined;
+    const task = row.kind === TASK_ROW.TASK && row.pin === undefined ? row.task : undefined;
     if (zone === TASKS_DROP_ZONE) {
       unpin(row, tasks);
       if (task !== undefined) tasks.onWriteSections(leaveSection(tasks, task.id));
@@ -1464,7 +1464,7 @@ function SidebarColumn({
   // does a pinned agent while its page stands.
   const pinnedShown = (row: PinnedRow) => {
     if (row.kind === TASK_ROW.AGENT) return row.agent.id === agentShown;
-    const { plan: task, pin } = row;
+    const { task, pin } = row;
     return (
       (pin !== undefined && pin === markedPin) ||
       (current(task.id) &&
@@ -1520,13 +1520,13 @@ function SidebarColumn({
   // no row is open, is the first row. The ends go no further.
   const at = drawn.findIndex((row) =>
     agentShown === undefined
-      ? row.kind === TASK_ROW.TASK && row.plan.id === tasks.activeTaskId
+      ? row.kind === TASK_ROW.TASK && row.task.id === tasks.activeTaskId
       : row.kind === TASK_ROW.AGENT && row.agent.id === agentShown,
   );
   const step = (by: number) => {
     const row = drawn[at + by];
     if (row === undefined) return;
-    if (row.kind === TASK_ROW.TASK) openTask(row.plan.id);
+    if (row.kind === TASK_ROW.TASK) openTask(row.task.id);
     else openAgent(row.agent.id);
   };
   const listed = tasks.signedIn && drawn.length > 0;
