@@ -20,7 +20,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test, vi } from "vitest";
 import { lineWords } from "#testing/actor-line";
 import { fakeAppBridge } from "#testing/app-bridge";
-import { signedInAs } from "#testing/app-state";
+import { handState, signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { codingAgentsControl } from "#testing/tasks-control";
@@ -100,14 +100,7 @@ interface Drawn {
 
 /** The plan drawn in a workspace whose members read answers `MEMBERS`, as `drawn` says. */
 async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
-  const signedIn = drawn.account === undefined ? undefined : signedInAs(drawn.account);
   fakeAppBridge({
-    ...(signedIn === undefined
-      ? {}
-      : {
-          onAppState: () => () => undefined,
-          requestAppState: () => Promise.resolve(signedIn),
-        }),
     act: (request: Act): Promise<ActOutcome> =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
@@ -117,6 +110,7 @@ async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
             : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
       ),
   });
+  if (drawn.account !== undefined) handState({}, { account: signedInAs(drawn.account).account });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const { readerId, account: _account, ...rest } = drawn;
