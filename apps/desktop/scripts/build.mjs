@@ -247,8 +247,8 @@ const WINDOW_ENTRIES = {
 // window parses one before it is needed: the editors (TipTap), the whiteboard
 // (Excalidraw), a File tab's tree (Pierre's tree), a Terminal tab's screen
 // (xterm.js), a plan's diagrams (Mermaid), a Files changed diff (Pierre's
-// diffs and Shiki), a call's avatar (Keyframe's SDK over LiveKit), and session
-// replay's recorder (rrweb). Each is an entry rather than a chunk only so that
+// diffs and Shiki), the Factory's scene host (Three.js), a call's avatar
+// (Keyframe's SDK over LiveKit), and session replay's recorder (rrweb). Each is an entry rather than a chunk only so that
 // it keeps a name of its own for the budget to read; what each reaches
 // through dynamic imports of its own, a diagram type's layout or a language's
 // grammar, is a chunk of its own, loaded when it is drawn.
@@ -259,8 +259,35 @@ const SIDE_BUNDLE_ENTRIES = {
   terminal: "src/renderer/terminal/index.ts",
   diagram: "src/renderer/diagram/index.ts",
   "diff-view": "src/renderer/diff-view/index.ts",
+  "factory-world": "src/renderer/factory-world/scene/index.ts",
   "avatar-session": "src/renderer/avatar-session/index.ts",
   "session-recorder": "src/renderer/session-recorder/index.ts",
+};
+
+// Each of the Factory's worlds, a bundle of its own beside the scene host's,
+// found by its folder (`src/renderer/factory-world/worlds/<key>/index.ts`),
+// so a world is added without a line here and one world's weight never loads
+// with another's.
+const WORLDS_ROOT = "src/renderer/factory-world/worlds";
+const WORLD_BUNDLE_ENTRIES = Object.fromEntries(
+  (await fs.readdir(path.join(appRoot, WORLDS_ROOT), { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => [`factory-world-${entry.name}`, `${WORLDS_ROOT}/${entry.name}/index.ts`]),
+);
+
+// The bundles that only ever load after others have, each with those
+// others: the scene host loads only in the panel, and a world only once the
+// host has. Each is measured beyond what those loaded already, so the host's
+// baseline is Three.js and its own code, and a world's is its own code and
+// whatever of Three.js it reaches that the host does not.
+const LOADED_AFTER = {
+  "renderer/factory-world.js": ["renderer/panel.js"],
+  ...Object.fromEntries(
+    Object.keys(WORLD_BUNDLE_ENTRIES).map((name) => [
+      `renderer/${name}.js`,
+      ["renderer/panel.js", "renderer/factory-world.js"],
+    ]),
+  ),
 };
 
 // The renderer, as ES modules: one entry per window role, so a window parses
@@ -275,7 +302,7 @@ const rendererBuild = build({
       name,
       path.join(appRoot, source),
     ]),
-    ...Object.entries(SIDE_BUNDLE_ENTRIES).map(([name, source]) => [
+    ...Object.entries({ ...SIDE_BUNDLE_ENTRIES, ...WORLD_BUNDLE_ENTRIES }).map(([name, source]) => [
       name,
       path.join(appRoot, source),
     ]),
@@ -448,18 +475,31 @@ await Promise.all(
 //
 // Note that a bundle is measured with the chunks it imports, because those load
 // with it before anything runs; a chunk reached only by a dynamic `import()` is
-// fetched when that code first runs, and is left out. Each file is gzipped on
-// its own, as each is read on its own.
+// fetched when that code first runs, and is left out. A bundle that only ever
+// loads after another (`LOADED_AFTER`) is measured beyond what that one has
+// loaded already. Each file is gzipped on its own, as each is read on its own.
+// Every renderer entry is measured, so a new one with no baseline fails until
+// one is recorded.
 const budget = JSON.parse(await fs.readFile(budgetFile, "utf8"));
 const { metafile } = await rendererBuild;
+const rendererEntries = [
+  ...Object.keys(WINDOW_ENTRIES),
+  ...Object.keys(SIDE_BUNDLE_ENTRIES),
+  ...Object.keys(WORLD_BUNDLE_ENTRIES),
+].map((name) => `renderer/${name}.js`);
 const measured = Object.fromEntries(
   await Promise.all(
-    Object.keys(budget.gzipBytes).map(async (bundle) => {
+    [...new Set([...Object.keys(budget.gzipBytes), ...rendererEntries])].map(async (bundle) => {
+      const before = new Set(
+        (LOADED_AFTER[bundle] ?? []).flatMap((earlier) => loadedUpFront(metafile, earlier)),
+      );
       const sizes = await Promise.all(
-        loadedUpFront(metafile, bundle).map(
-          async (file) =>
-            gzipSync(await fs.readFile(path.join(outputRoot, file)), { level: 9 }).length,
-        ),
+        loadedUpFront(metafile, bundle)
+          .filter((file) => !before.has(file))
+          .map(
+            async (file) =>
+              gzipSync(await fs.readFile(path.join(outputRoot, file)), { level: 9 }).length,
+          ),
       );
       return [bundle, sizes.reduce((sum, bytes) => sum + bytes, 0)];
     }),
@@ -475,11 +515,16 @@ if (process.env.LUKE_UPDATE_BUNDLE_BUDGET === "1") {
     process.stdout.write(`bundle budget recorded: ${bundle} ${bytes} gzipped bytes\n`);
   }
 } else {
+  const unrecorded = Object.keys(measured).filter((bundle) => !(bundle in budget.gzipBytes));
+  for (const bundle of unrecorded) {
+    console.error(`error: ${bundle} has no baseline in bundle-budget.json`);
+  }
   const exceeded = Object.entries(measured).flatMap(([bundle, bytes]) => {
+    if (!(bundle in budget.gzipBytes)) return [];
     const ceiling = Math.floor(budget.gzipBytes[bundle] * (1 + budget.slack));
     return bytes > ceiling ? [{ bundle, bytes, ceiling }] : [];
   });
-  if (exceeded.length > 0) {
+  if (exceeded.length > 0 || unrecorded.length > 0) {
     for (const { bundle, bytes, ceiling } of exceeded) {
       console.error(
         `error: ${bundle} is ${bytes} gzipped bytes, over its ceiling of ${ceiling} (baseline ${budget.gzipBytes[bundle]} plus ${budget.slack * 100}%)`,

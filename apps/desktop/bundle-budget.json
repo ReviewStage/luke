@@ -12,6 +12,8 @@
     "renderer/pcm-tee-worklet.js": 413,
     "renderer/avatar-session.js": 149485,
     "renderer/diagram.js": 195519,
-    "renderer/diff-view.js": 142443
+    "renderer/diff-view.js": 142443,
+    "renderer/factory-world.js": 146713,
+    "renderer/factory-world-dev.js": 1419
   }
 }

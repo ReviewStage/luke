@@ -416,6 +416,8 @@ node --input-type=module -e '
 # `effect-edges.json`, and the deployment and test-support files named here.
 # The agents' eve apps are scanned on the same terms: eve's file conventions
 # import `eve`, a platform, and their build and dependency trees are skipped.
+# `three` is a platform too: it draws on WebGL, so a module that imports it is
+# a Factory world's scene code (`apps/desktop/src/renderer/factory-world/`).
 # The source is parsed with the root's `typescript`, so a comment or a string
 # that says "window" is not a reach into the DOM. `react` is deliberately not
 # a platform, so a DOM-free hook is flagged and belongs in `@luke/ui`; a
@@ -431,7 +433,7 @@ node --input-type=module -e '
   const SCANNED = ["apps/desktop/src", "apps/web/src", "apps/web/server", "apps/luke", "apps/dev"];
   const APP_MODULE = /^(?:\.{1,2}\/|#(?:main|renderer|shared|preload|testing)\/)/;
   const PLATFORM =
-    /^(?:electron|electron-updater|@sentry\/electron|react-dom|better-auth|@better-auth\/[^/]+|eve|@vercel\/[^/]+|vite|@tailwindcss\/[^/]+|posthog-js|@fontsource[^/]*(?:\/[^/]+)?)(?:\/.*)?$/;
+    /^(?:electron|electron-updater|@sentry\/electron|react-dom|better-auth|@better-auth\/[^/]+|eve|@vercel\/[^/]+|vite|@tailwindcss\/[^/]+|posthog-js|@fontsource[^/]*(?:\/[^/]+)?|three)(?:\/.*)?$/;
   const DOM_GLOBALS = new Set([
     "window", "document", "navigator", "location", "history", "screen", "localStorage",
     "sessionStorage", "customElements", "devicePixelRatio", "getComputedStyle", "matchMedia",
