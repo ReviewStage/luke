@@ -7,12 +7,23 @@ import {
   type DiffListProps,
   type DiffListSelection,
   type DiffLook,
+  GAP_LINES,
   sameListSelection,
   sameLook,
   sameNotes,
 } from "@luke/panel/diff-view/contract";
+import { TooltipPill } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { Fragment, type ReactNode, type RefObject, useCallback, useEffect, useRef } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { DIFF_LOAD_FAILED, useSideBundles } from "../bundle-loader";
 
@@ -43,6 +54,8 @@ export interface DiffListEntry {
   readonly patch: string;
   readonly collapsed: boolean;
   readonly lead: boolean;
+  /** Whether the lines between its hunks may be opened. */
+  readonly expandable: boolean;
   readonly header: ReactNode;
   readonly notes: readonly DiffNote[];
 }
@@ -50,6 +63,43 @@ export interface DiffListEntry {
 /** What the view does to the list once it is drawn: scrolls it to a file's header. */
 export interface DiffListDoor {
   readonly reveal: (path: string) => void;
+}
+
+/** What a gap's arrow says it does: the next lines of a long gap, the whole of a short one, or every line of the gap. */
+const GAP_WORDS = {
+  MORE: `Show ${GAP_LINES} more lines`,
+  ALL_CHORD: "\u21e7-click for all",
+  THESE: "Show these lines",
+  EVERY: "Show all these lines",
+} as const;
+
+/** The hint over a gap's arrow under the pointer: the arrow, and what it says. */
+interface GapHint {
+  readonly anchor: HTMLElement;
+  readonly label: string;
+  readonly chord: string | undefined;
+}
+
+/**
+ * The hint for the arrow of a gap the pointer arrived on, inside a file's
+ * shadow root, where the pointer's path leads; none for anything else. A
+ * long gap draws an arrow for the next lines and keeps Expand all beside
+ * it, which ⇧ does too; a short one opens whole.
+ */
+function gapHintOf(path: readonly EventTarget[]): GapHint | undefined {
+  const anchor = path.find(
+    (target): target is HTMLElement =>
+      target instanceof HTMLElement && target.hasAttribute("data-expand-button"),
+  );
+  if (anchor === undefined) return undefined;
+  if (anchor.hasAttribute("data-expand-all-button")) {
+    return { anchor, label: GAP_WORDS.EVERY, chord: undefined };
+  }
+  const long =
+    anchor.closest("[data-separator-wrapper]")?.querySelector("[data-expand-all-button]") != null;
+  return long
+    ? { anchor, label: GAP_WORDS.MORE, chord: GAP_WORDS.ALL_CHORD }
+    : { anchor, label: GAP_WORDS.THESE, chord: undefined };
 }
 
 /** A note's place alone, which is all the bundle is handed of it. */
@@ -73,6 +123,7 @@ function listFileOf(entry: DiffListEntry): DiffListFile {
     patch: entry.patch,
     collapsed: entry.collapsed,
     lead: entry.lead,
+    expandable: entry.expandable,
     annotations: entry.notes.map(placeOf),
   };
   LIST_FILES.set(entry, file);
@@ -92,6 +143,7 @@ function sameFiles(a: readonly DiffListFile[], b: readonly DiffListFile[]): bool
           file.patch === other.patch &&
           file.collapsed === other.collapsed &&
           file.lead === other.lead &&
+          file.expandable === other.expandable &&
           sameNotes(file.annotations, other.annotations))
       );
     })
@@ -139,6 +191,9 @@ export function PierreDiffList({
   readTexts?: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
 }): React.JSX.Element {
   const loaded = useAtomValue(useSideBundles().diffView);
+  // The hint over the gap arrow under the pointer, which Pierre draws in a shadow root no hint of the window's own reaches.
+  const [hint, setHint] = useState<GapHint | undefined>(undefined);
+  const hintId = useId();
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<DiffListHandle | undefined>(undefined);
@@ -228,7 +283,26 @@ export function PierreDiffList({
       ref={hostRef}
       className="file-tab-lines diff-view diff-list"
       data-diff-layout={look.layout}
+      onPointerOver={(event) => {
+        const next = gapHintOf(event.nativeEvent.composedPath());
+        setHint((was) => (was?.anchor === next?.anchor ? was : next));
+      }}
+      onPointerLeave={() => setHint(undefined)}
+      onPointerDown={() => setHint(undefined)}
     >
+      {hint === undefined ? null : (
+        <TooltipPill
+          id={hintId}
+          anchor={hint.anchor}
+          instant={false}
+          label={hint.label}
+          shortcut={
+            hint.chord === undefined ? undefined : (
+              <span className="tooltip-chord">{hint.chord}</span>
+            )
+          }
+        />
+      )}
       {entries.map((entry) => (
         <Fragment key={entry.path}>
           {createPortal(entry.header, renderHeader(entry.path))}

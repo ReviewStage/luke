@@ -7,6 +7,7 @@ import {
   PATCH_OMITTED,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
+import { isSecretFile } from "@luke/features/task-wire";
 import { parsePatch } from "diff";
 import {
   DIFF_SELECTION_SIDE,
@@ -110,6 +111,23 @@ export const CHANGES_WORDS = {
   TOO_NARROW_TO_SPLIT: "Needs a wider panel",
   UNPLACED_THREADS: "Comments on lines this diff does not show",
 } as const;
+
+/** Why a changed file's lines between its hunks could not be opened: not read as text, read but not the text its patch was made against, or not read at all just now. */
+export const EXPANSION_REFUSAL = {
+  NOT_TEXT: "not-text",
+  CHANGED: "changed",
+  UNAVAILABLE: "unavailable",
+} as const;
+
+export type ExpansionRefusal = (typeof EXPANSION_REFUSAL)[keyof typeof EXPANSION_REFUSAL];
+
+/** What a file whose lines between hunks could not be opened says, once, above its first hunk. */
+export const EXPANSION_REFUSED_WORDS = {
+  [EXPANSION_REFUSAL.NOT_TEXT]: "Can't load more of this file: it's too large or not plain text.",
+  [EXPANSION_REFUSAL.CHANGED]:
+    "Can't load more of this file: it changed since these changes were read.",
+  [EXPANSION_REFUSAL.UNAVAILABLE]: "Can't load more of this file just now.",
+} as const satisfies Record<ExpansionRefusal, string>;
 
 /** The letter a file wears for what became of it, as an editor's source control marks it. */
 export const STATUS_LETTER = {
@@ -653,11 +671,12 @@ function linesOf(text: string): {
   };
 }
 
-/** Whether a file's lines between its hunks can be drawn: a file changed in place or moved with changes, whose patch is drawn. */
+/** Whether a file's lines between its hunks can be drawn: a file changed in place or moved with changes, whose patch is drawn, and that is no secret file. */
 export function expandable(file: CodingAgentChangedFile): boolean {
   const changedInPlace =
     file.status === CHANGED_FILE_STATUS.MODIFIED || file.status === CHANGED_FILE_STATUS.RENAMED;
-  return changedInPlace && fileNotice(file) === undefined;
+  // Note that a secret file is never read whole, so its gaps are never offered.
+  return changedInPlace && fileNotice(file) === undefined && !isSecretFile(file.path);
 }
 
 /**

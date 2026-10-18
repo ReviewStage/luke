@@ -1472,3 +1472,81 @@ test("no file is read whole for an agent on no task, a head not named, or a task
     "the same repository, whatever its case",
   );
 });
+
+test("a file whose gaps are never read whole offers none: a secret one, and one not changed in place", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("config/.env.local", { patch: HEAD_PATCH }),
+    changed("src/new.ts", { status: CHANGED_FILE_STATUS.ADDED }),
+  ];
+  answerFileReads((path) => ({
+    text: { path, repository: "acme/relay", branch: "a".repeat(40), text: HEAD_TEXT },
+  }));
+  const props = await drawTab();
+  assert.deepEqual(
+    props.files.map((file) => [file.path, file.expandable]),
+    [
+      ["config/.env.local", false],
+      ["src/new.ts", false],
+      ["src/seats.ts", true],
+    ],
+  );
+});
+
+test("a file whose read is refused closes its gaps and says why, once, above its first hunk", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/moved.ts", { patch: HEAD_PATCH }),
+  ];
+  answerFileReads((path) =>
+    path === "src/seats.ts"
+      ? { refusal: TASK_FILE_REFUSAL.NOT_TEXT }
+      : { text: { path, repository: "acme/relay", branch: "a".repeat(40), text: BASE_TEXT } },
+  );
+  const readTexts = (await drawTab()).readTexts ?? assert.fail("the list reads files whole");
+  await readTexts("src/seats.ts");
+  await readTexts("src/moved.ts");
+  await flush();
+  const drawn = lastDrawn();
+  assert.deepEqual(
+    drawn.files.map((file) => [file.path, file.expandable]),
+    [
+      ["src/moved.ts", false],
+      ["src/seats.ts", false],
+    ],
+  );
+  const why = (path: string) => {
+    const key = drawn.files.find((file) => file.path === path)?.annotations[0]?.key ?? "";
+    return drawn.renderAnnotation(path, key).textContent;
+  };
+  assert.equal(
+    why("src/seats.ts"),
+    "Can't load more of this file: it's too large or not plain text.",
+  );
+  assert.equal(
+    why("src/moved.ts"),
+    "Can't load more of this file: it changed since these changes were read.",
+  );
+});
+
+test("a gap's arrow under the pointer hangs its hint: the next twenty lines of a long gap and \u21e7 for all, or the whole of a short one", async () => {
+  files = [changed("src/seats.ts")];
+  await drawTab();
+  const hintOver = (long: boolean) => {
+    const wrapper = listBox().appendChild(document.createElement("div"));
+    wrapper.setAttribute("data-separator-wrapper", "");
+    const arrow = wrapper.appendChild(document.createElement("div"));
+    arrow.setAttribute("data-expand-button", "");
+    if (long)
+      wrapper.appendChild(document.createElement("div")).setAttribute("data-expand-all-button", "");
+    act(() => arrow.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+    const words = document.querySelector('[role="tooltip"]')?.textContent;
+    act(() => listBox().dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+    wrapper.remove();
+    return words;
+  };
+  assert.equal(hintOver(true), "Show 20 more lines\u21e7-click for all");
+  assert.equal(hintOver(false), "Show these lines");
+});

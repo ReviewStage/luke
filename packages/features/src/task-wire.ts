@@ -726,6 +726,14 @@ export function codeWindow(ref: CodeRef, lineCount: number): CodeWindow {
   return { first, last: Math.min(lineCount, first + WINDOW_LINES - 1) };
 }
 
+/** A file kept secret, refused wherever it sits in the repository: a `.env` file, or one whose name starts with `.env`. */
+const SECRET_FILE = /(^|\/)\.env[^/]*$/u;
+
+/** Whether a path names a secret file, which no reader reads, the service's or the window's asking. */
+export function isSecretFile(path: string): boolean {
+  return SECRET_FILE.test(path);
+}
+
 export const TASK_FILE_BOUNDS = {
   /** The most lines one read of a file for the File tab carries; a longer file is read a window at a time as it is scrolled. */
   WINDOW_LINES: 500,

@@ -10,6 +10,7 @@ import {
   type DiffViewHandle,
   type DiffViewModule,
   type DiffViewProps,
+  GAP_LINES,
   sameListSelection,
   sameLook,
   sameNotes,
@@ -376,6 +377,27 @@ function patchOf(file: DiffListFile): FileDiffMetadata {
 interface DrawnFile {
   readonly file: DiffListFile;
   readonly item: CodeViewDiffItem<string>;
+  /** Its patch as read, which the item draws as it is where the file may be opened between its hunks. */
+  readonly read: FileDiffMetadata;
+}
+
+/**
+ * The kind Pierre is told a file is where its lines between hunks may not
+ * be opened: Pierre offers a gap's arrows only for a file changed in place
+ * or moved with changes, and draws a file's hunks alike whatever its kind,
+ * so a file told it only moved draws as it is with no arrows on its gaps.
+ * Note that this is Pierre's one per-file door to that offer, its reader of
+ * files whole being one for the whole list.
+ */
+const UNEXPANDED_KIND = "rename-pure";
+
+/** A read patch as the item draws it: as read where its gaps may be opened, and otherwise told it only moved, so none is offered. */
+function drawnAs(read: FileDiffMetadata, expandable: boolean): FileDiffMetadata {
+  const offered = read.type === "change" || read.type === "rename-changed";
+  if (expandable || !offered) return read;
+  // Note that the copy keeps no cache key, because Pierre would hand it the drawing it keeps under the read's, its arrows with it.
+  const { cacheKey: _drawnUnder, ...drawn } = read;
+  return { ...drawn, type: UNEXPANDED_KIND };
 }
 
 /** A range Pierre picked, in the contract's words: a side Pierre leaves unsaid is the new file's. */
@@ -408,9 +430,6 @@ function commentOptions(
   };
 }
 
-/** How many unchanged lines one press of a gap's arrow draws, as GitHub's diff draws them. */
-const EXPANSION_LINES = 20;
-
 /**
  * Pierre's reading of a file whole, where the view reads files whole: the
  * first press on a gap between a file's hunks asks the view for the file's
@@ -424,7 +443,7 @@ function expansionOptions(
 ): CodeViewOptions<string, undefined> {
   if (latest().readTexts === undefined) return {};
   return {
-    expansionLineCount: EXPANSION_LINES,
+    expansionLineCount: GAP_LINES,
     loadDiffFiles: async (fileDiff: FileDiffMetadata) => {
       const texts = await latest().readTexts?.(pathOf(fileDiff));
       if (texts === undefined) throw new Error("The file could not be read whole.");
@@ -504,22 +523,22 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
         held.file.patch === file.patch &&
         held.file.lead === file.lead &&
         held.file.collapsed === file.collapsed &&
+        held.file.expandable === file.expandable &&
         sameNotes(held.file.annotations, file.annotations)
       ) {
         return held.item;
       }
+      const read =
+        held?.file.patch === file.patch && held.file.lead === file.lead ? held.read : patchOf(file);
       const item: CodeViewDiffItem<string> = {
         id: file.path,
         type: "diff",
-        fileDiff:
-          held?.file.patch === file.patch && held.file.lead === file.lead
-            ? held.item.fileDiff
-            : patchOf(file),
+        fileDiff: drawnAs(read, file.expandable),
         collapsed: file.collapsed,
         annotations: annotationsOf(file.annotations),
         version: (held?.item.version ?? 0) + 1,
       };
-      drawnFiles.set(file.path, { file, item });
+      drawnFiles.set(file.path, { file, item, read });
       paths.set(item.fileDiff, file.path);
       return item;
     });
