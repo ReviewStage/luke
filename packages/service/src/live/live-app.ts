@@ -23,6 +23,7 @@ import {
 } from "../inbox/inbox-store.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { planConversationLiveStatements } from "../tasks/brain-transcript.js";
+import { planRecordLiveStatements } from "../tasks/plan-record-live.js";
 import { type LiveSealer, LiveSealing } from "./realtime.js";
 
 /**
@@ -47,7 +48,9 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  * conversation the same way, after the plan is read as the account: its
  * mark, one row that moves whenever a read past the cursor would answer
  * something new, which the desktop asks the conversation on rather than
- * holding a read the service looks again for on a clock.
+ * holding a read the service looks again for on a clock, and beside it the
+ * rest of the plan's record the panel reads (`plan-record-live.ts`): its
+ * calls, its board, and its pages.
  * Nothing else here reads a row: the store is read by Realtime.
  */
 
@@ -150,12 +153,21 @@ const taskConversationLiveEndpoint = /* @__PURE__ */ Effect.fn("web/taskConversa
     const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
     if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     const sealing = yield* LiveSealing;
-    const statements = planConversationLiveStatements(userId, taskId);
+    const statements = Option.zipWith(
+      planConversationLiveStatements(userId, taskId),
+      planRecordLiveStatements(userId, taskId),
+      (conversation, record) => ({ ...conversation, ...record }),
+    );
     if (Option.isNone(sealing) || Option.isNone(statements)) {
       return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
     }
     const { seal, url } = sealing.value;
-    const queries = yield* Effect.all({ mark: seal(statements.value.mark) }).pipe(
+    const queries = yield* Effect.all({
+      mark: seal(statements.value.mark),
+      calls: seal(statements.value.calls),
+      board: seal(statements.value.board),
+      pages: seal(statements.value.pages),
+    }).pipe(
       Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
     );
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries });

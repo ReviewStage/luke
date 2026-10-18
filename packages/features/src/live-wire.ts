@@ -183,7 +183,9 @@ export function inboxOfLiveRows(rows: typeof scopeInboxLiveRowsSchema.Type): rea
 /**
  * A plan's planning conversation sealed for following: the address, and
  * its mark as one statement, one row that moves whenever a read past the
- * cursor would answer something new. The desktop holds its read of the
+ * cursor would answer something new; and beside it the rest of the plan's
+ * record the panel reads (`calls`, `board`, `pages`), each a part that
+ * moves as its rows do, which the panel reads again once it moves. The desktop holds its read of the
  * conversation and asks it once, unheld, each time the mark moves, rather
  * than holding a read the service looks again for on a clock. The service
  * answers `not-found` for a plan the account does not reach, and
@@ -192,7 +194,12 @@ export function inboxOfLiveRows(rows: typeof scopeInboxLiveRowsSchema.Type): rea
  */
 export const planConversationLiveAnswerSchema = EffectSchema.Struct({
   url: EffectSchema.String,
-  queries: EffectSchema.Struct({ mark: sealedLiveQuerySchema }),
+  queries: EffectSchema.Struct({
+    mark: sealedLiveQuerySchema,
+    calls: sealedLiveQuerySchema,
+    board: sealedLiveQuerySchema,
+    pages: sealedLiveQuerySchema,
+  }),
 });
 
 export type PlanConversationLiveAnswer = typeof planConversationLiveAnswerSchema.Type;
@@ -210,7 +217,38 @@ const planConversationMarkSchema = EffectSchema.Struct({
   workers: EffectSchema.Array(EffectSchema.String),
 });
 
-/** The conversation's mark as Realtime delivers it: one row, or none for a plan the account no longer reaches. */
+/** One call about the plan as its row delivers it: how it ended (null while it stands), what it metered, and how far its transcript reaches. */
+const planCallLiveRowSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  closedAt: EffectSchema.NullOr(EffectSchema.Finite),
+  closeReason: EffectSchema.NullOr(EffectSchema.String),
+  model: EffectSchema.NullOr(EffectSchema.String),
+  usage: EffectSchema.NullOr(
+    EffectSchema.Struct({ seconds: EffectSchema.Finite, confirmed: EffectSchema.Boolean }),
+  ),
+  segments: EffectSchema.Finite,
+  lastSegment: EffectSchema.Finite,
+});
+
+/** The plan's board as its row delivers it: Luke's drawing's number, the one the scene holds, and when it last changed; null before the board was written. */
+const planBoardLiveRowSchema = EffectSchema.Struct({
+  taskId: EffectSchema.String,
+  drawingNumber: EffectSchema.NullOr(EffectSchema.Finite),
+  appliedDrawing: EffectSchema.NullOr(EffectSchema.Finite),
+  updatedAt: EffectSchema.NullOr(EffectSchema.Finite),
+});
+
+/** One page shown on the plan as its row delivers it: how many versions it has, and when the newest was shown. */
+const planPageLiveRowSchema = EffectSchema.Struct({
+  pageId: EffectSchema.String,
+  versions: EffectSchema.Finite,
+  newestAt: EffectSchema.Finite,
+});
+
+/** The conversation's mark and the plan's record as Realtime delivers them: a part's rows, none of any for a plan the account no longer reaches. */
 export const planConversationLiveRowsSchema = EffectSchema.Struct({
   mark: EffectSchema.Array(planConversationMarkSchema),
+  calls: EffectSchema.Array(planCallLiveRowSchema),
+  board: EffectSchema.Array(planBoardLiveRowSchema),
+  pages: EffectSchema.Array(planPageLiveRowSchema),
 });

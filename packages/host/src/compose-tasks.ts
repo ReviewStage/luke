@@ -118,13 +118,21 @@ import {
   Schema,
   type Scope,
   Semaphore,
+  Stream,
   type SubscriptionRef,
 } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import { type ConversationMark, conversationMark, markMoved } from "./conversation-follow.js";
+import {
+  type ConversationMark,
+  callStands,
+  conversationMark,
+  markMoved,
+  type RecordPart,
+  recordMoves,
+} from "./conversation-follow.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
@@ -427,7 +435,11 @@ export interface TasksComposer extends Composer {
  * past its cursor in one look, unheld, each time the mark moves, so the
  * service never looks again on a clock and nothing parks or needs waking.
  * A service that seals nothing, or a subscription that stops, is read as
- * before, from the cursor held.
+ * before, from the cursor held. The same subscription carries the rest of
+ * the plan's record the panel reads: the board and the pages are read again
+ * as their rows move rather than on the call's activity, and the calls'
+ * transcript and the work once a call's rows say it ended and again as its
+ * last words land, rather than at its end and once more after a wait.
  */
 export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(function* (
   dependencies: TasksDependencies,
@@ -482,6 +494,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The plans a call just ended about, whose transcript and work are read again by the loop below. */
   const callEndReads = yield* Queue.sliding<string>(1);
 
+  /** The plans whose calls' record moved with none of their calls standing, whose transcript and work are read once by the loop below. */
+  const settledReads = yield* Queue.sliding<string>(1);
+
+  /** The plans whose conversation moved with none of their calls standing, whose work is read once by the loop below. */
+  const workReads = yield* Queue.sliding<string>(1);
+
   /** The one read of the open plan's conversation; running another interrupts it. */
   const conversationRead = yield* FiberHandle.make<void>();
 
@@ -498,6 +516,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The open plan the service sealed no conversation mark for, read on held reads until it is opened again. */
   let unsealedTaskId: string | undefined;
+
+  /**
+   * The open plan whose record is followed live: its board, pages, and calls
+   * read again as their rows move, so neither the call's activity nor its
+   * end needs to guess when they might have.
+   */
+  let recordLiveTaskId: string | undefined;
 
   /**
    * The plan whose call is telling its turns' work as they run, and the
@@ -903,7 +928,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       let after = from;
       let seen: ConversationMark = { kind: "waiting" };
       while (gate() && view.activeTaskId === taskId) {
-        if (seen.kind === "broken") return yield* followHeld(taskId, after);
+        if (seen.kind === "broken") {
+          // The record is read on the call's word again, as the conversation is.
+          if (recordLiveTaskId === taskId) recordLiveTaskId = undefined;
+          return yield* followHeld(taskId, after);
+        }
         const page = yield* readConversation(
           taskId,
           after === undefined ? {} : { after, unheld: true },
@@ -912,6 +941,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         write({ conversation: withForwardPage(page.value) });
         after = page.value.cursor;
         seen = yield* markMoved(mark, seen);
+        // A turn's work lands in the record too; while a call stands, the call tells it.
+        if (seen.kind === "standing" && !callStands(seen.rows)) {
+          Queue.offerUnsafe(workReads, taskId);
+        }
       }
     });
   }
@@ -950,9 +983,31 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           },
           sealed,
         );
+        recordLiveTaskId = taskId;
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            if (recordLiveTaskId === taskId) recordLiveTaskId = undefined;
+          }),
+        );
+        yield* Effect.forkScoped(
+          Stream.runForEach(recordMoves(mark), ({ part, rows }) =>
+            Effect.sync(() => recordMoved(taskId, part, callStands(rows))),
+          ),
+        );
         return yield* followLive(taskId, after, mark);
       }),
     );
+  }
+
+  /**
+   * Reads again the part of `taskId`'s record whose rows moved: the board,
+   * the pages, or, once none of its calls stands, the calls' transcript and
+   * the work, which is what a call's end and its settling waited to read.
+   */
+  function recordMoved(taskId: string, part: RecordPart, calling: boolean): void {
+    if (part === "board") Queue.offerUnsafe(boardReads, taskId);
+    if (part === "pages") Queue.offerUnsafe(pageReads, taskId);
+    if (part === "calls" && !calling) Queue.offerUnsafe(settledReads, taskId);
   }
 
   /** Reads `taskId`'s conversation from its newest turns and follows it, in place of any read standing. */
@@ -1020,6 +1075,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       activity.planner?.action === LOOK_AT_BOARD_TOOL_NAME &&
       was?.action !== LOOK_AT_BOARD_TOOL_NAME;
     write({ activity, callActivity: activity });
+    // A record followed live reads its board and pages as their rows move.
+    if (recordLiveTaskId === taskId) return;
     if (drew || stopped || looking) Queue.offerUnsafe(boardReads, taskId);
     // A page shown settles the same way a drawing does, and is read as the board is.
     const paged = was?.action === SHOW_PAGE_TOOL_NAME && activity.planner?.action !== was.action;
@@ -1052,7 +1109,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     view = rest;
     publish();
     if (view.activeTaskId !== taskId) return;
-    Queue.offerUnsafe(callEndReads, taskId);
+    // A record followed live reads the calls' transcript once the call's rows say it ended.
+    if (recordLiveTaskId !== taskId) Queue.offerUnsafe(callEndReads, taskId);
     wakeConversation(taskId);
   }
 
@@ -2111,6 +2169,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             );
             return Effect.andThen(read, Effect.andThen(Effect.sleep(TRANSCRIPT_SETTLE), read));
           }),
+        ),
+      );
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(settledReads), (taskId) =>
+            gate() && view.activeTaskId === taskId
+              ? serial(Effect.andThen(readTranscript(taskId), readWork(taskId)))
+              : Effect.void,
+          ),
+        ),
+      );
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(workReads), (taskId) =>
+            gate() && view.activeTaskId === taskId ? serial(readWork(taskId)) : Effect.void,
+          ),
         ),
       );
       // Note that a read still following is left alone, because it already

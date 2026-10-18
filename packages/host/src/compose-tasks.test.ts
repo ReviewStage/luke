@@ -818,17 +818,41 @@ const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERA
 /** The host's clock, which a seal's renewal is timed by. */
 const NOW = 1_800_000_100_000;
 
-/** A plan's conversation mark sealed as the service answers it. */
+/** One part of a plan's live read sealed, named by its capability. */
+function sealedPart(part: string) {
+  return {
+    capability: `capability-${part}`,
+    queryFingerprint: `fingerprint-${part}`,
+    expiresAt: NOW + 60_000,
+  };
+}
+
+/** A plan's conversation mark and its record sealed as the service answers them. */
 const SEALED_CONVERSATION: PlanConversationLiveAnswer = {
   url: "wss://realtime.example/v1",
   queries: {
-    mark: {
-      capability: "capability-mark",
-      queryFingerprint: "fingerprint-mark",
-      expiresAt: NOW + 60_000,
-    },
+    mark: sealedPart("mark"),
+    calls: sealedPart("calls"),
+    board: sealedPart("board"),
+    pages: sealedPart("pages"),
   },
 };
+
+/** The parts of the plan's record beside its mark. */
+const RECORD_PARTS = ["calls", "board", "pages"] as const;
+
+/** One call about the plan as its row delivers it: closed or standing, and how far its words reach. */
+function callRow(closed: boolean, segments: number) {
+  return {
+    id: "call-1",
+    closedAt: closed ? NOW : null,
+    closeReason: closed ? "hung-up" : null,
+    model: null,
+    usage: null,
+    segments,
+    lastSegment: segments,
+  };
+}
 
 /** A conversation's mark as its row delivers it, at a sequence and with the newest turn's status. */
 function markRow(seq: number, turnStatus: string) {
@@ -853,23 +877,40 @@ function fakeRealtime() {
     }),
     close: () => void closed.push(url),
   });
-  /** The mark's subscription, once the host's follower has made it. */
-  const subscribed = Effect.gen(function* () {
-    for (let turn = 0; turn < 100; turn += 1) {
-      const listener = listeners.get("capability-mark");
-      if (listener !== undefined) return listener;
-      yield* Effect.yieldNow;
-    }
-    return assert.fail("the host never subscribed to the mark");
-  });
+  /** Which of the record's parts have had their first rows. */
+  const started = new Set<string>();
+  /** A part's subscription, once the host's follower has made it. */
+  const subscribed = (part: string) =>
+    Effect.gen(function* () {
+      for (let turn = 0; turn < 100; turn += 1) {
+        const listener = listeners.get(`capability-${part}`);
+        if (listener !== undefined) return listener;
+        yield* Effect.yieldNow;
+      }
+      return assert.fail(`the host never subscribed to ${part}`);
+    });
+  /** A part's rows delivered, as Realtime's snapshot carries them, once the host subscribed. */
+  const deliverTo = (part: string, data: readonly unknown[]) =>
+    Effect.map(subscribed(part), (listener) => {
+      started.add(part);
+      listener({ status: "live", data });
+    });
   return {
     open,
     closed,
-    /** The mark's rows delivered, as Realtime's snapshot carries them, once the host subscribed. */
+    /** The mark's rows delivered, the record's empty first rows before them where it has none yet. */
     deliver: (data: readonly unknown[]) =>
-      Effect.map(subscribed, (listener) => listener({ status: "live", data })),
+      Effect.gen(function* () {
+        for (const part of RECORD_PARTS) {
+          if (!started.has(part)) yield* deliverTo(part, []);
+        }
+        yield* deliverTo("mark", data);
+      }),
+    /** A part of the record's rows delivered. */
+    deliverRecord: (part: (typeof RECORD_PARTS)[number], data: readonly unknown[]) =>
+      deliverTo(part, data),
     /** The mark's subscription stopped for good. */
-    fail: Effect.map(subscribed, (listener) => listener({ status: "error", data: [] })),
+    fail: Effect.map(subscribed("mark"), (listener) => listener({ status: "error", data: [] })),
   };
 }
 
@@ -2484,5 +2525,60 @@ it.effect(
       );
       const open = last()?.document;
       assert.equal(open?.status === TASKS_READ.READY ? open.task?.workspaceId : undefined, ACME.id);
+    }),
+);
+
+it.effect(
+  "a plan whose record is followed live reads its board and its calls' transcript and work as their rows move, never while a call stands, and not on the call's activity or end",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations, realtime } = yield* subject(service);
+      conversations.sealed = SEALED_CONVERSATION;
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([], "1:1", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* realtime.deliverRecord("calls", [callRow(false, 1)]);
+      yield* realtime.deliver([markRow(1, "running")]);
+      yield* conversations.nextAsk;
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([], "1:1", CODING_AGENT_STATUS.RUNNING),
+      );
+      yield* TestClock.adjust(Duration.seconds(1));
+      const before = service.workReads.length;
+
+      // A word of the call while a call stands, and its words landing, read nothing of the record.
+      tasks.showActivity({
+        type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
+        planId: INVITES,
+        planner: {},
+        notes: false,
+      });
+      yield* realtime.deliverRecord("calls", [callRow(false, 4)]);
+      yield* TestClock.adjust(Duration.seconds(1));
+      assert.equal(service.workReads.length, before);
+
+      // Luke draws: the board is read as its row moves.
+      const drawn: Board = { elements: [], appliedDrawing: 2 };
+      service.boards[INVITES] = drawn;
+      const boarded = yield* viewLands((view) => view.board?.appliedDrawing === 2);
+      yield* realtime.deliverRecord("board", [
+        { taskId: INVITES, drawingNumber: 2, appliedDrawing: 2, updatedAt: NOW },
+      ]);
+      assert.deepEqual((yield* boarded).board, drawn);
+
+      // The call ends, and its last words land after: each is read as it lands, with no wait.
+      tasks.callEnded(INVITES);
+      yield* realtime.deliverRecord("calls", [callRow(true, 4)]);
+      yield* TestClock.adjust(Duration.millis(10));
+      assert.equal(service.workReads.length, before + 1);
+      yield* realtime.deliverRecord("calls", [callRow(true, 5)]);
+      yield* TestClock.adjust(Duration.millis(10));
+      assert.equal(service.workReads.length, before + 2);
     }),
 );
