@@ -5287,7 +5287,7 @@ button.integration-tool-head:hover,
   font: inherit;
   font-size: var(--luke-type-body-size);
   resize: none;
-  outline: none; /* no ring: the box around it rings (`.field-well`) */
+  outline: none; /* no ring: the caret marks the field */
 }
 
 .chat-composer-bar {

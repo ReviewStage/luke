@@ -3908,9 +3908,8 @@ ol.transcript-list {
 }
 
 /* The shared composer card (../ai-elements/prompt-input.tsx): one card on
-   the sidebar's ground inside a hairline, ringed while its field holds the
-   caret (`.field-well`, base.css); under its field, the foot with the
-   owner's controls at its left and the round submit at its right. */
+   the sidebar's ground inside a hairline; under its field, the foot with
+   the owner's controls at its left and the round submit at its right. */
 .prompt-input {
   display: flex;
   width: 100%;
@@ -3958,7 +3957,7 @@ ol.transcript-list {
    line to eight and then scrolling, with no space between its paragraphs,
    as a textarea's lines stand, and the placeholder the field draws at the
    editor's own insets while the words are empty, dimmed with the editor
-   while the box is held. No ring: the card around it rings (`.field-well`). */
+   while the box is held. */
 .agent-composer-field {
   position: relative;
   --agent-composer-field-block: calc(var(--luke-space-16) + var(--luke-space-8));
