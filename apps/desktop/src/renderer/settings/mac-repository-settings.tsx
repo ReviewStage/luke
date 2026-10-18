@@ -139,7 +139,9 @@ function MacRepositoryRow({
             <Button
               type={BUTTON_TYPE.SUBMIT}
               variant={BUTTON_VARIANT.PRIMARY}
-              disabled={busy || !changed}
+              busy={busy}
+              busyLabel="Saving"
+              disabled={!changed}
             >
               Save
             </Button>
