@@ -1,6 +1,7 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
+import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ERROR_STATE_PLACEMENT,
@@ -30,7 +31,6 @@ import {
   windowUnread,
   withWindow,
 } from "./file-tab-model";
-import { useFileViewSettings } from "./file-view-settings";
 import { useMentionDrop, useTaskMentions } from "./task-mentions";
 import type { OpenFile } from "./use-side-panel";
 

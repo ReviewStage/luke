@@ -9,6 +9,7 @@ import {
   type TaskSectionIconColor,
   taskSectionIconSchema,
 } from "@luke/features/task-section-wire";
+import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { IconButton, SearchField, Segmented, TextField } from "@luke/ui";
 import {
   emojiGroups,
@@ -38,7 +39,6 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
-import { rendererRuntime } from "../renderer-runtime";
 import { Tooltip } from "../tooltip";
 
 /**

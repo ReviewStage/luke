@@ -7,12 +7,12 @@
  * either. The avatar's voice plays beside `App`, so no tab it shows cuts it.
  */
 
+import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { App } from "./app";
 import { callAvatarAtom } from "./call/call-avatar";
 import { PanelAvatarVoice } from "./call/panel-avatar";
 import { installWindowHistory } from "./navigation-history";
-import { rendererRegistry } from "./renderer-runtime";
 import { mountWindow } from "./window-root";
 
 // The panel's back and forward live in memory for as long as the window is open.

@@ -16,6 +16,8 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { dayAndTimeText } from "@luke/panel/tasks/task-time";
+import { useCapability } from "@luke/panel/use-app-state";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import {
@@ -68,10 +70,8 @@ import { sharedWords } from "../desktop/workspace-ref";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile";
 import { encodeImage } from "../feedback-images";
 import { useOpenPerson } from "../person-door";
-import { dayAndTimeText } from "../tasks/task-time";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { wholeWordsHint } from "../tooltip";
-import { useCapability } from "../use-app-state";
 import { MacRepositoriesGroup } from "./mac-repository-settings";
 import { MenuRow } from "./menu-row";
 

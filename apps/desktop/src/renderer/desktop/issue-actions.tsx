@@ -1,6 +1,7 @@
 import { ISSUE_PRIORITY_WORDS, ISSUE_STATUS_WORDS } from "@luke/features/issue-list-model";
 import { ISSUE_STATUS_ORDER, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog, type useMenu } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ArchiveIcon } from "lucide-react";
@@ -8,7 +9,6 @@ import { useCopyLinkItem } from "../copy-link-item";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { PRIORITY_ORDER, PriorityGlyph, StatusGlyph } from "./issue-pickers";
 import { useStartTaskItem } from "./issue-work";
-import type { IssueChange } from "./use-issues";
 
 /**
  * issue-actions.tsx -- an issue's actions as its card on the board and its row in the list offer them: its status and priority changed, a task started from it, its link copied, and its archive.

@@ -1,4 +1,9 @@
 import {
+  DEFAULT_SETTINGS,
+  type FileViewSettings,
+  useFileViewSettings,
+} from "@luke/panel/tasks/file-view-settings";
+import {
   DIFF_FONT,
   DIFF_FONT_LABEL,
   DIFF_FONT_SIZES,
@@ -29,7 +34,6 @@ import { SelectRow } from "../settings/select-row";
 import { SwitchRow } from "../settings/switch-row";
 import { Tooltip } from "../tooltip";
 import { CHANGES_WORDS } from "./changes-model";
-import { DEFAULT_SETTINGS, type FileViewSettings, useFileViewSettings } from "./file-view-settings";
 
 /**
  * diff-settings.tsx -- the diff settings button in the Files changed bar, and the popover under it: every diff setting stage-cli offers, in Luke's own controls.

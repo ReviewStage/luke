@@ -3,7 +3,9 @@ import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { useAct } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
+import { WordsWorkspace } from "@luke/panel/tasks/use-link-standing";
 import { OpenHereProvider, openPullRequestsHere } from "@luke/panel/tasks/use-open-link";
+import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, IconButton, useMenu } from "@luke/ui";
@@ -29,12 +31,10 @@ import {
 } from "../tasks/task-mentions";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { useCodingAgents } from "../tasks/use-coding-agents";
-import { WordsWorkspace } from "../tasks/use-link-standing";
 import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
-import { useExperiment } from "../use-app-state";
 import { ActionMenu } from "./action-menu";
 import { AgentPane } from "./main-tabs";
 import {
