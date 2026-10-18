@@ -1,6 +1,16 @@
 import type { AdminUserAccount, AdminUserDetail } from "@luke/service/admin/admin-user";
 import type { AdminMetricsWindow } from "@luke/service/admin/http";
-import { BADGE_TONE, Badge, GAP, Inline, Stack, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  AVATAR_SIZE,
+  BADGE_TONE,
+  Badge,
+  GAP,
+  Inline,
+  Stack,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { accountLabel } from "@luke/ui/account-initials";
 import { formatDate, formatDayTick, formatNumber, signInMethodLabel } from "@luke/ui/admin-format";
 import { ActivityCalendar } from "../charts/activity-calendar";
@@ -123,7 +133,7 @@ export function AccountScreen({
                     email: subject.email,
                     image: subject.image ?? undefined,
                   }}
-                  size="large"
+                  size={AVATAR_SIZE.MASTHEAD}
                 />
                 <Stack gap={GAP.TIGHT}>
                   <Inline>

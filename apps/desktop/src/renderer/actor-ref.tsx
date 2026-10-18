@@ -9,6 +9,7 @@ import {
 } from "@luke/features/automation-list-model";
 import type { AutomationSummary } from "@luke/features/automation-wire";
 import {
+  AVATAR_SHAPE,
   AVATAR_SIZE,
   Avatar,
   type AvatarSize,
@@ -34,7 +35,7 @@ import {
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
 import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words";
 import { InlineRef } from "./inline-ref";
 import { useActorDoor } from "./person-door";
@@ -87,7 +88,7 @@ export const ACTOR_SIZE = {
 
 export type ActorSize = (typeof ACTOR_SIZE)[keyof typeof ACTOR_SIZE];
 
-/** How many CSS pixels across each size draws its disc, which `desktop.css`'s `--actor-size` says for the same size. */
+/** How many CSS pixels across each size draws its disc, which the shared `Avatar` draws at for the same size. */
 const ACTOR_PIXELS = {
   [ACTOR_SIZE.MARK]: 14,
   [ACTOR_SIZE.INLINE]: 16,
@@ -140,76 +141,97 @@ function PersonDisc({
 }): React.JSX.Element {
   const src = pictureAt(pictureUrl, size);
   return (
-    <span className="actor-face">
-      <Avatar
-        id={id}
-        name={name}
-        {...(src === undefined ? {} : { src })}
-        size={AVATAR_OF_SIZE[size]}
-        decorative
-      />
-    </span>
+    <Avatar
+      id={id}
+      name={name}
+      {...(src === undefined ? {} : { src })}
+      size={AVATAR_OF_SIZE[size]}
+      decorative
+    />
   );
 }
 
-/** An App's bot on GitHub: its avatar once it loads, and its robot until then and where it fails, since a bot's square never holds a letter. */
-function BotFace({ actor, size }: { actor: GitHubActor; size: ActorSize }): React.JSX.Element {
-  const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
-  const [loadedUrl, setLoadedUrl] = useState<string | undefined>(undefined);
-  const sized = pictureAt(actor.avatarUrl, size);
-  const url = sized !== failedUrl ? sized : undefined;
-  const shown = url !== undefined && url === loadedUrl;
-  // Note that the robot stands until the picture has loaded, because a picture on the network may take a while, and goes once it has, so a transparent one shows nothing through.
+/** A square holding a glyph alone, bare or on its tile; an App's bot's avatar stands over its robot once it loads, since a bot's square never holds a letter. */
+function GlyphSquare({
+  name,
+  glyph,
+  size,
+  tiled,
+  src,
+}: {
+  name: string;
+  glyph: ReactNode;
+  size: ActorSize;
+  tiled: boolean;
+  src?: string | undefined;
+}): React.JSX.Element {
   return (
-    <span className="actor-face">
-      {shown ? null : <BotIcon />}
-      {url === undefined ? null : (
-        <img
-          className="actor-picture"
-          src={url}
-          alt=""
-          referrerPolicy="no-referrer"
-          draggable={false}
-          data-loaded={String(shown)}
-          onLoad={() => setLoadedUrl(url)}
-          onError={() => setFailedUrl(url)}
-        />
-      )}
-    </span>
+    <Avatar
+      name={name}
+      {...(src === undefined ? {} : { src })}
+      glyph={glyph}
+      shape={AVATAR_SHAPE.SQUARE}
+      size={AVATAR_OF_SIZE[size]}
+      tiled={tiled}
+      decorative
+    />
   );
+}
+
+/** Someone the window cannot name, by the glyph for why, on the circle the mark outlines. */
+function SomeoneDisc({ glyph, size }: { glyph: ReactNode; size: ActorSize }): React.JSX.Element {
+  return <Avatar name="" glyph={glyph} size={AVATAR_OF_SIZE[size]} decorative />;
 }
 
 /** What stands on an actor's circle or square, at its size. */
-function Face({ actor, size }: { actor: Actor; size: ActorSize }): React.JSX.Element {
+function Face({
+  actor,
+  size,
+  tiled,
+}: {
+  actor: Actor;
+  size: ActorSize;
+  tiled: boolean;
+}): React.JSX.Element {
   switch (actor.kind) {
     case ACTOR_KIND.PERSON:
       return (
         <PersonDisc id={actor.userId} name={actor.name} pictureUrl={actor.pictureUrl} size={size} />
       );
     case ACTOR_KIND.LUKE:
-      return (
-        <span className="actor-face">
-          <WingFace />
-        </span>
-      );
+      return <GlyphSquare name={actorName(actor)} glyph={<WingFace />} size={size} tiled={tiled} />;
     case ACTOR_KIND.AGENT:
       return (
-        <span className="actor-face">
-          <StateGlyph
-            glyph={<AgentMark provider={actor.provider} />}
-            state={GLYPH_OF_STATE[actor.state]}
-          />
-        </span>
+        <GlyphSquare
+          name={actorName(actor)}
+          glyph={
+            <StateGlyph
+              glyph={<AgentMark provider={actor.provider} />}
+              state={GLYPH_OF_STATE[actor.state]}
+            />
+          }
+          size={size}
+          tiled={tiled}
+        />
       );
     case ACTOR_KIND.AUTOMATION:
       return (
-        <span className="actor-face">
-          <StateGlyph glyph={<ClockIcon />} state={GLYPH_OF_STATE[actor.state]} />
-        </span>
+        <GlyphSquare
+          name={actorName(actor)}
+          glyph={<StateGlyph glyph={<ClockIcon />} state={GLYPH_OF_STATE[actor.state]} />}
+          size={size}
+          tiled={tiled}
+        />
       );
     case ACTOR_KIND.GITHUB:
       return actor.bot ? (
-        <BotFace actor={actor} size={size} />
+        <GlyphSquare
+          name={actor.login}
+          glyph={<BotIcon />}
+          size={size}
+          tiled={tiled}
+          src={pictureAt(actor.avatarUrl, size)}
+        />
       ) : (
         <PersonDisc id={actor.login} name={actor.login} pictureUrl={actor.avatarUrl} size={size} />
       );
@@ -226,15 +248,18 @@ function Face({ actor, size }: { actor: Actor; size: ActorSize }): React.JSX.Ele
         );
       }
       return (
-        <span className="actor-face">
-          {actor.reason === SOMEONE_REASON.FORMER ? (
-            <UserRoundXIcon />
-          ) : actor.reason === SOMEONE_REASON.EARLIER ? (
-            <HistoryIcon />
-          ) : (
-            <UserRoundIcon />
-          )}
-        </span>
+        <SomeoneDisc
+          glyph={
+            actor.reason === SOMEONE_REASON.FORMER ? (
+              <UserRoundXIcon />
+            ) : actor.reason === SOMEONE_REASON.EARLIER ? (
+              <HistoryIcon />
+            ) : (
+              <UserRoundIcon />
+            )
+          }
+          size={size}
+        />
       );
   }
 }
@@ -277,7 +302,7 @@ export function ActorMark({
       data-tiled={tiled ? "true" : undefined}
       aria-hidden="true"
     >
-      <Face actor={actor} size={size} />
+      <Face actor={actor} size={size} tiled={tiled} />
     </span>
   );
 }

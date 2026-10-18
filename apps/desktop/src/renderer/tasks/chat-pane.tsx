@@ -9,7 +9,14 @@ import {
   knownBlock,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
-import { TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
+import {
+  AVATAR_SHAPE,
+  AVATAR_SIZE,
+  Avatar,
+  TEXT_BUTTON_TONE,
+  TextButton,
+  WingFace,
+} from "@luke/ui";
 import type { ChatTarget } from "@luke/ui/chat-mention";
 import {
   CHAT_PLACE,
@@ -86,22 +93,26 @@ function threadToggleWords(open: boolean, count: number): string {
 /** What the composer at a channel's foot says it takes. */
 const COMPOSER_HINTS = ["@ mention an agent, Luke, or a teammate", "# link a channel"] as const;
 
-/** The mark a member's lines lead with: an agent's glyph, Luke's initial, a person's initial. */
+/** The mark a member's lines lead with, on a square: an agent's glyph, Luke's face, a person's letter on their hue. */
 export function MemberMark({ who, small }: { who: ChatWho; small?: boolean }): React.JSX.Element {
   const kind = who.member?.kind;
-  const size = small === true ? "small" : "full";
-  if (kind === MEMBER_KIND.AGENT) {
-    return (
-      <span className="chat-mark" data-kind={kind} data-size={size} aria-hidden="true">
-        {/* Note that the mark is the agent's harness at rest, since a line says who wrote it, not where its agent stands now. */}
-        <AgentGlyph agent={who.agent === undefined ? undefined : { model: who.agent.model }} />
-      </span>
-    );
-  }
-  const initial = kind === MEMBER_KIND.LUKE ? "L" : (who.name.at(0)?.toUpperCase() ?? "?");
+  const glyph =
+    kind === MEMBER_KIND.AGENT ? (
+      // Note that the mark is the agent's harness at rest, since a line says who wrote it, not where its agent stands now.
+      <AgentGlyph agent={who.agent === undefined ? undefined : { model: who.agent.model }} />
+    ) : kind === MEMBER_KIND.LUKE ? (
+      <WingFace />
+    ) : undefined;
   return (
-    <span className="chat-mark" data-kind={kind ?? "unknown"} data-size={size} aria-hidden="true">
-      {initial}
+    <span className="chat-mark" data-kind={kind ?? "unknown"}>
+      <Avatar
+        id={who.member?.userId ?? who.member?.id ?? who.name}
+        name={who.name}
+        glyph={glyph}
+        shape={AVATAR_SHAPE.SQUARE}
+        size={small === true ? AVATAR_SIZE.STACK : AVATAR_SIZE.ACCOUNT}
+        decorative
+      />
     </span>
   );
 }
