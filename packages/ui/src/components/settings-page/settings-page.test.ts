@@ -5,18 +5,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { Button } from "../button/button.js";
 import { SettingsRow } from "../settings-row/settings-row.js";
-import {
-  SETTINGS_LINE_KIND,
-  SettingsLine,
-  SettingsSection,
-} from "../settings-section/settings-section.js";
+import { SettingsRowsSkeleton, SettingsSection } from "../settings-section/settings-section.js";
 import { SettingsPage } from "./settings-page.js";
 
 /**
  * settings-page.test.ts -- the page's title is its one `h1`, each headed
  * section under it is a region its `h2` names, what acts on the whole
- * page stands in the page's head beside the title, and the page holds its
- * sections back, busy, while it is pending or a loading line stands in them.
+ * page stands in the page's head beside the title, and a section still
+ * reading leaves the rest of the page drawn, its placeholder alone busy.
  */
 
 const roots: Root[] = [];
@@ -105,45 +101,39 @@ test("a page with no actions holds only its title in its head", async () => {
   expect(head?.querySelector("button")).toBeNull();
 });
 
-/** Whether the page holds its sections back, as it does while a read is out. */
-function heldBack(container: HTMLElement): boolean {
-  return container.querySelector('[aria-busy="true"]') !== null;
-}
-
-/** A page whose one section reads its rows until `read`, a loading line standing in their place. */
+/** A page whose one section reads its rows until `read`, placeholder rows standing in their place, under a section already drawn. */
 function ReadingPage({ read }: { read: boolean }): React.JSX.Element {
   return createElement(SettingsPage, {
     title: "Workspace",
-    children: createElement(SettingsSection, {
-      title: "Members",
-      children: read
-        ? createElement(SettingsRow, {
-            label: "Ada",
-            children: () => createElement(Button, { children: "Remove" }),
-          })
-        : createElement(SettingsLine, {
-            kind: SETTINGS_LINE_KIND.LOADING,
-            children: "Loading the members",
-          }),
-    }),
+    children: [
+      section("General"),
+      createElement(SettingsSection, {
+        key: "Members",
+        title: "Members",
+        children: read
+          ? createElement(SettingsRow, {
+              label: "Ada",
+              children: () => createElement(Button, { children: "Remove" }),
+            })
+          : createElement(SettingsRowsSkeleton, { label: "Loading the members", rows: 2 }),
+      }),
+    ],
   });
 }
 
-test("a loading line holds the page's sections back until its read lands", async () => {
-  const container = await render(createElement(ReadingPage, { read: false }));
-  expect(heldBack(container)).toBe(true);
-  await act(async () => roots[0]?.render(createElement(ReadingPage, { read: true })));
-  expect(heldBack(container)).toBe(false);
-  expect(container.textContent).toContain("Ada");
-});
+/** What the page marks busy, by role: only a placeholder's status region, never the page or its sections. */
+function busy(container: HTMLElement): readonly (string | null)[] {
+  return [...container.querySelectorAll('[aria-busy="true"]')].map((each) =>
+    each.getAttribute("role"),
+  );
+}
 
-test("a pending page holds its sections back, and one with nothing out does not", async () => {
-  const pending = await render(
-    createElement(SettingsPage, { title: "Voice", pending: true, children: section("Microphone") }),
-  );
-  const settled = await render(
-    createElement(SettingsPage, { title: "Voice", children: section("Microphone") }),
-  );
-  expect(heldBack(pending)).toBe(true);
-  expect(heldBack(settled)).toBe(false);
+test("a page draws every section while one still reads, its placeholder alone busy, and the rows land in its place", async () => {
+  const container = await render(createElement(ReadingPage, { read: false }));
+  expect(busy(container)).toEqual(["status"]);
+  expect(container.querySelector('[role="status"]')?.textContent).toBe("Loading the members");
+  expect(container.querySelector("button")?.textContent).toBe("Change");
+  await act(async () => roots[0]?.render(createElement(ReadingPage, { read: true })));
+  expect(busy(container)).toEqual([]);
+  expect(container.textContent).toContain("Ada");
 });

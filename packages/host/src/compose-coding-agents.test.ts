@@ -399,6 +399,21 @@ function fakeService() {
         asked.push(`picture:${agentId}:${pictureId}:${callId ?? ""}`);
         return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
       }),
+    markInboxItemRead: (itemId) =>
+      Effect.sync(() => {
+        asked.push(`inbox-read:${itemId}`);
+        return { id: itemId, unread: false };
+      }),
+    markInboxItemUnread: (itemId) =>
+      Effect.sync(() => {
+        asked.push(`inbox-unread:${itemId}`);
+        return { id: itemId, unread: true };
+      }),
+    markInboxRead: (request) =>
+      Effect.sync(() => {
+        asked.push(`inbox-read-all:${request?.workspaceId ?? ""}`);
+        return { marked: 2 };
+      }),
     messageInbox: (itemId, request) =>
       Effect.sync(() => {
         const files = (request.attachments ?? []).map((file) => file.name).join(",");
@@ -675,6 +690,21 @@ it.effect("each method asks the service once and answers what it said, whole", (
         },
       },
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
+      { id: ITEM.id, unread: true },
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, {
+        itemId: ITEM.id,
+        unread: false,
+      }),
+      { id: ITEM.id, unread: false },
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_ALL, { workspaceId: WORKSPACE_ID }),
+      { marked: 2 },
+    );
 
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
@@ -726,6 +756,9 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
       `inbox-message:${ITEM.id}:Also page on-call.:pager.txt:message-1`,
+      `inbox-unread:${ITEM.id}`,
+      `inbox-read:${ITEM.id}`,
+      `inbox-read-all:${WORKSPACE_ID}`,
       `account-inbox:${INBOX_CURSOR_START}`,
       `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
       `chat-post:${WORKSPACE_ID}:{"readTo":4}`,

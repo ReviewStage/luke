@@ -60,6 +60,7 @@ import { useMinute } from "../tasks/task-time";
 import { CallBar } from "../tasks/tasks-parts";
 import { TerminalCommands, useOpenTerminal } from "../tasks/terminal-commands";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
+import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
 import { OpenHereProvider, openPullRequestsHere, useOpenLink } from "../tasks/use-open-link";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel";
@@ -218,8 +219,16 @@ function TaskInboxTab({
   const now = useMinute();
   const [asked, setAsked] = useState<string | undefined>(undefined);
   const needsYou = useTaskInboxWaitingOnly();
-  const items = [...inbox.board.open, ...inbox.board.settled];
-  const groups = [{ holder: taskHolder(task), items }];
+  const { act } = useAct();
+  const marks = useInboxReadMarks({
+    act,
+    workspaceId: task.workspaceId,
+    groups: [{ holder: taskHolder(task), items: [...inbox.board.open, ...inbox.board.settled] }],
+    // Note that a task's own Inbox offers no Mark all as read.
+    onMarkedAll: () => undefined,
+  });
+  const { groups } = marks;
+  const items = groups.flatMap((group) => group.items);
   const filter = {
     grouping: INBOX_GROUPING.NEWEST,
     waitingOnly: needsYou.waitingOnly,
@@ -242,6 +251,12 @@ function TaskInboxTab({
     choose(listed);
     columns.onOpen(listed.item.id);
   };
+  useReadOnOpen({
+    shown: shown && columns.shown !== INBOX_COLUMNS.LIST ? chosen?.item : undefined,
+    chosen: chosen?.item,
+    active: shown,
+    onMark: marks.onMark,
+  });
   // Note that the column is hidden, though drawn, while the side panel fills the window.
   const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown,
@@ -297,6 +312,7 @@ function TaskInboxTab({
           ) : null
         }
         onChoose={open}
+        onMark={(listed, unread) => marks.onMark(listed.item, unread)}
       />
       {chosen === undefined ? (
         <section

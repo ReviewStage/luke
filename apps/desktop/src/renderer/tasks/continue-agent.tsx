@@ -1,10 +1,9 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
-import { BUTTON_VARIANT, Button, TEXT_TONE, Text } from "@luke/ui";
+import { BANNER_LOOK, Banner, BUTTON_VARIANT, Button, TEXT_TONE, Text } from "@luke/ui";
 import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { ArrowRightIcon } from "lucide-react";
 import { useState } from "react";
-import { BANNER_LOOK, Banner } from "../banner";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts";
 import { useAgentArchive } from "../desktop/agent-archive";
 import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
@@ -217,35 +216,38 @@ export function ContinuedComposerNote({
   };
   return (
     <>
-      <Banner
-        look={BANNER_LOOK.COMPOSER}
-        className="continued-composer"
-        glyph={<ArrowRightIcon aria-hidden="true" />}
-        actions={
-          stop === undefined && agent.archivedAt !== undefined ? undefined : (
-            <>
-              {stop === undefined ? null : (
-                <Button
-                  busy={stopping}
-                  busyLabel={CONTINUED_COPY.STOPPING}
-                  onClick={() => pressStop(stop)}
-                >
-                  {CONTINUED_COPY.STOP}
-                </Button>
-              )}
-              {agent.archivedAt !== undefined ? null : (
-                <Button variant={BUTTON_VARIANT.OUTLINE} onClick={archive.action.onSelect}>
-                  {CONTINUED_COPY.ARCHIVE}
-                </Button>
-              )}
-            </>
-          )
-        }
-      >
-        <Text tone={TEXT_TONE.MUTED}>
-          <ContinuedIn {...doors} />
-        </Text>
-      </Banner>
+      <div className="agent-composer">
+        <div className="continued-composer">
+          <Banner
+            look={BANNER_LOOK.ROW}
+            glyph={<ArrowRightIcon aria-hidden="true" />}
+            actions={
+              stop === undefined && agent.archivedAt !== undefined ? undefined : (
+                <>
+                  {stop === undefined ? null : (
+                    <Button
+                      busy={stopping}
+                      busyLabel={CONTINUED_COPY.STOPPING}
+                      onClick={() => pressStop(stop)}
+                    >
+                      {CONTINUED_COPY.STOP}
+                    </Button>
+                  )}
+                  {agent.archivedAt !== undefined ? null : (
+                    <Button variant={BUTTON_VARIANT.OUTLINE} onClick={archive.action.onSelect}>
+                      {CONTINUED_COPY.ARCHIVE}
+                    </Button>
+                  )}
+                </>
+              )
+            }
+          >
+            <Text tone={TEXT_TONE.MUTED}>
+              <ContinuedIn {...doors} />
+            </Text>
+          </Banner>
+        </div>
+      </div>
       {archive.dialog}
     </>
   );
