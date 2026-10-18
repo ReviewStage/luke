@@ -207,9 +207,14 @@ const LISTING_STATE: AppStateSnapshot = {
   },
 };
 
-/** The words drawn as the Inbox draws them, off any task's page, in the workspace given, main's document being `state`; or, given an element, that element in their place. */
-async function drawn(
-  text: string | ReactElement,
+/** The words drawn as the Inbox draws them, off any task's page, in the workspace given, main's document being `state`. */
+function drawn(text: string, state: AppStateSnapshot = STATE): Promise<HTMLElement> {
+  return drawnElement(createElement(TranscriptWords, { text }), state);
+}
+
+/** An element drawn where the Inbox draws words, in the workspace given, main's document being `state`. */
+async function drawnElement(
+  element: ReactElement,
   state: AppStateSnapshot = STATE,
 ): Promise<HTMLElement> {
   fakeAppBridge({
@@ -224,7 +229,7 @@ async function drawn(
   root = createRoot(container);
   const words = createElement(WordsWorkspace, {
     value: ACME.id,
-    children: typeof text === "string" ? createElement(TranscriptWords, { text }) : text,
+    children: element,
   });
   act(() =>
     root?.render(
@@ -317,7 +322,7 @@ test("a chip of an agent the window lists not reads its task's agents once as it
 
 test("a mention of an agent the window lists not, laid in a message box as an Inbox answer's is, wears its harness, its task's agents read once", async () => {
   // The box stands on another task's page, whose doors know only that task's agents.
-  const container = await drawn(
+  const container = await drawnElement(
     createElement(MentionNodeChip, {
       mention: {
         name: "Prorate seat changes",
@@ -359,7 +364,7 @@ test("a mention of an agent the window lists not, laid in a message box as an In
 
 test("a mention of its own task's agent whose tile the page knows no harness of wears the harness read for it", async () => {
   // The box stands on the agent's own task's page, whose agents are not yet read.
-  const container = await drawn(
+  const container = await drawnElement(
     createElement(MentionNodeChip, {
       mention: {
         name: "Prorate seat changes",
