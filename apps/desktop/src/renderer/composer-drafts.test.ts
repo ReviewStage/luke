@@ -698,12 +698,12 @@ test("an inbox card's note outlasts a reload, its task's row marked meanwhile, a
 });
 
 /** One item of an agent's with no plan, open and asking for an approval, at `revision`. */
-function planlessItem(agentId: string, id: string, revision: number): InboxItem {
+function tasklessItem(agentId: string, id: string, revision: number): InboxItem {
   return { ...approval(revision), id, agentId };
 }
 
 /** An agent's own inbox with no plan, read through its reader as the Inbox page reads it, answering `items`. */
-async function planlessInbox(agentId: string, items: readonly InboxItem[]) {
+async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
   let control: TaskInboxControl | undefined;
   function Probe(): null {
     control = useTaskInbox({
@@ -733,19 +733,19 @@ async function planlessInbox(agentId: string, items: readonly InboxItem[]) {
 }
 
 test("an agent with no plan lets go of its own outdated answers as its inbox is read, and never another agent's", async () => {
-  const mine = planlessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
-  const theirs = planlessItem(BILLING.agent.id, "b1b2c3d4-0000-4000-8000-000000000002", 1);
-  const first = await planlessInbox(INVITES.agent.id, [mine]);
+  const mine = tasklessItem(INVITES.agent.id, "b1b2c3d4-0000-4000-8000-000000000001", 1);
+  const theirs = tasklessItem(BILLING.agent.id, "b1b2c3d4-0000-4000-8000-000000000002", 1);
+  const first = await tasklessInbox(INVITES.agent.id, [mine]);
   act(() =>
     first.onDraft(mine, { choices: [], values: [], note: "Only teammates", attachments: [] }),
   );
-  const other = await planlessInbox(BILLING.agent.id, [theirs]);
+  const other = await tasklessInbox(BILLING.agent.id, [theirs]);
   act(() => other.onDraft(theirs, { choices: [], values: [], note: "Weekly", attachments: [] }));
 
-  await planlessInbox(INVITES.agent.id, [{ ...mine, revision: 2 }]);
-  const reread = await planlessInbox(INVITES.agent.id, [mine]);
+  await tasklessInbox(INVITES.agent.id, [{ ...mine, revision: 2 }]);
+  const reread = await tasklessInbox(INVITES.agent.id, [mine]);
   assert.equal(reread.draftOf(mine).note, "", "the answer its agent outdated is let go");
-  const kept = await planlessInbox(BILLING.agent.id, [theirs]);
+  const kept = await tasklessInbox(BILLING.agent.id, [theirs]);
   assert.equal(kept.draftOf(theirs).note, "Weekly");
 });
 

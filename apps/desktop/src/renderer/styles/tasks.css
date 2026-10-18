@@ -398,36 +398,15 @@
   max-width: 360px;
 }
 
-/* The list an @ opens (`mention-picker.tsx`): a searchable menu whose field
-   is the editor it was typed in, hung under the word's line inside it, its
-   rows grouped by kind under the menu's own headings, each with its kind's
-   glyph and a muted detail, and the keys it hears at its foot. Named with
-   the menu's own class, since the menu's rule opens it under a trigger and
-   is read later. */
+/* The list an @ opens (`mention-picker.tsx`): `@luke/ui`'s combobox list
+   on a searchable menu's surface, whose field is the editor it was typed
+   in, hung under the word's line inside it, under a narrowed kind's crumb
+   and over the keys it hears at its foot. Named with the menu's own class,
+   since the menu's rule opens it under a trigger and is read later. */
 .searchable-menu.mention-menu {
   z-index: 3;
   width: 360px;
   max-width: 100%;
-}
-
-.mention-menu .task-compose-menu-list {
-  max-height: 320px;
-}
-
-/* A row's detail gives way first, and a name too long for the row even
-   then, a pull request's title, is cut as a searchable menu cuts one. */
-.mention-menu .task-compose-menu-name {
-  flex: 0 1 auto;
-}
-
-.mention-row-detail {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.mention-menu .mention-row-detail {
-  flex-shrink: 1000;
 }
 
 /* A narrowed list stands under its kind's crumb, as an MCP server's page
@@ -954,55 +933,6 @@
   }
 }
 
-/* A fold among a transcript's rows, a turn's calls or a replay's summary
-   (transcript-blocks.tsx, replay-card.tsx), in the caption type, and the one
-   quiet line that opens it, or that draws a replay's earlier steps, its
-   glyphs the control icon. */
-.transcript-fold {
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.transcript-fold-line {
-  display: flex;
-  height: var(--luke-control-height);
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  margin: 0;
-  padding: 0 var(--luke-space-4);
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: transparent;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    color var(--duration-quick) var(--spring),
-    background-color var(--duration-quick) var(--spring);
-}
-
-.transcript-fold-line:hover {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-}
-
-.transcript-fold-line > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: none;
-}
-
-/* A turn's calls, opened, in from the line's chevron. */
-.turn-fold-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-  margin-left: var(--luke-space-24);
-  padding-top: var(--luke-space-4);
-}
-
 /* A replay card's head: what it is, the source's chip, and how many steps,
    on one line that gives way at its end. */
 .replay-card-title {
@@ -1014,10 +944,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.replay-summary-body {
-  padding: var(--luke-space-4);
 }
 
 .replay-steps {
@@ -1282,7 +1208,6 @@ button.file-ref:hover .file-ref-path {
    height of a tab's bar whatever it holds, words alone or nothing yet, its
    words in the caption's type. */
 .file-view-bar {
-  container: file-bar / inline-size;
   display: flex;
   min-width: 0;
   min-height: var(--secondary-bar-height);
@@ -1328,13 +1253,10 @@ button.file-ref:hover .file-ref-path {
   white-space: nowrap;
 }
 
-/* The bar's path as breadcrumbs: each crumb a press that lists where it
-   stands, the chevrons between plain. The path gives way in the stylesheet
-   alone (file-breadcrumbs.tsx): every crumb narrows, cut short at its end,
-   the folders first, then the repository, the file's own name last, clipped
-   past the keyboard's ring on a crumb, which stands as tall as the path; and
-   on a narrow bar the folders between the repository and the file's own
-   folder stand as one "…" crumb (below). */
+/* A path drawn in the bar's breadcrumbs' own rows rather than `@luke/ui`'s
+   `Breadcrumbs`, as the Inbox pane's is: each crumb gives way, by its
+   share, down to its first letters and the ellipsis, clipped past the
+   keyboard's ring on a crumb, the last giving way last of all. */
 .file-breadcrumbs {
   position: relative;
   min-width: 0;
@@ -1352,9 +1274,6 @@ button.file-ref:hover .file-ref-path {
   list-style: none;
 }
 
-/* A crumb gives way, by its share, down to its first letters and the
-   ellipsis, its chevron always standing before it: the repository and the
-   folders first, and the file's own name last of all. */
 .file-breadcrumbs li {
   display: flex;
   min-width: calc(2.5em + 12px);
@@ -1362,16 +1281,8 @@ button.file-ref:hover .file-ref-path {
   align-items: center;
 }
 
-.file-breadcrumbs li:is([data-crumb="0"], [data-folded-crumb="all"]) {
-  min-width: 2.5em;
-}
-
-.file-breadcrumbs li[data-crumb="0"] {
-  flex-shrink: 9;
-}
-
-/* Note that the file's share is a whole one, because shares summing to
-   less than one leave the rest of the overflow standing. */
+/* Note that the last crumb's share is a whole one, because shares summing
+   to less than one leave the rest of the overflow standing. */
 .file-breadcrumbs li:last-child {
   flex-shrink: 1;
 }
@@ -1381,76 +1292,6 @@ button.file-ref:hover .file-ref-path {
 .file-breadcrumbs .file-breadcrumb-separator {
   min-width: 0;
   flex-shrink: 0;
-}
-
-/* A "…" stands for crumbs only where the bar is narrow enough to ask for
-   it. */
-.file-breadcrumbs li[data-folded-crumb] {
-  display: none;
-  flex-shrink: 0;
-}
-
-/* A path six folders deep or deeper draws its middle folders as the one
-   "…" on a bar of any width it does not fold further, since their floors
-   alone would push the file's own name out of the bar. */
-@container file-bar (min-width: 300px) {
-  .file-breadcrumbs:has(li[data-crumb="6"][data-folder="true"]) li[data-folded-crumb="middle"] {
-    display: flex;
-  }
-
-  .file-breadcrumbs:has(li[data-crumb="6"][data-folder="true"]) li[data-middle="true"] {
-    display: none;
-  }
-}
-
-/* A bar narrower than 520px draws the folders between the repository and
-   the file's own folder as one "…", which names them in its pill. */
-@container file-bar (max-width: 519px) {
-  .file-breadcrumbs li[data-folded-crumb="middle"] {
-    display: flex;
-  }
-
-  .file-breadcrumbs li[data-middle="true"] {
-    display: none;
-  }
-}
-
-/* A bar narrower than 300px draws the repository and every folder as one
-   "…", the file's own name alone after it. */
-@container file-bar (max-width: 299px) {
-  .file-breadcrumbs li[data-folded-crumb="all"] {
-    display: flex;
-  }
-
-  .file-breadcrumbs li:is([data-folded-crumb="middle"], [data-folder="true"]) {
-    display: none;
-  }
-}
-
-.file-breadcrumb {
-  min-width: 0;
-  padding: var(--luke-space-2) var(--luke-space-4);
-  overflow: hidden;
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.file-breadcrumb:hover,
-.file-breadcrumb[aria-expanded="true"] {
-  background: var(--luke-color-fill-selected);
-  color: var(--luke-color-text);
-}
-
-.file-breadcrumb[aria-current="page"] {
-  color: var(--luke-color-text);
 }
 
 .file-breadcrumb-separator {
@@ -1995,118 +1836,8 @@ button.file-ref:hover .file-ref-path {
   padding: var(--luke-space-8) var(--column-inset) var(--luke-space-12);
 }
 
-/* The row of tabs under the header, as stage-cli's pull request page draws
-   them: each its glyph, its name, and a quiet count, the chosen one
-   underlined on the row's hairline; its words stand at the content inset,
-   as the header's do. */
-.pull-request-tabs {
-  display: flex;
-  flex: none;
-  gap: var(--luke-space-2);
-  padding-inline: var(--column-inset);
-  overflow-x: auto;
-  border-bottom: 1px solid var(--luke-color-border);
-  container: pull-request-tabs / inline-size;
-  align-self: stretch;
-  scrollbar-width: none;
-}
-
-/* Narrower than the three need, a tab other than the chosen one keeps its
-   glyph and its count, its name left to a reader who cannot see it, as a
-   narrow tab of the strip keeps its glyph. */
-@container pull-request-tabs (width < 520px) {
-  .pull-request-tab-button[aria-selected="false"] .pull-request-tab-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
-
-.side-panel-content :is(.pull-request-header, .pull-request-tabs) {
+.side-panel-content .pull-request-header {
   padding-inline: max(var(--column-inset), var(--reading-room));
-}
-
-.pull-request-tab-button {
-  display: inline-flex;
-  height: 34px;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  margin-bottom: -1px;
-  padding: 0 var(--row-inset);
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--luke-color-text-muted);
-  font: inherit;
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
-  white-space: nowrap;
-  transition:
-    color var(--duration-hover) ease,
-    border-color var(--duration-hover) ease;
-}
-
-.pull-request-tab-button:hover {
-  color: var(--luke-color-text);
-}
-
-.pull-request-tab-button[aria-selected="true"] {
-  border-bottom-color: var(--luke-color-text);
-  color: var(--luke-color-text);
-}
-
-.pull-request-tab-icon {
-  display: inline-flex;
-}
-
-.pull-request-tab-icon > svg {
-  width: 14px;
-  height: 14px;
-}
-
-.pull-request-tab-count {
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--luke-weight-regular);
-}
-
-.pull-request-tab-count[data-check-summary] {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-}
-
-.pull-request-tab-glyph {
-  display: inline-flex;
-}
-
-.pull-request-tab-glyph > svg {
-  width: 12px;
-  height: 12px;
-}
-
-.pull-request-tab-count[data-check-summary="failing"] {
-  color: var(--luke-color-danger-text);
-}
-
-.pull-request-tab-count[data-check-summary="pending"] {
-  color: var(--luke-color-attention);
-}
-
-.pull-request-tab-count[data-check-summary="passing"] {
-  color: var(--luke-color-complete);
-}
-
-.pull-request-tab-added {
-  color: var(--luke-color-complete);
-}
-
-.pull-request-tab-removed {
-  color: var(--luke-color-danger-text);
 }
 
 /* The Conversation's filters, Hide resolved and Hide bots, at the end of a
@@ -2148,43 +1879,6 @@ button.file-ref:hover .file-ref-path {
 
 .pull-request-view > .pull-request-page > .pull-request-section:first-child {
   margin-top: var(--luke-space-12);
-}
-
-.pull-request-state {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding: var(--luke-space-2) var(--boxed-inset);
-  border: 1px solid color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
-  border-radius: var(--luke-radius-full);
-  background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);
-  color: var(--pull-request-tone);
-  font-weight: var(--luke-weight-semibold);
-}
-
-/* The pill as the press that opens what may be done from where the pull
-   request stands (`pull-request-writes.tsx`): its tone deepens under the
-   pointer, and a chevron says it opens. */
-.pull-request-state-button {
-  font: inherit;
-  font-weight: var(--luke-weight-semibold);
-  cursor: default;
-}
-
-.pull-request-state-button:not(:disabled):hover,
-.pull-request-state-button[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--pull-request-tone) 20%, transparent);
-}
-
-.pull-request-state-button:disabled {
-  opacity: 0.7;
-}
-
-.pull-request-state-chevron {
-  width: 12px;
-  height: 12px;
-  margin-inline-start: calc(-1 * var(--luke-space-2));
 }
 
 /* Where GitHub did not take the last change: a line under the bar, at the
@@ -3236,7 +2930,7 @@ ol.transcript-list {
   color: var(--luke-color-text);
 }
 
-/* A plan's card (../ai-elements/task.tsx), and what else a transcript opens
+/* A plan's card (../ai-elements/plan.tsx), and what else a transcript opens
    on drawn as one: a card on the raised ground inside a hairline, clipped to
    its corners so the header's hover fill follows them and what is in it
    rings inside itself. The header is the one line a closed card shows, its
@@ -3907,9 +3601,9 @@ button.draft-fork-quote:hover {
   animation: todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
 }
 
-[data-todos-dock][data-disclosure="opening"] > .disclosure-body {
+[data-todos-dock][data-disclosure="opening"] > .luke-disclosure-body {
   animation:
-    disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
+    luke-disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
     todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
 }
 
@@ -3921,9 +3615,9 @@ button.draft-fork-quote:hover {
   animation: todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
 }
 
-[data-todos-dock][data-disclosure="closing"] > .disclosure-body {
+[data-todos-dock][data-disclosure="closing"] > .luke-disclosure-body {
   animation:
-    disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
+    luke-disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
     todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
 }
 
@@ -4197,21 +3891,8 @@ button.skill-chip:hover,
   display: flex;
 }
 
-.agent-composer-actions .agent-composer-more,
-.agent-model-chip .harness-mark {
+.agent-composer-actions .agent-composer-more {
   display: none;
-}
-
-/* Too narrow for the published chips' words: each draws its mark alone,
-   its label and hint still naming it. */
-@container composer (max-width: 519px) {
-  .agent-composer :is(.agent-published-chip, .agent-changes-chip) > .luke-chip {
-    padding: 0 var(--luke-space-8);
-  }
-
-  .agent-composer :is(.agent-published-chip, .agent-changes-chip) .luke-chip-name {
-    display: none;
-  }
 }
 
 /* Too narrow for every press: the ⋯ takes in the Changes chip, the MCP
@@ -4233,21 +3914,6 @@ button.skill-chip:hover,
 
   .agent-composer-actions .agent-composer-more {
     display: inline-flex;
-  }
-}
-
-/* Too narrow for the model's words: the chip draws its harness's mark
-   alone, where it has one, its label and hint still naming the choice. */
-@container composer (max-width: 299px) {
-  .agent-composer .agent-model-chip .harness-mark {
-    display: block;
-  }
-
-  .agent-composer
-    .agent-model-chip
-    .luke-chip:has(.harness-mark)
-    :is(.luke-chip-name, .settings-chevron) {
-    display: none;
   }
 }
 
@@ -5406,15 +5072,11 @@ button.agent-ref:hover .agent-ref-name {
   display: contents;
 }
 
-.agent-published-chip > .luke-chip {
-  font-variant-numeric: tabular-nums;
-}
-
 /* A pull request's colour for where it stands, in GitHub's colours: open in
    the success green, a draft in the muted ink, merged in the merged purple,
-   closed in the danger red. Its mark wears it (`pull-request-mark.tsx`),
-   and so does the chip naming it, as its tint, its edge, and its words;
-   the mark alone turns red once its checks failed. */
+   closed in the danger red. Its mark wears it (`pull-request-mark.tsx`); a
+   chip naming it wears the shared palette's tone for it
+   (`PULL_REQUEST_TONE`); the mark alone turns red once its checks failed. */
 [data-pull-request-state="open"] {
   --pull-request-tone: var(--luke-color-complete);
 }
@@ -5466,26 +5128,6 @@ button.agent-ref:hover .agent-ref-name {
 
 .issue-mark[data-issue-state="not-planned"] {
   color: var(--luke-color-text-subtle);
-}
-
-.agent-published-chip[data-pull-request-state] > .luke-chip {
-  border-color: color-mix(in srgb, var(--pull-request-tone) 35%, transparent);
-  background: color-mix(in srgb, var(--pull-request-tone) 12%, transparent);
-  --luke-chip-ink: var(--pull-request-tone);
-  font-weight: 600;
-}
-
-.agent-published-chip[data-pull-request-state] > .luke-chip:hover,
-.agent-published-chip[data-pull-request-state][data-menu-open="true"] > .luke-chip {
-  background: color-mix(in srgb, var(--pull-request-tone) 22%, transparent);
-  --luke-chip-ink: var(--pull-request-tone);
-}
-
-/* A branch reads in the code face, as a terminal would print it. */
-.agent-published-chip[data-branch] .luke-chip-name {
-  max-width: 180px;
-  font-family: var(--luke-font-mono);
-  font-size: 11.5px; /* off-scale: a branch's name in the code face */
 }
 
 /* The pull request's row at a finished transcript's end, a card of one row

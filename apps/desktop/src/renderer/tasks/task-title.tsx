@@ -10,7 +10,7 @@
  */
 
 /** The title over a plan's text, drawn as a `#` heading. */
-export function PlanTitle({ name }: { name: string }): React.JSX.Element {
+export function TaskTitle({ name }: { name: string }): React.JSX.Element {
   return (
     <div className="markdown task-title">
       <p className="markdown-heading" data-level="1">

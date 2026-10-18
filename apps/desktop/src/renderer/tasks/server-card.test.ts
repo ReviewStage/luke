@@ -41,7 +41,7 @@ import { markdownHtmlParserLanded } from "#testing/markdown";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { AgentTab } from "./agent-tab";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**
@@ -188,7 +188,7 @@ const TRANSCRIPT: readonly CodingAgentMessage[] = [
 ];
 
 /** A plan's page, which an agent's box takes mentions on. */
-const PAGE: PlanMentionsValue = {
+const PAGE: TaskMentionsValue = {
   taskId: TASK_ID,
   taskName: "Backlog",
   workspace: PLACE.workspace,
@@ -210,7 +210,7 @@ async function drawn(node: ReactNode): Promise<HTMLElement> {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(AtomRegistry.make(), createElement(PlanMentions, { value: PAGE, children: node })),
+      onRegistry(AtomRegistry.make(), createElement(TaskMentions, { value: PAGE, children: node })),
     ),
   );
   await settle();

@@ -19,7 +19,7 @@ const BACKFILL = "20261015211326_plan_pin_per_account";
 
 const PINNED_AT = "2026-10-01T09:30:00.000Z";
 
-const PINNED_PLAN = "00000000-0000-4000-8000-000000000001";
+const PINNED_TASK = "00000000-0000-4000-8000-000000000001";
 
 /** A migrations folder holding every migration named before the backfill, and none after. */
 const foldersBeforeBackfill = Effect.gen(function* () {
@@ -51,7 +51,7 @@ it.effect(
           values ('dean-member', 'team', 'dean', 'owner', now()),
                  ('charles-member', 'team', 'charles', 'member', now())`;
         yield* sql`insert into plan (id, user_id, organization_id, name, document, pinned_at)
-          values (${PINNED_PLAN}, 'charles', 'team', 'Pinned', '', ${PINNED_AT}),
+          values (${PINNED_TASK}, 'charles', 'team', 'Pinned', '', ${PINNED_AT}),
                  ('00000000-0000-4000-8000-000000000002', 'dean', 'team', 'Unpinned', '', null)`;
 
         yield* runWebMigrations();
@@ -72,7 +72,7 @@ it.effect(
           [
             {
               userId: "charles",
-              planId: PINNED_PLAN,
+              planId: PINNED_TASK,
               pinnedAt: PINNED_AT,
             },
           ],

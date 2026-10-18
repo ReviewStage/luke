@@ -42,7 +42,7 @@ import { OpenLinkProvider } from "./use-open-link";
  * not add up is drawn whole as today. Synthetic throughout.
  */
 
-const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 /** When the new agent's first message was sent. */
@@ -51,7 +51,7 @@ const FORKED_AT = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 function summary(overrides: Partial<CodingAgentSummary> & { id: string }): CodingAgentSummary {
   return {
-    planId: PLAN_ID,
+    planId: TASK_ID,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title: null,
@@ -220,6 +220,15 @@ function longReplay(count: number, overrides: Partial<Replay> = {}): Replay {
   return replay({ steps, totalSteps: count, ...overrides });
 }
 
+/** The button that draws the page of steps before the ones drawn, by its words, while one stands. */
+function earlierRow(container: Element): HTMLButtonElement | null {
+  return (
+    [...container.querySelectorAll("button")].find((button) =>
+      (button.textContent ?? "").endsWith("earlier steps"),
+    ) ?? null
+  );
+}
+
 /** The steps the opened card draws, by their words. */
 function drawnSteps(container: Element): string[] {
   return [...container.querySelectorAll("[data-replay-step]")].map((step) =>
@@ -279,7 +288,7 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
 
-  const body = container.querySelector("[data-replay-card] .disclosure-body");
+  const body = container.querySelector("[data-replay-card] .luke-disclosure-body");
   assert.match(
     body?.textContent ?? "",
     /What this agent was handed of Wire the start from field's work/u,
@@ -333,12 +342,12 @@ test("a fork trimmed of its earliest steps says Forked and its steps of how many
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
   assert.match(
-    container.querySelector("[data-replay-card] .disclosure-body")?.textContent ?? "",
+    container.querySelector("[data-replay-card] .luke-disclosure-body")?.textContent ?? "",
     /209 earlier steps were left out to keep the replay within its size limit\./u,
   );
   press(container.querySelector("[data-replay-open]"));
   assert.deepEqual(places, [
-    { kind: LINK_PLACE.MESSAGE, planId: PLAN_ID, agentId: SOURCE.id, messageId: FORKED_AT },
+    { kind: LINK_PLACE.MESSAGE, planId: TASK_ID, agentId: SOURCE.id, messageId: FORKED_AT },
   ]);
 });
 
@@ -400,7 +409,7 @@ test("on an agent's own page, which lists no source, the card names the source a
   assert.ok((mark?.childElementCount ?? 0) > 0);
   press(container.querySelector("[data-replay-card] > summary .actor-ref"));
   assert.deepEqual(opened, []);
-  assert.deepEqual(places, [{ kind: LINK_PLACE.AGENT, planId: PLAN_ID, agentId: SOURCE.id }]);
+  assert.deepEqual(places, [{ kind: LINK_PLACE.AGENT, planId: TASK_ID, agentId: SOURCE.id }]);
 });
 
 test("a replay holding Luke's summary of the oldest steps opens on one folded row naming it as his, which opens onto the summary", async () => {
@@ -426,7 +435,7 @@ test("a replay holding Luke's summary of the oldest steps opens on one folded ro
   assert.equal(row?.textContent, "Summary of 174 earlier steps (written by Luke)");
   // The summary stands for the steps it summarized, so none is said to be left out.
   assert.doesNotMatch(
-    container.querySelector("[data-replay-card] .disclosure-body")?.textContent ?? "",
+    container.querySelector("[data-replay-card] .luke-disclosure-body")?.textContent ?? "",
     /left out/u,
   );
   // It stands ahead of the steps.
@@ -481,7 +490,7 @@ test("a replayed line is named under its sender as a transcript names one: Luke,
     ["", "Charles Pan"],
   ]);
   assert.doesNotMatch(
-    container.querySelector("[data-replay-card] .disclosure-body")?.textContent ?? "",
+    container.querySelector("[data-replay-card] .luke-disclosure-body")?.textContent ?? "",
     /\bYou\b/u,
   );
 });
@@ -546,7 +555,7 @@ test("opened, a long replay draws its newest twenty steps under a row that draws
   const numbered = (from: number, to: number) =>
     Array.from({ length: to - from + 1 }, (_, at) => `Step ${from + at}.`);
   assert.deepEqual(drawnSteps(container), numbered(26, 45));
-  const row = () => container.querySelector("[data-replay-earlier]");
+  const row = () => earlierRow(container);
   assert.equal(row()?.textContent, "Show 20 of 25 earlier steps");
   // The row stands over the steps it draws more of.
   const first = container.querySelector("[data-replay-step]");
@@ -564,7 +573,7 @@ test("opened, a long replay draws its newest twenty steps under a row that draws
   assert.equal(document.activeElement, container.querySelector("[data-replay-steps]"));
   // The replay kept every step, so none is said to be left out.
   assert.doesNotMatch(
-    container.querySelector("[data-replay-card] .disclosure-body")?.textContent ?? "",
+    container.querySelector("[data-replay-card] .luke-disclosure-body")?.textContent ?? "",
     /left out/u,
   );
 });
@@ -588,12 +597,12 @@ test("Luke's summary and the steps left out stand over the earlier-steps row, wh
   assert.equal(headOf(container), "Continued from Wire the start from field · 30 of 140 steps");
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
-  const body = container.querySelector("[data-replay-card] .disclosure-body");
+  const body = container.querySelector("[data-replay-card] .luke-disclosure-body");
   const summaryRow = body?.querySelector("[data-replay-summary]");
   const left = [...(body?.querySelectorAll("p") ?? [])].find((each) =>
     /left out/u.test(each.textContent ?? ""),
   );
-  const row = body?.querySelector("[data-replay-earlier]");
+  const row = body === null || body === undefined ? undefined : earlierRow(body);
   const step = body?.querySelector("[data-replay-step]");
   assert.equal(
     left?.textContent,

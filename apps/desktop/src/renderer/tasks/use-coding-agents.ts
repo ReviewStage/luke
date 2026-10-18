@@ -319,7 +319,7 @@ export interface AgentDraft {
 type DraftChoices = Pick<AgentDraft, "id" | "choice" | "disabledServers" | "fork">;
 
 /** The plan's draft agent: the key and chips held, with the words and files kept for it, or the words kept under their own key where nothing is held, as after a relaunch. */
-function planDraft(
+function taskDraft(
   held: DraftChoices | undefined,
   kept: KeptDraft<NewAgentPlace> | undefined,
 ): AgentDraft | undefined {
@@ -482,7 +482,7 @@ export function useCodingAgents(input: {
   const heldDraft = taskId === undefined ? undefined : drafts.get(taskId);
   const keptDraft = useNewAgentDraft(taskId, heldDraft?.id);
   const writer = useDraftWriter();
-  const draft = taskId === undefined ? undefined : planDraft(heldDraft, keptDraft);
+  const draft = taskId === undefined ? undefined : taskDraft(heldDraft, keptDraft);
   const [note, setNote] = useState<{ planId: string; note: Failure } | undefined>(undefined);
   const [reads, setReads] = useState(0);
   const pending = useRef<PendingStart | undefined>(undefined);

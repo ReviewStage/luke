@@ -483,6 +483,14 @@ function answerHead(page: HTMLElement): string | null {
   );
 }
 
+/** Opens the fold holding what a settled item offered, by pressing its line. */
+function openOffered(within: ParentNode): void {
+  const line =
+    within.querySelector<HTMLElement>("[data-inbox-offered] > summary") ??
+    assert.fail("what was offered is folded");
+  act(() => line.click());
+}
+
 test("a settled choice folds what its agent offered to one line saying who picked which, which still holds every option with the pick marked, then the developer's answer as their comment: their pick as a chip over their note, under a line saying when and that it reached the agent", async () => {
   const { page } = mount();
   await settle();
@@ -499,6 +507,7 @@ test("a settled choice folds what its agent offered to one line saying who picke
     offered.querySelector("summary")?.textContent,
     "2 options · you picked Retry 3 times over an hour",
   );
+  act(() => offered.querySelector("summary")?.click());
   assert.deepEqual(
     [...offered.querySelectorAll<HTMLElement>("li.inbox-option")].map((option) => [
       option.dataset.picked,
@@ -643,6 +652,7 @@ test("a settled choice whose pick is not the one recommended marks each apart: t
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
+  openOffered(page);
 
   assert.deepEqual(optionHeads(page, "li.inbox-option"), [
     ["Retry 3 times over an hour", "Recommended"],
@@ -666,6 +676,7 @@ test("a teammate's answer names them by their disc and name, beside their pick a
 
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
+  openOffered(pane);
   const picked = pane.querySelector(".inbox-picked") ?? assert.fail("the pick is marked");
   assert.equal(wordsOf(picked), "Charles Pan’s pick");
   assert.equal(picked.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
@@ -1168,6 +1179,38 @@ test("an Inbox with nothing in it stands its empty state in the pane beside the 
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.equal(emptyStateIn(page, ".inbox-tasks"), "Nothing needs you");
+});
+
+test("while its plans are first read, the list stands placeholder rows in its items' place, saying to a reader that the inbox is being read, with no row to press and no ring; once the reads land, the items stand where they stood", async () => {
+  const reads = new Map([
+    [BILLING.id, pending()],
+    [INVITES.id, pending()],
+  ]);
+  startRead = (taskId) => reads.get(taskId)?.promise;
+  const { page } = mount();
+  await settle();
+  const list = page.querySelector<HTMLElement>(".inbox-tasks");
+  assert.ok(list, "the list is drawn");
+  const wait = list.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
+  assert.equal(wait?.textContent, "Reading your inbox…");
+  assert.ok(
+    (wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0,
+    "placeholder rows stand in the items' place",
+  );
+  assert.deepEqual(listed(page), []);
+  assert.equal(list.querySelector(".luke-spinner"), null, "no ring stands in the list's corner");
+
+  reads.get(BILLING.id)?.settle({ items: [THRESHOLD, RETRY], cursor: "1" });
+  reads.get(INVITES.id)?.settle({ items: [EXPIRY], cursor: "1" });
+  await settle();
+  assert.equal(list.querySelector('[aria-busy="true"]'), null);
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "How is a failed email retried?",
+    "▸ *Alert at 80%?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
 });
 
 test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape does not leave the Inbox", async () => {
@@ -1769,7 +1812,7 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
 
   typeInComposer(pane, "See @roll");
   await settle();
-  const offered = [...pane.querySelectorAll(".mention-menu .task-compose-menu-name")].map(
+  const offered = [...pane.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
     (name) => name.textContent,
   );
   pressInComposer(pane, "Enter");

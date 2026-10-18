@@ -46,6 +46,12 @@ import {
   Skeleton,
   SkeletonRegion,
   Switch,
+  TAB_COUNT_TONE,
+  TABS_INSET,
+  TabCount,
+  type TabCountTone,
+  type TabItem,
+  Tabs,
   useMenu,
 } from "@luke/ui";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
@@ -1125,35 +1131,6 @@ function HeaderTitle({
   );
 }
 
-/** What a tab of the row says beside its name: a quiet count, a count in the checks' colour, or the lines a pull request adds and removes. */
-const TAB_COUNT = {
-  COUNT: "count",
-  CHECKS: "checks",
-  LINES: "lines",
-} as const;
-
-type TabCount =
-  | { readonly kind: typeof TAB_COUNT.COUNT; readonly count: number }
-  | {
-      readonly kind: typeof TAB_COUNT.CHECKS;
-      /** How many stand as its glyph says, once the checks are read; none before. */
-      readonly count: number | undefined;
-      readonly summary: CheckSummary;
-    }
-  | {
-      readonly kind: typeof TAB_COUNT.LINES;
-      readonly additions: number;
-      readonly deletions: number;
-    };
-
-/** One tab of the row: the view it shows, its glyph, its name, and what it counts. */
-interface TabEntry {
-  readonly view: PullRequestView;
-  readonly icon: ReactNode;
-  readonly label: string;
-  readonly count: TabCount | undefined;
-}
-
 /** How many checks the Checks tab's glyph counts: those that failed beside a failure, those still running beside a wait, and every one where all passed. */
 function summaryCountOf(checks: readonly PullRequestCheck[], summary: CheckSummary): number {
   if (summary === CHECK_SUMMARY.FAILING) {
@@ -1181,94 +1158,35 @@ const SUMMARY_WORDS = {
   [CHECK_SUMMARY.NONE]: "none",
 } as const satisfies Record<CheckSummary, string>;
 
-/** What a tab counts, drawn quiet beside its name: on Checks, how they went in its colour from the first frame, and how many once read. */
-function TabCountWords({ count }: { count: TabCount }): React.JSX.Element | null {
-  if (count.kind === TAB_COUNT.CHECKS) {
-    const glyph = SUMMARY_GLYPHS[count.summary];
-    if (glyph === null && count.count === undefined) return null;
-    return (
-      <span className="pull-request-tab-count" data-check-summary={count.summary}>
-        {glyph === null ? null : (
-          <span
-            className="pull-request-tab-glyph"
-            role="img"
-            aria-label={SUMMARY_WORDS[count.summary]}
-          >
-            {glyph}
-          </span>
-        )}
-        {count.count?.toLocaleString()}
-      </span>
-    );
-  }
-  if (count.kind === TAB_COUNT.LINES) {
-    return (
-      <span className="pull-request-tab-count">
-        <span className="pull-request-tab-added">+{count.additions.toLocaleString()}</span>{" "}
-        <span className="pull-request-tab-removed">−{count.deletions.toLocaleString()}</span>
-      </span>
-    );
-  }
-  return <span className="pull-request-tab-count">{count.count.toLocaleString()}</span>;
+/** The tone the Checks tab's count takes for how its checks went, as its glyph does. */
+const SUMMARY_TONES = {
+  [CHECK_SUMMARY.FAILING]: TAB_COUNT_TONE.DANGER,
+  [CHECK_SUMMARY.PENDING]: TAB_COUNT_TONE.ATTENTION,
+  [CHECK_SUMMARY.PASSING]: TAB_COUNT_TONE.COMPLETE,
+  [CHECK_SUMMARY.NONE]: TAB_COUNT_TONE.QUIET,
+} as const satisfies Record<CheckSummary, TabCountTone>;
+
+/** What the Checks tab counts: how they went in its colour from the first frame, and how many once read; nothing where neither stands. */
+function checksCount(summary: CheckSummary, count: number | undefined): ReactNode {
+  const glyph = SUMMARY_GLYPHS[summary];
+  if (glyph === null && count === undefined) return undefined;
+  return (
+    <TabCount
+      tone={SUMMARY_TONES[summary]}
+      {...(glyph === null ? {} : { glyph, glyphLabel: SUMMARY_WORDS[summary] })}
+    >
+      {count?.toLocaleString()}
+    </TabCount>
+  );
 }
 
-/**
- * The row of tabs under the fixed header, as stage-cli's pull request page
- * draws them: each its glyph, its name, and a quiet count, the chosen one
- * underlined. The arrows move between them, as a tab strip's do.
- */
-function PullRequestTabs({
-  tabs,
-  view,
-  onView,
-  ids,
-}: {
-  tabs: readonly TabEntry[];
-  view: PullRequestView;
-  onView: (view: PullRequestView) => void;
-  /** The id of each tab and of the panel it controls, by view. */
-  ids: (view: PullRequestView) => { readonly tab: string; readonly panel: string };
-}): React.JSX.Element {
-  const step = (by: number) => {
-    const at = tabs.findIndex((tab) => tab.view === view);
-    const next = tabs[(at + by + tabs.length) % tabs.length];
-    if (next === undefined) return;
-    onView(next.view);
-    document.getElementById(ids(next.view).tab)?.focus();
-  };
+/** What the Files changed tab counts: the lines a pull request adds and removes, each in its colour. */
+function linesCount(additions: number, deletions: number): ReactNode {
   return (
-    <div
-      className="pull-request-tabs"
-      role="tablist"
-      aria-label="Pull request"
-      onKeyDown={(event) => {
-        if (event.key === "ArrowRight") step(1);
-        if (event.key === "ArrowLeft") step(-1);
-      }}
-    >
-      {tabs.map((tab) => {
-        const selected = tab.view === view;
-        return (
-          <button
-            key={tab.view}
-            id={ids(tab.view).tab}
-            type="button"
-            role="tab"
-            className="pull-request-tab-button"
-            aria-selected={selected}
-            aria-controls={ids(tab.view).panel}
-            tabIndex={selected ? 0 : -1}
-            onClick={() => onView(tab.view)}
-          >
-            <span className="pull-request-tab-icon" aria-hidden="true">
-              {tab.icon}
-            </span>
-            <span className="pull-request-tab-label">{tab.label}</span>
-            {tab.count === undefined ? null : <TabCountWords count={tab.count} />}
-          </button>
-        );
-      })}
-    </div>
+    <>
+      <TabCount tone={TAB_COUNT_TONE.COMPLETE}>{`+${additions.toLocaleString()}`}</TabCount>{" "}
+      <TabCount tone={TAB_COUNT_TONE.DANGER}>{`−${deletions.toLocaleString()}`}</TabCount>
+    </>
   );
 }
 
@@ -1291,44 +1209,35 @@ function tabsOf(
   parts: OverviewParts,
   published: CodingAgentPullRequest | undefined,
   bar: BarPullRequest | undefined,
-): readonly TabEntry[] {
+): readonly TabItem<PullRequestView>[] {
   const conversation = landed(parts.conversation);
   const checks = landed(parts.checks);
   return [
     {
-      view: PULL_REQUEST_VIEW.CONVERSATION,
+      value: PULL_REQUEST_VIEW.CONVERSATION,
       icon: <MessagesSquareIcon />,
       label: "Conversation",
       count:
-        conversation === undefined
-          ? undefined
-          : { kind: TAB_COUNT.COUNT, count: conversationCount(conversation) },
+        conversation === undefined ? undefined : conversationCount(conversation).toLocaleString(),
     },
     {
-      view: PULL_REQUEST_VIEW.CHECKS,
+      value: PULL_REQUEST_VIEW.CHECKS,
       icon: <CircleCheckIcon />,
       label: "Checks",
       count:
         bar === undefined
           ? undefined
-          : {
-              kind: TAB_COUNT.CHECKS,
-              count: checks === undefined ? undefined : summaryCountOf(checks.checks, bar.checks),
-              summary: bar.checks,
-            },
+          : checksCount(
+              bar.checks,
+              checks === undefined ? undefined : summaryCountOf(checks.checks, bar.checks),
+            ),
     },
     {
-      view: PULL_REQUEST_VIEW.FILES,
+      value: PULL_REQUEST_VIEW.FILES,
       icon: <FileDiffIcon />,
       label: "Files changed",
       count:
-        published === undefined
-          ? undefined
-          : {
-              kind: TAB_COUNT.LINES,
-              additions: published.additions,
-              deletions: published.deletions,
-            },
+        published === undefined ? undefined : linesCount(published.additions, published.deletions),
     },
   ];
 }
@@ -1564,11 +1473,13 @@ export function AgentPullRequestTab({
               <HeaderTitle title={title} />
               <PullRequestHead parts={parts} now={now} />
             </header>
-            <PullRequestTabs
+            <Tabs<PullRequestView>
+              label="Pull request"
               tabs={tabsOf(parts, published, bar)}
-              view={view}
-              onView={onView}
+              value={view}
+              onChange={onView}
               ids={ids}
+              inset={TABS_INSET.READING}
             />
             <div
               className="pull-request-view"

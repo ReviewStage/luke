@@ -4,6 +4,7 @@ import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/feat
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  ArrowUpRightIcon,
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
@@ -24,7 +25,6 @@ import { type Actor, personActor, teammateCreator } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import {
   ArrowRightIcon,
-  ArrowUpRightIcon,
   AudioLinesIcon,
   BlocksIcon,
   FactoryIcon,
@@ -167,14 +167,14 @@ function useFactoryBoard(tasks: TasksControl, now: number): FactoryRead {
   const listed = tasks.listed.tasks;
   const questions = useWaitingItems(tasks);
   // Note that main's own count stands in only for a plan the Inbox has not read as it stands now, because such a read is newer than main's, and an item it shows answered must not come back; a plan changed since its last read, its reread out or failed, keeps main's count.
-  const { items, readPlans } = questions;
+  const { items, readTasks } = questions;
   const waiting = useMemo(
     () =>
       factoryWaiting(
         items,
-        tasks.inbox.filter((each) => !readPlans.has(each.taskId)),
+        tasks.inbox.filter((each) => !readTasks.has(each.taskId)),
       ),
-    [items, readPlans, tasks.inbox],
+    [items, readTasks, tasks.inbox],
   );
   const oneOff = tasks.listedAgents.standing;
   // Note that an agent with no task keeps main's count on the same terms as a task does, until its own read is current.
@@ -334,7 +334,7 @@ function FactoryRow({
               {words}
               {external ? (
                 <span className="factory-external">
-                  <ArrowUpRightIcon className="text-link-out" aria-hidden="true" />
+                  <ArrowUpRightIcon />
                   <span className="visually-hidden">(opens on GitHub)</span>
                 </span>
               ) : null}

@@ -4,6 +4,7 @@ import { ATTACHMENT_CHIPS_EXAMPLE } from "./examples/attachment-chips";
 import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { AVATARS_EXAMPLE } from "./examples/avatars";
 import { BADGES_EXAMPLE } from "./examples/badges";
+import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CARDS_EXAMPLE } from "./examples/cards";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
@@ -14,6 +15,7 @@ import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
 import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
+import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
 import { FOLDING_BUTTONS_EXAMPLE } from "./examples/folding-buttons";
@@ -37,7 +39,9 @@ import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
+import { TABS_EXAMPLE } from "./examples/tabs";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
+import { TEXT_LINKS_EXAMPLE } from "./examples/text-links";
 import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
 
@@ -64,6 +68,7 @@ export const EXAMPLES: readonly Example[] = [
   ATTACHMENT_CHIPS_EXAMPLE,
   AVATARS_EXAMPLE,
   BADGES_EXAMPLE,
+  BREADCRUMBS_EXAMPLE,
   BUTTONS_EXAMPLE,
   CARDS_EXAMPLE,
   CHIPS_EXAMPLE,
@@ -73,6 +78,7 @@ export const EXAMPLES: readonly Example[] = [
   DATA_TABLE_EXAMPLE,
   DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,
+  DISCLOSURES_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
   ERROR_STATES_EXAMPLE,
   FOLDING_BUTTONS_EXAMPLE,
@@ -81,9 +87,11 @@ export const EXAMPLES: readonly Example[] = [
   HOVER_CARDS_EXAMPLE,
   INLINE_EDITS_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
+  TEXT_LINKS_EXAMPLE,
   TOOLTIPS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
+  TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
   PAGINATION_EXAMPLE,

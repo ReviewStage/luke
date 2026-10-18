@@ -16,6 +16,7 @@ import {
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
+  CHIP_WIDTH,
   ChevronRightIcon,
   Chip,
   GearIcon,
@@ -765,7 +766,14 @@ export function AgentServersButton({
           </Tooltip>
         </span>
       ) : (
-        <Chip look={CHIP_LOOK.FIELD} chevron aria-label={SERVERS_LABEL} {...press}>
+        // A face is a form's field, at least the column its pickers share.
+        <Chip
+          look={CHIP_LOOK.FIELD}
+          width={CHIP_WIDTH.MIN_FIELD}
+          chevron
+          aria-label={SERVERS_LABEL}
+          {...press}
+        >
           {face}
         </Chip>
       )}

@@ -202,7 +202,7 @@ function ListRows(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="list-row-narrow" title="Long words in a narrow column">
         <div className="catalog-narrow">
-          <List label="Plans">
+          <List label="Tasks">
             <ListRow
               title="Migrate the acme-corporation-engineering-platform workspace"
               description="Last edited by someone with a very long name indeed"

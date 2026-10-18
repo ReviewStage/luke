@@ -19,13 +19,13 @@ import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { agentTabLabel } from "../tasks/coding-agent-model";
-import {
-  PlanMentions,
-  type PlanMentionsValue,
-  planlessMentions,
-  useMentionAgentsReader,
-} from "../tasks/plan-mentions";
 import { SkillFiles } from "../tasks/skill-chip";
+import {
+  TaskMentions,
+  type TaskMentionsValue,
+  tasklessMentions,
+  useMentionAgentsReader,
+} from "../tasks/task-mentions";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { useCodingAgents } from "../tasks/use-coding-agents";
 import { WordsWorkspace } from "../tasks/use-link-standing";
@@ -61,7 +61,7 @@ import { useTabViews } from "./strip-tabs";
  * its id (`use-coding-agents.ts`'s `agentId`). ⌘F finds in it as in a
  * plan's column. An `@` in its box offers its repository's files, its
  * skills, and the servers, read through its workspace since no plan names
- * them (`planlessMentions`); a skill a message names is its chip, which
+ * them (`tasklessMentions`); a skill a message names is its chip, which
  * opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
  * File tab reads a repository no plan names; and a dictation listens for its repository and
  * its title. A row of its inbox calls opens the window's Inbox, since the
@@ -132,10 +132,10 @@ function AgentMentions({
   value,
   children,
 }: {
-  value: PlanMentionsValue | undefined;
+  value: TaskMentionsValue | undefined;
   children: React.ReactNode;
 }): React.ReactNode {
-  return value === undefined ? children : <PlanMentions value={value}>{children}</PlanMentions>;
+  return value === undefined ? children : <TaskMentions value={value}>{children}</TaskMentions>;
 }
 
 /**
@@ -298,7 +298,7 @@ export function DesktopAgentPage({
   const mentions =
     workspaceId === undefined || agentRepository === undefined
       ? undefined
-      : planlessMentions(
+      : tasklessMentions(
           { workspace: listed?.slug ?? workspaceId, workspaceId, repository: agentRepository },
           tasks.onShowMention,
           readMentionAgents,
