@@ -103,6 +103,21 @@ type WriteNote =
   | { readonly kind: typeof WRITE_NOTE.SIGN_IN }
   | { readonly kind: typeof WRITE_NOTE.WORDS; readonly words: string };
 
+/** How a change went, for a press that waits on it, such as a question's answer: made, or not, in the words the line says why. */
+type WriteOutcome = { readonly done: true } | { readonly done: false; readonly words: string };
+
+/** What a press sent while another change is out is told: it was not sent. */
+const NOT_SENT: WriteOutcome = { done: false, words: "Another change is on its way to GitHub." };
+
+/** How an answer went, in the words its line says where GitHub did not make the change. */
+function outcomeOf(note: WriteNote | undefined): WriteOutcome {
+  if (note === undefined) return { done: true };
+  return {
+    done: false,
+    words: note.kind === WRITE_NOTE.SIGN_IN ? WRITE_WORDS.SIGN_IN : note.words,
+  };
+}
+
 /** The tab's changes: the one out, if any, what the last one left to say, and the presses. */
 export interface PullRequestWrites {
   /** The change out now; none while nothing is. */
@@ -113,7 +128,7 @@ export interface PullRequestWrites {
    * sent it can let go of what it held, and what it answers settles once
    * GitHub answered and what it said is drawn, as a merge's question waits.
    */
-  readonly write: (request: PullRequestActionRequest, onDone?: () => void) => Promise<void>;
+  readonly write: (request: PullRequestActionRequest, onDone?: () => void) => Promise<WriteOutcome>;
   readonly dismiss: () => void;
 }
 
@@ -144,7 +159,7 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
   const out = useRef(false);
   const write = useCallback(
     (request: PullRequestActionRequest, onDone?: () => void) => {
-      if (out.current) return Promise.resolve();
+      if (out.current) return Promise.resolve(NOT_SENT);
       out.current = true;
       setPending(request.action);
       setNote(undefined);
@@ -157,12 +172,14 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
         .then((answer) => {
           out.current = false;
           setPending(undefined);
-          setNote(noteOf(answer));
+          const note = noteOf(answer);
+          setNote(note);
           if (!("failure" in answer) && answer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {
             onDone?.();
           }
           // Note that a refusal may still have moved the pull request, so every answer from GitHub reads again.
           if (!("failure" in answer)) onWritten();
+          return outcomeOf(note);
         });
     },
     [act, agentId, onWritten],

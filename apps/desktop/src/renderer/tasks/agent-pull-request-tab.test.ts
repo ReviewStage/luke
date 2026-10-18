@@ -2696,8 +2696,11 @@ const INVITE_FILE = {
   patch: thread().diffHunk.replace("@@ -8,6 +8,7 @@", "@@ -8,5 +8,6 @@"),
 };
 
-/** The tab over that one file, read at `READ_HEAD`, its conversation holding the member's pending review as given, and how many times the changes were read. */
-async function drawCommentable(pendingReview?: { readonly comments: number } | null) {
+/** The tab over that one file, read at `READ_HEAD`, its conversation holding the member's pending review as given; a read of the changes after the first answers `reread` in its place where one is given. */
+async function drawCommentable(
+  pendingReview?: { readonly comments: number } | null,
+  reread: typeof INVITE_FILE = INVITE_FILE,
+) {
   const read = { changes: 0 };
   const tab = await draw(
     controlAnswering(
@@ -2714,14 +2717,19 @@ async function drawCommentable(pendingReview?: { readonly comments: number } | n
       () => {
         read.changes += 1;
         return Promise.resolve({
-          pullRequest: { url: PAGE, headSha: READ_HEAD, truncated: false, files: [INVITE_FILE] },
+          pullRequest: {
+            url: PAGE,
+            headSha: READ_HEAD,
+            truncated: false,
+            files: [read.changes === 1 ? INVITE_FILE : reread],
+          },
         });
       },
     ),
   );
   await act(async () => option(tab, "Files changed").click());
   await settle();
-  return { tab, read };
+  return { tab };
 }
 
 /** Presses the gutter's + on the lines given of the file, as the diff bundle tells the view, and the comment it opened. */
@@ -2862,12 +2870,15 @@ test("a member holding a pending review adds a comment to it and nothing else, a
   );
 });
 
-test("a comment GitHub refuses says so under it in GitHub's own words, its words kept, beside Refresh changes, which reads the files again", async () => {
+test("a comment GitHub refuses says so under it in GitHub's own words, its words kept, beside Refresh changes, which draws the files as read again", async () => {
   changeAnswer = {
     outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
     words: "Pull request review thread line must be part of the diff",
   };
-  const { read } = await drawCommentable();
+  await drawCommentable(undefined, { ...INVITE_FILE, additions: 5 });
+  const lines = () =>
+    lists.at(-1)?.renderHeader(INVITE_FILE.path).querySelector(".agent-published-added")
+      ?.textContent;
   const comment = await pickLines({
     start: 9,
     side: DIFF_SELECTION_SIDE.ADDITIONS,
@@ -2884,8 +2895,34 @@ test("a comment GitHub refuses says so under it in GitHub's own words, its words
     "GitHub said: Pull request review thread line must be part of the diff",
   );
   assert.equal(comment.querySelector("textarea")?.value, "Here.");
-  const before = read.changes;
+  assert.match(lines() ?? "", /\+2/u);
   act(() => commentOffer(comment, "Refresh changes").click());
   await settle();
-  assert.equal(read.changes, before + 1);
+  assert.match(lines() ?? "", /\+5/u, "the files are drawn as read again");
+});
+
+test("Discard's question stands busy until GitHub answers, and says GitHub's refusal in its words", async () => {
+  const held = Promise.withResolvers<void>();
+  changeHeld = held.promise;
+  changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Review is not pending" };
+  const { tab } = await drawCommentable({ comments: 1 });
+  act(() =>
+    (
+      tab.querySelector<HTMLButtonElement>('[aria-label="Review, 1 pending comment"]') ??
+      assert.fail("Review counts the pending comment")
+    ).click(),
+  );
+  const panel =
+    tab.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("Review opens its panel");
+  act(() => commentOffer(panel, "Discard").click());
+  const question = () =>
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ??
+    assert.fail("Discard asks first");
+  act(() => commentOffer(question(), "Discard review").click());
+  await settle();
+
+  assert.equal(question().getAttribute("aria-busy"), "true", "the question waits on GitHub");
+  held.resolve();
+  await settle();
+  assert.match(question().textContent ?? "", /GitHub said: Review is not pending/u);
 });

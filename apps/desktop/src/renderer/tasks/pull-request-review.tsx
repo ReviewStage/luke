@@ -15,7 +15,7 @@ import {
   useConfirmDialog,
 } from "@luke/ui";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { PopoverPanel } from "../popover-panel";
@@ -216,11 +216,17 @@ export function PullRequestReview({
   // Note that a press outside closes it too, as a menu's does, because the
   // field keeps the focus through a press on words nothing can focus, so no
   // blur says it was left; a review on its way holds it open all the same.
-  // Note that Discard sends its change once answered, and GitHub's answer is drawn in the panel, so the question holds the panel open as a review on its way does.
-  const discarding = useConfirmDialog({ subject: pending != null, surfaceOpen: open }, () => {
-    writes.write({ action: PULL_REQUEST_ACTION.DISCARD_REVIEW });
-    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-  });
+  // Note that the question stands, busy, until GitHub answers the discard, says its refusal in GitHub's words, and holds the panel open meanwhile as a review on its way does.
+  const discarding = useConfirmDialog({ subject: pending != null, surfaceOpen: open }, () =>
+    writes
+      .write({ action: PULL_REQUEST_ACTION.DISCARD_REVIEW })
+      .then(
+        (outcome): ActionResult =>
+          outcome.done
+            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+            : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
+      ),
+  );
   const sending = writes.pending !== undefined || discarding.stage !== CONFIRM_STAGE.RESTING;
   useEffect(() => {
     if (!open || sending) return undefined;

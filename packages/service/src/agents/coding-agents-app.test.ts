@@ -1377,13 +1377,20 @@ function reviewAs(
   });
 }
 
+/** One of the pull request's pending reviews as GitHub answers it: its id, whether the asker wrote it, and the commit it was started on where told. */
+interface PendingNode {
+  readonly id: string;
+  readonly viewerDidAuthor: boolean;
+  readonly commit?: { readonly oid: string };
+}
+
 /**
  * GitHub answering a review's calls: the pull request's id, the pending
  * reviews given for its read of them, and each mutation as `mutation`
  * says, an empty answer by default.
  */
 function reviewsAnswering(
-  pending: readonly { readonly id: string; readonly viewerDidAuthor: boolean }[],
+  pending: readonly PendingNode[],
   mutation: (call: GraphqlCall) => Response = () => Response.json({ data: {} }),
 ): (call: GraphqlCall) => Response {
   return (call) => {
@@ -1450,20 +1457,9 @@ function lineCommentAs(
   });
 }
 
-/** GitHub answering a line comment's and a discard's calls: the member's pending reviews as given, a started review as `PRR_started`, and an empty answer to every other mutation. */
-function linesAnswering(
-  pending: readonly { readonly id: string; readonly viewerDidAuthor: boolean }[],
-): (call: GraphqlCall) => Response {
-  return (call) => {
-    if (
-      call.query.includes("addPullRequestReview(input: { pullRequestId: $id, commitOID: $commit })")
-    ) {
-      return Response.json({
-        data: { addPullRequestReview: { pullRequestReview: { id: "PRR_started" } } },
-      });
-    }
-    return reviewsAnswering(pending)(call);
-  };
+/** GitHub answering a line comment's and a discard's calls: the member's pending reviews as given, and an empty answer to every mutation. */
+function linesAnswering(pending: readonly PendingNode[]): (call: GraphqlCall) => Response {
+  return reviewsAnswering(pending);
 }
 
 it.layer(getTestDB())("changing an agent's pull request", (it) => {
@@ -1999,7 +1995,7 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
         const holding = yield* published({
           answer: linesAnswering([
             { id: "PRR_someone_else", viewerDidAuthor: false },
-            { id: "PRR_member_pending", viewerDidAuthor: true },
+            { id: "PRR_member_pending", viewerDidAuthor: true, commit: { oid: LINE_HEAD } },
           ]),
         });
         const joined = yield* holding.ask(
@@ -2009,22 +2005,68 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
         for (const answered of [started, joined]) {
           assert.deepEqual(answered, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
         }
-        const thread = (calls: readonly GraphqlCall[]) =>
+        const mutations = (calls: readonly GraphqlCall[]) =>
           calls
             .filter((call) => call.query.includes("mutation"))
-            .map((call) => [mutationName(call.query), call.variables.id ?? call.variables.review]);
-        assert.deepEqual(thread(fresh.calls), [
-          ["addPullRequestReview", PULL_REQUEST_NODE_ID],
-          ["addPullRequestReviewThread", "PRR_started"],
+            .map((call) => [mutationName(call.query), call.variables]);
+        assert.deepEqual(mutations(fresh.calls), [
+          [
+            "addPullRequestReview",
+            {
+              id: PULL_REQUEST_NODE_ID,
+              commit: LINE_HEAD,
+              path: "src/invite.ts",
+              body: "Rename this.",
+              line: 12,
+              side: "LEFT",
+            },
+          ],
         ]);
-        assert.equal(
-          fresh.calls.find((call) => call.query.includes("addPullRequestReviewThread"))?.variables
-            .side,
-          "LEFT",
+        assert.doesNotMatch(
+          fresh.calls.find((call) => call.query.includes("mutation"))?.query ?? "",
+          /event:/u,
+          "the review is started pending, its first thread with it",
         );
-        assert.deepEqual(thread(holding.calls), [
-          ["addPullRequestReviewThread", "PRR_member_pending"],
+        assert.deepEqual(mutations(holding.calls), [
+          [
+            "addPullRequestReviewThread",
+            {
+              review: "PRR_member_pending",
+              path: "src/invite.ts",
+              body: "Rename this.",
+              line: 12,
+              side: "RIGHT",
+            },
+          ],
         ]);
+      }),
+  );
+
+  it.effect(
+    "a comment for a review held pending on another commit is refused in words saying so, its lines never sent to that review",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          answer: linesAnswering([
+            {
+              id: "PRR_member_pending",
+              viewerDidAuthor: true,
+              commit: { oid: "0ld0ld0ld0ld0ld0ld0ld0ld0ld0ld0ld0ld0ld0" },
+            },
+          ]),
+        });
+
+        const answered = yield* ask(lineCommentAs(other, agent.id, { mode: "review" }));
+
+        assert.deepEqual(answered, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            outcome: "refused",
+            words:
+              "Your pending review was started on another commit. Submit or discard it, then refresh changes to comment on these lines.",
+          },
+        });
+        assert.ok(calls.every((call) => !call.query.includes("mutation")));
       }),
   );
 

@@ -195,7 +195,7 @@ const PENDING_REVIEWS_READ = 10;
 const PENDING_REVIEW_QUERY = `query($id: ID!) {
   node(id: $id) {
     ... on PullRequest {
-      reviews(states: PENDING, first: ${PENDING_REVIEWS_READ}) { nodes { id viewerDidAuthor } }
+      reviews(states: PENDING, first: ${PENDING_REVIEWS_READ}) { nodes { id viewerDidAuthor commit { oid } } }
     }
   }
 }`;
@@ -203,7 +203,13 @@ const PENDING_REVIEW_QUERY = `query($id: ID!) {
 const PendingReviewsSchema = Schema.Struct({
   node: Schema.Struct({
     reviews: Schema.Struct({
-      nodes: Schema.Array(Schema.Struct({ id: Schema.String, viewerDidAuthor: Schema.Boolean })),
+      nodes: Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          viewerDidAuthor: Schema.Boolean,
+          commit: Schema.optionalKey(Schema.NullOr(Schema.Struct({ oid: Schema.String }))),
+        }),
+      ),
     }),
   }),
 });
@@ -468,13 +474,11 @@ const SINGLE_COMMENT_MUTATION = `mutation($id: ID!, $commit: GitObjectID!, ${THR
   }
 }`;
 
-const START_REVIEW_MUTATION = `mutation($id: ID!, $commit: GitObjectID!) {
-  addPullRequestReview(input: { pullRequestId: $id, commitOID: $commit }) { pullRequestReview { id } }
+const START_REVIEW_MUTATION = `mutation($id: ID!, $commit: GitObjectID!, ${THREAD_VARIABLES}) {
+  addPullRequestReview(input: { pullRequestId: $id, commitOID: $commit, threads: [{ ${THREAD_FIELDS} }] }) {
+    pullRequestReview { id }
+  }
 }`;
-
-const StartedReviewSchema = Schema.Struct({
-  addPullRequestReview: Schema.Struct({ pullRequestReview: Schema.Struct({ id: Schema.String }) }),
-});
 
 const REVIEW_THREAD_MUTATION = `mutation($review: ID!, ${THREAD_VARIABLES}) {
   addPullRequestReviewThread(input: { pullRequestReviewId: $review, ${THREAD_FIELDS} }) { thread { id } }
@@ -494,15 +498,22 @@ function threadVariables(comment: LineComment) {
   };
 }
 
+/** What the member is told where the review they hold pending was started on a commit other than the one their diff was read at, whose lines may not be these. */
+const PENDING_ON_OTHER_COMMIT =
+  "Your pending review was started on another commit. Submit or discard it, then refresh changes to comment on these lines.";
+
 /**
  * A comment on lines of a changed file, on the member's token, as GitHub's
  * own line comment offers it: published at once as a review of its own
  * (`single`), as "Add single comment" does; or added to the member's own
- * pending review (`review`), one started on the head their diff was read
- * at where they hold none, which is the review the Review panel submits
- * (`submitPullRequestReview`). GitHub's rules, a line outside the diff, a
- * range across hunks, a head no longer the pull request's, are its refusal
- * in its words.
+ * pending review (`review`), or, where they hold none, one started with it
+ * on the head their diff was read at, in the one call, so a refused comment
+ * never leaves an empty review behind; that review is the one the Review
+ * panel submits (`submitPullRequestReview`). A pending review started on
+ * another commit is refused in words saying so rather than given lines
+ * counted on this one. GitHub's rules, a line outside the diff, a range
+ * across hunks, a head no longer the pull request's, are its refusal in
+ * its words.
  */
 export const addLineComment = /* @__PURE__ */ Effect.fn("web/addLineComment")(function* (
   token: Redacted.Redacted,
@@ -520,15 +531,20 @@ export const addLineComment = /* @__PURE__ */ Effect.fn("web/addLineComment")(fu
     return;
   }
   const own = yield* ownPendingReview(token, pullRequestId);
-  const review =
-    own?.id ??
-    (yield* githubWrite(
+  if (own === undefined) {
+    yield* githubWrite(
       token,
       START_REVIEW_MUTATION,
-      { id: pullRequestId, commit: comment.headSha },
-      StartedReviewSchema,
-    )).addPullRequestReview.pullRequestReview.id;
-  yield* githubWrite(token, REVIEW_THREAD_MUTATION, { review, ...thread }, Schema.Unknown);
+      { id: pullRequestId, commit: comment.headSha, ...thread },
+      Schema.Unknown,
+    );
+    return;
+  }
+  const started = own.commit?.oid;
+  if (started !== undefined && started !== comment.headSha) {
+    return yield* refusalOf([PENDING_ON_OTHER_COMMIT]);
+  }
+  yield* githubWrite(token, REVIEW_THREAD_MUTATION, { review: own.id, ...thread }, Schema.Unknown);
 });
 
 const DISCARD_REVIEW_MUTATION = `mutation($id: ID!) {
