@@ -16,10 +16,12 @@ import { and, desc, eq, exists, inArray, isNotNull, isNull, type SQL, sql } from
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { organization } from "../schemas/auth.js";
 import { automation } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { inboxAttachment } from "../schemas/inbox-attachment.js";
+import { issue } from "../schemas/issue.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { conversations } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
@@ -114,12 +116,30 @@ export interface StoredTask {
   readonly sectionWriters: readonly PlanSectionWriter[];
   /** The Linear issue the plan was started from, as it was read then; nothing for a plan started from none. */
   readonly linearIssue: TaskLinearIssue | undefined;
+  /** The workspace's own issue the plan was started from, as it reads now; nothing for a plan started from none, or once it is gone. */
+  readonly issue: StoredTaskIssue | undefined;
+}
+
+/**
+ * The workspace's own issue a task was started from, as it reads now: its
+ * number and what it says, and its workspace's name and slug, which its
+ * identifier and its link are written from.
+ */
+export interface StoredTaskIssue {
+  readonly id: string;
+  readonly number: number;
+  readonly title: string;
+  readonly description: string;
+  readonly workspaceName: string;
+  readonly workspaceSlug: string;
 }
 
 /**
  * A plan to start: the workspace it starts in, its name where one is given,
  * the repository it is about where one is chosen, and the Linear issue it
- * starts from, as the service read it, where one was picked. A plan started
+ * starts from, as the service read it, where one was picked, and the
+ * workspace's own issue it starts from, where it was started from one, which
+ * the caller confirms is an issue of the workspace it starts in. A plan started
  * with no name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is
  * renamed. A plan started with `planning` false skips its planning phase and
  * starts empty rather than as the template.
@@ -129,6 +149,7 @@ export interface NewTask {
   readonly name?: string;
   readonly repository?: string | null;
   readonly linearIssue?: TaskLinearIssue;
+  readonly issueId?: string;
   readonly planning?: boolean;
 }
 
@@ -161,6 +182,7 @@ const TASK_SUMMARY_COLUMNS = {
   organizationId: task.organizationId,
   name: task.name,
   repository: task.repository,
+  issueId: task.issueId,
   archivedAt: task.archivedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -181,6 +203,7 @@ const TaskSummaryRowSchema = Schema.Struct({
   organizationId: Schema.String,
   name: Schema.String,
   repository: Schema.NullOr(Schema.String),
+  issueId: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -391,6 +414,12 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
       saved: row.updatedAt.getTime() > row.createdAt.getTime(),
       sectionWriters,
       linearIssue: row.linearIssue ?? undefined,
+      issue:
+        row.issueId === null
+          ? undefined
+          : Option.getOrUndefined(
+              yield* findTaskIssue({ issueId: row.issueId, organizationId: row.organizationId }),
+            ),
     };
   });
 }
@@ -430,6 +459,7 @@ function summaryOf(
     ...(pin === null ? undefined : { pinnedAt: pin.pinnedAt.getTime() }),
     ...(pin === null || pin.pinPosition === null ? undefined : { pinPosition: pin.pinPosition }),
     ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt.getTime() }),
+    ...(row.issueId === null ? undefined : { issueId: row.issueId }),
   };
 }
 
@@ -441,6 +471,7 @@ const insertTask = SqlSchema.findOne({
     repository: Schema.NullOr(Schema.String),
     document: Schema.String,
     linearIssue: Schema.NullOr(taskLinearIssueSchema),
+    issueId: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
   Result: TaskRowSchema,
@@ -455,6 +486,7 @@ const insertTask = SqlSchema.findOne({
           repository: write.repository,
           document: write.document,
           linearIssue: write.linearIssue,
+          issueId: write.issueId,
           createdAt: write.now,
           updatedAt: write.now,
         })
@@ -477,6 +509,38 @@ const findTasks = SqlSchema.findAll({
         .leftJoin(taskPin, readersPin(userId))
         .where(and(taskReachableBy(userId), includeArchived ? undefined : isNull(task.archivedAt)))
         .orderBy(desc(task.createdAt), desc(task.id)),
+    ),
+});
+
+/**
+ * The issue a task names, where it is an issue of the task's own workspace,
+ * with that workspace's name and slug; none where it is gone.
+ */
+const findTaskIssue = SqlSchema.findOneOption({
+  Request: Schema.Struct({ issueId: Schema.String, organizationId: Schema.String }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    number: Schema.Number,
+    title: Schema.String,
+    description: Schema.String,
+    workspaceName: Schema.String,
+    workspaceSlug: Schema.String,
+  }),
+  execute: ({ issueId, organizationId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: issue.id,
+          number: issue.number,
+          title: issue.title,
+          description: issue.description,
+          workspaceName: organization.name,
+          workspaceSlug: organization.slug,
+        })
+        .from(issue)
+        .innerJoin(organization, eq(organization.id, issue.organizationId))
+        .where(and(eq(issue.id, issueId), eq(issue.organizationId, organizationId)))
+        .limit(1),
     ),
 });
 
@@ -527,6 +591,7 @@ const TaskColumnChangesSchema = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
   organizationId: Schema.optionalKey(Schema.String),
   repository: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  issueId: Schema.optionalKey(Schema.Null),
   archivedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
 });
 
@@ -733,6 +798,7 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
       repository: started.repository ?? null,
       document: template ?? DEFAULT_PLAN_TEMPLATE,
       linearIssue: started.linearIssue ?? null,
+      issueId: started.issueId ?? null,
       now,
     }).pipe(
       // An insert that returned no row is the database breaking its own contract, not an outcome.
@@ -835,9 +901,10 @@ function stampOf(asked: boolean, standing: Date | null, now: Date): Date | null 
 function columnChangesOf(changes: TaskChanges, standing: TaskRow, now: Date): TaskColumnChanges {
   return {
     ...(changes.name === undefined ? undefined : { name: changes.name }),
-    ...(changes.organizationId === undefined
+    // An issue is its workspace's, so a task moved to another lets its issue go.
+    ...(changes.organizationId === undefined || changes.organizationId === standing.organizationId
       ? undefined
-      : { organizationId: changes.organizationId }),
+      : { organizationId: changes.organizationId, issueId: null }),
     ...(changes.repository === undefined ? undefined : { repository: changes.repository }),
     ...(changes.archived === undefined
       ? undefined

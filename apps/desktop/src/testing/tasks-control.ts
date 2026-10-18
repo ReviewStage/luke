@@ -344,6 +344,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onRetryDocument: ignore,
     onNewTask: ignore,
     onNewTaskIn: ignore,
+    onNewTaskFrom: ignore,
     newTask: {
       open: false,
       preset: undefined,

@@ -4,6 +4,7 @@ import {
   type IssueView,
 } from "@luke/features/issue-view";
 import type { Issue, IssueStatus } from "@luke/features/issue-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -43,6 +44,7 @@ import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, IssueBoardSkeleton, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail, IssueDetailSkeleton } from "./issue-detail";
 import { IssueList, listRowIssue } from "./issue-list";
+import { type IssueWork, IssueWorkProvider } from "./issue-work";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
 import { type IssueChange, useIssue, useIssues } from "./use-issues";
 import { useRowKeys } from "./use-row-keys";
@@ -416,16 +418,39 @@ function IssuePage({
 }
 
 /**
+ * The listed workspace's tasks started from the issue, the archived ones
+ * among them, newest started first whatever the sidebar's pins put first.
+ */
+function tasksStartedFrom(issueId: string, listed: TasksControl["listed"]): TaskSummary[] {
+  return [...listed.tasks, ...listed.archived]
+    .filter((task) => task.issueId === issueId)
+    .sort((one, other) => other.createdAt - one.createdAt || other.id.localeCompare(one.id));
+}
+
+/**
  * The window's Issues pages, in the plan's place: the list, or one issue's.
  * The list is read once for both, so an issue opened from it draws at once
  * and a change is in the list the moment it lands; going back from an
  * issue hands its row the keyboard.
  */
 export function IssuesPage({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+  const work: IssueWork = {
+    onStartTask: (issue, identifier) =>
+      tasks.onNewTaskFrom({
+        id: issue.id,
+        workspaceId: issue.workspaceId,
+        identifier,
+        title: issue.title,
+      }),
+    tasksOf: (issueId) => tasksStartedFrom(issueId, tasks.listed),
+    onOpenTask: tasks.onSelect,
+  };
   // Every Copy link on these pages is written under the listed workspace, whose issues they are.
   return (
     <LinkWorkspaceProvider value={tasks.workspace?.slug ?? tasks.workspace?.id}>
-      <IssuesPages tasks={tasks} />
+      <IssueWorkProvider value={work}>
+        <IssuesPages tasks={tasks} />
+      </IssueWorkProvider>
     </LinkWorkspaceProvider>
   );
 }
