@@ -392,6 +392,15 @@ body {
   max-width: 360px;
 }
 
+/* A palette's short card: its search row over a list engine's box that
+   fills the rest of the card's height. */
+.catalog-palette {
+  display: flex;
+  height: 200px;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
 /* A dialog's long words, which give way and scroll in a short window so the
    answers under them stay on the card. */
 .catalog-dialog-scroll {

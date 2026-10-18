@@ -31,6 +31,14 @@
     padding: var(--luke-menu-inset);
   }
 
+  /* A list engine's box that fills the column its caller gives it, giving
+     way to what stands above and below it there. */
+  .luke-combobox-list[data-height="fill"] {
+    min-height: 0;
+    max-height: none;
+    flex: 1 1 auto;
+  }
+
   .luke-combobox > .luke-combobox-list {
     border: 1px solid var(--luke-color-border-strong);
     border-top: 0;

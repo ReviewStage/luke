@@ -5,6 +5,8 @@ import { SANDBOX_STATE, type SandboxState } from "@luke/features/terminal-wire";
 import { Shortcut } from "@luke/panel/shortcut";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import {
+  COMBOBOX_LIST_HEIGHT,
+  ComboboxListBox,
   ComboboxOptionItem,
   PlusIcon,
   SearchIcon,
@@ -153,47 +155,49 @@ export function TerminalPicker({
         <SearchIcon />
         <Command.Input placeholder={PICKER_QUESTION} value={query} onValueChange={setQuery} />
       </div>
-      <Command.List className="command-palette-list scroll-fade" label="Coding agents">
-        {read ? (
-          <Command.Empty className="command-palette-empty">No agents match.</Command.Empty>
-        ) : null}
-        {!read ? (
-          <div className="command-palette-empty">Reading the task’s agents…</div>
-        ) : listed.length === 0 ? (
-          <Command.Item
-            asChild
-            value={START_ROW}
-            disabled={!start.available}
-            onSelect={() => choose(onStartAgent)}
-          >
-            <ComboboxOptionItem
-              option={{
-                id: START_ROW,
-                label: "Start a coding agent",
-                icon: <PlusIcon />,
-                detail: start.available ? undefined : start.reason,
-              }}
-            />
-          </Command.Item>
-        ) : (
-          <Command.Group
-            heading={
-              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-                Coding agents
-              </Text>
-            }
-          >
-            {listed.map((agent) => (
-              <AgentRow
-                key={agent.id}
-                agent={agent}
-                name={agentTabLabel(agent, agents.models)}
-                last={agent.id === lastUsed}
-                onPick={() => choose(() => onPick(agent.id))}
+      <Command.List asChild label="Coding agents">
+        <ComboboxListBox height={COMBOBOX_LIST_HEIGHT.FILL}>
+          {read ? (
+            <Command.Empty className="command-palette-empty">No agents match.</Command.Empty>
+          ) : null}
+          {!read ? (
+            <div className="command-palette-empty">Reading the task’s agents…</div>
+          ) : listed.length === 0 ? (
+            <Command.Item
+              asChild
+              value={START_ROW}
+              disabled={!start.available}
+              onSelect={() => choose(onStartAgent)}
+            >
+              <ComboboxOptionItem
+                option={{
+                  id: START_ROW,
+                  label: "Start a coding agent",
+                  icon: <PlusIcon />,
+                  detail: start.available ? undefined : start.reason,
+                }}
               />
-            ))}
-          </Command.Group>
-        )}
+            </Command.Item>
+          ) : (
+            <Command.Group
+              heading={
+                <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+                  Coding agents
+                </Text>
+              }
+            >
+              {listed.map((agent) => (
+                <AgentRow
+                  key={agent.id}
+                  agent={agent}
+                  name={agentTabLabel(agent, agents.models)}
+                  last={agent.id === lastUsed}
+                  onPick={() => choose(() => onPick(agent.id))}
+                />
+              ))}
+            </Command.Group>
+          )}
+        </ComboboxListBox>
       </Command.List>
       <div className="command-palette-footer" aria-hidden="true">
         <span className="command-palette-footer-hint">
