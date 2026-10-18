@@ -3,7 +3,7 @@ import { it } from "@effect/vitest";
 import { Effect, Fiber, Layer, Logger } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
-import { sentryCronCheckIns, sentryLogger } from "./sentry.js";
+import { sentryCronCheckIns, sentryLogger, sentryReportedFetch } from "./sentry.js";
 
 /**
  * The deployment's Sentry at its own boundary, its transport
@@ -96,5 +96,72 @@ it.effect("a monitored run returns only once its closing check-in has left", () 
       sentOfType(sentry.sent, "check_in").map((item) => item.payload.status),
       ["in_progress", "ok"],
     );
+  }),
+);
+
+it.effect("an exception and a rejection nothing in the process caught are each captured", () =>
+  Effect.gen(function* () {
+    const sentry = recordingSentry();
+    yield* Effect.sync(() => {
+      sentry.throwUncaught(new RangeError("thrown on a timer"));
+      sentry.rejectUnhandled(new TypeError("rejected unawaited"));
+    }).pipe(Effect.provide(sentry.layer));
+    assert.deepEqual(exceptionTypes(sentry.sent), ["RangeError", "TypeError"]);
+  }),
+);
+
+it.effect("a web function that throws is captured, and throws the same failure on", () =>
+  Effect.gen(function* () {
+    const sentry = recordingSentry();
+    const fetch = sentryReportedFetch(
+      () => Promise.reject(new SyntaxError("DATABASE_URL is not set")),
+      () => {},
+    );
+    yield* Effect.promise(() =>
+      assert.rejects(fetch(new Request("https://luke.test/api/plans")), {
+        name: "SyntaxError",
+        message: "DATABASE_URL is not set",
+      }),
+    ).pipe(Effect.provide(sentry.layer));
+    assert.deepEqual(exceptionTypes(sentry.sent), ["SyntaxError"]);
+  }),
+);
+
+it.effect("a web function answers before its report has left, and keeps awake until it has", () =>
+  Effect.gen(function* () {
+    // Note that the network is held by hand, because a function frozen once it answers drops whatever is still in flight.
+    let release = () => {};
+    const network = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sentry = recordingSentry(() => network);
+    const awake: Promise<boolean>[] = [];
+    yield* Effect.gen(function* () {
+      const context = yield* Effect.context<never>();
+      const { handler, dispose } = HttpRouter.toWebHandler(
+        HttpRouter.add("GET", "/dies", Effect.die(new RangeError("no such row"))),
+        { disableLogger: true },
+      );
+      const fetch = sentryReportedFetch(
+        (request) => handler(request, context),
+        (sending) => awake.push(sending),
+      );
+      const answer = yield* Effect.promise(() => fetch(new Request("https://luke.test/dies")));
+      let delivered = false;
+      const keptAwake = Promise.all(awake).then(() => {
+        delivered = true;
+      });
+      for (let turn = 0; turn < 10; turn++) yield* Effect.yieldNow;
+      assert.equal(answer.status, 500);
+      assert.equal(delivered, false);
+      release();
+      yield* Effect.promise(() => keptAwake);
+      yield* Effect.promise(() => dispose());
+    }).pipe(
+      // Note that the network is let go on a failed assertion too, or closing Sentry would wait on it for good.
+      Effect.ensuring(Effect.sync(() => release())),
+      Effect.provide(sentry.layer),
+    );
+    assert.deepEqual(exceptionTypes(sentry.sent), ["RangeError"]);
   }),
 );
