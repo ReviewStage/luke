@@ -138,6 +138,9 @@ interface Wheel {
   /** How far the movement has gone each way before it leaned. */
   leanX: number;
   leanY: number;
+  /** Where the row stood as the swipe began, and how far right the hand has gone since, before any give. */
+  from: number;
+  travel: number;
   /** The last delta's size, and how many deltas in a row have shrunk. */
   last: number;
   shrinking: number;
@@ -340,7 +343,7 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
     wheel.current = undefined;
     // A movement that leaned no way, was the list's, or coasted after its swipe was let go, rests with nothing to settle.
     if (held.act === undefined || held.scroll || held.coasting) return;
-    settle(held.act, []);
+    settle(held.act, held.samples);
   };
   const wheelMoved = (event: WheelEvent) => {
     const current = latest.current.act;
@@ -353,6 +356,8 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
         coasting: false,
         leanX: 0,
         leanY: 0,
+        from: 0,
+        travel: 0,
         last: 0,
         shrinking: 0,
         samples: [],
@@ -379,9 +384,12 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
       event.preventDefault();
       measure();
       held.act = current;
+      // Note that a swipe begun on an open row starts from where it rests, and the give is read off the hand's whole travel, never off a place it already gave.
+      held.from = at.current;
+      held.travel = -held.leanX;
       setState(SWIPE_STATE.MOVING);
       held.last = Math.abs(event.deltaX);
-      follow(followed(-held.leanX, width.current));
+      follow(followed(held.from + held.travel, width.current));
       sampled(held.samples, { at: event.timeStamp, offset: at.current });
       return;
     }
@@ -391,7 +399,8 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
     const size = Math.abs(event.deltaX);
     held.shrinking = size > 0 && size < held.last ? held.shrinking + 1 : 0;
     held.last = size;
-    follow(followed(at.current - event.deltaX, width.current));
+    held.travel -= event.deltaX;
+    follow(followed(held.from + held.travel, width.current));
     sampled(held.samples, { at: event.timeStamp, offset: at.current });
     if (held.shrinking >= SWIPE.COAST) {
       held.coasting = true;

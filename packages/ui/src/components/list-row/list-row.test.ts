@@ -537,8 +537,9 @@ function trackpad() {
     act(() => {
       for (const frame of frames.splice(0)) frame(time);
     });
-  const wheel = (item: HTMLElement, deltaX: number, deltaY = 0): boolean => {
+  const wheel = (item: HTMLElement, deltaX: number, deltaY = 0, at?: number): boolean => {
     const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX, deltaY });
+    if (at !== undefined) Object.defineProperty(event, "timeStamp", { value: at });
     act(() => {
       item.dispatchEvent(event);
     });
@@ -744,4 +745,28 @@ test("a trackpad's deltas shrinking five times in a row are the fingers lifted: 
   for (const delta of [-30, -8, -6, -4, -2, -1]) wheel(short.item, delta);
   expect(standing(short.item)).toEqual(["open", "72px", false]);
   expect(short.acted).toEqual([]);
+});
+
+test("a trackpad's swipe on an open row starts from where it rests, goes the hand's way past the give however it is fed, and a flick let go when the wheel rests carries as a pointer's does", () => {
+  const { frameAt, wheel } = trackpad();
+  const open = swiped();
+  drag(open.press, 10, 40);
+  release(open.press, 40);
+  expect(standing(open.item)).toEqual(["open", "72px", false]);
+  wheel(open.item, -5);
+  expect(standing(open.item)).toEqual(["moving", "77px", false]);
+
+  const far = swiped();
+  wheel(far.item, -300);
+  expect(standing(far.item)).toEqual(["moving", "270.75px", true]);
+  wheel(far.item, -10);
+  expect(standing(far.item)).toEqual(["moving", "274.25px", true]);
+
+  const flicked = swiped();
+  wheel(flicked.item, -60, 0, 100);
+  wheel(flicked.item, -60, 0, 110);
+  wheel(flicked.item, -50, 0, 120);
+  frameAt(1_000);
+  frameAt(1_200);
+  expect(flicked.acted).toEqual(["Read"]);
 });
