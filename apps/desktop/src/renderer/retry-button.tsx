@@ -4,11 +4,8 @@
  * A failure's words read as a sentence of their own and the retry stands
  * beside or after them, never as a link inside the sentence, the way Cursor
  * and Codex draw a failed load. A row that is itself the button, "Show older
- * versions" turned failure, cannot hold a second one, so it draws the same
- * glyph and word after its failure (`RetryRowLabel`), and its own press is
- * the retry. The failure's words are an alert, because they appear in the
- * row's place after a press or a scroll and a reader would otherwise hear
- * nothing of it.
+ * versions" turned failure, cannot hold a second one, so it draws
+ * `@luke/ui`'s `RetryRowLabel` instead, and its own press is the retry.
  */
 
 import { RotateCwIcon } from "lucide-react";
@@ -40,18 +37,5 @@ export function RetryButton({
       <RotateCwIcon aria-hidden="true" />
       <span className="retry-word">{label}</span>
     </button>
-  );
-}
-
-/** A failed row's words: the failure, then the glyph and word its press retries with. */
-export function RetryRowLabel({ failure }: { failure: string }): React.JSX.Element {
-  return (
-    <>
-      <span role="alert">{failure}</span>{" "}
-      <span className="retry-label">
-        <RotateCwIcon aria-hidden="true" />
-        {RETRY_WORD}
-      </span>
-    </>
   );
 }
