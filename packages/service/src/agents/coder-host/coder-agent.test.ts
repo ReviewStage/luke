@@ -83,6 +83,7 @@ function coderChannel() {
       admits: CODER_DEPLOYMENT_TURNS,
       presents: DEPLOYMENT_PRESENCE.ACCOUNT,
     },
+    async () => undefined,
   );
 }
 
