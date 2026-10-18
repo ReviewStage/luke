@@ -7,9 +7,11 @@ import { eq } from "drizzle-orm";
 import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
-import { user } from "../../schemas/auth.js";
+import { organization, user } from "../../schemas/auth.js";
+import { issue } from "../../schemas/issue.js";
 import { taskPin } from "../../schemas/task-pin.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
+import { createIssue } from "../issue-store.js";
 import { createTask, deleteTask, listTasks, readTask, updateTask } from "../task-store.js";
 
 /**
@@ -218,6 +220,80 @@ it.layer(getTestDB())("a plan's starting text", (it) => {
         Effect.map(readTask(owner, taskId), (read) => Option.getOrUndefined(read)?.task.document);
       assert.equal((yield* opened(planned.id))?.body, DEFAULT_PLAN_TEMPLATE);
       assert.deepEqual(yield* opened(unplanned.id), { body: "", assumptions: [] });
+    }),
+  );
+});
+
+/** An issue Dean files in the workspace, failing the test where it is not filed. */
+const fileIssue = (userId: string, organizationId: string, title: string) =>
+  Effect.map(
+    createIssue(userId, { organizationId, title, description: "Steps to reproduce." }),
+    (made) => Option.getOrElse(made, () => assert.fail("the issue was not filed")),
+  );
+
+it.layer(getTestDB())("a plan started from an issue", (it) => {
+  it.effect("names its issue to every member of the workspace, and to no account outside it", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const charles = yield* openAccount;
+      const outsider = yield* openAccount;
+      const organizationId = yield* openWorkspace(dean);
+      yield* joinWorkspace(organizationId, charles);
+      const filed = yield* fileIssue(dean, organizationId, "Invites expire too soon");
+      const [workspace] = yield* Database.use((db) =>
+        db.select().from(organization).where(eq(organization.id, organizationId)),
+      );
+
+      const started = yield* createTask(dean, { organizationId, issueId: filed.id });
+
+      assert.equal(started.issueId, filed.id);
+      assert.equal((yield* listedTask(charles, started.id)).issueId, filed.id);
+      assert.deepEqual(Option.getOrUndefined(yield* readTask(charles, started.id))?.issue, {
+        id: filed.id,
+        number: filed.number,
+        title: "Invites expire too soon",
+        description: "Steps to reproduce.",
+        workspaceName: workspace?.name,
+        workspaceSlug: workspace?.slug,
+      });
+      const outside = yield* listTasks(outsider, { includeArchived: true });
+      assert.equal(
+        outside.some(({ id }) => id === started.id),
+        false,
+      );
+      assert.equal(Option.isNone(yield* readTask(outsider, started.id)), true);
+    }),
+  );
+
+  it.effect("lets its issue go once it moves to another workspace", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const organizationId = yield* openWorkspace(dean);
+      const elsewhere = yield* openWorkspace(dean);
+      const filed = yield* fileIssue(dean, organizationId, "Invites expire too soon");
+      const started = yield* createTask(dean, { organizationId, issueId: filed.id });
+
+      const renamed = yield* updateTask(dean, started.id, { name: "Invites", organizationId });
+      assert.equal(Option.getOrUndefined(renamed)?.issueId, filed.id);
+      const moved = yield* updateTask(dean, started.id, { organizationId: elsewhere });
+
+      assert.equal(Option.getOrUndefined(moved)?.issueId, undefined);
+      assert.equal(Option.getOrUndefined(yield* readTask(dean, started.id))?.issue, undefined);
+    }),
+  );
+
+  it.effect("lets its issue go once the issue is deleted, and stands", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const organizationId = yield* openWorkspace(dean);
+      const filed = yield* fileIssue(dean, organizationId, "Invites expire too soon");
+      const started = yield* createTask(dean, { organizationId, issueId: filed.id });
+
+      yield* Database.use((db) => db.delete(issue).where(eq(issue.id, filed.id)));
+
+      const listed = yield* listedTask(dean, started.id);
+      assert.equal(listed.issueId, undefined);
+      assert.equal(Option.getOrUndefined(yield* readTask(dean, started.id))?.issue, undefined);
     }),
   );
 });

@@ -27,8 +27,8 @@
     white-space: nowrap;
     cursor: pointer;
     transition:
-      color var(--duration-hover) ease,
-      text-decoration-color var(--duration-hover) ease;
+      color var(--luke-duration-hover) ease,
+      text-decoration-color var(--luke-duration-hover) ease;
   }
 
   /* Two lines, a card's name: the words wrap, and a third is cut short. */

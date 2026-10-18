@@ -126,7 +126,12 @@ export function withValue(
   return { ...draft, values: value === undefined ? others : [...others, { label, value }] };
 }
 
-/** The answer's kind for what the card holds: a press where the response is answered by one, else the options picked, the form filled, or the developer's words or files. */
+/**
+ * The answer's kind for what the card holds: a press where one was given,
+ * else the decision an approval or a to-do holds, the nod a note is
+ * answered by, the options picked, the form filled, or the developer's
+ * words or files.
+ */
 function replyKindOf(
   item: Pick<InboxItem, "response">,
   draft: InboxDraft,
@@ -134,6 +139,11 @@ function replyKindOf(
 ): InboxReplyKind | undefined {
   if (press !== undefined) return press;
   const response = item.response;
+  if (!knownResponse(response)) return undefined;
+  if (response.type === INBOX_RESPONSE.APPROVAL || response.type === INBOX_RESPONSE.TODO) {
+    return decidedOf(response, draft);
+  }
+  if (response.type === INBOX_RESPONSE.NONE) return INBOX_REPLY.ACKNOWLEDGED;
   if (response.type === INBOX_RESPONSE.CHOICE && draft.choices.length > 0) return INBOX_REPLY.CHOSE;
   if (response.type === INBOX_RESPONSE.FORM) return INBOX_REPLY.SUBMITTED;
   return draft.note.trim() === "" && draft.attachments.length === 0
@@ -156,8 +166,9 @@ function sentValues(form: InboxForm, draft: InboxDraft): readonly InboxFormValue
 /**
  * The answer the card holds, or nothing where it holds none the item
  * takes: a choice is answered by its options, with the note beside them,
- * or by the developer's own words; an approval, a task, and an item asking
- * nothing by their presses, with the note beside them; words by words; a
+ * or by the developer's own words; an approval and a task by the decision
+ * picked, or a press given, and an item asking nothing by its nod, with the
+ * note beside them; words by words; a
  * form by its fields, with the note beside them. The files attached go
  * beside any of these, and stand for the developer's own words where they
  * wrote none, as a message's do; they travel apart from the answer.
@@ -202,6 +213,8 @@ export type InboxMissing =
 const MISSING_LINE = {
   ONE: "Pick an option",
   MANY: "Pick at least one",
+  APPROVAL: "Approve or decline",
+  TODO: "Tick it, or say you couldn't",
   WORDS: "Write your answer",
 } as const;
 
@@ -209,8 +222,8 @@ const MISSING_LINE = {
  * What the card's answer still lacks, the first thing in the item's order,
  * or nothing where it lacks nothing it can be told to fill: a choice with
  * no pick and no words of the developer's own lacks an option, a form its
- * first required field left empty, and words their words. An item
- * answered by a press lacks nothing here.
+ * first required field left empty, an approval or a to-do its decision,
+ * and words their words. A note lacks nothing, its nod being its answer.
  */
 export function inboxMissing(
   item: Pick<InboxItem, "response">,
@@ -237,9 +250,69 @@ export function inboxMissing(
     }
     case INBOX_RESPONSE.TEXT:
       return ownWords ? undefined : { kind: INBOX_MISSING.WORDS, line: MISSING_LINE.WORDS };
+    case INBOX_RESPONSE.APPROVAL:
+    case INBOX_RESPONSE.TODO:
+      if (decidedOf(response, draft) !== undefined) return undefined;
+      return {
+        kind: INBOX_MISSING.OPTION,
+        line: response.type === INBOX_RESPONSE.APPROVAL ? MISSING_LINE.APPROVAL : MISSING_LINE.TODO,
+      };
     default:
       return undefined;
   }
+}
+
+/** A response decided by a pick of two, the one going ahead and the one holding back: an approval, or a to-do. */
+export type InboxDecided = Extract<
+  InboxResponse,
+  { type: typeof INBOX_RESPONSE.APPROVAL | typeof INBOX_RESPONSE.TODO }
+>;
+
+/** What an approval or a to-do may be decided as, the one going ahead first, as its cards stand. */
+export function decisionsOf(
+  response: InboxDecided,
+): readonly { readonly reply: InboxReplyKind; readonly label: string }[] {
+  const { ahead, back } = INBOX_PRESSES[response.type];
+  return [ahead, back];
+}
+
+/**
+ * The decision the card holds for an approval or a to-do, or none yet.
+ * Note that the draft holds it as its one pick, by its reply's kind, so it
+ * is kept with the card's words as a choice's pick is.
+ */
+export function decidedOf(response: InboxDecided, draft: InboxDraft): InboxReplyKind | undefined {
+  const held = draft.choices[0];
+  return decisionsOf(response).find((decision) => decision.reply === held)?.reply;
+}
+
+/** The draft holding the decision given, in place of any before it. */
+export function withDecision(draft: InboxDraft, reply: InboxReplyKind): InboxDraft {
+  return { ...draft, choices: [reply] };
+}
+
+/**
+ * The draft after the open item's option numbered `number`, counted from
+ * one, is picked by its key: a choice's option, as `withChoice` picks it,
+ * or an approval's or a to-do's decision, the one going ahead first; none
+ * where the item has no such option.
+ */
+export function numberedPick(
+  item: Pick<InboxItem, "response">,
+  draft: InboxDraft,
+  number: number,
+): InboxDraft | undefined {
+  const response = item.response;
+  if (!knownResponse(response)) return undefined;
+  if (response.type === INBOX_RESPONSE.CHOICE) {
+    const option = response.options[number - 1];
+    return option === undefined ? undefined : withChoice(response, draft, option.label);
+  }
+  if (response.type !== INBOX_RESPONSE.APPROVAL && response.type !== INBOX_RESPONSE.TODO) {
+    return undefined;
+  }
+  const decision = decisionsOf(response)[number - 1];
+  return decision === undefined ? undefined : withDecision(draft, decision.reply);
 }
 
 /**
@@ -332,14 +405,19 @@ export function inboxMessageOf(draft: InboxDraft): InboxMessageDraft | undefined
   return { text, attachments: draft.attachments };
 }
 
-/** The presses each response answered by a press offers: the one that holds back where there is one, then the one that goes ahead. */
+/**
+ * The two ways an approval and a to-do are decided, the one that holds
+ * back and the one that goes ahead, and the nod a note is answered by:
+ * the Inbox's cards in the question and a chat ask's presses (`chat-ask.tsx`)
+ * name them alike, and a settled item keeps them as what it offered.
+ */
 export const INBOX_PRESSES = {
   [INBOX_RESPONSE.APPROVAL]: {
     back: { reply: INBOX_REPLY.DECLINED, label: "Decline" },
     ahead: { reply: INBOX_REPLY.APPROVED, label: "Approve" },
   },
   [INBOX_RESPONSE.TODO]: {
-    back: { reply: INBOX_REPLY.NOT_DONE, label: "Can't do this" },
+    back: { reply: INBOX_REPLY.NOT_DONE, label: "Couldn't do it" },
     ahead: { reply: INBOX_REPLY.DONE, label: "Done" },
   },
   [INBOX_RESPONSE.NONE]: {
@@ -348,7 +426,7 @@ export const INBOX_PRESSES = {
   },
 } as const;
 
-/** The presses that answer the response, or nothing where words, a pick, or a form answer it. */
+/** The presses a chat ask answers the response by, or nothing where words, a pick, or a form answer it. */
 export function pressesOf(
   response: InboxReadResponse,
 ): (typeof INBOX_PRESSES)[keyof typeof INBOX_PRESSES] | undefined {
@@ -785,6 +863,19 @@ export type InboxListView = { readonly readerId: string | undefined } & (
 export function readersItem(item: InboxItem, readerId: string | undefined): boolean {
   const starter = item.startedBy?.userId;
   return starter === undefined || readerId === undefined || starter === readerId;
+}
+
+/**
+ * Whether an open item of an agent with no task, as main lists it, waits on
+ * the reader: its agent started by them, or by nobody the service names, or
+ * listed before the reader's own id is known, as `readersItem` reads an item.
+ * Main lists every member's, as the Inbox lists them, and counts only these.
+ */
+export function waitsOnReader(
+  entry: Pick<AppInboxTasklessItem, "startedBy">,
+  readerId: string | undefined,
+): boolean {
+  return entry.startedBy === undefined || readerId === undefined || entry.startedBy === readerId;
 }
 
 /** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */

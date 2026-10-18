@@ -24,8 +24,8 @@
     background: var(--luke-color-overlay);
     box-shadow: var(--luke-menu-shadow);
     animation:
-      luke-menu-arrive var(--duration-quick, 0s) var(--motion-exit, ease) both,
-      luke-menu-drop var(--duration-fast, 0s) var(--spring-fast, ease) both;
+      luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
+      luke-menu-drop var(--luke-duration-fast) var(--luke-spring-fast) both;
   }
 
   /* Hidden for the one layout pass that measures where it fits. */
@@ -38,7 +38,7 @@
      the one motion it has. */
   .luke-menu[data-leaving="true"] {
     pointer-events: none;
-    animation: luke-menu-leave var(--duration-exit, 0s) var(--motion-exit, ease) forwards;
+    animation: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
     transition: none;
   }
 

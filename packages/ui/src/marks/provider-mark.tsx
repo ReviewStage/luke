@@ -30,8 +30,30 @@ export const MARK_PROVIDER = { ...INTEGRATION_PROVIDER, GOOGLE: "google" } as co
 
 export type MarkProvider = (typeof MARK_PROVIDER)[keyof typeof MARK_PROVIDER];
 
-/** The class a mark wears when its caller names none, which the desktop sizes it by. */
-const MARK_CLASS = "provider-mark";
+/**
+ * How big a mark stands: the glyph cell of the row, chip, or button it leads
+ * (`slot`, which sizes it), or one of four sizes of its own: beside a
+ * caption's words, as a control's icon, as a settings row's leading mark, and
+ * as the tile a connection's card leads with.
+ */
+export const PROVIDER_MARK_SIZE = {
+  SLOT: "slot",
+  CAPTION: "caption",
+  ICON: "icon",
+  ROW: "row",
+  TILE: "tile",
+} as const;
+
+export type ProviderMarkSize = (typeof PROVIDER_MARK_SIZE)[keyof typeof PROVIDER_MARK_SIZE];
+
+/** The class each size wears; a slot's mark wears the base alone. */
+const MARK_CLASS = {
+  [PROVIDER_MARK_SIZE.SLOT]: "luke-provider-mark",
+  [PROVIDER_MARK_SIZE.CAPTION]: "luke-provider-mark luke-provider-mark-caption",
+  [PROVIDER_MARK_SIZE.ICON]: "luke-provider-mark luke-provider-mark-icon",
+  [PROVIDER_MARK_SIZE.ROW]: "luke-provider-mark luke-provider-mark-row",
+  [PROVIDER_MARK_SIZE.TILE]: "luke-provider-mark luke-provider-mark-tile",
+} as const satisfies Record<ProviderMarkSize, string>;
 
 interface MarkProps {
   readonly className: string;
@@ -533,14 +555,15 @@ function YCombinatorMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-/** One provider's mark, at whatever size `className` gives it. */
+/** One provider's mark, at `size`, or the size of the slot it stands in. */
 export function ProviderMark({
   provider,
-  className = MARK_CLASS,
+  size = PROVIDER_MARK_SIZE.SLOT,
 }: {
   provider: MarkProvider;
-  className?: string;
+  size?: ProviderMarkSize | undefined;
 }): React.JSX.Element {
+  const className = MARK_CLASS[size];
   switch (provider) {
     case MARK_PROVIDER.GOOGLE:
       return <GoogleMark className={className} />;

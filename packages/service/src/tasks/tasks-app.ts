@@ -3,6 +3,7 @@ import { readBoard, writeScene } from "@luke/database/models/board-store";
 import { childTitlesOf } from "@luke/database/models/child-titles";
 import { listCodingAgents } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
+import { readIssue } from "@luke/database/models/issue-store";
 import {
   keepPlanAttachment,
   PLAN_ATTACHMENT_KEEP,
@@ -436,13 +437,30 @@ const startingLinearIssue = (organizationId: string, issueId: string) =>
     "Linear gave no issue to start a task from",
   );
 
+/**
+ * The workspace's own issue a plan starts from, where the account reads it
+ * and it is an issue of the workspace the plan starts in; refused as not
+ * found otherwise, before anything is written.
+ */
+const startingIssue = Effect.fnUntraced(function* (
+  userId: string,
+  organizationId: string,
+  issueId: string,
+) {
+  const read = yield* hostedStoreOrUnavailable(readIssue(userId, issueId));
+  if (Option.isNone(read) || read.value.workspaceId !== organizationId) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
+  return read.value.id;
+});
+
 /** Whether a list read asks for the archived tasks too; a build from before archiving never does. */
 function listsArchived(request: Request): boolean {
   const asked = new URL(request.url).searchParams.get(TASK_LIST_QUERY.ARCHIVED);
   return asked === TASK_LIST_ARCHIVED.INCLUDE;
 }
 
-/** GET lists the account's plans, and beside them the agents with no plan in its workspaces; POST starts one with an empty document, its repository confirmed and its Linear issue read first. */
+/** GET lists the account's plans, and beside them the agents with no plan in its workspaces; POST starts one with an empty document, its repository confirmed and its Linear issue and its own issue read first. */
 const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoint")(function* (
   seams: TasksAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -479,12 +497,17 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
     started.success.linearIssueId === undefined
       ? undefined
       : yield* startingLinearIssue(organizationId, started.success.linearIssueId);
+  const issueId =
+    started.success.issueId === undefined
+      ? undefined
+      : yield* startingIssue(userId, organizationId, started.success.issueId);
   const task = yield* hostedStoreOrUnavailable(
     createTask(userId, {
       organizationId,
       ...(started.success.name === undefined ? undefined : { name: started.success.name }),
       repository,
       ...(issue === undefined ? undefined : { linearIssue: issue }),
+      ...(issueId === undefined ? undefined : { issueId }),
       ...(started.success.planning === undefined
         ? undefined
         : { planning: started.success.planning }),

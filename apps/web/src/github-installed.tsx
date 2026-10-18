@@ -4,7 +4,13 @@ import {
   type GitHubInstallStatus,
   githubInstallStatusFromWire,
 } from "@luke/features";
-import { AUTH_STATUS_TONE, AuthPage, MARK_PROVIDER, ProviderMark } from "@luke/ui";
+import {
+  AUTH_STATUS_TONE,
+  AuthPage,
+  MARK_PROVIDER,
+  PROVIDER_MARK_SIZE,
+  ProviderMark,
+} from "@luke/ui";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { startSiteAnalytics } from "./analytics";
@@ -98,7 +104,7 @@ function GitHubInstalled(): React.JSX.Element {
     <AuthPage
       mark={
         <ConnectionGraphic
-          mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} className="size-10 shrink-0" />}
+          mark={<ProviderMark provider={MARK_PROVIDER.GITHUB} size={PROVIDER_MARK_SIZE.TILE} />}
         />
       }
       status={{

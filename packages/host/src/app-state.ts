@@ -161,6 +161,8 @@ export interface AppInboxTasklessItem extends AppInboxWaitingItem {
   repository: string;
   /** The workspace the agent belongs to, whose Inbox lists the item; absent from a service before it. */
   workspaceId?: string;
+  /** The account that started the agent, whom the item waits on; absent where the service does not say, when it is the reader's own. */
+  startedBy?: string;
 }
 
 /** One automation holding items of its runs' agents with no task, waiting or settled, as a task holding items is listed: how many, and when the latest changed; null for the agents no automation the reader may read names. */
@@ -182,7 +184,7 @@ export interface AppInboxSlice {
   waiting: readonly AppInboxTask[];
   /** Every task holding an inbox item, waiting or settled, the task whose item changed latest first: what the window's Inbox lists. */
   tasks: readonly AppInboxTaskHolding[];
-  /** The open items of agents with no task, the latest changed first, which wait beside the tasks' and count with them. */
+  /** The open items of agents with no task in the account's workspaces, every member's, the latest changed first, as the window's Inbox lists them; those of the reader's own agents (`startedBy`) alone wait on it and count with the tasks'. */
   taskless: readonly AppInboxTasklessItem[];
   /** Every automation holding items of its agents with no task, as `tasks` lists the tasks. */
   automations: readonly AppInboxAutomationHolding[];
