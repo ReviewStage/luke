@@ -4,7 +4,9 @@ import {
   GAP,
   Inline,
   PUBLIC_PAGE_WIDTH,
+  PUBLIC_SECTIONS,
   PUBLIC_TITLE,
+  PublicMedia,
   PublicPage,
   PublicSection,
   Stack,
@@ -16,10 +18,12 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * public-page.tsx -- the landing's shape, a hero over its lead, acts, and
- * sections; a plain page under the profile's page title; a wide page with a
- * rail beside its words; and the landing in a phone's width, each in a frame that scrolls as a document would,
- * with the site's banner and footer. Every name and line is made up.
+ * public-page.tsx -- the landing's shape, a hero over its lead, acts, a
+ * recording bleeding past the column, and sections; a plain page under the
+ * profile's page title; a wide page of ruled entries with a rail beside their
+ * words; a page beneath it with its way back; and the landing in a phone's
+ * width, each in a frame that scrolls as a document would, with the site's
+ * banner and footer. Every name and line is made up.
  */
 
 const SECTIONS = [
@@ -82,6 +86,9 @@ function Landing(): React.JSX.Element {
           <Button variant={BUTTON_VARIANT.PRIMARY}>Download for macOS</Button>
           <Button variant={BUTTON_VARIANT.OUTLINE}>View on GitHub</Button>
         </Inline>
+        <PublicMedia>
+          <div className="catalog-public-media" role="img" aria-label="A recording's frame" />
+        </PublicMedia>
       </PublicSection>
       <Sections />
     </PublicPage>
@@ -117,15 +124,19 @@ const RELEASES = [
   },
 ] as const;
 
-function Changelog(): React.JSX.Element {
+function Changelog({ beneath }: { beneath: boolean }): React.JSX.Element {
+  const releases = beneath ? RELEASES.slice(0, 1) : RELEASES;
   return (
     <PublicPage
       banner={<Banner />}
       footer={<Footer />}
-      title="Changelog"
+      back={beneath ? { href: "#public-page-wide", label: "Changelog" } : undefined}
+      title={beneath ? `Acme ${RELEASES[0].version}` : "Changelog"}
+      lead={<Button variant={BUTTON_VARIANT.OUTLINE}>View releases on GitHub</Button>}
       width={PUBLIC_PAGE_WIDTH.WIDE}
+      sections={PUBLIC_SECTIONS.RULED}
     >
-      {RELEASES.map((release) => (
+      {releases.map((release) => (
         <PublicSection key={release.version}>
           <div className="catalog-public-release">
             <Stack gap={GAP.TIGHT}>
@@ -155,9 +166,14 @@ function PublicPages(): React.JSX.Element {
           <About />
         </div>
       </CatalogSection>
-      <CatalogSection id="public-page-wide" title="A wide page with a rail">
+      <CatalogSection id="public-page-wide" title="A wide page of ruled entries with a rail">
         <div className="catalog-screen catalog-screen-public">
-          <Changelog />
+          <Changelog beneath={false} />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="public-page-back" title="A page beneath another, with its way back">
+        <div className="catalog-screen catalog-screen-public">
+          <Changelog beneath />
         </div>
       </CatalogSection>
       <CatalogSection id="public-page-phone" title="A phone's width">

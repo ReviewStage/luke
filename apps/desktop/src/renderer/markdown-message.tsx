@@ -736,7 +736,11 @@ export function MarkdownMessage({
     return drawing;
   }, [link, openLink, diagrams, picture, toggles]);
   return (
-    <div className={className === undefined ? "markdown" : `markdown ${className}`}>
+    <div
+      className={
+        className === undefined ? "markdown luke-prose" : `markdown luke-prose ${className}`
+      }
+    >
       <FenceEdit.Provider value={edit}>
         <Markdown
           remarkPlugins={REMARK_PLUGINS}

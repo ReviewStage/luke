@@ -630,7 +630,7 @@ export function PlanDocumentEditor({
     placement: editing.placement,
     focus: true,
     label: "Plan",
-    className: "markdown plan-unit",
+    className: "markdown luke-prose plan-unit",
     onDraft: doors.onDraft,
     onFinish: (section) => once(() => doors.onFinish(section)),
     onLeaveUp: doors.onLeaveUp,

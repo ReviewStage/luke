@@ -20,7 +20,10 @@ import { type ReactNode, useId } from "react";
  *
  * The content is on the site's reading column, or on a wider one for a page
  * that sets a rail beside its words, as the changelog does; the banner and
- * the footer keep to the reading column either way.
+ * the footer keep to the reading column either way. A page beneath another
+ * names its way back above its title. Its sections stand apart by room, or
+ * under a rule across the column each, as a list of entries does; a picture
+ * or a recording may bleed wider than the column, as the landing's does.
  */
 
 /** How a page's title is set: the profile's page title, or the landing's display hero. */
@@ -38,6 +41,21 @@ export const PUBLIC_PAGE_WIDTH = {
 } as const;
 
 export type PublicPageWidth = (typeof PUBLIC_PAGE_WIDTH)[keyof typeof PUBLIC_PAGE_WIDTH];
+
+/** How a page's sections stand apart: by room alone, or each under a rule across the column. */
+export const PUBLIC_SECTIONS = {
+  SPACED: "spaced",
+  RULED: "ruled",
+} as const;
+
+export type PublicSections = (typeof PUBLIC_SECTIONS)[keyof typeof PUBLIC_SECTIONS];
+
+/** The page a page stands beneath, which its way back opens. */
+export type PublicBack = {
+  readonly href: string;
+  /** What the page is called, read after the way back's arrow. */
+  readonly label: string;
+};
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
@@ -68,6 +86,17 @@ export function PublicSection({
 }
 
 /**
+ * A picture or a recording standing wider than the column, up to the page's
+ * bleed and centred on the page, under a hairline frame. It measures the
+ * page's own width (`cqw`, read off the page's container) rather than the
+ * viewport's, which would count a classic scrollbar's gutter, and keeps the
+ * page's inset from either edge, so on a phone it lines up with the words.
+ */
+export function PublicMedia({ children }: { children: ReactNode }): React.JSX.Element {
+  return <div className="luke-public-media">{children}</div>;
+}
+
+/**
  * The site's banner, standing still at the top of the document's scroll:
  * `children` on the page's column, over a wash of the ground across the page.
  */
@@ -88,13 +117,15 @@ function PublicFooter({ children }: { children: ReactNode }): React.JSX.Element 
   );
 }
 
-/** A public page: `banner` over the `title`, `lead`, and sections, over `footer`. */
+/** A public page: `banner` over the way `back`, the `title`, `lead`, and sections, over `footer`. */
 export function PublicPage({
   banner,
   footer,
+  back,
   title,
   titleStyle = PUBLIC_TITLE.PAGE,
   width = PUBLIC_PAGE_WIDTH.COLUMN,
+  sections = PUBLIC_SECTIONS.SPACED,
   lead,
   children,
 }: {
@@ -102,10 +133,13 @@ export function PublicPage({
   banner?: ReactNode;
   /** The site's closing links and notices, laid on the column under the rule. */
   footer?: ReactNode;
+  /** The page this one stands beneath, named above the title as the way back to it. */
+  back?: PublicBack | undefined;
   /** What the page is, as its `h1`; a page whose content brings its own leaves it out. */
   title?: ReactNode;
   titleStyle?: PublicTitle;
   width?: PublicPageWidth;
+  sections?: PublicSections;
   /** A sentence or two under the title on what the page is for, or opening a page whose content brings its title. */
   lead?: ReactNode;
   /** The page's sections, or the content of a page that is one; a title alone may leave it out. */
@@ -115,8 +149,14 @@ export function PublicPage({
     <div className="luke-public-page">
       {said(banner) ? <PublicBanner>{banner}</PublicBanner> : null}
       <main className="luke-public-page-column luke-public-page-main" data-width={width}>
-        {said(title) || said(lead) ? (
+        {back !== undefined || said(title) || said(lead) ? (
           <div className="luke-public-page-intro">
+            {back !== undefined ? (
+              <a className="luke-public-page-back" href={back.href}>
+                <span aria-hidden="true">← </span>
+                {back.label}
+              </a>
+            ) : null}
             {said(title) ? (
               <h1 className="luke-public-page-title" data-style={titleStyle}>
                 {title}
@@ -125,7 +165,11 @@ export function PublicPage({
             {said(lead) ? <p className="luke-public-page-lead">{lead}</p> : null}
           </div>
         ) : null}
-        {said(children) ? <div className="luke-public-page-sections">{children}</div> : null}
+        {said(children) ? (
+          <div className="luke-public-page-sections" data-sections={sections}>
+            {children}
+          </div>
+        ) : null}
       </main>
       {said(footer) ? <PublicFooter>{footer}</PublicFooter> : null}
     </div>
