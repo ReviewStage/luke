@@ -68,6 +68,14 @@ export function mountWindow(surface: ReactNode): void {
       await Effect.runPromise(appStateFirstRead);
     } catch (error) {
       console.error("The window's state could not be read; nothing is drawn.", error);
+      // A blank window is a failure, so it is sent as an event through this
+      // window's SDK and its filters, not only kept as the console's
+      // breadcrumb. Note that it is captured here rather than through main's
+      // Effect reporter, because providing a reporter layer on this path put
+      // 90 to 130 KB gzipped on every window's first load.
+      Sentry.captureException(error, {
+        mechanism: { type: "auto.electron.renderer.first_read", handled: false },
+      });
       return;
     }
     root.render(

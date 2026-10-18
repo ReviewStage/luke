@@ -65,6 +65,9 @@ export function gatewayHost(options: GatewayHostOptions): GatewayHost {
           );
         }
         return Effect.suspend(() => handler(params, context)).pipe(
+          // A handler's refusal is an answer, and its defect a bug, which is
+          // reported here, where the defect itself still stands.
+          Effect.withErrorReporting({ defectsOnly: true }),
           Effect.map((result): GatewayCallResult => ({ ok: true, result })),
           Effect.catch((refusal) => Effect.succeed(refused(refusal))),
           // A handler that throws rather than failing refuses that one call and no other.

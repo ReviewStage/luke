@@ -103,8 +103,8 @@ export class AppStateStore {
 
 /**
  * The one place the document becomes a push, for the client's scope: every
- * change of it is handed to `publish`. A push that throws is reported rather
- * than left to end the fiber: a `Stream.runForEach` that failed once would
+ * change of it is handed to `publish`. A push that throws is reported, to
+ * Sentry as well as the line, rather than left to end the fiber: a `Stream.runForEach` that failed once would
  * never resume, and every later write would then reach no window for the rest
  * of the session.
  */
@@ -116,7 +116,7 @@ export function publishAppStateChanges(
   return Effect.asVoid(
     Effect.forkScoped(
       Stream.runForEach(state.changes, () =>
-        Effect.catchDefect(publish(), (defect) =>
+        Effect.catchDefect(Effect.withErrorReporting(publish(), { defectsOnly: true }), (defect) =>
           Effect.sync(() =>
             report(
               `the app-state push to windows failed: ${defect instanceof Error ? defect.message : String(defect)}`,

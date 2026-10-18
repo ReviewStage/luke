@@ -761,6 +761,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
+      '@sentry/core':
+        specifier: 11.7.0
+        version: 11.7.0
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -783,6 +786,9 @@ importers:
         specifier: 'catalog:'
         version: 4.0.4
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
