@@ -469,25 +469,48 @@ function listsArchived(request: Request): boolean {
 
 /**
  * The task and the agent a start's earlier request made under the agent's
- * key, where it made one and the account still reaches its task: a retry
- * after a lost answer is answered with them rather than with a second task.
+ * key: a retry after a lost answer is answered with them rather than with a
+ * second task. A key already spent on an agent anywhere else, on another
+ * workspace's task, on no task, or on a task the account no longer reaches,
+ * is no retry of this start, and is refused as invalid with nothing written.
  */
 const startedBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   idempotencyKey: string,
+  organizationId: string,
 ): Effect.fn.Return<Option.Option<TaskStartAnswer>, HostedRefusal, DatabaseServices> {
   const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, idempotencyKey));
-  if (Option.isNone(made) || made.value.taskId === null) return Option.none();
-  const task = yield* hostedStoreOrUnavailable(readTask(userId, made.value.taskId));
-  if (Option.isNone(task)) return Option.none();
+  if (Option.isNone(made)) return Option.none();
+  const task =
+    made.value.taskId === null
+      ? Option.none()
+      : yield* hostedStoreOrUnavailable(readTask(userId, made.value.taskId));
+  if (Option.isNone(task) || task.value.task.workspaceId !== organizationId) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
   return Option.some({ plan: task.value.task, agent: yield* summaryOf(userId, made.value) });
 });
+
+/**
+ * The agent the key names on the task, where the Start made one before it
+ * failed: a store write or read after eve took the session failed the
+ * Start, though the agent works on. Nothing where it made none, or where it
+ * could not be read either.
+ */
+const agentMadeOn = (userId: string, taskId: string, idempotencyKey: string) =>
+  Effect.gen(function* () {
+    const made = yield* readCodingAgentByKey(userId, idempotencyKey);
+    if (Option.isNone(made) || made.value.taskId !== taskId) return Option.none();
+    return Option.some(yield* summaryOf(userId, made.value));
+  }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 /**
  * The agent a start asks for, started on the task it just made through the
  * agent's own Start (`startRequestedAgent`), reaching eve as the developer;
  * a refusal is answered beside the task rather than in its place, since the
  * task stands either way and the developer's words are theirs to try again.
+ * A Start that failed after its agent was made answers that agent, since it
+ * works all the same.
  */
 const startedAgentOn = (
   seams: TasksAppSeams,
@@ -499,10 +522,14 @@ const startedAgentOn = (
   startRequestedAgent(eveFor(seams, request), userId, task.id, agent).pipe(
     Effect.map((started): TaskStartAnswer => ({ plan: task, agent: started.agent })),
     Effect.catch((refusal) =>
-      Effect.as(
-        Effect.logWarning(`the agent a task's start asked for was refused: ${refusal.error}`),
-        { plan: task, agentRefusal: { error: refusal.error } } satisfies TaskStartAnswer,
-      ),
+      Effect.gen(function* () {
+        const made = yield* agentMadeOn(userId, task.id, agent.idempotencyKey);
+        if (Option.isSome(made)) return { plan: task, agent: made.value } satisfies TaskStartAnswer;
+        yield* Effect.logWarning(
+          `the agent a task's start asked for was refused: ${refusal.error}`,
+        );
+        return { plan: task, agentRefusal: { error: refusal.error } } satisfies TaskStartAnswer;
+      }),
     ),
   );
 
@@ -511,9 +538,11 @@ const startedAgentOn = (
  * its workspaces; POST starts one with an empty document, its repository
  * confirmed and its Linear issue and its own issue read first, and, where it
  * names an agent, starts that agent on it: a start naming an agent and no
- * repository is refused as an agent's Start on such a task is, before
- * anything is written, and one whose agent's key already started an agent
- * answers that agent's task and the agent.
+ * repository is refused as an agent's Start on such a task is, and one
+ * carrying no bearer, which the agent's session is opened over, as
+ * unauthenticated, both before anything is written; one whose agent's key
+ * already started an agent in the workspace answers that agent's task and
+ * the agent (`startedBefore`).
  */
 const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoint")(function* (
   seams: TasksAppSeams,
@@ -544,13 +573,18 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   if (Result.isFailure(started)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { agent } = started.success;
   if (agent !== undefined) {
+    // Note that the agent's session is opened over the developer's bearer, so a cookie's start is refused before anything is written.
+    yield* hostedBearerOnly(request);
     if (started.success.repository === undefined || started.success.repository === null) {
       return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
     }
-    const before = yield* startedBefore(userId, agent.idempotencyKey);
-    if (Option.isSome(before)) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, before.value);
   }
   const organizationId = yield* startingWorkspace(seams, userId, started.success.workspaceId);
+  const before =
+    agent === undefined
+      ? Option.none()
+      : yield* startedBefore(userId, agent.idempotencyKey, organizationId);
+  if (Option.isSome(before)) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, before.value);
   const repository = yield* reachableRepository(
     Effect.succeed(organizationId),
     started.success.repository,

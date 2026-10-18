@@ -998,10 +998,11 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a task's start retried under its agent's key answers the task and the agent the first made, and starts neither again",
+    "a task's start retried under its agent's key answers the task and the agent the first made, and starts neither again; the key named for another workspace is refused",
     () =>
       Effect.gen(function* () {
         const { owner, task, eve, ask } = yield* openTask();
+        const team = yield* openWorkspace(owner);
         const body = {
           name: "Invitation expiry",
           workspaceId: task.workspaceId,
@@ -1015,6 +1016,9 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
 
         const first = yield* startOnce(HOSTED_HTTP_STATUS.CREATED);
         const again = yield* startOnce(HOSTED_HTTP_STATUS.OK);
+        const elsewhere = yield* ask(
+          request(TASKS, owner, { method: "POST", body: { ...body, workspaceId: team } }),
+        );
         const listed = readAnswer(
           taskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1023,6 +1027,10 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
 
         assert.equal(again.plan.id, first.plan.id);
         assert.equal(again.agent?.id, first.agent?.id);
+        assert.deepEqual(
+          elsewhere,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
         assert.equal(eve.opened.length, 1);
         assert.deepEqual(
           listed.plans.filter((each) => each.name === body.name).map((each) => each.id),
