@@ -1,6 +1,6 @@
 import { LINK_PLACE, type LinkPlaceKind } from "@luke/features/luke-link";
 import { openTargetOf } from "@luke/features/open-address";
-import { AuthPage, BUTTON_VARIANT, ButtonLink } from "@luke/ui";
+import { AuthPage, BUTTON_VARIANT, ButtonLink, TEXT_LINK_LOOK, TextLink } from "@luke/ui";
 import { useState } from "react";
 import { LukeMark } from "./SiteChrome";
 
@@ -64,8 +64,6 @@ const TITLE = {
 /** The landing page, on whichever host served this one. */
 const LANDING_URL = "/";
 
-const QUIET_LINK = "underline underline-offset-2";
-
 /**
  * The page's address read as a link: a press opens what it names in the app, and a moment later says what to check where nothing did.
  *
@@ -96,9 +94,9 @@ export function OpenPage(): React.JSX.Element {
       )}
       <p className="m-0 text-center text-muted-foreground">
         {WORDS.NO_APP}{" "}
-        <a className={QUIET_LINK} href={LANDING_URL}>
+        <TextLink href={LANDING_URL} look={TEXT_LINK_LOOK.UNDERLINED}>
           {WORDS.GET}
-        </a>
+        </TextLink>
       </p>
       {/* Note that the line's room stands from the first paint, two lines where the card is narrow enough to wrap it, because a card growing under a press would move the button from under the pointer. */}
       <p
@@ -108,9 +106,9 @@ export function OpenPage(): React.JSX.Element {
         {pressed ? (
           <span className="animate-arrive-late">
             {WORDS.DID_NOT_OPEN}{" "}
-            <a className={QUIET_LINK} href={LANDING_URL}>
+            <TextLink href={LANDING_URL} look={TEXT_LINK_LOOK.UNDERLINED}>
               {WORDS.INSTALLED}
-            </a>
+            </TextLink>
             .
           </span>
         ) : null}

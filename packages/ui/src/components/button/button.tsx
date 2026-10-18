@@ -41,7 +41,8 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
  * somewhere: a download, another site, an app's own scheme. The browser
  * follows its address, so it opens in a new tab, copies, and hands off as
  * any link does; it is never unavailable or busy, since a link that cannot
- * be followed is not drawn.
+ * be followed is not drawn. An IconButtonLink is an IconButton's look on a
+ * link, named by its `label`; an `external` one opens in a new tab.
  *
  * An app's hint wraps a button and hands it the pointer and focus handlers
  * it shows and goes on, and the chord it names (`HintProps`), which land on
@@ -217,6 +218,37 @@ export function ButtonLink({
         {icon}
         <span className="luke-button-words">{children}</span>
       </span>
+    </a>
+  );
+}
+
+/** A link drawn as an IconButton: a glyph alone, named by `label`, going to `href` when pressed. */
+export function IconButtonLink({
+  href,
+  icon,
+  label,
+  variant,
+  external = false,
+}: {
+  href: string;
+  icon: ReactNode;
+  /** Its accessible name, which a sighted reader has from the glyph. */
+  label: string;
+  variant?: ButtonVariant;
+  /** Whether it opens in a new tab, leaving the page it is on where it was. */
+  external?: boolean;
+}): React.JSX.Element {
+  return (
+    <a
+      className="luke-button"
+      data-icon-only="true"
+      data-variant={variant ?? BUTTON_VARIANT.QUIET}
+      href={href}
+      aria-label={label}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noreferrer" : undefined}
+    >
+      <span className="luke-button-face">{icon}</span>
     </a>
   );
 }

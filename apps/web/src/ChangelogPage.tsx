@@ -1,12 +1,15 @@
 import {
   BUTTON_VARIANT,
   ButtonLink,
+  MARK_PROVIDER,
+  ProviderMark,
   PUBLIC_PAGE_WIDTH,
   PublicPage,
   PublicSection,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
+  TextLink,
 } from "@luke/ui";
 import changelogMarkdown from "../../../CHANGELOG.md?raw";
 import {
@@ -19,13 +22,7 @@ import {
   parseReleases,
   type Release,
 } from "./changelog-releases";
-import {
-  GitHubMark,
-  REPOSITORY_URL,
-  SITE_PAGE,
-  SiteFooterLinks,
-  SiteNavigation,
-} from "./SiteChrome";
+import { REPOSITORY_URL, SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 
 /**
  * The changelog's pages and its per-release pages, drawn from CHANGELOG.md
@@ -47,9 +44,6 @@ const RELEASE_DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
 function formatReleaseDate(date: string): string {
   return RELEASE_DATE_FORMAT.format(new Date(`${date}T00:00:00Z`));
 }
-
-const NAV_LINK =
-  "text-sm font-semibold text-muted-foreground no-underline transition-colors duration-150 hover:text-foreground motion-reduce:transition-none";
 
 /**
  * What opens either view: an optional way back, the page's title, and its door
@@ -73,7 +67,11 @@ function ChangelogIntro({
         {title}
       </Text>
       <div className="mt-6">
-        <ButtonLink variant={BUTTON_VARIANT.OUTLINE} href={github.href} icon={<GitHubMark />}>
+        <ButtonLink
+          variant={BUTTON_VARIANT.OUTLINE}
+          href={github.href}
+          icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}
+        >
           {github.label}
         </ButtonLink>
       </div>
@@ -244,9 +242,9 @@ function SingleRelease({
     <>
       <ChangelogIntro
         back={
-          <a className={NAV_LINK} href={CHANGELOG_PATH}>
+          <TextLink href={CHANGELOG_PATH} variant={TEXT_VARIANT.LABEL}>
             ← Changelog
-          </a>
+          </TextLink>
         }
         title={`Luke ${release.version}`}
         github={{
