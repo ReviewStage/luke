@@ -4902,14 +4902,6 @@ ol.transcript-list {
   display: contents;
 }
 
-/* A row's line in the popover: its server's mark, then its words. */
-.agent-servers-line {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-}
-
 /* A server's words, one line beside its mark: its name, its count, and
    why it lists no tools, each giving way so the reason stays in sight. */
 .agent-servers-words {

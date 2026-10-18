@@ -611,14 +611,8 @@ function ServersPopover({
       >
         <ListRow
           id={index < 0 ? undefined : `${rowsId}-${index}`}
-          // Note that the mark leads the title's line rather than the row's
-          // muted leading slot, because a brand's mark is drawn in its own ink.
-          title={
-            <span className="agent-servers-line">
-              <ProviderMark provider={input.row.provider} />
-              {input.title}
-            </span>
-          }
+          leading={<ProviderMark provider={input.row.provider} />}
+          title={input.title}
           meta={input.meta}
           actions={input.actions}
           current={index >= 0 && index === at ? LIST_ROW_CURRENT.ITEM : undefined}
