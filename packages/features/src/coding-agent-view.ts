@@ -45,6 +45,7 @@ import {
 } from "./provider-key-wire.js";
 import {
   pullRequestActionRequestSchema,
+  pullRequestViewedAnswerSchema,
   pullRequestWriteAnswerSchema,
 } from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
@@ -392,6 +393,15 @@ export const codingAgentPullRequestWriteAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentPullRequestWriteAnswerView =
   typeof codingAgentPullRequestWriteAnswerViewSchema.Type;
+
+/** Which of an agent's pull request's files the member marked viewed on GitHub, as the window hears it: each file's mark, the member to sign in with GitHub again, GitHub's refusal in its words, or why there is no answer. */
+export const codingAgentPullRequestViewedAnswerViewSchema = EffectSchema.Union([
+  pullRequestViewedAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentPullRequestViewedAnswerView =
+  typeof codingAgentPullRequestViewedAnswerViewSchema.Type;
 
 /** A dictated clip, as the window asks for its words: the clip once, its length, and the words to listen for. */
 export const dictationTranscribeParamsSchema = dictationRequestSchema;

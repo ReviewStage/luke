@@ -39,6 +39,7 @@ import {
   type CodingAgentPullRequestActionParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
+  type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
   type CodingAgentServersParams,
@@ -129,6 +130,9 @@ export interface CodingAgentActsDependencies {
     codingAgentPullRequestAction(
       params: CodingAgentPullRequestActionParams,
     ): Effect.Effect<CodingAgentPullRequestWriteAnswerView>;
+    codingAgentPullRequestViewed(
+      params: CodingAgentPullRequestParams,
+    ): Effect.Effect<CodingAgentPullRequestViewedAnswerView>;
     providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
     providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
     providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
@@ -211,6 +215,7 @@ export type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION
   | typeof ACT_KIND.CODING_AGENTS_GITHUB_IMAGE
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION
+  | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED
   | typeof ACT_KIND.PROVIDER_KEYS_READ
   | typeof ACT_KIND.PROVIDER_KEYS_SAVE
   | typeof ACT_KIND.PROVIDER_KEYS_REMOVE
@@ -370,6 +375,10 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, sender);
       return host.codingAgentPullRequestAction(params);
+    },
+    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED, sender);
+      return host.codingAgentPullRequestViewed(params);
     },
     [ACT_KIND.PROVIDER_KEYS_READ]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PROVIDER_KEYS_READ, sender);

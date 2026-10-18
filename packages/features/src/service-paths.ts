@@ -624,6 +624,11 @@ export function agentPullRequestActionPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/pull-request/action`;
 }
 
+/** Which of an agent's pull request's files the asking member marked viewed on GitHub (GET), read on their own sign-in; `pull-request-write-wire.ts` declares the answer. */
+export function agentPullRequestViewedPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/pull-request/viewed`;
+}
+
 /** One agent's shells: list them and where its sandbox stands (GET), or start one (POST); `terminal-wire.ts` declares both. */
 export function agentTerminalsPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/terminals`;

@@ -1283,6 +1283,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
 });
 
 const AGENT_PULL_REQUEST_ACTION = "/api/agents/pull-request-action";
+const AGENT_PULL_REQUEST_VIEWED = "/api/agents/pull-request-viewed";
 const AGENT_PULL_REQUEST = "/api/agents/pull-request";
 const AGENT_OVERVIEW_PULL_REQUEST = AGENT_OVERVIEW[0];
 
@@ -1404,6 +1405,37 @@ function reviewMutations(calls: readonly GraphqlCall[]) {
 /** A change to one of the pull request's review threads as the bearer given. */
 function threadActionAs(bearer: string, agentId: string, body: WireBoundaryInput): Request {
   return request(AGENT_PULL_REQUEST_ACTION, bearer, { method: "POST", id: agentId, body });
+}
+
+/**
+ * GitHub answering the viewed read a page at a time, the first page's
+ * cursor naming the second, and the pull request's id and an empty answer
+ * to each mutation.
+ */
+function viewedAnswering(call: GraphqlCall): Response {
+  if (call.query.includes("mutation")) return Response.json({ data: {} });
+  if (!call.query.includes("viewerViewedState")) {
+    return Response.json({ data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } } });
+  }
+  const first = call.variables.after === null;
+  const nodes = first
+    ? [
+        { path: "src/seats.ts", viewerViewedState: "VIEWED" },
+        { path: "src/plan.ts", viewerViewedState: "DISMISSED" },
+      ]
+    : [{ path: "README.md", viewerViewedState: "UNVIEWED" }];
+  return Response.json({
+    data: {
+      repository: {
+        pullRequest: {
+          files: {
+            nodes,
+            pageInfo: { hasNextPage: first, endCursor: first ? "cursor-2" : null },
+          },
+        },
+      },
+    },
+  });
 }
 
 /** GitHub answering a thread's calls: the pull request's id, every thread named as one of the pull request given, and an empty answer to each mutation. */
@@ -1875,6 +1907,85 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
         assert.ok(calls.every((call) => !call.query.includes("mutation")));
+      }),
+  );
+
+  it.effect(
+    "a teammate reads which files they viewed on GitHub, every page of them, and marks and unmarks one, each on their own GitHub token",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: viewedAnswering,
+        });
+
+        const viewed = yield* ask(request(AGENT_PULL_REQUEST_VIEWED, other, { id: agent.id }));
+        const marked = yield* ask(
+          threadActionAs(other, agent.id, { action: "mark-file-viewed", path: "README.md" }),
+        );
+        const unmarked = yield* ask(
+          threadActionAs(other, agent.id, { action: "unmark-file-viewed", path: "src/seats.ts" }),
+        );
+
+        assert.deepEqual(viewed, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            outcome: "done",
+            files: [
+              { path: "src/seats.ts", state: "viewed" },
+              { path: "src/plan.ts", state: "dismissed" },
+              { path: "README.md", state: "unviewed" },
+            ],
+          },
+        });
+        assert.deepEqual(marked, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(unmarked, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(
+          calls
+            .filter((call) => call.query.includes("viewerViewedState"))
+            .map((call) => call.variables.after),
+          [null, "cursor-2"],
+        );
+        assert.deepEqual(
+          calls
+            .filter((call) => call.query.includes("mutation"))
+            .map((call) => [
+              call.query.includes("unmarkFileAsViewed") ? "unmark" : "mark",
+              call.variables,
+            ]),
+          [
+            ["mark", { id: PULL_REQUEST_NODE_ID, path: "README.md" }],
+            ["unmark", { id: PULL_REQUEST_NODE_ID, path: "src/seats.ts" }],
+          ],
+        );
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+      }),
+  );
+
+  it.effect(
+    "a member with no GitHub sign-in, or one GitHub refuses, is asked to sign in before any viewed mark is read, never on the App's token",
+    () =>
+      Effect.gen(function* () {
+        const unsigned = yield* published({ otherToken: null });
+        assert.deepEqual(
+          yield* unsigned.ask(
+            request(AGENT_PULL_REQUEST_VIEWED, unsigned.other, { id: unsigned.agent.id }),
+          ),
+          { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "sign-in-required" } },
+        );
+        assert.deepEqual(unsigned.calls, []);
+
+        const revoked = yield* published({
+          otherToken: "ghu_revoked",
+          answer: () => Response.json({ message: "Bad credentials" }, { status: 401 }),
+        });
+        assert.deepEqual(
+          yield* revoked.ask(
+            request(AGENT_PULL_REQUEST_VIEWED, revoked.other, { id: revoked.agent.id }),
+          ),
+          { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "sign-in-required" } },
+        );
+        assert.ok(revoked.calls.every((call) => call.authorization === "Bearer ghu_revoked"));
       }),
   );
 

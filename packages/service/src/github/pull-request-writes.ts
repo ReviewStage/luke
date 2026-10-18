@@ -14,9 +14,13 @@
  * (a missing permission, a branch protection, a rate limit); and a GitHub
  * that could not be reached or answered in no shape the call reads.
  * Nothing of the token, the request, or GitHub's body reaches a log line.
+ * Which files the member marked viewed is read through the same call, on
+ * the same token, since GitHub keeps that mark for each account alone.
  */
 
 import {
+  FILE_VIEWED_STATE,
+  type FileViewedState,
   MERGE_METHOD,
   type MergeMethod,
   PULL_REQUEST_WRITE_BOUNDS,
@@ -115,7 +119,7 @@ const readWrite = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
 const githubWrite = <A>(
   token: Redacted.Redacted,
   document: string,
-  variables: Readonly<Record<string, string | number | boolean>>,
+  variables: Readonly<Record<string, string | number | boolean | null>>,
   data: Schema.Codec<A, unknown>,
 ): Effect.Effect<A, GitHubWriteFailure, HttpClient.HttpClient> =>
   Effect.scoped(
@@ -417,3 +421,118 @@ export const takeOutOfMergeQueue = /* @__PURE__ */ Effect.fn("web/takeOutOfMerge
 ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
   yield* githubWrite(token, DEQUEUE_MUTATION, { id: pullRequestId }, Schema.Unknown);
 });
+
+const MARK_VIEWED_MUTATION = `mutation($id: ID!, $path: String!) {
+  markFileAsViewed(input: { pullRequestId: $id, path: $path }) { clientMutationId }
+}`;
+
+const UNMARK_VIEWED_MUTATION = `mutation($id: ID!, $path: String!) {
+  unmarkFileAsViewed(input: { pullRequestId: $id, path: $path }) { clientMutationId }
+}`;
+
+/** One of the pull request's files marked viewed, or unmarked where `viewed` is false, for the member alone, on their token. */
+export const setFileViewed = /* @__PURE__ */ Effect.fn("web/setFileViewed")(function* (
+  token: Redacted.Redacted,
+  pullRequestId: string,
+  path: string,
+  viewed: boolean,
+): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+  yield* githubWrite(
+    token,
+    viewed ? MARK_VIEWED_MUTATION : UNMARK_VIEWED_MUTATION,
+    { id: pullRequestId, path },
+    Schema.Unknown,
+  );
+});
+
+/** GitHub lists a pull request's files a hundred to a page. */
+const VIEWED_PER_PAGE = 100;
+
+const VIEWED_QUERY = `query($owner: String!, $name: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      files(first: ${VIEWED_PER_PAGE}, after: $after) {
+        nodes { path viewerViewedState }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}`;
+
+/** GitHub's own word for where a file stands for the viewer, as `FileViewedState` spells it. */
+const GRAPHQL_VIEWED_STATE = {
+  VIEWED: FILE_VIEWED_STATE.VIEWED,
+  UNVIEWED: FILE_VIEWED_STATE.UNVIEWED,
+  DISMISSED: FILE_VIEWED_STATE.DISMISSED,
+} as const satisfies Record<string, FileViewedState>;
+
+/** GitHub's words for where a file stands, each one `GRAPHQL_VIEWED_STATE` reads. */
+const GRAPHQL_VIEWED_STATES = [
+  "VIEWED",
+  "UNVIEWED",
+  "DISMISSED",
+] as const satisfies readonly (keyof typeof GRAPHQL_VIEWED_STATE)[];
+
+const ViewedPageSchema = Schema.Struct({
+  repository: Schema.NullOr(
+    Schema.Struct({
+      pullRequest: Schema.NullOr(
+        Schema.Struct({
+          files: Schema.NullOr(
+            Schema.Struct({
+              nodes: Schema.Array(
+                Schema.Struct({
+                  path: Schema.String,
+                  viewerViewedState: Schema.Literals(GRAPHQL_VIEWED_STATES),
+                }),
+              ),
+              pageInfo: Schema.Struct({
+                hasNextPage: Schema.Boolean,
+                endCursor: Schema.NullOr(Schema.String),
+              }),
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
+});
+
+/** One file and where it stands for the member. */
+export interface FileViewed {
+  readonly path: string;
+  readonly state: FileViewedState;
+}
+
+/**
+ * Where each of the pull request's files stands for the member on GitHub,
+ * read on their token a page at a time, up to as many as a read of the
+ * changes lists; a pull request out of their sight is GitHub's refusal.
+ */
+export const pullRequestViewedStates = /* @__PURE__ */ Effect.fn("web/pullRequestViewedStates")(
+  function* (
+    token: Redacted.Redacted,
+    fullName: string,
+    number: number,
+  ): Effect.fn.Return<readonly FileViewed[], GitHubWriteFailure, HttpClient.HttpClient> {
+    const [owner = "", name = ""] = fullName.split("/");
+    const files: FileViewed[] = [];
+    let after: string | null = null;
+    while (files.length < PULL_REQUEST_WRITE_BOUNDS.MAX_VIEWED_FILES) {
+      const page: typeof ViewedPageSchema.Type = yield* githubWrite(
+        token,
+        VIEWED_QUERY,
+        { owner, name, number, after },
+        ViewedPageSchema,
+      );
+      const listed = page.repository?.pullRequest?.files;
+      if (listed === undefined || listed === null) return yield* refusalOf([NOT_RESOLVED]);
+      for (const node of listed.nodes) {
+        files.push({ path: node.path, state: GRAPHQL_VIEWED_STATE[node.viewerViewedState] });
+      }
+      if (!listed.pageInfo.hasNextPage || listed.pageInfo.endCursor === null) break;
+      after = listed.pageInfo.endCursor;
+    }
+    return files.slice(0, PULL_REQUEST_WRITE_BOUNDS.MAX_VIEWED_FILES);
+  },
+);

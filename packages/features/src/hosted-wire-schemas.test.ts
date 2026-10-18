@@ -224,6 +224,8 @@ const EFFECT_MODULE_SCHEMAS = {
       codingAgentView.codingAgentPullRequestActionParamsSchema,
     codingAgentPullRequestWriteAnswerViewSchema:
       codingAgentView.codingAgentPullRequestWriteAnswerViewSchema,
+    codingAgentPullRequestViewedAnswerViewSchema:
+      codingAgentView.codingAgentPullRequestViewedAnswerViewSchema,
     codingAgentGitHubImageParamsSchema: codingAgentView.codingAgentGitHubImageParamsSchema,
     githubImageTypeSchema: codingAgentView.githubImageTypeSchema,
     codingAgentGitHubImageViewSchema: codingAgentView.codingAgentGitHubImageViewSchema,
@@ -436,6 +438,7 @@ const EFFECT_MODULE_SCHEMAS = {
     mergeMethodSchema: pullRequestWriteWire.mergeMethodSchema,
     pullRequestActionRequestSchema: pullRequestWriteWire.pullRequestActionRequestSchema,
     pullRequestWriteAnswerSchema: pullRequestWriteWire.pullRequestWriteAnswerSchema,
+    pullRequestViewedAnswerSchema: pullRequestWriteWire.pullRequestViewedAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof pullRequestWriteWire>,
   "repository-reach-wire": {
     repositoryUnreachedSchema: repositoryReachWire.repositoryUnreachedSchema,

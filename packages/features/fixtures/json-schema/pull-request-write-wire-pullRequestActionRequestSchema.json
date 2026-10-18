@@ -213,6 +213,48 @@
         "threadId"
       ],
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "mark-file-viewed"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      },
+      "required": [
+        "action",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "unmark-file-viewed"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      },
+      "required": [
+        "action",
+        "path"
+      ],
+      "additionalProperties": false
     }
   ]
 }

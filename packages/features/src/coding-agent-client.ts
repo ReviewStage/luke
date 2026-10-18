@@ -47,6 +47,7 @@ import {
   type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
@@ -125,6 +126,7 @@ import {
 import {
   type PullRequestActionRequest,
   pullRequestActionRequestSchema,
+  pullRequestViewedAnswerSchema,
   pullRequestWriteAnswerSchema,
 } from "./pull-request-write-wire.js";
 import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
@@ -140,6 +142,7 @@ import {
   agentPicturePath,
   agentPullRequestActionPath,
   agentPullRequestPath,
+  agentPullRequestViewedPath,
   agentStopPath,
   agentSubagentMessagesPath,
   HOSTED_SERVICE_PATH,
@@ -867,6 +870,16 @@ export class HostedCodingAgentClient {
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, pullRequestWriteAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** Which of the agent's pull request's files the member marked viewed on GitHub, read on their own sign-in. */
+  pullRequestViewed(
+    agentId: string,
+  ): Effect.Effect<CodingAgentPullRequestViewedAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentPullRequestViewedPath(agentId) }),
+      (answer) => readAnswer(answer, pullRequestViewedAnswerSchema, ROW_REFUSALS),
     );
   }
 
