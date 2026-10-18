@@ -633,17 +633,18 @@ function answeredCall(
   return { ...namedCall(kind, input, output, undefined), subject: stringAt(named, field) ?? "" };
 }
 
-/** The tools that keep the member's sidebar sections, whose accepted call changes the sidebar. */
+/** The tools that keep the member's sidebar, sections and archives, whose accepted call changes it. */
 const SECTION_TOOLS: ReadonlySet<string> = new Set([
   AGENT_TOOL.CREATE_SECTION,
   AGENT_TOOL.DELETE_SECTION,
   AGENT_TOOL.MOVE_TASK,
+  AGENT_TOOL.ARCHIVE_TASK,
 ]);
 
 /**
  * Whether an answered call changed what the sidebar draws, so the window
  * reads the tasks again: a start that made a new task, or a section made,
- * deleted, or a task moved, each only once it was accepted.
+ * deleted, a task moved, or a task archived, each only once it was accepted.
  */
 export function changesSidebar(tool: string, output: WireValue | undefined): boolean {
   if (!isRecord(output)) return false;
@@ -734,6 +735,8 @@ function tasksToolView(
       return answeredCall(CALL_KIND.DELETE_SECTION, input, output, "section", "title");
     case AGENT_TOOL.MOVE_TASK:
       return answeredCall(CALL_KIND.MOVE_TASK, input, output, "task", "name");
+    case AGENT_TOOL.ARCHIVE_TASK:
+      return answeredCall(CALL_KIND.ARCHIVE_TASK, input, output, "task", "name");
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
     case EVE_TOOL.TASK_WAIT:

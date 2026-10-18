@@ -762,7 +762,7 @@ export const LIST_TASKS_TOOL = {
     "workspace's sidebar, each with its id and title. Narrow it by words of a task's name with " +
     `nameContains. Call it to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s ` +
     `taskId, to narrow ${AGENT_TOOL.LIST_AGENTS} to one, or to find the task and the section ` +
-    `${AGENT_TOOL.MOVE_TASK} and ${AGENT_TOOL.DELETE_SECTION} name.`,
+    `${AGENT_TOOL.MOVE_TASK}, ${AGENT_TOOL.DELETE_SECTION}, and ${AGENT_TOOL.ARCHIVE_TASK} name.`,
   inputSchema: LIST_TASKS_INPUT,
 } as const;
 
@@ -904,7 +904,7 @@ export function callerUserId(caller: AgentCaller): string {
 }
 
 /** The task the caller works on: the call's, or the coding agent's own, which may be none. */
-function callerTask(caller: AgentCaller): string | null {
+export function callerTask(caller: AgentCaller): string | null {
   return caller.kind === AGENT_CALLER.LUKE ? caller.plan.taskId : caller.agent.taskId;
 }
 

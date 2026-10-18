@@ -83,7 +83,12 @@ import {
   type SearchWebResult,
 } from "../public-research.js";
 import type { RepositorySandbox } from "../repository-shell.js";
-import { runCreateSection, runDeleteSection, runMoveTask } from "../task-section-tools.js";
+import {
+  runArchiveTask,
+  runCreateSection,
+  runDeleteSection,
+  runMoveTask,
+} from "../task-section-tools.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
@@ -451,6 +456,7 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.CREATE_SECTION
     | typeof CODER_TOOL.DELETE_SECTION
     | typeof CODER_TOOL.MOVE_TASK
+    | typeof CODER_TOOL.ARCHIVE_TASK
     | typeof CODER_TOOL.LIST_MODELS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
@@ -470,6 +476,7 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.CREATE_SECTION]: runCreateSection,
   [CODER_TOOL.DELETE_SECTION]: runDeleteSection,
   [CODER_TOOL.MOVE_TASK]: runMoveTask,
+  [CODER_TOOL.ARCHIVE_TASK]: runArchiveTask,
   [CODER_TOOL.LIST_MODELS]: runListModels,
 } as const;
 

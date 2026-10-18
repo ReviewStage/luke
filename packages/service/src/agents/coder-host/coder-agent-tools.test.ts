@@ -2271,3 +2271,42 @@ test("create_section, move_task, and delete_section keep the caller's starter's 
     reason: TASK_SECTION_TOOL_REFUSAL.NO_SECTION,
   });
 });
+
+test("archive_task archives a teammate's task of the caller's workspace for every member, which list_tasks then leaves out, again as accepted, and refuses the caller's own task and one of another workspace", async () => {
+  const { workspaceId, plans: taskIds, agents } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const archived = {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    task: { id: taskIds.billing, name: "Billing" },
+  };
+
+  assert.deepEqual(await call(CODER_TOOL.ARCHIVE_TASK, { taskId: taskIds.billing }), archived);
+  const listed = await call(CODER_TOOL.LIST_TASKS, {});
+  assert.ok(Array.isArray(listed.tasks));
+  assert.deepEqual(
+    listed.tasks.flatMap((task) => (isRecord(task) ? [task.id] : [])),
+    [taskIds.invitations],
+  );
+  // The archive is the workspace's, so the teammate who started the task reads it archived too.
+  const theirs = await database.run(readTask(teammates.userId, taskIds.billing));
+  assert.ok(Option.isSome(theirs) && theirs.value.task.archivedAt !== undefined);
+  assert.deepEqual(await call(CODER_TOOL.ARCHIVE_TASK, { taskId: taskIds.billing }), archived);
+
+  assert.deepEqual(await call(CODER_TOOL.ARCHIVE_TASK, { taskId: taskIds.invitations }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: TASK_SECTION_TOOL_REFUSAL.OWN_TASK,
+  });
+  // The caller's starter is a member of the other workspace too, but the caller is not of it.
+  assert.deepEqual(await call(CODER_TOOL.ARCHIVE_TASK, { taskId: taskIds.elsewhere }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: TASK_SECTION_TOOL_REFUSAL.NO_TASK_TO_ARCHIVE,
+  });
+  const elsewhere = await database.run(readTask(caller.userId, taskIds.elsewhere));
+  assert.ok(Option.isSome(elsewhere) && elsewhere.value.task.archivedAt === undefined);
+  assert.deepEqual(await call(CODER_TOOL.ARCHIVE_TASK, { taskId: "billing" }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: TASK_SECTION_TOOL_REFUSAL.UNREADABLE_ARCHIVE,
+  });
+});

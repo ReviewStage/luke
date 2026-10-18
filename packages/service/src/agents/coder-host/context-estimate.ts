@@ -19,7 +19,12 @@ import {
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
-import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL, MOVE_TASK_TOOL } from "../task-section-tools.js";
+import {
+  ARCHIVE_TASK_TOOL,
+  CREATE_SECTION_TOOL,
+  DELETE_SECTION_TOOL,
+  MOVE_TASK_TOOL,
+} from "../task-section-tools.js";
 import { CODER } from "./bounds.js";
 import { CHAT_TOOLS } from "./chat.js";
 import { DELEGATE_TOOL } from "./delegation.js";
@@ -161,6 +166,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.MOVE_TASK]: {
     description: MOVE_TASK_TOOL.description,
     inputSchema: emitJsonSchema(MOVE_TASK_TOOL.inputSchema),
+  },
+  [CODER_TOOL.ARCHIVE_TASK]: {
+    description: ARCHIVE_TASK_TOOL.description,
+    inputSchema: emitJsonSchema(ARCHIVE_TASK_TOOL.inputSchema),
   },
   [CODER_TOOL.POST_CHAT]: {
     description: CHAT_TOOLS.POST.description,

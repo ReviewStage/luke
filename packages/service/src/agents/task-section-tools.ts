@@ -5,7 +5,7 @@ import {
   listTaskSections,
   writeTaskSections,
 } from "@luke/database/models/task-section-store";
-import { readTask } from "@luke/database/models/task-store";
+import { readTask, updateTask } from "@luke/database/models/task-store";
 import {
   TASK_SECTION_BOUNDS,
   TASK_SECTION_ICON_KIND,
@@ -28,13 +28,14 @@ import {
   agentToolRejected,
   CODING_AGENT_TOOL_REFUSAL,
   type CodingAgentCall,
+  callerTask,
   callerUserId,
   callerWorkspace,
   orStoreRefusal,
 } from "./coding-agent-tools.js";
 
 /**
- * task-section-tools.ts -- the tools every agent keeps the developer's sidebar sections by: make one, delete one, and move a task into one or out of them.
+ * task-section-tools.ts -- the tools every agent keeps the developer's sidebar by: make a section, delete one, move a task into one or out of them, and archive a task.
  *
  * Luke on a call and every coding agent are offered the same
  * `create_section`, `delete_section`, and `move_task`, one implementation
@@ -51,8 +52,13 @@ import {
  * own. A section is made under an id drawn from eve's key for the call, so
  * a call eve runs again makes the one section; a task moved where it
  * already stands moves nothing; and deleting a section puts its tasks back
- * under Tasks and deletes none of them. Every answer is data the model
- * reads, never a credential.
+ * under Tasks and deletes none of them. `archive_task` archives another
+ * task of the workspace by the write the task menu's Archive makes (`PATCH
+ * /api/plans/:id`, `task-store.ts`'s `updateTask`): an archive is a stamp on
+ * the task's row, so it is the workspace's, and any member brings it back
+ * from the archived list. The task the caller works on is refused, as an
+ * agent archiving itself is. Every answer is data the model reads, never a
+ * credential.
  */
 
 /** Why a call changed nothing, in words the model can act on. */
@@ -71,6 +77,9 @@ export const TASK_SECTION_TOOL_REFUSAL = {
     "Not run: the developer you work for keeps no section of this workspace under that id; " +
     `${AGENT_TOOL.LIST_TASKS} names the sections.`,
   NO_TASK: `Not moved: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
+  UNREADABLE_ARCHIVE: `Not archived: name the task by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
+  NO_TASK_TO_ARCHIVE: `Not archived: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
+  OWN_TASK: "Not archived: that is the task you work on; the developer archives it from its menu.",
   UNAVAILABLE: "Not run: the sections could not be written just now. The call may be made again.",
 } as const;
 
@@ -109,9 +118,17 @@ const MOVE_TASK_INPUT = Schema.Struct({
   ),
 });
 
+const ARCHIVE_TASK_INPUT = Schema.Struct({
+  taskId: describeWire(
+    wireUuidSchema,
+    `The task to archive, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
+  ),
+});
+
 const readCreateAsked = Schema.decodeUnknownResult(CREATE_SECTION_INPUT);
 const readDeleteAsked = Schema.decodeUnknownResult(DELETE_SECTION_INPUT);
 const readMoveAsked = Schema.decodeUnknownResult(MOVE_TASK_INPUT);
+const readArchiveAsked = Schema.decodeUnknownResult(ARCHIVE_TASK_INPUT);
 
 /** The tools as Luke and every coding agent are offered them: each its name, its words, and its input schema. */
 export const CREATE_SECTION_TOOL = {
@@ -147,6 +164,18 @@ export const MOVE_TASK_TOOL = {
     "asks you to sort or file them. Answers `accepted` with the task's id and name and the " +
     "section it now stands in (null for none), or `rejected` and why.",
   inputSchema: MOVE_TASK_INPUT,
+} as const;
+
+export const ARCHIVE_TASK_TOOL = {
+  name: AGENT_TOOL.ARCHIVE_TASK,
+  description:
+    `Archive another task of your workspace, by its id as ${AGENT_TOOL.LIST_TASKS} answered it, ` +
+    "as the developer's Archive would: it leaves the sidebar and every member's task list for " +
+    "the archived ones, its plan, agents, and pull requests kept, and any member can unarchive " +
+    "it. Archive a task only when the developer asks for it, never on your own, and never the " +
+    "task you work on. Answers `accepted` with the task's id and name, also for a task already " +
+    "archived, or `rejected` and why.",
+  inputSchema: ARCHIVE_TASK_INPUT,
 } as const;
 
 /** The UUID's version and variant bits, set as RFC 9562 sets them on a name-based (SHA) id. */
@@ -290,6 +319,46 @@ export function runMoveTask(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         task: { id: taskId, name: stored.value.task.name },
         section: section === undefined ? null : sectionReading(section),
+      };
+    }),
+  );
+}
+
+/** One call of `archive_task`: a task of the caller's workspace, other than its own, archived for every member. */
+export function runArchiveTask(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, DatabaseServices> {
+  const asked = readArchiveAsked(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(TASK_SECTION_TOOL_REFUSAL.UNREADABLE_ARCHIVE));
+  }
+  const { taskId } = asked.success;
+  if (taskId === callerTask(call.caller)) {
+    return Effect.succeed(agentToolRejected(TASK_SECTION_TOOL_REFUSAL.OWN_TASK));
+  }
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      const workspace = yield* callerWorkspace(call.caller);
+      if (Option.isNone(workspace)) {
+        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      }
+      const userId = callerUserId(call.caller);
+      const stored = yield* readTask(userId, taskId);
+      // A task of another workspace, even one the member is also in, is none of the caller's.
+      if (Option.isNone(stored) || stored.value.task.workspaceId !== workspace.value) {
+        return agentToolRejected(TASK_SECTION_TOOL_REFUSAL.NO_TASK_TO_ARCHIVE);
+      }
+      const archived = yield* updateTask(userId, taskId, { archived: true }).pipe(
+        // Note that a change naming only the archive is never refused as archived, so one that is breaks the store's contract.
+        Effect.catchTag("TaskArchived", (refused) => Effect.die(refused)),
+      );
+      if (Option.isNone(archived)) {
+        return agentToolRejected(TASK_SECTION_TOOL_REFUSAL.NO_TASK_TO_ARCHIVE);
+      }
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        task: { id: taskId, name: archived.value.name },
       };
     }),
   );

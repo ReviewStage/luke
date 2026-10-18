@@ -83,9 +83,11 @@ import {
   runInRepository,
 } from "../repository-shell.js";
 import {
+  ARCHIVE_TASK_TOOL,
   CREATE_SECTION_TOOL,
   DELETE_SECTION_TOOL,
   MOVE_TASK_TOOL,
+  runArchiveTask,
   runCreateSection,
   runDeleteSection,
   runMoveTask,
@@ -259,6 +261,8 @@ On a request to stop an agent ("stop the agent", "it's going the wrong way, stop
 
 The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. On a request to sort them ("make a section for the billing work", "move the invite tasks into Growth", "delete the Old section"), list_tasks names each task's section and the sections the developer keeps; create_section makes a section, move_task moves a task into one or back under Tasks, and delete_section deletes one, its tasks going back under Tasks and none of them deleted. Change only what the developer asked for, never on your own, then say in your return what you changed.
 
+On a request to put tasks away ("archive the billing task", "archive the tasks whose PRs merged"), archive_task archives each other task of the workspace the developer means, found with list_tasks, as their Archive would: it leaves every member's sidebar, its plan and agents kept, and any member can unarchive it. Archive only what the developer asked for, never on your own, and never this task, which the developer archives from its menu. Then say in your return which tasks you archived.
+
 ### The task's chat
 
 The task's workspace has a chat, where its coding agents, the developer's team, and you talk; you speak there as @luke, and the task has a channel of its own, where its agents post. What was said there since your last turn is handed to you under [chat since the last call], and is read by then. When the developer asks you to tell the team or the task's agents something they should all see ("post in the channel that we're moving to Postgres", "tell everyone the API is frozen"), post it with post_chat, in the task's channel unless they name another channel or a member, then say briefly in your return what you posted. A message for one agent's session alone is message_coding_agent, as above. On a status question, read the task's channel with read_chat beside the agents themselves, and fold what was said there into the sentence or two you return; never read the chat out. A question for the developer on this call is queue_question, never a post: an ask in chat is for the room to answer later, and you resolve one of yours with resolve_ask once it no longer matters.
@@ -289,6 +293,7 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - archive_agent archives an idle coding agent of the workspace by its id, with a short reason its archived banner shows, and unarchive_agent brings an archived one back.
 - list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, who started it, and the sidebar section the developer keeps it in, and the sections themselves, so an agent can be started on another task by its taskId, or a task moved.
 - create_section makes a section in the developer's sidebar for this workspace, delete_section deletes one, its tasks going back under Tasks, and move_task moves a task into a section or back under Tasks.
+- archive_task archives another task of the workspace by its id, for every member, as the developer's Archive would.
 - post_chat posts a message in the workspace's chat as @luke, in the task's channel unless it names another place.
 - read_chat reads the workspace's chat: who is in it, its channels, and what you have not read, or a channel's or a thread's messages.
 - resolve_ask resolves an ask you posted in the chat, by its key.
@@ -650,6 +655,10 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   {
     ...MOVE_TASK_TOOL,
     run: (call, input) => runMoveTask(call.agents, input),
+  },
+  {
+    ...ARCHIVE_TASK_TOOL,
+    run: (call, input) => runArchiveTask(call.agents, input),
   },
   {
     ...LIST_MODELS_TOOL,

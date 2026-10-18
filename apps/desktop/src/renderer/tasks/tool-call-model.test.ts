@@ -557,7 +557,7 @@ test("a stop names the agent its answer titles and opens that agent's tab, which
   assert.equal(toolTarget(refused), undefined);
 });
 
-test("the section calls read as theirs, a made section by the title asked and a deleted one and a moved task by what the answer names, and open nothing", () => {
+test("the sidebar calls read as theirs, a made section by the title asked and a deleted one, a moved task, and an archived task by what the answer names, and open nothing", () => {
   const made = {
     tool: "create_section",
     callId: "call-1",
@@ -585,7 +585,14 @@ test("the section calls read as theirs, a made section by the title asked and a 
     },
   };
 
-  const rows = [made, deleted, moved].map((call) => {
+  const archived = {
+    tool: "archive_task",
+    callId: "call-4",
+    input: { taskId: "task-3" },
+    output: { status: "accepted", task: { id: "task-3", name: "Old invites" } },
+  };
+
+  const rows = [made, deleted, moved, archived].map((call) => {
     const view = toolCallView(call);
     return [view.kind, view.subject, toolTarget(call)];
   });
@@ -593,8 +600,10 @@ test("the section calls read as theirs, a made section by the title asked and a 
     [CALL_KIND.CREATE_SECTION, "Growth", undefined],
     [CALL_KIND.DELETE_SECTION, "Growth", undefined],
     [CALL_KIND.MOVE_TASK, "Bill by seat", undefined],
+    [CALL_KIND.ARCHIVE_TASK, "Old invites", undefined],
   ]);
   assert.equal(toolCallView({ ...moved, output: undefined }).subject, "");
+  assert.equal(toolCallView({ ...archived, output: undefined }).subject, "");
 });
 
 test("a page read names the page its answer titles, and opens the page's tab only where it is on the call's own task", () => {

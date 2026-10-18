@@ -276,7 +276,7 @@ Keep the inbox current rather than repeating it. Post under an item's key again 
 
 ## The sidebar's sections
 
-The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. \`${CODER_TOOL.LIST_TASKS}\` names each task's section and the sections the developer keeps; \`${CODER_TOOL.CREATE_SECTION}\` makes a section, \`${CODER_TOOL.MOVE_TASK}\` moves a task into one or back under Tasks, and \`${CODER_TOOL.DELETE_SECTION}\` deletes one, its tasks going back under Tasks and none of them deleted. Sort the developer's tasks only when they ask you to, never on your own, and say in your message what you changed.
+The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. \`${CODER_TOOL.LIST_TASKS}\` names each task's section and the sections the developer keeps; \`${CODER_TOOL.CREATE_SECTION}\` makes a section, \`${CODER_TOOL.MOVE_TASK}\` moves a task into one or back under Tasks, and \`${CODER_TOOL.DELETE_SECTION}\` deletes one, its tasks going back under Tasks and none of them deleted. Sort the developer's tasks only when they ask you to, never on your own, and say in your message what you changed. \`${CODER_TOOL.ARCHIVE_TASK}\` archives another task of your workspace by its id, for every member, as the developer's Archive would, its plan and agents kept and any member able to unarchive it: archive one only when the developer asks you to, never your own task, and say in your message which tasks you archived.
 
 ## What your messages are
 
