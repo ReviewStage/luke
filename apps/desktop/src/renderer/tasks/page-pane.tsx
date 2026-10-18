@@ -1,6 +1,6 @@
 import type { PageLine } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
-import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import {
   ChevronLeftIcon,
@@ -89,17 +89,14 @@ function VersionStep({
 }): React.JSX.Element {
   return (
     <Tooltip label={label}>
-      <button
-        type="button"
-        className="icon-button"
-        aria-label={label}
+      <IconButton
+        icon={icon}
+        label={label}
         disabled={to === undefined}
         onClick={() => {
           if (to !== undefined) onStep(to);
         }}
-      >
-        {icon}
-      </button>
+      />
     </Tooltip>
   );
 }
@@ -267,28 +264,21 @@ export function PagePane({
               </>
             ) : null}
             <Tooltip label={toggleLabel}>
-              <button
-                type="button"
-                className="icon-button page-view-source-toggle"
-                aria-label={toggleLabel}
-                data-source={String(showingSource)}
+              <IconButton
+                icon={<CodeXmlIcon aria-hidden="true" />}
+                label={toggleLabel}
                 onClick={() => setView(showingSource ? PAGE_VIEW.PAGE : PAGE_VIEW.SOURCE)}
-              >
-                <CodeXmlIcon aria-hidden="true" />
-              </button>
+              />
             </Tooltip>
             <Tooltip label="Reload">
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Reload page"
+              <IconButton
+                icon={<RotateCwIcon aria-hidden="true" />}
+                label="Reload page"
                 onClick={() => {
                   setReloads((was) => was + 1);
                   sources.forget();
                 }}
-              >
-                <RotateCwIcon aria-hidden="true" />
-              </button>
+              />
             </Tooltip>
             {showingSource ? <SourceMenu read={source} /> : null}
           </div>
