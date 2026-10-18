@@ -4,6 +4,7 @@ import {
   clearedIssueFilter,
   DEFAULT_ISSUE_FILTER,
   filteredIssues,
+  ISSUE_GROUPING,
   issueColumns,
   issueFilterAnyPriority,
   issueFilterChanged,
@@ -11,6 +12,7 @@ import {
   issueFilterToggledPriority,
   issueGroups,
   issueIdentifier,
+  issueListGroups,
 } from "./issue-list-model.js";
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "./issue-wire.js";
 
@@ -218,4 +220,41 @@ test("choosing a creator or every priority changes that alone, the rest of the f
     createdBy: "user-ada",
     showCompleted: false,
   });
+});
+
+test("grouped by priority, the list stands the most pressing first and an unweighed issue's last, leaves out a priority no issue holds, and lists the work under way first inside each", () => {
+  const groups = issueListGroups(
+    [
+      issue(1, { priority: ISSUE_PRIORITY.NONE }),
+      issue(2, { priority: ISSUE_PRIORITY.HIGH, status: ISSUE_STATUS.BACKLOG, updatedAt: 90 }),
+      issue(3, { priority: ISSUE_PRIORITY.HIGH, status: ISSUE_STATUS.IN_PROGRESS, updatedAt: 10 }),
+      issue(4, { priority: ISSUE_PRIORITY.URGENT, status: ISSUE_STATUS.DONE }),
+      issue(5, { priority: ISSUE_PRIORITY.HIGH, status: ISSUE_STATUS.BACKLOG, updatedAt: 95 }),
+    ],
+    ISSUE_GROUPING.PRIORITY,
+  );
+
+  assert.deepEqual(
+    groups.map((group) => [group.words, numbers(group.issues)]),
+    [
+      ["Urgent", [4]],
+      ["High", [3, 5, 2]],
+      ["No priority", [1]],
+    ],
+  );
+});
+
+test("grouped by status, the list's headings are the status groups in their words", () => {
+  const groups = issueListGroups(
+    [issue(1, { status: ISSUE_STATUS.DONE }), issue(2, { status: ISSUE_STATUS.IN_PROGRESS })],
+    ISSUE_GROUPING.STATUS,
+  );
+
+  assert.deepEqual(
+    groups.map((group) => [group.words, numbers(group.issues)]),
+    [
+      ["In progress", [2]],
+      ["Done", [1]],
+    ],
+  );
 });

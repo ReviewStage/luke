@@ -2117,13 +2117,13 @@ test("an issue's page lists its archived tasks too, and its tasks newest started
   assert.deepEqual(workOf(page), ["Third try", "Second try", "First try"]);
 });
 
-/** The item of the menu standing open whose label, its glyph and any detail left out, is `name`. */
+/** The item whose label, its glyph and any detail left out, is `name`, of the newest menu standing open that holds one: a submenu before the menu it hangs from. */
 function labelledItem(name: string): HTMLButtonElement {
   const found = [
     ...document.querySelectorAll<HTMLElement>(
       '[role="menu"]:not([data-leaving]) .luke-menu-item-label',
     ),
-  ].find((each) => each.textContent === name);
+  ].findLast((each) => each.textContent === name);
   const item = found?.closest<HTMLButtonElement>("button");
   assert.ok(item, `no menu item labelled ${name}`);
   return item;
@@ -2285,4 +2285,45 @@ test("a filter one account chose is not the filter of another account signed in 
 
   assert.deepEqual(groups(other), [["Backlog2", ["ACME-2 Issue 2", "ACME-1 Issue 1"]]]);
   assert.equal(saysFiltered(other), false);
+});
+
+test("Group by Priority in the List's View options heads its issues by priority, the most pressing first, stands when the page opens again, and Status heads them by status again", async () => {
+  standing = [
+    issue(1, { priority: ISSUE_PRIORITY.LOW, status: ISSUE_STATUS.TODO }),
+    issue(2, { priority: ISSUE_PRIORITY.URGENT }),
+    issue(3, { priority: ISSUE_PRIORITY.LOW, status: ISSUE_STATUS.IN_PROGRESS }),
+  ];
+  const page = mount();
+  await settle();
+  act(() => button("View options").click());
+  const offeredOnBoard = [...document.querySelectorAll(".luke-menu-item-label")].some(
+    (label) => label.textContent === "Group by",
+  );
+  act(() => button("View options").click());
+  await settle();
+  showList();
+
+  chooseView("Priority", "Group by");
+  const byPriority = groups(page);
+  act(() => root?.unmount());
+  const reopened = mount();
+  await settle();
+  const keptByPriority = groups(reopened);
+  chooseView("Status", "Group by");
+
+  assert.equal(
+    offeredOnBoard,
+    false,
+    "the board's columns are its statuses, so it offers no grouping",
+  );
+  assert.deepEqual(byPriority, [
+    ["Urgent1", ["ACME-2 Issue 2"]],
+    ["Low2", ["ACME-3 Issue 3", "ACME-1 Issue 1"]],
+  ]);
+  assert.deepEqual(keptByPriority, byPriority);
+  assert.deepEqual(groups(reopened), [
+    ["In progress1", ["ACME-3 Issue 3"]],
+    ["Todo1", ["ACME-1 Issue 1"]],
+    ["Backlog1", ["ACME-2 Issue 2"]],
+  ]);
 });
