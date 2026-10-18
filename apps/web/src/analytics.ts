@@ -1,4 +1,4 @@
-import type { PostHog } from "posthog-js";
+import type { CapturedNetworkRequest, PostHog } from "posthog-js";
 
 /**
  * What tryluke.dev counts about itself. It exists to close the funnel the
@@ -13,11 +13,17 @@ import type { PostHog } from "posthog-js";
  * `PRIVACY.md` rather than letting the counted events' stronger claim bleed
  * onto either.
  *
- * The two masking options below are this file's own, and are the one place
- * this half is narrower than the app's: the panel records what a provider
- * wrote about somebody's work and no longer masks it, where this is a
- * marketing page whose copy is public and whose only typed field is a
- * sign-in. Masking the words costs nothing here, so nothing here spends it.
+ * The recorder here masks less than the app's: the desktop panel's recording
+ * masks every word it draws (`apps/desktop/src/renderer/session-replay.ts`),
+ * because the panel shows somebody's work, where this is a marketing page
+ * whose copy is public and whose only typed field is a sign-in, so only what
+ * is typed is masked. The two `mask_all_*` options below are autocapture's,
+ * not the recorder's, and keep a press's words out of its event.
+ *
+ * What the client does is set here in full rather than left to the project's
+ * settings, because the library turns on whatever the project's remote
+ * configuration asks for wherever `init` is silent, and `PRIVACY.md` says
+ * what this site collects, not what the project happens to have switched on.
  */
 
 const PROJECT_API_KEY = import.meta.env.VITE_POSTHOG_PROJECT_API_KEY;
@@ -47,44 +53,83 @@ const AUTH_PATH = {
 
 const AUTH_PATHS: ReadonlySet<string> = new Set(Object.values(AUTH_PATH));
 
+/**
+ * The query parameters that carry a credential, or a step of one, on any
+ * page: an OAuth authorization code and its state, an error a provider
+ * hands back, a PKCE challenge or verifier, a signed request and its
+ * signature, and a bearer token by its usual names. A provider or a link may
+ * land on any page with one, the landing page included, so these are taken
+ * off every address that leaves, not only the sign-in pages'.
+ */
+const AUTH_PARAMS: ReadonlySet<string> = new Set([
+  "code",
+  "state",
+  "error",
+  "error_description",
+  "error_uri",
+  "code_challenge",
+  "code_verifier",
+  "sig",
+  "signature",
+  "oauth_query",
+  "token",
+  "access_token",
+  "id_token",
+  "refresh_token",
+]);
+
+/** The library's console-log capture, which a project can switch on whatever `init` says. */
+const LOGS_SCRIPT = "/logs.js";
+
 /** Whether the page now loading is one the sign-in flow's address serves. */
 function onAuthPage(): boolean {
   return AUTH_PATHS.has(window.location.pathname);
 }
 
+/** Whether a script the library is about to load is its console-log capture. */
+function isLogsScript(script: HTMLScriptElement): boolean {
+  return new URL(script.src, window.location.href).pathname.endsWith(LOGS_SCRIPT);
+}
+
 /**
  * Cuts an auth page's address to its origin and path, dropping the query and
- * the fragment that carry the authorization request. Every other address is
- * returned whole, so a marketing link keeps the campaign that brought someone,
- * and a value that is not an address is returned untouched.
+ * the fragment that carry the authorization request, and takes the
+ * credential-bearing parameters off every other address. The rest of an
+ * address is kept, so a marketing link keeps the campaign that brought
+ * someone; an address with nothing to take off, and a value that is not an
+ * address, are returned exactly as they came.
  */
-function authUrlToPath(value: string): string {
+function scrubAuthUrl(value: string): string {
   let url: URL;
   try {
     url = new URL(value);
   } catch {
     return value;
   }
-  return AUTH_PATHS.has(url.pathname) ? `${url.origin}${url.pathname}` : value;
+  if (AUTH_PATHS.has(url.pathname)) return `${url.origin}${url.pathname}`;
+  const found = [...url.searchParams.keys()].filter((name) => AUTH_PARAMS.has(name));
+  if (found.length === 0) return value;
+  for (const name of found) url.searchParams.delete(name);
+  return url.toString();
 }
 
 /**
  * Rewrites every address a capture result carries — an event property, the
- * referrer, and the first-seen pair PostHog keeps once on the person, which
- * rides in the top-level `$set`/`$set_once` beside the properties, not within
- * them — so an auth page's address never leaves whole. An address only ever
- * sits as a string value in a plain record, so the walk descends into those
- * alone: an array (a recording's `$snapshot_data`, an autocaptured element
- * list) and a class instance (the capture result's `Date` timestamp) are each
- * a leaf, left whole. Anything that is not an auth page's address stays as it
- * was.
+ * referrer, the session's entry address, and the first-seen pair PostHog
+ * keeps once on the person, which rides in the top-level `$set`/`$set_once`
+ * beside the properties, not within them — so no address leaves with a
+ * credential in it (`scrubAuthUrl`). An address only ever sits as a string
+ * value in a plain record, so the walk descends into those alone: an array (a
+ * recording's `$snapshot_data`, whose addresses the recorder's own hook
+ * rewrites, and an autocaptured element list) and a class instance (the
+ * capture result's `Date` timestamp) are each a leaf, left whole.
  */
 /* oxlint-disable anti-slop/no-runtime-typeof, anti-slop/require-safety-comment-for-type-assertion --
    PostHog's capture result is the untyped JSON this boundary parses, so the
    walk branches on each node's runtime shape and the assertions restate the
    branch the `typeof`/prototype guard just proved. */
 export function sanitizeAnalyticsUrls<Value>(value: Value): Value {
-  if (typeof value === "string") return authUrlToPath(value) as Value;
+  if (typeof value === "string") return scrubAuthUrl(value) as Value;
   if (value !== null && typeof value === "object") {
     const proto = Object.getPrototypeOf(value);
     if (proto === Object.prototype || proto === null) {
@@ -137,7 +182,8 @@ export function startSiteAnalytics(): void {
       mask_all_text: true,
       mask_all_element_attributes: true,
       // The sign-in flow's address is a live authorization request, so the
-      // recorder never runs on its pages and no event keeps that address whole.
+      // recorder never runs on its pages, and no event or recording on any
+      // page keeps a credential in an address.
       disable_session_recording: onAuthPage(),
       before_send: (event) => event && sanitizeAnalyticsUrls(event),
       session_recording: {
@@ -145,7 +191,31 @@ export function startSiteAnalytics(): void {
         // and it is the one thing here worth masking.
         maskAllInputs: true,
         blockSelector: ".ph-block",
+        // The recorder's own hook for every address it writes: the page's
+        // address in each snapshot, each navigation, and each network entry.
+        maskCapturedNetworkRequestFn: (request: CapturedNetworkRequest) => ({
+          ...request,
+          name: scrubAuthUrl(request.name),
+        }),
       },
+      // Everything below is off whatever the project's settings say, because
+      // `PRIVACY.md` does not offer it: no exceptions, no console in a
+      // recording or as logs, no network timing or web vitals, no heatmaps or
+      // dead clicks, no Conversations widget, surveys, or product tours, and
+      // no feature flags, which nothing on this site reads. Console logs are
+      // the one the library lets a project switch on over `init`, so their
+      // script is refused from loading at all.
+      capture_exceptions: false,
+      enable_recording_console_log: false,
+      logs: { captureConsoleLogs: false },
+      prepare_external_dependency_script: (script) => (isLogsScript(script) ? null : script),
+      capture_performance: false,
+      capture_heatmaps: false,
+      capture_dead_clicks: false,
+      disable_conversations: true,
+      disable_surveys: true,
+      disable_product_tours: true,
+      advanced_disable_feature_flags: true,
     });
     return posthog;
   });

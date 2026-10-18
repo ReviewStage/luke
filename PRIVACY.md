@@ -1191,9 +1191,16 @@ We do not sell your information or use it for advertising.
 tryluke.dev counts page views, presses, and sign-in steps using PostHog, and
 records the pages themselves, except the sign-in pages, which it does not
 record. A press is counted by what was clicked and where, never the words on
-it, and a recording masks what you type into a field. When you finish signing
-in, the site names you to PostHog by your account's id, name, and email
-address, which links your earlier visits to your account. Your browser
+it, and a recording masks what you type into a field. Before a count or a
+recording leaves your browser, the site takes out of every address in it, on
+every page, any sign-in code, state, error, challenge, signature, or token a
+sign-in or a link put there, and cuts a sign-in page's address to the page
+itself. It collects nothing else, whatever our PostHog project's settings
+say: no errors, nothing from your browser's console, no page or network
+timings, no heatmaps, no chat widget, surveys, or product tours, and no
+feature flags. When you finish signing in, the site names you to PostHog by
+your account's id, name, and email address, which links your earlier visits
+to your account. Your browser
 contacts PostHog directly, so PostHog sees your network address, as it does
 for the app's recordings.
 
