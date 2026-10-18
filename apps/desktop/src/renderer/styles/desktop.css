@@ -1209,10 +1209,11 @@ ul.actor-stack {
 
 /* The one unread mark: what the developer has not seen, a plan saved since
    they last looked at it on this Mac, a tab that something arrived on while
-   another was chosen, and an Inbox item that needs them, reads in the
+   another was chosen, and a Factory row that waits on them, reads in the
    heavier weight and the primary ink until they look, as a chat app's
-   channels do. Only what waits on them, the Inbox item, also wears the
-   blue dot (`.inbox-row-dot`). In the sidebar, where a read name is in the
+   channels do. Only what waits on them, the Factory's row, also wears the
+   blue dot (`.inbox-row-dot`); an Inbox item that needs them wears the
+   attention mark instead (`.inbox-row-attention`). In the sidebar, where a read name is in the
    quieter ink, the ink carries half the step, so a semibold is enough. */
 .sidebar-task[data-unread="true"] .sidebar-task-name,
 .tab[data-unread="true"] .tab-label {
@@ -4184,25 +4185,21 @@ button.integration-tool-head:hover,
   transform: translateY(-50%);
 }
 
-/* In a ListRow the dot stands in a place of its own at the end of the row's
-   metadata, kept on every row, so the times line up whether a row wears one
-   or not. */
-.inbox-row-dot-place {
-  --inbox-dot: 7px;
-
-  position: relative;
-  display: inline-block;
-  width: var(--inbox-dot);
-  height: var(--inbox-dot);
-  flex: none;
+/* An Inbox item that needs the developer wears the attention mark before
+   its time (`inbox-list.tsx`), a size under a row glyph's, as a sidebar plan
+   wears it, so the disc's edge reads at the time's height. */
+.inbox-row-attention {
+  display: inline-flex;
 }
 
-/* A teammate's open item waits on them, not on the reader: the dot's place
-   holds a hollow ring in the time's ink, so the column still says something
-   is open there without the blue that means the reader is asked. */
-.inbox-row-dot[data-hollow="true"] {
-  background: none;
-  box-shadow: inset 0 0 0 1.5px var(--luke-color-text-subtle); /* off-scale: a hairline ring at the dot's size */
+.inbox-row-attention .attention-mark {
+  width: 12px;
+  height: 12px;
+}
+
+.inbox-row-attention .attention-mark svg {
+  width: 10px;
+  height: 10px;
 }
 
 /* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
@@ -6611,9 +6608,9 @@ button.integration-tool-head:hover,
   width: var(--summary-rail-width);
 }
 
-/* Needs you's glyph is the Inbox's own, wearing the rows' blue dot at its
-   top right while anything needs the developer, filtered out or not, so the
-   dot says there is something to answer and the pressed fill alone says the
+/* Needs you's glyph is the Inbox's own, wearing a dot in the rows'
+   attention orange at its top right while anything needs the developer,
+   filtered out or not, so the dot says there is something to answer and the pressed fill alone says the
    filter is on. The stroke is cut back in a ring around the dot, as lucide's
    own dotted glyphs are drawn. The dot stands in the glyph's 24-unit box,
    the cut in the glyph's pixels at the same point, scaled by one unit. */
@@ -6621,7 +6618,7 @@ button.integration-tool-head:hover,
   cx: 19px;
   cy: 5px;
   r: 3.6px;
-  fill: var(--luke-color-accent);
+  fill: var(--luke-color-attention-fill);
   stroke: none;
 }
 

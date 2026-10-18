@@ -92,6 +92,7 @@ import {
   proposedOptions,
   readersItem,
   SETTLED_BY,
+  sentenceCased,
   settledAt,
   settlementOf,
   THREAD_ENTRY,
@@ -858,11 +859,6 @@ function Comment({
 /** A comment's writer by name, which hangs their card and opens their page or tab. */
 function CommentName({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <span className="inbox-comment-name">{children}</span>;
-}
-
-/** A word set as the start of a sentence. */
-function sentenceCased(words: string): string {
-  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
 /**
