@@ -1,6 +1,6 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { type SocialProvider, socialProviderFromState } from "@luke/features/sign-in-provider";
-import { AuthPage, ProviderMark } from "@luke/ui";
+import { AuthPage, PROVIDER_MARK_SIZE, ProviderMark } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -60,7 +60,7 @@ function SignIn(): React.JSX.Element {
       mark={
         provider ? (
           <ConnectionGraphic
-            mark={<ProviderMark provider={provider} className="size-10 shrink-0" />}
+            mark={<ProviderMark provider={provider} size={PROVIDER_MARK_SIZE.TILE} />}
           />
         ) : (
           <span className="inline-flex w-13">

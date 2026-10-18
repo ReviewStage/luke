@@ -23,6 +23,8 @@
     line-height: var(--luke-type-label-leading);
     font-weight: var(--luke-weight-regular);
     text-align: left;
+    /* Note that a NavItemLink is an anchor, which would otherwise wear the link's underline. */
+    text-decoration: none;
     cursor: pointer;
     transition:
       background-color var(--duration-hover) ease,

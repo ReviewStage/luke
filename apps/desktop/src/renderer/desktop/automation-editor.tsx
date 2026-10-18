@@ -78,6 +78,7 @@ import {
   ErrorState,
   IconButton,
   POPOVER_ALIGN,
+  PROVIDER_MARK_SIZE,
   ProviderMark,
   SETTINGS_SECTION_FRAME,
   SettingsRow,
@@ -463,7 +464,7 @@ function OwnServersRow({
             ) : (
               <span className="automation-servers">
                 {shown.map((provider) => (
-                  <ProviderMark key={provider} provider={provider} />
+                  <ProviderMark key={provider} provider={provider} size={PROVIDER_MARK_SIZE.ICON} />
                 ))}
                 {on.length > shown.length ? (
                   <ChipName>{`+${on.length - shown.length}`}</ChipName>

@@ -210,11 +210,6 @@
   white-space: nowrap;
 }
 
-.account-provider .provider-mark {
-  width: 12px;
-  height: 12px;
-}
-
 /* The small glyph that rides a link's words. Note that a shared button's glyph
    is left to the button, because this unlayered rule would otherwise shrink
    the button's icon below the control contract's size. */
