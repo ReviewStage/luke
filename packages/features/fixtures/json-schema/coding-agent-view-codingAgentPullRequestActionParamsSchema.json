@@ -445,6 +445,84 @@
             "content"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "add-review-comment"
+              ]
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "single",
+                "review"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "line": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "side": {
+              "type": "string",
+              "enum": [
+                "left",
+                "right"
+              ]
+            },
+            "startLine": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "startSide": {
+              "type": "string",
+              "enum": [
+                "left",
+                "right"
+              ]
+            },
+            "body": {
+              "type": "string",
+              "maxLength": 65536
+            },
+            "headSha": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "action",
+            "mode",
+            "path",
+            "line",
+            "side",
+            "body",
+            "headSha"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "discard-review"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
         }
       ]
     }

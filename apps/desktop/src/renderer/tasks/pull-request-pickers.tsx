@@ -9,7 +9,7 @@ import type {
   PullRequestReviewTeam,
 } from "@luke/features/coding-agent-wire";
 import { PULL_REQUEST_ACTION, REVIEWER_KIND } from "@luke/features/pull-request-write-wire";
-import { cssCustomProperties, dropBelowStart, useMenu } from "@luke/ui";
+import { BUTTON_SIZE, cssCustomProperties, dropBelowStart, IconButton, useMenu } from "@luke/ui";
 import { TagIcon, UserPlusIcon, UserRoundIcon, UsersRoundIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
@@ -135,15 +135,13 @@ function PickerButton({
 }): React.JSX.Element {
   return (
     <Tooltip label={label}>
-      <button
-        type="button"
-        className="icon-button pull-request-picker"
-        aria-label={label}
+      <IconButton
+        icon={icon}
+        label={label}
+        size={BUTTON_SIZE.COMPACT}
         disabled={disabled}
         {...trigger}
-      >
-        {icon}
-      </button>
+      />
     </Tooltip>
   );
 }

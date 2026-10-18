@@ -17,14 +17,24 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
-import { Badge, CHIP_LOOK, Chip, ChipName, ErrorState, useMenu } from "@luke/ui";
 import {
-  CheckIcon,
+  Badge,
+  BUTTON_SIZE,
+  CHIP_LOOK,
+  Chip,
+  ChipName,
+  ErrorState,
+  IconButton,
+  INLINE_EDIT_LOOK,
+  InlineEdit,
+  type InlineEditEnd,
+  useMenu,
+} from "@luke/ui";
+import {
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
   PencilIcon,
-  XIcon,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
@@ -73,6 +83,8 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE]: "Disable auto-merge",
   [PULL_REQUEST_ACTION.DEQUEUE]: "Remove from queue",
   [PULL_REQUEST_ACTION.COMMENT]: "Comment",
+  [PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT]: "Comment on lines",
+  [PULL_REQUEST_ACTION.DISCARD_REVIEW]: "Discard review",
   [PULL_REQUEST_ACTION.CLOSE]: "Close pull request",
   [PULL_REQUEST_ACTION.REOPEN]: "Reopen pull request",
   [PULL_REQUEST_ACTION.EDIT_TITLE]: "Edit title",
@@ -113,7 +125,7 @@ function failureWords(failure: CodingAgentCallFailure): string {
 }
 
 /** What the line under the bar says of the last change, where GitHub did not take it. */
-const WRITE_NOTE = {
+export const WRITE_NOTE = {
   SIGN_IN: "sign-in",
   WORDS: "words",
 } as const;
@@ -121,6 +133,21 @@ const WRITE_NOTE = {
 type WriteNote =
   | { readonly kind: typeof WRITE_NOTE.SIGN_IN }
   | { readonly kind: typeof WRITE_NOTE.WORDS; readonly words: string };
+
+/** How a change went, for a press that waits on it, such as a question's answer: made, or not, in the words the line says why. */
+type WriteOutcome = { readonly done: true } | { readonly done: false; readonly words: string };
+
+/** What a press sent while another change is out is told: it was not sent. */
+const NOT_SENT: WriteOutcome = { done: false, words: "Another change is on its way to GitHub." };
+
+/** How an answer went, in the words its line says where GitHub did not make the change. */
+function outcomeOf(note: WriteNote | undefined): WriteOutcome {
+  if (note === undefined) return { done: true };
+  return {
+    done: false,
+    words: note.kind === WRITE_NOTE.SIGN_IN ? WRITE_WORDS.SIGN_IN : note.words,
+  };
+}
 
 /** The tab's changes: the one out, if any, what the last one left to say, and the presses. */
 export interface PullRequestWrites {
@@ -132,7 +159,7 @@ export interface PullRequestWrites {
    * sent it can let go of what it held, and what it answers settles once
    * GitHub answered and what it said is drawn, as a merge's question waits.
    */
-  readonly write: (request: PullRequestActionRequest, onDone?: () => void) => Promise<void>;
+  readonly write: (request: PullRequestActionRequest, onDone?: () => void) => Promise<WriteOutcome>;
   readonly dismiss: () => void;
 }
 
@@ -163,7 +190,7 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
   const out = useRef(false);
   const write = useCallback(
     (request: PullRequestActionRequest, onDone?: () => void) => {
-      if (out.current) return Promise.resolve();
+      if (out.current) return Promise.resolve(NOT_SENT);
       out.current = true;
       setPending(request.action);
       setNote(undefined);
@@ -176,12 +203,14 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
         .then((answer) => {
           out.current = false;
           setPending(undefined);
-          setNote(noteOf(answer));
+          const note = noteOf(answer);
+          setNote(note);
           if (!("failure" in answer) && answer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {
             onDone?.();
           }
           // Note that a refusal may still have moved the pull request, so every answer from GitHub reads again.
           if (!("failure" in answer)) onWritten();
+          return outcomeOf(note);
         });
     },
     [act, agentId, onWritten],
@@ -309,16 +338,15 @@ export function PullRequestWriteNote({
 /** The title's own words. */
 const TITLE_WORDS = {
   EDIT: "Edit title",
-  SAVE: "Save title",
-  CANCEL: "Cancel",
   FIELD: "Pull request title",
 } as const;
 
 /**
  * The pull request's title and number, its pencil opening a field over the
- * title where its words may be changed: kept on Enter or the check where
- * they changed and are not empty, given up on Escape or the cross. The field
- * stands until GitHub answers, and closes once it has.
+ * title where its words may be changed: kept on Enter, or as the focus
+ * leaves, where they changed and are not empty, and given up on Escape.
+ * The title stands as it was until GitHub answers with the new one, its
+ * pencil unavailable while the write is out.
  */
 export function PullRequestTitle({
   title,
@@ -330,83 +358,41 @@ export function PullRequestTitle({
   number: string;
   writes: PullRequestWrites;
 }): React.JSX.Element {
-  const [editing, setEditing] = useState<string | undefined>(undefined);
+  const [editing, setEditing] = useState(false);
   const busy = writes.pending !== undefined;
-  const begin = () => setEditing(title);
-  const keep = () => {
-    const words = (editing ?? "").trim();
-    if (words === "" || words === title) {
-      setEditing(undefined);
-      return;
-    }
-    void writes
-      .write({ action: PULL_REQUEST_ACTION.EDIT_TITLE, title: words })
-      .then(() => setEditing(undefined));
+  const end = ({ value }: InlineEditEnd) => {
+    setEditing(false);
+    if (value === undefined) return;
+    void writes.write({ action: PULL_REQUEST_ACTION.EDIT_TITLE, title: value });
   };
-  if (editing === undefined) {
+  if (editing) {
     return (
-      <h2 className="pull-request-title pull-request-title-editable">
-        {title} <span className="pull-request-number">{number}</span>
-        <Tooltip label={TITLE_WORDS.EDIT}>
-          <button
-            type="button"
-            className="icon-button pull-request-title-edit"
-            aria-label={TITLE_WORDS.EDIT}
-            disabled={busy}
-            onClick={begin}
-          >
-            <PencilIcon />
-          </button>
-        </Tooltip>
+      <h2 className="pull-request-title pull-request-title-field">
+        <InlineEdit
+          value={title}
+          label={TITLE_WORDS.FIELD}
+          editing
+          maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_TITLE_CHARS}
+          look={INLINE_EDIT_LOOK.INPUT}
+          onEnd={end}
+        />
       </h2>
     );
   }
   return (
-    <div className="pull-request-title pull-request-title-field">
-      <input
-        className="pull-request-title-input"
-        // biome-ignore lint/a11y/noAutofocus: the field opens on a press of its pencil, which is where the keyboard is going.
-        autoFocus
-        onFocus={(event) => event.currentTarget.select()}
-        aria-label={TITLE_WORDS.FIELD}
-        value={editing}
-        maxLength={PULL_REQUEST_WRITE_BOUNDS.MAX_TITLE_CHARS}
-        disabled={busy}
-        onChange={(event) => setEditing(event.target.value)}
-        onKeyDown={(event) => {
-          // Note that a key an input method takes to finish a word is the word's, not the field's.
-          if (event.nativeEvent.isComposing) return;
-          if (event.key === "Enter") keep();
-          if (event.key === "Escape") {
-            // The field's Escape gives the edit up and nothing more, so the window's own Escape never closes the page.
-            event.preventDefault();
-            event.stopPropagation();
-            setEditing(undefined);
-          }
-        }}
-      />
-      <Tooltip label={TITLE_WORDS.SAVE}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={TITLE_WORDS.SAVE}
-          disabled={busy || editing.trim() === ""}
-          onClick={keep}
-        >
-          <CheckIcon />
-        </button>
-      </Tooltip>
-      <Tooltip label={TITLE_WORDS.CANCEL}>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={TITLE_WORDS.CANCEL}
-          disabled={busy}
-          onClick={() => setEditing(undefined)}
-        >
-          <XIcon />
-        </button>
-      </Tooltip>
-    </div>
+    <h2 className="pull-request-title pull-request-title-editable">
+      {title} <span className="pull-request-number">{number}</span>
+      <span className="pull-request-title-edit">
+        <Tooltip label={TITLE_WORDS.EDIT}>
+          <IconButton
+            icon={<PencilIcon aria-hidden="true" />}
+            label={TITLE_WORDS.EDIT}
+            size={BUTTON_SIZE.COMPACT}
+            disabled={busy}
+            onClick={() => setEditing(true)}
+          />
+        </Tooltip>
+      </span>
+    </h2>
   );
 }

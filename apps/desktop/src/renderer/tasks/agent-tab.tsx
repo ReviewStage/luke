@@ -20,6 +20,8 @@ import { useAct } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
 import { useOpenPlace } from "@luke/panel/tasks/use-open-link";
 import {
+  BUTTON_VARIANT,
+  Button,
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
@@ -1238,13 +1240,11 @@ function AgentEndLine({
       {mark}
       <span className="agent-end-words">{ended.words}</span>
       {remedy === undefined ? null : (
-        <button
-          type="button"
-          className="toolbar-button bordered-button failure-note-remedy agent-end-remedy"
-          onClick={onOpenApiKeys}
-        >
-          {remedy}
-        </button>
+        <span className="agent-end-remedy">
+          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onOpenApiKeys}>
+            {remedy}
+          </Button>
+        </span>
       )}
     </p>
   );

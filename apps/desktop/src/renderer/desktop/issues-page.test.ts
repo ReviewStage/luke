@@ -58,6 +58,13 @@ const DAY = 24 * HOUR;
 /** The moment the window's clock stands at in a test that reads how long ago something was. */
 const NOW = Date.UTC(2026, 9, 14, 12);
 
+/**
+ * The moment the window's clock stands at otherwise: a day past the epoch,
+ * so the synthetic issues, stamped in its first seconds, are recent, and a
+ * settled one among them is not left out as gone quiet.
+ */
+const EARLY = DAY;
+
 /** The signed-in reader's account. */
 const READER = "user-grace";
 
@@ -187,8 +194,11 @@ let tasksArchived: TaskSummary[] = [];
 let newTasksFrom: NewTaskIssue[] = [];
 /** Every task opened, in order. */
 let tasksOpened: string[] = [];
+/** The account signed in as the page is drawn. */
+let signedIn = READER;
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"], now: EARLY });
   installScrollIntoView();
   window.localStorage.clear();
   standing = [];
@@ -208,6 +218,7 @@ beforeEach(() => {
   tasksArchived = [];
   newTasksFrom = [];
   tasksOpened = [];
+  signedIn = READER;
   editors.length = 0;
   bundles = landed;
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
@@ -317,7 +328,7 @@ function Pages({
   const control = tasksControl({ workspace });
   const tasks = tasksControl({
     workspace,
-    me: READER,
+    me: signedIn,
     tasks: tasksListed,
     archived: tasksArchived,
     onNewTaskFrom: (from) => newTasksFrom.push(from),
@@ -2104,4 +2115,174 @@ test("an issue's page lists its archived tasks too, and its tasks newest started
   const page = await openIssue(issue(1).id);
 
   assert.deepEqual(workOf(page), ["Third try", "Second try", "First try"]);
+});
+
+/** The item of the menu standing open whose label, its glyph and any detail left out, is `name`. */
+function labelledItem(name: string): HTMLButtonElement {
+  const found = [
+    ...document.querySelectorAll<HTMLElement>(
+      '[role="menu"]:not([data-leaving]) .luke-menu-item-label',
+    ),
+  ].find((each) => each.textContent === name);
+  const item = found?.closest<HTMLButtonElement>("button");
+  assert.ok(item, `no menu item labelled ${name}`);
+  return item;
+}
+
+/** One choice of View options taken: the submenu named opened, where one is, and the choice in it. */
+function chooseView(choice: string, submenu?: string): void {
+  act(() => button("View options").click());
+  if (submenu !== undefined) act(() => labelledItem(submenu).click());
+  act(() => labelledItem(choice).click());
+}
+
+/** Whether View options says the page is filtered. */
+function saysFiltered(page: HTMLElement): boolean {
+  const options = page.querySelector(".issues-view-options");
+  return (
+    options?.getAttribute("data-filtered") === "true" &&
+    button("View options").getAttribute("aria-description") === "Filtered"
+  );
+}
+
+test("a priority chosen in View options leaves the others off the board and the list, says the page is filtered, and stands when the page opens again", async () => {
+  standing = [
+    issue(1, { priority: ISSUE_PRIORITY.URGENT }),
+    issue(2, { priority: ISSUE_PRIORITY.LOW }),
+    issue(3, { priority: ISSUE_PRIORITY.NONE, status: ISSUE_STATUS.TODO }),
+  ];
+  const page = mount();
+  await settle();
+  const filteredAtFirst = saysFiltered(page);
+
+  chooseView("Urgent", "Priority");
+  const board = groups(page);
+  const filtered = saysFiltered(page);
+  showList();
+  const list = groups(page);
+  act(() => root?.unmount());
+  const reopened = mount();
+  await settle();
+
+  assert.equal(filteredAtFirst, false);
+  assert.deepEqual(board, [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.ok(filtered, "View options says a filter is on");
+  assert.deepEqual(list, [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.deepEqual(groups(reopened), [["Backlog1", ["ACME-1 Issue 1"]]], "the filter is kept");
+  assert.ok(saysFiltered(reopened));
+});
+
+test("Created by Me in View options shows only the issues the reader filed", async () => {
+  standing = [
+    issue(1, { creator: { userId: "user-ada", name: "Ada Lovelace" } }),
+    issue(2, { creator: { userId: READER, name: "Grace Hopper" } }),
+    issue(3, { creator: null }),
+  ];
+  const page = mount();
+  await settle();
+
+  chooseView("Me", "Created by");
+  const mine = groups(page);
+  chooseView("Ada Lovelace", "Created by");
+  const ada = groups(page);
+  chooseView("Anyone", "Created by");
+
+  assert.deepEqual(mine, [["Backlog1", ["ACME-2 Issue 2"]]]);
+  assert.deepEqual(ada, [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.deepEqual(groups(page), [
+    ["Backlog3", ["ACME-3 Issue 3", "ACME-2 Issue 2", "ACME-1 Issue 1"]],
+  ]);
+  assert.equal(saysFiltered(page), false);
+});
+
+test("a Done or Canceled issue last changed over a week ago is left off the board and the list at first while a recent one stands, and Show completed brings it back", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  standing = [
+    issue(1, { status: ISSUE_STATUS.DONE, updatedAt: NOW - 8 * DAY }),
+    issue(2, { status: ISSUE_STATUS.DONE, updatedAt: NOW - DAY }),
+    issue(3, { status: ISSUE_STATUS.CANCELED, updatedAt: NOW - 30 * DAY }),
+    issue(4, { status: ISSUE_STATUS.BACKLOG, updatedAt: NOW - 30 * DAY }),
+  ];
+  const page = mount();
+  await settle();
+  const atFirst = columns(page);
+  const filteredAtFirst = saysFiltered(page);
+  showList();
+  const listedAtFirst = groups(page);
+
+  chooseView("Show completed");
+  const listed = groups(page);
+  act(() => button("View options").click());
+  act(() => labelledItem("Board").click());
+
+  assert.deepEqual(atFirst.slice(3), [
+    ["Done1", ["ACME-2"]],
+    ["Canceled", []],
+  ]);
+  assert.deepEqual(atFirst[0], ["Backlog1", ["ACME-4"]], "open work stands however old");
+  assert.equal(filteredAtFirst, false, "the first filter is no change to say");
+  assert.deepEqual(listedAtFirst, [
+    ["Backlog1", ["ACME-4 Issue 4"]],
+    ["Done1", ["ACME-2 Issue 2"]],
+  ]);
+  assert.deepEqual(listed, [
+    ["Backlog1", ["ACME-4 Issue 4"]],
+    ["Done2", ["ACME-2 Issue 2", "ACME-1 Issue 1"]],
+    ["Canceled1", ["ACME-3 Issue 3"]],
+  ]);
+  assert.deepEqual(columns(page).slice(3), [
+    ["Done2", ["ACME-2", "ACME-1"]],
+    ["Canceled1", ["ACME-3"]],
+  ]);
+  assert.ok(saysFiltered(page));
+});
+
+test("where every issue is settled and gone quiet, the page says none matches and Clear filters shows them", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+  standing = [issue(1, { status: ISSUE_STATUS.DONE, updatedAt: NOW - 30 * DAY })];
+  const page = mount();
+  await settle();
+  const said = page.querySelector(".luke-empty-state")?.textContent;
+
+  act(() => button("Clear filters").click());
+
+  assert.equal(said, "No issues matchClear filters");
+  assert.deepEqual(groups(page), [["Done1", ["ACME-1 Issue 1"]]]);
+});
+
+test("a filter that keeps none of the workspace's issues says no issue matches, and Clear filters shows every issue again", async () => {
+  standing = [issue(1), issue(2, { status: ISSUE_STATUS.TODO })];
+  const page = mount();
+  await settle();
+
+  chooseView("Urgent", "Priority");
+  const said = page.querySelector(".luke-empty-state")?.textContent;
+  const columnsWhileNone = page.querySelectorAll("[data-issue-column]").length;
+  act(() => button("Clear filters").click());
+
+  assert.equal(said, "No issues matchClear filters");
+  assert.equal(columnsWhileNone, 0, "the board's columns step aside for the line");
+  assert.deepEqual(groups(page), [
+    ["Backlog1", ["ACME-1 Issue 1"]],
+    ["Todo1", ["ACME-2 Issue 2"]],
+  ]);
+  assert.equal(saysFiltered(page), false);
+});
+
+test("a filter one account chose is not the filter of another account signed in on this Mac", async () => {
+  standing = [
+    issue(1, { creator: { userId: "user-ada", name: "Ada Lovelace" } }),
+    issue(2, { creator: { userId: READER, name: "Grace Hopper" } }),
+  ];
+  mount();
+  await settle();
+  chooseView("Me", "Created by");
+  act(() => root?.unmount());
+
+  signedIn = "user-ada";
+  const other = mount();
+  await settle();
+
+  assert.deepEqual(groups(other), [["Backlog2", ["ACME-2 Issue 2", "ACME-1 Issue 1"]]]);
+  assert.equal(saysFiltered(other), false);
 });

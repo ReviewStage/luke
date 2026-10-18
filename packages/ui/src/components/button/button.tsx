@@ -10,7 +10,10 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * for one that destroys, `danger-outline` for a destructive act that is
  * not the place's own, and `ink` for one that ends what the place holds, a
  * solid fill in the text's own colour apart from the quiet ones beside it,
- * as a call's End call is. Each is one control's height, corner, and glyph
+ * as a call's End call is. Two tinted looks carry news on a wash of their
+ * colour rather than a fill: `working-tint` for an act something under way
+ * offers (Restart, once a release is downloaded), and `danger-tint` for the
+ * one a failure offers (Download, once installing it failed). Each is one control's height, corner, and glyph
  * in the profile it is drawn at, and owns its insides: it takes no class or
  * style, and its outer spacing is its container's. Its shape is square on
  * the control's corner, or `round`: a disc for a glyph alone, a pill for
@@ -54,7 +57,10 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * smaller square a row's marks stand in at its end (a sidebar row's Pin,
  * Archive, or ⋯, a message's Copy), which its row reveals under the
  * pointer. A compact quiet one draws no ground under the pointer, because
- * the row beneath it is already lit; only its glyph brightens.
+ * the row beneath it is already lit; only its glyph brightens. A labelled
+ * Button comes in the same two: `compact` is a row mark's height in the
+ * caption's type, for a press that stands among words rather than
+ * controls (a sidebar foot's Restart).
  *
  * An IconButton may instead be a `submit`, the round button a message is
  * sent with: its glyph is its state's, never its caller's, an arrow while it
@@ -76,6 +82,8 @@ export const BUTTON_VARIANT = {
   DANGER: "danger",
   DANGER_OUTLINE: "danger-outline",
   INK: "ink",
+  WORKING_TINT: "working-tint",
+  DANGER_TINT: "danger-tint",
 } as const;
 
 export type ButtonVariant = (typeof BUTTON_VARIANT)[keyof typeof BUTTON_VARIANT];
@@ -88,7 +96,7 @@ export const BUTTON_SHAPE = {
 
 export type ButtonShape = (typeof BUTTON_SHAPE)[keyof typeof BUTTON_SHAPE];
 
-/** How big a glyph-alone button is: the control's own square, or a row mark's. */
+/** How big a button is: the control's own, or a row mark's height. */
 export const BUTTON_SIZE = {
   CONTROL: "control",
   COMPACT: "compact",
@@ -214,6 +222,7 @@ function stateProps(props: ButtonBase, name: string | undefined) {
 export function Button({
   icon,
   label,
+  size,
   children,
   ...props
 }: ButtonBase & {
@@ -221,10 +230,15 @@ export function Button({
   icon?: ReactNode;
   /** Its accessible name where its words say less, which holds its words ("Start a coding agent" over "Start"). */
   label?: string | undefined;
+  size?: ButtonSize | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <button className="luke-button" {...stateProps(props, label)}>
+    <button
+      className="luke-button"
+      data-size={size === BUTTON_SIZE.COMPACT ? BUTTON_SIZE.COMPACT : undefined}
+      {...stateProps(props, label)}
+    >
       <span className="luke-button-face">
         {icon}
         <span className="luke-button-words">{children}</span>
