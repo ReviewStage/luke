@@ -10,6 +10,7 @@ import {
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { type SettledWaiting, useSettledWaiting } from "@luke/panel/tasks/inbox-settling";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
@@ -896,12 +897,13 @@ function ListSkeleton(): React.JSX.Element {
  * tasks, the sum of the Inbox's row counts, and every one from an agent
  * with no task that the developer started (`waitsOnReader`), which names no
  * workspace to be counted in; a teammate's is listed in the Inbox, and waits
- * on the teammate.
+ * on the teammate. An item the window answered is counted no longer from the
+ * moment it was sent (`inbox-settling.ts`).
  */
-function waitingItems(tasks: TasksControl): number {
-  return tasks.listed.inbox.reduce(
+function waitingItems({ waiting, taskless }: SettledWaiting, readerId: string | undefined): number {
+  return waiting.reduce(
     (sum, task) => sum + task.items.length,
-    tasks.inboxTaskless.filter((each) => waitsOnReader(each, tasks.me)).length,
+    taskless.filter((each) => waitsOnReader(each, readerId)).length,
   );
 }
 
@@ -1291,6 +1293,7 @@ function SidebarColumn({
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
+  const settledWaiting = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -1569,7 +1572,7 @@ function SidebarColumn({
         </NavItem>
         <SidebarHomeRow current={atHome} disabled={!tasks.signedIn} onOpen={chosen(goHome)} />
         <SidebarInboxRow
-          waiting={tasks.signedIn ? waitingItems(tasks) : 0}
+          waiting={tasks.signedIn ? waitingItems(settledWaiting, tasks.me) : 0}
           current={inInbox}
           disabled={!tasks.signedIn}
           onOpen={chosen(openInbox)}

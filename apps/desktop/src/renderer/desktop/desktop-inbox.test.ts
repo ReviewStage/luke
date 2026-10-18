@@ -10,6 +10,7 @@ import {
 } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxMessagedView,
@@ -564,6 +565,15 @@ function answerHead(page: HTMLElement): string | null {
   );
 }
 
+/** The picks the shown item's answer carries, as its comment draws them. */
+function answeredPicks(page: HTMLElement): (string | null)[] {
+  return [
+    ...page.querySelectorAll(
+      '.inbox-view-items:not([hidden]) [data-inbox-comment="answered"] [data-inbox-pick]',
+    ),
+  ].map((pick) => pick.textContent);
+}
+
 /** Opens the fold holding what a settled item offered, by pressing its line. */
 function openOffered(within: ParentNode): void {
   const line =
@@ -823,7 +833,8 @@ test("Enter on a focused option sends the answer and never presses the option; w
     sent.map(({ reply, choices }) => ({ reply, choices })),
     [{ reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] }],
   );
-  assert.deepEqual(checkedOptions(pane), ["Retry once"], "Enter left the pick standing");
+  // The answer stands at once, as sent: the pick Enter was on, never pressed off.
+  assert.deepEqual(answeredPicks(page), ["Retry once"], "Enter left the pick standing");
 });
 
 test("a waiting choice of several is a checkbox list whose box counts the picks on its foot: the arrows move along it picking nothing, a number key toggles its option, and Enter on a picked option sends every pick and lets none go", async () => {
@@ -872,7 +883,8 @@ test("a waiting choice of several is a checkbox list whose box counts the picks 
     sent.map(({ reply, choices }) => ({ reply, choices })),
     [{ reply: INBOX_REPLY.CHOSE, choices: ["Pager", "Email"] }],
   );
-  assert.deepEqual(checkedOptions(pane), ["Email", "Pager"], "Enter let no pick go");
+  // The answer stands at once, as sent: every pick, Enter's own among them.
+  assert.deepEqual(answeredPicks(page), ["Email, Pager"], "Enter let no pick go");
 });
 
 test("Enter anywhere in a form, in a short number field or its text field's composer, sends it once its required fields are filled, and before that takes the keyboard to the first one left empty, the box's foot naming it; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
@@ -1000,7 +1012,8 @@ test("an approval is decided in its question, Approve and Decline two cards pick
     sent.map(({ reply }) => reply),
     [INBOX_REPLY.DECLINED],
   );
-  assert.deepEqual(checkedOptions(pane), ["Decline"], "Enter left the pick standing");
+  // The answer stands at once, as sent: the pick Enter was on, never pressed off.
+  assert.deepEqual(answeredPicks(page), ["Decline"], "Enter left the pick standing");
 });
 
 test("a to-do is a task card in its question: a checkbox beside its step, the item's title, and a Couldn't do it pill under it, picked as a choice of two by a press, the arrows, or its number, and sent by the box's one Send", async () => {
@@ -4297,4 +4310,200 @@ test("a row swiped right marks its item: a long swipe marks an unread item read 
     "Alert at 80%?",
     "a swipe opens nothing",
   );
+});
+
+/** The answers the pane sent, and how the test answers the oldest still out, as the service would. */
+interface GatedAnswers {
+  readonly sent: CodingAgentInboxAnswerParams[];
+  readonly answer: (view: CodingAgentInboxAnsweredView) => void;
+}
+
+/** Every answer the pane sends, held until the test answers it as the service would. */
+function gatedAnswers(): GatedAnswers {
+  const sent: CodingAgentInboxAnswerParams[] = [];
+  const waiting: ((view: CodingAgentInboxAnsweredView) => void)[] = [];
+  const bridge = appBridge();
+  fakeAppBridge({
+    ...bridge,
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return bridge.act(request);
+      sent.push(request.payload);
+      return new Promise((resolve) =>
+        waiting.push((value) => resolve({ status: ACT_OUTCOME_STATUS.DONE, value })),
+      );
+    },
+  });
+  return { sent, answer: (view) => waiting.shift()?.(view) };
+}
+
+/** Threshold as the service answers it once the reader's note was taken. */
+const THRESHOLD_ANSWERED: InboxItem = {
+  ...THRESHOLD,
+  status: INBOX_STATUS.ANSWERED,
+  answer: { reply: INBOX_REPLY.ANSWERED, note: "Use 90%" },
+  answeredBy: READER,
+  settledAt: 6_000,
+  updatedAt: 6_000,
+};
+
+/** Each plan's header as the list folds it: its name and what in it needs you. */
+function foldedCounts(page: HTMLElement): (string | null)[] {
+  const headers = () => [
+    ...page.querySelectorAll<HTMLButtonElement>(
+      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+    ),
+  ];
+  for (const header of headers()) {
+    if (header.getAttribute("aria-expanded") === "true") act(() => header.click());
+  }
+  const counts = headers().map((header) => header.textContent);
+  for (const header of headers()) act(() => header.click());
+  return counts;
+}
+
+/** Sends a note from the open item's box as its answer. */
+function answerWithNote(page: HTMLElement, note: string): void {
+  const pane = itemPane(page);
+  typeInComposer(pane, note);
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+}
+
+test("an answer leaves Needs you the moment it is sent, its plan's count dropping with it, and no stale read brings it back: not its plan's own held read, nor the list's once another plan's item is chosen, nor main's word before it caught up", async () => {
+  // The plan's first held read is the test's to land, and every one after it stays held.
+  const held = pending();
+  let asked = false;
+  heldRead = (taskId) => {
+    if (taskId !== BILLING.id || asked) return new Promise(() => undefined);
+    asked = true;
+    return held.promise;
+  };
+  const { page } = mount();
+  await settle();
+  const { sent, answer } = gatedAnswers();
+  assert.deepEqual(foldedCounts(page), ["Billing usage alerts1 needs you", "Invites1 needs you"]);
+
+  answerWithNote(page, "Use 90%");
+  await settle();
+  assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "▸ Alert at 80%?",
+    "How is a failed email retried?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+  assert.deepEqual(subjectOf(page), ["Alert at 80%?", "Answered", false]);
+  assert.deepEqual(foldedCounts(page), ["Billing usage alerts", "Invites1 needs you"]);
+
+  await act(async () => answer({ item: THRESHOLD_ANSWERED, taken: true }));
+  await settle();
+  // The plan's own held read lands as it stood before the answer, asked before it was taken.
+  await act(async () => held.settle({ items: [THRESHOLD, RETRY], cursor: "2" }));
+  await settle();
+  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "");
+
+  // The choice moves to another plan's item, so the answered one's plan is drawn from the list's read, which main has not moved yet.
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  assert.equal(
+    needsYouMark(rowNamed(page, "Alert at 80%?")),
+    "",
+    "the stale read brings nothing back",
+  );
+  assert.deepEqual(foldedCounts(page), ["Billing usage alerts", "Invites1 needs you"]);
+
+  // Main catches up, and the list reads the plan again, holding the answer itself.
+  inboxes.set(BILLING.id, [THRESHOLD_ANSWERED, RETRY]);
+  act(() =>
+    setHolding([
+      { taskId: BILLING.id, items: 2, updatedAt: 6_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
+    ]),
+  );
+  await settle();
+  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "");
+  assert.equal(readTitle(page), "Expire after 7 days?", "the choice never jumps back");
+});
+
+test("an answer the service refuses brings its item back as it was, needing you, with its box's words and why it did not go", async () => {
+  const { page } = mount();
+  await settle();
+  const { answer } = gatedAnswers();
+  answerWithNote(page, "Use 90%");
+  await settle();
+  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "");
+
+  await act(async () => answer({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+  await settle();
+  const pane = itemPane(page);
+  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*");
+  assert.deepEqual(foldedCounts(page), ["Billing usage alerts1 needs you", "Invites1 needs you"]);
+  assert.equal(composerEditor(pane).textContent, "Use 90%", "the box keeps its words");
+  assert.ok(
+    pane.querySelector('.agent-composer [role="alert"]')?.textContent,
+    "the box says why the answer did not go",
+  );
+});
+
+test("an answer the agent changed its item before stands no longer: the item comes back as the agent now asks it, and the box says so", async () => {
+  const { page } = mount();
+  await settle();
+  const { answer } = gatedAnswers();
+  answerWithNote(page, "Use 90%");
+  await settle();
+
+  const asked = { ...THRESHOLD, revision: 2, title: "Alert at 85%?", updatedAt: 6_000 };
+  await act(async () => answer({ item: asked, taken: false }));
+  await settle();
+  assert.equal(needsYouMark(rowNamed(page, "Alert at 85%?")), "*");
+  assert.equal(
+    itemPane(page).querySelector('.agent-composer [role="alert"]')?.textContent,
+    "The agent changed this item before your answer landed. Answer it as it stands now.",
+  );
+});
+
+test("an item its agent posts again after it was answered needs you again once a read holds the newer revision, though the list's older read still stands for it elsewhere", async () => {
+  const { page } = mount();
+  await settle();
+  const { answer } = gatedAnswers();
+  answerWithNote(page, "Use 90%");
+  await settle();
+  await act(async () => answer({ item: THRESHOLD_ANSWERED, taken: true }));
+  await settle();
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "");
+
+  // The agent asks again under the same key, and main says the plan moved.
+  inboxes.set(BILLING.id, [{ ...THRESHOLD, revision: 2, updatedAt: 7_000 }, RETRY]);
+  act(() =>
+    setHolding([
+      { taskId: BILLING.id, items: 2, updatedAt: 7_000 },
+      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
+    ]),
+  );
+  await settle();
+  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*");
+});
+
+test("a message the service took stays the last word on its item's row once another plan's item is chosen, though the list's read of its plan is older than the message", async () => {
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  heldMessages(writtenOn(RETRY, "c1b2c3d4-0000-4000-8000-000000000011"));
+  const pane = itemPane(page);
+  typeInComposer(pane, "Page on-call at night too.");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  const said = "You: Page on-call at night too.";
+  assert.equal(rowLines(page, "How is a failed email retried?")[1], said);
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  assert.equal(rowLines(page, "How is a failed email retried?")[1], said);
 });

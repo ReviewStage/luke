@@ -16,6 +16,7 @@ import { useAct } from "@luke/panel/act";
 import { appBridge } from "@luke/panel/app-bridge";
 import { appPlatform } from "@luke/panel/app-platform";
 import { prefetchMarkdownHtmlParser } from "@luke/panel/markdown-html-parser";
+import { useInboxSettlingOwner } from "@luke/panel/tasks/inbox-settling";
 import { ListedPullRequestsProvider, OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { useAppState, useExperiment } from "@luke/panel/use-app-state";
 import { useSignIn } from "@luke/panel/use-sign-in";
@@ -112,6 +113,7 @@ export function App(): React.JSX.Element {
   }, [accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
+  useInboxSettlingOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.TASKS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ACCOUNT);

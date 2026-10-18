@@ -20,6 +20,7 @@
     "./sources.css": "./src/sources.css",
     "./tasks/chat-gate": "./src/tasks/chat-gate.js",
     "./tasks/file-view-settings": "./src/tasks/file-view-settings.js",
+    "./tasks/inbox-settling": "./src/tasks/inbox-settling.js",
     "./tasks/task-time": "./src/tasks/task-time.js",
     "./tasks/use-inbox-pages": "./src/tasks/use-inbox-pages.js",
     "./tasks/use-link-standing": "./src/tasks/use-link-standing.js",

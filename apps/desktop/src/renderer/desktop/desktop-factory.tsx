@@ -1,6 +1,7 @@
 import { PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
+import { useSettledWaiting } from "@luke/panel/tasks/inbox-settling";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -191,13 +192,15 @@ function useFactoryBoard(tasks: TasksControl, now: number): FactoryRead {
   const questions = useWaitingItems(tasks);
   // Note that main's own count stands in only for a plan the Inbox has not read as it stands now, because such a read is newer than main's, and an item it shows answered must not come back; a plan changed since its last read, its reread out or failed, keeps main's count.
   const { items, readTasks } = questions;
+  // Note that main's count leaves out what the window answered, from the moment it was sent, as the reads do.
+  const settled = useSettledWaiting(tasks.inbox, tasks.inboxTaskless);
   const waiting = useMemo(
     () =>
       factoryWaiting(
         items,
-        tasks.inbox.filter((each) => !readTasks.has(each.taskId)),
+        settled.waiting.filter((each) => !readTasks.has(each.taskId)),
       ),
-    [items, readTasks, tasks.inbox],
+    [items, readTasks, settled.waiting],
   );
   const oneOff = tasks.listedAgents.standing;
   // Note that an agent with no task keeps main's count on the same terms as a task does, until its own read is current.
@@ -206,9 +209,9 @@ function useFactoryBoard(tasks: TasksControl, now: number): FactoryRead {
     () =>
       factoryOneOffWaiting(
         items,
-        tasks.inboxTaskless.filter((each) => !readAgents.has(each.agentId)),
+        settled.taskless.filter((each) => !readAgents.has(each.agentId)),
       ),
-    [items, readAgents, tasks.inboxTaskless],
+    [items, readAgents, settled.taskless],
   );
   const board = useMemo(
     () =>

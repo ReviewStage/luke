@@ -1,6 +1,7 @@
 import type { CodingAgentInboxParams } from "@luke/features/coding-agent-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { useSettledReads } from "@luke/panel/tasks/inbox-settling";
 import { useTasklessInboxItems } from "@luke/panel/tasks/use-taskless-inbox-items";
 import { useCallback, useMemo } from "react";
 import {
@@ -61,7 +62,10 @@ export function useWaitingItems(tasks: TasksControl): WaitingItems {
     [inboxTasks, listed],
   );
   const read = useInboxItems({ holdings, readInbox });
-  const taskless = useTasklessInboxItems(tasks.inboxTaskless);
+  const tasklessReads = useTasklessInboxItems(tasks.inboxTaskless);
+  // Note that the window's own answers and messages stand over the agents' reads until they hold them, so a stale read never brings an answered item back.
+  const tasklessItems = useSettledReads(tasklessReads.items);
+  const taskless = { ...tasklessReads, items: tasklessItems };
   const entries = [
     ...holdings.flatMap((holding) => {
       const task = listed.find((each) => each.id === holding.taskId);

@@ -9,6 +9,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { useAct } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useSettledReads } from "@luke/panel/tasks/inbox-settling";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { type OpenHere, OpenHereProvider, useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { useTasklessInboxItems } from "@luke/panel/tasks/use-taskless-inbox-items";
@@ -211,7 +212,10 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     [inboxTasks, listedTasks],
   );
   const read = useInboxItems({ holdings, readInbox });
-  const taskless = useTasklessInboxItems(tasks.inboxTaskless);
+  const tasklessReads = useTasklessInboxItems(tasks.inboxTaskless);
+  // Note that the window's own answers and messages stand over the agents' reads until they hold them, so a stale read never brings an answered item back.
+  const tasklessItems = useSettledReads(tasklessReads.items);
+  const taskless = { ...tasklessReads, items: tasklessItems };
   const asked = view.chosen;
   const chosenTask =
     asked !== undefined && "taskId" in asked
