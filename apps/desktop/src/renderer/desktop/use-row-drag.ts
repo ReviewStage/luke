@@ -221,13 +221,16 @@ function scrollerOf(list: HTMLElement): HTMLElement | undefined {
  * How far the column runs along this frame, toward the edge the pointer is
  * held at: faster the nearer the edge, the whole of `EDGE_SPEED` at it or
  * past it, and none away from both edges or where the column has no further
- * to go that way.
+ * to go that way. Each edge reaches at most half the column, so in a column
+ * too short for both a pointer is near one edge only and the column never
+ * turns back and forth beneath it.
  */
 function edgeRun(scroller: HTMLElement, y: number): number {
   const box = scroller.getBoundingClientRect();
-  const above = box.top + EDGE_REACH - y;
-  const below = y - (box.bottom - EDGE_REACH);
-  const speed = (into: number) => Math.ceil(EDGE_SPEED * Math.min(1, into / EDGE_REACH));
+  const reach = Math.min(EDGE_REACH, box.height / 2);
+  const above = box.top + reach - y;
+  const below = y - (box.bottom - reach);
+  const speed = (into: number) => Math.ceil(EDGE_SPEED * Math.min(1, into / reach));
   if (above > 0 && scroller.scrollTop > 0) return -speed(above);
   const end = scroller.scrollHeight - scroller.clientHeight;
   if (below > 0 && scroller.scrollTop < end) return speed(below);
