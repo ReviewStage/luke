@@ -16,7 +16,7 @@ import { fakeAppBridge } from "#testing/app-bridge";
 import { editorBundleLanded, installEditorLayout } from "#testing/composer";
 import { DOCUMENT_TASK } from "#testing/document-task";
 import { PlanBody } from "./plan-body";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 
 /**
  * `@` in the plan's editor over the real editor bundle: the word typed
@@ -70,7 +70,7 @@ afterEach(() => {
 });
 
 /** The plan's page drawn editable with its mentions, its editor opened on Rollout, under the page's mentions where given. */
-async function opened(page?: PlanMentionsValue, plan: Task = PLAN) {
+async function opened(page?: TaskMentionsValue, plan: Task = PLAN) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -88,7 +88,7 @@ async function opened(page?: PlanMentionsValue, plan: Task = PLAN) {
   });
   act(() =>
     root.render(
-      page === undefined ? body : createElement(PlanMentions, { value: page, children: body }),
+      page === undefined ? body : createElement(TaskMentions, { value: page, children: body }),
     ),
   );
   const rollout = container.querySelector<HTMLElement>('[role="group"][aria-label="Rollout"]');
@@ -231,7 +231,7 @@ test("a heading just renamed is offered by its new words, before the editor hand
 });
 
 test("on the plan's page an @ typed in the plan offers its pages and its agents too", async () => {
-  const page: PlanMentionsValue = {
+  const page: TaskMentionsValue = {
     taskId: PLAN.id,
     taskName: PLAN.name,
     workspace: "acme",
@@ -274,7 +274,7 @@ test("on the plan's page an @ typed in the plan offers the workspace's other age
     name,
     actor: { kind: ACTOR_KIND.AGENT, name, provider: undefined, state: ACTOR_STATE.REST },
   });
-  const page: PlanMentionsValue = {
+  const page: TaskMentionsValue = {
     taskId: PLAN.id,
     taskName: PLAN.name,
     workspace: "acme",
@@ -381,7 +381,7 @@ test("@plan: typed in the plan narrows the list to the plan, searched by the wor
 });
 
 test("on the plan's page an @ typed in the plan offers the pull requests its agents published, a pick written as its link's chip", async () => {
-  const page: PlanMentionsValue = {
+  const page: TaskMentionsValue = {
     taskId: PLAN.id,
     taskName: PLAN.name,
     workspace: "acme",

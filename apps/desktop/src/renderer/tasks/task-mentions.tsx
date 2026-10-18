@@ -26,19 +26,19 @@ import type { CodingAgentsControl } from "./use-coding-agents";
 import { useOpenTask } from "./use-open-link";
 
 /**
- * plan-mentions.tsx -- what a task's page hands every place on it that picks or draws a mention: the task, its saved text, and what opening a mention does.
+ * task-mentions.tsx -- what a task's page hands every place on it that picks or draws a mention: the task, its saved text, and what opening a mention does.
  *
  * The plan's own words draw their mentions through the document
  * (`plan-body.tsx`); an agent's message box on the same page picks them with
- * `@` (`agent-composer.tsx`), the plan's pages and agents among them, and its transcript draws the ones a message
+ * `@` (`agent-composer.tsx`), the task's pages and agents among them, and its transcript draws the ones a message
  * holds as chips (`transcript-blocks.tsx`). Those stand far from the task's
  * page in the tree, so the page hands them this, as it hands them its skills
  * (`skill-chip.tsx`'s `SkillFiles`). A place off a task's page reads nothing,
  * picks no mention, and draws a mention's link as words.
  *
- * The page of an agent no plan holds, as an automation's run starts one,
- * hands the same through `planlessMentions`: its repository's files, its
- * skills, and the servers, with no plan's sections, since there is no plan.
+ * The page of an agent no task holds, as an automation's run starts one,
+ * hands the same through `tasklessMentions`: its repository's files, its
+ * skills, and the servers, with no plan's sections, since there is no task.
  * Either hands the workspace's coding agents too, read as an `@` list
  * opens through `useMentionAgentsReader`, each named by its task.
  *
@@ -50,28 +50,28 @@ import { useOpenTask } from "./use-open-link";
  */
 
 /** A task's page's mentions: the task, its text as saved, and the doors its chips open through. */
-export interface PlanMentionsValue {
+export interface TaskMentionsValue {
   readonly taskId: string;
   readonly taskName: string;
   /** The slug of the task's workspace, which a mention of it is written under. */
   readonly workspace: string;
   /** The task's repository, `owner/name`; null before one is chosen. */
   readonly repository: string | null;
-  /** The id of the workspace whose installation the repository is read through, where no plan names it (`NO_PLAN`). */
+  /** The id of the workspace whose installation the repository is read through, where no task names it (`NO_TASK`). */
   readonly workspaceId?: string | undefined;
   readonly text: () => string;
-  /** The pages agents showed on the plan, which an `@` offers; none off a plan. */
+  /** The pages agents showed on the task, which an `@` offers; none off a task. */
   readonly pages?: readonly MentionablePage[] | undefined;
-  /** The plan's coding agents, which an `@` offers first; none off a plan. */
+  /** The task's coding agents, which an `@` offers first; none off a task. */
   readonly agents?: readonly MentionableAgent[] | undefined;
-  /** Reads the workspace's coding agents, which an `@` offers after the plan's own. */
+  /** Reads the workspace's coding agents, which an `@` offers after the task's own. */
   readonly readAgents?: MentionAgentsReader | undefined;
-  /** The pull requests the plan's agents published, which an `@` offers; none off a plan. */
+  /** The pull requests the task's agents published, which an `@` offers; none off a task. */
   readonly pullRequests?: readonly MentionablePullRequest[] | undefined;
   readonly doors: MentionDoors;
 }
 
-const PlanMentionsContext = createContext<PlanMentionsValue | undefined>(undefined);
+const TaskMentionsContext = createContext<TaskMentionsValue | undefined>(undefined);
 
 /** What takes in a mention made elsewhere on the page: the agent's message box drawn there. */
 type MentionBox = (mention: MentionNode) => void;
@@ -90,28 +90,28 @@ const MentionBoxContext = createContext<MentionBoxes | undefined>(undefined);
  * handed the sections of the plan as saved, and a section the box offered
  * that the send cannot find would reach the agent as gone.
  */
-export function PlanMentions({
+export function TaskMentions({
   value,
   children,
 }: {
-  value: PlanMentionsValue;
+  value: TaskMentionsValue;
   children: ReactNode;
 }): React.JSX.Element {
   const [box, stand] = useState<MentionBox | undefined>(undefined);
   const boxes = useMemo<MentionBoxes>(() => ({ box, stand }), [box]);
   return (
-    <PlanMentionsContext.Provider value={value}>
+    <TaskMentionsContext.Provider value={value}>
       <MentionBoxContext.Provider value={boxes}>{children}</MentionBoxContext.Provider>
-    </PlanMentionsContext.Provider>
+    </TaskMentionsContext.Provider>
   );
 }
 
 /** The task's page's mentions; nothing off a task's page. */
-export function usePlanMentions(): PlanMentionsValue | undefined {
-  return useContext(PlanMentionsContext);
+export function useTaskMentions(): TaskMentionsValue | undefined {
+  return useContext(TaskMentionsContext);
 }
 
-/** Where no plan's page stands, or a page stands with no plan, its plan: none, so a section of any plan is drawn as found, and none is offered. */
+/** Where no task's page stands, or a page stands with no task, its task: none, so a section of any plan is drawn as found, and none is offered. */
 export const NO_TASK = "";
 
 /** The anchors of no task. */
@@ -120,25 +120,25 @@ const NO_ANCHORS: ReadonlySet<string> = new Set();
 /** What a press on a task's chip does with no opener at hand, as in a test of one surface: nothing. */
 const OPEN_NOTHING = (): void => undefined;
 
-/** A place no plan holds, as an agent an automation started stands in: its workspace's slug, which a mention is written under, its id, which its repository is read through, and the repository. */
-export interface PlanlessPlace {
+/** A place no task holds, as an agent an automation started stands in: its workspace's slug, which a mention is written under, its id, which its repository is read through, and the repository. */
+export interface TasklessPlace {
   readonly workspace: string;
   readonly workspaceId: string;
   readonly repository: string;
 }
 
 /**
- * The mentions of a page no plan holds, as the page of an agent an
+ * The mentions of a page no task holds, as the page of an agent an
  * automation started is: its repository's files and folders, its skills,
- * and the servers, and no plan's sections; a plan or a section a message
- * names opens through `onOpenPlan`, and a file is GitHub's, since no File
+ * and the servers, and no plan's sections; a task or a section a message
+ * names opens through `onOpenTask`, and a file is GitHub's, since no File
  * tab stands there.
  */
-export function planlessMentions(
-  place: PlanlessPlace,
+export function tasklessMentions(
+  place: TasklessPlace,
   onOpenTask: MentionDoors["onOpenTask"],
   readAgents?: MentionAgentsReader,
-): PlanMentionsValue {
+): TaskMentionsValue {
   const { workspace, workspaceId, repository } = place;
   return {
     taskId: NO_TASK,
@@ -247,7 +247,7 @@ export interface MentionedTask {
  * GitHub's.
  */
 export function useMentionDoors(task?: MentionedTask): MentionDoors {
-  const page = useContext(PlanMentionsContext)?.doors;
+  const page = useContext(TaskMentionsContext)?.doors;
   const openTask = useOpenTask();
   const windowDoors = useMemo<MentionDoors>(
     () => ({

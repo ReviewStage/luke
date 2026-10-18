@@ -25,13 +25,12 @@ import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ActorRef } from "../actor-ref";
 import { Message, MessageContent } from "../ai-elements/message";
-import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/task";
+import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan";
 import { TOOL_BLOCK } from "../ai-elements/tool";
 import { useFindOpen } from "../find-in-tab";
 import { useMemberDirectory } from "../member-directory";
 import { lineSender, providerOf } from "./coding-agent-model";
 import { linkChip } from "./mention-chip";
-import { useMentionDoors } from "./plan-mentions";
 import {
   earlierStepsLine,
   leftOutLine,
@@ -46,6 +45,7 @@ import {
   summaryLine,
 } from "./replay-card-model";
 import { SentTime } from "./sent-time";
+import { useMentionDoors } from "./task-mentions";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model";
 import { TranscriptTool, TranscriptWords } from "./transcript-blocks";
 import type { CodingAgentsControl } from "./use-coding-agents";

@@ -22,7 +22,7 @@ import { MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import { CallCheckpoint, CallEnded } from "./call-card";
 import { FileRef } from "./file-ref";
-import { useMentionLink } from "./plan-mentions";
+import { useMentionLink } from "./task-mentions";
 import { useOpenLink } from "./use-open-link";
 
 /**

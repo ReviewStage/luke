@@ -11,7 +11,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "#testing/app-bridge";
-import { DESKTOP_CAPABILITIES, handCapabilities } from "#testing/app-state";
+import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { useAppCommand } from "../app-commands";
 import { OpenPersonProvider } from "../person-door";
@@ -373,4 +373,21 @@ test("an update ready to install offers Restart in the sidebar on the desktop, a
     await restartShown(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.UPDATES)),
     false,
   );
+});
+
+test("the Mac offline says so in the foot, and nothing does while it is online", async () => {
+  const offlineShown = async (online: boolean) => {
+    handState({}, { network: { online } });
+    mount(DEAN);
+    await act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+    const mark = document.querySelector('[role="status"][aria-label="Offline"]');
+    const words = mark?.textContent ?? null;
+    for (const root of roots.splice(0)) act(() => root.unmount());
+    return words;
+  };
+
+  assert.equal(await offlineShown(false), "Offline");
+  assert.equal(await offlineShown(true), null);
 });

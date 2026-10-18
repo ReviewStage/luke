@@ -47,14 +47,14 @@ import {
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager";
 import { type InboxCodeDoors, InboxPane } from "../tasks/inbox-pane";
 import { PlanBody, type SectionLinks } from "../tasks/plan-body";
-import {
-  mentionablePullRequests,
-  PlanMentions,
-  type PlanMentionsValue,
-  useMentionAgentsReader,
-} from "../tasks/plan-mentions";
 import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip";
 import { SkillFiles } from "../tasks/skill-chip";
+import {
+  mentionablePullRequests,
+  TaskMentions,
+  type TaskMentionsValue,
+  useMentionAgentsReader,
+} from "../tasks/task-mentions";
 import { taskLinkPlace } from "../tasks/task-menu-items";
 import { useMinute } from "../tasks/task-time";
 import { CallBar } from "../tasks/tasks-parts";
@@ -614,8 +614,8 @@ function PlanDocument({
     const subject = agentSubject(agents, agentId, views.held, false);
     return { actor: subject.tile, card: <AgentCard subject={subject} models={agents.models} /> };
   };
-  // What every place on the page that picks or draws a mention reads (`plan-mentions.tsx`).
-  const mentions: PlanMentionsValue = {
+  // What every place on the page that picks or draws a mention reads (`task-mentions.tsx`).
+  const mentions: TaskMentionsValue = {
     taskId: task.id,
     taskName: task.name,
     workspace,
@@ -650,7 +650,7 @@ function PlanDocument({
           )}
           onOpen={openAutomation}
         >
-          <PlanMentions value={mentions}>
+          <TaskMentions value={mentions}>
             <OpenHereProvider value={openHere}>
               <div ref={setArea} className="desktop-task" data-panel-open={String(sidePanel.open)}>
                 {/* Note that the column is hidden rather than left out while the
@@ -800,7 +800,7 @@ function PlanDocument({
                         />
                       ) : null}
                       {tab === MAIN_TAB.CHAT && chatOn ? (
-                        <section className="desktop-plan-chat" role="tabpanel" aria-label="Chat">
+                        <section className="desktop-task-chat" role="tabpanel" aria-label="Chat">
                           <TaskChatTab tasks={tasks} taskId={task.id} />
                         </section>
                       ) : null}
@@ -890,7 +890,7 @@ function PlanDocument({
                 {stranded.dialog}
               </div>
             </OpenHereProvider>
-          </PlanMentions>
+          </TaskMentions>
         </AutomationDirectory>
       </MemberDirectory>
     </LinkWorkspaceProvider>

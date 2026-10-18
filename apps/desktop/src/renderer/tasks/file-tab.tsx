@@ -29,7 +29,7 @@ import {
   withWindow,
 } from "./file-tab-model";
 import { useFileViewSettings } from "./file-view-settings";
-import { useMentionDrop, usePlanMentions } from "./plan-mentions";
+import { useMentionDrop, useTaskMentions } from "./task-mentions";
 import type { OpenFile } from "./use-side-panel";
 
 /**
@@ -307,7 +307,7 @@ export function FileTab({
 }): React.JSX.Element {
   const [read, setRead] = useState<FileRead>({ kind: FILE_READ.READING });
   const tab = useRef<HTMLElement>(null);
-  const page = usePlanMentions();
+  const page = useTaskMentions();
   const drop = useMentionDrop();
   const held = useRef<FileRead>(read);
   held.current = read;
