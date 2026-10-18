@@ -69,6 +69,11 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   `--luke-loop-motion`, the play state an endless loop holds. Reduced motion
   zeroes the durations but hover's and pauses the loop. A component reads
   only `--luke-*` custom properties (`scripts/repository-checks.sh`).
+- **Placement hooks**: the few properties an app may set on a component's
+  container, each the one way a measurement of the app's reaches inside.
+  `--luke-combobox-list-max` caps a `ComboboxList`'s height (280px where
+  unset), so a picker placed against the window's edge hands its list the
+  room it found; nothing else inside the list is the app's to set.
 
 ## Using a component
 

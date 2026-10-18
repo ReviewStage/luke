@@ -1302,11 +1302,9 @@ function AgentRow({
       rows={rows}
       note={
         agents === undefined ? (
-          <div className="task-compose-menu-note">
-            <Spinner label="Loading agents" />
-          </div>
+          <Spinner label="Loading agents" />
         ) : rows.length === 0 ? (
-          <p className="task-compose-menu-note">No agents of this workspace work in it yet.</p>
+          "No agents of this workspace work in it yet."
         ) : undefined
       }
       noMatch={NO_MATCH}

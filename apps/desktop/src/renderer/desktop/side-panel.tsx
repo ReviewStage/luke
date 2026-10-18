@@ -916,6 +916,7 @@ function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Elemen
         </Text>
       </div>
       <MenuRowList
+        label="Open a tab"
         rows={entries.map((entry) => entry.row)}
         onPick={(id) => entries.find((entry) => entry.row.id === id)?.onPick()}
       />
