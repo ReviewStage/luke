@@ -5,6 +5,9 @@ import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { createContext, useCallback, useContext } from "react";
 import type { DiffViewModule } from "./diff-view/contract";
+import type { FactorySceneModule } from "./factory-world/contract";
+import type { WorldEntry } from "./factory-world/registry";
+import type { WorldModule } from "./factory-world/world";
 import type { FileTreeModule } from "./file-tree/contract";
 import type { PlanEditorModule } from "./plan-editor/contract";
 import { rendererRuntime } from "./renderer-runtime";
@@ -16,8 +19,10 @@ import type { WhiteboardModule } from "./whiteboard/contract";
  *
  * The panel's editors (`plan-editor/`), the whiteboard (`whiteboard/`), a File
  * tab's tree (`file-tree/`), a Terminal tab's screen (`terminal/`), a plan's
- * diagrams (`diagram/`), a Files changed diff (`diff-view/`), and a call's
- * avatar (`avatar-session/`) are each reached through a dynamic `import()` of
+ * diagrams (`diagram/`), a Files changed diff (`diff-view/`), the Factory's
+ * scene host (`factory-world/scene/`) and each of its worlds
+ * (`factory-world/worlds/<key>/`), and a call's avatar (`avatar-session/`)
+ * are each reached through a dynamic `import()` of
  * their entry, which the bundler splits off the bundle every window parses
  * and loads from wherever it put it, so nothing here names a file. Where a
  * bundle has a stylesheet, its entry imports it. The answer is kept alive,
@@ -40,6 +45,7 @@ export interface SideBundleImporters {
   readonly terminal: BundleImporter<TerminalModule>;
   readonly diagram: BundleImporter<DiagramModule>;
   readonly diffView: BundleImporter<DiffViewModule>;
+  readonly factoryScene: BundleImporter<FactorySceneModule>;
 }
 
 /** Each bundle of the panel's own, as the module its entry exports once imported, or why it could not be. */
@@ -61,6 +67,9 @@ export const TERMINAL_LOAD_FAILED = "The terminal could not be shown.";
 /** What the Files changed view says where its bundle failed to load. */
 export const DIFF_LOAD_FAILED = "The diff could not be shown.";
 
+/** What the Factory says where its scene, or the world chosen, failed to load. */
+export const WORLD_LOAD_FAILED = "The world could not be shown.";
+
 /** What a fence says over its code where the diagram bundle failed to load, as it says where Mermaid refused the code. */
 export const DIAGRAM_REFUSED_LINE = "This diagram could not be drawn.";
 
@@ -72,6 +81,7 @@ const LOAD_FAILED = {
   terminal: TERMINAL_LOAD_FAILED,
   diagram: DIAGRAM_REFUSED_LINE,
   diffView: DIFF_LOAD_FAILED,
+  factoryScene: WORLD_LOAD_FAILED,
 } as const satisfies { readonly [Bundle in keyof SideBundleImporters]: string };
 
 /** Each bundle's entry, imported where the bundler put it. */
@@ -86,6 +96,7 @@ const SIDE_BUNDLE_IMPORTERS: SideBundleImporters = {
   terminal: () => import("./terminal/index").then((entry) => entry.terminal),
   diagram: () => import("./diagram/index").then((entry) => entry.diagram),
   diffView: () => import("./diff-view/index").then((entry) => entry.diffView),
+  factoryScene: () => import("./factory-world/scene/index").then((entry) => entry.factoryScene),
 };
 
 /**
@@ -123,6 +134,7 @@ export function sideBundles(importers: Partial<SideBundleImporters> = {}): SideB
     terminal: bundleAtom(reach.terminal, LOAD_FAILED.terminal),
     diagram: bundleAtom(reach.diagram, LOAD_FAILED.diagram),
     diffView: bundleAtom(reach.diffView, LOAD_FAILED.diffView),
+    factoryScene: bundleAtom(reach.factoryScene, LOAD_FAILED.factoryScene),
   };
 }
 
@@ -138,6 +150,27 @@ export const avatarSessionAtom = bundleAtom(
   () => import("./avatar-session/index").then((entry) => entry.avatarSession),
   "The video could not be started.",
 );
+
+/** Each Factory world's bundle as imported, by its registry entry's importer. */
+const worldBundles = new Map<
+  WorldEntry["load"],
+  Atom.Atom<AsyncResult.AsyncResult<WorldModule, Error>>
+>();
+
+/**
+ * A Factory world's own bundle, imported the first time it is chosen and
+ * kept, by its registry entry's importer, which is what keys it: a test
+ * that offers a world of its own hands an entry of its own.
+ */
+export function worldBundleAtom(
+  load: WorldEntry["load"],
+): Atom.Atom<AsyncResult.AsyncResult<WorldModule, Error>> {
+  const held = worldBundles.get(load);
+  if (held !== undefined) return held;
+  const bundle = bundleAtom(() => load().then((entry) => entry.world), WORLD_LOAD_FAILED);
+  worldBundles.set(load, bundle);
+  return bundle;
+}
 
 /** The bundles the surfaces under it read. */
 export const SideBundlesContext = createContext<SideBundles>(SIDE_BUNDLES);

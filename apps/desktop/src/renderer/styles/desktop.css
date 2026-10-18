@@ -4967,6 +4967,291 @@ button.integration-tool-head:hover,
   }
 }
 
+/* Factory worlds ------------------------------------------------------------- */
+
+/* A world stands in the board's place, filling the room under the toolbar
+   to the window's edges, and draws its chrome over the scene the way the
+   mockup's floating panels do: on the overlay's ground inside a hairline,
+   each one at a corner or an edge, so the middle of the world stays clear.
+   A signal's colour arrives as `--world-signal`, set from the view model's
+   palette (`SIGNAL_COLOR`), so the bar, the label, and the card say a
+   signal in the same colour the scene draws it in. */
+.factory-world {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.factory-world > .luke-empty-state {
+  flex: 1;
+}
+
+.factory-world-stage {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: clip;
+}
+
+.factory-world-scene,
+.factory-world-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.factory-world-canvas {
+  display: block;
+  touch-action: none;
+}
+
+.factory-world-pipeline,
+.factory-world-home,
+.factory-world-label,
+.factory-world-card,
+.factory-world-scrubber {
+  position: absolute;
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-menu-radius);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 12px 32px var(--luke-color-shadow-soft);
+}
+
+/* The pipeline bar: planned → building → shipped, the defects' arrow
+   turning back, each count a filter chip pressed while its layer stands. */
+.factory-world-pipeline {
+  top: var(--luke-space-12);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-2);
+  margin: 0;
+  padding: var(--luke-space-4);
+  transform: translateX(-50%);
+  font-variant-numeric: tabular-nums;
+}
+
+.factory-world-stage-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-2);
+}
+
+.factory-world-flow {
+  display: inline-flex;
+  color: var(--luke-color-text-subtle);
+}
+
+.factory-world-flow[data-back] {
+  color: var(--world-signal, var(--luke-color-text-subtle));
+}
+
+.factory-world-flow svg {
+  width: 14px;
+  height: 14px;
+}
+
+.factory-world-signal {
+  display: inline-flex;
+  color: var(--world-signal);
+}
+
+.factory-world-signal > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+.factory-world-stage-count {
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-semibold);
+}
+
+.factory-world-stuck {
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
+.factory-world-home {
+  top: var(--luke-space-12);
+  left: var(--luke-space-12);
+  padding: var(--luke-space-2);
+}
+
+/* The hover label follows the pointer, a little below and right of it, and
+   never takes it. */
+.factory-world-label {
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--luke-space-6);
+  max-width: 360px;
+  padding: var(--luke-space-4) var(--luke-space-8);
+  transform: translate(calc(var(--label-x) + 14px), calc(var(--label-y) + 14px));
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.factory-world-label > .luke-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.factory-world-label > .factory-world-signal {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  align-self: center;
+  border-radius: var(--luke-radius-full);
+  background: var(--world-signal);
+}
+
+/* The card of what is selected hangs from the top right, edged in its
+   signal along its top. */
+.factory-world-card {
+  top: var(--luke-space-12);
+  right: var(--luke-space-12);
+  display: flex;
+  width: 300px;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
+  border-top: 2px solid var(--world-signal);
+}
+
+.factory-world-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+}
+
+.factory-world-card-head > .luke-text {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.factory-world-tag {
+  padding: 0 var(--luke-space-6);
+  border-radius: var(--luke-radius-6);
+  background: var(--world-signal);
+  color: var(--luke-color-on-accent);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
+  text-transform: uppercase;
+}
+
+.factory-world-lines {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  font-size: var(--luke-type-caption-size);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The lines' bar: added then removed, each its share of a bar filled by how
+   many lines there are. */
+.factory-world-lines-bar {
+  height: 6px;
+  flex: 1;
+  border-radius: var(--luke-radius-full);
+  background:
+    linear-gradient(
+      to right,
+      var(--diff-added-mark) 0 calc(var(--added) * 100%),
+      var(--diff-removed-mark) calc(var(--added) * 100%)
+        calc((var(--added) + var(--removed)) * 100%),
+      transparent calc((var(--added) + var(--removed)) * 100%)
+    ),
+    var(--luke-color-fill-strong);
+}
+
+.factory-world-blast {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-12);
+  padding-top: var(--luke-space-8);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.factory-world-blast-map {
+  width: 84px;
+  height: 84px;
+  flex: none;
+}
+
+.factory-world-blast-map circle {
+  fill: var(--luke-color-fill-pressed);
+}
+
+.factory-world-blast-map circle[data-reach="downstream"] {
+  fill: var(--world-blast);
+}
+
+.factory-world-blast-map circle[data-reach="touched"] {
+  fill: var(--world-touched);
+}
+
+.factory-world-blast-counts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+}
+
+.factory-world-card-doors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-6);
+}
+
+/* The scrubber stands at the foot, its track the window the snapshot looks
+   back on, each merge a tick in the shipped colour. */
+.factory-world-scrubber {
+  bottom: var(--luke-space-12);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-4) var(--luke-space-12);
+  transform: translateX(-50%);
+  font-variant-numeric: tabular-nums;
+}
+
+.factory-world-track {
+  position: relative;
+  width: min(520px, 40vw);
+  height: 28px;
+}
+
+.factory-world-ticks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.factory-world-tick {
+  position: absolute;
+  top: 4px;
+  left: calc(var(--at) * 100%);
+  width: 1px;
+  height: 8px;
+  background: var(--world-shipped);
+}
+
+.factory-world-track > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  accent-color: var(--luke-color-accent);
+}
+
 /* Automations ---------------------------------------------------------------- */
 
 /* A window-wide place beside the sidebar, as Factory is: its toolbar, then

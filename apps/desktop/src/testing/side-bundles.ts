@@ -50,6 +50,7 @@ export function unlandedBundles(): SideBundles {
     terminal: unlanded,
     diagram: unlanded,
     diffView: unlanded,
+    factoryScene: unlanded,
   });
 }
 
