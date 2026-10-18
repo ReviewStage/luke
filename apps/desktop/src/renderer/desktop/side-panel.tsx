@@ -1459,7 +1459,9 @@ function TabContent({
         <TaskBoard taskId={taskId} board={board} viewOnly={agents.onUnarchive !== undefined} />
       );
     case SIDE_PANEL_TAB.CODE:
-      return shownCode === undefined || shownCode.length === 0 ? (
+      // Note that no code read yet is a wait, and only code read as none says so.
+      if (shownCode === undefined) return <SpinnerRegion label="Loading code" />;
+      return shownCode.length === 0 ? (
         <EmptyState icon={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.CODE }).icon}>
           {NO_CODE_LINE}
         </EmptyState>

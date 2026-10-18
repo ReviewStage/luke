@@ -83,6 +83,9 @@ import {
   SettingsRow,
   SettingsSection,
   SidePanelIcon,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
   Switch,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
@@ -378,6 +381,42 @@ function namesSaid(providers: readonly IntegrationProvider[]): string {
 /** The most marks the servers chip holds before it counts the rest, so it stays a picker's width. */
 const SERVERS_CHIP_MARKS = 4;
 
+/** How wide the block standing in the servers chip is while the connections are read: a chip of a mark or two. */
+const SERVERS_CHIP_SKELETON_WIDTH = "96px";
+
+/**
+ * The servers row while no read of the owner's connections has answered:
+ * blocks where the words and the chip will stand, claiming nothing, or the
+ * failure and Retry where the read was refused.
+ */
+function UnreadServersRow({
+  failed,
+  onRetry,
+}: {
+  failed: boolean;
+  onRetry: () => void;
+}): React.JSX.Element {
+  if (failed) {
+    return (
+      <SettingsRow
+        label="MCP servers"
+        below={() => (
+          <ErrorState onRetry={onRetry}>Your connected servers could not be read.</ErrorState>
+        )}
+      />
+    );
+  }
+  return (
+    <SettingsRow label="MCP servers" description={<Skeleton width="40%" />}>
+      {() => (
+        <SkeletonRegion label="Reading your connected servers…">
+          <Skeleton shape={SKELETON_SHAPE.CONTROL} width={SERVERS_CHIP_SKELETON_WIDTH} />
+        </SkeletonRegion>
+      )}
+    </SettingsRow>
+  );
+}
+
 /** The servers row as the automation's creator sees it: their connections, switched in the agent box's own popover from a field chip. */
 function OwnServersRow({
   disabled,
@@ -388,6 +427,11 @@ function OwnServersRow({
 }): React.JSX.Element {
   const statuses = useIntegrationStatuses();
   const openSettings = useOpenSettings();
+  // Note that no provider standing yet is a read still to answer, so the row claims nothing until one does.
+  const read = INTEGRATION_PROVIDER_LIST.some((provider) => statuses.statusOf(provider));
+  if (!read) {
+    return <UnreadServersRow failed={statuses.readFailed} onRetry={() => void statuses.read()} />;
+  }
   const connected = INTEGRATION_PROVIDER_LIST.filter(
     (provider) => statuses.statusOf(provider) === INTEGRATION_STATUS.CONNECTED,
   );

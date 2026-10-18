@@ -65,6 +65,7 @@ import {
 import {
   CHIP_LOOK,
   Chip,
+  ErrorState,
   GearIcon,
   PinIcon,
   SearchIcon,
@@ -104,7 +105,7 @@ import { markReadItem } from "../tasks/task-menu-items";
 import { SIDE_PANEL_TABS } from "../tasks/use-side-panel";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { useWorkspaceMembers } from "../tasks/use-workspace-members";
+import { useWorkspaceMembersRead, type WorkspaceMembersRead } from "../tasks/use-workspace-members";
 import { workRowsOf } from "../tasks/work-model";
 import { Tooltip } from "../tooltip";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs";
@@ -188,6 +189,33 @@ const FILES_MISSED_LINE = "The files could not be read.";
 
 /** What the Files filter says while the repository is read. */
 const READING_LINE = "Reading the repository's files…";
+
+/** What the Tasks filter says while the account's tasks are first read, and where that read did not land. */
+const TASKS_READING_LINE = "Reading your tasks…";
+const TASKS_FAILED_LINE = "Your tasks could not be read.";
+
+/** What the People filter says while the listed workspace's members are read, and where that read did not land. */
+const PEOPLE_READING_LINE = "Reading the workspace's members…";
+const PEOPLE_FAILED_LINE = "The workspace's members could not be read.";
+
+/** What the list says in place of "Nothing matches.": a line of its own, a source still reading, or one refused. */
+const PALETTE_NOTICE = {
+  SAID: "said",
+  READING: "reading",
+  FAILED: "failed",
+} as const;
+
+/** A notice and its words, a refusal with the Retry that reads its source again. */
+type PaletteNotice =
+  | {
+      readonly kind: typeof PALETTE_NOTICE.SAID | typeof PALETTE_NOTICE.READING;
+      readonly line: string;
+    }
+  | {
+      readonly kind: typeof PALETTE_NOTICE.FAILED;
+      readonly line: string;
+      readonly onRetry: () => void;
+    };
 
 /** What the Files filter says under a listing cut short at the wire's bound. */
 const TRUNCATED_LINE = `Only the repository's first ${TASK_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES.toLocaleString("en-US")} entries are searched.`;
@@ -358,10 +386,83 @@ function filesOf(answer: TasksTreeAnswer): FilesRead {
 }
 
 /** What the Files filter says in place of rows: why there are none to search yet, or nothing. */
-function filesNotice(repositoryOpen: boolean, held: FilesHeld | undefined): string | undefined {
-  if (!repositoryOpen) return NO_REPOSITORY_LINE;
-  if (held === undefined || held.read === FILES_READ.READING) return READING_LINE;
-  return held.read === FILES_READ.MISSED ? held.notice : undefined;
+function filesNotice(
+  repositoryOpen: boolean,
+  held: FilesHeld | undefined,
+): PaletteNotice | undefined {
+  if (!repositoryOpen) return { kind: PALETTE_NOTICE.SAID, line: NO_REPOSITORY_LINE };
+  if (held === undefined || held.read === FILES_READ.READING) {
+    return { kind: PALETTE_NOTICE.READING, line: READING_LINE };
+  }
+  return held.read === FILES_READ.MISSED
+    ? { kind: PALETTE_NOTICE.SAID, line: held.notice }
+    : undefined;
+}
+
+/** What the Tasks filter says while the account's tasks have not been read, or their read did not land; nothing once they are read. */
+function tasksNotice(
+  tasks: Pick<TasksControl, "signedIn" | "listRead" | "listFailed" | "onRetryList">,
+): PaletteNotice | undefined {
+  if (!tasks.signedIn || tasks.listRead) return undefined;
+  return tasks.listFailed
+    ? { kind: PALETTE_NOTICE.FAILED, line: TASKS_FAILED_LINE, onRetry: tasks.onRetryList }
+    : { kind: PALETTE_NOTICE.READING, line: TASKS_READING_LINE };
+}
+
+/**
+ * What the People filter says while the listed workspace's members have not
+ * been read, the workspaces themselves among that, or their read was
+ * refused; nothing once they are read, or where no workspace is to come.
+ */
+function peopleNotice(
+  tasks: Pick<TasksControl, "signedIn" | "workspace" | "workspaces" | "listFailed">,
+  read: WorkspaceMembersRead,
+): PaletteNotice | undefined {
+  if (tasks.workspace === undefined) {
+    const coming = tasks.signedIn && tasks.workspaces.length === 0 && !tasks.listFailed;
+    return coming ? { kind: PALETTE_NOTICE.READING, line: PEOPLE_READING_LINE } : undefined;
+  }
+  if (read.members !== undefined) return undefined;
+  return read.refused
+    ? { kind: PALETTE_NOTICE.FAILED, line: PEOPLE_FAILED_LINE, onRetry: read.retry }
+    : { kind: PALETTE_NOTICE.READING, line: PEOPLE_READING_LINE };
+}
+
+/**
+ * What an empty list says for the filter shown: its kind's own notice, or,
+ * under All, the first kind still reading, else the first refused, since
+ * either could still have matched; nothing where "Nothing matches." is true.
+ */
+function emptyNotice(
+  filter: PaletteFilter,
+  notices: readonly (PaletteNotice | undefined)[],
+): PaletteNotice | undefined {
+  if (filter !== PALETTE_FILTER.ALL) return notices[0];
+  return (
+    notices.find((notice) => notice?.kind === PALETTE_NOTICE.READING) ??
+    notices.find((notice) => notice?.kind === PALETTE_NOTICE.FAILED)
+  );
+}
+
+/** The list's notice where its rows would stand: a refusal with Retry, a reading line a reader hears, or a line of its own. */
+function NoticeLine({ notice }: { notice: PaletteNotice }): React.JSX.Element {
+  if (notice.kind === PALETTE_NOTICE.FAILED) {
+    return (
+      <div className="command-palette-empty">
+        <ErrorState onRetry={notice.onRetry}>{notice.line}</ErrorState>
+      </div>
+    );
+  }
+  return (
+    <div
+      className="command-palette-empty"
+      role={notice.kind === PALETTE_NOTICE.READING ? "status" : undefined}
+    >
+      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+        {notice.line}
+      </Text>
+    </div>
+  );
 }
 
 /** A file's row, as every place names a file (`file-ref.tsx`): its type's icon, its name, and its folder after it, hanging the file's card with Luke's note on its newest lines where he showed it. */
@@ -1023,7 +1124,8 @@ export function CommandPalette({
 
   const tokens = searchTokens(query);
   // The listed workspace's members, read once for it, name a teammate's task's creator by face.
-  const members = useWorkspaceMembers(tasks.workspace);
+  const membersRead = useWorkspaceMembersRead(tasks.workspace);
+  const { members } = membersRead;
   const reads = useReadMarks();
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   const taskId = tasks.activeTaskId;
@@ -1116,7 +1218,23 @@ export function CommandPalette({
         .map((kind) => ({ kind, rows: rowsFor(kind) }))
         .filter((section) => section.rows.length > 0)
     : [];
-  const notice = filter === PALETTE_FILTER.FILES ? filesNotice(filesOpen, held) : undefined;
+  // Each kind's word for its rows' absence: still reading, refused, or a line of its own.
+  const noticeOf = {
+    [PALETTE_FILTER.TASKS]: () => tasksNotice(tasks),
+    [PALETTE_FILTER.AGENTS]: () => undefined,
+    [PALETTE_FILTER.PEOPLE]: () => peopleNotice(tasks, membersRead),
+    [PALETTE_FILTER.FILES]: () =>
+      fileQuery === undefined ? undefined : filesNotice(filesOpen, held),
+    [PALETTE_FILTER.ACTIONS]: () => undefined,
+    [PALETTE_FILTER.SETTINGS]: () => undefined,
+  } as const satisfies Record<PaletteKind, () => PaletteNotice | undefined>;
+  const notice =
+    open && sections.length === 0
+      ? emptyNotice(
+          filter,
+          kinds.map((kind) => noticeOf[kind]()),
+        )
+      : undefined;
   const cut =
     filesOpen &&
     filter === PALETTE_FILTER.FILES &&
@@ -1156,11 +1274,7 @@ export function CommandPalette({
             </Text>
           </Command.Empty>
         ) : (
-          <div className="command-palette-empty">
-            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-              {notice}
-            </Text>
-          </div>
+          <NoticeLine notice={notice} />
         )}
         {sections.map((section) => (
           <Command.Group key={section.kind} heading={FILTER_LABEL[section.kind]}>
