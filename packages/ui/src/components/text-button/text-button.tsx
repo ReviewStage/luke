@@ -17,7 +17,8 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
  * - `accent` in the accent's ink, set as a label, for the one act a line
  *   offers ("3 replies").
  *
- * It never wraps: words longer than its room end in an ellipsis. It takes no
+ * It keeps to one line unless asked for two (`lines`), as a card's name
+ * wraps: words longer than that end in an ellipsis. It takes no
  * class or style, and its outer spacing is its container's. One that keeps
  * focus (`keepFocus`) leaves the focus where it is when a pointer presses
  * it, as a Button's does, and an app's hint wraps it as it wraps a Button,
@@ -45,6 +46,14 @@ type HintProps = Pick<
   | "aria-keyshortcuts"
 >;
 
+/** How many lines its words take before they are cut short with an ellipsis. */
+export const TEXT_BUTTON_LINES = {
+  ONE: "one",
+  TWO: "two",
+} as const;
+
+export type TextButtonLines = (typeof TEXT_BUTTON_LINES)[keyof typeof TEXT_BUTTON_LINES];
+
 /** A pointer's press that leaves the focus where it is. */
 function preventFocusMove(event: MouseEvent<HTMLButtonElement>): void {
   event.preventDefault();
@@ -53,6 +62,7 @@ function preventFocusMove(event: MouseEvent<HTMLButtonElement>): void {
 /** Words in a line that act when pressed, drawn in `tone`. */
 export function TextButton({
   tone = TEXT_BUTTON_TONE.QUIET,
+  lines = TEXT_BUTTON_LINES.ONE,
   onClick,
   keepFocus,
   id,
@@ -60,6 +70,7 @@ export function TextButton({
   ...props
 }: HintProps & {
   tone?: TextButtonTone;
+  lines?: TextButtonLines;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   /** Whether a pointer's press leaves the focus where it is. */
   keepFocus?: boolean | undefined;
@@ -76,6 +87,7 @@ export function TextButton({
       type="button"
       className="luke-text-button"
       data-tone={tone}
+      data-lines={lines}
       id={id}
       aria-label={props["aria-label"]}
       aria-expanded={props["aria-expanded"]}

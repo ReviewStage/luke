@@ -31,6 +31,16 @@
       text-decoration-color var(--duration-hover) ease;
   }
 
+  /* Two lines, a card's name: the words wrap, and a third is cut short. */
+  .luke-text-button[data-lines="two"] {
+    display: -webkit-inline-box;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
   /* A desktop control answers a press the way a Mac's does, without the
      web's pointing hand. */
   [data-luke-profile="desktop"] .luke-text-button {

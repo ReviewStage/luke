@@ -1,4 +1,11 @@
-import { TEXT_BUTTON_TONE, TEXT_TONE, TEXT_VARIANT, Text, TextButton } from "@luke/ui";
+import {
+  TEXT_BUTTON_LINES,
+  TEXT_BUTTON_TONE,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  TextButton,
+} from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -6,7 +13,8 @@ import { CatalogSection } from "../section";
 /**
  * text-buttons.tsx -- every TextButton tone among the words it stands in: a
  * quiet name and count, a link-look act in a caption, an accent toggle that
- * shows its replies, and a long quote cut short in a narrow column.
+ * shows its replies, and long words cut short in a narrow column, on one
+ * line or, as a card's name, on two.
  */
 
 /** Does nothing, for a press the catalog only draws. */
@@ -54,6 +62,11 @@ function TextButtons(): React.JSX.Element {
           <Text>
             <TextButton onClick={pressed}>
               “Every behavior change ships with a test that fails without it, same PR.”
+            </TextButton>
+          </Text>
+          <Text>
+            <TextButton lines={TEXT_BUTTON_LINES.TWO} onClick={pressed}>
+              Review all failed deployment checks every morning and summarise them for the team
             </TextButton>
           </Text>
         </div>
