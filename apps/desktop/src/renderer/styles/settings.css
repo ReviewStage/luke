@@ -100,20 +100,16 @@
    thing, and a shortcut whose chord answers nothing until it is supplied. The
    attention tint on purpose: unlike the changed word this is an urgency, the
    same standing a session waiting on a person has. The words are the hover's
-   and the hidden text's; the glyph alone is the mark. */
+   and the hidden text's; the shared alert glyph alone is the mark. */
 .settings-attention {
   display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--luke-color-attention);
+}
+
+.settings-attention > svg {
   width: 16px;
   height: 16px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--luke-color-attention) 22%, transparent);
-  color: var(--luke-color-attention);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-bold);
-  line-height: 1;
 }
 
 .settings-copy small {

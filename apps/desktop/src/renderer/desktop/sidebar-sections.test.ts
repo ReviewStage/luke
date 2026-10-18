@@ -713,6 +713,39 @@ test("Enter in the Emoji tab's search chooses the first emoji it found", async (
   assert.deepEqual(made.icon, { kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: "🛻" });
 });
 
+test("Clear search empties the icon search, every glyph is offered again, and the caret stays in the search", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([]);
+
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section…").click());
+  await settleLoaded();
+  const search = dialogField("Search icons");
+  typeInto(search, "telescope");
+  assert.equal(document.querySelector('button[aria-label="Folder"]'), null);
+  act(() => dialogButton("Clear search").click());
+
+  assert.equal(search.value, "");
+  assert.ok(dialogButton("Folder"));
+  assert.equal(document.activeElement, search);
+});
+
+test("ArrowDown in the icon search hands the focus to the grid's tab stop", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([]);
+
+  openMoveToSection(sidebar, "Retry audit");
+  act(() => item("New section…").click());
+  await settleLoaded();
+  const search = dialogField("Search icons");
+  typeInto(search, "telescope");
+  act(() => {
+    search.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  });
+
+  assert.equal(document.activeElement?.getAttribute("aria-label"), "Telescope");
+});
+
 test("the arrows move the grid's one tab stop with the focus", async () => {
   handState(experimentsOn(EXPERIMENT.SECTIONS));
   const sidebar = await mountSidebar([]);
