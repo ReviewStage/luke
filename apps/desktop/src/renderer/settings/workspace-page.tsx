@@ -167,7 +167,7 @@ const READ_FAILED = {
  */
 const LEAVE_WORDS = {
   LINE: "You lose its tasks, agents, and Inbox until someone invites you again.",
-  PLANS: (name: string) => `Tasks you wrote stay in ${name}.`,
+  TASKS: (name: string) => `Tasks you wrote stay in ${name}.`,
   AGENTS: "Agents you started that are still working stop.",
   AUTOMATIONS: "Automations you created stop running.",
   INVITATIONS: "Invitations you sent stay valid.",
@@ -576,7 +576,7 @@ function MemberLeave({
         }}
       >
         <ul className="leave-consequences">
-          <li>{LEAVE_WORDS.PLANS(workspace.name)}</li>
+          <li>{LEAVE_WORDS.TASKS(workspace.name)}</li>
           <li>{LEAVE_WORDS.AGENTS}</li>
           {automationsLine === undefined ? null : <li>{automationsLine}</li>}
           {/* An invitation is the workspace's, so one an admin sent outlives their leaving; a member sends none. */}

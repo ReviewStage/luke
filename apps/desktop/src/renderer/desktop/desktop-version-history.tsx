@@ -44,8 +44,8 @@ import {
   VERSION_CHANGE,
   versionDiff,
 } from "../tasks/plan-history-model";
-import type { MentionedTask } from "../tasks/plan-mentions";
 import { RelativeTime } from "../tasks/relative-time";
+import type { MentionedTask } from "../tasks/task-mentions";
 import { useMinute } from "../tasks/task-time";
 import {
   HISTORY_READ,

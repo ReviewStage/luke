@@ -48,7 +48,7 @@ import {
 } from "../ai-elements/conversation";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message";
-import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/task";
+import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan";
 import { TOOL_STATE } from "../ai-elements/tool";
 import { appPlatform } from "../app-platform";
 import { useAutomation } from "../automation-directory";
@@ -119,7 +119,6 @@ import {
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links";
-import { useMentionDoors } from "./plan-mentions";
 import { PlanPictures } from "./plan-pictures";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card";
 import { briefAgent, replayOpening } from "./replay-card-model";
@@ -129,6 +128,7 @@ import { MentionedServers, SentToAgent } from "./server-card";
 import { SentWords, useSkill } from "./skill-chip";
 import type { SkillSource } from "./skill-picker";
 import { SkillCard } from "./skill-ref";
+import { useMentionDoors } from "./task-mentions";
 import { useMinute } from "./task-time";
 import {
   calledAgent,

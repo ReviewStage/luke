@@ -280,8 +280,8 @@ export function useTaskInbox(input: {
   const [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
   // The cards' drafts, kept apart from the hook so another tab's or page's reading of the inbox
   // shares them, under the plan, or under none where the inbox is an agent's with no plan.
-  const ownPlan = input.reader === undefined ? taskId : undefined;
-  const draftsOn = ownPlan ?? null;
+  const ownTask = input.reader === undefined ? taskId : undefined;
+  const draftsOn = ownTask ?? null;
   // Note that an agent with no plan is the planId its inbox is read by.
   const readAgent = input.reader === undefined ? undefined : taskId;
   const drafts = useInboxDrafts(draftsOn);
@@ -484,15 +484,15 @@ export function useTaskInbox(input: {
   // item keeps its thread's draft, and an answer left unsent on an item settled since is let go.
   const { drop } = writer;
   useEffect(() => {
-    if (!held.read || (ownPlan === undefined && readAgent === undefined)) return;
+    if (!held.read || (ownTask === undefined && readAgent === undefined)) return;
     const stale = drafts.filter(
       (kept) =>
-        (ownPlan !== undefined || kept.place.agentId === readAgent) &&
+        (ownTask !== undefined || kept.place.agentId === readAgent) &&
         !held.items.some((item) => draftOfItem(kept.place, item)),
     );
     if (stale.length === 0) return;
     drop((place) => stale.some((kept) => Equal.equals(kept.place, place)));
-  }, [held.read, held.items, ownPlan, readAgent, drafts, drop]);
+  }, [held.read, held.items, ownTask, readAgent, drafts, drop]);
 
   const board = useMemo(() => inboxBoard(held.items), [held.items]);
   const draftOf = useCallback(

@@ -432,7 +432,7 @@ export type InboxHolder =
     };
 
 /** An agent with no plan as the Inbox groups it: what its group and row name it by, and the workspace whose list holds it; one with an item waiting, or one a link names whose items are all settled. */
-export type PlanlessAgent = Pick<
+export type TasklessInboxAgent = Pick<
   AppInboxTasklessItem,
   | "agentId"
   | "agentTitle"
@@ -502,7 +502,7 @@ export function listedIn(
  * them.
  */
 export function tasklessGroups(
-  waiting: readonly PlanlessAgent[],
+  waiting: readonly TasklessInboxAgent[],
   read: ReadonlyMap<string, readonly InboxItem[]>,
   workspaceId: string | undefined,
 ): readonly InboxGroup[] {

@@ -97,17 +97,17 @@ function Facts(): React.JSX.Element {
   );
 }
 
-function Plan({ secondary }: { secondary: boolean }): React.JSX.Element {
+function Task({ secondary }: { secondary: boolean }): React.JSX.Element {
   return (
     <DetailPage
       title={TITLE}
-      description="A plan in the platform workspace."
+      description="A task in the platform workspace."
       actions={
         <>
           <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PencilIcon />}>
             Edit
           </Button>
-          <IconButton icon={<EllipsisIcon />} label="More for this plan" />
+          <IconButton icon={<EllipsisIcon />} label="More for this task" />
         </>
       }
       secondary={secondary ? { label: "Details", content: <Facts /> } : undefined}
@@ -117,7 +117,7 @@ function Plan({ secondary }: { secondary: boolean }): React.JSX.Element {
   );
 }
 
-function PlanUnderToolbar(): React.JSX.Element {
+function TaskUnderToolbar(): React.JSX.Element {
   return (
     <DetailPage
       frame={PAGE_FRAME.TOOLBAR}
@@ -128,7 +128,7 @@ function PlanUnderToolbar(): React.JSX.Element {
           <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PencilIcon />}>
             Edit
           </Button>
-          <IconButton icon={<EllipsisIcon />} label="More for this plan" />
+          <IconButton icon={<EllipsisIcon />} label="More for this task" />
         </header>
       }
       secondary={{ label: "Details", content: <Facts /> }}
@@ -143,12 +143,12 @@ function DetailPages(): React.JSX.Element {
     <>
       <CatalogSection id="detail-page-secondary" title="With a secondary column">
         <div className="catalog-screen catalog-screen-detail">
-          <Plan secondary />
+          <Task secondary />
         </div>
       </CatalogSection>
       <CatalogSection id="detail-page-main" title="The main content alone">
         <div className="catalog-screen catalog-screen-detail">
-          <Plan secondary={false} />
+          <Task secondary={false} />
         </div>
       </CatalogSection>
       <CatalogSection
@@ -156,12 +156,12 @@ function DetailPages(): React.JSX.Element {
         title="A phone's width, the secondary column following"
       >
         <div className="catalog-screen catalog-screen-phone catalog-screen-detail">
-          <Plan secondary />
+          <Task secondary />
         </div>
       </CatalogSection>
       <CatalogSection id="detail-page-toolbar" title="Under the window's toolbar">
         <div className="catalog-screen catalog-screen-detail">
-          <PlanUnderToolbar />
+          <TaskUnderToolbar />
         </div>
       </CatalogSection>
     </>

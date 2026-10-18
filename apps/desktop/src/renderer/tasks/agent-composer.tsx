@@ -50,10 +50,10 @@ import { readFiles, withFiles } from "./attached-files";
 import { ComposerField } from "./composer-field";
 import { useComposerPickers } from "./composer-pickers";
 import { DictateButton, DictationStrip } from "./dictation-strip";
-import { useMentionBox } from "./plan-mentions";
 import { ComposerQuoteView } from "./reply-to-selection";
 import { useRepositoryRemedy } from "./repository-remedy";
 import type { SkillSource } from "./skill-picker";
+import { useMentionBox } from "./task-mentions";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentModelControl } from "./use-agent-model";
 

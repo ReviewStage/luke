@@ -121,7 +121,7 @@ test("a step back cancelled at the leave ask leaves the trail where the window s
     },
   });
   const homes: string[] = [];
-  const atPlan = asking(
+  const atTask = asking(
     tasksControl({
       page: TASKS_PAGE.DOCUMENT,
       activeTaskId: TASK_ID,
@@ -130,7 +130,7 @@ test("a step back cancelled at the leave ask leaves the trail where the window s
     }),
   );
   const window = mount(asking(tasksControl()));
-  window.stand(atPlan);
+  window.stand(atTask);
   assert.equal(window.history().canGoBack, true);
 
   standing = ask;

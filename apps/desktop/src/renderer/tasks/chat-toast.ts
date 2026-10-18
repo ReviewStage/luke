@@ -66,14 +66,14 @@ export function useChatToasts(view: (workspaceId: string) => void, shown: ChatSh
     [toast],
   );
   const shownWorkspace = shown?.workspaceId;
-  const shownPlan = shown?.planId ?? null;
+  const shownTask = shown?.planId ?? null;
   useEffect(() => {
     if (shownWorkspace === undefined) return;
     for (const [messageId, waits] of told.current) {
       if (waits.workspaceId !== shownWorkspace) continue;
-      if (shownPlan !== null && waits.planId !== shownPlan) continue;
+      if (shownTask !== null && waits.planId !== shownTask) continue;
       withdraw(messageId);
       told.current.delete(messageId);
     }
-  }, [shownWorkspace, shownPlan, withdraw]);
+  }, [shownWorkspace, shownTask, withdraw]);
 }
