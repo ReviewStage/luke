@@ -12,6 +12,7 @@ import {
   takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
+import { createIssue } from "@luke/database/models/issue-store";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
 import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
@@ -2626,6 +2627,46 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
   await database.run(updateTask(teammates.userId, taskIds.billing, { archived: true }));
   const archived = await call(CODER_TOOL.READ_TASK, { taskId: taskIds.billing });
   assert.equal(isRecord(archived.task) && archived.task.archived, true, JSON.stringify(archived));
+
+  // A task started from a workspace issue names the issue by its identifier and link, with what it says.
+  const filed = Option.getOrThrow(
+    await database.run(
+      createIssue(teammates.userId, {
+        organizationId: workspaceId,
+        title: "Refunds",
+        description: "Refund within thirty days.",
+      }),
+    ),
+  );
+  const fromIssue = await database.run(
+    createTask(teammates.userId, {
+      organizationId: workspaceId,
+      name: "Fix billing",
+      repository: RELAY_FULL_NAME,
+      issueId: filed.id,
+    }),
+  );
+  const issued = await call(CODER_TOOL.READ_TASK, { taskId: fromIssue.id });
+  assert.ok(isRecord(issued.task) && isRecord(issued.task.issue), JSON.stringify(issued));
+  const { identifier, title, url, description } = issued.task.issue;
+  assert.deepEqual([title, description], ["Refunds", "Refund within thirty days."]);
+  assert.ok(
+    isWireString(identifier) && identifier.endsWith(`-${filed.number}`),
+    String(identifier),
+  );
+  assert.ok(isWireString(url) && url.includes(filed.id), String(url));
+  assert.equal(issued.task.linearIssue, null);
+  const linearIssue = {
+    identifier: "REL-7",
+    title: "Seat pricing",
+    url: "https://linear.app/acme/issue/REL-7",
+    description: "Charge per active seat.",
+  };
+  const fromLinear = await database.run(
+    createTask(teammates.userId, { organizationId: workspaceId, name: "Seats", linearIssue }),
+  );
+  const linear = await call(CODER_TOOL.READ_TASK, { taskId: fromLinear.id });
+  assert.deepEqual(isRecord(linear.task) && linear.task.linearIssue, linearIssue);
 
   for (const taskId of [taskIds.elsewhere, randomUUID()]) {
     assert.deepEqual(await call(CODER_TOOL.READ_TASK, { taskId }), {
