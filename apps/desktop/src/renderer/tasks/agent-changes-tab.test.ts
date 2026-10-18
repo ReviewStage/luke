@@ -79,6 +79,9 @@ function changed(
   };
 }
 
+/** The commits the service names for the pull request's changed images; none unless a test names them. */
+let commits: { headSha?: string; baseSha?: string } = {};
+
 /** The pull request's files, in the order GitHub lists them, which is not the tree's. */
 let files: CodingAgentChangedFile[] = [changed("src/seats.ts")];
 
@@ -90,6 +93,7 @@ const control = codingAgentsControl({
     Promise.resolve({
       pullRequest: {
         url: "https://github.com/acme/relay/pull/7",
+        ...commits,
         truncated: false,
         files,
         reviewers: [],
@@ -123,6 +127,7 @@ beforeEach(() => {
   drawn = [];
   revealed = [];
   files = [changed("src/seats.ts")];
+  commits = {};
   boxWidth = 900;
   window.lukeDiffView = standIn;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
@@ -139,6 +144,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  watched.clear();
+  vi.unstubAllGlobals();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
@@ -606,4 +613,156 @@ test("Refresh changes reads the review threads again with the files, so the two 
   act(() => refresh?.click());
 
   assert.equal(threadReads, 1);
+});
+
+/** What an intersection observer is told of an element coming into view, as far as the view reads it. */
+type InView = (entries: readonly { readonly isIntersecting: boolean }[]) => void;
+
+/** Every element an intersection observer watches, with the observer's callback, as the window would report one coming into view. */
+const watched = new Map<Element, InView>();
+
+/** An intersection observer that reports an element in view only once something calls `comeIntoView`, and only an element a document holds. */
+class StandInIntersectionObserver {
+  readonly #callback: InView;
+  constructor(callback: InView) {
+    this.#callback = callback;
+  }
+  observe(target: Element): void {
+    watched.set(target, this.#callback);
+  }
+  disconnect(): void {
+    for (const [target, callback] of watched)
+      if (callback === this.#callback) watched.delete(target);
+  }
+}
+
+/** Reports every watched element a document holds as in view, as Pierre standing its file near the view would. */
+function comeIntoView(): void {
+  for (const [target, callback] of [...watched]) {
+    if (!target.isConnected) continue;
+    act(() => callback([{ isIntersecting: true }]));
+  }
+}
+
+/** The images the service was asked for, by address, each answered with a picture of its own. */
+function answerImages(): string[] {
+  const asked: string[] = [];
+  Object.defineProperty(window, "luke", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: () => undefined,
+      act: (request: Act) => {
+        if (request.kind !== ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.REFUSED,
+            reason: "Not in this test.",
+          });
+        }
+        asked.push(request.payload.src);
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { contentType: "image/png", base64: btoa(request.payload.src) },
+        });
+      },
+    },
+  });
+  handSettings();
+  return asked;
+}
+
+/** Stands a file's header where Pierre would, in the document near the view, and lets its pictures be read. */
+async function standNearView(path: string): Promise<HTMLElement> {
+  const slot = lastDrawn().renderHeader(path);
+  document.body.append(slot);
+  comeIntoView();
+  await flush();
+  return slot;
+}
+
+const HEAD_SHA = "1".repeat(40);
+const MERGE_BASE_SHA = "2".repeat(40);
+
+test("a changed image is read at the merge base and the head only once it comes near the view, and drawn before and after", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  const asked = answerImages();
+  commits = { headSha: HEAD_SHA, baseSha: MERGE_BASE_SHA };
+  files = [
+    changed("assets/logo.png", {
+      previousPath: "assets/old logo.png",
+      status: CHANGED_FILE_STATUS.RENAMED,
+      omitted: PATCH_OMITTED.BINARY,
+      patch: null,
+    }),
+  ];
+  const props = await drawTab();
+
+  assert.equal(
+    props.files[0]?.patch,
+    "diff --git a/assets/old logo.png b/assets/logo.png\n--- a/assets/old logo.png\n+++ b/assets/logo.png\n",
+  );
+  assert.deepEqual(asked, [], "nothing is read before Pierre stands the file near the view");
+
+  const slot = await standNearView("assets/logo.png");
+  assert.deepEqual(asked, [
+    `https://raw.githubusercontent.com/acme/relay/${MERGE_BASE_SHA}/assets/old%20logo.png`,
+    `https://raw.githubusercontent.com/acme/relay/${HEAD_SHA}/assets/logo.png`,
+  ]);
+  const pictures = [...slot.querySelectorAll<HTMLImageElement>("img")];
+  assert.deepEqual(
+    pictures.map((picture) => picture.alt),
+    ["Before", "After"],
+  );
+  assert.equal(pictures[1]?.src, `data:image/png;base64,${btoa(asked[1] ?? "")}`);
+
+  const swipe = [...slot.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+    (each) => each.textContent === "Swipe",
+  );
+  act(() => swipe?.click());
+  assert.ok(slot.querySelector('input[aria-label="Swipe between the two"]'));
+  assert.equal(slot.querySelectorAll(".image-diff-stack img").length, 2);
+});
+
+test("a changed image whose merge base the service could not read draws its after alone, saying the before is unavailable", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  const asked = answerImages();
+  commits = { headSha: "3".repeat(40) };
+  files = [changed("logo.webp", { omitted: PATCH_OMITTED.BINARY, patch: null })];
+  await drawTab();
+
+  const slot = await standNearView("logo.webp");
+  assert.deepEqual(asked, [
+    `https://raw.githubusercontent.com/acme/relay/${"3".repeat(40)}/logo.webp`,
+  ]);
+  assert.equal(slot.querySelectorAll("img").length, 1);
+  assert.match(slot.textContent ?? "", /Previous version unavailable/u);
+});
+
+test("an SVG is drawn as a picture until its source is asked for, and its lines then", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  answerImages();
+  commits = { headSha: "4".repeat(40), baseSha: "5".repeat(40) };
+  files = [changed("icon.svg")];
+  await drawTab();
+  assert.equal(
+    lastDrawn().files[0]?.patch,
+    "diff --git a/icon.svg b/icon.svg\n--- a/icon.svg\n+++ b/icon.svg\n",
+  );
+
+  act(() =>
+    header("icon.svg")
+      .querySelector<HTMLButtonElement>('button[aria-label="Show source"]')
+      ?.click(),
+  );
+  await flush();
+  assert.match(lastDrawn().files[0]?.patch ?? "", /@@ -1,2 \+1,3 @@/u);
+});
+
+test("an image of a service that names no commits is a binary file, as before", async () => {
+  files = [changed("logo.png", { omitted: PATCH_OMITTED.BINARY, patch: null })];
+  await drawTab();
+
+  assert.equal(
+    header("logo.png").querySelector(".diff-list-notice")?.textContent,
+    "Binary file not shown.",
+  );
 });

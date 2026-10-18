@@ -74,7 +74,9 @@ import {
 import { githubReadOrRefusal } from "../github/github-refusal.js";
 import { pullRequestNodeId, setPullRequestDraft } from "../github/pull-request-writes.js";
 import {
+  imageCommits,
   type PullRequestReadFailure,
+  pullRequestByNumber,
   pullRequestChecks,
   pullRequestConversation,
   pullRequestDeployments,
@@ -825,7 +827,8 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
 
 /**
  * GET reads the agent's changes: the files of the pull request its kept
- * published answer names, and who it names (`github-people.ts`), read from
+ * published answer names, who it names (`github-people.ts`), and the
+ * commits its changed images are read at (`imageCommits`), read from
  * GitHub afresh on a token minted for the agent's repository on its plan's
  * workspace installation, with who its row says it writes as, or none
  * where it names no pull request yet.
@@ -844,14 +847,20 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
   const listed = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
-    const [files, people] = yield* Effect.all(
+    // Note that the pull request itself is read beside its files for its head and base, which its changed images are read at; a read that does not land names neither.
+    const [files, people, whole] = yield* Effect.all(
       [
         pullRequestFiles(token, agent.repository, pullRequest),
         changesPeople(token, agent, pullRequest.number),
+        Effect.orElseSucceed(
+          pullRequestByNumber(token, agent.repository, pullRequest.number),
+          () => Option.none(),
+        ),
       ],
       { concurrency: "unbounded" },
     );
-    return { ...files, ...people };
+    const commits = yield* imageCommits(token, agent.repository, whole, files.files);
+    return { ...commits, ...files, ...people };
   }).pipe(
     Effect.catch((failure) => {
       switch (failure._tag) {

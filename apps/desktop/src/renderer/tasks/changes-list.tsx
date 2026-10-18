@@ -1,6 +1,6 @@
 import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import { ChevronRightIcon } from "lucide-react";
-import { type RefObject, useCallback, useMemo, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useMemo, useRef, useState } from "react";
 import { SHORTCUT_KEY, type ShortcutChord } from "#shared/shortcuts";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
@@ -58,6 +58,8 @@ export const LIST_WORDS = {
   CLEAR_FILTER: "Clear filter",
   COLLAPSE_ALL: "Collapse all files",
   EXPAND_ALL: "Expand all files",
+  SHOW_SOURCE: "Show source",
+  SHOW_IMAGE: "Show image",
 } as const;
 
 /** Whether the press landed in something taking typing, which keeps its letters. */
@@ -88,6 +90,13 @@ function stepped(paths: readonly string[], from: string | undefined, step: numbe
   const at = from === undefined ? -1 : paths.indexOf(from);
   if (at === -1) return paths[0];
   return paths[Math.min(paths.length - 1, Math.max(0, at + step))];
+}
+
+/** The paths with `path` turned: taken out where it stood among them, put in where it did not. */
+function turned(paths: ReadonlySet<string>, path: string): ReadonlySet<string> {
+  const next = new Set(paths);
+  if (!next.delete(path)) next.add(path);
+  return next;
 }
 
 /** The folds turned over, with `paths` folded as `collapsed` says. */
@@ -124,6 +133,9 @@ export interface ChangesList {
   readonly stand: (path: string) => void;
   readonly onKeyDown: (event: React.KeyboardEvent) => void;
   readonly door: RefObject<DiffListDoor | null>;
+  /** Whether an image that is text too, an SVG, is drawn as its source's lines rather than as a picture, and the door that turns it. */
+  readonly asSource: (path: string) => boolean;
+  readonly toggleSource: (path: string) => void;
 }
 
 /** Files changed's list over `files`, every fold at its default and no file stood on until the developer acts. */
@@ -132,6 +144,7 @@ export function useChangesList(files: readonly CodingAgentChangedFile[]): Change
   const [overrides, setOverrides] = useState<ReadonlySet<string>>(new Set());
   const [standing, setStanding] = useState<string | undefined>(undefined);
   const [top, setTop] = useState<string | undefined>(undefined);
+  const [sources, setSources] = useState<ReadonlySet<string>>(new Set());
   const door = useRef<DiffListDoor | null>(null);
   const ordered = useMemo(() => treeOrder(files), [files]);
   const kept = useMemo(() => filterFiles(ordered, query), [ordered, query]);
@@ -146,13 +159,9 @@ export function useChangesList(files: readonly CodingAgentChangedFile[]): Change
   const keptStanding = standing !== undefined && paths.includes(standing) ? standing : undefined;
   const current = keptStanding ?? (top !== undefined && paths.includes(top) ? top : paths[0]);
 
-  const toggle = useCallback((path: string) => {
-    setOverrides((was) => {
-      const next = new Set(was);
-      if (!next.delete(path)) next.add(path);
-      return next;
-    });
-  }, []);
+  const toggle = useCallback((path: string) => setOverrides((was) => turned(was, path)), []);
+  const asSource = useCallback((path: string) => sources.has(path), [sources]);
+  const toggleSource = useCallback((path: string) => setSources((was) => turned(was, path)), []);
   const toggleAll = useCallback(
     () => setOverrides((was) => foldedAs(was, kept, !allCollapsed)),
     [kept, allCollapsed],
@@ -195,28 +204,35 @@ export function useChangesList(files: readonly CodingAgentChangedFile[]): Change
     stand: setStanding,
     onKeyDown,
     door,
+    asSource,
+    toggleSource,
   };
 }
 
 /**
  * A file's header in the list: its fold, the letter of what became of it,
- * its path, from the path it moved from where it moved, and the lines it
- * adds and removes, and under them, while it is open, why it has no hunks
- * where it has none, which stands here rather than as a note because a note
- * on the whole file stands on one side of a split. Pierre keeps it at the
- * top of the list while the file's lines scroll under it.
+ * its path, from the path it moved from where it moved, the lines it adds
+ * and removes, and any control of its own; and under them, while it is
+ * open, what stands in the place of lines it draws none of, why it has no
+ * hunks or a changed image's two sides (`image-diff.tsx`), which stands here
+ * rather than as a note because a note on the whole file stands on one side
+ * of a split. Pierre keeps it at the top of the list while the file's lines
+ * scroll under it.
  */
 export function FileHead({
   file,
-  notice,
+  body,
+  controls,
   collapsed,
   standing,
   onToggle,
   onStand,
 }: {
   file: CodingAgentChangedFile;
-  /** Why the file has no hunks to draw; none for a file that has them. */
-  notice: string | undefined;
+  /** What stands in the place of lines the file draws none of; none for a file that draws its lines. */
+  body: ReactNode;
+  /** The file's own controls, at the end of its row; none for none. */
+  controls?: ReactNode;
   collapsed: boolean;
   /** Whether the keys stand on the file, which outlines it. */
   standing: boolean;
@@ -257,8 +273,9 @@ export function FileHead({
           <bdi>{file.path}</bdi>
         </span>
         <LinesChanged additions={file.additions} deletions={file.deletions} />
+        {controls}
       </div>
-      {notice === undefined || collapsed ? null : <p className="diff-list-notice">{notice}</p>}
+      {body === null || body === undefined || collapsed ? null : body}
     </div>
   );
 }
