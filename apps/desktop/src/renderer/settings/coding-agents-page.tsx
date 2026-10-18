@@ -14,9 +14,9 @@ import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
   ErrorState,
-  SETTINGS_LINE_KIND,
   SettingsLine,
   SettingsRow,
+  SettingsRowsSkeleton,
   SettingsSection,
   TEXT_LINK_LOOK,
   TextLink,
@@ -89,6 +89,9 @@ const PAGE_LINE = {
   SIGNED_OUT: "Sign in to choose the model your coding agents run on.",
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;
+
+/** How many rows stand in the Default model group's place while it is read: the model's, effort's, and context's, which every model draws. */
+const DEFAULT_SKELETON_ROWS = 3;
 
 /** The link under a resting Fast row that asks Anthropic for fast mode. */
 const FAST_ACCESS_WORD = "Request access";
@@ -389,7 +392,7 @@ function CodingAgentsSection({
           </ErrorState>
         </SettingsLine>
       ) : (
-        <SettingsLine kind={SETTINGS_LINE_KIND.LOADING}>Loading your default</SettingsLine>
+        <SettingsRowsSkeleton label="Loading your default" rows={DEFAULT_SKELETON_ROWS} />
       )}
     </SettingsSection>
   );

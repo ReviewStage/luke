@@ -206,9 +206,19 @@ function titleBarButtons(page: HTMLElement): string[] {
   );
 }
 
-test("Escape pressed while Settings is still loading leaves Settings for the plans, as it does once Settings stands", () => {
+test("while Settings is still loading its frame stands, a page of placeholder sections beside the page list's column, and Escape pressed there leaves Settings for the plans, as it does once Settings stands", () => {
   const tabs: PanelTab[] = [];
-  mount(false, false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  const page = mount(false, false, {}, PANEL_TAB.SETTINGS, (tab) => tabs.push(tab));
+  const placeholder = page.querySelector('section[aria-label="Settings"] [role="status"]');
+
+  assert.deepEqual(
+    [
+      page.querySelector('nav[aria-label="Settings pages"]') !== null,
+      placeholder?.textContent,
+      placeholder?.querySelectorAll(".luke-settings-section-card").length,
+    ],
+    [true, "Loading Settings", 2],
+  );
 
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.EXIT_SETTINGS), "Settings' way out is offered");
