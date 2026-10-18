@@ -282,6 +282,26 @@ test("the Comments tab's Resolved toggle lists the resolved thread whole, where 
   ]);
 });
 
+test("the Comments tab's Resolved toggle starts the other list at its top", () => {
+  const { container } = drawn("tab");
+  const list = container.querySelector<HTMLElement>(".comments-list");
+  assert.ok(list);
+  let top = 240;
+  Object.defineProperty(list, "scrollTop", {
+    configurable: true,
+    get: () => top,
+    set: (value: number) => {
+      top = value;
+    },
+  });
+
+  act(() =>
+    container.querySelector<HTMLButtonElement>(".comments-head button[aria-pressed]")?.click(),
+  );
+
+  assert.equal(top, 0);
+});
+
 test("the Comments tab lists each open thread whole, its reply field under its comments", () => {
   const { container } = drawn("tab");
 

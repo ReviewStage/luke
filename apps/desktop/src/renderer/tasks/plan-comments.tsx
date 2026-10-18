@@ -1727,7 +1727,11 @@ export function PlanCommentsTab({
         </span>
         <ResolvedOnly
           shown={filter === COMMENTS_FILTER.RESOLVED}
-          onShown={(shown) => setFilter(shown ? COMMENTS_FILTER.RESOLVED : COMMENTS_FILTER.OPEN)}
+          onShown={(shown) => {
+            setFilter(shown ? COMMENTS_FILTER.RESOLVED : COMMENTS_FILTER.OPEN);
+            // Note that the other list starts at its top, not where the one it replaces was scrolled to.
+            if (list.current !== null) list.current.scrollTop = 0;
+          }}
         />
       </div>
       <div ref={list} className="comments-list scroll-fade">

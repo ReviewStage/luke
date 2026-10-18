@@ -5691,8 +5691,10 @@ button.picture-frame {
   box-shadow: var(--luke-menu-shadow);
 }
 
-.comment-float .comment-card[data-open="false"]:hover {
-  background: var(--luke-color-fill-hover);
+/* Note that the hover's fill is translucent, so over the page it is laid on the card's own surface, never the words beneath. */
+.comment-float .comment-card[data-open="false"]:is(:hover, [data-pointed="true"]) {
+  background: linear-gradient(var(--luke-color-fill-hover), var(--luke-color-fill-hover))
+    var(--luke-color-overlay);
 }
 
 /* A thread: at rest its words on the column's ground, open on a menu's surface. */
