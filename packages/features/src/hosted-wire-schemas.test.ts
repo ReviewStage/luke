@@ -136,6 +136,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentChangesAnswerSchema: codingAgentWire.codingAgentChangesAnswerSchema,
     codingAgentOverviewPullRequestAnswerSchema:
       codingAgentWire.codingAgentOverviewPullRequestAnswerSchema,
+    codingAgentReviewOptionsAnswerSchema: codingAgentWire.codingAgentReviewOptionsAnswerSchema,
     codingAgentOverviewChecksAnswerSchema: codingAgentWire.codingAgentOverviewChecksAnswerSchema,
     codingAgentOverviewConversationAnswerSchema:
       codingAgentWire.codingAgentOverviewConversationAnswerSchema,
@@ -216,6 +217,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentChangesAnswerViewSchema: codingAgentView.codingAgentChangesAnswerViewSchema,
     codingAgentOverviewPullRequestAnswerViewSchema:
       codingAgentView.codingAgentOverviewPullRequestAnswerViewSchema,
+    codingAgentReviewOptionsAnswerViewSchema:
+      codingAgentView.codingAgentReviewOptionsAnswerViewSchema,
     codingAgentOverviewChecksAnswerViewSchema:
       codingAgentView.codingAgentOverviewChecksAnswerViewSchema,
     codingAgentOverviewConversationAnswerViewSchema:
