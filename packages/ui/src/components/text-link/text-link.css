@@ -42,6 +42,22 @@
     text-decoration-color: currentColor;
   }
 
+  .luke-text-link[data-look="heading"] {
+    color: var(--luke-color-text);
+  }
+
+  a.luke-text-link[data-look="heading"]:hover {
+    color: var(--luke-color-accent-text);
+  }
+
+  .luke-text-link[data-font="sans"] {
+    font-family: var(--luke-font-sans);
+  }
+
+  .luke-text-link[data-font="mono"] {
+    font-family: var(--luke-font-mono);
+  }
+
   .luke-text-link[data-height="control"] {
     display: inline-flex;
     align-items: center;

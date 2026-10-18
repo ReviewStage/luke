@@ -1,6 +1,7 @@
 import {
   GAP,
   Inline,
+  TEXT_FONT,
   TEXT_LINK_CURRENT,
   TEXT_LINK_HEIGHT,
   TEXT_LINK_LOOK,
@@ -15,8 +16,8 @@ import { CatalogSection } from "../section";
 /**
  * text-links.tsx -- a quiet row of links at a control's height with the
  * reader's place lifted, a quiet row in the surrounding caption type, an
- * underlined link and an external one in a sentence, and a long link in a
- * narrow column.
+ * underlined link, an external one, and words with no address in a
+ * sentence, a heading's mono link, and a long link in a narrow column.
  */
 
 function TextLinks(): React.JSX.Element {
@@ -58,9 +59,23 @@ function TextLinks(): React.JSX.Element {
             <TextLink href="#text-links-sentence" look={TEXT_LINK_LOOK.UNDERLINED} external newTab>
               the analytics processor
             </TextLink>
+            , or{" "}
+            <TextLink href={undefined} look={TEXT_LINK_LOOK.UNDERLINED}>
+              a file the place opens nothing for
+            </TextLink>
             .
           </Text>
         </div>
+      </CatalogSection>
+      <CatalogSection id="text-links-heading" title="A heading's own words">
+        <TextLink
+          href="#text-links-heading"
+          look={TEXT_LINK_LOOK.HEADING}
+          variant={TEXT_VARIANT.LABEL}
+          font={TEXT_FONT.MONO}
+        >
+          v0.17.0
+        </TextLink>
       </CatalogSection>
       <CatalogSection id="text-links-narrow" title="Narrow column, long words">
         <div className="catalog-narrow">

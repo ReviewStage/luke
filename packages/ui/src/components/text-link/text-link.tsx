@@ -1,6 +1,6 @@
 import type { FocusEventHandler, MouseEvent, PointerEventHandler, ReactNode } from "react";
 import { ArrowUpRightIcon } from "../../face/glyphs.js";
-import type { TextVariant } from "../text/text.js";
+import type { TextFont, TextVariant } from "../text/text.js";
 import { TEXT_LINK_LOOK, type TextLinkLook } from "./text-link-look.js";
 
 export { TEXT_LINK_LOOK, type TextLinkLook } from "./text-link-look.js";
@@ -14,11 +14,14 @@ export { TEXT_LINK_LOOK, type TextLinkLook } from "./text-link-look.js";
  * already is (`current`); `underlined` for one inside written words, in the
  * words' own ink over a thin underline in a faint wash of it, which goes
  * full strength under the pointer or the keyboard, so it reads by its line
- * and not its colour alone.
+ * and not its colour alone; `heading` for one that is a heading's own words
+ * (a release's version over its notes), in the text's own ink and lighting
+ * to the accent under the pointer.
  *
  * A link set in a type role (`variant`) wears that role's size, leading,
- * and weight; one set in none takes the words around it, so a footer's mono
- * caption row or a reply's sentence keeps its own type. A link that stands
+ * and weight, and its `font` the shared sans or mono face; one set in no
+ * role takes the words around it, so a footer's mono caption row or a
+ * reply's sentence keeps its own type. A link that stands
  * alone at the control's `height` is as tall as a control, so a finger's
  * target is the contract's without moving a word.
  *
@@ -64,6 +67,7 @@ export function TextLink({
   href,
   look = TEXT_LINK_LOOK.QUIET,
   variant,
+  font,
   height = TEXT_LINK_HEIGHT.TEXT,
   current,
   external = false,
@@ -77,6 +81,8 @@ export function TextLink({
   look?: TextLinkLook;
   /** The type role its words are set in; the surrounding words' type where none. */
   variant?: TextVariant | undefined;
+  /** The face its words are set in; the surrounding words' face where none. */
+  font?: TextFont | undefined;
   height?: TextLinkHeight;
   /** Whether the reader is where it goes, which lifts a quiet link and is announced. */
   current?: TextLinkCurrent | undefined;
@@ -94,7 +100,12 @@ export function TextLink({
       {external ? <ArrowUpRightIcon /> : null}
     </>
   );
-  const face = { "data-look": look, "data-variant": variant, "data-height": height };
+  const face = {
+    "data-look": look,
+    "data-variant": variant,
+    "data-font": font,
+    "data-height": height,
+  };
   if (href === undefined) {
     return (
       <span className="luke-text-link" {...face} {...hint}>
