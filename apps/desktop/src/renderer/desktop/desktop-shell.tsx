@@ -33,7 +33,7 @@ import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopTasks } from "./desktop-tasks";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
 import { useFloatDismiss } from "./hover-pane";
-import { OfflineMark } from "./offline-mark";
+import { OfflineMark, useOffline } from "./offline-mark";
 import { PaneGlide } from "./pane-motion";
 import { PersonPage } from "./person-page";
 import { SidePanelToggle } from "./side-panel";
@@ -364,6 +364,7 @@ export function DesktopShell({
   // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
   const summary = useSummaryPin(sidebar.staged);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
+  const offline = useOffline();
   usePlaceCommands(!gated, tab, onTabChange, tasks, settings, history);
   // Factory switched off while it stands, here or on another Mac, gives the task's place back.
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
@@ -442,6 +443,10 @@ export function DesktopShell({
           onBegin={gates.onBeginSignIn}
           onCancel={gates.onCancelSignIn}
         />
+        {/* Signing in needs the network, so the gate says when there is none. */}
+        <div className="title-bar-controls">
+          <OfflineMark />
+        </div>
       </div>
     );
   }
@@ -518,6 +523,7 @@ export function DesktopShell({
       data-sidebar-collapsed={String(sidebar.collapsed)}
       data-sidebar-overlay={sidebar.overlay}
       data-panel-toggle={String(panelToggle)}
+      data-offline={String(offline)}
     >
       <DesktopSidebar
         sidebar={sidebar}

@@ -3,7 +3,7 @@ import { Tooltip } from "../tooltip";
 import { useAppState } from "../use-app-state";
 
 /**
- * offline-mark.tsx -- the pill that says this Mac is offline, in the sidebar's foot or, while the sidebar is folded, in the title bar.
+ * offline-mark.tsx -- the pill that says this Mac is offline, in the sidebar's foot or, while the sidebar is folded or the sign-in stands, in the title bar.
  *
  * Every surface still fails on its own while the network is gone, each as
  * its read could not be done; the pill says once why, where the window keeps
@@ -17,10 +17,14 @@ import { useAppState } from "../use-app-state";
 /** What the pill's hint says: why reads are failing, and that nothing needs doing. */
 const OFFLINE_HINT = "You're offline. Luke will catch up as soon as you reconnect.";
 
+/** Whether main last found the Mac offline: what the pill, and the room the title bar makes for it, answer. */
+export function useOffline(): boolean {
+  return useAppState()?.network.online === false;
+}
+
 /** The offline pill, or nothing while the Mac is online. */
 export function OfflineMark(): React.JSX.Element | null {
-  const offline = useAppState()?.network.online === false;
-  if (!offline) return null;
+  if (!useOffline()) return null;
   return (
     <Tooltip label={OFFLINE_HINT}>
       <span className="offline-mark" role="status" aria-label="Offline">

@@ -2233,10 +2233,14 @@ ul.actor-stack {
 /* The Mac offline (`offline-mark.tsx`), a pill of the release's shape in the
    attention orange: a state to know of rather than a press, so it has no
    hover. It fades in on the pair every arriving element rides and goes at
-   once, as the release's pill does. Folded, it stands in the title bar beside
-   New task, centred on its buttons. A narrow foot draws its glyph alone, as
+   once, as the release's pill does. A narrow foot draws its glyph alone, as
    it draws the release's, and so does a foot the release's pill stands in
-   too, so the account's name keeps a name's room beside the two. */
+   too, so the account's name keeps a name's room beside the two. Folded, it
+   stands in the title bar beside New task as a round its glyph alone, one
+   button wide, and the toolbar's clearance grows by that button, so nothing
+   the toolbar draws starts beneath it. Over the sign-in, where nothing
+   else stands in the title bar, it keeps its word. Over a drag region, it
+   takes the pointer back so its hint can show. */
 .offline-mark {
   display: inline-flex;
   flex: none;
@@ -2252,6 +2256,7 @@ ul.actor-stack {
   font-weight: 600;
   white-space: nowrap;
   animation: popup-fade var(--duration-quick) var(--motion-exit) backwards;
+  -webkit-app-region: no-drag;
 }
 
 .offline-mark svg {
@@ -2259,8 +2264,24 @@ ul.actor-stack {
   height: 13px;
 }
 
-.title-bar-controls .offline-mark {
-  margin-left: var(--control-gap);
+.desktop-shell .title-bar-controls .offline-mark {
+  width: var(--control-height);
+  height: var(--control-height);
+  justify-content: center;
+  padding: 0;
+}
+
+.desktop-shell .title-bar-controls .offline-mark-word {
+  display: none;
+}
+
+.desktop-shell[data-sidebar-collapsed="true"][data-offline="true"] {
+  --sidebar-toggle-clearance: calc(
+    var(--title-bar-left) +
+    3 *
+    var(--control-height) +
+    var(--control-gap)
+  );
 }
 
 .sidebar-account-row:has(.sidebar-update) .offline-mark {
