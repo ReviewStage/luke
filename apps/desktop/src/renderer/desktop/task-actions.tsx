@@ -23,6 +23,7 @@ import {
 import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import { DOCUMENT_REGION, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
+import { useTaskRename } from "@luke/ui/use-task-rename";
 import { FolderInputIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
@@ -51,7 +52,6 @@ import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections";
 import { TaskStatusMark, taskCardOf } from "./task-card";
-import { useTaskRename } from "./task-name-field";
 
 /**
  * task-actions.tsx -- one task's actions, offered alike from the toolbar's ⋯ button and from a right-click on the task in the sidebar.

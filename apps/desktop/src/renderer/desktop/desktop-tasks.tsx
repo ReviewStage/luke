@@ -16,6 +16,7 @@ import {
 import { chatNames } from "@luke/ui/chat-model";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { useTaskRename } from "@luke/ui/use-task-rename";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useAct } from "../act";
@@ -84,7 +85,6 @@ import { useStrandedTaskBanner } from "./stranded-task-banner";
 import { useTabViews } from "./strip-tabs";
 import { TaskActions } from "./task-actions";
 import { taskCardOf } from "./task-card";
-import { useTaskRename } from "./task-name-field";
 import {
   SummaryButton,
   type SummaryPin,
