@@ -3,7 +3,14 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { BUTTON_SHAPE, BUTTON_VARIANT, Button, ButtonLink, IconButton } from "./button.js";
+import {
+  BUTTON_SHAPE,
+  BUTTON_VARIANT,
+  Button,
+  ButtonLink,
+  IconButton,
+  IconButtonLink,
+} from "./button.js";
 
 /**
  * button.test.ts -- a ButtonLink is a link a reader finds by its words,
@@ -12,7 +19,8 @@ import { BUTTON_SHAPE, BUTTON_VARIANT, Button, ButtonLink, IconButton } from "./
  * yet takes the focus a roving group hands it and is pressed as any other;
  * an ordinary button stays a Tab stop. A button that keeps focus leaves it
  * on the field that held it when a pointer presses it. A labelled button
- * given a label is named by it, which holds its words.
+ * given a label is named by it, which holds its words. An IconButtonLink is
+ * a link named by its label, and one in a new tab opens there.
  */
 
 const roots: Root[] = [];
@@ -195,4 +203,37 @@ test("a labelled button given a label is named by it, its words within it, and b
     ["Starting", "Start"],
   ]);
   expect(said[0]?.[0]).toContain(said[0]?.[1]);
+});
+
+test("an IconButtonLink is a link named by its label, and one in a new tab opens there", () => {
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(IconButtonLink, {
+        href: "https://github.com/example/luke",
+        icon: createElement("svg", { "aria-hidden": true }),
+        label: "Luke on GitHub",
+      }),
+      createElement(IconButtonLink, {
+        href: "https://x.com/example",
+        icon: createElement("svg", { "aria-hidden": true }),
+        label: "Example on X",
+        newTab: true,
+      }),
+    ),
+  );
+
+  const links = Array.from(container.querySelectorAll("a"));
+  expect(
+    links.map((link) => [
+      link.getAttribute("aria-label"),
+      link.getAttribute("href"),
+      link.getAttribute("target"),
+    ]),
+  ).toEqual([
+    ["Luke on GitHub", "https://github.com/example/luke", null],
+    ["Example on X", "https://x.com/example", "_blank"],
+  ]);
+  expect(container.querySelector("button")).toBeNull();
 });
