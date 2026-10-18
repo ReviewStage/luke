@@ -1567,10 +1567,7 @@ function reviewPress(tab: HTMLElement): HTMLButtonElement {
 /** Opens the review panel from the bar. */
 function openReview(tab: HTMLElement): HTMLElement {
   act(() => reviewPress(tab).click());
-  return (
-    tab.querySelector<HTMLElement>('[role="dialog"].pull-request-review-panel') ??
-    assert.fail("Review opens the panel")
-  );
+  return tab.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("Review opens the panel");
 }
 
 /** Writes the review's words as the member would. */
@@ -1629,7 +1626,7 @@ test("Review opens a panel whose choice and words are submitted for the agent as
     ],
   ]);
   assert.equal(conversationReads, 2, "the conversation is read again once GitHub took the review");
-  assert.equal(tab.querySelector(".pull-request-review-panel"), null, "the panel closes");
+  assert.equal(tab.querySelector('[role="dialog"]'), null, "the panel closes");
   const reopened = openReview(tab);
   assert.equal(reopened.querySelector("textarea")?.value, "", "the submitted words are let go");
   assert.equal(
@@ -1692,7 +1689,7 @@ test("a press outside the review panel closes it, its words kept, and one on a s
       document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     });
 
-    assert.equal(tab.querySelector(".pull-request-review-panel"), null);
+    assert.equal(tab.querySelector('[role="dialog"]'), null);
     assert.equal(openReview(tab).querySelector("textarea")?.value, "Half a thought");
   } finally {
     vi.restoreAllMocks();
