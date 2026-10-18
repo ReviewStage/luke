@@ -17,12 +17,15 @@ import {
   type BadgeTone,
   IconButton,
   LIST_DENSITY,
+  LIST_ROW_CURRENT,
   List,
   ListRow,
+  type ListRowHint,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
+import { cloneElement, createContext, useContext } from "react";
 import { MarkdownMessage } from "./markdown-message";
 import { Highlighted } from "./search-field";
 import { Tooltip } from "./tooltip";
@@ -64,6 +67,24 @@ export function keepInView(list: HTMLElement | null, row: Element | null): void 
   else if (top + row.offsetHeight > list.scrollTop + list.clientHeight)
     list.scrollTop = top + row.offsetHeight - list.clientHeight;
 }
+
+/** What makes a row's tool the current one, where its owner moves the highlight to the pointer. */
+const RowHighlight = createContext<(() => void) | undefined>(undefined);
+
+/**
+ * The pointer coming onto a row makes its tool the current one, as a
+ * menu's highlight follows the pointer. Note that it rides the row's hint
+ * slot, the one door to its press's pointer handlers, and raises no words.
+ */
+const PointerHighlight: ListRowHint = ({ children }) => {
+  const highlight = useContext(RowHighlight);
+  return cloneElement(children, {
+    onPointerEnter: (event) => {
+      children.props.onPointerEnter?.(event);
+      highlight?.();
+    },
+  });
+};
 
 /** The badge a tool wears on its row and at the head of its page's hints. */
 function ToolBadge({ tool }: { tool: IntegrationTool }): React.JSX.Element | null {
@@ -124,38 +145,47 @@ export function IntegrationToolList({
       {tools.map((tool) => {
         const isCurrent = tool.name === current;
         return (
-          <ListRow
+          <RowHighlight.Provider
             key={tool.name}
-            id={idOf?.(tool)}
-            ref={rowRef === undefined ? undefined : (press) => rowRef(tool, press)}
-            title={
-              <span className="integration-tool-name">
-                <span
-                  className="integration-tool-title"
-                  data-name={namedApart(tool) ? undefined : "true"}
-                >
-                  <Highlighted text={toolTitle(tool)} tokens={tokens} />
-                </span>
-                {namedApart(tool) ? (
-                  <span className="integration-tool-id">
-                    <Highlighted text={tool.name} tokens={tokens} />
+            value={onCurrent === undefined || isCurrent ? undefined : () => onCurrent(tool)}
+          >
+            <ListRow
+              id={idOf?.(tool)}
+              ref={rowRef === undefined ? undefined : (press) => rowRef(tool, press)}
+              title={
+                <span className="integration-tool-name">
+                  <span
+                    className="integration-tool-title"
+                    data-name={namedApart(tool) ? undefined : "true"}
+                  >
+                    <Highlighted text={toolTitle(tool)} tokens={tokens} />
                   </span>
-                ) : null}
-                <ToolBadge tool={tool} />
-              </span>
-            }
-            description={
-              tool.description === "" ? undefined : (
-                <Highlighted text={toolSummary(tool.description)} tokens={tokens} />
-              )
-            }
-            current={isCurrent}
-            chevron={onOpen !== undefined}
-            keepFocus={keepFocus}
-            tabbable={keepFocus || isCurrent}
-            onPress={onOpen === undefined ? undefined : () => onOpen(tool)}
-            onKeyDown={onKeyDown === undefined ? undefined : (event) => onKeyDown(event, tool)}
-          />
+                  {namedApart(tool) ? (
+                    <span className="integration-tool-id">
+                      <Highlighted text={tool.name} tokens={tokens} />
+                    </span>
+                  ) : null}
+                  <ToolBadge tool={tool} />
+                </span>
+              }
+              description={
+                tool.description === "" ? undefined : (
+                  <Highlighted text={toolSummary(tool.description)} tokens={tokens} />
+                )
+              }
+              current={isCurrent ? LIST_ROW_CURRENT.ITEM : undefined}
+              chevron={onOpen !== undefined}
+              keepFocus={keepFocus}
+              tabbable={keepFocus || isCurrent}
+              onPress={onOpen === undefined ? undefined : () => onOpen(tool)}
+              onKeyDown={onKeyDown === undefined ? undefined : (event) => onKeyDown(event, tool)}
+              hint={
+                onCurrent === undefined
+                  ? undefined
+                  : { Hint: PointerHighlight, label: toolTitle(tool) }
+              }
+            />
+          </RowHighlight.Provider>
         );
       })}
     </List>

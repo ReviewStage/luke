@@ -13,6 +13,7 @@ import {
   EllipsisIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  LIST_ROW_CURRENT,
   List,
   ListRow,
   RetryRowLabel,
@@ -244,7 +245,7 @@ function RevisionRow({
         }
         description={<span className="version-row-summary">{summary}</span>}
         meta={<RelativeTime at={lastEdit.at} now={now} />}
-        current={selected}
+        current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={onSelect}
         onContextMenu={offered ? showMenu : undefined}
         actionsShown={ACTIONS_SHOWN.ON_HOVER}
@@ -341,7 +342,7 @@ function SectionRow({
         ref={rowRef}
         title={sectionName(section.heading)}
         meta={word}
-        current={selected}
+        current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={onSelect}
         onContextMenu={source === undefined ? undefined : menu.contextMenu()}
       />

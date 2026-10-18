@@ -1,6 +1,10 @@
 import {
+  type ComponentType,
+  type FocusEventHandler,
   type KeyboardEvent,
   type MouseEvent,
+  type PointerEventHandler,
+  type ReactElement,
   type ReactNode,
   type RefCallback,
   useEffect,
@@ -61,7 +65,40 @@ import { useClipped } from "../../use-clipped.js";
  * deleting row's does. Where an app hints a row's whole title only when it
  * is cut short, the row says whether it is (`onTitleClipped`), measured
  * whenever its box resizes.
+ *
+ * The open row is current in one of two ways (`LIST_ROW_CURRENT`): the page
+ * shown beside the list, as an Inbox's item is, or the one item chosen in
+ * its set. An unread row's title stands in the heavier weight until it is
+ * read. A row that opens something may hang the app's hint from its press
+ * (`hint`), as a Button's hint hangs: the app's own tooltip, handed the
+ * words to raise and the press it wraps, whose pointer and focus handlers
+ * land on the press itself.
  */
+
+/** How the open row is current: the page shown beside the list, or the item chosen in its set. */
+export const LIST_ROW_CURRENT = {
+  PAGE: "page",
+  ITEM: "true",
+} as const;
+
+export type ListRowCurrent = (typeof LIST_ROW_CURRENT)[keyof typeof LIST_ROW_CURRENT];
+
+/** What a hint hands the press it wraps: when to show and go, and what it says of the press. */
+interface ListRowHintProps {
+  "aria-describedby"?: string | undefined;
+  "aria-keyshortcuts"?: string | undefined;
+  onPointerEnter?: PointerEventHandler<HTMLElement> | undefined;
+  onPointerLeave?: PointerEventHandler<HTMLElement> | undefined;
+  onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
+  onFocus?: FocusEventHandler<HTMLElement> | undefined;
+  onBlur?: FocusEventHandler<HTMLElement> | undefined;
+}
+
+/** The app's hint a row's press hangs: its words, and the press it wraps. */
+export type ListRowHint = ComponentType<{
+  label: string | undefined;
+  children: ReactElement<ListRowHintProps>;
+}>;
 
 /** How a list stands: its rows apart on the ground, or edge to edge in a card. */
 export const LIST_VARIANT = {
@@ -137,6 +174,8 @@ export function ListRow({
   actions,
   onPress,
   current,
+  unread,
+  hint,
   density,
   actionsShown = ACTIONS_SHOWN.ALWAYS,
   menuOpen = false,
@@ -161,8 +200,12 @@ export function ListRow({
   actions?: ReactNode;
   /** What pressing the row does; a row without one is not a control. */
   onPress?: (() => void) | undefined;
-  /** Whether the row is the one open now, drawn and announced as current. */
-  current?: boolean | undefined;
+  /** How the row is the one open now, drawn and announced as current; nothing where it is not. */
+  current?: ListRowCurrent | undefined;
+  /** Whether what the row stands for has not been seen, its title in the heavier weight. */
+  unread?: boolean | undefined;
+  /** The app's hint hung from the row's press and the words it raises; a row that opens nothing raises none. */
+  hint?: { readonly Hint: ListRowHint; readonly label: string } | undefined;
   /** Its density where it stands in a list of the app's own rather than a `List`, which sets its rows'. */
   density?: ListDensity | undefined;
   /** Whether its acts stand always, or only while the row is reached for, over its metadata. */
@@ -212,36 +255,42 @@ export function ListRow({
       ) : null}
     </>
   );
+  const press = onPress ? (
+    <button
+      ref={ref}
+      type="button"
+      className="luke-list-row-main"
+      aria-current={current}
+      disabled={disabled}
+      tabIndex={tabbable ? undefined : -1}
+      // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
+      onMouseDown={keepFocus ? preventFocusMove : undefined}
+      onClick={onPress}
+      onKeyDown={onKeyDown}
+    >
+      {face}
+    </button>
+  ) : undefined;
   return (
     <li
       id={id}
       ref={onPress ? undefined : ref}
       className="luke-list-row"
-      data-current={current === true ? "true" : undefined}
+      data-current={current === undefined ? undefined : "true"}
+      data-unread={unread === true ? "true" : undefined}
       data-density={density}
       data-actions={actionsShown}
       data-menu-open={menuOpen ? "true" : undefined}
       onContextMenu={onContextMenu}
     >
-      {onPress ? (
-        <button
-          ref={ref}
-          type="button"
-          className="luke-list-row-main"
-          aria-current={current === true ? "true" : undefined}
-          disabled={disabled}
-          tabIndex={tabbable ? undefined : -1}
-          // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
-          onMouseDown={keepFocus ? preventFocusMove : undefined}
-          onClick={onPress}
-          onKeyDown={onKeyDown}
-        >
-          {face}
-        </button>
-      ) : (
-        <div className="luke-list-row-main" aria-current={current === true ? "true" : undefined}>
+      {press === undefined ? (
+        <div className="luke-list-row-main" aria-current={current}>
           {face}
         </div>
+      ) : hint === undefined ? (
+        press
+      ) : (
+        <hint.Hint label={hint.label}>{press}</hint.Hint>
       )}
       {said(actions) ? <div className="luke-list-row-actions">{actions}</div> : null}
     </li>

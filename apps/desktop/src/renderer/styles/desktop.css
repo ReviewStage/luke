@@ -4256,6 +4256,19 @@ body:has(.app-stage[data-capture="true"])
   transform: translateY(-50%);
 }
 
+/* In a ListRow the dot stands in a place of its own at the end of the row's
+   metadata, kept on every row, so the times line up whether a row wears one
+   or not. */
+.inbox-row-dot-place {
+  --inbox-dot: 7px;
+
+  position: relative;
+  display: inline-block;
+  width: var(--inbox-dot);
+  height: var(--inbox-dot);
+  flex: none;
+}
+
 /* A teammate's open item waits on them, not on the reader: the dot's place
    holds a hollow ring in the time's ink, so the column still says something
    is open there without the blue that means the reader is asked. */
@@ -8242,9 +8255,11 @@ body:has(.app-stage[data-capture="true"])
 }
 
 /* Note that the context gives way before the marks and the time, because
-   the metadata's slot clips at its end and the time is what ends it. */
+   the metadata's slot clips at its end and the time is what ends it, and
+   stops at a bound, so a long one never takes the row's title's room. */
 .home-row-meta > .home-row-context {
   min-width: 0;
+  max-width: 20ch;
   flex: 0 1 auto;
 }
 

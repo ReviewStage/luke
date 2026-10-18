@@ -376,6 +376,23 @@ test("Escape, Left, and Backspace on a tool's page each go back to its server's 
   assert.equal(container.querySelector(".agent-servers-menu"), null);
 });
 
+test("on a server's page the pointer coming onto a tool's row moves the highlight to it", async () => {
+  const { container } = await opened();
+  openVercel(container);
+  assert.equal(highlighted(container), "delete_domain");
+  const row =
+    [
+      ...container.querySelectorAll<HTMLButtonElement>('ul[aria-label$=" tools"] > li > button'),
+    ].find((button) => button.textContent?.startsWith("delete_project")) ??
+    assert.fail("delete_project has its row");
+
+  act(() => {
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+
+  assert.equal(highlighted(container), "delete_project");
+});
+
 test("a press on a tool opens its page with the popover standing open, and its back goes back to the server's page", async () => {
   const { container } = await opened();
   openVercel(container);

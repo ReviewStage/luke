@@ -9,6 +9,7 @@ import {
   ConfirmDialog,
   IconButton,
   LIST_DENSITY,
+  LIST_ROW_CURRENT,
   List,
   ListRow,
   PlusIcon,
@@ -112,7 +113,7 @@ function ShellRow({
             <span className="terminal-shell-running" role="img" aria-label="Running" />
           ) : null
         }
-        current={shown}
+        current={shown ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={renaming ? undefined : () => session.onChoose(shell.id)}
         onContextMenu={renaming ? undefined : menu.contextMenu(row)}
         actionsShown={ACTIONS_SHOWN.ON_HOVER}
