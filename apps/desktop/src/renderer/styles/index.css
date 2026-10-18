@@ -27,9 +27,6 @@
 /* The AI Elements components' utilities, over the tokens above; compiled by
    scripts/tailwind.mjs as the stylesheet is built. */
 @import "./tailwind.css";
-/* Generated from packages/brand/scripts/generate-brand-assets.mjs; base.css holds the wiring it
-   assumes. Last, so a hand-written rule can still win. */
-@import "./generated/face-motion.css";
 /* After everything: the window's own layout restages the shared surface's
    elements, and its overrides have to win. */
 @import "./desktop.css";

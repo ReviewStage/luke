@@ -21,14 +21,21 @@ import {
   codeReadOf,
   codeWindow,
   EMPTY_INBOX_DRAFT,
+  EVERYONES,
   firstChoice,
   holderName,
   INBOX_GROUPING,
   INBOX_MISSING,
   INBOX_SHOW,
+  INBOX_SORT,
+  INBOX_STATUS_GROUP,
+  INBOX_WHOSE,
   type InboxDraft,
+  type InboxGrouping,
   type InboxListView,
   type InboxShow,
+  type InboxSort,
+  type InboxWhose,
   inboxBoard,
   inboxCounts,
   inboxList,
@@ -465,7 +472,7 @@ const TASKS = [
   { holder: taskHolder(INVITES), items: [item({ id: "expiry", updatedAt: 40 })] },
 ];
 
-/** Each group of a list as its task's name, or its person's, You for the reader's own, and its items' ids, or the one run's ids. */
+/** Each group of a list as its task's name, its person's, You for the reader's own, or its status, and its items' ids, or the one run's ids. */
 function drawn(view: InboxListView): readonly (string | readonly [string, readonly string[]])[] {
   if (view.grouping === INBOX_GROUPING.TASK) {
     return view.groups.map(
@@ -475,6 +482,11 @@ function drawn(view: InboxListView): readonly (string | readonly [string, readon
   if (view.grouping === INBOX_GROUPING.PERSON) {
     return view.groups.map(
       ({ starter, items }) => [starter?.name ?? "You", items.map(({ item }) => item.id)] as const,
+    );
+  }
+  if (view.grouping === INBOX_GROUPING.STATUS) {
+    return view.groups.map(
+      ({ status, items }) => [status, items.map(({ item }) => item.id)] as const,
     );
   }
   return view.items.map(({ item }) => item.id);
@@ -767,6 +779,96 @@ test("grouped by person, the reader's own items stand first as You, then each te
     ],
     "Needs you leaves a teammate's group out but for the item chosen",
   );
+});
+
+test("grouped by status, what needs the reader stands first, then what waits on a teammate, then what is answered or taken back, each in the list's order, a status with nothing in it left out; a folded status's items are stepped past but for the one chosen", () => {
+  const status = (show: InboxShow) =>
+    inboxList(SHARED, {
+      grouping: INBOX_GROUPING.STATUS,
+      show,
+      readerId: ME.userId,
+      chosen: undefined,
+    });
+  assert.deepEqual(drawn(status(INBOX_SHOW.ALL)), [
+    [INBOX_STATUS_GROUP.NEEDS_YOU, ["mine-invites", "mine", "unnamed"]],
+    [INBOX_STATUS_GROUP.WAITING, ["danas", "kais"]],
+    [INBOX_STATUS_GROUP.ANSWERED, ["danas-answered"]],
+  ]);
+  assert.deepEqual(drawn(status(INBOX_SHOW.OPEN)).length, 2, "All open holds nothing answered");
+  const view = status(INBOX_SHOW.ALL);
+  const waiting = view.grouping === INBOX_GROUPING.STATUS ? view.groups[1]?.key : undefined;
+  const folded = (key: string) => key === waiting;
+  assert.equal(inboxSteps(view, "unnamed", folded)?.next?.item.id, "danas-answered");
+  assert.equal(inboxSteps(view, "danas", folded)?.next?.item.id, "danas-answered");
+});
+
+test("sorted by waiting longest, the open items stand first, the one posted longest ago first, then the settled ones the latest changed first, and the tasks in the order their first item stands", () => {
+  const tasks = [
+    {
+      holder: taskHolder(BILLING),
+      items: [
+        item({ id: "fresh", postedAt: 90, updatedAt: 95 }),
+        item({ id: "settled-late", status: INBOX_STATUS.ANSWERED, postedAt: 5, updatedAt: 99 }),
+      ],
+    },
+    {
+      holder: taskHolder(INVITES),
+      items: [
+        item({ id: "oldest", postedAt: 10, updatedAt: 98 }),
+        item({ id: "settled-early", status: INBOX_STATUS.CLOSED, postedAt: 1, updatedAt: 50 }),
+      ],
+    },
+  ];
+  const sorted = (grouping: InboxGrouping, sort: InboxSort) =>
+    drawn(
+      inboxList(tasks, {
+        grouping,
+        show: INBOX_SHOW.ALL,
+        readerId: undefined,
+        chosen: undefined,
+        sort,
+      }),
+    );
+  assert.deepEqual(sorted(INBOX_GROUPING.NONE, INBOX_SORT.WAITING), [
+    "oldest",
+    "fresh",
+    "settled-late",
+    "settled-early",
+  ]);
+  assert.deepEqual(sorted(INBOX_GROUPING.TASK, INBOX_SORT.WAITING), [
+    ["Invites", ["oldest", "settled-early"]],
+    ["Billing alerts", ["fresh", "settled-late"]],
+  ]);
+  assert.deepEqual(sorted(INBOX_GROUPING.NONE, INBOX_SORT.LATEST), [
+    "settled-late",
+    "oldest",
+    "fresh",
+    "settled-early",
+  ]);
+});
+
+test("Whose lists everyone's items, the reader's own, items whose starter the service does not name among them, or one teammate's, and the tabs count only those; the item chosen keeps its place among the steps", () => {
+  const whose = (choice: InboxWhose, chosen?: string) =>
+    drawn(
+      inboxList(SHARED, {
+        grouping: INBOX_GROUPING.NONE,
+        show: INBOX_SHOW.ALL,
+        readerId: ME.userId,
+        chosen,
+        whose: choice,
+      }),
+    );
+  assert.equal(whose(EVERYONES).length, 6);
+  assert.deepEqual(whose({ kind: INBOX_WHOSE.MINE }), ["mine-invites", "mine", "unnamed"]);
+  const dana = { kind: INBOX_WHOSE.PERSON, ...DANA } as const;
+  assert.deepEqual(whose(dana), ["danas-answered", "danas"]);
+  assert.deepEqual(whose(dana, "kais"), ["danas-answered", "danas", "kais"]);
+  assert.deepEqual(inboxCounts(SHARED, ME.userId, dana), {
+    [INBOX_SHOW.NEEDS_YOU]: 0,
+    [INBOX_SHOW.UNREAD]: 0,
+    [INBOX_SHOW.OPEN]: 1,
+    [INBOX_SHOW.ALL]: 2,
+  });
 });
 
 test("grouped by person, a folded person's items are stepped past but for the one chosen", () => {

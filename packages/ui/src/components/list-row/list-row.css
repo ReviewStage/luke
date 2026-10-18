@@ -234,6 +234,19 @@
     font-weight: var(--luke-weight-medium);
   }
 
+  /* A title that fades rather than ending in an ellipsis (a row whose acts
+     come in on hover) fades out over its last few pixels only while it is
+     measured cut short, so a short one ends on its last letter. The mask
+     fades the words themselves, so it reads alike over every fill the row
+     wears. */
+  .luke-list-row-title[data-end="fade"] {
+    text-overflow: clip;
+  }
+
+  .luke-list-row-title[data-end="fade"][data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
+  }
+
   /* What has not been seen reads in a heavier weight, and its description
      in the body's ink, until it is, as a mail app's unread threads do. */
   .luke-list-row[data-unread="true"] .luke-list-row-title {
@@ -353,11 +366,11 @@
     opacity: 1;
   }
 
-  /* Acts offered to the row in hand stand over its metadata's end, at the
-     title's line where the metadata stands there, and come in while the
-     pointer rests on the row, it holds the keyboard, or its menu is open,
-     the metadata stepping aside so nothing moves. The press keeps its end inset, since
-     the acts take no room beside it. */
+  /* Acts offered to the row in hand come in at its end while the pointer
+     rests on the row, it holds the keyboard, or its menu is open, the
+     metadata stepping aside for them; where the metadata stands at the
+     title's line, they stand over its end there, so nothing moves. At rest
+     the press keeps its end inset, since the acts take no room beside it. */
   .luke-list-row[data-actions="hover"] {
     position: relative;
   }
@@ -394,6 +407,45 @@
     [data-menu-open="true"]
   ) .luke-list-row-meta {
     visibility: hidden;
+  }
+
+  /* Where the metadata stands at the row's middle, the acts that come in
+     take their own room at the row's end rather than standing over its
+     words, and the metadata gives its room up to the title: the title is
+     cut where the acts begin, fading out there (above), so a short time
+     never leaves a long name running under Pin and Archive. The acts go at
+     once as the row is let go, so the words coming back never show
+     through them. */
+  .luke-list-row[data-actions="hover"]:not([data-meta="title"]) .luke-list-row-actions {
+    transition: none;
+  }
+
+  .luke-list-row[data-actions="hover"]:not([data-meta="title"]):is(
+      :hover,
+      :has(:focus-visible),
+      [data-menu-open="true"]
+    )
+    .luke-list-row-actions {
+    position: static;
+    transition: opacity var(--luke-duration-hover) ease;
+  }
+
+  .luke-list-row[data-actions="hover"]:not([data-meta="title"]):has(.luke-list-row-actions):is(
+      :hover,
+      :has(:focus-visible),
+      [data-menu-open="true"]
+    )
+    .luke-list-row-main {
+    padding-inline-end: 0;
+  }
+
+  .luke-list-row[data-actions="hover"]:not([data-meta="title"]):has(.luke-list-row-actions):is(
+      :hover,
+      :has(:focus-visible),
+      [data-menu-open="true"]
+    )
+    .luke-list-row-meta {
+    display: none;
   }
 
   /* Note that the row holding the keyboard stands over its neighbours,
