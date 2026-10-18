@@ -21,7 +21,7 @@
     border-radius: var(--luke-control-radius);
     color: var(--luke-color-text);
     font-family: var(--luke-font-sans);
-    transition: background-color var(--duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) ease;
   }
 
   /* The pointer lights a row that opens something, never past the open
@@ -174,7 +174,7 @@
      the text's own while it is reached for, open, unread, or its menu is. */
   .luke-list-row[data-ink="sidebar"] .luke-list-row-title {
     color: var(--luke-color-sidebar-ink);
-    transition: color var(--duration-hover) ease;
+    transition: color var(--luke-duration-hover) ease;
   }
 
   .luke-list-row[data-ink="sidebar"]:is(
@@ -294,7 +294,7 @@
     flex: none;
     color: var(--luke-color-text-subtle);
     opacity: 0;
-    transition: opacity var(--duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) ease;
   }
 
   .luke-list-row-chevron > svg {
@@ -325,7 +325,7 @@
     inset-inline-end: 0;
     opacity: 0;
     pointer-events: none;
-    transition: opacity var(--duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) ease;
   }
 
   .luke-list-row[data-actions="hover"][data-meta="title"] .luke-list-row-actions {
@@ -396,7 +396,7 @@
       linear-gradient(var(--luke-list-row-fill), var(--luke-list-row-fill)),
       var(--luke-list-row-ground, var(--luke-color-ground));
     transform: translateX(var(--luke-list-row-swipe, 0px));
-    transition: transform var(--duration-fast) var(--spring-fast);
+    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
   }
 
   .luke-list-row[data-swipe="moving"] > .luke-list-row-slide {
@@ -422,11 +422,11 @@
 
   .luke-list-row[data-swipe="rest"] > .luke-list-row-swipe {
     opacity: 0;
-    transition: opacity 0s linear var(--duration-fast);
+    transition: opacity 0s linear var(--luke-duration-fast);
   }
 
   .luke-list-row[data-swipe="moving"] > .luke-list-row-swipe {
-    transition: background-color var(--duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) ease;
   }
 
   .luke-list-row[data-armed="true"] > .luke-list-row-swipe {
@@ -458,14 +458,14 @@
     font-weight: var(--luke-weight-medium);
     opacity: var(--luke-list-row-swipe-shown, 0);
     transform: translateX(var(--luke-list-row-swipe-label, 0px));
-    transition: transform var(--duration-fast) var(--spring-fast);
+    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
   }
 
   /* While the row follows the hand, its label follows a beat behind, so
      the jump from the button's middle to the face's edge as the row arms
      glides rather than snaps. */
   .luke-list-row[data-swipe="moving"] .luke-list-row-swipe-label {
-    transition: transform var(--duration-hover) ease-out;
+    transition: transform var(--luke-duration-hover) ease-out;
   }
 
   .luke-list-row-swipe-label > svg {

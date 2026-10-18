@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { ISSUE_CALL_FAILURE, type IssueListView } from "@luke/features/issue-view";
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import {
   WORKSPACE_ROLE,
   type Workspace,
@@ -23,14 +24,19 @@ import { installScrollIntoView } from "#testing/scroll-into-view";
 import { landedBundles, onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand, useAppKeymap } from "../app-commands";
-import type { SideBundles } from "../bundle-loader";
-import type { PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
-import { ISSUES_PAGE, type IssuesPlace } from "../tasks/use-tasks-tab";
+import { type SideBundles, sideBundles } from "../bundle-loader";
+import {
+  PLACEMENT_END,
+  type PlanEditorModule,
+  type PlanEditorPlacement,
+  type PlanEditorProps,
+} from "../plan-editor/contract";
+import { ISSUES_PAGE, type IssuesPlace, type NewTaskIssue } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
 import { IssuesPage } from "./issues-page";
 
 /**
- * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return opening a row, an issue's page saying who filed it and when it was filed and last changed, and a read that did not land said with a retry.
+ * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return opening a row, an issue's page saying who filed it and when it was filed and last changed and listing the tasks started from it, Start task… opening New task on an issue, and a read that did not land said with a retry.
  *
  * The service is a script at the act boundary; synthetic issues and words throughout.
  * The description's editor is the plan's TipTap bundle, tested beside it
@@ -92,6 +98,8 @@ interface StandInEditor {
   readonly element: HTMLElement;
   text: string;
   destroyed: boolean;
+  /** Where each press on the text's room put the caret while the editor stood. */
+  readonly placed: PlanEditorPlacement[];
 }
 
 /** Every editor the description mounted, newest last. */
@@ -106,13 +114,23 @@ const EDITOR_STAND_IN: PlanEditorModule = {
     element.setAttribute("aria-label", props.label);
     element.tabIndex = 0;
     host.append(element);
-    const editor: StandInEditor = { props, element, text: props.markdown, destroyed: false };
+    const editor: StandInEditor = {
+      props,
+      element,
+      text: props.markdown,
+      destroyed: false,
+      placed: [],
+    };
     editors.push(editor);
     if (props.focus) element.focus();
     return {
       take: (_sent, merged) => ({ base: merged, text: merged }),
       chooseMention: () => undefined,
       markdown: () => editor.text,
+      focusAt: (placement) => {
+        editor.placed.push(placement);
+        element.focus();
+      },
       insertPictures: () => undefined,
       settlePicture: () => undefined,
       removePicture: () => undefined,
@@ -162,6 +180,13 @@ let heldCreates: (() => void)[] | undefined;
 let changeRefused = false;
 /** Every text copied, in order. */
 let copied: string[] = [];
+/** The listed workspace's tasks, as the tab holds them, and its archived ones. */
+let tasksListed: TaskSummary[] = [];
+let tasksArchived: TaskSummary[] = [];
+/** Every issue New task was opened on, in order. */
+let newTasksFrom: NewTaskIssue[] = [];
+/** Every task opened, in order. */
+let tasksOpened: string[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
@@ -179,6 +204,10 @@ beforeEach(() => {
   heldCreates = undefined;
   changeRefused = false;
   copied = [];
+  tasksListed = [];
+  tasksArchived = [];
+  newTasksFrom = [];
+  tasksOpened = [];
   editors.length = 0;
   bundles = landed;
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
@@ -264,6 +293,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  for (const sheet of document.head.querySelectorAll("style[data-laid-out]")) sheet.remove();
 });
 
 /** The registry every render of one mount shares, so a render again is the same window. */
@@ -288,6 +318,10 @@ function Pages({
   const tasks = tasksControl({
     workspace,
     me: READER,
+    tasks: tasksListed,
+    archived: tasksArchived,
+    onNewTaskFrom: (from) => newTasksFrom.push(from),
+    onSelect: (taskId) => tasksOpened.push(taskId),
     issuesView: {
       ...control.issuesView,
       open: true,
@@ -908,7 +942,117 @@ test("a click into the description opens the plan's editor in its place, the car
   );
 });
 
-test("Return on the description opens the editor with the caret at the end of its last section", async () => {
+/**
+ * The issue's page laid out as a window draws it: its main column scrolls,
+ * as its stylesheet says, and stands from 0 to 1000 across, and the
+ * description's words from 100 to 800 across and 200 to 240 down. Laid out
+ * before the page is drawn, as a window's stylesheet is.
+ */
+function layPageOut(): void {
+  const sheet = document.createElement("style");
+  sheet.dataset.laidOut = "";
+  sheet.textContent = ".luke-detail-page-main { overflow-y: auto; }";
+  document.head.append(sheet);
+  const wide = DOMRect.fromRect({ x: 0, y: 0, width: 1000, height: 900 });
+  const words = DOMRect.fromRect({ x: 100, y: 200, width: 700, height: 40 });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains("luke-detail-page-main") ? wide : words;
+  });
+}
+
+/** The page's main column, whose room is the description's way in. */
+function columnOf(page: HTMLElement): HTMLElement {
+  return (
+    page.querySelector<HTMLElement>(".luke-detail-page-main") ?? assert.fail("the page's column")
+  );
+}
+
+/** A press on `target` at the point given, its button going down and coming up; answers whether the press was taken. */
+function pressAt(target: Element, x: number, y: number): boolean {
+  const down = new MouseEvent("mousedown", {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+  });
+  act(() => {
+    target.dispatchEvent(down);
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y }));
+  });
+  return down.defaultPrevented;
+}
+
+test("a press anywhere on the page's room under an empty description opens its editor at the end", async () => {
+  standing = [issue(1)];
+  layPageOut();
+  const page = await openIssue(issue(1).id);
+  const column = columnOf(page);
+
+  const taken = pressAt(column, 400, 700);
+
+  assert.ok(!taken, "a drag from the room still selects, as a press on a page does");
+  assert.equal(openEditor().props.markdown, "");
+  assert.deepEqual(openEditor().props.placement, PLACEMENT_END);
+});
+
+test("a press on the room beside the description opens it on the nearest line, and one above it, by the title, opens nothing", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  layPageOut();
+  const page = await openIssue(issue(1).id);
+  const column = columnOf(page);
+  const body = page.querySelector(".plan-body") ?? assert.fail("the issue's body");
+
+  const aboveTaken = pressAt(body, 400, 120);
+  const openedAbove = editors.length;
+  pressAt(column, 900, 220);
+
+  assert.ok(!aboveTaken);
+  assert.equal(openedAbove, 0, "a press above the description opens nothing");
+  assert.deepEqual(
+    openEditor().props.placement,
+    { x: 799, y: 220 },
+    "the nearest line, at the words' own edge",
+  );
+});
+
+test("a press on the room while the description's editor loads is where the editor opens", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  const gate = Promise.withResolvers<PlanEditorModule>();
+  bundles = sideBundles({ planEditor: () => gate.promise });
+  layPageOut();
+  const page = await openIssue(issue(1).id);
+  const column = columnOf(page);
+
+  pressAt(column, 400, 700);
+  pressAt(column, 900, 220);
+  await act(async () => {
+    gate.resolve(EDITOR_STAND_IN);
+    await gate.promise;
+  });
+  await settle();
+
+  assert.deepEqual(openEditor().props.placement, { x: 799, y: 220 });
+});
+
+test("a press on the room while the description is open moves its caret to the end and keeps it open", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  layPageOut();
+  const page = await openIssue(issue(1).id);
+  const column = columnOf(page);
+  const editor = openDescription(page);
+
+  const taken = pressAt(column, 400, 700);
+  await settle();
+
+  assert.ok(taken, "the press keeps the keyboard in the editor");
+  assert.deepEqual(editor.placed, [PLACEMENT_END]);
+  assert.ok(!editor.destroyed);
+  assert.deepEqual(changes, []);
+});
+
+test("Return on the description opens the editor with the caret at the end of its text", async () => {
   standing = [issue(1, { description: "Fails on CI.\n\n## Steps\n\nRun it twice." })];
   const page = await openIssue(issue(1).id);
 
@@ -916,7 +1060,7 @@ test("Return on the description opens the editor with the caret at the end of it
   act(() => description.focus());
   press("Enter", description);
 
-  assert.deepEqual(openEditor().props.placement, { section: 1 });
+  assert.deepEqual(openEditor().props.placement, PLACEMENT_END);
   assert.equal(openEditor().props.markdown, "Fails on CI.\n\n## Steps\n\nRun it twice.");
 });
 
@@ -1430,23 +1574,49 @@ test("the page opens again in the layout last chosen, the list after List and th
   assert.equal(thirdTime.querySelector(".home-section"), null);
 });
 
-test("a workspace with no issue yet still stands the board's columns, each saying it holds none", async () => {
+/** The empty workspace's own New issue, under its line. */
+function emptyStateNewIssue(page: HTMLElement): HTMLButtonElement | null {
+  return page.querySelector<HTMLButtonElement>(".luke-empty-state button");
+}
+
+test("a workspace with no issue yet says so on the board and in the list, its New issue opening the card, and the first issue filed stands the board's columns", async () => {
   const page = mount();
   await settle();
+  const boardSays = page.querySelector(".luke-empty-state")?.textContent;
+  const boardColumns = columns(page).length;
+  showList();
+  const listSays = page.querySelector(".luke-empty-state")?.textContent;
+  act(() => button("View options").click());
+  act(() => menuItem("Board").click());
 
+  const newIssue = emptyStateNewIssue(page);
+  assert.ok(newIssue, "the empty state offers New issue");
+  act(() => newIssue.click());
+  const field = composerField();
+  assert.ok(field, "the empty state's New issue opens the card");
+  const whileOpen = emptyStateNewIssue(page)?.disabled;
+  typeInto(field, "First issue");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+
+  assert.equal(boardSays, "No issues yetNew issue");
+  assert.equal(boardColumns, 0, "no empty column stands on an empty workspace's board");
+  assert.equal(listSays, "No issues yetNew issue");
+  assert.equal(
+    whileOpen,
+    true,
+    "New issue is unavailable while the card stands, as the toolbar's is",
+  );
+  assert.equal(page.querySelector(".luke-empty-state"), null);
   assert.deepEqual(columns(page), [
-    ["Backlog", []],
+    ["Backlog1", ["ACME-1"]],
     ["Todo", []],
     ["In progress", []],
     ["Done", []],
     ["Canceled", []],
   ]);
-  assert.equal(
-    [...page.querySelectorAll("[data-issue-column] p")].filter(
-      (idle) => idle.textContent === "No issues",
-    ).length,
-    5,
-  );
 });
 
 test("once the page has come back from an issue, a layout chosen keeps the keyboard on View options rather than that issue's row", async () => {
@@ -1463,6 +1633,7 @@ test("once the page has come back from an issue, a layout chosen keeps the keybo
 });
 
 test("a column's + opens the new issue's card with that column's status chosen, the priority at its default, and the title holding the keyboard", async () => {
+  standing = [issue(1)];
   mount();
   await settle();
 
@@ -1851,4 +2022,86 @@ test("a card is sent the status of the column it is let go over, though the last
 
   assert.deepEqual(changes, [{ issueId: issue(1).id, change: { status: ISSUE_STATUS.DONE } }]);
   assert.deepEqual(columns(page)[3], ["Done1", ["ACME-1"]]);
+});
+
+/** A task of the listed workspace, started from the issue given where one is. */
+function task(id: string, name: string, issueId?: string, createdAt = 1): TaskSummary {
+  return {
+    id,
+    workspaceId: WORKSPACE.id,
+    name,
+    createdAt,
+    updatedAt: createdAt,
+    repository: null,
+    ...(issueId === undefined ? undefined : { issueId }),
+  };
+}
+
+/** The tasks the issue's page lists as started from it, by name, in order; none where it draws no row. */
+function workOf(page: HTMLElement): string[] | undefined {
+  const row = page.querySelector(".issue-work");
+  if (row === null) return undefined;
+  return [...row.querySelectorAll("button")].map((each) => each.textContent ?? "");
+}
+
+test("an issue's ⋯ offers Start task…, which opens New task on the issue by its identifier and title, in its workspace", async () => {
+  standing = [issue(1, { title: "Fix login" }), issue(2)];
+  await openIssue(issue(1).id);
+
+  act(() => button("Issue actions").click());
+  act(() => menuItem("Start task…").click());
+
+  assert.deepEqual(newTasksFrom, [
+    { id: issue(1).id, workspaceId: WORKSPACE.id, identifier: "ACME-1", title: "Fix login" },
+  ]);
+  assert.deepEqual(changes, []);
+});
+
+test("a card's menu offers Start task… for its own issue", async () => {
+  standing = [issue(1), issue(2, { title: "Fix logout" })];
+  const page = mount();
+  await settle();
+
+  rightClick(cardOf(page, issue(2).id));
+  act(() => menuItem("Start task…").click());
+
+  assert.deepEqual(newTasksFrom, [
+    { id: issue(2).id, workspaceId: WORKSPACE.id, identifier: "ACME-2", title: "Fix logout" },
+  ]);
+});
+
+test("an issue's page lists the tasks started from it, and none of another issue's, each opening its task", async () => {
+  standing = [issue(1), issue(2)];
+  tasksListed = [
+    task("task-newer", "Fix login, again", issue(1).id, 2),
+    task("task-other", "Fix logout", issue(2).id, 2),
+    task("task-plain", "Tidy", undefined, 2),
+    task("task-older", "Fix login", issue(1).id, 1),
+  ];
+  const page = await openIssue(issue(1).id);
+
+  assert.deepEqual(workOf(page), ["Fix login, again", "Fix login"]);
+  act(() => button("Open Fix login").click());
+  assert.deepEqual(tasksOpened, ["task-older"]);
+});
+
+test("an issue no task was started from draws no row of tasks", async () => {
+  standing = [issue(1), issue(2)];
+  tasksListed = [task("task-other", "Fix logout", issue(2).id), task("task-plain", "Tidy")];
+  const page = await openIssue(issue(1).id);
+
+  assert.equal(workOf(page), undefined);
+});
+
+test("an issue's page lists its archived tasks too, and its tasks newest started first whatever the sidebar's pins put first", async () => {
+  standing = [issue(1)];
+  // The sidebar's order: a pinned task, the oldest, ahead of a newer one.
+  tasksListed = [
+    { ...task("task-pinned", "First try", issue(1).id, 1), pinnedAt: 5 },
+    task("task-newest", "Third try", issue(1).id, 3),
+  ];
+  tasksArchived = [{ ...task("task-archived", "Second try", issue(1).id, 2), archivedAt: 4 }];
+  const page = await openIssue(issue(1).id);
+
+  assert.deepEqual(workOf(page), ["Third try", "Second try", "First try"]);
 });

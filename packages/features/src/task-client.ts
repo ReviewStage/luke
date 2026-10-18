@@ -167,6 +167,7 @@ const REPOSITORY_REFUSALS = {
 const START_REFUSALS = {
   ...REPOSITORY_REFUSALS,
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
+  [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
 } as const;
 
 /** The refusals a move can answer with: the task or the workspace not the account's, the task archived, or the workspace not reaching its repository. */

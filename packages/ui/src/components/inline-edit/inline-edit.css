@@ -38,8 +38,8 @@
     font: inherit;
     letter-spacing: 0;
     transition:
-      border-color var(--duration-hover) ease,
-      background-color var(--duration-hover) ease;
+      border-color var(--luke-duration-hover) ease,
+      background-color var(--luke-duration-hover) ease;
   }
 
   .luke-inline-edit[data-look="input"]:focus {

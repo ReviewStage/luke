@@ -23,7 +23,7 @@
     background: var(--luke-color-fill-hover);
     color: var(--luke-color-text-subtle);
     cursor: text;
-    transition: border-color var(--duration-hover) ease;
+    transition: border-color var(--luke-duration-hover) ease;
   }
 
   .luke-search-field > svg {
@@ -96,7 +96,7 @@
     background: transparent;
     color: var(--luke-color-text-muted);
     cursor: default;
-    transition: background-color var(--duration-hover) ease;
+    transition: background-color var(--luke-duration-hover) ease;
   }
 
   .luke-search-field-clear:hover {

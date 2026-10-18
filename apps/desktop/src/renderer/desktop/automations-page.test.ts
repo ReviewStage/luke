@@ -1157,7 +1157,11 @@ test("a new agent's MCP servers are a field chip of the owner's connected ones u
   await settle();
   const chip = button("MCP servers");
   assert.match(page.textContent ?? "", /Every connected server is on\./u);
-  assert.equal(chip.querySelectorAll(".provider-mark").length, 2, "Linear's and Sentry's marks");
+  assert.equal(
+    chip.querySelectorAll(".luke-provider-mark").length,
+    2,
+    "Linear's and Sentry's marks",
+  );
 
   act(() => chip.click());
   await settle();
@@ -1167,7 +1171,7 @@ test("a new agent's MCP servers are a field chip of the owner's connected ones u
   assert.ok(sentry, "the agent box's own switches stand");
   act(() => sentry.click());
   assert.match(page.textContent ?? "", /Sentry off\./u);
-  assert.equal(chip.querySelectorAll(".provider-mark").length, 1, "Linear's mark alone");
+  assert.equal(chip.querySelectorAll(".luke-provider-mark").length, 1, "Linear's mark alone");
   act(() => button("Save").click());
   await settle();
 
@@ -1208,7 +1212,7 @@ test("a new agent's MCP servers row says a refused read of the owner's connectio
   act(() => button("Retry").click());
   await settle();
   assert.match(page.textContent ?? "", /Every connected server is on\./u);
-  assert.equal(button("MCP servers").querySelectorAll(".provider-mark").length, 2);
+  assert.equal(button("MCP servers").querySelectorAll(".luke-provider-mark").length, 2);
 });
 
 test("another member's automation says which servers its creator switched off, offering no switch of the reader's own", async () => {
@@ -1818,7 +1822,7 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
 /** What each row's glyph draws, in order: GitHub's mark, or the lucide icon's name. */
 function glyphs(rows: readonly Element[]): string[] {
   return rows.map((row) => {
-    if (row.querySelector(".provider-mark") !== null) return "github";
+    if (row.querySelector(".luke-provider-mark") !== null) return "github";
     const icon = row.querySelector(".state-glyph svg");
     const named = [...(icon?.classList ?? [])].find(
       (name) => name.startsWith("lucide-") && name !== "lucide-icon",

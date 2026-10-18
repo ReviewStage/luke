@@ -26,8 +26,9 @@
  * otherwise lose, such as words a save left unsaved, persists until it is
  * dismissed. One with an action
  * may always be dismissed before then, since that is how the developer
- * reaches what it stands over: by its action, by the × it shows under the
- * pointer or focus, by Escape while focus is in it, or by whoever showed it
+ * reaches what it stands over: by its action, by the × it shows over its
+ * top-left corner under the pointer or focus, as a Mac's own notifications
+ * do, by Escape while focus is in it, or by whoever showed it
  * withdrawing what it is about. One with no action is never pointed at, so
  * clicks pass through it. It arrives on the pair
  * every arriving element rides and leaves first over `--duration-exit`, held
@@ -45,6 +46,7 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@luke/brand";
 import {
+  BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
   IconButton,
@@ -522,6 +524,7 @@ function ToastCard({
             <IconButton
               icon={<XIcon aria-hidden="true" />}
               label={DISMISS_LABEL}
+              size={BUTTON_SIZE.COMPACT}
               onClick={() => step({ kind: TOAST_STEP.DISMISS, id })}
             />
           </span>

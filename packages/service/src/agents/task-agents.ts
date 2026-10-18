@@ -119,10 +119,19 @@ function summaryOf(read: readonly ReadAgent[]): TaskAgentsSummary {
   const working = newest.filter((agent) => WORKING_STATUSES.has(agent.line.status));
   const resting = newest.filter((agent) => !WORKING_STATUSES.has(agent.line.status));
   const pullRequests = new Map<string, TaskPullRequestLine>();
-  for (const { published } of newest) {
+  for (const { published, line } of newest) {
     if (published === null || pullRequests.has(published.url)) continue;
     const { number, title, state, checks, additions, deletions, url } = published;
-    pullRequests.set(url, { number, title, state, checks, additions, deletions, url });
+    pullRequests.set(url, {
+      number,
+      title,
+      state,
+      checks,
+      additions,
+      deletions,
+      url,
+      agentId: line.id,
+    });
   }
   return {
     total: agents.length,

@@ -10,8 +10,9 @@ import { EmptyState, type EmptyStateAction } from "./empty-state.js";
  * empty-state.test.ts -- an empty place shows its heading and its line, its
  * glyph hidden from a reader; its one way on is a button named by its words
  * that answers a press; and a place with a line alone offers neither a
- * heading nor a button; a place a failure left empty is one alert holding
- * its line and its way on, and an empty one is no alert.
+ * heading nor a button; a way on unavailable for now stands and takes no
+ * press; a place a failure left empty is one alert holding its line and its
+ * way on, and an empty one is no alert.
  */
 
 declare global {
@@ -58,6 +59,19 @@ test("an empty place shows its heading and line, and its way on answers a press"
   expect([...buttons].map((button) => button.textContent)).toEqual(["Close task"]);
   act(() => buttons[0]?.click());
   expect(pressed).toEqual(["close"]);
+});
+
+test("a way on unavailable for now still stands, and a press does nothing", () => {
+  const pressed: string[] = [];
+  const container = draw({
+    action: { label: "New issue", disabled: true, onClick: () => pressed.push("new") },
+    children: "No issues yet",
+  });
+  const button = container.querySelector("button");
+  expect(button?.textContent).toBe("New issue");
+  expect(button?.disabled).toBe(true);
+  act(() => button?.click());
+  expect(pressed).toEqual([]);
 });
 
 test("the glyph says nothing to a reader", () => {

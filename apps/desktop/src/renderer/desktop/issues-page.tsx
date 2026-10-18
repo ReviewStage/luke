@@ -4,6 +4,7 @@ import {
   type IssueView,
 } from "@luke/features/issue-view";
 import type { Issue, IssueStatus } from "@luke/features/issue-wire";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -43,6 +44,7 @@ import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, IssueBoardSkeleton, useBoardKeys } from "./issue-board";
 import { IssueCrumbs, IssueDetail, IssueDetailSkeleton } from "./issue-detail";
 import { IssueList, listRowIssue } from "./issue-list";
+import { type IssueWork, IssueWorkProvider } from "./issue-work";
 import { type IssueDraft, NewIssueDialog } from "./new-issue-dialog";
 import { type IssueChange, useIssue, useIssues } from "./use-issues";
 import { useRowKeys } from "./use-row-keys";
@@ -56,7 +58,8 @@ import { useRowKeys } from "./use-row-keys";
  * and its toolbar says so with a quiet badge and Send feedback. New issue,
  * or C pressed anywhere on the page but a field, opens a card as New task
  * does (`new-issue-dialog.tsx`), whose issue lands in its group at once; a
- * board column's + opens it with that column's status chosen.
+ * board column's + opens it with that column's status chosen. A workspace
+ * with no issue yet says so in either layout, New issue its one way on.
  * ↑ and ↓ move through the rows from anywhere on the
  * page, and Return opens the one reached on its own page
  * (`issue-detail.tsx`), from which Escape comes back to the list with that
@@ -89,6 +92,9 @@ const storedLayout = Schema.fromJsonString(Schema.Literals(Object.values(ISSUES_
 
 /** What the toolbar's layout menu is called. */
 const VIEW_OPTIONS = "View options";
+
+/** What files a new issue is called, in the toolbar and in an empty workspace. */
+const NEW_ISSUE = "New issue";
 
 /** What the list's page is read as while its issues are, and one issue's page while its issue is. */
 const READING_LINE = "Reading issues";
@@ -142,16 +148,17 @@ function keyboardLeftWith(issueId: string): boolean {
 }
 
 /**
- * What the list's page stands, by its read and its layout. Note that an
- * empty board still stands its columns, each saying it holds none, so only
- * the list says there are none yet; and that a board being read stands as
- * ready, drawing its own columns of blocks (`IssueBoardSkeleton`), since
- * the page's loading rows are a list's shape, not a board's.
+ * What the list's page stands, by its read and its layout. Note that a
+ * workspace with no issue yet stands the empty state in either layout, as
+ * Factory does, rather than a board of empty columns; and that
+ * a board being read stands as ready, drawing its own columns of blocks
+ * (`IssueBoardSkeleton`), since the page's loading rows are a list's shape,
+ * not a board's.
  */
 function listState(read: ReturnType<typeof useIssues>["read"], onBoard: boolean): CollectionState {
   if (read === undefined) return onBoard ? COLLECTION_STATE.READY : COLLECTION_STATE.LOADING;
   if ("failure" in read) return COLLECTION_STATE.ERROR;
-  return !onBoard && read.issues.length === 0 ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
+  return read.issues.length === 0 ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
 }
 
 /** The list's page: the listed workspace's issues by status, a new one a press away. */
@@ -225,14 +232,26 @@ function ListPage({
               disabled={onCompose === undefined}
               onClick={onCompose}
             >
-              New issue
+              {NEW_ISSUE}
             </Button>
           </div>
         </header>
       }
       state={listState(read, onBoard)}
       loadingLabel={READING_LINE}
-      empty={<EmptyState icon={<ListTodoIcon />}>No issues yet</EmptyState>}
+      empty={
+        // Note that its New issue is the toolbar's, unavailable while no workspace is listed or the card stands.
+        <EmptyState
+          icon={<ListTodoIcon />}
+          action={{
+            label: NEW_ISSUE,
+            disabled: onCompose === undefined,
+            onClick: () => onCompose?.(),
+          }}
+        >
+          No issues yet
+        </EmptyState>
+      }
       error={
         <ErrorState onRetry={reload} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {UNREAD_LINE}
@@ -399,16 +418,39 @@ function IssuePage({
 }
 
 /**
+ * The listed workspace's tasks started from the issue, the archived ones
+ * among them, newest started first whatever the sidebar's pins put first.
+ */
+function tasksStartedFrom(issueId: string, listed: TasksControl["listed"]): TaskSummary[] {
+  return [...listed.tasks, ...listed.archived]
+    .filter((task) => task.issueId === issueId)
+    .sort((one, other) => other.createdAt - one.createdAt || other.id.localeCompare(one.id));
+}
+
+/**
  * The window's Issues pages, in the plan's place: the list, or one issue's.
  * The list is read once for both, so an issue opened from it draws at once
  * and a change is in the list the moment it lands; going back from an
  * issue hands its row the keyboard.
  */
 export function IssuesPage({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+  const work: IssueWork = {
+    onStartTask: (issue, identifier) =>
+      tasks.onNewTaskFrom({
+        id: issue.id,
+        workspaceId: issue.workspaceId,
+        identifier,
+        title: issue.title,
+      }),
+    tasksOf: (issueId) => tasksStartedFrom(issueId, tasks.listed),
+    onOpenTask: tasks.onSelect,
+  };
   // Every Copy link on these pages is written under the listed workspace, whose issues they are.
   return (
     <LinkWorkspaceProvider value={tasks.workspace?.slug ?? tasks.workspace?.id}>
-      <IssuesPages tasks={tasks} />
+      <IssueWorkProvider value={work}>
+        <IssuesPages tasks={tasks} />
+      </IssueWorkProvider>
     </LinkWorkspaceProvider>
   );
 }

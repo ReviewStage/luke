@@ -35,8 +35,8 @@
     text-decoration: none;
     white-space: nowrap;
     transition:
-      background-color var(--duration-hover) ease,
-      color var(--duration-hover) ease;
+      background-color var(--luke-duration-hover) ease,
+      color var(--luke-duration-hover) ease;
   }
 
   a.luke-pagination-item:hover {

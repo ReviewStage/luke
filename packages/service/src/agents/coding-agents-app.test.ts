@@ -113,6 +113,7 @@ import {
   codingAgentAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentOverviewConversationAnswerSchema,
   codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
   codingAgentPullRequestAnswerSchema,
@@ -139,7 +140,7 @@ import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/i
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
-import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
+import { PULL_REQUEST_WRITE_BOUNDS, REACTION } from "@luke/features/pull-request-write-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { TASK_LIST_ARCHIVED, taskListAnswerSchema } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
@@ -1959,6 +1960,117 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
         assert.ok(calls.every((call) => !call.query.includes("mutation")));
+      }),
+  );
+
+  it.effect(
+    "two members reading the same conversation are each told which reactions are their own, each read on their own GitHub token, and the answer is never kept for anyone else",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, agent, ask, fetch } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: (call) =>
+            Response.json({
+              data: {
+                repository: {
+                  pullRequest: call.query.includes("viewerHasReacted")
+                    ? {
+                        id: PULL_REQUEST_NODE_ID,
+                        reactionGroups: [
+                          {
+                            content: "HEART",
+                            viewerHasReacted: call.authorization === "Bearer ghu_standing",
+                          },
+                        ],
+                      }
+                    : {
+                        id: PULL_REQUEST_NODE_ID,
+                        reactionGroups: [
+                          { content: "HEART", reactors: { totalCount: 1, nodes: [] } },
+                        ],
+                        reviewThreads: { totalCount: 0, nodes: [] },
+                      },
+                },
+              },
+            }),
+        });
+        const readAs = (bearer: string) =>
+          Effect.map(
+            ask(request(AGENT_OVERVIEW[2], bearer, { id: agent.id })),
+            (answered) =>
+              readAnswer(
+                codingAgentOverviewConversationAnswerSchema,
+                HOSTED_HTTP_STATUS.OK,
+                answered,
+              ).pullRequest?.descriptionReactions,
+          );
+
+        assert.deepEqual(yield* readAs(owner), [
+          { content: REACTION.HEART, count: 1, by: [], mine: true },
+        ]);
+        assert.deepEqual(yield* readAs(other), [
+          { content: REACTION.HEART, count: 1, by: [], mine: false },
+        ]);
+        const response = yield* fetch(request(AGENT_OVERVIEW[2], other, { id: agent.id }));
+        assert.equal(response.headers.get("cache-control"), "private, no-store");
+      }),
+  );
+
+  it.effect(
+    "a teammate gives a reaction and takes it back on their own GitHub token, once what it names is held to the agent's pull request; one on anything else is refused and nothing is changed",
+    () =>
+      Effect.gen(function* () {
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: (call) =>
+            Response.json({
+              data: call.query.includes("mutation")
+                ? {}
+                : call.query.includes("repository(")
+                  ? { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } }
+                  : {
+                      node: {
+                        issue: {
+                          id: call.variables.id === "IC_1" ? PULL_REQUEST_NODE_ID : "PR_elsewhere",
+                        },
+                      },
+                    },
+            }),
+        });
+        const react = (action: string, subject: string) =>
+          ask(
+            request(AGENT_PULL_REQUEST_ACTION, other, {
+              method: "POST",
+              id: agent.id,
+              body: { action, subject, content: REACTION.HEART },
+            }),
+          );
+
+        const done = { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } };
+        assert.deepEqual(yield* react("add-reaction", "IC_1"), done);
+        assert.deepEqual(yield* react("remove-reaction", "IC_1"), done);
+        assert.deepEqual(yield* react("add-reaction", "IC_ELSEWHERE"), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            outcome: "refused",
+            words: "Could not resolve to a comment on this pull request.",
+          },
+        });
+
+        assert.ok(calls.every((call) => call.authorization === "Bearer ghu_teammate"));
+        assert.deepEqual(
+          calls
+            .filter((call) => call.query.includes("mutation"))
+            .map((call) => [
+              call.query.includes("addReaction") ? "add" : "remove",
+              call.variables.id,
+              call.variables.content,
+            ]),
+          [
+            ["add", "IC_1", "HEART"],
+            ["remove", "IC_1", "HEART"],
+          ],
+        );
       }),
   );
 

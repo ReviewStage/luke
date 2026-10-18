@@ -42,6 +42,14 @@ in front. Then look at the list as a set.
   every picture at that one height.
 - The plan document is not wallpaper. Show it only where it is the subject;
   elsewhere open another task, another tab, or fold it away.
+- Nothing experimental gets a picture. A feature behind Settings ›
+  Experimental (the Factory, Issues, Automations, video calls, and whatever
+  joins them) is no section's subject, even where the notes announce it, and
+  no shot turns an experiment on (`ShotSpec.experiments` stays empty), so
+  nothing an experiment draws (a sidebar row, a person's Automations
+  section, an automation's chip) shows at the edge of another picture
+  either. 0.15.0's Factory and 0.17.0's Issues pictures were taken and then
+  removed for this.
 
 Show the developer the list (and the old releases' pictures it should not
 repeat) before staging; it is cheap to change now and expensive later.
@@ -109,6 +117,8 @@ Every picture, whatever it shows:
   staging may answer a status the release would not (0.12.0's Slack, not
   available yet, shows connected) so a picture reads as a feature working;
   what it may not do is draw a row or control the release does not have.
+- No experiment switched on: the window as a user who never opened Settings ›
+  Experimental sees it.
 - Real UI only. Stage data and state the app already draws; never add a row,
   label, or control the release does not have (0.12.0's first Integrations
   shot invented a GitHub row and was rejected). Something the release shows

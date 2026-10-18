@@ -13,7 +13,6 @@
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
     "@fontsource-variable/geist": "5.3.0",
     "@fontsource-variable/jetbrains-mono": "5.3.0",
-    "@luke/brand": "workspace:*",
     "@luke/ui": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"

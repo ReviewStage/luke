@@ -4,17 +4,12 @@
    weight. */
 
 :root {
-  /* The veil over a picture set's last tile that counts the pictures past
-     it (`.picture-set-more`), the same in either appearance, since it lies
-     over a picture rather than the window. */
-  --picture-veil: rgba(0, 0, 0, 0.52);
-  --picture-veil-ink: #fff;
   /* An actor's tile (`actor-ref.tsx`): under a person's circle, a pile's
      count, and, in a facepile alone, Luke's face in his own blue, an agent's
      harness, or an automation's clock, so the face a square overlaps never
-     shows through it. */
-  --actor-tile: #2a2a30;
-  --actor-tile-ink: rgba(255, 255, 255, 0.92);
+     shows through it: opaque, a step of ink over the ground. */
+  --actor-tile: color-mix(in srgb, var(--luke-color-ink) 10%, var(--luke-color-ground));
+  --actor-tile-ink: var(--luke-color-text);
   /* A top row and its hairline, its middle level with the traffic lights'. */
   --desktop-bar-height: calc(2 * var(--traffic-lights-middle) + 1px);
   /* A tab's own bar under a tab strip and its hairline: a control's height
@@ -85,12 +80,6 @@
   /* The measure code is read at, a step wider than words', so a hundred
      columns stand beside their line numbers without wrapping. */
   --code-reading-width: 840px;
-  /* A find's matches in a tab's text: each one tinted, the one it is at
-     filled, in the yellow and orange a browser's find draws them in, with
-     dark words on the fill so the match reads in either appearance. */
-  --find-match: rgba(255, 214, 10, 0.3);
-  --find-current: #ff9f0a;
-  --find-current-text: #000;
   /* The floating layers are `--luke-z-*`. Nothing inside the window's stage
      reaches them, since the stage is one stacking context under them all;
      inside it, the whiteboard is a stacking context of its own (`tasks.css`). */
@@ -102,19 +91,6 @@
    sooner (`window-full-screen.ts`). */
 :root[data-full-screen="true"] {
   --title-bar-left: var(--column-inset);
-}
-
-/* The light appearance, which the window answers whenever macOS (or Luke's
-   own setting, through it) asks: an off-white ground, the sidebar a step
-   darker, the side panel between them, and white for what floats. The window
-   main paints before the page loads is this ground too
-   (`DESKTOP_WINDOW.BACKGROUND`). */
-@media (prefers-color-scheme: light) {
-  :root {
-    --find-match: rgba(255, 204, 0, 0.42);
-    --actor-tile: #e8e8ec;
-    --actor-tile-ink: rgba(0, 0, 0, 0.82);
-  }
 }
 
 html,
@@ -387,7 +363,9 @@ body,
 }
 
 /* A workspace's tile: a square of its hue with its first letter as its text,
-   at a row's glyph size. A loaded picture drops the hue (`data-hue`) and the
+   at a row's glyph size. Note that its corner is a share of its edge, so it
+   reads as one shape at every size, squarer than a person's square face
+   (`@luke/ui`'s Avatar) and never mistaken for a person's circle. A loaded picture drops the hue (`data-hue`) and the
    letter, so the square has no fill of its own and a transparent photo shows
    the surface it sits on. */
 .workspace-tile {
@@ -396,9 +374,9 @@ body,
   height: var(--luke-menu-glyph);
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 4px;
+  border-radius: 25%;
   color: var(--luke-color-on-identity);
-  font-size: 10px;
+  font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
   line-height: 1;
 }
@@ -451,15 +429,13 @@ body,
 .workspace-tile[data-size="inline"] {
   width: 14px;
   height: 14px;
-  border-radius: 3.5px; /* off-scale */
-  font-size: 9px;
+  font-size: var(--luke-type-caption-size);
 }
 
 .workspace-tile[data-size="head"] {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
-  font-size: 15px;
+  font-size: var(--luke-type-dialog-size);
 }
 
 /* A workspace named (`workspace-ref.tsx`): its tile and its name as one
@@ -1374,10 +1350,6 @@ ul.actor-stack {
   gap: var(--luke-space-8);
 }
 
-.section-icon-search {
-  font-size: var(--luke-type-body-size);
-}
-
 .section-icon-colors,
 .section-icon-choices {
   min-width: 0;
@@ -1524,11 +1496,12 @@ ul.actor-stack {
 }
 
 /* An owner's picture stands in a glyph's slot (`repository-picture.tsx`): the
-   slot sizes it, and its corners are rounded and edged so a logo drawn on
-   white does not bleed into the ground around it. */
+   slot sizes it, and its corners are rounded, a share of its edge as a
+   workspace's tile's are, and edged so a logo drawn on white does not bleed
+   into the ground around it. */
 .repository-picture {
   flex: 0 0 auto;
-  border-radius: 4px;
+  border-radius: 25%;
   outline: 1px solid var(--luke-color-border);
   outline-offset: -1px; /* off-scale */
   object-fit: cover;
@@ -1646,11 +1619,11 @@ ul.actor-stack {
   gap: var(--luke-space-4);
   height: 24px;
   padding: 0 var(--luke-space-8);
-  border-radius: 999px;
+  border-radius: var(--luke-radius-full);
   background: var(--luke-color-attention-tint);
   color: var(--luke-color-attention);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
   animation: popup-fade var(--duration-quick) var(--motion-exit) backwards;
   -webkit-app-region: no-drag;
@@ -2594,7 +2567,7 @@ ul.actor-stack {
 .desktop-document .plan-body {
   color: var(--luke-color-text-body);
   font-size: 15px;
-  line-height: 1.65;
+  line-height: var(--luke-type-reading-leading);
 }
 
 .desktop-document .plan-body > * + * {
@@ -2854,10 +2827,10 @@ ul.actor-stack {
   max-height: min(288px, var(--settings-picker-list-max, 288px));
 }
 
-/* A harness's or a provider's mark keeps its box in a row however tight the
-   row is, the harness mark drawn as an image (`harness-marks.tsx`) as the
-   traced ones (`@luke/ui`'s `ProviderMark`) do. */
-:is(.harness-mark, .provider-mark) {
+/* A harness's mark keeps its box in a row however tight the row is, drawn
+   as an image (`harness-marks.tsx`) as the traced provider marks
+   (`@luke/ui`'s `ProviderMark`) keep theirs. */
+.harness-mark {
   flex: 0 0 auto;
 }
 
@@ -3566,6 +3539,13 @@ ul.actor-stack {
   height: 10px;
 }
 
+/* An item whose box holds a draft wears its pencil at the attention mark's
+   size, as a sidebar task's row wears it at its glyph's (`draft-mark.tsx`). */
+.home-row-meta .draft-mark {
+  width: 12px;
+  height: 12px;
+}
+
 /* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
    as a plan leads with its title: the title at a document heading's size,
    then a muted line of its agent, when it asked, and where it stands, over a
@@ -3728,7 +3708,7 @@ ul.actor-stack {
   overflow-clip-margin: var(--luke-focus-ring-room);
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
-  line-height: 1.625;
+  line-height: var(--luke-type-reading-leading);
 }
 
 /* What the developer picked leads their comment as a chip, a check and the
@@ -3760,6 +3740,118 @@ ul.actor-stack {
   width: 12px;
   height: 12px;
   flex: none;
+}
+
+/* A to-do's card (`inbox-pane.tsx`'s TodoCard): its step beside a checkbox,
+   ticked in the complete green, and under a hairline a pill saying it could
+   not be done, filled in the danger tint once picked. Each pick wears its
+   number at its right, as a choice's options do. */
+.inbox-todo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+}
+
+.inbox-todo-step {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: var(--luke-space-12);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--luke-color-text);
+  font: inherit;
+  font-weight: var(--luke-weight-medium);
+  text-align: left;
+}
+
+.inbox-todo-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inbox-todo-number {
+  flex: none;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--luke-weight-regular);
+}
+
+.inbox-todo-box {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--luke-space-16);
+  height: var(--luke-space-16);
+  margin-top: calc(
+    (1lh - var(--luke-space-16)) /
+    2
+  ); /* off-scale: centres the box on the first line */
+  border: 1.5px solid var(--luke-color-text-subtle); /* off-scale: a checkbox's ring, as a choice's is */
+  border-radius: var(--luke-space-4);
+}
+
+.inbox-todo-step[aria-checked="true"] > .inbox-todo-box {
+  border-color: var(--luke-color-complete);
+  background: var(--luke-color-complete);
+}
+
+.inbox-todo-step[aria-checked="true"] > .inbox-todo-box::after {
+  width: var(--luke-space-8);
+  height: var(--luke-space-4);
+  margin-top: -2px; /* off-scale: lifts the tick to the box's centre */
+  border-bottom: 2px solid var(--luke-color-ground);
+  border-left: 2px solid var(--luke-color-ground);
+  transform: rotate(-45deg);
+  content: "";
+}
+
+.inbox-todo-acts {
+  display: flex;
+  padding-top: var(--luke-space-8);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.inbox-todo-pill {
+  display: inline-flex;
+  height: var(--luke-control-height);
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  padding: 0 var(--luke-space-12);
+  border: 1px solid var(--luke-color-border);
+  border-radius: 999px;
+  background: var(--luke-color-fill-hover);
+  color: var(--luke-color-text);
+  font: inherit;
+  font-size: var(--luke-type-caption-size);
+}
+
+.inbox-todo-pill svg {
+  display: none;
+  width: 12px;
+  height: 12px;
+}
+
+.inbox-todo-pill[aria-checked="true"] {
+  border-color: var(--luke-color-danger);
+  background: color-mix(in srgb, var(--luke-color-danger) 14%, transparent);
+  color: var(--luke-color-danger-text);
+}
+
+.inbox-todo-pill[aria-checked="true"] svg {
+  display: block;
+}
+
+.inbox-todo-step:disabled,
+.inbox-todo-pill:disabled {
+  opacity: 0.4;
 }
 
 /* The pane's crumbs are drawn as the plan's column's tabs (`.tab`), parted
@@ -4716,11 +4808,6 @@ ul.actor-stack {
   gap: var(--luke-space-4);
 }
 
-.automation-servers > .provider-mark {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-}
-
 /* A picker here grows from a Settings picker's width to name its whole
    value, an event's or a zone's, rather than cut it short (its chip's
    `CHIP_WIDTH.MIN_FIELD`); the time stands at that same width beside them.
@@ -5368,12 +5455,12 @@ ul.actor-stack {
 
 /* Each match, then the one the find is at over it (`find-matches.ts`). */
 ::highlight(find-match) {
-  background-color: var(--find-match);
+  background-color: var(--luke-color-find-match);
 }
 
 ::highlight(find-current) {
-  background-color: var(--find-current);
-  color: var(--find-current-text);
+  background-color: var(--luke-color-find-current);
+  color: var(--luke-color-on-find-current);
 }
 
 /* What a query found, in the list's place: each page's heading, then its
@@ -7184,7 +7271,6 @@ ul.actor-stack {
 .home-row-picture .repository-picture {
   width: 16px;
   height: 16px;
-  border-radius: 4px;
 }
 
 /* A person's page (`person-page.tsx`): Home's column, headed by their face
@@ -7338,23 +7424,6 @@ ul.actor-stack {
 :is(.new-issue, .new-task) .settings-picker {
   min-width: 0;
   flex-shrink: 1;
-}
-
-.dialog-name-field {
-  width: 100%;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-well);
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-  transition: border-color var(--duration-hover) ease;
-}
-
-.dialog-name-field::placeholder {
-  color: var(--luke-color-text-subtle);
 }
 
 /* New task's foot: the repository chip at its start, the answers at its
@@ -7529,18 +7598,41 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   pointer-events: none;
 }
 
-/* A toast with an action shows its × at its end under the pointer or focus,
-   keeping its room at rest so the words never reflow as it comes. */
+/* A toast with an action shows its × as a disc over its top-left corner
+   under the pointer or focus, as a Mac's own notifications do, so it takes
+   no room in the row: the action stands at the card's end and the words
+   never reflow as it comes. At rest it lets the pointer through, so the
+   part of it past the card's edge never stands in the way of what is
+   under it. */
 .toast-dismiss {
+  position: absolute;
+  top: calc(-1 * var(--luke-space-8));
+  left: calc(-1 * var(--luke-space-8));
   display: flex;
-  flex: none;
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-full);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 1px 3px var(--luke-color-shadow-soft);
   opacity: 0;
-  transition: opacity var(--duration-hover) ease;
+  transform: scale(0.85);
+  pointer-events: none;
+  transition:
+    opacity var(--duration-hover) ease,
+    transform var(--duration-hover) ease;
 }
 
 .toast:hover .toast-dismiss,
 .toast:focus-within .toast-dismiss {
   opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* Note that the × must let the pointer through under a modal too, because
+   one already under the pointer as the modal opens keeps its card hovered
+   by taking the pointer itself, past the card's own `none` above. */
+body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
+  pointer-events: none;
 }
 
 @keyframes toast-fade {

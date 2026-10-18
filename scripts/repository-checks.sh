@@ -251,6 +251,18 @@ if [[ -n "$ui_app_reaches" ]]; then
         "$ui_app_reaches" >&2
     exit 1
 fi
+# For the same reason a component reads only the custom properties
+# `@luke/ui/tokens.css` and the package itself declare, all `--luke-*`: a name
+# one app's own stylesheet sets is unset in every other app, and the rule that
+# reads it silently drops there. A comment line is skipped.
+ui_foreign_tokens=$(grep -rnaP --include='*.css' --include='*.ts' --include='*.tsx' \
+    'var\(\s*--(?!luke-)' "$LUKE_REPO_ROOT/packages/ui/src" |
+    grep -vE '\.test\.tsx?:|:[0-9]+:\s*(\*|//|/\*)' || true)
+if [[ -n "$ui_foreign_tokens" ]]; then
+    printf 'error: @luke/ui reads a custom property it does not own (declare it as a --luke-* token under packages/ui/src/tokens):\n%s\n' \
+        "$ui_foreign_tokens" >&2
+    exit 1
+fi
 
 # A hosted quota is the service's own accounting, and the customer-facing panel
 # says only that voice is temporarily unavailable — never a number, a meter or a
@@ -621,11 +633,14 @@ if [[ -n "$node_reaching_effect" ]]; then
     exit 1
 fi
 
-# A deployment's migration runs while the deployment before it still serves
-# the old names, so a migration newer than the cutoff renames no table and no
-# column in place (`packages/database/src/core/migration-renames.ts`): the
-# Oct 17 plan-to-task rename broke the 26 turns then running.
-pnpm --silent --filter @luke/database check:renames
+# A deployment's migration runs while the deployment before it, and every
+# coding agent run pinned to it for up to 25 hours, still serves the old names,
+# so a new migration renames or drops no table, column, type, or view unless it
+# is marked `-- contract: <why old readers have drained>`
+# (`packages/database/src/core/migration-contractions.ts`, the db-migrations
+# skill's "Expand, migrate, contract"): the Oct 17 plan-to-task rename broke
+# the 26 turns then running.
+pnpm --silent --filter @luke/database check:contractions
 
 # A `var(--name)` with no fallback, where nothing declares `--name`, fails
 # nothing: the declaration it stands in is invalid at computed-value time, so a

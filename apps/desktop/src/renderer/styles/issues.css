@@ -339,3 +339,19 @@
   gap: var(--luke-space-8);
   font-size: var(--luke-type-caption-size);
 }
+
+/* The tasks started from the issue, under its status and priority: a quiet
+   word, then a pill for each, wrapping as the chips above them do. */
+.issue-work {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-8);
+  margin-top: var(--luke-space-12);
+}
+
+.issue-work-label {
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}

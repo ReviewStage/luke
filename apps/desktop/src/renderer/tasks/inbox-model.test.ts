@@ -25,20 +25,26 @@ import {
   firstChoice,
   holderName,
   INBOX_GROUPING,
+  INBOX_MISSING,
+  type InboxDraft,
   type InboxListView,
   inboxBoard,
   inboxList,
+  inboxMissing,
   inboxPreview,
   inboxReply,
   inboxSteps,
   isUnread,
   listedItems,
   nextNeedingYou,
+  numberedPick,
   proposedOptions,
   SETTLED_BY,
   settlementOf,
   taskHolder,
   tasklessGroups,
+  withChoice,
+  withDecision,
   withReadMarks,
   withValue,
 } from "./inbox-model";
@@ -188,32 +194,134 @@ test("a form is answered by its fields in the form's own order whatever order th
   });
 });
 
-test("an approval, a task, and an item asking nothing are answered by their presses alone, and words by words", () => {
+test("what an answer lacks is said by what it asks: a choice its pick, unless the developer's own words or files answer it, a form its first required field left empty in the form's order, and words their words; nothing once it lacks nothing", () => {
+  assert.deepEqual(inboxMissing(QUEUE, EMPTY_INBOX_DRAFT), {
+    kind: INBOX_MISSING.OPTION,
+    line: "Pick an option",
+  });
+  assert.deepEqual(inboxMissing(CHANNELS, EMPTY_INBOX_DRAFT), {
+    kind: INBOX_MISSING.OPTION,
+    line: "Pick at least one",
+  });
+  assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, choices: ["Redis"] }), undefined);
+  assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, note: "Use SQS." }), undefined);
+  const files = [{ name: "trace.txt", mediaType: "text/plain", data: btoa("boom\n") }] as const;
+  assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, attachments: files }), undefined);
+
+  const rollout = item({
+    id: "rollout",
+    response: {
+      type: INBOX_RESPONSE.FORM,
+      fields: [
+        { type: INBOX_FIELD.TEXT, label: "Branch prefix" },
+        { type: INBOX_FIELD.SELECT, label: "Effort", required: true, options: ["high", "xhigh"] },
+        { type: INBOX_FIELD.TEXT, label: "Reviewer", required: true },
+        { type: INBOX_FIELD.BOOLEAN, label: "Post in #eng", required: true },
+      ],
+    },
+  });
+  assert.deepEqual(inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Reviewer", "Dean")), {
+    kind: INBOX_MISSING.FIELD,
+    label: "Effort",
+    line: "Fill in Effort",
+  });
+  const effort = withValue(EMPTY_INBOX_DRAFT, "Effort", "high");
+  assert.deepEqual(
+    inboxMissing(rollout, withValue(effort, "Reviewer", "  ")),
+    { kind: INBOX_MISSING.FIELD, label: "Reviewer", line: "Fill in Reviewer" },
+    "blank words fill nothing",
+  );
+  assert.equal(
+    inboxMissing(rollout, withValue(effort, "Reviewer", "Dean")),
+    undefined,
+    "a yes-or-no left alone is a no",
+  );
+
+  const question = item({ id: "question" });
+  assert.deepEqual(inboxMissing(question, { ...EMPTY_INBOX_DRAFT, note: " " }), {
+    kind: INBOX_MISSING.WORDS,
+    line: "Write your answer",
+  });
+  assert.equal(inboxMissing(question, { ...EMPTY_INBOX_DRAFT, note: "Hello" }), undefined);
+});
+
+test("an option picked by its number is the one pick of a choice of one, picked again it stays; of a choice of several it joins the picks, and picked again it leaves them", () => {
+  assert.deepEqual(
+    withChoice({}, { ...EMPTY_INBOX_DRAFT, choices: ["Postgres"] }, "Redis").choices,
+    ["Redis"],
+  );
+  assert.deepEqual(withChoice({}, { ...EMPTY_INBOX_DRAFT, choices: ["Redis"] }, "Redis").choices, [
+    "Redis",
+  ]);
+  const several = { multiple: true };
+  let draft = withChoice(several, EMPTY_INBOX_DRAFT, "SMS");
+  draft = withChoice(several, draft, "Email");
+  assert.deepEqual(draft.choices, ["SMS", "Email"]);
+  assert.deepEqual(withChoice(several, draft, "SMS").choices, ["Email"]);
+});
+
+test("an approval and a task are answered by the decision the card holds, or a chat ask's press, an item asking nothing by its nod with or without a note, and words by words", () => {
   const task = item({ id: "task", response: { type: INBOX_RESPONSE.TODO } });
   assert.equal(inboxReply(task, { ...EMPTY_INBOX_DRAFT, note: "done it" }), undefined);
+  assert.deepEqual(inboxReply(task, withDecision(EMPTY_INBOX_DRAFT, INBOX_REPLY.NOT_DONE)), {
+    reply: INBOX_REPLY.NOT_DONE,
+  });
   assert.deepEqual(inboxReply(task, EMPTY_INBOX_DRAFT, INBOX_REPLY.DONE), {
     reply: INBOX_REPLY.DONE,
   });
   assert.equal(
-    inboxReply(task, EMPTY_INBOX_DRAFT, INBOX_REPLY.APPROVED),
+    inboxReply(task, withDecision(EMPTY_INBOX_DRAFT, INBOX_REPLY.APPROVED)),
     undefined,
     "a task takes no approval",
   );
-  const fyi = item({ id: "fyi", response: { type: INBOX_RESPONSE.NONE } });
-  assert.equal(inboxReply(fyi, { ...EMPTY_INBOX_DRAFT, note: "ok" }), undefined);
+  const step = item({ id: "step", response: { type: INBOX_RESPONSE.APPROVAL } });
   assert.deepEqual(
-    inboxReply(fyi, { ...EMPTY_INBOX_DRAFT, note: "ok" }, INBOX_REPLY.ACKNOWLEDGED),
-    {
-      reply: INBOX_REPLY.ACKNOWLEDGED,
-      note: "ok",
-    },
+    inboxReply(step, {
+      ...withDecision(EMPTY_INBOX_DRAFT, INBOX_REPLY.DECLINED),
+      note: " Not yet. ",
+    }),
+    { reply: INBOX_REPLY.DECLINED, note: "Not yet." },
   );
+  const fyi = item({ id: "fyi", response: { type: INBOX_RESPONSE.NONE } });
+  assert.deepEqual(inboxReply(fyi, EMPTY_INBOX_DRAFT), { reply: INBOX_REPLY.ACKNOWLEDGED });
+  assert.deepEqual(inboxReply(fyi, { ...EMPTY_INBOX_DRAFT, note: "ok" }), {
+    reply: INBOX_REPLY.ACKNOWLEDGED,
+    note: "ok",
+  });
   const question = item({ id: "question" });
   assert.equal(inboxReply(question, { ...EMPTY_INBOX_DRAFT, note: "  " }), undefined);
   assert.deepEqual(inboxReply(question, { ...EMPTY_INBOX_DRAFT, note: "Hello" }), {
     reply: INBOX_REPLY.ANSWERED,
     note: "Hello",
   });
+});
+
+test("an approval or a to-do lacks its decision until one is picked, a note lacks nothing, and a number key picks an approval's or a to-do's decision, the one going ahead first, as it picks a choice's option", () => {
+  const step = item({ id: "step", response: { type: INBOX_RESPONSE.APPROVAL } });
+  const task = item({ id: "task", response: { type: INBOX_RESPONSE.TODO } });
+  assert.deepEqual(inboxMissing(step, EMPTY_INBOX_DRAFT), {
+    kind: INBOX_MISSING.OPTION,
+    line: "Approve or decline",
+  });
+  assert.deepEqual(inboxMissing(task, { ...EMPTY_INBOX_DRAFT, note: "Did half." }), {
+    kind: INBOX_MISSING.OPTION,
+    line: "Tick it, or say you couldn't",
+  });
+  assert.equal(inboxMissing(task, withDecision(EMPTY_INBOX_DRAFT, INBOX_REPLY.DONE)), undefined);
+  const fyi = item({ id: "fyi", response: { type: INBOX_RESPONSE.NONE } });
+  assert.equal(inboxMissing(fyi, EMPTY_INBOX_DRAFT), undefined);
+
+  const decided = (picked: InboxDraft | undefined) =>
+    picked === undefined ? undefined : inboxReply(step, picked)?.reply;
+  assert.equal(decided(numberedPick(step, EMPTY_INBOX_DRAFT, 1)), INBOX_REPLY.APPROVED);
+  assert.equal(decided(numberedPick(step, EMPTY_INBOX_DRAFT, 2)), INBOX_REPLY.DECLINED);
+  assert.equal(numberedPick(step, EMPTY_INBOX_DRAFT, 3), undefined);
+  assert.equal(
+    inboxReply(task, numberedPick(task, EMPTY_INBOX_DRAFT, 2) ?? EMPTY_INBOX_DRAFT)?.reply,
+    INBOX_REPLY.NOT_DONE,
+  );
+  assert.deepEqual(numberedPick(QUEUE, EMPTY_INBOX_DRAFT, 2)?.choices, ["Redis"]);
+  assert.equal(numberedPick(fyi, EMPTY_INBOX_DRAFT, 1), undefined);
 });
 
 test("files attached alone answer an item in the developer's own words, and travel apart from the answer", () => {

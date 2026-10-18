@@ -4,13 +4,24 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { CHOICE_SELECT, ChoiceList, type ChoiceOption, type ChoiceSelect } from "./choice-list.js";
+import {
+  CHOICE_FLOW,
+  CHOICE_LOOK,
+  CHOICE_SELECT,
+  CHOICE_TONE,
+  ChoiceList,
+  type ChoiceLook,
+  type ChoiceOption,
+  type ChoiceSelect,
+} from "./choice-list.js";
 
 /**
  * choice-list.test.ts -- a pick-one list is a radio group the arrows walk
  * past an unavailable row, a press on its checked row keeping or clearing
- * the choice as asked; a pick-several list toggles each row on its own; and
- * a settled list names what was picked and takes no press.
+ * the choice as asked; a pick-several list toggles each row on its own, the
+ * arrows moving along it; a marked and numbered list
+ * leads each row with its control and wears its key; and a settled list
+ * names what was picked and takes no press.
  */
 
 declare global {
@@ -48,11 +59,15 @@ function Held({
   clearable = false,
   disabled = false,
   start = [],
+  look,
+  numbered,
 }: {
   select?: ChoiceSelect;
   clearable?: boolean;
   disabled?: boolean;
   start?: readonly Retry[];
+  look?: ChoiceLook;
+  numbered?: boolean;
 }): React.JSX.Element {
   const [value, setValue] = useState<readonly Retry[]>(start);
   const [heard, setHeard] = useState<string[]>([]);
@@ -66,6 +81,8 @@ function Held({
       select,
       clearable,
       disabled,
+      look,
+      numbered,
       onChange: (next: readonly Retry[]) => {
         setValue(next);
         setHeard((all) => [...all, next.join("+") || "none"]);
@@ -172,6 +189,72 @@ test("a pick-several list is a group of checkboxes, each its own Tab stop, toggl
   act(() => row(page, "Retry 3 times").click());
   assert.equal(heard(page), "three,three+never,never");
   assert.equal(row(page, "Never retry").getAttribute("aria-checked"), "true");
+});
+
+test("the arrows move the keyboard along a pick-several list, past an unavailable row and wrapping at either end, and toggle nothing", () => {
+  const page = render(createElement(Held, { select: CHOICE_SELECT.MANY }));
+  const three = row(page, "Retry 3 times");
+  act(() => three.focus());
+  key(three, "ArrowDown");
+  assert.equal(document.activeElement, row(page, "Never retry"));
+  key(row(page, "Never retry"), "ArrowRight");
+  assert.equal(document.activeElement, three);
+  key(three, "ArrowUp");
+  assert.equal(document.activeElement, row(page, "Never retry"));
+  assert.equal(heard(page), "");
+});
+
+test("a marked list leads each row with the radio or the checkbox it behaves as, and a numbered one wears each row's number after its badge and names it as the row's key", () => {
+  const controls = (page: HTMLElement) =>
+    rows(page).map((each) =>
+      each.querySelector(".luke-choice-control")?.getAttribute("data-shape"),
+    );
+  assert.deepEqual(controls(render(createElement(Held, { look: CHOICE_LOOK.MARKED }))), [
+    "radio",
+    "radio",
+    "radio",
+  ]);
+  const boxes = render(
+    createElement(Held, { look: CHOICE_LOOK.MARKED, select: CHOICE_SELECT.MANY, numbered: true }),
+  );
+  assert.deepEqual(controls(boxes), ["box", "box", "box"]);
+  assert.deepEqual(
+    rows(boxes).map((each) => each.getAttribute("aria-keyshortcuts")),
+    ["1", "2", "3"],
+  );
+  assert.equal(row(boxes, "Retry 3 times").textContent, "Retry 3 timesRecommended1Over an hour.");
+  const plain = render(createElement(Held));
+  assert.deepEqual(controls(plain), [undefined, undefined, undefined]);
+  assert.deepEqual(
+    rows(plain).map((each) => each.getAttribute("aria-keyshortcuts")),
+    [null, null, null],
+  );
+});
+
+test("a list across stands its rows side by side, each toned row filling its checked control with what picking it means, and still picks one by the arrows", () => {
+  function Decide(): React.JSX.Element {
+    const [value, setValue] = useState<readonly string[]>([]);
+    return createElement(ChoiceList<string>, {
+      legend: "Decision",
+      options: [
+        { value: "yes", label: "Approve", tone: CHOICE_TONE.COMPLETE },
+        { value: "no", label: "Decline", tone: CHOICE_TONE.DANGER },
+      ],
+      value,
+      look: CHOICE_LOOK.MARKED,
+      flow: CHOICE_FLOW.ACROSS,
+      onChange: setValue,
+    });
+  }
+  const page = render(createElement(Decide));
+  assert.equal(page.querySelector('[role="radiogroup"]')?.getAttribute("data-flow"), "across");
+  assert.deepEqual(
+    rows(page).map((each) => each.dataset.tone),
+    ["complete", "danger"],
+  );
+  act(() => row(page, "Approve").focus());
+  key(row(page, "Approve"), "ArrowRight");
+  assert.equal(row(page, "Decline").getAttribute("aria-checked"), "true");
 });
 
 test("an unavailable list changes nothing, by press or by key", () => {
