@@ -1,8 +1,8 @@
+import { ChangedMark } from "@luke/panel/settings/marks";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SettingsRow, type SettingsRowDensity, Switch } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
-import { ChangedMark } from "./marks";
 
 /**
  * A settings switch: `@luke/ui`'s `SettingsRow` holding its `Switch`, the

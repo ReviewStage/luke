@@ -5,9 +5,9 @@ import {
   type TurnTokens,
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { HarnessMark } from "@luke/panel/harness-marks";
 import { spanText } from "@luke/panel/tasks/task-time";
 import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule } from "@luke/ui";
-import { HarnessMark } from "../harness-marks";
 import { providerOf } from "./coding-agent-model";
 import { ModelLabel } from "./model-label";
 

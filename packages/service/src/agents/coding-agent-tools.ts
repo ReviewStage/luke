@@ -21,7 +21,15 @@ import {
 } from "@luke/database/models/message-reads";
 import { readPageById } from "@luke/database/models/plan-pages";
 import { listTaskSections } from "@luke/database/models/task-section-store";
-import { createTask, deleteTask, listTasks, readTask } from "@luke/database/models/task-store";
+import {
+  createTask,
+  deleteTask,
+  listTasks,
+  readTask,
+  type StoredTask,
+  type TaskChanges,
+  updateTask,
+} from "@luke/database/models/task-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
@@ -35,6 +43,7 @@ import {
   type CodingAgentStartFrom,
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
+import { githubRepositoryFullNameSchema } from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
@@ -165,6 +174,17 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * agent never archives itself, and an unarchive brings back only the
  * archive it read, never one made again since. An archive or an unarchive already standing answers as done, so
  * a call eve runs again does nothing twice.
+ * A task's change takes the one path the member's own task menu does
+ * (`tasks-app.ts`'s PATCH, `task-store.ts`'s `updateTask`), for the member
+ * the caller acts for: a new name, a repository confirmed through the
+ * workspace's installation or none, that member's own pin, or an archive,
+ * on any task of the caller's workspace, a teammate's among them. An archive
+ * is made as the menu makes it, without asking and without stopping the
+ * task's agents, so an agent still at work on it finishes the turn it is on
+ * and takes no message after, and it records neither who archived the task
+ * nor why, since a task's archive stamps only when it stands from. The
+ * caller never archives the task it works on itself, and a change already
+ * standing answers as done.
  * A stop takes the one path the Stop button's does (`coder-host/stop.ts`):
  * eve's cancel of the turn under way, named by eve's own id for it, then the
  * row's stamp, which `list_agents` then reads as cancelled. The agent stays
@@ -220,7 +240,8 @@ export const CODING_AGENT_TOOL_REFUSAL = {
     `most ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters.`,
   UNREADABLE_FILTER: "Not run: narrow the list by a taskId, by thisTask, or by neither.",
   UNREADABLE_TASKS:
-    "Not run: narrow the tasks by words of their name, and page them by an offset of 0 or more.",
+    "Not run: narrow the tasks by words of their name, page them by an offset of 0 or more, and " +
+    "ask for the archived ones too with includeArchived true, or leave it out.",
   NO_AGENT: `Not run: no coding agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   NO_WORKSPACE:
     "Not run: your workspace could not be read for you, so no agent is reached from here.",
@@ -256,6 +277,29 @@ export const ARCHIVE_AGENT_REFUSAL = {
   REARCHIVED:
     "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
     `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
+} as const;
+
+/** Why a task's change changed nothing, in words the model can act on. */
+export const UPDATE_TASK_REFUSAL = {
+  UNREADABLE:
+    `Not run: name the task by the id ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered, ` +
+    `and at least one change: a name of at most ${TASK_BOUNDS.MAX_NAME_CHARS} characters, a ` +
+    "repository as owner/name or null, archived, or pinned.",
+  OWN_TASK:
+    "Not archived: that is the task you work on, and you do not archive it yourself; say you are " +
+    "done, and the developer archives it. Its other changes are yours to make without archived.",
+  NO_TASK:
+    "Not run: no task of your workspace has that id, so it is none you can change; " +
+    `${AGENT_TOOL.LIST_TASKS} names them, the archived ones too with includeArchived.`,
+  ARCHIVED:
+    "Not changed: that task is archived, so it takes no new name or repository; bring it back in " +
+    "the same call with archived false, or leave it as it is.",
+  NOT_REACHABLE:
+    "Not changed: the GitHub installation connected to the workspace does not reach that " +
+    "repository; name one it reaches, or null for none.",
+  GITHUB_UNANSWERED:
+    "Not changed: GitHub did not answer whether the workspace reaches that repository. The call " +
+    "may be made again.",
 } as const;
 
 /** Why a stop changed nothing, in words the model can act on. */
@@ -554,6 +598,48 @@ const ARCHIVE_AGENT_INPUT = Schema.Struct({
 });
 
 const readArchive = Schema.decodeUnknownResult(ARCHIVE_AGENT_INPUT);
+
+/**
+ * A task's change names the task and at least one of what the member's own
+ * menu changes of it: its name, its repository, its archive, and the
+ * member's own pin. Note that an archive keeps no reason, since a task's
+ * archive stamps only when it stands from.
+ */
+const UPDATE_TASK_INPUT = Schema.Struct({
+  taskId: describeWire(
+    wireUuidSchema,
+    `The task's id, as ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered it, or a ` +
+      "mention of it names.",
+  ),
+  name: Schema.optionalKey(
+    describeWire(
+      Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(TASK_BOUNDS.MAX_NAME_CHARS)),
+      "Its new name, as the sidebar shows it, which its plan's heading follows.",
+    ),
+  ),
+  repository: Schema.optionalKey(
+    describeWire(
+      Schema.NullOr(githubRepositoryFullNameSchema),
+      "The GitHub repository its agents work in, as owner/name, which the workspace's GitHub " +
+        "installation must reach; null for none.",
+    ),
+  ),
+  archived: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "true to archive it, as the Archive task menu does, false to bring an archived one back.",
+    ),
+  ),
+  pinned: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "true to pin it in the sidebar of the developer you work for, false to unpin it; their pin " +
+        "alone, no other member's.",
+    ),
+  ),
+});
+
+const readTaskUpdate = Schema.decodeUnknownResult(UPDATE_TASK_INPUT);
 const readMessage = Schema.decodeUnknownResult(MESSAGE_AGENT_INPUT);
 /** A start as a call carries it: one Luke made under the tool's earlier words names its prompt `task`. */
 const START_AGENT_CALL = Schema.Struct({
@@ -689,6 +775,25 @@ export const UNARCHIVE_AGENT_TOOL = {
   inputSchema: READ_AGENT_INPUT,
 } as const;
 
+export const UPDATE_TASK_TOOL = {
+  name: AGENT_TOOL.UPDATE_TASK,
+  description:
+    "Change a task of your workspace by its id, as the developer's own task menu would, on behalf " +
+    "of the developer you work for: rename it, set or clear its repository, pin or unpin it in " +
+    "their sidebar, or archive it or bring it back; name at least one change, and several go in " +
+    "one call. An archived task leaves the sidebar and every list but the archived ones, its plan " +
+    "takes no edit, and its agents take no message and start no new turn, while everything on it " +
+    "is kept and any member can bring it back. Like the menu, an archive asks no one and stops no " +
+    "agent: one still working on the task finishes the turn it is on. Archive a task whose work is " +
+    "done, such as one whose pull requests merged, or one the developer asked you to clean up; " +
+    "never a teammate's task still in use unless the developer asked for it. The task you work on " +
+    "yourself is never archived, though its other changes are yours to make. Find an archived " +
+    `task with ${AGENT_TOOL.LIST_TASKS} and includeArchived. Answers \`accepted\` with the task as ` +
+    "it now stands, `already` true where every change named already stood, or `rejected` and " +
+    "why. Then say which tasks you changed and how.",
+  inputSchema: UPDATE_TASK_INPUT,
+} as const;
+
 export const STOP_AGENT_TOOL = {
   name: AGENT_TOOL.STOP_AGENT,
   description:
@@ -731,8 +836,15 @@ export const READ_PAGE_TOOL = {
   inputSchema: READ_PAGE_INPUT,
 } as const;
 
-/** A list of tasks names its words to look for at most, and how many of the matching tasks to pass over. */
+/** A list of tasks names its words to look for at most, how many of the matching tasks to pass over, and whether the archived ones are listed too. */
 const LIST_TASKS_INPUT = Schema.Struct({
+  includeArchived: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "true to list the archived tasks too, each marked archived, such as to find one to " +
+        `bring back with ${AGENT_TOOL.UPDATE_TASK}; leave it out for the open tasks alone.`,
+    ),
+  ),
   nameContains: Schema.optionalKey(
     describeWire(
       Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(200)),
@@ -753,11 +865,13 @@ const readTasksAsked = Schema.decodeUnknownResult(LIST_TASKS_INPUT);
 export const LIST_TASKS_TOOL = {
   name: AGENT_TOOL.LIST_TASKS,
   description:
-    "List the open tasks of your workspace, started by any member: each with its id, its name, " +
+    "List the open tasks of your workspace, started by any member, and the archived ones too " +
+    "where includeArchived asks: each with its id, its name, " +
     "the repository its agents work in (null for none yet), who started it, whether it is " +
-    "the task you work on, the sectionId of the sidebar section the developer you work for " +
-    "keeps it in (null for none, under Tasks), and its mention, the `[@name](link)` to name it " +
-    `by in your words, the newest first and at most ${TASKS_LIST_LIMIT} a page, with ` +
+    "the task you work on, whether it is archived, the sectionId of the sidebar section the " +
+    "developer you work for keeps it in (null for none, under Tasks), and its mention, the " +
+    "`[@name](link)` to name it by in your words, the newest first and at most " +
+    `${TASKS_LIST_LIMIT} a page, with ` +
     "nextOffset where more stand; and beside them every section that developer keeps in this " +
     "workspace's sidebar, each with its id and title. Narrow it by words of a task's name with " +
     `nameContains. Call it to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s ` +
@@ -1642,6 +1756,121 @@ export function runUnarchiveAgent(
   );
 }
 
+/** A task's change as the model reads it: the task as it now stands, with its mention, and whether every change named already stood before the call. */
+const taskUpdateAnswer = (userId: string, task: StoredTask["task"], already: boolean) =>
+  Effect.map(
+    workspaceStepOf(userId, task.workspaceId),
+    (step): WireRecord => ({
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      task: {
+        id: task.id,
+        name: task.name,
+        repository: task.repository,
+        archived: task.archivedAt !== undefined,
+        pinned: task.pinnedAt !== undefined,
+        mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
+      },
+      already,
+    }),
+  );
+
+/** Whether every change named already stands on the task as its member reads it. */
+function changesStand(task: StoredTask["task"], changes: TaskChanges): boolean {
+  return (
+    (changes.name === undefined || changes.name === task.name) &&
+    (changes.repository === undefined || changes.repository === task.repository) &&
+    (changes.archived === undefined || changes.archived === (task.archivedAt !== undefined)) &&
+    (changes.pinned === undefined || changes.pinned === (task.pinnedAt !== undefined))
+  );
+}
+
+/** A repository's refusal in the model's words: one the installation does not reach, GitHub not answering, or else the service down. */
+function repositoryRefusalWords(refusal: HostedRefusal): string {
+  if (refusal.error === HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE) {
+    return UPDATE_TASK_REFUSAL.NOT_REACHABLE;
+  }
+  return refusal.error === HOSTED_API_ERROR.GITHUB_UNANSWERED
+    ? UPDATE_TASK_REFUSAL.GITHUB_UNANSWERED
+    : CODING_AGENT_TOOL_REFUSAL.STORE;
+}
+
+/** A repository confirmed as the menu's PATCH confirms one, through the workspace's installation, or the refusal's words; none clears it. */
+const reachedRepository = (workspaceId: string, repository: string | null) =>
+  repository === null
+    ? Effect.succeed<Result.Result<string | null, string>>(Result.succeed(null))
+    : Effect.map(
+        Effect.result(workspaceRepository(workspaceId, repository)),
+        (reached): Result.Result<string | null, string> =>
+          Result.isSuccess(reached)
+            ? Result.succeed(reached.success.fullName)
+            : Result.fail(repositoryRefusalWords(reached.failure)),
+      );
+
+/**
+ * One call of `update_task`: a task of the caller's workspace changed as the
+ * member's own menu changes it (`updateTask`, which `tasks-app.ts`'s PATCH
+ * runs), for the member the caller acts for, its repository confirmed first
+ * as the PATCH confirms one, or why not. Note that the task is read first, on
+ * that member's standing, both to hold it to the caller's workspace and to
+ * tell a change already standing, which the store keeps as it stood; and
+ * that the caller never archives the task it works on.
+ */
+export function runUpdateTask(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  const asked = readTaskUpdate(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
+  }
+  const { taskId, ...changes } = asked.success;
+  if (Object.keys(changes).length === 0) {
+    return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
+  }
+  const { caller } = call;
+  if (changes.archived === true && taskId === callerTask(caller)) {
+    return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.OWN_TASK));
+  }
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      const userId = callerUserId(caller);
+      const workspace = yield* callerWorkspace(caller);
+      const read = yield* readTask(userId, taskId);
+      if (
+        Option.isNone(workspace) ||
+        Option.isNone(read) ||
+        read.value.task.workspaceId !== workspace.value
+      ) {
+        return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
+      }
+      const repository =
+        changes.repository === undefined
+          ? undefined
+          : yield* reachedRepository(workspace.value, changes.repository);
+      if (repository !== undefined && Result.isFailure(repository)) {
+        return agentToolRejected(repository.failure);
+      }
+      // A repository is compared as GitHub spells it, which is how the task holds it.
+      const asWritten = {
+        ...changes,
+        ...(repository === undefined ? undefined : { repository: repository.success }),
+      };
+      const already = changesStand(read.value.task, asWritten);
+      const changed = yield* updateTask(userId, taskId, asWritten).pipe(
+        Effect.map(
+          (task): Result.Result<Option.Option<StoredTask["task"]>, string> => Result.succeed(task),
+        ),
+        Effect.catchTag("TaskArchived", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.ARCHIVED)),
+        ),
+      );
+      if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
+      if (Option.isNone(changed.success)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
+      return yield* taskUpdateAnswer(userId, changed.success.value, already);
+    }),
+  );
+}
+
 /** A stop's refusal in the model's words: an agent gone meanwhile is none, a deployment with no eve says so, and anything else is the service down. */
 function stopRefusalWords(refusal: HostedRefusal, eve: EveSessions | undefined): string {
   if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
@@ -1731,7 +1960,7 @@ export function runStopAgent(
   );
 }
 
-/** One call of `list_tasks`: the open tasks of the caller's workspace, newest first, each with the section its member keeps it in, and those sections. */
+/** One call of `list_tasks`: the open tasks of the caller's workspace, and the archived ones too where asked, newest first, each with the section its member keeps it in, and those sections. */
 export function runListTasks(
   call: CodingAgentCall,
   input: UnparsedWireValue,
@@ -1751,7 +1980,9 @@ export function runListTasks(
       }
       const ownTask = callerTask(caller);
       const userId = callerUserId(caller);
-      const listed = yield* listTasks(userId);
+      const listed = yield* listTasks(userId, {
+        includeArchived: asked.success.includeArchived === true,
+      });
       const matching = listed.filter(
         (task) =>
           task.workspaceId === workspace.value &&
@@ -1772,6 +2003,7 @@ export function runListTasks(
         repository: task.repository ?? null,
         startedBy: task.createdBy?.name ?? null,
         isYourTask: task.id === ownTask,
+        archived: task.archivedAt !== undefined,
         sectionId: sectionOf.get(task.id) ?? null,
         mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
       }));

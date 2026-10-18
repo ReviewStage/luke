@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { ellipsized } from "@luke/panel/testing/action-label";
 import { APP_COMMAND, appCommandLabel } from "@luke/settings/shortcuts";
 import { test } from "vitest";
-import { ellipsized } from "#testing/action-label";
 
 /**
  * No command's name, which ⌘K, the Keyboard shortcuts page, and the menu

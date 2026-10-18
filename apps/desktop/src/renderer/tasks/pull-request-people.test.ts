@@ -13,14 +13,14 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { MemberDirectory } from "@luke/panel/member-directory";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { MemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { AgentChangesTab, ChangesCard, peopleOf } from "./agent-changes-tab";
 import { agentSubject, NOTHING_HELD } from "./agent-ref";

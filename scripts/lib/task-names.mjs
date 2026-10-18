@@ -204,13 +204,13 @@ const WIRE_NAME = {
     "apps/desktop/src/renderer/tasks/tasks-fixture.ts",
   ],
   // The main tabs' kept choice, under the key it was first stored as.
-  planClosed: ["apps/desktop/src/renderer/tasks/use-main-tabs.ts"],
+  planClosed: ["packages/panel/src/tasks/use-main-tabs.ts"],
 };
 
 /** The New task dialog's Plan switch: whether Luke writes a plan for the task it starts. */
 const PLAN_SWITCH_FILES = [
   "apps/desktop/src/renderer/tasks/new-task-dialog.tsx",
-  "apps/desktop/src/renderer/tasks/new-task-planning.ts",
+  "packages/panel/src/tasks/new-task-planning.ts",
   "apps/desktop/src/renderer/tasks/use-tasks-tab.test.ts",
 ];
 
@@ -350,8 +350,8 @@ export const CANARY = {
     ["planet", "packages/features/src/anywhere.ts"],
     ["PlanTitle", "apps/desktop/src/renderer/ai-elements/plan.tsx"],
     ["PLAN_ROW", "apps/desktop/src/renderer/desktop/main-tabs.tsx"],
-    ["planClosed", "apps/desktop/src/renderer/tasks/use-main-tabs.ts"],
-    ["useNewTaskPlanning", "apps/desktop/src/renderer/tasks/new-task-planning.ts"],
+    ["planClosed", "packages/panel/src/tasks/use-main-tabs.ts"],
+    ["useNewTaskPlanning", "packages/panel/src/tasks/new-task-planning.ts"],
   ],
   /** The SQL names the schema clause must refuse, and those it must let stand. */
   SQL_REFUSED: ["plan", "plan_id", "plan_board", "plan_board2", "plan_pin"],

@@ -5,6 +5,15 @@ import {
   LINEAR_PRIORITY,
 } from "@luke/features/factory-world-wire";
 import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  WORLD_LAYER,
+  type WorldHost,
+  type WorldLayers,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import {
   blastRadiusOf,
   factoryWorldAsOf,
   factoryWorldViewOf,
@@ -26,15 +35,6 @@ import {
 } from "@luke/ui/testing";
 import { InstancedMesh, Matrix4, type Object3D, PerspectiveCamera, Scene, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  WORLD_LAYER,
-  type WorldHost,
-  type WorldLayers,
-  type WorldState,
-} from "../../world";
 import { world } from "./index";
 
 /**
@@ -230,6 +230,8 @@ function everythingIn(snapshot: FactoryWorld): Map<PickKind, Set<string>> {
     [PICK_KIND.SHIPPED, new Set(snapshot.shipped.map((merged) => merged.url))],
     [PICK_KIND.PLANNED, new Set(snapshot.planned.map((issue) => issue.identifier))],
     [PICK_KIND.DEFECT, new Set(snapshot.defects.map((defect) => defect.id))],
+    // Note that a task is the campus's to pick; no world draws one.
+    [PICK_KIND.TASK, new Set()],
   ]);
 }
 

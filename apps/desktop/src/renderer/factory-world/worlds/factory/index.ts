@@ -1,5 +1,12 @@
 import type { FactoryDefect, FactoryPlanned } from "@luke/features/factory-world-wire";
 import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  type WorldModule,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import {
   type AgentView,
   agentDrawnUnder,
   type FactoryWorldView,
@@ -20,13 +27,6 @@ import {
   MeshBasicMaterial,
   Vector3,
 } from "three";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  type WorldModule,
-  type WorldState,
-} from "../../world";
 import { type AgentPlacement, agentsLayerOf, raisesSite, SITE, siteSizeOf } from "./agents";
 import { type Belts, beltsOf, paintCrates, rideBelts } from "./belts";
 import { buildingPlanOf } from "./buildings";

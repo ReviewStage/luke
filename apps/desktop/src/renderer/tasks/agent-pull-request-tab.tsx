@@ -31,8 +31,18 @@ import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { Fold, FoldBody, FoldSummary } from "@luke/panel/ai-elements/fold";
 import { appPlatform } from "@luke/panel/app-platform";
+import { threadPreview } from "@luke/panel/tasks/changes-model";
+import {
+  type ConversationFiltersControl,
+  type ConversationHidden,
+  conversationHidden,
+  filteredConversation,
+  useConversationFilters,
+} from "@luke/panel/tasks/conversation-filters";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
+import { PullRequestLabels } from "@luke/panel/tasks/pull-request-labels";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
@@ -43,6 +53,7 @@ import {
   Badge,
   Button,
   CopyIcon,
+  DisclosureChevron,
   EmptyState,
   ErrorState,
   IconButton,
@@ -81,7 +92,6 @@ import {
   XIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
-import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { useCopyToast } from "../copy-feedback";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
@@ -92,15 +102,7 @@ import {
   type ThreadPlace,
   useAgentRead,
 } from "./agent-changes-tab";
-import { threadPreview } from "./changes-model";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model";
-import {
-  type ConversationFiltersControl,
-  type ConversationHidden,
-  conversationHidden,
-  filteredConversation,
-  useConversationFilters,
-} from "./conversation-filters";
 import { PierreDiff, useDiffLook } from "./file-diff";
 import type { PendingReview } from "./line-comment";
 import { blockedWords, MergeActions } from "./merge-box";
@@ -109,7 +111,6 @@ import {
   PullRequestCommentBox,
   usePullRequestComment,
 } from "./pull-request-comment-box";
-import { PullRequestLabels } from "./pull-request-labels";
 import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people";
 import {
   LabelPicker,
@@ -900,7 +901,9 @@ function ThreadCard({
           {labels.map((label) => (
             <Badge key={label}>{label}</Badge>
           ))}
-          <FoldChevron />
+          <span className="pull-request-thread-turn">
+            <DisclosureChevron />
+          </span>
         </FoldSummary>
         <FoldBody>
           {preview === undefined ? null : (
@@ -996,7 +999,9 @@ function InlineThread({
           <span className="pull-request-quiet">
             {PULL_REQUEST_WORDS.commentCount(thread.comments.length + thread.more)}
           </span>
-          <FoldChevron />
+          <span className="pull-request-thread-turn">
+            <DisclosureChevron />
+          </span>
         </FoldSummary>
         <FoldBody>
           <ThreadComments thread={thread} now={now} picture={picture} />

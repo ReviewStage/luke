@@ -14,11 +14,36 @@ import {
 } from "@luke/host/app-state";
 import { useAct } from "@luke/panel/act";
 import { appBridge } from "@luke/panel/app-bridge";
+import {
+  runAppCommand,
+  useAppCommand,
+  useAppKeymap,
+  useMenuCommands,
+} from "@luke/panel/app-commands";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useWindowFocused } from "@luke/panel/call/use-window-focused";
+import { GitHubConnectProvider } from "@luke/panel/github-connect";
+import { useKeyboardModality } from "@luke/panel/keyboard-modality";
+import { useLastSignIn } from "@luke/panel/last-sign-in";
 import { prefetchMarkdownHtmlParser } from "@luke/panel/markdown-html-parser";
+import { OpenFeedbackProvider } from "@luke/panel/open-feedback";
+import { OpenSettingsProvider } from "@luke/panel/open-settings";
+import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import { shownSettingsView } from "@luke/panel/settings/pages";
+import { type AgentPlace, useAgentEndToasts } from "@luke/panel/tasks/agent-end-toast";
+import { useChatToasts } from "@luke/panel/tasks/chat-toast";
+import { useInboxSettlingOwner } from "@luke/panel/tasks/inbox-settling";
+import { useInboxToasts } from "@luke/panel/tasks/inbox-toast";
+import {
+  type RepositoryRemedyDoors,
+  RepositoryRemedyProvider,
+} from "@luke/panel/tasks/repository-remedy";
 import { ListedPullRequestsProvider, OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
+import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "@luke/panel/toast";
 import { useAppState, useExperiment } from "@luke/panel/use-app-state";
 import { useSignIn } from "@luke/panel/use-sign-in";
+import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "@luke/panel/use-voice-view";
+import { useWindowFullScreen } from "@luke/panel/window-full-screen";
 import { APP_SETTING_SCHEMA, EXPERIMENT, type Experiment, VOICE_HOTKEY_NONE } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -46,11 +71,9 @@ import {
 } from "@luke/voice/volume-hint";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
 import { usePrefetchEditorBundle } from "./bundle-loader";
 import { type CallCardInput, callControls } from "./call/call-card";
 import { useCallCardVideo } from "./call/panel-avatar";
-import { useWindowFocused } from "./call/use-window-focused";
 import { useDraftsOwner } from "./composer-drafts";
 import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
@@ -58,30 +81,16 @@ import { type FailedRunPlace, useFailedRunToasts } from "./desktop/failed-runs";
 import { ListedAutomations } from "./desktop/listed-automations";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { FeedbackDialog } from "./feedback-dialog";
-import { GitHubConnectProvider } from "./github-connect";
-import { useKeyboardModality } from "./keyboard-modality";
-import { useLastSignIn } from "./last-sign-in";
 import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
-import { OpenFeedbackProvider } from "./open-feedback";
-import { OpenSettingsProvider } from "./open-settings";
-import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { OpenPersonProvider } from "./person-door";
 import { applySessionReplay } from "./session-replay";
-import { shownSettingsView } from "./settings/pages";
 import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
-import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast";
-import { useChatToasts } from "./tasks/chat-toast";
-import { useInboxToasts } from "./tasks/inbox-toast";
 import { MessageRevealProvider } from "./tasks/message-links";
-import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy";
 import { useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab";
-import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast";
 import { useUpdatedToast } from "./update-toast";
 import { useCaptionPresentation } from "./use-caption-presentation";
-import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view";
-import { useWindowFullScreen } from "./window-full-screen";
 import { useWindowZoom } from "./window-zoom";
 
 /** No agent ended unseen, as the document reads before main has answered. */
@@ -112,6 +121,7 @@ export function App(): React.JSX.Element {
   }, [accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
+  useInboxSettlingOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.TASKS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ACCOUNT);

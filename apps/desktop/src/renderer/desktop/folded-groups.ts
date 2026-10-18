@@ -1,6 +1,16 @@
 import { Option, Schema } from "effect";
 import { useState } from "react";
-import { INBOX_GROUPING, type InboxGrouping } from "../tasks/inbox-model";
+import {
+  EVERYONES,
+  INBOX_GROUPING,
+  INBOX_SHOW,
+  INBOX_SORT,
+  INBOX_WHOSE,
+  type InboxGrouping,
+  type InboxShow,
+  type InboxSort,
+  type InboxWhose,
+} from "../tasks/inbox-model";
 
 /**
  * folded-groups.ts -- which of the sidebar's groups the developer folded, Pinned, the repositories', and the creators', kept across launches, and the Inbox's plan groups, how it lists its items, and how wide its list stands kept the same way.
@@ -17,9 +27,12 @@ import { INBOX_GROUPING, type InboxGrouping } from "../tasks/inbox-model";
  * account's own sections, each by its id. A fixture run starts with every group open
  * and keeps nothing, so its frames never wear a developer's folds. The
  * Inbox's task groups are kept on the same terms, each by its task's id,
- * and so are its two view choices, Needs you and how it groups, and its
- * list's width; a task's own Inbox keeps a Needs you of its own, one for
- * every task, apart from the window's; a fixture run draws no inbox, so it has nothing staged to
+ * and so are its view choices, the tab it shows, how it groups and sorts,
+ * and whose items it lists, a teammate by their account's id, and its
+ * list's width; a task's own Inbox keeps a tab of its own, one for every
+ * task, apart from the window's. A tab kept before the tabs were, the Needs
+ * you button's press, is read as the Needs you tab where it was pressed and
+ * Everything where it was not, which is what that list then held; a fixture run draws no inbox, so it has nothing staged to
  * keep apart. An automation's Runs panel keeps its width and whether it
  * stands on the same terms, one for every automation, as the side panel
  * keeps one for every plan.
@@ -34,9 +47,14 @@ const STORAGE_KEY = {
   INBOX_TASKS: "luke.inboxFoldedTasks",
   /** Where the Inbox's task groups were kept before tasks had their name. */
   INBOX_TASKS_EARLIER: "luke.inboxFoldedPlans",
+  INBOX_SHOW: "luke.inboxShow",
+  TASK_INBOX_SHOW: "luke.taskInboxShow",
+  /** Where the Inbox's Needs you button kept its press, before its tabs. */
   INBOX_WAITING_ONLY: "luke.inboxWaitingOnly",
   TASK_INBOX_WAITING_ONLY: "luke.taskInboxWaitingOnly",
   INBOX_GROUPING: "luke.inboxGrouping",
+  INBOX_SORT: "luke.inboxSort",
+  INBOX_WHOSE: "luke.inboxWhose",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
   RUNS_PANEL: "luke.automationRunsPanel",
 } as const;
@@ -64,7 +82,7 @@ export const INBOX_LIST_WIDTH = {
 /** The folded groups, each by its repository, or its creator, null for the plans with none. */
 const storedFolds = Schema.fromJsonString(Schema.Array(Schema.NullOr(Schema.String)));
 
-/** Whether Pinned is folded, or the Inbox lists only what waits. */
+/** Whether Pinned is folded. */
 const storedFlag = Schema.fromJsonString(Schema.Boolean);
 
 /** The Inbox's folded tasks, by id. */
@@ -80,6 +98,28 @@ const storedRunsPanel = Schema.fromJsonString(
 
 /** How the Inbox groups its items. */
 const storedGrouping = Schema.fromJsonString(Schema.Literals(Object.values(INBOX_GROUPING)));
+
+/** How the Inbox sorts its items. */
+const storedSort = Schema.fromJsonString(Schema.Literals(Object.values(INBOX_SORT)));
+
+/** Whose items the Inbox lists. */
+const storedWhose = Schema.fromJsonString(
+  Schema.Union([
+    Schema.Struct({ kind: Schema.Literal(INBOX_WHOSE.EVERYONE) }),
+    Schema.Struct({ kind: Schema.Literal(INBOX_WHOSE.MINE) }),
+    Schema.Struct({
+      kind: Schema.Literal(INBOX_WHOSE.PERSON),
+      userId: Schema.String,
+      name: Schema.String,
+    }),
+  ]),
+);
+
+/** Which tab the Inbox shows. */
+const storedShow = Schema.fromJsonString(Schema.Literals(Object.values(INBOX_SHOW)));
+
+/** Whether the Needs you button was pressed, before the tabs; null where nothing was kept. */
+const storedEarlierShow = Schema.fromJsonString(Schema.NullOr(Schema.Boolean));
 
 /** Every fold the sidebar keeps. */
 interface Folds {
@@ -227,52 +267,91 @@ export function useInboxTaskFolds(): InboxTaskFolds {
   };
 }
 
-/** Whether an Inbox lists only what needs the developer, and the press that changes it. */
-export interface InboxWaitingOnly {
-  waitingOnly: boolean;
-  onWaitingOnly: (waitingOnly: boolean) => void;
+/** Which tab an Inbox shows, and the press that shows another. */
+export interface InboxShowChoice {
+  show: InboxShow;
+  onShow: (show: InboxShow) => void;
 }
 
 /** How the window's Inbox lists its items, and the presses that change it. */
-export interface InboxViewChoices extends InboxWaitingOnly {
+export interface InboxViewChoices extends InboxShowChoice, InboxWhoseChoice {
   grouping: InboxGrouping;
   onGrouping: (grouping: InboxGrouping) => void;
+  sort: InboxSort;
+  onSort: (sort: InboxSort) => void;
 }
 
-/** A task's own Inbox's Needs you, every item listed until first pressed, kept apart from the window's and shared by every task. */
-export function useTaskInboxWaitingOnly(): InboxWaitingOnly {
-  const [waitingOnly, setWaitingOnly] = useState(() =>
-    readKept(STORAGE_KEY.TASK_INBOX_WAITING_ONLY, storedFlag, false),
-  );
+/** Whose items the window's Inbox lists, and the press that lists another's. */
+export interface InboxWhoseChoice {
+  whose: InboxWhose;
+  onWhose: (whose: InboxWhose) => void;
+}
+
+/** A view choice, `fallback` until first changed, kept under `key` as it is changed. */
+function useKeptChoice<A>(
+  key: string,
+  schema: Schema.Codec<A, string>,
+  fallback: A,
+): readonly [A, (next: A) => void] {
+  const [value, setValue] = useState<A>(() => readKept(key, schema, fallback));
+  return [
+    value,
+    (next) => {
+      setValue(next);
+      writeKept(key, schema, next);
+    },
+  ];
+}
+
+/**
+ * The tab kept under `key`, or, where none is, the one the Needs you button
+ * kept under `earlier` stood for: Needs you where it was pressed, and
+ * Everything, all it then listed, where it was not; All open where neither
+ * was kept.
+ */
+function readShow(key: string, earlier: string): InboxShow {
+  const pressed = readKept(earlier, storedEarlierShow, null);
+  const fallback =
+    pressed === null ? INBOX_SHOW.OPEN : pressed ? INBOX_SHOW.NEEDS_YOU : INBOX_SHOW.ALL;
+  return readKept(key, storedShow, fallback);
+}
+
+/** An Inbox's tab, read from `key` (or `earlier`'s press) and kept there as it is pressed. */
+function useKeptShow(key: string, earlier: string): InboxShowChoice {
+  const [show, setShow] = useState<InboxShow>(() => readShow(key, earlier));
   return {
-    waitingOnly,
-    onWaitingOnly: (next) => {
-      setWaitingOnly(next);
-      writeKept(STORAGE_KEY.TASK_INBOX_WAITING_ONLY, storedFlag, next);
+    show,
+    onShow: (next) => {
+      setShow(next);
+      writeKept(key, storedShow, next);
     },
   };
 }
 
-/** The Inbox's view choices, every item grouped by task until first changed, and kept as each is pressed. */
+/** A task's own Inbox's tab, All open until first pressed, kept apart from the window's and shared by every task. */
+export function useTaskInboxShow(): InboxShowChoice {
+  return useKeptShow(STORAGE_KEY.TASK_INBOX_SHOW, STORAGE_KEY.TASK_INBOX_WAITING_ONLY);
+}
+
+/** The Inbox's view choices, All open of everyone's, grouped by task, the latest first, until first changed, and kept as each is pressed. */
 export function useInboxViewChoices(): InboxViewChoices {
-  const [waitingOnly, setWaitingOnly] = useState(() =>
-    readKept(STORAGE_KEY.INBOX_WAITING_ONLY, storedFlag, false),
+  const shown = useKeptShow(STORAGE_KEY.INBOX_SHOW, STORAGE_KEY.INBOX_WAITING_ONLY);
+  const [grouping, onGrouping] = useKeptChoice<InboxGrouping>(
+    STORAGE_KEY.INBOX_GROUPING,
+    storedGrouping,
+    INBOX_GROUPING.TASK,
   );
-  const [grouping, setGrouping] = useState<InboxGrouping>(() =>
-    readKept(STORAGE_KEY.INBOX_GROUPING, storedGrouping, INBOX_GROUPING.TASK),
+  const [sort, onSort] = useKeptChoice<InboxSort>(
+    STORAGE_KEY.INBOX_SORT,
+    storedSort,
+    INBOX_SORT.LATEST,
   );
-  return {
-    waitingOnly,
-    grouping,
-    onWaitingOnly: (next) => {
-      setWaitingOnly(next);
-      writeKept(STORAGE_KEY.INBOX_WAITING_ONLY, storedFlag, next);
-    },
-    onGrouping: (next) => {
-      setGrouping(next);
-      writeKept(STORAGE_KEY.INBOX_GROUPING, storedGrouping, next);
-    },
-  };
+  const [whose, onWhose] = useKeptChoice<InboxWhose>(
+    STORAGE_KEY.INBOX_WHOSE,
+    storedWhose,
+    EVERYONES,
+  );
+  return { ...shown, grouping, onGrouping, sort, onSort, whose, onWhose };
 }
 
 /** A width held within the list's bounds, in whole pixels. */

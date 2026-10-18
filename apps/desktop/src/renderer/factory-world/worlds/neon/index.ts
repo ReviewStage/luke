@@ -1,13 +1,13 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
-import { AGENT_STATE, agentDrawnUnder, type FactoryWorldView } from "@luke/ui/factory-world";
-import { Color, Matrix4, Quaternion, Vector3 } from "three";
 import {
   PICK_KIND,
   type PickKind,
   type PickTarget,
   type WorldModule,
   type WorldState,
-} from "../../world";
+} from "@luke/panel/factory-world/world";
+import { AGENT_STATE, agentDrawnUnder, type FactoryWorldView } from "@luke/ui/factory-world";
+import { Color, Matrix4, Quaternion, Vector3 } from "three";
 import { createWorkers, hologramOf, type WorkerPlacement, type WorkSite } from "./agents";
 import { createCity, paintStreetLight, writeZoneRow } from "./city";
 import { resetZoneState, sharedUniforms, ZONE_ROW, zoneState, zoneTexel } from "./glsl";

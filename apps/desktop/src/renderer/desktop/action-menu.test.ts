@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { CopyIcon } from "lucide-react";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { MenuRow } from "../settings/menu-row";
 import { LinesMenu } from "../tasks/file-menu";
 

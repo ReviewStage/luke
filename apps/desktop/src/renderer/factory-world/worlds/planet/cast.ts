@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget, type WorldPicking } from "@luke/panel/factory-world/world";
 import { AGENT_KIND, AGENT_STATE, type AgentView } from "@luke/ui/factory-world";
 import {
   AdditiveBlending,
@@ -21,7 +22,6 @@ import {
   Vector3,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
 import {
   campSite,
   type PlanetLayout,

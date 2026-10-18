@@ -27,6 +27,13 @@ import {
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { type ActHandle, useAct } from "@luke/panel/act";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { type GitHubConnectControl, useGitHubConnection } from "@luke/panel/github-connect";
+import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "@luke/panel/integration-grant";
+import { type IntegrationStatuses, useIntegrationStatuses } from "@luke/panel/integration-statuses";
+import { useIntegrationTools } from "@luke/panel/integration-tools";
+import { Shortcut } from "@luke/panel/shortcut";
+import { SPINNER_SIZE, SpinnerRing } from "@luke/panel/spinner";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
@@ -61,15 +68,8 @@ import { searchTokens } from "@luke/ui/search-tokens";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { useAppCommand } from "../app-commands";
-import { type GitHubConnectControl, useGitHubConnection } from "../github-connect";
-import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "../integration-grant";
-import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses";
 import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
-import { useIntegrationTools } from "../integration-tools";
 import { focusSearchField, Highlighted } from "../search-field";
-import { Shortcut } from "../shortcut";
-import { SPINNER_SIZE, SpinnerRing } from "../spinner";
 import { commandKeyshortcuts } from "../tooltip";
 import { MenuRow } from "./menu-row";
 

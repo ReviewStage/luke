@@ -10,6 +10,7 @@
  * through to nothing and the command palette leaves it out.
  */
 
+import { useAppCommand } from "@luke/panel/app-commands";
 import {
   ZOOM_ACTUAL_SIZE,
   ZOOM_STEP,
@@ -20,7 +21,6 @@ import {
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useLayoutEffect, useRef } from "react";
-import { useAppCommand } from "./app-commands";
 
 /** The custom property desktop.css divides the traffic lights' width by, since the page zoom does not scale them. */
 const ZOOM_PROPERTY = "--zoom";

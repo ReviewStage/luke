@@ -5,10 +5,10 @@ import {
   type IssuePriority,
   type IssueStatus,
 } from "@luke/features/issue-wire";
+import { Shortcut } from "@luke/panel/shortcut";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import { BUTTON_VARIANT, Button, DIALOG_SIZE, Dialog, ErrorState, TextField } from "@luke/ui";
 import { useRef, useState } from "react";
-import { Shortcut } from "../shortcut";
 import { PriorityMenu, StatusMenu } from "./issue-pickers";
 
 /**

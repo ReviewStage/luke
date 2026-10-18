@@ -1,7 +1,11 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
+import { useAppCommand } from "@luke/panel/app-commands";
+import { DraftMark } from "@luke/panel/draft-mark";
+import { useMemberDirectory } from "@luke/panel/member-directory";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { useReadMarks } from "@luke/panel/tasks/use-task-looks";
 import { useAppState, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -40,11 +44,8 @@ import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { FolderInputIcon } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref";
-import { useAppCommand } from "../app-commands";
 import { usePlanDrafted } from "../composer-drafts";
 import { useCopyToast } from "../copy-feedback";
-import { DraftMark } from "../draft-mark";
-import { useMemberDirectory } from "../member-directory";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref";
 import { lastEditOf } from "../tasks/plan-body";
 import { RelativeTime } from "../tasks/relative-time";
@@ -56,7 +57,6 @@ import {
   taskLinkPlace,
   versionHistoryItem,
 } from "../tasks/task-menu-items";
-import { useReadMarks } from "../tasks/use-task-looks";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";

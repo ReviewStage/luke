@@ -1,5 +1,6 @@
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { useOpenFeedback } from "@luke/panel/open-feedback";
 import type { SettingsWrites } from "@luke/panel/settings/writes";
 import {
   EXPERIMENT,
@@ -23,7 +24,6 @@ import {
   TextButton,
 } from "@luke/ui";
 import { FlaskConicalIcon } from "lucide-react";
-import { useOpenFeedback } from "../open-feedback";
 import { SchemaSettingRows } from "./schema-rows";
 import { SwitchRow } from "./switch-row";
 

@@ -1,3 +1,15 @@
+import { useAppCommand } from "@luke/panel/app-commands";
+import {
+  FIND_SKIP_ATTRIBUTE,
+  type FindPainting,
+  findRanges,
+  matchFrom,
+  NO_PAINTING,
+  repaint,
+  reveal,
+  selectedWords,
+  watchText,
+} from "@luke/panel/find-matches";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { CloseIcon, DisclosureFind, IconButton, SearchField, useDisclosureFinding } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
@@ -12,18 +24,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAppCommand } from "./app-commands";
-import {
-  FIND_SKIP_ATTRIBUTE,
-  type FindPainting,
-  findRanges,
-  matchFrom,
-  NO_PAINTING,
-  repaint,
-  reveal,
-  selectedWords,
-  watchText,
-} from "./find-matches";
 import { Tooltip } from "./tooltip";
 
 /**

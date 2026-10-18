@@ -1,4 +1,11 @@
 import { FACTORY_WORLD_BOUNDS, type FactoryDefect } from "@luke/features/factory-world-wire";
+import {
+  PICK_KIND,
+  type PickTarget,
+  type WorldPalette,
+  type WorldPicking,
+  type WorldPoint,
+} from "@luke/panel/factory-world/world";
 import { ZONE_LAYER } from "@luke/ui/factory-world";
 import {
   AdditiveBlending,
@@ -18,13 +25,6 @@ import {
   ShaderMaterial,
   SphereGeometry,
 } from "three";
-import {
-  PICK_KIND,
-  type PickTarget,
-  type WorldPalette,
-  type WorldPicking,
-  type WorldPoint,
-} from "../../world";
 import { breachAngleOf } from "./architecture";
 import type { ZoneSite } from "./layout";
 import { HUE } from "./materials";

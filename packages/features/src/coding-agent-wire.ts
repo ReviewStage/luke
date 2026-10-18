@@ -399,7 +399,7 @@ function carriesFiles(
 }
 
 /** A Start's words or files: a prompt and its files afresh, never a note; from another agent, whose brief it is handed, no prompt, and a note and its files. */
-const startBrief = EffectSchema.makeFilter(
+export const startBrief = EffectSchema.makeFilter(
   ({
     prompt,
     attachments,

@@ -16,9 +16,9 @@
  * a window wide enough pins it again.
  */
 
+import { PANE_FLOAT, type PaneFloat } from "@luke/panel/desktop/hover-pane";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useState } from "react";
-import { PANE_FLOAT, type PaneFloat } from "./hover-pane";
 
 /** The storage keys the choices are kept under. */
 const SIDEBAR_COLLAPSED_KEY = "luke.sidebar-collapsed";

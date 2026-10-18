@@ -15,15 +15,15 @@ import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { MemberDirectory } from "@luke/panel/member-directory";
+import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { ACTOR_KIND, SOMEONE_REASON } from "@luke/ui/actor-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "#testing/app-bridge";
-import { onRegistry } from "#testing/copy-feedback";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
-import { MemberDirectory } from "../member-directory";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref";
 import {
   agentActor,

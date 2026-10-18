@@ -11,18 +11,18 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import type { Task } from "@luke/features/task-wire";
+import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
+import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
+import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { onRegistry } from "#testing/copy-feedback";
-import { installScrollIntoView } from "#testing/scroll-into-view";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs";
 import type { SidePanelTab } from "../tasks/use-side-panel";
-import { NO_LOOKS } from "../tasks/use-task-looks";
 import { DesktopTasks } from "./desktop-tasks";
 
 /**

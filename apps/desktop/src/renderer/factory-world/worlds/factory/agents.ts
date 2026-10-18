@@ -1,4 +1,5 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import type { WorldPalette } from "@luke/panel/factory-world/world";
 import {
   AGENT_KIND,
   AGENT_STATE,
@@ -23,7 +24,6 @@ import {
   SphereGeometry,
   Vector3,
 } from "three";
-import type { WorldPalette } from "../../world";
 import { hdrMaterial } from "./effects";
 import { clamp, col, ease, lerp, PAL, PRIM, partGeo, rngOf, shade } from "./geo";
 import { keptRight, type Layout, type Lot, Path, roadRoute, type Spot } from "./layout";

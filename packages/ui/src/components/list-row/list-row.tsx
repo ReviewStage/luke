@@ -83,7 +83,18 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), over
  * its metadata's end while the pointer rests on it or it holds the
  * keyboard, the metadata stepping aside as a sidebar row's time does for
- * Pin and Archive.
+ * Pin and Archive. Where its metadata stands at its middle, the acts take
+ * their own room as they come in, so the title is cut where they begin
+ * rather than running under them, and a title cut short there or at rest
+ * fades out over its last few pixels instead of ending in an ellipsis, as a
+ * browser's tab does, so the cut moving as the acts come and go reads as
+ * the fade sliding rather than the words cut again.
+ *
+ * A row may lead its description with what it belongs to (`lead`), a
+ * thread's task, say, in a list grouped by something else: a small chip
+ * of a glyph and a name, cut short at a short name's width, the
+ * description's words following it on the same line, as a mail app tags a
+ * thread with its mailbox.
  *
  * A row may be swiped right to one act (`swipe`), as a mail app's thread
  * is swiped to mark it read: a short swipe leaves it open on the act's
@@ -122,6 +133,12 @@ export interface ListRowSwipe {
   readonly label: string;
   readonly icon: ReactNode;
   readonly onAct: () => void;
+}
+
+/** What a row belongs to, as the chip before its description names it: its glyph and its name. */
+export interface ListRowLead {
+  readonly icon: ReactNode;
+  readonly label: string;
 }
 
 /** What a hint hands the press it wraps: when to show and go, and what it says of the press. */
@@ -171,15 +188,22 @@ function preventFocusMove(event: MouseEvent<HTMLElement>): void {
   event.preventDefault();
 }
 
-/** Tells `onTitleClipped` whether the title is cut short, measuring it only where someone asks. */
+/** A row's title as measured: the ref to hand it, none where nothing measures it, and whether it is cut short. */
+interface TitleClip {
+  readonly ref: RefCallback<HTMLElement> | undefined;
+  readonly clipped: boolean;
+}
+
+/** Whether the title is cut short, told to `onTitleClipped`, measured only where someone asks or the title fades. */
 function useTitleClipped(
   onTitleClipped: ((clipped: boolean) => void) | undefined,
-): RefCallback<HTMLElement> | undefined {
+  fades: boolean,
+): TitleClip {
   const [measured, clipped] = useClipped();
   useEffect(() => {
     onTitleClipped?.(clipped);
   }, [onTitleClipped, clipped]);
-  return onTitleClipped === undefined ? undefined : measured;
+  return { ref: onTitleClipped === undefined && !fades ? undefined : measured, clipped };
 }
 
 /** The act of a row that offers no swipe. */
@@ -214,6 +238,7 @@ export function ListRow({
   leading,
   title,
   description,
+  lead,
   meta,
   metaAt = LIST_ROW_META.MIDDLE,
   actions,
@@ -241,6 +266,8 @@ export function ListRow({
   /** What the row is, which its name opens with. */
   title: ReactNode;
   description?: ReactNode;
+  /** What the row belongs to, drawn as a chip of its glyph and its name before the description, on its line. */
+  lead?: ListRowLead | undefined;
   /** Metadata at the row's end, before its acts ("2h ago", "Owner"). */
   meta?: ReactNode;
   /** Where the metadata stands: at the row's middle, or at the end of the title's line. */
@@ -249,8 +276,8 @@ export function ListRow({
   actions?: ReactNode;
   /** When the acts stand: always, beside the row, or over its metadata's end while the row is hovered or holds the keyboard. */
   actionsAt?: ListRowActions;
-  /** What pressing the row does; a row without one is not a control. */
-  onPress?: (() => void) | undefined;
+  /** What pressing the row does, handed the press, whose modifiers it may read; a row without one is not a control. */
+  onPress?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   /** How the row is the one open now, drawn and announced as current; nothing where it is not. */
   current?: ListRowCurrent | undefined;
   /** Whether what the row stands for has not been seen, its title in the heavier weight. */
@@ -285,9 +312,18 @@ export function ListRow({
   swipe?: ListRowSwipe | undefined;
 }): React.JSX.Element {
   const swiped = useRowSwipe(swipe?.label, swipe?.onAct ?? NO_ACT);
-  const titleRef = useTitleClipped(onTitleClipped);
+  // Note that the acts coming in cut the title back to where they begin, so
+  // it fades there rather than having its ellipsis jump as they come and go.
+  const fades =
+    actionsAt === LIST_ROW_ACTIONS.HOVER && metaAt === LIST_ROW_META.MIDDLE && said(actions);
+  const titleClip = useTitleClipped(onTitleClipped, fades);
   const heading = (
-    <span ref={titleRef} className="luke-list-row-title">
+    <span
+      ref={titleClip.ref}
+      className="luke-list-row-title"
+      data-end={fades ? "fade" : undefined}
+      data-overflow={fades ? String(titleClip.clipped) : undefined}
+    >
       {title}
     </span>
   );
@@ -308,8 +344,18 @@ export function ListRow({
         ) : (
           heading
         )}
-        {said(description) ? (
-          <span className="luke-list-row-description">{description}</span>
+        {said(description) || lead !== undefined ? (
+          <span className="luke-list-row-description">
+            {lead === undefined ? null : (
+              <span className="luke-list-row-lead">
+                <span className="luke-list-row-lead-icon" aria-hidden="true">
+                  {lead.icon}
+                </span>
+                <span className="luke-list-row-lead-label">{lead.label}</span>
+              </span>
+            )}
+            {description}
+          </span>
         ) : null}
       </span>
       {metaAt === LIST_ROW_META.TITLE ? null : metadata}

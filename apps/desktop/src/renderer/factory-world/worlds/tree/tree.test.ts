@@ -6,6 +6,14 @@ import {
   LINEAR_PRIORITY,
 } from "@luke/features/factory-world-wire";
 import {
+  PICK_KIND,
+  type PickKind,
+  type PickTarget,
+  type WorldHost,
+  type WorldLayers,
+  type WorldState,
+} from "@luke/panel/factory-world/world";
+import {
   factoryWorldAsOf,
   factoryWorldViewOf,
   SCENE_GROUND,
@@ -27,14 +35,6 @@ import {
 } from "@luke/ui/testing";
 import { type InstancedMesh, Matrix4, type Object3D, PerspectiveCamera, Scene } from "three";
 import { test } from "vitest";
-import {
-  PICK_KIND,
-  type PickKind,
-  type PickTarget,
-  type WorldHost,
-  type WorldLayers,
-  type WorldState,
-} from "../../world";
 import { world } from "./index";
 
 /**

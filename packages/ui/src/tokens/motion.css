@@ -4,11 +4,14 @@
    `motion-tokens.css` under their `--luke-*` names. Reduced motion zeroes
    them here rather than component by component, keeping hover feedback's
    70ms (a colour settling is not motion), and pauses `--luke-loop-motion`,
-   the play state of a loop with no end of its own (a busy button's ring).
-   The desktop holds the same tokens still on its capture stage. */
+   the play state of a loop with no end of its own (a busy button's ring),
+   and `--luke-face-motion`, the face's: paused, every motion holds its first
+   frame, the resting pose each starts from — head upright, eyes open. The
+   desktop holds the same tokens still on its capture stage. */
 
 :root {
   --luke-loop-motion: running;
+  --luke-face-motion: running;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -18,5 +21,6 @@
     --luke-duration-pane: 1ms;
     --luke-duration-fast: 1ms;
     --luke-loop-motion: paused;
+    --luke-face-motion: paused;
   }
 }

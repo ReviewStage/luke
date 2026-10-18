@@ -1,4 +1,11 @@
 import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
+import {
+  filterFiles,
+  STATUS_LETTER,
+  STATUS_WORDS,
+  startsCollapsed,
+  treeOrder,
+} from "@luke/panel/tasks/changes-model";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import { IconButton } from "@luke/ui";
 import { ChevronRightIcon } from "lucide-react";
@@ -14,13 +21,6 @@ import {
 } from "react";
 import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
-import {
-  filterFiles,
-  STATUS_LETTER,
-  STATUS_WORDS,
-  startsCollapsed,
-  treeOrder,
-} from "./changes-model";
 import type { DiffListDoor } from "./diff-list";
 
 /**

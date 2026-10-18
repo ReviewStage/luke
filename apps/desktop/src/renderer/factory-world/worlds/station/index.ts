@@ -1,6 +1,4 @@
 import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
-import { agentDrawnUnder, type ZoneView } from "@luke/ui/factory-world";
-import { Color, DoubleSide, Group, Mesh, PlaneGeometry, Vector3 } from "three";
 import {
   PICK_KIND,
   type PickKind,
@@ -8,7 +6,9 @@ import {
   type WorldModule,
   type WorldPalette,
   type WorldState,
-} from "../../world";
+} from "@luke/panel/factory-world/world";
+import { agentDrawnUnder, type ZoneView } from "@luke/ui/factory-world";
+import { Color, DoubleSide, Group, Mesh, PlaneGeometry, Vector3 } from "three";
 import { Crew, type CrewPlan } from "./crew";
 import { Damage } from "./damage";
 import { Bursts, Reticle, Sparks, Streaks } from "./effects";

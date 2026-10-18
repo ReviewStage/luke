@@ -18,6 +18,7 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
+import { useGitHubConnection } from "@luke/panel/github-connect";
 import {
   Badge,
   BUTTON_SIZE,
@@ -39,7 +40,6 @@ import {
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { useGitHubConnection } from "../github-connect";
 import { Tooltip } from "../tooltip";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark";
 

@@ -1,12 +1,12 @@
 import { PAGE_SHOWER, type PageLine, type PageShower } from "@luke/features/page-wire";
 import { appPlatform } from "@luke/panel/app-platform";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { useKnownNames } from "@luke/panel/tasks/use-known-names";
 import { HoverCard, HoverCardHead } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
 import { useState } from "react";
 import { PAGE_SANDBOX } from "./page-pane";
 import { RelativeTime } from "./relative-time";
-import { useKnownNames } from "./use-known-names";
 
 /**
  * page-card.tsx -- the card a page of the plan hangs wherever it is named: its tab's, its row's in the plan's summary, and its chip's.

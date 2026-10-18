@@ -1,3 +1,6 @@
+import { Spinner } from "@luke/panel/spinner";
+import { usePrefersReducedMotion } from "@luke/panel/use-reduced-motion";
+import { frameLevel } from "@luke/panel/voice/voice-level-meter";
 import {
   BUTTON_SHAPE,
   BUTTON_VARIANT,
@@ -11,10 +14,7 @@ import {
 } from "@luke/ui";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Spinner } from "../spinner";
 import { Tooltip } from "../tooltip";
-import { usePrefersReducedMotion } from "../use-reduced-motion";
-import { frameLevel } from "../voice/voice-level-meter";
 import { DICTATION_PHASE, type DictationControl } from "./use-dictation";
 
 /**

@@ -15,10 +15,10 @@
  * Call tab is, and the voice is what the developer hears whatever is shown.
  */
 
+import { ThinkingDots } from "@luke/panel/thinking-dots";
 import { Button, IconButton, ResetIcon, VideoIcon, VideoOffIcon, WingFace } from "@luke/ui";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { useCallback, useEffect, useRef } from "react";
-import { ThinkingDots } from "../thinking-dots";
 
 /** What the tile says, for a reader and on screen. */
 export const CALL_VIDEO_LABEL = {

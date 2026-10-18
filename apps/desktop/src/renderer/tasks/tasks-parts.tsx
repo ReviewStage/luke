@@ -1,3 +1,4 @@
+import { ThinkingDots } from "@luke/panel/thinking-dots";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SHAPE,
@@ -11,7 +12,6 @@ import {
   SpeakerOffIcon,
 } from "@luke/ui";
 import type { CallStatus } from "@luke/ui/tasks-model";
-import { ThinkingDots } from "../thinking-dots";
 import { Tooltip } from "../tooltip";
 
 /**

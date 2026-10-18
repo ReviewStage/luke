@@ -1,7 +1,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readBoard, writeScene } from "@luke/database/models/board-store";
 import { childTitlesOf } from "@luke/database/models/child-titles";
-import { listCodingAgents } from "@luke/database/models/coding-agent-store";
+import { listCodingAgents, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readIssue } from "@luke/database/models/issue-store";
 import {
@@ -41,14 +41,18 @@ import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@luke/features/plan-ed
 import {
   planRevisionSeqSchema,
   TASK_BOUNDS,
+  type Task,
+  type TaskAgentStart,
   type TaskAnswer,
   type TaskFileRequest,
+  type TaskStartAnswer,
   taskFileRequestSchema,
 } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Data, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { type EveReach, eveFor, stoppedForGood } from "../agents/coder-host/stop.js";
+import { MAXIMUM_START_BODY_BYTES, startRequestedAgent } from "../agents/coder-host/start.js";
+import { type EveReach, eveFor, stoppedForGood, summaryOf } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   CURSOR_START,
@@ -271,6 +275,9 @@ const ATTACHMENT_QUERY = "attachment";
 /** A start or a change is a name and a repository's name at most, so a body past this is neither. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
 
+/** A start is a change's few fields and, where it names one, an agent's Start beside them. */
+const MAXIMUM_TASK_START_BODY_BYTES = MAXIMUM_NAME_BODY_BYTES + MAXIMUM_START_BODY_BYTES;
+
 /** An edit is the plan's text twice, its base and its value, each at its bound with every character escaped. */
 const MAXIMUM_EDIT_BODY_BYTES = TASK_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
 
@@ -460,7 +467,83 @@ function listsArchived(request: Request): boolean {
   return asked === TASK_LIST_ARCHIVED.INCLUDE;
 }
 
-/** GET lists the account's plans, and beside them the agents with no plan in its workspaces; POST starts one with an empty document, its repository confirmed and its Linear issue and its own issue read first. */
+/**
+ * The task and the agent a start's earlier request made under the agent's
+ * key: a retry after a lost answer is answered with them rather than with a
+ * second task. A key already spent on an agent anywhere else, on another
+ * workspace's task, on no task, or on a task the account no longer reaches,
+ * is no retry of this start, and is refused as invalid with nothing written.
+ */
+const startedBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  idempotencyKey: string,
+  organizationId: string,
+): Effect.fn.Return<Option.Option<TaskStartAnswer>, HostedRefusal, DatabaseServices> {
+  const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, idempotencyKey));
+  if (Option.isNone(made)) return Option.none();
+  const task =
+    made.value.taskId === null
+      ? Option.none()
+      : yield* hostedStoreOrUnavailable(readTask(userId, made.value.taskId));
+  if (Option.isNone(task) || task.value.task.workspaceId !== organizationId) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return Option.some({ plan: task.value.task, agent: yield* summaryOf(userId, made.value) });
+});
+
+/**
+ * The agent the key names on the task, where the Start made one before it
+ * failed: a store write or read after eve took the session failed the
+ * Start, though the agent works on. Nothing where it made none, or where it
+ * could not be read either.
+ */
+const agentMadeOn = (userId: string, taskId: string, idempotencyKey: string) =>
+  Effect.gen(function* () {
+    const made = yield* readCodingAgentByKey(userId, idempotencyKey);
+    if (Option.isNone(made) || made.value.taskId !== taskId) return Option.none();
+    return Option.some(yield* summaryOf(userId, made.value));
+  }).pipe(Effect.orElseSucceed(() => Option.none()));
+
+/**
+ * The agent a start asks for, started on the task it just made through the
+ * agent's own Start (`startRequestedAgent`), reaching eve as the developer;
+ * a refusal is answered beside the task rather than in its place, since the
+ * task stands either way and the developer's words are theirs to try again.
+ * A Start that failed after its agent was made answers that agent, since it
+ * works all the same.
+ */
+const startedAgentOn = (
+  seams: TasksAppSeams,
+  request: Request,
+  userId: string,
+  task: Task,
+  agent: TaskAgentStart,
+): Effect.Effect<TaskStartAnswer, never, TasksServices> =>
+  startRequestedAgent(eveFor(seams, request), userId, task.id, agent).pipe(
+    Effect.map((started): TaskStartAnswer => ({ plan: task, agent: started.agent })),
+    Effect.catch((refusal) =>
+      Effect.gen(function* () {
+        const made = yield* agentMadeOn(userId, task.id, agent.idempotencyKey);
+        if (Option.isSome(made)) return { plan: task, agent: made.value } satisfies TaskStartAnswer;
+        yield* Effect.logWarning(
+          `the agent a task's start asked for was refused: ${refusal.error}`,
+        );
+        return { plan: task, agentRefusal: { error: refusal.error } } satisfies TaskStartAnswer;
+      }),
+    ),
+  );
+
+/**
+ * GET lists the account's plans, and beside them the agents with no plan in
+ * its workspaces; POST starts one with an empty document, its repository
+ * confirmed and its Linear issue and its own issue read first, and, where it
+ * names an agent, starts that agent on it: a start naming an agent and no
+ * repository is refused as an agent's Start on such a task is, and one
+ * carrying no bearer, which the agent's session is opened over, as
+ * unauthenticated, both before anything is written; one whose agent's key
+ * already started an agent in the workspace answers that agent's task and
+ * the agent (`startedBefore`).
+ */
 const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoint")(function* (
   seams: TasksAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -485,10 +568,23 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
       planlessAgents: tasklessAgents,
     });
   }
-  const body = yield* readJsonBodyEffect(MAXIMUM_NAME_BODY_BYTES);
+  const body = yield* readJsonBodyEffect(MAXIMUM_TASK_START_BODY_BYTES);
   const started = readEither(taskCreateRequestSchema)(body);
   if (Result.isFailure(started)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { agent } = started.success;
+  if (agent !== undefined) {
+    // Note that the agent's session is opened over the developer's bearer, so a cookie's start is refused before anything is written.
+    yield* hostedBearerOnly(request);
+    if (started.success.repository === undefined || started.success.repository === null) {
+      return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+    }
+  }
   const organizationId = yield* startingWorkspace(seams, userId, started.success.workspaceId);
+  const before =
+    agent === undefined
+      ? Option.none()
+      : yield* startedBefore(userId, agent.idempotencyKey, organizationId);
+  if (Option.isSome(before)) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, before.value);
   const repository = yield* reachableRepository(
     Effect.succeed(organizationId),
     started.success.repository,
@@ -501,6 +597,8 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
     started.success.issueId === undefined
       ? undefined
       : yield* startingIssue(userId, organizationId, started.success.issueId);
+  // An agent is the start, so its task opens with no planning phase.
+  const planning = agent === undefined ? started.success.planning : false;
   const task = yield* hostedStoreOrUnavailable(
     createTask(userId, {
       organizationId,
@@ -508,12 +606,14 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
       repository,
       ...(issue === undefined ? undefined : { linearIssue: issue }),
       ...(issueId === undefined ? undefined : { issueId }),
-      ...(started.success.planning === undefined
-        ? undefined
-        : { planning: started.success.planning }),
+      ...(planning === undefined ? undefined : { planning }),
     }),
   );
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { plan: task } satisfies TaskAnswer);
+  const answer: TaskStartAnswer =
+    agent === undefined
+      ? { plan: task }
+      : yield* startedAgentOn(seams, request, userId, task, agent);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, answer);
 });
 
 /**

@@ -4,6 +4,7 @@ import {
   LINEAR_PRIORITY,
   type LinearPriority,
 } from "@luke/features/factory-world-wire";
+import { PICK_KIND, type PickTarget, type WorldPicking } from "@luke/panel/factory-world/world";
 import {
   AdditiveBlending,
   Color,
@@ -13,7 +14,6 @@ import {
   type Scene,
   Vector3,
 } from "three";
-import { PICK_KIND, type PickTarget, type WorldPicking } from "../../world";
 import { CITY, type CityLayout, DISTRICT_KIND, type District, SURVEY_BAND } from "./city";
 import { bendableTube, clamp, GLSL_BEND, geodesicDome, instancedAttribute } from "./geometry";
 import { DOME_MODE, domeLookOf, domesOf } from "./glass";

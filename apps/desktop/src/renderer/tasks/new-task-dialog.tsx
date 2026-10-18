@@ -1,42 +1,33 @@
-import { useAtom } from "@effect/atom-react";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { rendererRuntime } from "@luke/panel/renderer-runtime";
-import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
+import { WorkspaceTile } from "@luke/panel/desktop/workspace-tile";
+import { Shortcut } from "@luke/panel/shortcut";
+import { useNewTaskPlanning } from "@luke/panel/tasks/new-task-planning";
+import {
+  SHORTCUT_KEY,
+  type ShortcutChord,
+  shortcutAria,
+  shortcutMatches,
+} from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   Button,
   CHIP_WIDTH,
-  Combobox,
-  ComposeIcon,
   DIALOG_SIZE,
   Dialog,
   ErrorState,
-  ProviderMark,
   Switch,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
+  TextField,
 } from "@luke/ui";
-import { searchTokens } from "@luke/ui/search-tokens";
-import {
-  type LinearIssuesAsk,
-  linearIssuesAskOf,
-  offeredIssues,
-  taskNameOfIssue,
-  workspaceReaches,
-} from "@luke/ui/tasks-model";
-import { Duration, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useEffect, useId, useRef, useState } from "react";
-import { WorkspaceTile } from "../desktop/workspace-tile";
-import { Highlighted } from "../search-field";
+import { taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
+import { useId, useRef, useState } from "react";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row";
-import { Shortcut } from "../shortcut";
 import { Tooltip } from "../tooltip";
-import { useNewTaskPlanning } from "./new-task-planning";
+import { LINEAR_CHORD, LinearIssueChip } from "./linear-issue-chip";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import type { TasksControl } from "./use-tasks-tab";
 
@@ -72,63 +63,51 @@ import type { TasksControl } from "./use-tasks-tab";
  * rather than the template, and no call. The switch is kept as it was left
  * for the next New task (`new-task-planning.ts`).
  *
- * Where the workspace the task starts in has Linear connected, the name
- * field is also the search over its issues, read as the card opens and
- * again on a switch of workspace. As soon as anything is typed, the issues
- * whose title or key holds every word stand under the field, and once the
- * typing rests Linear itself is searched for the words, so an issue older
- * than those read is found too;
- * a key typed whole or a link to an issue pasted asks Linear for that one
- * issue instead. They stand nearest first, the top one highlighted, and the
- * arrows move the highlight on through them to the last row, which creates
- * the task under the name as typed.
- * Return, or Create, does what the highlight says: an issue starts its task
- * at once, named by its title, on the repository, in the workspace, and with
- * the planning the card shows, and Luke is handed the issue to research.
- * Command-Return creates the task under the name as typed whatever is
- * highlighted, and Escape puts the issues away before it puts the card away.
- * The field and its issues are `@luke/ui`'s `Combobox`, which reads those
- * keys; with no issues standing, Return creates the task with any modifier
- * held, since the name has no second line to begin.
- * With no issue matching, or no Linear connected, or its issues not read,
- * the field is the plain name it always was.
+ * The name field is only ever the name: typing in it searches nothing.
+ * Where the workspace the task starts in has Linear connected, a Linear
+ * chip stands after the repository chip in the card's foot
+ * (`linear-issue-chip.tsx`), and a press on it, or ⌘L from the card, opens
+ * a search over that workspace's issues, read as the card opens and again
+ * on a switch of workspace, which closes the search. With nothing typed it
+ * lists the issues read; typing narrows them at once, and once the typing
+ * rests Linear itself is searched, so an issue older than those read is
+ * found too, and a key or a link to an issue pasted asks Linear for that one
+ * issue. The arrows move through them, Return chooses, and Escape closes the
+ * search and leaves the card. Choosing an issue starts its task at once,
+ * named by its title, on the repository, in the workspace, and with the
+ * planning the card shows, and Luke is handed the issue to research.
  *
  * Opened from one of the workspace's own issues (its Start task…), the card
  * says so in its title, its name starts as the issue's title, it starts in
- * the issue's workspace and no other, and its name searches no Linear; the
+ * the issue's workspace and no other, and it offers no Linear chip; the
  * task it starts is linked to that issue, which the issue's page lists it
- * under.
+ * under. Opened from the issue's Start agent…, the card is a new agent's:
+ * it offers no Plan switch, since the task starts without its planning
+ * phase, asks for a repository for the agent to work in, and its Start
+ * agent starts the task and an agent on it at once, which opens on its tab.
  */
 
 /** Create task's chord: Return alone, from the name field. */
 const CREATE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER, bare: true };
 
-/** The chord that creates the task under the name as typed while Linear's issues stand under the field. */
-const TYPED_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
+/** What the name field says before anything is typed. */
+const NAME_PLACEHOLDER = "Task name (optional)";
 
-/** The key of the last option under the field, which creates the task under the name as typed. */
-const TYPED_OPTION = "typed";
-
-/** What the name field says before anything is typed, by whether it also searches Linear. */
-const NAME_PLACEHOLDER = {
-  PLAIN: "Task name (optional)",
-  LINEAR: "Task name, or search Linear issues",
-} as const;
-
-/** The card's title, before the workspace's chip: the issue it starts from where there is one, and "in" where the chip stands after it. */
-function newTaskHeading(issue: string | undefined, inWorkspace: boolean): string {
-  const heading = issue === undefined ? "New task" : `New task from ${issue}`;
+/** The card's title, before the workspace's chip: an agent's where one starts at once, the issue it starts from where there is one, and "in" where the chip stands after it. */
+function newTaskHeading(issue: string | undefined, inWorkspace: boolean, agent: boolean): string {
+  const what = agent ? "New agent" : "New task";
+  const heading = issue === undefined ? what : `${what} from ${issue}`;
   return inWorkspace ? `${heading} in` : heading;
 }
+
+/** What the card says where an agent is asked to start with no repository chosen for it to work in. */
+const AGENT_NEEDS_REPOSITORY = "Choose a repository for the agent to work in.";
 
 /** What the Plan switch's description says the start will do, by its state. */
 const PLANNING_NOTE = {
   ON: "Starts from your plan template and opens a call with Luke.",
   OFF: "Starts with an empty plan and no call.",
 } as const;
-
-/** How long the typing rests before Linear is searched for the name as typed. */
-const SEARCH_PAUSE = Duration.millis(250);
 
 /** What the workspace picker's menu says where no workspace matches; its list is short enough to read whole, so it is never searched. */
 const NO_WORKSPACE_MATCH = "No workspaces match";
@@ -172,94 +151,6 @@ function WorkspaceChip({
 }
 
 /**
- * The Linear issues of the workspace the task starts in, read as the card
- * opens and again for another workspace; none while they are read, where
- * that workspace has no Linear connected, or where the read was refused,
- * which leaves the name a plain field rather than a search that failed.
- */
-function useLinearIssues(
-  readIn: TasksControl["newTask"]["linearIssuesIn"],
-  workspaceId: string | undefined,
-): readonly LinearIssueSummary[] {
-  const [issues, setIssues] = useState<readonly LinearIssueSummary[]>([]);
-  // Note that the reader is held through a ref, because the tab hands a new
-  // one on every render and a read is owed to a workspace, not a render.
-  const latest = useRef(readIn);
-  latest.current = readIn;
-  const connected = readIn(workspaceId) !== undefined;
-  useEffect(() => {
-    setIssues([]);
-    const reading = connected ? latest.current(workspaceId) : undefined;
-    if (reading === undefined) return;
-    let current = true;
-    reading().then(
-      (listed) => {
-        if (current) setIssues(listed);
-      },
-      () => undefined,
-    );
-    return () => {
-      current = false;
-    };
-  }, [connected, workspaceId]);
-  return issues;
-}
-
-/** One search of a workspace's Linear for the name as typed, and the read that asks it. */
-interface IssueSearch {
-  readonly workspaceId: string | undefined;
-  readonly typed: string;
-  readonly ask: LinearIssuesAsk;
-  readonly read: (ask: LinearIssuesAsk) => Promise<readonly LinearIssueSummary[]>;
-}
-
-/** What one search found, and the workspace and the name it was for. */
-interface IssueSearchAnswer {
-  readonly workspaceId: string | undefined;
-  readonly typed: string;
-  readonly issues: readonly LinearIssueSummary[];
-}
-
-/**
- * A search once the typing has rested, as an atom whose work is the wait and
- * then the read: setting it again starts the wait over and lets go of the
- * read still out, so only the newest name is answered. A refused read
- * finds nothing.
- */
-const issueSearchAtom = () =>
-  rendererRuntime.fn((search: IssueSearch) =>
-    Effect.gen(function* () {
-      yield* Effect.sleep(SEARCH_PAUSE);
-      const issues = yield* Effect.tryPromise(() => search.read(search.ask)).pipe(
-        Effect.orElseSucceed((): readonly LinearIssueSummary[] => []),
-      );
-      return { workspaceId: search.workspaceId, typed: search.typed, issues };
-    }),
-  );
-
-/**
- * Linear searched for the name as typed in the workspace given, once the
- * typing rests: the last answer, whichever name and workspace it was for,
- * and the search to ask as the name or the workspace changes.
- */
-function useLinearSearch(
-  readIn: TasksControl["newTask"]["linearIssuesIn"],
-): readonly [
-  IssueSearchAnswer | undefined,
-  (typed: string, workspaceId: string | undefined) => void,
-] {
-  const [atom] = useState(issueSearchAtom);
-  const [answer, search] = useAtom(atom);
-  const ask = (typed: string, workspaceId: string | undefined) => {
-    const read = readIn(workspaceId);
-    const asked = linearIssuesAskOf(typed);
-    if (read === undefined || asked === undefined) return;
-    search({ workspaceId, typed: typed.trim(), ask: asked, read });
-  };
-  return [AsyncResult.isSuccess(answer) ? answer.value : undefined, ask];
-}
-
-/**
  * The card with its own state, mounted afresh on each opening so a
  * cancelled name is never offered again: the name, the repository chosen
  * over the press's or the last one used, and the start under way. The
@@ -269,11 +160,13 @@ function useLinearSearch(
 function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.JSX.Element {
   // The workspace's own issue the task starts from, where the card was opened on one: it names the task, and its workspace is the one the task starts in.
   const from = newTask.preset?.issue;
+  // Whether an agent starts on the task at once, without its planning phase: what an issue's Start agent… asks.
+  const agent = newTask.preset?.agent === true;
   const [name, setName] = useState(from?.title ?? "");
   const [chosen, setChosen] = useState<string | null | undefined>(newTask.preset?.repository);
   // The workspace the task starts in: the one listed, or the issue's, until the title's chip chooses another.
   const [workspaceId, setWorkspaceId] = useState(from?.workspaceId ?? newTask.workspaceId);
-  // Note that a task from one of the workspace's issues starts from that issue alone, so its name searches no Linear.
+  // Note that a task from one of the workspace's issues starts from that issue alone, so it offers no Linear chip.
   const linearIssuesIn: TasksControl["newTask"]["linearIssuesIn"] =
     from === undefined ? newTask.linearIssuesIn : () => undefined;
   const startsIn = workspaceId ?? newTask.workspaceId;
@@ -291,23 +184,8 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
   const searchesLinear = linearIssuesIn(startsIn) !== undefined;
-  const issues = useLinearIssues(linearIssuesIn, startsIn);
-  const [searched, searchLinear] = useLinearSearch(linearIssuesIn);
-  // What Linear found for the name as it now stands is offered whatever it
-  // holds; what it found for an earlier name stands with the issues read,
-  // offered only where it holds the words, until the newer search answers.
-  const answered = searched?.workspaceId === startsIn ? searched : undefined;
-  const current = answered !== undefined && answered.typed === name.trim();
-  const found = current ? answered.issues : [];
-  const known = current || answered === undefined ? issues : [...issues, ...answered.issues];
-  // The row the arrows stand on among the issues and, after them, the name as typed; and whether Escape put the issues away until the next keystroke.
-  const [highlight, setHighlight] = useState(0);
-  const [dismissed, setDismissed] = useState(false);
-  const matches = dismissed ? [] : offeredIssues(known, name, found);
-  const matching = matches.length > 0;
-  const at = Math.min(highlight, matches.length);
-  const picked = matching ? matches[at] : undefined;
-  const tokens = searchTokens(name);
+  // How many times ⌘L asked the Linear chip to open its menu.
+  const [linearAsks, setLinearAsks] = useState(0);
   const field = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const planningId = useId();
@@ -324,20 +202,32 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
 
   const begin = (taskName: string, issue?: LinearIssueSummary) => {
     if (!canStart) return;
+    // Note that an agent works in a repository, so one asked to start with none is not asked for.
+    if (agent && repository === null) {
+      setNote(AGENT_NEEDS_REPOSITORY);
+      return;
+    }
     setStarting(true);
     setNote(undefined);
     newTask
-      .start(taskName, repository, startsIn, planning, {
+      .start(taskName, repository, startsIn, agent ? false : planning, {
         ...(issue === undefined ? undefined : { linearIssueId: issue.id }),
         ...(from === undefined ? undefined : { issueId: from.id }),
+        ...(agent ? { agent } : undefined),
       })
       .then(setNote)
       .finally(() => setStarting(false));
   };
-  const startTyped = () => begin(name.trim());
+  const start = () => begin(name.trim());
   const startIssue = (issue: LinearIssueSummary) => begin(taskNameOfIssue(issue), issue);
-  // Create does what Return does: the highlighted issue, else the name as typed.
-  const start = () => (picked === undefined ? startTyped() : startIssue(picked));
+  // ⌘L from the card opens the Linear chip's menu, where the chip stands.
+  const onCardKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // Note that a key an input method is composing with is its own, Safari's last one (229) among them.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+    if (!searchesLinear || starting || !shortcutMatches(LINEAR_CHORD, event)) return;
+    event.preventDefault();
+    setLinearAsks((asks) => asks + 1);
+  };
   const close = () => {
     if (!starting) newTask.onClose();
   };
@@ -350,92 +240,54 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
       initialFocus={field}
       onDismiss={close}
     >
-      <div className="new-task ph-no-capture">
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: ⌘L is read as it bubbles from the card's own controls, the name field first, which are what take the keys. */}
+      <div className="new-task ph-no-capture" onKeyDown={onCardKey}>
         <div className="new-task-head">
           <div className="new-task-title">
             <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
-              {newTaskHeading(from?.identifier, startsIn !== undefined)}
+              {newTaskHeading(from?.identifier, startsIn !== undefined, agent)}
             </Text>
             <WorkspaceChip
               workspaces={newTask.workspaces}
               chosen={startsIn}
               disabled={starting || from !== undefined}
-              onChoose={(chosenId) => {
-                setWorkspaceId(chosenId);
-                setHighlight(0);
-                setDismissed(false);
-                searchLinear(name, chosenId);
-              }}
+              onChoose={setWorkspaceId}
             />
           </div>
-          {/* Note that the word labels the switch, so a press on it turns the switch too. */}
-          <Tooltip label={planningNote}>
-            <span className="new-task-planning">
-              <label htmlFor={planningId}>Plan</label>
-              <Switch
-                id={planningId}
-                checked={planning}
-                label="Plan with Luke"
-                describedBy={planningNoteId}
-                disabled={starting}
-                onChange={setPlanning}
-              />
-              <span id={planningNoteId} hidden>
-                {planningNote}
-              </span>
-            </span>
-          </Tooltip>
+          {/* Note that an agent started at once starts without planning, so its card offers no Plan switch. */}
+          {agent ? null : (
+            <>
+              {/* Note that the word labels the switch, so a press on it turns the switch too. */}
+              <Tooltip label={planningNote}>
+                <span className="new-task-planning">
+                  <label htmlFor={planningId}>Plan</label>
+                  <Switch
+                    id={planningId}
+                    checked={planning}
+                    label="Plan with Luke"
+                    describedBy={planningNoteId}
+                    disabled={starting}
+                    onChange={setPlanning}
+                  />
+                  <span id={planningNoteId} hidden>
+                    {planningNote}
+                  </span>
+                </span>
+              </Tooltip>
+            </>
+          )}
         </div>
-        <Combobox
+        <TextField
           ref={field}
           label="Task name"
-          listLabel="Linear issues"
           keyShortcuts={shortcutAria(CREATE_CHORD)}
-          placeholder={searchesLinear ? NAME_PLACEHOLDER.LINEAR : NAME_PLACEHOLDER.PLAIN}
+          placeholder={NAME_PLACEHOLDER}
           maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
           spellCheck
           value={name}
           disabled={starting}
-          onChange={(typed) => {
-            setName(typed);
-            setHighlight(0);
-            setDismissed(false);
-            searchLinear(typed, startsIn);
-          }}
-          groups={[
-            {
-              label: "Linear issues",
-              options: matches.map((issue) => ({
-                id: issue.id,
-                label: <Highlighted text={issue.title} tokens={tokens} />,
-                icon: <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />,
-                detail:
-                  issue.state === undefined
-                    ? issue.identifier
-                    : `${issue.identifier} · ${issue.state}`,
-              })),
-            },
-            {
-              options: [
-                {
-                  id: TYPED_OPTION,
-                  label: `Create task “${name.trim()}”`,
-                  icon: <ComposeIcon />,
-                  hint: <Shortcut chord={TYPED_CHORD} />,
-                },
-              ],
-            },
-          ]}
-          open={matching}
-          active={at}
-          onActiveChange={setHighlight}
-          onChoose={(index) => {
-            const issue = matches[index];
-            if (issue === undefined) startTyped();
-            else startIssue(issue);
-          }}
-          onEnter={startTyped}
-          onEscape={() => setDismissed(true)}
+          onChange={setName}
+          onEnter={start}
         />
         {note === undefined ? null : <ErrorState>{note}</ErrorState>}
         <div className="new-task-actions">
@@ -449,6 +301,13 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
             onChoose={setChosen}
             onUnreached={() => setChosen(null)}
           />
+          <LinearIssueChip
+            readIn={linearIssuesIn}
+            workspaceId={startsIn}
+            disabled={starting}
+            openRequest={linearAsks}
+            onChoose={startIssue}
+          />
           <div className="new-task-answers">
             <Button disabled={starting} onClick={close}>
               Cancel
@@ -457,10 +316,10 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
               variant={BUTTON_VARIANT.PRIMARY}
               aria-keyshortcuts={shortcutAria(CREATE_CHORD)}
               busy={starting}
-              busyLabel={picked === undefined ? "Creating" : "Starting"}
+              busyLabel={agent ? "Starting" : "Creating"}
               onClick={start}
             >
-              {picked === undefined ? "Create task" : `Start ${picked.identifier}`}
+              {agent ? "Start agent" : "Create task"}
               <Shortcut chord={CREATE_CHORD} />
             </Button>
           </div>

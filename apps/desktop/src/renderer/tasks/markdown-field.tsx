@@ -1,7 +1,7 @@
 import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
+import { Segmented } from "@luke/panel/segmented";
 import { TextArea } from "@luke/ui";
 import { type Ref, useState } from "react";
-import { Segmented } from "../segmented";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**

@@ -3,9 +3,10 @@ import { useAppState, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { Select, type SelectOption } from "@luke/ui";
 import * as Atom from "effect/reactivity/Atom";
-import { SquareKanbanIcon } from "lucide-react";
+import { Building2Icon, SquareKanbanIcon } from "lucide-react";
 import {
   FACTORY_BOARD,
+  FACTORY_CAMPUS,
   type FactoryChoice,
   type WorldEntry,
   type WorldKey,
@@ -13,14 +14,14 @@ import {
 } from "./registry";
 
 /**
- * world-picker.tsx -- the Factory toolbar's pop-up of what the page shows: the board first, as it always was, then each world the build offers.
+ * world-picker.tsx -- the Factory toolbar's pop-up of what the page shows: the board first, as it always was, then the campus, then each world the build offers.
  *
  * The choice is the window's, held for the session and never stored: the
  * board is what every launch opens on, and a world chosen stands until
  * another is, Factory closing and opening again between. It is Factory's
- * experiment (`EXPERIMENT.FACTORY`) like the page itself, and with no world
- * offered, as a packaged app has until one is registered, the picker does
- * not stand at all and the page is the board alone.
+ * experiment (`EXPERIMENT.FACTORY`) like the page itself: while it is off,
+ * nothing is offered, the picker does not stand at all, and the page is the
+ * board alone.
  */
 
 /** What the page shows, kept for the window's session. */
@@ -33,11 +34,20 @@ const BOARD_OPTION: SelectOption<FactoryChoice> = {
   icon: <SquareKanbanIcon />,
 };
 
+/** The campus's entry, after the board's. */
+const CAMPUS_OPTION: SelectOption<FactoryChoice> = {
+  value: FACTORY_CAMPUS,
+  label: "Campus",
+  icon: <Building2Icon />,
+};
+
 /** What the page offers and shows: the worlds it may choose among, the one chosen, and the choosing. */
 export interface FactoryWorlds {
   readonly offered: readonly (WorldEntry & { readonly key: WorldKey })[];
-  /** The world shown; none where the board is. */
+  /** The world shown; none where the board or the campus is. */
   readonly chosen: WorldEntry | undefined;
+  /** Whether the campus is shown. */
+  readonly campus: boolean;
   readonly choice: FactoryChoice;
   readonly choose: (choice: FactoryChoice) => void;
 }
@@ -50,13 +60,16 @@ export function useFactoryWorlds(): FactoryWorlds {
   const [held, choose] = useAtom(choiceAtom);
   const offered = factoryOn ? worldsOffered(packaged) : [];
   const chosen = offered.find((entry) => entry.key === held);
-  return { offered, chosen, choice: chosen === undefined ? FACTORY_BOARD : held, choose };
+  const campus = factoryOn && held === FACTORY_CAMPUS;
+  const choice = chosen !== undefined || campus ? held : FACTORY_BOARD;
+  return { offered, chosen, campus, choice, choose };
 }
 
 /** The pop-up in Factory's toolbar. */
 export function WorldPicker({ worlds }: { worlds: FactoryWorlds }): React.JSX.Element {
   const options: SelectOption<FactoryChoice>[] = [
     BOARD_OPTION,
+    CAMPUS_OPTION,
     ...worlds.offered.map(({ key, name, icon: Icon }) => ({
       value: key,
       label: name,
