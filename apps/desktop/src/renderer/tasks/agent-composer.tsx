@@ -154,10 +154,11 @@ import type { AgentModelControl } from "./use-agent-model";
  * alone; then a ⋯ takes in, in this order, the Changes chip, the MCP
  * servers, the context ring, and the microphone; then the model chip draws
  * its harness's mark alone; and last the + goes into the ⋯ too. The field
- * and the round Send or Stop always stand whole. The ⋯ offers what the
- * stylesheet hid as it opens, read off the foot itself, so the stylesheet
- * is the one place the order is kept; a popover it opens hangs at the
- * foot's right, where its own hidden press stood.
+ * and the round Send or Stop always stand whole. The chips drawing their
+ * marks alone are `FOLD_WIDTH`'s, read off the card's width here; what the
+ * ⋯ takes in is the stylesheet's, which it offers as it opens, read off the
+ * foot itself; a popover it opens hangs at the foot's right, where its own
+ * hidden press stood.
  */
 
 /** What the box's note says while the editor bundle could not be loaded. */
@@ -176,6 +177,17 @@ const BUTTON = {
   STOPPING: "Stopping…",
   ATTACH: "Attach files",
   MORE: "More",
+} as const;
+
+/**
+ * The card widths below which a chip draws its mark alone: the published
+ * chips first, then the model chip. Note that they are steps of the same
+ * order as the stylesheet's (tasks.css's `composer` queries, at 400 and 240),
+ * because the room each leaves is counted on the steps before it.
+ */
+const FOLD_WIDTH = {
+  PUBLISHED: 520,
+  MODEL: 300,
 } as const;
 
 /** The presses a narrow card's ⋯ takes in, by the class each wears on the foot. */
@@ -207,6 +219,32 @@ function hiddenPresses(foot: HTMLElement | null): readonly OverflowPress[] {
     const element = foot.querySelector(`.${press}`);
     return element !== null && getComputedStyle(element).display === "none";
   });
+}
+
+/**
+ * The width the card's form lays its foot out in, the box the stylesheet's
+ * `composer` queries read, followed as it resizes; nothing before it was
+ * laid out, which draws every chip whole.
+ */
+function useFootWidth(card: RefObject<HTMLDivElement | null>): number | undefined {
+  const [width, setWidth] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const form = card.current?.querySelector("form");
+    if (form === null || form === undefined) return undefined;
+    const measure = () => {
+      const style = getComputedStyle(form);
+      const inner =
+        form.clientWidth -
+        Number.parseFloat(style.paddingLeft) -
+        Number.parseFloat(style.paddingRight);
+      setWidth(inner > 0 ? inner : undefined);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(form);
+    return () => observer.disconnect();
+  }, [card]);
+  return width;
 }
 
 /**
@@ -322,6 +360,8 @@ export function AgentComposer({
   const room = useRef<HTMLDivElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const foot = useRef<HTMLDivElement>(null);
+  const footWidth = useFootWidth(card);
+  const folds = (below: number) => footWidth !== undefined && footWidth < below;
   // The popovers the ⋯ may open in place of their hidden presses.
   const [serversOpen, setServersOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
@@ -635,8 +675,16 @@ export function AgentComposer({
                     attach(picked);
                   }}
                 />
-                <PublishedChip published={published} doors={doors} />
-                <ChangesChip published={published} doors={doors} />
+                <PublishedChip
+                  published={published}
+                  doors={doors}
+                  narrow={folds(FOLD_WIDTH.PUBLISHED)}
+                />
+                <ChangesChip
+                  published={published}
+                  doors={doors}
+                  narrow={folds(FOLD_WIDTH.PUBLISHED)}
+                />
               </PromptInputTools>
               <div className="agent-composer-actions">
                 {model === undefined ? null : (
@@ -645,6 +693,7 @@ export function AgentComposer({
                     models={models}
                     readModels={readModels}
                     usage={usage}
+                    narrow={folds(FOLD_WIDTH.MODEL)}
                   />
                 )}
                 <AgentServersButton

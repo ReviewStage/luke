@@ -1,6 +1,14 @@
 import type { CodingAgentUsage } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { AnchoredPopover, CHIP_LOOK, Chip, type ChipLook, ChipName, POPOVER_ALIGN } from "@luke/ui";
+import {
+  AnchoredPopover,
+  CHIP_LOOK,
+  Chip,
+  type ChipLook,
+  ChipName,
+  type ChipWidth,
+  POPOVER_ALIGN,
+} from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { HarnessMark } from "../harness-marks";
@@ -32,9 +40,9 @@ import type { AgentModelControl } from "./use-agent-model";
  * says what the agent has cost so far, tokens and dollars, once a turn has
  * settled. The menu closes on a pick, on Escape, and on
  * focus leaving it; Escape stops there, so it closes the menu and not the
- * panel behind it. The chip also carries its harness's mark, which a
- * composer too narrow for the words draws in their place, so the choice
- * is named by the chip's label and its tooltip rather than by its words.
+ * panel behind it. A composer too narrow for the words has the chip draw
+ * its harness's mark in their place (`iconOnly`), so the choice is named by
+ * the chip's label and its tooltip rather than by its words.
  */
 
 export function AgentModelChip({
@@ -43,6 +51,8 @@ export function AgentModelChip({
   readModels,
   usage,
   look = CHIP_LOOK.TOOLBAR,
+  width,
+  narrow = false,
 }: {
   model: AgentModelControl;
   /** The catalog as last read; nothing before the first read lands. */
@@ -53,6 +63,10 @@ export function AgentModelChip({
   usage: CodingAgentUsage | undefined;
   /** The chip's look: the agent box's toolbar chip, or a form row's field (`@luke/ui`'s `Chip`). */
   look?: ChipLook;
+  /** How wide the chip stands; its words' own width where none is named. */
+  width?: ChipWidth | undefined;
+  /** Whether its place is too narrow for the words, so a chip whose harness has a mark draws that alone. */
+  narrow?: boolean;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -84,6 +98,8 @@ export function AgentModelChip({
         <Chip
           ref={trigger}
           look={look}
+          width={width}
+          iconOnly={narrow && provider !== undefined}
           chevron
           aria-label={label}
           aria-haspopup="dialog"
@@ -91,7 +107,7 @@ export function AgentModelChip({
           aria-controls={open ? menuId : undefined}
           onClick={() => setOpen(!open)}
         >
-          {provider === undefined ? null : <HarnessMark provider={provider} />}
+          {narrow && provider !== undefined ? <HarnessMark provider={provider} /> : null}
           <ChipName>
             <ModelLabel choice={model.choice} models={models ?? []} />
           </ChipName>
