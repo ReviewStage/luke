@@ -634,9 +634,12 @@ pnpm --silent --filter @luke/database check:renames
 # `--space-*`, `--focus-ring-width`, …) went on reading names nobody set. So
 # every such read in a tracked sheet, page, or script under apps/ and packages/
 # must name a property one of them declares: a sheet's `--name:` or
-# `@property --name`, or a script's `"--name"` literal (`setProperty`, a style
-# object's key, a constant), where a `--name-${…}` template declares the whole
-# family. A name only a third-party stylesheet sets is listed here by hand.
+# `@property --name`, or a script's write of it (CSS text in a string, a style
+# object's `"--name":` key, a `["--name"] =`, or `setProperty`'s first
+# argument, spelled or held in a constant), where a `--name-${…}` declaration
+# declares the whole family. A script that only reads a name, through
+# `getPropertyValue`, declares nothing. A name only a third-party stylesheet
+# sets is listed here by hand.
 # Note that the declarations are pooled across every app, so a name one profile
 # sets and another reads unset still passes; the check catches a name gone
 # everywhere, which is what a retired token is.
@@ -649,6 +652,19 @@ node --input-type=module -e '
   // Set by the stylesheet Excalidraw ships, which the board imports.
   const THIRD_PARTY = ["--default-button-size"];
   const SCRIPT = /\.tsx?$/;
+  const NAME = "(--[\\w-]+)";
+  const QUOTED = `["\x27\x60]${NAME}["\x27\x60]`;
+  // What a script writes a property with, the name always the first group.
+  const SCRIPT_WRITES = [
+    new RegExp(`(?<![\\w-])${NAME}\\s*:`, "g"),
+    new RegExp(`${QUOTED}\\s*:`, "g"),
+    new RegExp(`\\[\\s*${QUOTED}\\s*\\]\\s*=(?!=)`, "g"),
+    new RegExp(`setProperty\\(\\s*${QUOTED}`, "g"),
+  ];
+  const SCRIPT_FAMILIES = [
+    /(?<![\w-])(--[\w-]+?)\$\{[^}]*\}\s*:/g,
+    /setProperty\(\s*\x60(--[\w-]+?)\$\{/g,
+  ];
   const files = execFileSync("git", ["-C", root, "ls-files", "-z", "--", "apps", "packages"], {
     encoding: "utf8",
   })
@@ -665,9 +681,16 @@ node --input-type=module -e '
       ? source.replace(/^\s*(\/\/|\/\*|\*).*$/gm, "")
       : source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
     if (SCRIPT.test(file)) {
-      for (const [, name, end] of text.matchAll(/(?<=["\x27\x60]\s*)(--[\w-]+?)(\$\{|["\x27\x60])/g)) {
-        if (end === "${") families.push(name);
-        else declared.add(name);
+      for (const write of SCRIPT_WRITES) {
+        for (const [, name] of text.matchAll(write)) declared.add(name);
+      }
+      for (const family of SCRIPT_FAMILIES) {
+        for (const [, name] of text.matchAll(family)) families.push(name);
+      }
+      // A constant handed to setProperty declares the name it holds.
+      for (const [, constant] of text.matchAll(/setProperty\(\s*([A-Za-z_$][\w$]*)\s*,/g)) {
+        const held = text.match(new RegExp(`\\b${constant}\\s*=\\s*${QUOTED}`));
+        if (held) declared.add(held[1]);
       }
     } else {
       for (const [, name, registered] of text.matchAll(/(--[\w-]+)\s*:|@property\s+(--[\w-]+)/g)) {
