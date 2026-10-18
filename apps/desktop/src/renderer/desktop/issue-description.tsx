@@ -96,6 +96,8 @@ export function IssueDescription({
 
   const typed = () => handle.current?.markdown() ?? drafted.current ?? description;
   const begin = (at: PlanEditorPlacement) => {
+    // Note that an editor opens as a change from the words it shows, so one left as it opened sends nothing, whatever an earlier save kept.
+    kept.current = description;
     drafted.current = undefined;
     setNote(undefined);
     setPlacement(at);

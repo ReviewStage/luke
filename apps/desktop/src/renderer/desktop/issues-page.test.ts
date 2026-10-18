@@ -1051,6 +1051,32 @@ test("words typed back to the description it opened on while a save is out are s
   ]);
 });
 
+test("a description reopened on words a later change's answer drew, and left as it opened, sends nothing", async () => {
+  standing = [issue(1, { description: "Original" })];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const editor = openDescription(page);
+  type(editor, "Revised");
+  finish(editor);
+  await settle();
+  // The service answers a status change made meanwhile from the issue as it stood before the description landed.
+  standing = [issue(1, { description: "Original" })];
+  pick(page, "Status", "Todo");
+  await settle();
+  act(() => held[0]?.());
+  await settle();
+  act(() => held[1]?.());
+  await settle();
+  const shown = descriptionOf(page).textContent;
+  finish(openDescription(page));
+  await settle();
+
+  assert.equal(shown, "Original");
+  assert.equal(changes.length, 2, "reopening and leaving the words as they opened sends nothing");
+});
+
 test("a control pressed while a finished save is out keeps the keyboard once the save closes the editor", async () => {
   standing = [issue(1)];
   const page = await openIssue(issue(1).id);
