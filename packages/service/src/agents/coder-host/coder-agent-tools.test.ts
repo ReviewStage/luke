@@ -1737,6 +1737,13 @@ test("update_task renames a task, pins it for the caller's starter alone, sets i
   assert.equal(isRecord(cleared.task) && cleared.task.repository, null, JSON.stringify(cleared));
   const set = await update({ repository: RELAY_FULL_NAME }, "call-5");
   assert.equal(isRecord(set.task) && set.task.repository, RELAY_FULL_NAME, JSON.stringify(set));
+  // The repository named in another casing is GitHub's same one, which already stands.
+  const again = await update({ repository: RELAY_FULL_NAME.toLowerCase() }, "call-5b");
+  assert.deepEqual(
+    [isRecord(again.task) && again.task.repository, again.already],
+    [RELAY_FULL_NAME, true],
+    JSON.stringify(again),
+  );
 
   const own = await call(
     CODER_TOOL.UPDATE_TASK,

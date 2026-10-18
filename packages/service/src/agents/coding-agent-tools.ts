@@ -1843,7 +1843,6 @@ export function runUpdateTask(
       ) {
         return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
       }
-      const already = changesStand(read.value.task, changes);
       const repository =
         changes.repository === undefined
           ? undefined
@@ -1851,10 +1850,13 @@ export function runUpdateTask(
       if (repository !== undefined && Result.isFailure(repository)) {
         return agentToolRejected(repository.failure);
       }
-      const changed = yield* updateTask(userId, taskId, {
+      // A repository is compared as GitHub spells it, which is how the task holds it.
+      const asWritten = {
         ...changes,
         ...(repository === undefined ? undefined : { repository: repository.success }),
-      }).pipe(
+      };
+      const already = changesStand(read.value.task, asWritten);
+      const changed = yield* updateTask(userId, taskId, asWritten).pipe(
         Effect.map(
           (task): Result.Result<Option.Option<StoredTask["task"]>, string> => Result.succeed(task),
         ),
