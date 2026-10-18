@@ -163,7 +163,7 @@ test("a transcript, the plan, a version, and a note draw a link they have no chi
 
   for (const surface of surfaces) {
     assert.deepEqual(plainLinks(surface), PLAIN);
-    assert.equal(surface.querySelectorAll(".mention-chip").length, 2);
+    assert.equal(surface.querySelectorAll("[data-mention-ref]").length, 2);
   }
 });
 

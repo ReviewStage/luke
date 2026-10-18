@@ -301,106 +301,6 @@
   opacity: 1;
 }
 
-/* A mention drawn in words (`mention-chip.tsx`): a pill on the words'
-   line, its kind's glyph and its name cut at a width so one long name
-   never takes the line, on the raised fill a skill's chip wears, washed
-   as a button is under the pointer. A mention whose subject is gone keeps
-   its name, struck through, on an outline alone. Its name sits on the
-   line's baseline, and the pill stands proud of the name's own line on
-   padding its margins take back, so a line holding a chip is no taller
-   than a line of words. A chip is never wider than its column, so a long
-   name in a narrow one is cut rather than scrolled. */
-.mention-chip {
-  display: inline-flex;
-  max-width: min(240px, 100%);
-  align-items: center;
-  gap: var(--luke-space-4);
-  margin-block: -0.075em;
-  padding: 0.075em var(--luke-space-6) 0.075em var(--luke-space-4);
-  border: 0;
-  border-radius: 5px;
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 500;
-  line-height: 1.2;
-  vertical-align: baseline;
-  white-space: nowrap;
-}
-
-.mention-chip:hover,
-.mention-chip:focus-visible {
-  background: var(--luke-color-fill-selected);
-}
-
-/* An agent named on a call's row (`transcript-blocks.tsx`'s
-   `AgentCallChip`): its mention's chip, but no target of its own, since
-   the row it stands on is the one that opens the agent and hangs its card.
-   So it takes the row's pointer, and lifts as the row is hovered or
-   reached from the keyboard, anywhere on it, as a chip lifts under its own
-   hover. Note that the lift is what keeps it seen, because its resting
-   fill is the row's hover fill, into which it would otherwise sink. */
-.tool-agent-chip {
-  cursor: inherit;
-}
-
-:is(button, summary):is(:hover, :focus-visible) .tool-agent-chip {
-  background: var(--luke-color-fill-selected);
-}
-
-.mention-chip-glyph {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  width: 13px;
-  height: 13px;
-  color: var(--luke-color-text-muted);
-}
-
-.mention-chip-glyph svg {
-  width: 13px;
-  height: 13px;
-}
-
-/* Note that the name alone is baseline-aligned, because a flex box takes
-   its baseline from the items that are, and otherwise from its first item,
-   the glyph, whose baseline is its bottom edge, lifting the name above the
-   line's words. */
-.mention-chip-label {
-  min-width: 0;
-  align-self: baseline;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Where a provider's page stands, its issue's state, after its name: the
-   name's muted ink behind a hairline, never cut, since the name gives way
-   first. A chip saying one is let wider, so its title is read rather than
-   cut at its first word. */
-.mention-chip:has(.mention-chip-state) {
-  max-width: min(360px, 100%);
-}
-
-.mention-chip-state {
-  flex: none;
-  align-self: baseline;
-  padding-left: var(--luke-space-4);
-  border-left: 1px solid var(--luke-color-border-strong);
-  color: var(--luke-color-text-muted);
-  font-weight: 400;
-}
-
-.mention-chip[data-state="gone"] {
-  background: none;
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
-  color: var(--luke-color-text-subtle);
-}
-
-.mention-chip[data-state="gone"] .mention-chip-label {
-  text-decoration: line-through;
-}
-
 /* A chip held with its punctuation (`.link-glued`, markdown.css) is capped
    by its length alone, because the box it stands in is the one held to the
    column, and the chip in it already gives way before it would push its
@@ -409,12 +309,12 @@
    against while it does, Chromium reads the cap as none, and the box keeps
    the room of the whole name as a gap after the chip it then cuts, washed
    where a version's change mark holds the chip. */
-.link-glued .mention-chip {
-  max-width: 240px;
+.link-glued [data-mention-ref] {
+  max-width: var(--luke-inline-ref-pill-width);
 }
 
-.link-glued .mention-chip:has(.mention-chip-state) {
-  max-width: 360px;
+.link-glued [data-mention-ref][data-stated] {
+  max-width: var(--luke-inline-ref-pill-stated-width);
 }
 
 /* The list an @ opens (`mention-picker.tsx`): a searchable menu whose field
@@ -480,7 +380,7 @@
    press drawn as the line over the document's is. Note that both take the
    pointer although the line fades out, because a pointer on them is on
    their section, which shows it. */
-.plan-unit-byline > :is(.actor-ref, .plan-edit-link) {
+.plan-unit-byline > :is([data-actor-ref], .plan-edit-link) {
   pointer-events: auto;
 }
 
@@ -901,49 +801,6 @@
   border-bottom: 1px solid var(--luke-color-border);
   background: var(--luke-color-fill-hover);
   font-size: 11.5px; /* off-scale: the code's own type */
-}
-
-/* A file named in place (file-ref.tsx): its type's icon at the size the
-   file tree's rows draw it, its path, and its lines, drawn as the words
-   alone where it is the button that opens the file. */
-.file-ref {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-control-gap);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font: inherit;
-  text-align: left;
-}
-
-.file-ref > svg {
-  width: 14px;
-  height: 14px;
-  flex: none;
-}
-
-/* The path is cut from its left, so the file's own name stays in sight;
-   the `bdi` inside keeps the path itself reading left to right. */
-.file-ref-path {
-  min-width: 0;
-  overflow: hidden;
-  direction: rtl;
-  font-family: var(--luke-font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-button.file-ref:hover .file-ref-path {
-  text-decoration: underline;
-}
-
-.file-ref-lines {
-  flex: 0 0 auto;
-  color: var(--luke-color-text-muted);
-  white-space: nowrap;
 }
 
 /* A card's copy and its file's opening keep to the header's right. */
@@ -2834,7 +2691,7 @@ button.pull-request-check:hover {
 }
 
 /* Luke's note reads as the step's words, so the path above it steps back. */
-.code-card:has(> .code-card-note) .file-ref {
+.code-card:has(> .code-card-note) [data-file-ref] {
   color: var(--luke-color-text-muted);
 }
 
@@ -4017,33 +3874,19 @@ button.draft-fork-quote:hover {
   opacity: 0.6;
 }
 
-/* A chosen skill's pill, the composer's and a sent message's alike
-   (`skill-chip.tsx`): in the composer it is a word of the editor's, which a
-   press opens the skill's file from where the skill is known; in a message
-   it is a button drawing its words in the bubble's type, which opens the
-   same file. */
+/* A chosen skill's pill in the composer (`skill-picker.tsx`): a word of the
+   editor's, which a press opens the skill's file from where the skill is
+   known. */
 .skill-chip {
   border-radius: 4px;
   background: var(--luke-color-fill-strong);
   box-shadow: 0 0 0 2px var(--luke-color-fill-strong);
 }
 
-/* Note that the button keeps to its words' height, as the composer's pill
-   does, rather than standing the line's full height as a button would. */
-button.skill-chip {
-  padding: 0;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  line-height: 1.25;
-}
-
 .skill-chip[data-opens] {
   cursor: pointer;
 }
 
-button.skill-chip:hover,
 .skill-chip[data-opens]:hover {
   background: var(--luke-color-fill-selected);
   box-shadow: 0 0 0 2px var(--luke-color-fill-selected);
@@ -4777,7 +4620,7 @@ button.attached-file-face:hover img {
   white-space: nowrap;
 }
 
-.terminal-tab-title .agent-ref {
+.terminal-tab-title [data-agent-ref] {
   flex: 0 1 auto;
   color: var(--luke-color-text);
   font-weight: var(--luke-weight-semibold);
@@ -5008,8 +4851,8 @@ button.attached-file-face:hover img {
   font-weight: var(--luke-weight-semibold);
 }
 
-.terminal-shells-foot .agent-ref .harness-mark,
-.terminal-shells-foot .agent-ref .working-mark {
+.terminal-shells-foot [data-agent-ref] .harness-mark,
+.terminal-shells-foot [data-agent-ref] .working-mark {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
 }
@@ -5100,27 +4943,10 @@ button.attached-file-face:hover img {
   --shortcut-ink: currentColor;
 }
 
-/* An agent named in place (`agent-ref.tsx`): its mark and name as one quiet
-   button in the words around it, its name underlined under the pointer as a
-   link's is, and its tab's card hung while the pointer rests on it. */
-.agent-ref {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  vertical-align: bottom;
-}
-
-button.agent-ref:hover .agent-ref-name {
-  text-decoration: underline;
-  text-underline-offset: 2px;
+/* An agent's mark heading a row (`agent-ref.tsx`'s `AgentMarkRef`), which
+   hangs its tab's card: the mark alone, centred in the room it stands in. */
+.agent-mark-ref {
+  display: flex;
 }
 
 /* The chips along the box's foot: the model chip, the MCP button, and the

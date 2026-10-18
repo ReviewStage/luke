@@ -222,8 +222,8 @@ async function settle(): Promise<void> {
 /** Presses the chip of the item's words that says the name given. */
 async function pressChip(container: HTMLElement, name: string): Promise<void> {
   const chip = [
-    ...container.querySelectorAll<HTMLButtonElement>("[data-inbox-markdown] .mention-chip"),
-  ].find((each) => each.querySelector(".mention-chip-label")?.textContent?.includes(name));
+    ...container.querySelectorAll<HTMLButtonElement>("[data-inbox-markdown] [data-mention-ref]"),
+  ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name));
   assert.ok(chip, `no chip says ${name}`);
   act(() => chip.click());
   await settle();

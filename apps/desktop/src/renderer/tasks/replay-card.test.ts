@@ -205,7 +205,7 @@ function cardMeta(container: Element) {
   const meta = container.querySelector("[data-replay-card] ~ .message-meta");
   assert.ok(meta !== null);
   return {
-    sender: meta.querySelector(".message-sender .actor-ref-name")?.textContent ?? undefined,
+    sender: meta.querySelector(".message-sender .luke-inline-ref-label")?.textContent ?? undefined,
     at: meta.querySelector("time")?.getAttribute("dateTime") ?? undefined,
   };
 }
@@ -262,7 +262,7 @@ test("an agent continued from another opens on the plan's card, the folded Conti
   assert.ok(!container.textContent?.includes("Note from the developer"));
 
   // The source's chip opens its tab, and leaves the card folded.
-  press(container.querySelector("[data-replay-card] > summary .actor-ref"));
+  press(container.querySelector("[data-replay-card] > summary [data-actor-ref]"));
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: SOURCE.id }]);
   assert.equal(container.querySelector("[data-replay-step]"), null);
 });
@@ -398,7 +398,7 @@ test("on an agent's own page, which lists no source, the card names the source a
   // The read named the source's model, so its chip wears its harness's mark rather than the empty box of none known.
   const mark = container.querySelector("[data-replay-card] > summary .actor-mark svg");
   assert.ok((mark?.childElementCount ?? 0) > 0);
-  press(container.querySelector("[data-replay-card] > summary .actor-ref"));
+  press(container.querySelector("[data-replay-card] > summary [data-actor-ref]"));
   assert.deepEqual(opened, []);
   assert.deepEqual(places, [{ kind: LINK_PLACE.AGENT, planId: PLAN_ID, agentId: SOURCE.id }]);
 });
@@ -467,8 +467,8 @@ test("a replayed line is named under its sender as a transcript names one: Luke,
   const senders = [...container.querySelectorAll("[data-replay-step]")].map((step) => {
     const sender = step.querySelector(".message-sender");
     if (sender === null) return null;
-    const ref = sender.querySelector<HTMLElement>(".actor-ref");
-    const name = ref?.querySelector(".actor-ref-name")?.textContent ?? sender.textContent;
+    const ref = sender.querySelector<HTMLElement>("[data-actor-ref]");
+    const name = ref?.querySelector(".luke-inline-ref-label")?.textContent ?? sender.textContent;
     return [ref?.dataset.kind ?? "", name ?? ""];
   });
   assert.deepEqual(senders, [

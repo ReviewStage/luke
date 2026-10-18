@@ -526,14 +526,15 @@ test("a call about an agent names it by its chip in the place of the words, as i
     container.querySelector<HTMLElement>(
       `button[data-call-id="call-${callId}"], [data-call-id="call-${callId}"] summary`,
     );
-  const chip = (callId: string) => line(callId)?.querySelector(".tool-agent-chip")?.textContent;
+  const chip = (callId: string) =>
+    line(callId)?.querySelector("[data-tool-agent-ref]")?.textContent;
   const said = (callId: string) => line(callId)?.textContent?.replace(/\s+/gu, " ").trim();
   assert.equal(chip("message_agent"), "Invoice export", "a listed agent is named as its tab is");
   assert.equal(said("message_agent"), "Messaged Invoice export Rebase on main");
   assert.equal(chip("archive_agent"), "Retry audit", "an agent the plan lists not by its answer");
   assert.equal(said("archive_agent"), "Archived Retry audit");
   assert.ok(
-    line("archive_agent")?.querySelector(".tool-agent-chip img.harness-mark"),
+    line("archive_agent")?.querySelector("[data-tool-agent-ref] img.harness-mark"),
     "an agent the plan lists not wears the harness its answer's model runs in, Codex's here",
   );
   assert.equal(chip("start_agent"), undefined, "a start that names no agent yet keeps its words");
@@ -541,7 +542,7 @@ test("a call about an agent names it by its chip in the place of the words, as i
   const row = line("message_agent");
   assert.ok(row, "the message's row is drawn");
   assert.equal(row.querySelector("button, a"), null, "the chip is no target inside the row");
-  act(() => row.querySelector<HTMLElement>(".tool-agent-chip")?.click());
+  act(() => row.querySelector<HTMLElement>("[data-tool-agent-ref]")?.click());
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }], "it opens the row's");
 });
 
@@ -608,7 +609,7 @@ test("a call about an agent the place lists not, whose answer names no model, we
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
-  const chip = container.querySelector('[data-call-id="call-archive_agent"] .tool-agent-chip');
+  const chip = container.querySelector('[data-call-id="call-archive_agent"] [data-tool-agent-ref]');
 
   assert.equal(chip?.textContent, "Retry audit");
   // Codex's mark is its picture.

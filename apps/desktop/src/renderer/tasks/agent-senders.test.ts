@@ -215,10 +215,10 @@ async function drawnFor(reader: string, opened: LinkPlace[] = []): Promise<reado
 async function sendersFor(reader: string): Promise<readonly Seen[]> {
   const drawn = await drawnFor(reader);
   return drawn.flatMap((message, index): Seen[] => {
-    const sender = message.querySelector<HTMLElement>(".message-sender .actor-ref");
+    const sender = message.querySelector<HTMLElement>(".message-sender [data-actor-ref]");
     if (sender === null) return [];
     const id = MESSAGES[index]?.id ?? "";
-    const name = sender.querySelector(".actor-ref-name")?.textContent ?? "";
+    const name = sender.querySelector(".luke-inline-ref-label")?.textContent ?? "";
     const picture = sender.querySelector("img")?.getAttribute("src");
     const kind = sender.dataset.kind ?? "";
     return [picture == null ? [id, kind, name] : [id, kind, name, picture]];
@@ -303,7 +303,7 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   const drawn = await drawnFor(DEAN.userId, opened);
   const sender = drawn[
     MESSAGES.findIndex((message) => message.id === "claude-agent")
-  ]?.querySelector<HTMLElement>(".message-sender .actor-ref");
+  ]?.querySelector<HTMLElement>(".message-sender [data-actor-ref]");
   assert.ok(sender instanceof HTMLButtonElement, "the sender is a door");
 
   await act(async () => {

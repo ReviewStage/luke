@@ -152,7 +152,7 @@ test("a Changes card names the coding agent whose pull request it is by its tile
     /^6 files changed/,
   );
   const named = container.querySelector<HTMLButtonElement>(
-    '.luke-hover-card-sub button.actor-ref[data-kind="agent"]',
+    '.luke-hover-card-sub button[data-actor-ref][data-kind="agent"]',
   );
   assert.ok(named, "the agent is named as an actor");
   assert.equal(named.textContent, "Expiry job");

@@ -524,7 +524,10 @@ test("a settled choice folds what its agent offered to one line saying who picke
     "person",
     "the answerer's face leads their comment",
   );
-  assert.ok(reply.querySelector(".actor-ref[data-kind='person']"), "the answerer by their name");
+  assert.ok(
+    reply.querySelector("[data-actor-ref][data-kind='person']"),
+    "the answerer by their name",
+  );
 });
 
 /** An item's options as a reader meets them: each label, then its Recommended badge's words, and whether the badge has gone quiet, where it wears one. */
@@ -676,7 +679,7 @@ test("a teammate's answer names them by their disc and name, beside their pick a
   assert.match(answerHead(page) ?? "", /^Charles Pan.+ · /u);
   assert.equal(reply.querySelector("[data-inbox-pick]")?.textContent, "Retry 3 times over an hour");
 
-  const answerer = reply.querySelector(".actor-ref") ?? assert.fail("the answerer is named");
+  const answerer = reply.querySelector("[data-actor-ref]") ?? assert.fail("the answerer is named");
   act(() => {
     answerer.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
@@ -824,7 +827,9 @@ function reach(control: HTMLElement): void {
 /** The agent's references in the pane's thread, each its tile and its name as one button. */
 function threadRefs(page: HTMLElement): HTMLButtonElement[] {
   return [
-    ...page.querySelectorAll<HTMLButtonElement>('.inbox-board button.actor-ref[data-kind="agent"]'),
+    ...page.querySelectorAll<HTMLButtonElement>(
+      '.inbox-board button[data-actor-ref][data-kind="agent"]',
+    ),
   ];
 }
 
@@ -856,7 +861,7 @@ test("the thread names its agent as one button wherever it does, its subject's l
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
   const sent = page.querySelector<HTMLButtonElement>(
-    '[data-inbox-comment="answered"] button.actor-ref[data-kind="agent"]',
+    '[data-inbox-comment="answered"] button[data-actor-ref][data-kind="agent"]',
   );
   assert.ok(sent, "the line saying the answer was sent names the agent");
   assert.equal(sent.textContent, "Alerts");
@@ -1770,7 +1775,7 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
   );
   pressInComposer(pane, "Enter");
   await settle();
-  const chips = [...composerEditor(pane).querySelectorAll(".mention-chip")].map(
+  const chips = [...composerEditor(pane).querySelectorAll("[data-mention-ref]")].map(
     (chip) => chip.textContent,
   );
   pressInComposer(pane, "Enter");
@@ -1812,7 +1817,7 @@ test("an answered item's note draws a mention it holds as the chip a sent messag
   act(() => rowNamed(page, "How is a failed email retried?").click());
   const note = itemPane(page).querySelector('[data-inbox-comment="answered"] [data-inbox-note]');
 
-  assert.equal(note?.querySelector(".mention-chip")?.textContent, "rollout-store.ts");
+  assert.equal(note?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
   assert.equal(note?.textContent, "See rollout-store.ts");
 });
 
@@ -2823,7 +2828,7 @@ test("a thread draws its messages after the question in the order they were writ
     ["message", "person", "You", "See rollout-store.ts"],
   ]);
   const mine = itemPane(page).querySelectorAll('[data-inbox-comment="message"]')[2];
-  assert.equal(mine?.querySelector(".mention-chip")?.textContent, "rollout-store.ts");
+  assert.equal(mine?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
 });
 
 test("a message written on a settled item's thread from its box goes as a message, never an answer, and lands on the thread in place, scrolled into view, the item still answered and the box emptied", async () => {

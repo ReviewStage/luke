@@ -209,12 +209,12 @@ async function inbox(options: {
 
 /** The chips the chosen item's words draw, by the name each says and the state after it. */
 function chips(container: HTMLElement): [string | null, string | null][] {
-  return [...container.querySelectorAll<HTMLElement>("[data-inbox-markdown] .mention-chip")].map(
-    (chip) => [
-      chip.querySelector(".mention-chip-label")?.textContent ?? null,
-      chip.querySelector(".mention-chip-state")?.textContent ?? null,
-    ],
-  );
+  return [
+    ...container.querySelectorAll<HTMLElement>("[data-inbox-markdown] [data-mention-ref]"),
+  ].map((chip) => [
+    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
+    chip.querySelector(".luke-inline-ref-state")?.textContent ?? null,
+  ]);
 }
 
 /** The workspaces each pull request read was asked through. */

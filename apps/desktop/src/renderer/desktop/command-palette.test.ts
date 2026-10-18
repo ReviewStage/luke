@@ -635,7 +635,9 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     act(() => {
       row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
-    const words = document.querySelector(".luke-tooltip-card .actor-words .actor-ref")?.textContent;
+    const words = document.querySelector(
+      ".luke-tooltip-card .actor-words [data-actor-ref]",
+    )?.textContent;
     act(() => root.unmount());
     document.body.innerHTML = "";
     return words;

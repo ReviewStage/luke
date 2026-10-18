@@ -216,10 +216,13 @@ export function TerminalShells({
         </ul>
       )}
       <div className="terminal-shells-foot">
-        <AgentRef subject={subject} models={models} onOpen={onOpenAgent}>
-          <AgentGlyph agent={subject.agent} />
-          <span className="agent-ref-name">{standingWords(subject, listed?.sandbox)}</span>
-        </AgentRef>
+        <AgentRef
+          subject={subject}
+          models={models}
+          onOpen={onOpenAgent}
+          glyph={<AgentGlyph agent={subject.agent} />}
+          label={standingWords(subject, listed?.sandbox)}
+        />
       </div>
     </aside>
   );

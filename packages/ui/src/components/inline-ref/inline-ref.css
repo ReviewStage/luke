@@ -1,0 +1,147 @@
+/* inline-ref.css -- a thing named in a line of words: its glyph, its name
+   on the line's baseline, and its standing, in the look its place chose.
+
+   The token never makes its line taller than a line of words: its name sits
+   on the words' baseline, and a pill stands proud of the name on padding its
+   margins take back. Its metrics are the line's own, in em, since it stands
+   in prose of any size. A token is never wider than its column, so a long
+   name in a narrow one is cut rather than scrolled. */
+
+@layer components {
+  .luke-inline-ref {
+    display: inline-flex;
+    min-width: 0;
+    max-width: 100%;
+    align-items: center;
+    gap: var(--luke-icon-gap);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    vertical-align: baseline;
+    white-space: nowrap;
+  }
+
+  button.luke-inline-ref {
+    cursor: pointer;
+  }
+
+  .luke-inline-ref-glyph {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+  }
+
+  .luke-inline-ref-glyph > svg {
+    width: 1em;
+    height: 1em;
+  }
+
+  /* Note that the name alone is baseline-aligned, because a flex box takes
+     its baseline from the items that are, and otherwise from its first
+     item, the glyph, whose baseline is its bottom edge, lifting the name
+     above the line's words. */
+  .luke-inline-ref-label {
+    min-width: 0;
+    align-self: baseline;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* A path is cut from its left, so its last part stays in sight; the `bdi`
+     inside keeps the path itself reading left to right. */
+  .luke-inline-ref-label[data-name="path"] {
+    direction: rtl;
+    font-family: var(--luke-font-mono);
+  }
+
+  .luke-inline-ref-state {
+    flex: none;
+    align-self: baseline;
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-inline-ref[data-gone="true"] {
+    color: var(--luke-color-text-subtle);
+  }
+
+  .luke-inline-ref[data-gone="true"] .luke-inline-ref-label {
+    text-decoration: line-through;
+  }
+
+  /* A link's name underlines under the pointer, as a link's does. */
+  button.luke-inline-ref[data-look="link"]:hover .luke-inline-ref-label {
+    text-decoration: underline;
+    text-underline-offset: var(--luke-space-2);
+  }
+
+  /* A wash rises to the text's ink under the pointer, on a fill that bleeds
+     by a ring of its own colour rather than padding, so the words around it
+     keep their spacing. Note that the name stands at least a 16px mark's
+     height, so a mark beside it stays centred on it. */
+  .luke-inline-ref[data-look="wash"] {
+    gap: var(--luke-space-6);
+    border-radius: var(--luke-radius-6);
+  }
+
+  .luke-inline-ref[data-look="wash"] .luke-inline-ref-label {
+    padding-block: max(0px, calc((16px - 1lh) / 2)); /* off-scale: the mark's 16px */
+  }
+
+  .luke-inline-ref[data-look="wash"]:hover {
+    background: var(--luke-color-fill-hover);
+    box-shadow: 0 0 0 3px var(--luke-color-fill-hover); /* off-scale: the wash's bleed */
+    color: var(--luke-color-text);
+  }
+
+  /* A pill on the raised fill, washed as a button is under the pointer, its
+     glyph in the muted ink. A pill saying its standing is let wider, so its
+     name is read rather than cut at its first word. */
+  .luke-inline-ref[data-look="pill"] {
+    max-width: min(var(--luke-inline-ref-pill-width), 100%);
+    gap: var(--luke-space-4);
+    margin-block: -0.075em;
+    padding: 0.075em var(--luke-space-6) 0.075em var(--luke-space-4);
+    border-radius: var(--luke-radius-6);
+    background: var(--luke-color-fill-strong);
+    color: var(--luke-color-text);
+    font-weight: var(--luke-weight-medium);
+    line-height: 1.2;
+  }
+
+  .luke-inline-ref[data-look="pill"]:has(.luke-inline-ref-state) {
+    max-width: min(var(--luke-inline-ref-pill-stated-width), 100%);
+  }
+
+  .luke-inline-ref[data-look="pill"] .luke-inline-ref-glyph {
+    width: 1em;
+    height: 1em;
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-inline-ref[data-look="pill"] .luke-inline-ref-state {
+    padding-left: var(--luke-space-4);
+    border-left: 1px solid var(--luke-color-border-strong);
+    font-weight: var(--luke-weight-regular);
+  }
+
+  button.luke-inline-ref[data-look="pill"]:not([data-gone="true"]):is(:hover, :focus-visible) {
+    background: var(--luke-color-fill-selected);
+  }
+
+  /* An inert pill on a row that is itself a press lifts as the row is
+     hovered or reached from the keyboard, anywhere on it. Note that the
+     lift is what keeps it seen, because its resting fill is the row's hover
+     fill, into which it would otherwise sink. */
+  :is(button, summary):is(:hover, :focus-visible)
+  span.luke-inline-ref[data-look="pill"]:not([data-gone="true"]) {
+    background: var(--luke-color-fill-selected);
+  }
+
+  .luke-inline-ref[data-look="pill"][data-gone="true"] {
+    background: none;
+    box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
+  }
+}

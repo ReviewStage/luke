@@ -289,7 +289,7 @@ function carriesWords(card: Element, words: string): boolean {
 
 /** Each chip drawn in the words, in order. */
 function chipsOf(container: HTMLElement): readonly Element[] {
-  return [...container.querySelectorAll(".mention-chip")];
+  return [...container.querySelectorAll("[data-mention-ref]")];
 }
 
 test("a plan's chip hangs the plan's card, and a section's the same card's head with the heading the anchor names", async () => {

@@ -21,7 +21,7 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
-import { cn, ProviderMark } from "@luke/ui";
+import { cn, INLINE_REF_LOOK, InlineRef, ProviderMark } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
@@ -587,16 +587,16 @@ const CALL_ICON = {
  * the row it stands on is already the one that opens the agent and hangs
  * its card, and a second press or card inside it would be two targets for
  * one thing; so it takes the row's pointer and lifts with the row's hover
- * as a chip lifts with its own (tasks.css).
+ * as a chip lifts with its own.
  */
 function AgentCallChip({ agent }: { agent: Actor }): ReactNode {
   return (
-    <span className="mention-chip tool-agent-chip" data-kind="agent">
-      <span className="mention-chip-glyph">
-        <ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />
-      </span>
-      <span className="mention-chip-label">{actorName(agent)}</span>
-    </span>
+    <InlineRef
+      look={INLINE_REF_LOOK.PILL}
+      glyph={<ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />}
+      label={actorName(agent)}
+      data-tool-agent-ref=""
+    />
   );
 }
 

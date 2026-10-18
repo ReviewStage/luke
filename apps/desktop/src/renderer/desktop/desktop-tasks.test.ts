@@ -708,8 +708,8 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
     ),
   );
   const chip = (name: string) =>
-    [...container.querySelectorAll<HTMLButtonElement>(".desktop-document .mention-chip")].find(
-      (each) => each.querySelector(".mention-chip-label")?.textContent?.includes(name),
+    [...container.querySelectorAll<HTMLButtonElement>(".desktop-document [data-mention-ref]")].find(
+      (each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name),
     );
 
   const own = chip("relay#42");

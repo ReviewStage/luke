@@ -548,7 +548,7 @@ test("once an agent continues the agent, its box gives way to Continued in with 
   assert.equal(tab.sendButton(), null, "the box takes no message");
   assert.equal(tab.buttons(tab.container).length, 0, "the agent is not continued twice");
   assert.match(note.textContent ?? "", /^Continued in/);
-  const chips = [...note.querySelectorAll<HTMLButtonElement>("button.actor-ref")];
+  const chips = [...note.querySelectorAll<HTMLButtonElement>("button[data-actor-ref]")];
   assert.deepEqual(
     chips.map((chip) => chip.textContent),
     ["Fix the tile (2)", "Fix the tile (3)"],
@@ -673,7 +673,7 @@ test("where an archive took the box, the transcript's end names the agents that 
     "a completed agent has no end line, yet is named",
   );
   assert.deepEqual(
-    [...(completed.continuedIn()[0]?.querySelectorAll("button.actor-ref") ?? [])].map(
+    [...(completed.continuedIn()[0]?.querySelectorAll("button[data-actor-ref]") ?? [])].map(
       (chip) => chip.textContent,
     ),
     ["Fix the tile (2)"],
