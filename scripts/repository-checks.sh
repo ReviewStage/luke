@@ -713,6 +713,66 @@ node --input-type=module -e '
     process.exit(1);
   }
 ' "$LUKE_REPO_ROOT"
+
+# A box that scrolls up and down scrolls sideways too unless it says
+# otherwise: `overflow-y: auto` alone computes `overflow-x` to `auto`, so a
+# pixel of a ring, a negative margin, or a row being dragged past its edge
+# hands the box a sideways scroll a trackpad swipe drifts it along, and a
+# find or a column kept in view counts it a sideways scroller. So every rule
+# in a tracked sheet under apps/ and packages/ that scrolls on one value
+# (`overflow-y: auto|scroll`, or `overflow: auto|scroll`) names its
+# `overflow-x` in the same rule: `hidden` where nothing should scroll
+# sideways, `auto` where something should. A Tailwind class list does the
+# same with `overflow-x-*` beside `overflow-y-auto` or `overflow-auto`.
+node --input-type=module -e '
+  import { execFileSync } from "node:child_process";
+  import { readFileSync } from "node:fs";
+  import path from "node:path";
+
+  const root = process.argv[1];
+  const SCROLLS = /(?:^|[;\s])overflow(?:-y)?\s*:\s*(?:auto|scroll)\s*(?:;|$)/;
+  const NAMES_X = /(?:^|[;\s])overflow-x\s*:/;
+  const CLASS_SCROLLS = /(?<![\w-])overflow-(?:y-)?(?:auto|scroll)(?![\w-])/;
+  const CLASS_NAMES_X = /(?<![\w-])overflow-x-\w+/;
+  const files = execFileSync("git", ["-C", root, "ls-files", "-z", "--", "apps", "packages"], {
+    encoding: "utf8",
+  })
+    .split("\0")
+    .filter((file) => /\.(css|tsx)$/.test(file) && !/\.test\.tsx$/.test(file));
+  const found = [];
+  for (const file of files) {
+    const source = readFileSync(path.join(root, file), "utf8");
+    if (file.endsWith(".tsx")) {
+      source.split("\n").forEach((line, index) => {
+        if (CLASS_SCROLLS.test(line) && !CLASS_NAMES_X.test(line)) found.push(`  ${file}:${index + 1}`);
+      });
+      continue;
+    }
+    // Blank comments, keeping every newline, so a line number still points home.
+    const text = source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
+    // Note that each block collects only its own declarations, the text of
+    // a nested block going to that block, so a nested rule is read alone.
+    const open = [];
+    let line = 1;
+    for (const character of text) {
+      if (character === "\n") line += 1;
+      if (character === "{") open.push({ line, body: "" });
+      else if (character === "}") {
+        const block = open.pop();
+        if (block !== undefined && SCROLLS.test(block.body) && !NAMES_X.test(block.body)) {
+          found.push(`  ${file}:${block.line}`);
+        }
+      } else if (open.length > 0) open[open.length - 1].body += character;
+    }
+  }
+  if (found.length > 0) {
+    process.stderr.write(
+      `error: a rule scrolls up and down without naming overflow-x, which then computes to auto and scrolls sideways too; add overflow-x: hidden, or auto where it should scroll sideways:\n${found.join("\n")}\n`,
+    );
+    process.exit(1);
+  }
+' "$LUKE_REPO_ROOT"
+
 # The unit of work is a task and a plan is the document inside it. The rename
 # from one to the other had to be finished twice by hand because new code kept
 # arriving under the old names, so a name or a file that calls a task a plan,

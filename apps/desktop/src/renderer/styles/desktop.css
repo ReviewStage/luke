@@ -572,6 +572,7 @@ body,
   flex-direction: column;
   margin: calc(-1 * var(--luke-focus-ring-reach));
   padding: var(--luke-focus-ring-reach);
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -901,6 +902,7 @@ ul.actor-stack {
   gap: var(--luke-space-6);
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   list-style: none;
 }
@@ -1427,6 +1429,7 @@ ul.actor-stack {
 
 .section-icon-scroll {
   height: 220px;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -3270,6 +3273,7 @@ body:has(.app-stage[data-capture="true"])
   flex-direction: column;
   gap: var(--luke-space-12);
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   outline: none; /* no ring: out of the tab order, focused by script so its keys scroll it */
@@ -3544,6 +3548,7 @@ body:has(.app-stage[data-capture="true"])
 .inbox-tasks-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
@@ -4460,6 +4465,7 @@ body:has(.app-stage[data-capture="true"])
 .automations-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--content-inset) var(--luke-space-32);
 }
@@ -4833,6 +4839,7 @@ body:has(.app-stage[data-capture="true"])
   flex: 1;
   flex-direction: column;
   gap: var(--luke-space-8);
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16);
   border-left: 1px solid var(--luke-color-border);
@@ -4868,6 +4875,7 @@ body:has(.app-stage[data-capture="true"])
 .chat-rail-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
@@ -4952,6 +4960,7 @@ body:has(.app-stage[data-capture="true"])
 .chat-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--column-inset);
 }
@@ -5643,6 +5652,7 @@ body:has(.app-stage[data-capture="true"])
   display: flex;
   height: 100%;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
   padding-bottom: 8vh;
 }
@@ -5751,6 +5761,7 @@ body:has(.app-stage[data-capture="true"])
   flex-direction: column;
   gap: var(--luke-section-gap);
   padding: var(--column-inset);
+  overflow-x: hidden;
   overflow-y: auto;
   background: var(--luke-color-ground);
 }
@@ -5812,6 +5823,7 @@ body:has(.app-stage[data-capture="true"])
   flex-direction: column;
   gap: var(--luke-section-gap);
   padding: calc(var(--column-inset) - var(--card-edge)) var(--luke-menu-inset) var(--luke-space-12);
+  overflow-x: hidden;
   overflow-y: auto;
   border: var(--card-edge) solid var(--luke-color-border);
   border-radius: var(--luke-radius-14);
@@ -6189,6 +6201,7 @@ body:has(.app-stage[data-capture="true"])
   display: flex;
   min-height: 0;
   flex-direction: column;
+  overflow-x: hidden;
   overflow-y: auto;
   /* The 300px is the column's measure rather than a step of the scale. */
   padding: var(--luke-space-48)
@@ -6906,6 +6919,7 @@ body:has(.app-stage[data-capture="true"])
   flex: 1 1 auto;
   min-height: 0;
   padding: var(--luke-space-6);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -7098,6 +7112,7 @@ body:has(.app-stage[data-capture="true"])
 .home-scroll {
   min-height: 0;
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-32) var(--luke-page-inset) var(--luke-space-48);
 }
