@@ -15,6 +15,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useCopyToast } from "@luke/panel/copy-feedback";
 import {
   DIFF_SELECTION_SIDE,
   type DiffFileTexts,
@@ -40,6 +41,8 @@ import {
   threadsOn,
 } from "@luke/panel/tasks/changes-model";
 import { useFileViewSettings } from "@luke/panel/tasks/file-view-settings";
+import { ImageDiff, type ImageSides, imageDrawable } from "@luke/panel/tasks/image-diff";
+import { Tooltip } from "@luke/panel/tooltip";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   Button,
@@ -67,8 +70,6 @@ import {
   RotateCwIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCopyToast } from "../copy-feedback";
-import { Tooltip } from "../tooltip";
 import { LinesChanged } from "./agent-published";
 import { AgentActorRef, type AgentSubject } from "./agent-ref";
 import { type ChangesList, FileHead, FOLD_CHORD, LIST_WORDS, useChangesList } from "./changes-list";
@@ -79,7 +80,6 @@ import { useDiffLook, useSplitRoom } from "./file-diff";
 import { LinesMenu, useSaveText } from "./file-menu";
 import { FileTreePane } from "./file-tree-pane";
 import { FileViewBar, usePaneRoom } from "./file-view";
-import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff";
 import { LineComment, type PendingReview } from "./line-comment";
 import { PullRequestMark } from "./pull-request-mark";
 import { OpenedBy, ReviewersLine } from "./pull-request-people";

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { OpenPersonProvider } from "@luke/panel/person-door";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -14,7 +15,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { OpenPersonProvider } from "../person-door";
 import { SidebarFoot } from "./sidebar-foot";
 
 /**

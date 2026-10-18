@@ -1,5 +1,6 @@
 import { AttentionMark } from "@luke/panel/settings/marks";
 import type { SettingsWrites } from "@luke/panel/settings/writes";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
@@ -21,7 +22,6 @@ import {
   VOICE_KEYLESS_NOTE,
 } from "@luke/voice/microphone-access";
 import type { MicrophoneControl } from "@luke/voice/settings-controls";
-import { Tooltip } from "../tooltip";
 import { SchemaSettingRows } from "./schema-rows";
 
 /**

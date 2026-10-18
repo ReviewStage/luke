@@ -3,7 +3,9 @@ import { useRowKeys } from "@luke/panel/desktop/use-row-keys";
 import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
 import { RepositoryPicture } from "@luke/panel/repository-picture";
 import { Shortcut } from "@luke/panel/shortcut";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { commandKeyshortcuts } from "@luke/panel/tooltip";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
@@ -36,10 +38,8 @@ import {
   needsReader,
   waitsOnReader,
 } from "../tasks/inbox-model";
-import { RelativeTime } from "../tasks/relative-time";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems } from "../tasks/use-waiting-items";
-import { commandKeyshortcuts } from "../tooltip";
 import { TaskStatusMark } from "./task-card";
 
 /**

@@ -7,6 +7,8 @@ import {
 import { ISSUE_STATUS_ORDER, type Issue, type IssueStatus } from "@luke/features/issue-wire";
 import type { IssueChange } from "@luke/panel/desktop/use-issues";
 import { useRowDrag } from "@luke/panel/desktop/use-row-drag";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   IconButton,
   SKELETON_SHAPE,
@@ -20,8 +22,6 @@ import {
 } from "@luke/ui";
 import { PlusIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { RelativeTime } from "../tasks/relative-time";
-import { Tooltip } from "../tooltip";
 import { IssueActions } from "./issue-actions";
 import { ISSUE_OPENING, type IssueOpening, openingOf, pageKey } from "./issue-peek";
 import { PriorityMark, StatusGlyph } from "./issue-pickers";

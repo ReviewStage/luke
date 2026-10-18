@@ -1,5 +1,6 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
+import { ActionMenu } from "@luke/panel/desktop/action-menu";
 import {
   BANNER_LOOK,
   Banner,
@@ -17,7 +18,6 @@ import { ArrowRightIcon } from "lucide-react";
 import { useState } from "react";
 import { ActorMark } from "../actor-ref";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts";
-import { ActionMenu } from "../desktop/action-menu";
 import { useAgentArchive } from "../desktop/agent-archive";
 import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { CONTINUE_LABEL, CONTINUED_IN } from "./coding-agent-model";

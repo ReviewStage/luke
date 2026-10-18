@@ -9,6 +9,7 @@ import { RUN_PROFILE } from "@luke/host/app-state";
 import { useAct } from "@luke/panel/act";
 import { appBridge } from "@luke/panel/app-bridge";
 import { runAppCommand } from "@luke/panel/app-commands";
+import { SIDEBAR_OVERLAY, type SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
@@ -35,7 +36,6 @@ import { fixtureChat } from "../tasks/chat-fixture";
 import { HISTORY_READ } from "../tasks/use-plan-history";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopShell } from "./desktop-shell";
-import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
 
 const ignore = () => undefined;
 const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });

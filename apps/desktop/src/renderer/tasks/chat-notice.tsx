@@ -1,4 +1,5 @@
 import { CHANNEL_KIND, CHAT_BLOCK, type ChatAnswer, knownBlock } from "@luke/features/chat-wire";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { Button } from "@luke/ui";
 import {
   CHAT_PLACE,
@@ -9,7 +10,6 @@ import {
 } from "@luke/ui/chat-model";
 import type { ChatNoticeMetadata } from "@luke/wire";
 import { MemberMark } from "./chat-pane";
-import { RelativeTime } from "./relative-time";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**

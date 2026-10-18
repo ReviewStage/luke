@@ -67,6 +67,7 @@ import type { BrainHostSeams } from "./production.js";
 import { foldedQuietly, type RelayStanding, type RelayStateStore, StreamRelay } from "./relay.js";
 import { rotationSeedText } from "./seed.js";
 import { carryStop } from "./stop-carrier.js";
+import { titleTask } from "./task-title.js";
 
 /**
  * The hosted brain composed over eve and the store: what the eve project's
@@ -82,7 +83,9 @@ import { carryStop } from "./stop-carrier.js";
  * and the brain's tools (`brain.ts`), and every write runs under the
  * conversation the session was admitted for. A worker is named from the
  * task it is handed by the same small call that names a coding agent
- * (`coder-host/title.ts`), on its child conversation.
+ * (`coder-host/title.ts`), on its child conversation, and a task no member
+ * named is named by it as each of its first turns completes
+ * (`task-title.ts`).
  */
 
 /** The turn a resolver or a tool runs in, as eve names it and as the store keys it; plain data, so a tool may capture it. */
@@ -235,7 +238,9 @@ export interface BrainHost extends HostAdmission {
    * Relays one event of the session's stream into the store, under the state
    * the caller keeps for the session and the prompt it composed; a turn that
    * completes marks the chat it was handed read, and one that fails or is
-   * stopped leaves it unread for the next.
+   * stopped leaves it unread for the next. A turn that completes among the
+   * conversation's first ones names the task where no member named it
+   * (`task-title.ts`).
    */
   relay(
     event: MessageStreamEvent,
@@ -549,11 +554,23 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
           ...(offered === undefined ? undefined : { offered }),
         });
-        // Only the turn the chat was handed to, and only once it completed, marks it read.
-        if (event.type !== "turn.completed" || event.data.turnId !== chat.eveTurnId) return;
+        if (event.type !== "turn.completed") return;
         const task = yield* taskOf(admitted);
-        if (task === undefined || chat.through === undefined) return;
-        yield* chatTakenIn(admitted.caller, task.task.id, chat.through);
+        if (task === undefined) return;
+        // Only the turn the chat was handed to, and only once it completed, marks it read.
+        if (event.data.turnId === chat.eveTurnId && chat.through !== undefined) {
+          yield* chatTakenIn(admitted.caller, task.task.id, chat.through);
+        }
+        // The name is metered to the member the turn ran for, as the brain's own steps are.
+        const titleModel = seams.titleModel(admitted.caller);
+        if (titleModel === undefined) return;
+        // Note that the name is awaited here rather than forked, because eve's step, and the
+        // function instance under it, end when the hook returns and take a detached call with them.
+        yield* titleTask(titleModel, admitted.caller, admitted.target, task).pipe(
+          Effect.catch((failure) =>
+            Effect.logWarning(`The task's name was not written: ${failure._tag}`),
+          ),
+        );
       }),
 
     relayChild: (event, session, state) =>

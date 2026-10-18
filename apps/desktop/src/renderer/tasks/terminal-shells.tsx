@@ -8,7 +8,9 @@ import {
   type TerminalSummary,
   type TerminalsAnswer,
 } from "@luke/features/terminal-wire";
+import { ActionMenu } from "@luke/panel/desktop/action-menu";
 import type { FloatingBox } from "@luke/panel/desktop/hover-pane";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   CloseIcon,
   ConfirmDialog,
@@ -30,8 +32,6 @@ import {
 } from "@luke/ui";
 import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
-import { ActionMenu } from "../desktop/action-menu";
-import { Tooltip } from "../tooltip";
 import { AgentRef, type AgentSubject } from "./agent-ref";
 import { agentStillWriting } from "./coding-agent-model";
 import { AgentGlyph } from "./tab-look";

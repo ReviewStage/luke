@@ -32,12 +32,16 @@ to the versioned DMG, both checksums must verify, the DMG must pass `codesign`, 
 `Notarized Developer ID`, and carrying `LUKE-LICENSE.txt`, and `latest-mac.yml` must name
 the zip with a relative URL and carry both `sha512` and `size`.
 
-The packaged Sentry SDK uses `production` as its environment and `Luke@X.Y.Z`
-as its release. When `SENTRY_AUTH_TOKEN` is present, the final esbuild plugin on
-the main, preload, and renderer JavaScript builds uploads their source maps to
-that release before electron-builder packages the app. The maps remain excluded
-from the app bundle; ordinary local builds need neither Sentry value and upload
-nothing.
+Every build's Sentry SDK reports under the release `Luke@X.Y.Z`, the name the
+build bakes into main beside the one it uploads maps under, and under the
+environment of the Luke it is: `production` for a Developer ID package, `test`
+for an ad-hoc `Luke Test` package, and `development` for `electron .`. When
+`SENTRY_AUTH_TOKEN` is present, the final esbuild plugin on the main, preload,
+and renderer JavaScript builds uploads their source maps to that release before
+electron-builder packages the app, and a refused upload fails the build. The
+maps are written beside the bundles, named by no `sourceMappingURL` comment,
+and excluded from the app bundle; ordinary local builds need neither Sentry
+value and upload nothing, and neither does a rehearsal (below).
 
 ## Cut a release
 
@@ -88,8 +92,8 @@ and prereleases, so a draft is a release nobody can reach.
 
 Run the **Release** workflow from the Actions tab with **Run workflow**. A manual dispatch
 runs the identical build, signing, notarization, and validation path but publishes
-nothing: no release is created and no assets are attached. The six artifacts are kept as a
-workflow artifact for 14 days instead.
+nothing: no release is created, no assets are attached, and no source maps are uploaded
+to Sentry. The six artifacts are kept as a workflow artifact for 14 days instead.
 
 This is what to run after changing credentials, the signing or notarization setup, the
 packaging configuration, or the workflow itself — it proves the whole path works before a

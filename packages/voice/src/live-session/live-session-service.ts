@@ -111,6 +111,20 @@ const RUN_END_NOTE = {
  */
 const STOPPED_RUN_NOTE = "The developer stopped this ask, and Luke's work on it was cancelled.";
 
+/**
+ * What a call back is told of Luke's words the developer did not hear because
+ * no call stood: commentary to say, and in the voice's own words, since the
+ * catch-up is meant short and the words may be several sentences long.
+ */
+function missedWorkNote(missed: string, working: boolean): string {
+  const still = working ? " He is still working, and will say more when he has it." : "";
+  return `While the developer was away, Luke kept working. Catch them up in a sentence or two, in your own words rather than reading this out: ${missed}${still}`;
+}
+
+/** What a call back is told, silently, where work an earlier call asked for is still under way and nothing of it is news yet. */
+const STILL_WORKING_NOTE =
+  "Luke is still working on what the developer asked on an earlier call; his findings will follow when he has them.";
+
 /** The one progress update a slow step earns, worded by the build; an unknown step gets the general line. */
 const SLOW_STEP_NOTE: ReadonlyMap<string, string> = new Map([
   ["transcript_read", "Luke is reading a session's transcript; this takes a moment."],
@@ -692,22 +706,37 @@ export class LiveSessionService {
   }
 
   /**
-   * Sets the backend exploring the moment a fresh session starts, rather
-   * than at the developer's first words, which is when the first delegation
-   * could be composed. Note that the run stands as one the brain opened of
-   * its own, because it answers no delegation: its reply waits for any
-   * asked run and is silenced by the developer's next ask. A refusal is
-   * never spoken, since the developer asked for nothing; their first ask
-   * reaches the backend as it would have without one.
+   * A fresh session starting, as the brain finds the plan: on its first call
+   * the backend is set exploring the moment the session starts, rather than
+   * at the developer's first words; on a call back the work earlier calls
+   * left under way is taken up instead, since it went on with no call
+   * standing, and the voice is handed what Luke said meanwhile to catch the
+   * developer up on. Note that every run stands as one the brain opened of
+   * its own, because it answers no delegation of this call: its reply waits
+   * for no asked run, it never ends the call, and the developer's next ask
+   * silences it. Each stands before its follow runs, so a run that ends as
+   * the call joins it is still heard.
    */
-  #explore(session: StandingSession): void {
+  #join(session: StandingSession): void {
     this.#start(
-      Effect.flatMap(this.#brain.explore(session.sessionId), (submission) =>
-        Effect.sync(() => {
-          if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) return;
-          if (this.#standing === session) this.#registerWoken(submission.runId);
-        }),
-      ),
+      Effect.gen({ self: this }, function* () {
+        const revision = session.revisions;
+        const join = yield* this.#brain.join(session.sessionId);
+        // A developer who has asked something since the join began is answered by that ask, which
+        // reads the plan's history itself: nothing joined stands, nothing is caught up on and
+        // nothing counted heard, so the next call is handed it all again.
+        if (this.#standing !== session || session.revisions !== revision) return;
+        for (const runId of join.runs) this.#registerWoken(runId);
+        const working = join.joined && join.runs.length > 0;
+        if (join.missed !== undefined) {
+          this.#speakInto(session, null, missedWorkNote(join.missed, working));
+        } else if (working) {
+          this.#append(session, thinkingAppend(this.#input(null, STILL_WORKING_NOTE)));
+        }
+        session.questions.push(...join.questions);
+        if (!session.holdingQuestion) this.#handQuestion(session, null);
+        yield* join.follow;
+      }),
     );
   }
 
@@ -1042,7 +1071,7 @@ export class LiveSessionService {
     switch (event.type) {
       case LIVE_SERVER_EVENT.SESSION_STARTED:
         this.#started(session);
-        this.#explore(session);
+        this.#join(session);
         return Effect.void;
       case LIVE_SERVER_EVENT.SESSION_CLOSED:
         return this.#over(session);

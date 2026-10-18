@@ -3,11 +3,15 @@ import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automat
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
+import { LINK_COPY, useCopyToast } from "@luke/panel/copy-feedback";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { useAutomations } from "@luke/panel/desktop/use-automations";
 import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
 import { useOpenSettings } from "@luke/panel/open-settings";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -49,15 +53,11 @@ import {
 import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref";
-import { LINK_COPY, useCopyToast } from "../copy-feedback";
 import { lineSubject } from "../tasks/agent-ref";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
 import { holderName, INBOX_HOLDER, type InboxListed } from "../tasks/inbox-model";
-import { RelativeTime } from "../tasks/relative-time";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { useWaitingItems } from "../tasks/use-waiting-items";
-import { Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction } from "./action-menu";
 import { RecentRow } from "./desktop-home";
 import { useArchivedView, useTaskListView } from "./task-list-view";
 

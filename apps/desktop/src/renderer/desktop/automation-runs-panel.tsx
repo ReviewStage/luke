@@ -12,10 +12,14 @@ import {
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { ActionMenu } from "@luke/panel/desktop/action-menu";
 import { usePaneSlide } from "@luke/panel/desktop/pane-motion";
 import type { RunsRead } from "@luke/panel/desktop/use-automation-runs";
 import { EDGE_SIDE, useResizableEdge } from "@luke/panel/desktop/use-resizable-edge";
+import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "@luke/panel/state-glyph";
 import { momentText, sinceText, useMinute } from "@luke/panel/tasks/task-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -38,11 +42,7 @@ import {
 } from "@luke/ui";
 import { ClockIcon, PlayIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { useCopyLinkItem } from "../copy-link-item";
-import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph";
 import { centreWithin, scrollerOf } from "../tasks/code-pane";
-import { Tooltip } from "../tooltip";
-import { ActionMenu } from "./action-menu";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups";
 
 /**

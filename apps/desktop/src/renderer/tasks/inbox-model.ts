@@ -31,8 +31,8 @@ import { linksIn } from "@luke/features/mention-link";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
+import type { CountNoun } from "@luke/panel/desktop/sidebar-group-header";
 import { isWireString } from "@luke/wire";
-import type { CountNoun } from "../desktop/sidebar-group-header";
 import { refusalLine, refusalPasses } from "./file-tab-model";
 import { plainWords } from "./tool-call-model";
 

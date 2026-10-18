@@ -10,6 +10,11 @@ import type { FactoryWorld } from "@luke/features/factory-world-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { runAppCommand, useAppCommand } from "@luke/panel/app-commands";
+import type {
+  FactorySceneModule,
+  FactorySceneProps,
+  SceneHover,
+} from "@luke/panel/factory-world/contract";
 import { PICK_KIND, type WorldModule, type WorldState } from "@luke/panel/factory-world/world";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
@@ -40,7 +45,6 @@ import { bundleLanded, landedBundles, onSideBundles } from "#testing/side-bundle
 import { tasksControl } from "#testing/tasks-control";
 import { type SideBundles, sideBundles, worldBundleAtom } from "../bundle-loader";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import type { FactorySceneModule, FactorySceneProps, SceneHover } from "./contract";
 import type { WorldEntry } from "./registry";
 import { FactoryWorldPage } from "./world-page";
 

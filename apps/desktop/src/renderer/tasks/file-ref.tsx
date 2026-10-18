@@ -1,5 +1,6 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
+import { InlineRef } from "@luke/panel/inline-ref";
 import {
   HoverCard,
   HoverCardHead,
@@ -8,7 +9,6 @@ import {
   INLINE_REF_NAME,
 } from "@luke/ui";
 import { fileFolder, fileName, fileRefText, lineRangeText } from "@luke/voice/code-pane-model";
-import { InlineRef } from "../inline-ref";
 import { shownWhereRead } from "./file-tab-model";
 import { FileTypeIcon } from "./file-type-icon";
 

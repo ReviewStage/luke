@@ -1,10 +1,10 @@
-import { BUTTON_SHAPE, BUTTON_VARIANT, Button } from "@luke/ui";
-import { MarkdownMessage } from "./markdown-message";
 import {
   CAPTION_TONE,
   type CaptionPresentation,
   type CaptionTone,
-} from "./use-caption-presentation";
+} from "@luke/panel/use-caption-presentation";
+import { BUTTON_SHAPE, BUTTON_VARIANT, Button } from "@luke/ui";
+import { MarkdownMessage } from "./markdown-message";
 
 /**
  * caption-strip.tsx -- the live captions: a small strip of the words being said, just above the call bar.
