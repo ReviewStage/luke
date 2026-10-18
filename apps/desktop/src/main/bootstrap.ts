@@ -8,7 +8,7 @@ import {
 } from "@luke/host/app-identity";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import { buildCommit } from "@luke/host/build-commit";
-import { type SentryEnvironment, sentryEnvironment } from "@luke/host/sentry-options";
+import { type SentryEnvironment, sentryEnvironment } from "@luke/host/sentry-environment";
 import type { MenuBarChange } from "./app-menu";
 import type { DesktopConfig } from "./services/desktop-config";
 

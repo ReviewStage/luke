@@ -1,10 +1,10 @@
 /**
- * sentry-options.test.ts -- which requests a window traces, and which environment each build reports under.
+ * sentry-tracing.test.ts -- which requests a window traces: every one but its own reports to main.
  */
 
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { SENTRY_ENVIRONMENT, sentryEnvironment, sentryTracesRequest } from "./sentry-options.js";
+import { sentryTracesRequest } from "./sentry-tracing.js";
 
 test("a renderer's report to main is never traced", () => {
   assert.equal(sentryTracesRequest("sentry-ipc://envelope/sentry_key"), false);
@@ -22,25 +22,4 @@ test("every other request is traced", () => {
 
 test("a request that only names the scheme elsewhere is still traced", () => {
   assert.equal(sentryTracesRequest("https://example.com/?next=sentry-ipc://envelope"), true);
-});
-
-test("a Developer ID package reports as production", () => {
-  assert.equal(
-    sentryEnvironment({ packaged: true, developerIdSigned: true }),
-    SENTRY_ENVIRONMENT.PRODUCTION,
-  );
-});
-
-test("an ad-hoc package reports as a test build, never as production", () => {
-  assert.equal(
-    sentryEnvironment({ packaged: true, developerIdSigned: false }),
-    SENTRY_ENVIRONMENT.TEST,
-  );
-});
-
-test("an unpackaged run reports as development, even from a release bundle", () => {
-  assert.equal(
-    sentryEnvironment({ packaged: false, developerIdSigned: true }),
-    SENTRY_ENVIRONMENT.DEVELOPMENT,
-  );
 });

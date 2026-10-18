@@ -5,9 +5,10 @@ import {
 } from "@luke/features/analytics";
 import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
 import { feedbackDeliveryFromEnvironment } from "@luke/features/feedback";
+import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
 import { type RunMode, sentryReportingEnabled } from "@luke/host";
 import type { EffectDesktopService } from "@luke/host/desktop-service";
-import { SENTRY_TRACES_SAMPLE_RATE, type SentryEnvironment } from "@luke/host/sentry-options";
+import type { SentryEnvironment } from "@luke/host/sentry-environment";
 import * as Sentry from "@sentry/electron/main";
 import { Effect } from "effect";
 import {

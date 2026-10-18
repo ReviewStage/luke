@@ -11,8 +11,8 @@
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@luke/features/sentry-tracing";
 import type { AppBridge } from "@luke/host/bridge";
-import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@luke/host/sentry-options";
 import { installAppBridge } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
