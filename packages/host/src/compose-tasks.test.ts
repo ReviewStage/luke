@@ -973,6 +973,24 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
   }),
 );
 
+it.effect(
+  "a task's code read as none is held as none, and a task whose work read did not answer holds its code unread",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const billing = task(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      service.works[INVITES] = { turns: [] };
+      const { call, last } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      assert.deepEqual(last()?.shownCode, []);
+
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING });
+      assert.equal(last()?.shownCode, undefined);
+    }),
+);
+
 it.effect("a refresh that reads what the view already holds tells the window nothing", () =>
   Effect.gen(function* () {
     const billing = task(BILLING, "Billing export", "# Billing export", 20);

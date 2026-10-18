@@ -157,6 +157,41 @@ test("the Call tab draws each call's spoken lines as the developer's bubbles and
   assert.match(call.textContent ?? "", /Live/u);
 });
 
+/** The Code tab as the task's page draws it over the code the task holds, as markup. */
+function codeTab(shownCode: readonly never[] | undefined): HTMLElement {
+  const markup = renderToStaticMarkup(
+    createElement(DesktopTasks, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      tasks: tasksControl({
+        page: TASKS_PAGE.DOCUMENT,
+        activeTaskId: TASK.id,
+        region: { kind: DOCUMENT_REGION.READY, task: TASK },
+        sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
+        shownCode,
+      }),
+    }),
+  );
+  const page = document.createElement("div");
+  page.innerHTML = markup;
+  return page;
+}
+
+test("the Code tab waits while the task's code is unread, and says there is none only once it is read as none", () => {
+  const tab = (page: HTMLElement) => {
+    const panel = page.querySelector("aside[aria-label='Panel'] [role=tabpanel]");
+    assert.ok(panel, "the panel shows its tab");
+    return panel;
+  };
+  const unread = tab(codeTab(undefined));
+  assert.ok(unread.querySelector("[role=status]"), "the tab says it is waiting");
+  assert.doesNotMatch(unread.textContent ?? "", /No code yet\./u);
+
+  const none = tab(codeTab([]));
+  assert.match(none.textContent ?? "", /No code yet\./u);
+  assert.equal(none.querySelector("[role=status]"), null);
+});
+
 test("a plan's Inbox tab whose read holds nothing says nothing needs you under the Inbox's glyph, or under its list where the list stands alone, rather than standing blank", async () => {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,

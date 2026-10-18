@@ -4562,6 +4562,25 @@ button.attached-file-face:hover img {
   line-height: var(--luke-type-caption-leading);
 }
 
+/* The list's room while no read has listed the shells: the blocks standing
+   for them, or the failure, with the foot kept at the list's end. */
+.terminal-shells-wait {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.terminal-shells-wait[data-failed] {
+  padding: var(--luke-space-8) var(--luke-space-12);
+}
+
+/* A row standing for a shell still being read opens nothing, so it takes no
+   pointer's fill. */
+.terminal-shells-wait .terminal-shell:hover {
+  background: none;
+}
+
 .terminal-shell {
   position: relative;
   display: flex;

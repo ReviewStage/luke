@@ -1417,8 +1417,8 @@ function sameHolds(a: TaskHolds, b: TaskHolds): boolean {
 /**
  * Whether a kind the task did not hold holds something now. Note that a
  * kind not yet read counts as one held nothing, because the host leaves the
- * task's work and code absent both before their read and when it found
- * none, so a first snippet or turn arrives from nothing known; a read
+ * task's work absent both before its read and when it found none, so a
+ * first turn arrives from nothing known; a read
  * landing after another tab shows is held to the same rule, and the tab
  * shown stands rather than flickering to the one that landed.
  */

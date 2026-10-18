@@ -160,6 +160,10 @@ let defaultRefused = false;
 let catalogReads = 0;
 /** Whether the account's tasks were about no repository lately, so a new automation starts with none. */
 let noRecent = false;
+/** Whether the read of the account's integrations is held unanswered, as one still out on the wire. */
+let integrationsHeld = false;
+/** How many reads of the account's integrations are refused before one answers. */
+let integrationsRefusals = 0;
 /** What a change answers: the automation as changed, or why not. */
 let changeRefusal:
   | (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE]
@@ -201,6 +205,8 @@ beforeEach(() => {
   catalogReads = 0;
   changeRefusal = undefined;
   noRecent = false;
+  integrationsHeld = false;
+  integrationsRefusals = 0;
   fakeAppBridge({
     act: (request: Act) => {
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
@@ -252,6 +258,11 @@ beforeEach(() => {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
       }
       if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
+        if (integrationsHeld) return new Promise(() => undefined);
+        if (integrationsRefusals > 0) {
+          integrationsRefusals -= 1;
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Unreachable." });
+        }
         // Linear and Sentry are connected; the rest are not.
         const integrations = Object.fromEntries(
           INTEGRATION_PROVIDER_LIST.map((provider) => [
@@ -1111,6 +1122,40 @@ test("a new agent's MCP servers are a field chip of the owner's connected ones u
     automationId: SWEEP.id,
     change: { action: { ...SWEEP.action, disabledServers: [INTEGRATION_PROVIDER.SENTRY] } },
   });
+});
+
+test("a new agent's MCP servers row claims nothing while the owner's connections are read", async () => {
+  standing = [{ ...SWEEP, mine: true }];
+  integrationsHeld = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  const reading = [...page.querySelectorAll("[role=status]")].map((each) => each.textContent);
+  assert.ok(reading.includes("Reading your connected servers…"), "the row says it is reading");
+  assert.doesNotMatch(page.textContent ?? "", /None connected yet\.|Every connected server/u);
+  assert.equal(
+    [...page.querySelectorAll("button")].find(
+      (each) => each.getAttribute("aria-label") === "MCP servers",
+    ),
+    undefined,
+    "no chip claims None while the read is out",
+  );
+});
+
+test("a new agent's MCP servers row says a refused read of the owner's connections, and Retry reads them", async () => {
+  standing = [{ ...SWEEP, mine: true }];
+  integrationsRefusals = 1;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  const alert = page.querySelector("[role=alert]");
+  assert.match(alert?.textContent ?? "", /Your connected servers could not be read\./u);
+  assert.doesNotMatch(page.textContent ?? "", /None connected yet\./u);
+
+  act(() => button("Retry").click());
+  await settle();
+  assert.match(page.textContent ?? "", /Every connected server is on\./u);
+  assert.equal(button("MCP servers").querySelectorAll(".provider-mark").length, 2);
 });
 
 test("another member's automation says which servers its creator switched off, offering no switch of the reader's own", async () => {
