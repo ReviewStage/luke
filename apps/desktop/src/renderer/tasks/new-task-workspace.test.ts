@@ -6,9 +6,11 @@ import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
+import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { editorBundleLanded, installEditorLayout } from "#testing/composer";
 import { tasksControl } from "#testing/tasks-control";
 import { NewTaskDialog } from "./new-task-dialog";
 import type { RepositoryChooser } from "./repository-chip";
@@ -16,9 +18,11 @@ import type { RepositoryChooser } from "./repository-chip";
 /**
  * new-task-workspace.test.ts -- New task says where the task will start,
  * "New task in Acme", and the workspace chip there chooses another: the
- * repository chip then lists that workspace's repositories, and the plan
- * starts there. Both chips are the app's one picker, Settings' bordered chip
- * and its menu. Synthetic throughout.
+ * composer's repository chip then lists that workspace's repositories, and
+ * the task starts there. Both chips are the app's one picker, Settings'
+ * bordered chip and its menu. Each test stands the card in Plan mode, which
+ * starts with or without a repository, as New task keeps the mode it was
+ * left in. Synthetic throughout.
  */
 
 const PERSONAL: Workspace = {
@@ -36,8 +40,13 @@ const ACME: Workspace = {
 
 const roots: Root[] = [];
 
+// Landed before any card renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
   installScrollIntoView();
+  installEditorLayout();
+  window.localStorage.setItem("luke.new-task-mode", "plan");
   fakeAppBridge({
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
@@ -46,6 +55,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  window.localStorage.clear();
 });
 
 async function settle(): Promise<void> {
@@ -97,7 +107,7 @@ function chooserFor(workspaceId: string | undefined): RepositoryChooser {
   };
 }
 
-test("New plan says the workspace it starts in, and the workspace chosen there lists its own repositories and starts the plan", async () => {
+test("New task says the workspace it starts in, and the workspace chosen there lists its own repositories and starts the plan", async () => {
   const starts: (string | undefined)[] = [];
   const control = tasksControl();
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -155,18 +165,14 @@ test("New plan says the workspace it starts in, and the workspace chosen there l
     "the list is the chosen workspace's repositories",
   );
 
-  const name = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(name, "Usage");
-    name?.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  const create = [...document.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
-    each.textContent?.startsWith("Create task"),
-  );
+  const create = document.querySelector<HTMLButtonElement>(START_WITH_LUKE);
   act(() => create?.click());
   await settle();
   assert.deepEqual(starts, [ACME.id], "the plan starts in the workspace chosen");
 });
+
+/** Plan mode's Start, the composer's round button. */
+const START_WITH_LUKE = 'button[aria-label="Start planning"]';
 
 /** The menu's option that names `name`. */
 function optionNamed(menu: ParentNode, name: string): HTMLElement {
@@ -205,32 +211,25 @@ async function openNewTask(workspaceId: string, preset?: string) {
   const repositoryChip = () =>
     document.querySelector<HTMLButtonElement>(".repository-chip .luke-chip") ??
     assert.fail("the repository chip stands");
-  const create = async (words: string) => {
-    const name = document.querySelector<HTMLInputElement>('input[aria-label="Task name"]');
-    act(() => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(name, words);
-      name?.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    const button = [...document.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
-      each.textContent?.startsWith("Create task"),
-    );
+  const create = async () => {
+    const button = document.querySelector<HTMLButtonElement>(START_WITH_LUKE);
     act(() => button?.click());
     await settle();
   };
   return { starts, repositoryChip, create };
 }
 
-test("a repository group's + whose repository the workspace's GitHub does not reach opens New plan on none", async () => {
+test("a repository group's + whose repository the workspace's GitHub does not reach opens New task on none", async () => {
   const dialog = await openNewTask(PERSONAL.id, "ReviewStage/luke");
 
   const label = dialog.repositoryChip().textContent;
-  await dialog.create("Tmp");
+  await dialog.create();
 
   assert.equal(label, "No repository");
   assert.deepEqual(dialog.starts, [[null, PERSONAL.id]]);
 });
 
-test("switching New plan to a workspace with no GitHub connected lets the other workspace's repository go and offers none of its own", async () => {
+test("switching New task to a workspace with no GitHub connected lets the other workspace's repository go and offers none of its own", async () => {
   const dialog = await openNewTask(ACME.id);
   const before = dialog.repositoryChip().textContent;
 
@@ -245,7 +244,7 @@ test("switching New plan to a workspace with no GitHub connected lets the other 
   const offered = [...document.querySelectorAll("button")].map((button) => button.textContent);
   const note = document.querySelector(".luke-combobox-note p")?.textContent;
   const after = dialog.repositoryChip().textContent;
-  await dialog.create("Tmp");
+  await dialog.create();
 
   assert.deepEqual([before, after], ["acme-corp/relay", "No repository"]);
   assert.equal(offered.includes("acme-corp/relay"), false);
@@ -275,7 +274,7 @@ test("New task's workspace and repository chips each open their own menu", async
   assert.deepEqual(drawn, ["Workspace", "Repository"]);
 });
 
-test("Tab from the workspace picker's open list moves on to the Plan switch beside the title, and Shift-Tab back to the chip", async () => {
+test("Tab from the workspace picker's open list moves on to the composer's words, and Shift-Tab back to the chip", async () => {
   await openNewTask(ACME.id);
   const chip =
     document.querySelector<HTMLButtonElement>('[aria-label="Workspace: Acme"]') ??
@@ -294,7 +293,7 @@ test("Tab from the workspace picker's open list moves on to the Plan switch besi
   const forward = await tabFromList(false);
   const backward = await tabFromList(true);
 
-  assert.deepEqual([forward, backward], ["Plan with Luke", "Workspace: Acme"]);
+  assert.deepEqual([forward, backward], ["Task prompt", "Workspace: Acme"]);
 });
 
 test("a switch of workspace closes the Linear search, and the chip then lists the issues of the workspace chosen", async () => {

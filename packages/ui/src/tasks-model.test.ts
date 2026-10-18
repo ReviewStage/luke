@@ -6,6 +6,7 @@ import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import { test } from "vitest";
 import {
+  agentPromptOf,
   ISSUE_MATCH_LIMIT,
   linearIssuesAskOf,
   MICROPHONE_PRESS,
@@ -16,6 +17,7 @@ import {
   positionedView,
   TASK_MARK,
   taskNameOfIssue,
+  taskNameOfWords,
   unsettledPinPositions,
 } from "./tasks-model.js";
 
@@ -117,6 +119,38 @@ test("a plan started from a Linear issue is named by its title, cut to a name's 
     TASK_BOUNDS.MAX_NAME_CHARS,
   );
   assert.equal(taskNameOfIssue({ identifier: "ENG-3", title: "   " }), "ENG-3");
+});
+
+test("an agent New task starts is handed a mention of the issue picked, then a blank line and the words; the issue alone with no words, and the words alone with no issue", () => {
+  const issue = {
+    identifier: "ENG-1",
+    title: " Fix [the] refresh ",
+    url: "https://linear.app/acme/issue/ENG-1/fix-the-refresh",
+  };
+
+  assert.equal(
+    agentPromptOf(issue, "  Reproduce it first.\n"),
+    "[@ENG-1 Fix \\[the\\] refresh](https://linear.app/acme/issue/ENG-1/fix-the-refresh)\n\nReproduce it first.",
+  );
+  assert.equal(
+    agentPromptOf(issue, "   "),
+    "[@ENG-1 Fix \\[the\\] refresh](https://linear.app/acme/issue/ENG-1/fix-the-refresh)",
+  );
+  assert.equal(
+    agentPromptOf(undefined, " Make the sidebar keep its folds. "),
+    "Make the sidebar keep its folds.",
+  );
+});
+
+test("a task started in Plan mode is named by the first line of the words, cut to a name's bound, and by nothing for a blank box", () => {
+  const long = "x".repeat(TASK_BOUNDS.MAX_NAME_CHARS + 20);
+
+  assert.equal(
+    taskNameOfWords("\n  Rethink automations  \nwhich agent they reuse"),
+    "Rethink automations",
+  );
+  assert.equal(taskNameOfWords(long).length, TASK_BOUNDS.MAX_NAME_CHARS);
+  assert.equal(taskNameOfWords(" \n "), "");
 });
 
 test("a pin dragged here stands at its new place until the list carries it, and is let go once it does, the pin is gone, or the service answered", () => {

@@ -33,7 +33,8 @@ import { useTaskMentions } from "./task-mentions";
  * repository's skills, written in as a skill's chip (`skill-picker.tsx`);
  * and the microphone records words into the box at the caret
  * (`use-dictation.ts`). A list that stands answers the keys it takes first,
- * then dictation does, and Escape otherwise leaves the box. What a server's
+ * then dictation does, and Escape otherwise leaves the box, or does what its
+ * owner says instead (`onLeave`), as New task's closes its card. What a server's
  * chip says a send does with it is the box's to tell (`servers.place`).
  */
 
@@ -66,6 +67,7 @@ export function useComposerPickers({
   keywords,
   servers,
   onNote,
+  onLeave,
 }: {
   /** The box's editor; nothing until it has mounted. */
   editor: RefObject<ComposerEditorHandle | undefined>;
@@ -83,6 +85,8 @@ export function useComposerPickers({
   servers: { readonly statuses: IntegrationStatuses; readonly place: MentionedServersPlace };
   /** Says why a dictation left nothing, or clears what the last one said. */
   onNote: (note: string | undefined) => void;
+  /** What Escape does where no list or dictation takes it: New task's box closes its card; the box gives up the caret where none is given. */
+  onLeave?: (() => void) | undefined;
 }): ComposerPickers {
   const dictation = useDictation({ editor, keywords, onNote });
   const openSkill = useSkillOpener();
@@ -120,7 +124,8 @@ export function useComposerPickers({
     }
     if (event.key !== "Escape") return false;
     event.stopPropagation();
-    editor.current?.blur();
+    if (onLeave === undefined) editor.current?.blur();
+    else onLeave();
     return true;
   };
 

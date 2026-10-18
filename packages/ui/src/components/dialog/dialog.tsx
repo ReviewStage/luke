@@ -46,12 +46,13 @@ export type DialogRole = (typeof DIALOG_ROLE)[keyof typeof DIALOG_ROLE];
 
 /**
  * How wide the card stands: a question's measure, wider for a note being
- * written, or fitted to a file shown edge to edge, as a picture opened over
- * the window is.
+ * written, wider still for a composer card with chips at its foot, or fitted
+ * to a file shown edge to edge, as a picture opened over the window is.
  */
 export const DIALOG_SIZE = {
   CONFIRM: "confirm",
   WIDE: "wide",
+  COMPOSER: "composer",
   MEDIA: "media",
 } as const;
 
