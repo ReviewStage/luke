@@ -184,7 +184,7 @@ export function AdminSidebar({
         style={{ width: sidebarRailWidth(collapsed) }}
         className="hidden h-full shrink-0 flex-col overflow-hidden border-r border-border bg-card py-5 transition-[width] duration-150 ease-out min-[720px]:flex motion-reduce:transition-none"
       >
-        <div className="flex items-center px-4">
+        <div className="flex items-center gap-2 px-4">
           <span className="flex w-8 shrink-0 justify-center text-foreground" aria-hidden="true">
             <span className="inline-flex w-6">
               <LukeMark className="h-auto w-full" />
