@@ -364,6 +364,11 @@ The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
 - One-line guide comments inside functions. Why comments talk: "Note that
   we X, because Y." Design comments sit above the function. No trivial
   comments.
+- UI draws with `@luke/ui` (`packages/ui/README.md`): its components, page
+  patterns and `--luke-*` tokens; no raw controls where a component exists,
+  no literal colours or sizes, no `className` on its controls. A missing
+  variant is added to `@luke/ui` as an `as const` option. Third-party engines
+  are the exception.
 
 ## Commits
 
