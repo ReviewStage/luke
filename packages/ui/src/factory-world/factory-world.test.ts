@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
-import { FACTORY_WORLD_BOUNDS } from "@luke/features/factory-world-wire";
+import { FACTORY_WORLD_BOUNDS, type FactoryZone } from "@luke/features/factory-world-wire";
 import { AREA_PATH } from "@luke/features/pull-request-area";
 import { test } from "vitest";
 import {
@@ -151,36 +151,103 @@ test("edges join only zones the snapshot names, once each, marking a zone's depe
 
 /* ----- Layout ----- */
 
-test("a zone lands in the same place when other zones come and go", () => {
+/** The zones standing on `ring`, in the order they go round it. */
+function ringOf(view: FactoryWorldView, ring: number): ZoneView[] {
+  return view.zones
+    .filter((zone) => zone.ring === ring)
+    .sort((left, right) => left.angle - right.angle);
+}
+
+/** Each zone on `ring` beside the next one round, the last beside the first. */
+function neighboursOn(view: FactoryWorldView, ring: number): (readonly [ZoneView, ZoneView])[] {
+  const zones = ringOf(view, ring);
+  return zones.flatMap((zone, index) => {
+    const next = zones[(index + 1) % zones.length];
+    return next === undefined ? [] : [[zone, next] as const];
+  });
+}
+
+/** `count` zones named `<directory>/<name>-<n>`, depending on nothing, so all stand at the surface. */
+function zonesUnder(directory: string, count: number): FactoryZone[] {
+  return Array.from({ length: count }, (_, index) => factoryZoneOf(`${directory}/zone-${index}`));
+}
+
+test("a ring holding two directories is filled all the way round, no gap wider than twice an even share", () => {
+  const view = factoryWorldViewOf(
+    factoryWorldOf({ zones: [...zonesUnder("apps", 4), ...zonesUnder("packages", 9)] }),
+  );
+  const surface = ringOf(view, zoneOf(view, "apps/zone-0").ring);
+  const evenShare = (2 * Math.PI) / surface.length;
+
+  assert.equal(surface.length, 13);
+  for (const [left, right] of neighboursOn(view, surface[0]?.ring ?? -1)) {
+    const gap = (right.angle - left.angle + 2 * Math.PI) % (2 * Math.PI);
+    assert.ok(gap <= 2 * evenShare, `${left.path} to ${right.path}: ${gap}`);
+  }
+});
+
+test("a directory's zones hold one unbroken arc of their ring", () => {
+  const view = factoryWorldViewOf(
+    factoryWorldOf({
+      zones: [...zonesUnder("apps", 5), ...zonesUnder("libs", 7), ...zonesUnder("kits", 3)],
+    }),
+  );
+  const directories = ringOf(view, zoneOf(view, "apps/zone-0").ring).map(
+    (zone) => zone.path.split("/")[0],
+  );
+  const changes = directories.filter(
+    (directory, index) => directory !== directories.at(index - 1),
+  ).length;
+
+  // Note that going round once, three unbroken arcs change directory exactly three times.
+  assert.equal(changes, 3);
+});
+
+test("a directory coming or going moves every other zone on its ring less than one even share, and none on another ring", () => {
+  const scripts = factoryZoneOf("scripts", [], { bytes: 3000 });
   const before = factoryWorldViewOf(
-    factoryWorldOf({ zones: [...PRODUCT_ZONES, factoryZoneOf("apps/extra", ["libs/base"])] }),
+    factoryWorldOf({ zones: [...zonesUnder("apps", 4), ...zonesUnder("packages", 9), scripts] }),
   );
   const after = factoryWorldViewOf(
     factoryWorldOf({
       zones: [
-        ...PRODUCT_ZONES.filter((zone) => zone.path !== "apps/site"),
-        factoryZoneOf("apps/newer", ["libs/model"]),
+        ...zonesUnder("apps", 4),
+        ...zonesUnder("packages", 9),
         factoryZoneOf("docs/guide"),
+        scripts,
       ],
     }),
   );
+  const evenShare = (2 * Math.PI) / ringOf(after, zoneOf(after, "docs/guide").ring).length;
 
-  const placeOf = (zone: ZoneView) => ({ angle: zone.angle, radius: zone.radius });
-  assert.deepEqual(placeOf(zoneOf(after, "apps/desk")), placeOf(zoneOf(before, "apps/desk")));
-  assert.deepEqual(placeOf(zoneOf(after, "libs/base")), placeOf(zoneOf(before, "libs/base")));
+  for (const zone of before.zones) {
+    if (zone.path === "scripts") continue;
+    const moved = circularGap(zone.angle, zoneOf(after, zone.path).angle);
+    assert.ok(moved < evenShare, `${zone.path} moved ${moved}`);
+  }
+  assert.deepEqual(zoneOf(after, "scripts"), zoneOf(before, "scripts"));
 });
 
-test("zones under one top-level directory stand within one spread of each other's angle", () => {
-  const zones = Array.from({ length: 12 }, (_, index) => factoryZoneOf(`apps/app-${index}`));
-  const view = factoryWorldViewOf(factoryWorldOf({ zones }));
+test("zones on one ring stand apart by their footprints, a larger zone given more of the ring", () => {
+  const view = factoryWorldViewOf(
+    factoryWorldOf({
+      zones: [
+        factoryZoneOf("apps/huge", [], { bytes: 90_000 }),
+        factoryZoneOf("apps/small", [], { bytes: 1_000 }),
+        factoryZoneOf("libs/large", [], { bytes: 40_000 }),
+        factoryZoneOf("libs/tiny", [], { bytes: 10 }),
+        factoryZoneOf("kits/medium", [], { bytes: 10_000 }),
+      ],
+    }),
+  );
+  const ring = zoneOf(view, "apps/huge").ring;
+  const footprints = ringOf(view, ring).reduce((sum, zone) => sum + zone.footprint, 0);
 
-  for (const left of view.zones) {
-    for (const right of view.zones) {
-      assert.ok(
-        circularGap(left.angle, right.angle) <= 2 * ZONE_LAYOUT.GROUP_SPREAD + 1e-9,
-        `${left.path} and ${right.path}`,
-      );
-    }
+  // Note that a zone covering its footprint's share of the turn either side of its middle meets its neighbour's and no more.
+  for (const [left, right] of neighboursOn(view, ring)) {
+    const gap = (right.angle - left.angle + 2 * Math.PI) % (2 * Math.PI);
+    const covered = (Math.PI * (left.footprint + right.footprint)) / footprints;
+    assert.ok(gap >= covered - 1e-9, `${left.path} overlaps ${right.path}`);
   }
 });
 
