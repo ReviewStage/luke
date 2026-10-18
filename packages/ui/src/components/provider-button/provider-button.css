@@ -44,7 +44,7 @@
   .luke-provider-button[data-primary="true"] {
     background: var(--luke-color-text);
     box-shadow: none;
-    color: var(--luke-color-ground);
+    color: var(--luke-color-ink-inverse);
   }
 
   .luke-provider-button[data-primary="true"]:hover:not(:disabled) {

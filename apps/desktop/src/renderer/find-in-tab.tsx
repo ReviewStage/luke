@@ -1,5 +1,5 @@
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { CloseIcon, IconButton, SearchField } from "@luke/ui";
+import { CloseIcon, DisclosureFind, IconButton, SearchField, useDisclosureFinding } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import {
@@ -120,9 +120,6 @@ export interface FindSource {
   readonly onTally: (listener: (tally: FindTally) => void) => () => void;
   readonly selection: () => string | undefined;
 }
-
-/** Whether a find bar stands open over the tab drawing under it. */
-const FindOpenContext = createContext(false);
 
 /** Hands the scope over the tab a source of the tab's own, or takes it back. */
 const FindSourceContext = createContext<(source: FindSource | undefined) => void>(() => undefined);
@@ -295,7 +292,7 @@ function FindBar({
  * it while this is so, so the find covers what the tab holds.
  */
 export function useFindOpen(): boolean {
-  return useContext(FindOpenContext);
+  return useDisclosureFinding();
 }
 
 /**
@@ -387,7 +384,7 @@ export function FindScope({
         />
       ) : null}
       <FindSourceContext.Provider value={setSource}>
-        <FindOpenContext.Provider value={open}>{children}</FindOpenContext.Provider>
+        <DisclosureFind finding={open}>{children}</DisclosureFind>
       </FindSourceContext.Provider>
     </div>
   );

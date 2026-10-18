@@ -1,6 +1,7 @@
+import { useDisclosureBodyDrawn } from "@luke/ui";
 import { BrainIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { Fold, FoldBody, type FoldProps, FoldSummary, useFoldBodyDrawn } from "./fold";
+import { Fold, FoldBody, type FoldProps, FoldSummary } from "./fold";
 
 /**
  * reasoning.tsx -- AI Elements' Reasoning: a model's thinking, folded under one quiet line until the reader opens it.
@@ -39,7 +40,7 @@ export interface ReasoningTriggerProps {
 
 /** The one line a folded reasoning shows. */
 export function ReasoningTrigger({ preview = "" }: ReasoningTriggerProps): ReactNode {
-  const drawn = useFoldBodyDrawn();
+  const drawn = useDisclosureBodyDrawn();
   return (
     <FoldSummary className="reasoning-line">
       <BrainIcon className="reasoning-icon" aria-hidden="true" />

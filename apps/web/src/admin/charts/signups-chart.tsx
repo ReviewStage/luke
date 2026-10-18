@@ -20,7 +20,7 @@ import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "rec
 import { ChartEmpty, ChartFrame, ChartTrend } from "./chart-frame";
 
 const SIGNUPS_CHART = {
-  count: { label: "New accounts", color: "var(--chart-1)" },
+  count: { label: "New accounts", color: "var(--luke-color-chart-1)" },
 } satisfies ChartConfig;
 
 /**
@@ -82,7 +82,7 @@ export function SignupsChart({
 }
 
 const SIGN_IN_METHODS_CHART = {
-  accounts: { label: "Accounts", color: "var(--chart-1)" },
+  accounts: { label: "Accounts", color: "var(--luke-color-chart-1)" },
 } satisfies ChartConfig;
 
 /**

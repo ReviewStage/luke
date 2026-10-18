@@ -29,6 +29,7 @@
 @import "./components/data-table/data-table.css";
 @import "./components/detail-page/detail-page.css";
 @import "./components/dialog/dialog.css";
+@import "./components/disclosure/disclosure.css";
 @import "./components/empty-state/empty-state.css";
 @import "./components/error-state/error-state.css";
 @import "./components/form-field/form-field.css";
