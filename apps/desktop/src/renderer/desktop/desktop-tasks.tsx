@@ -580,7 +580,7 @@ function PlanDocument({
   };
   // A call's row in a transcript opens what the call is about where the
   // window already draws it: the task, an agent, or the Inbox in this
-  // column, the rest in the side panel.
+  // column, another task as the sidebar opens it, the rest in the side panel.
   const openTarget = (target: ToolTarget) => {
     switch (target.kind) {
       case TOOL_TARGET.AGENT:
@@ -595,6 +595,8 @@ function PlanDocument({
         return sidePanel.onChoose(SIDE_PANEL_TAB.BOARD);
       case TOOL_TARGET.PAGE:
         return sidePanel.onChoose({ page: target.page });
+      case TOOL_TARGET.TASK:
+        return tasks.onShowTask(target.task);
       case TOOL_TARGET.SHOWN_CODE: {
         // The lines are read at the commit Luke read them at, as the Code tab's snippet opens them.
         const showing = tasks.shownCode?.find((each) => each.callId === target.call);

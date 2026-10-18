@@ -466,7 +466,7 @@ test("a turn whose older steps the service left out says so, and a worker whose 
   assert.equal(workFailed(workerOf(row === undefined ? [] : [row], "w")?.session?.record), true);
 });
 
-test("the starts of Luke's work that made a new task and his accepted section calls are named by call id once answered, and no other start, refused section call, call still out, or unread work names one", () => {
+test("the starts of Luke's work that made a new task and his accepted section and task archive calls are named by call id once answered, and no other start, refused section or archive call, call still out, or unread work names one", () => {
   const made = { status: "accepted", agent: { id: "agent-2" }, newTask: { id: "task-2" } };
   const onTask = { status: "accepted", agent: { id: "agent-3" } };
   const conversation = conversationOf([
@@ -478,9 +478,11 @@ test("the starts of Luke's work that made a new task and his accepted section ca
       toolCall(AGENT_TOOL.DELETE_SECTION, "c5", {}, { output: { status: "accepted" } }),
       toolCall(AGENT_TOOL.CREATE_SECTION, "c6", {}, { output: { status: "rejected" } }),
       toolCall(AGENT_TOOL.MOVE_TASK, "c7", {}),
+      toolCall(AGENT_TOOL.ARCHIVE_TASK, "c8", {}, { output: { status: "accepted" } }),
+      toolCall(AGENT_TOOL.UNARCHIVE_TASK, "c9", {}, { output: { status: "rejected" } }),
     ]),
   ]);
 
-  assert.deepEqual(sidebarCallIds(conversation), ["c1", "c5"]);
+  assert.deepEqual(sidebarCallIds(conversation), ["c1", "c5", "c8"]);
   assert.deepEqual(sidebarCallIds(undefined), []);
 });

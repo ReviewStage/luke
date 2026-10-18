@@ -666,6 +666,7 @@ function InboxSidePanel({
   const { panel } = drawing;
   const openTarget = (target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.PAGE) return panel.onChoose({ page: target.page });
+    if (target.kind === TOOL_TARGET.TASK) return tasks.onShowTask(target.task);
     if (target.kind === TOOL_TARGET.AGENT) {
       return taskId === undefined
         ? tasks.agentView.onOpen(target.agent)

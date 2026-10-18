@@ -21,7 +21,14 @@ import {
 } from "@luke/database/models/message-reads";
 import { readPageById } from "@luke/database/models/plan-pages";
 import { listTaskSections } from "@luke/database/models/task-section-store";
-import { createTask, deleteTask, listTasks, readTask } from "@luke/database/models/task-store";
+import {
+  createTask,
+  deleteTask,
+  listTasks,
+  readTask,
+  type StoredTask,
+  updateTask,
+} from "@luke/database/models/task-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
@@ -220,7 +227,8 @@ export const CODING_AGENT_TOOL_REFUSAL = {
     `most ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters.`,
   UNREADABLE_FILTER: "Not run: narrow the list by a taskId, by thisTask, or by neither.",
   UNREADABLE_TASKS:
-    "Not run: narrow the tasks by words of their name, and page them by an offset of 0 or more.",
+    "Not run: narrow the tasks by words of their name, page them by an offset of 0 or more, and " +
+    "ask for the archived ones too with includeArchived true, or leave it out.",
   NO_AGENT: `Not run: no coding agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   NO_WORKSPACE:
     "Not run: your workspace could not be read for you, so no agent is reached from here.",
@@ -256,6 +264,19 @@ export const ARCHIVE_AGENT_REFUSAL = {
   REARCHIVED:
     "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
     `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
+} as const;
+
+/** Why a task's archive or unarchive changed nothing, in words the model can act on. */
+export const ARCHIVE_TASK_REFUSAL = {
+  UNREADABLE:
+    `Not run: name the task by the id ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered; ` +
+    `${AGENT_TOOL.LIST_TASKS} with includeArchived lists the archived ones.`,
+  OWN_TASK:
+    "Not archived: that is the task you work on, and you do not archive it yourself; say you are " +
+    "done, and the developer archives it.",
+  NO_TASK:
+    "Not run: no task of your workspace has that id, so it is none you can archive or bring back; " +
+    `${AGENT_TOOL.LIST_TASKS} names them, the archived ones too with includeArchived.`,
 } as const;
 
 /** Why a stop changed nothing, in words the model can act on. */
@@ -554,6 +575,17 @@ const ARCHIVE_AGENT_INPUT = Schema.Struct({
 });
 
 const readArchive = Schema.decodeUnknownResult(ARCHIVE_AGENT_INPUT);
+
+/** A task's archive or unarchive names the task alone: its archive stamps when it stands from and keeps no reason. */
+const ARCHIVE_TASK_INPUT = Schema.Struct({
+  taskId: describeWire(
+    wireUuidSchema,
+    `The task's id, as ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered it, or a ` +
+      "mention of it names.",
+  ),
+});
+
+const readTaskRef = Schema.decodeUnknownResult(ARCHIVE_TASK_INPUT);
 const readMessage = Schema.decodeUnknownResult(MESSAGE_AGENT_INPUT);
 /** A start as a call carries it: one Luke made under the tool's earlier words names its prompt `task`. */
 const START_AGENT_CALL = Schema.Struct({
@@ -689,6 +721,32 @@ export const UNARCHIVE_AGENT_TOOL = {
   inputSchema: READ_AGENT_INPUT,
 } as const;
 
+export const ARCHIVE_TASK_TOOL = {
+  name: AGENT_TOOL.ARCHIVE_TASK,
+  description:
+    "Archive a task of your workspace by its id, as the developer's Archive task would, on " +
+    "behalf of the developer you work for: it leaves the sidebar and every list but the " +
+    "archived ones, its plan takes no edit, and its agents take no message and start no new " +
+    "turn, while everything on it is kept and any member can unarchive it. Like the menu, it " +
+    "asks no one and stops no agent: one still working on it finishes the turn it is on. " +
+    "Archive a task whose work is done, such as one whose pull requests merged, or one the " +
+    "developer asked you to clean up; never a teammate's task still in use unless the developer " +
+    "asked for it. The task you work on yourself is refused. Answers `accepted`, also for a task " +
+    "already archived, or `rejected` and why. Then say which tasks you archived.",
+  inputSchema: ARCHIVE_TASK_INPUT,
+} as const;
+
+export const UNARCHIVE_TASK_TOOL = {
+  name: AGENT_TOOL.UNARCHIVE_TASK,
+  description:
+    "Bring an archived task of your workspace back by its id, as the developer's Unarchive " +
+    "would: it stands in the sidebar and the lists again, its plan takes edits, and its agents " +
+    "take messages, everything on it as it was. Unarchive one archived by mistake, or one the " +
+    `developer asks for, found with ${AGENT_TOOL.LIST_TASKS} and includeArchived. Answers ` +
+    "`accepted`, also for a task not archived, or `rejected` and why.",
+  inputSchema: ARCHIVE_TASK_INPUT,
+} as const;
+
 export const STOP_AGENT_TOOL = {
   name: AGENT_TOOL.STOP_AGENT,
   description:
@@ -731,8 +789,15 @@ export const READ_PAGE_TOOL = {
   inputSchema: READ_PAGE_INPUT,
 } as const;
 
-/** A list of tasks names its words to look for at most, and how many of the matching tasks to pass over. */
+/** A list of tasks names its words to look for at most, how many of the matching tasks to pass over, and whether the archived ones are listed too. */
 const LIST_TASKS_INPUT = Schema.Struct({
+  includeArchived: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "true to list the archived tasks too, each marked archived, such as to find one to " +
+        `bring back with ${AGENT_TOOL.UNARCHIVE_TASK}; leave it out for the open tasks alone.`,
+    ),
+  ),
   nameContains: Schema.optionalKey(
     describeWire(
       Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(200)),
@@ -753,11 +818,13 @@ const readTasksAsked = Schema.decodeUnknownResult(LIST_TASKS_INPUT);
 export const LIST_TASKS_TOOL = {
   name: AGENT_TOOL.LIST_TASKS,
   description:
-    "List the open tasks of your workspace, started by any member: each with its id, its name, " +
+    "List the open tasks of your workspace, started by any member, and the archived ones too " +
+    "where includeArchived asks: each with its id, its name, " +
     "the repository its agents work in (null for none yet), who started it, whether it is " +
-    "the task you work on, the sectionId of the sidebar section the developer you work for " +
-    "keeps it in (null for none, under Tasks), and its mention, the `[@name](link)` to name it " +
-    `by in your words, the newest first and at most ${TASKS_LIST_LIMIT} a page, with ` +
+    "the task you work on, whether it is archived, the sectionId of the sidebar section the " +
+    "developer you work for keeps it in (null for none, under Tasks), and its mention, the " +
+    "`[@name](link)` to name it by in your words, the newest first and at most " +
+    `${TASKS_LIST_LIMIT} a page, with ` +
     "nextOffset where more stand; and beside them every section that developer keeps in this " +
     "workspace's sidebar, each with its id and title. Narrow it by words of a task's name with " +
     `nameContains. Call it to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s ` +
@@ -1642,6 +1709,85 @@ export function runUnarchiveAgent(
   );
 }
 
+/** A task's archive or unarchive as the model reads it: the task with its mention, whether it now stands archived, and whether it already stood so before the call. */
+const taskArchiveAnswer = (
+  userId: string,
+  task: StoredTask["task"],
+  archived: boolean,
+  already: boolean,
+) =>
+  Effect.map(
+    workspaceStepOf(userId, task.workspaceId),
+    (step): WireRecord => ({
+      status: ACTION_RESULT_STATUS.ACCEPTED,
+      task: {
+        id: task.id,
+        name: task.name,
+        mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
+      },
+      archived,
+      already,
+    }),
+  );
+
+/**
+ * A task of the caller's workspace archived or brought back as the member's
+ * own menu does it (`updateTask`, which `tasks-app.ts`'s PATCH runs), for the
+ * member the caller acts for, or why not. Note that the task is read first,
+ * on that member's standing, both to hold it to the caller's workspace and to
+ * tell an archive already standing, which the store keeps as it stood.
+ */
+const taskArchived = (caller: AgentCaller, taskId: string, archived: boolean) =>
+  orStoreRefusal(
+    Effect.gen(function* () {
+      const userId = callerUserId(caller);
+      const workspace = yield* callerWorkspace(caller);
+      const read = yield* readTask(userId, taskId);
+      if (
+        Option.isNone(workspace) ||
+        Option.isNone(read) ||
+        read.value.task.workspaceId !== workspace.value
+      ) {
+        return agentToolRejected(ARCHIVE_TASK_REFUSAL.NO_TASK);
+      }
+      const already = (read.value.task.archivedAt !== undefined) === archived;
+      const changed = yield* updateTask(userId, taskId, { archived }).pipe(
+        // An archive alone renames nothing, so the store's refusal of an archived task's rename is never met.
+        Effect.catchTag("TaskArchived", (refused) => Effect.die(refused)),
+      );
+      if (Option.isNone(changed)) return agentToolRejected(ARCHIVE_TASK_REFUSAL.NO_TASK);
+      return yield* taskArchiveAnswer(userId, changed.value, archived, already);
+    }),
+  );
+
+/** One call of `archive_task`: a task of the caller's workspace archived for the caller's member, as the Archive task menu archives it, or why it was not. */
+export function runArchiveTask(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  const asked = readTaskRef(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(ARCHIVE_TASK_REFUSAL.UNREADABLE));
+  }
+  const { taskId } = asked.success;
+  if (taskId === callerTask(call.caller)) {
+    return Effect.succeed(agentToolRejected(ARCHIVE_TASK_REFUSAL.OWN_TASK));
+  }
+  return taskArchived(call.caller, taskId, true);
+}
+
+/** One call of `unarchive_task`: an archived task of the caller's workspace brought back, as a member's Unarchive brings it. */
+export function runUnarchiveTask(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  const asked = readTaskRef(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(ARCHIVE_TASK_REFUSAL.UNREADABLE));
+  }
+  return taskArchived(call.caller, asked.success.taskId, false);
+}
+
 /** A stop's refusal in the model's words: an agent gone meanwhile is none, a deployment with no eve says so, and anything else is the service down. */
 function stopRefusalWords(refusal: HostedRefusal, eve: EveSessions | undefined): string {
   if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
@@ -1731,7 +1877,7 @@ export function runStopAgent(
   );
 }
 
-/** One call of `list_tasks`: the open tasks of the caller's workspace, newest first, each with the section its member keeps it in, and those sections. */
+/** One call of `list_tasks`: the open tasks of the caller's workspace, and the archived ones too where asked, newest first, each with the section its member keeps it in, and those sections. */
 export function runListTasks(
   call: CodingAgentCall,
   input: UnparsedWireValue,
@@ -1751,7 +1897,9 @@ export function runListTasks(
       }
       const ownTask = callerTask(caller);
       const userId = callerUserId(caller);
-      const listed = yield* listTasks(userId);
+      const listed = yield* listTasks(userId, {
+        includeArchived: asked.success.includeArchived === true,
+      });
       const matching = listed.filter(
         (task) =>
           task.workspaceId === workspace.value &&
@@ -1772,6 +1920,7 @@ export function runListTasks(
         repository: task.repository ?? null,
         startedBy: task.createdBy?.name ?? null,
         isYourTask: task.id === ownTask,
+        archived: task.archivedAt !== undefined,
         sectionId: sectionOf.get(task.id) ?? null,
         mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
       }));

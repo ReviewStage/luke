@@ -78,6 +78,7 @@ import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../bra
 import { claimRuntimeSession } from "../brain-host/conversation.js";
 import {
   ARCHIVE_AGENT_REFUSAL,
+  ARCHIVE_TASK_REFUSAL,
   CODING_AGENT_TOOL_REFUSAL,
   LIST_MODELS_REFUSAL,
   READ_PAGE_REFUSAL,
@@ -1637,6 +1638,103 @@ test("archive_agent refuses an agent still working, the caller itself, an agent 
   for (const agent of [agents.teammates, agents.caller, agents.otherWorkspaces, agents.strangers]) {
     const read = Option.getOrThrow(await database.run(readCodingAgent(agent.userId, agent.id)));
     assert.equal(read.archivedAt, null, agent.id);
+  }
+});
+
+test("archive_task archives a teammate's task of the caller's workspace for the caller's starter, as the Archive task menu does, without stopping or refusing over the agent still working on it, answers a call run again as done, and unarchive_task brings it back", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  await turnOn(agents.teammates, false);
+  const answered = (archived: boolean, already: boolean) => ({
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    task: {
+      id: tasks.billing,
+      name: "Billing",
+      mention: `[@Billing](https://tryluke.dev/workspace-${workspaceId}/plan/${tasks.billing})`,
+    },
+    archived,
+    already,
+  });
+  const archivedAt = async () =>
+    Option.getOrThrow(await database.run(readTask(agents.teammates.userId, tasks.billing))).task
+      .archivedAt;
+  const listedBy = async (userId: string) =>
+    (await database.run(listTasks(userId))).map((listed) => listed.id);
+
+  assert.deepEqual(
+    await call(CODER_TOOL.ARCHIVE_TASK, { taskId: tasks.billing }),
+    answered(true, false),
+  );
+  const stamped = await archivedAt();
+  assert.ok(stamped !== undefined);
+  // Every member of the workspace reads it archived, its owner among them, as after the menu's.
+  assert.ok(!(await listedBy(agents.caller.userId)).includes(tasks.billing));
+  assert.ok(!(await listedBy(agents.teammates.userId)).includes(tasks.billing));
+  const working = await call(CODER_TOOL.LIST_AGENTS, { taskId: tasks.billing });
+  assert.deepEqual(
+    Array.isArray(working.agents)
+      ? working.agents.map((agent) => isRecord(agent) && [agent.status, agent.archived])
+      : [],
+    [[CODING_AGENT_STATUS.RUNNING, false]],
+    "the agent on it is neither stopped nor archived",
+  );
+  // list_tasks leaves it out unless asked, and then names it archived, so it is found to bring back.
+  const listedIds = (listed: WireRecord) =>
+    Array.isArray(listed.tasks)
+      ? listed.tasks.flatMap((each) => (isRecord(each) ? [[each.id, each.archived]] : []))
+      : [];
+  assert.deepEqual(listedIds(await call(CODER_TOOL.LIST_TASKS, { nameContains: "Bill" })), []);
+  assert.deepEqual(
+    listedIds(await call(CODER_TOOL.LIST_TASKS, { nameContains: "Bill", includeArchived: true })),
+    [[tasks.billing, true]],
+  );
+  assert.deepEqual(
+    await call(CODER_TOOL.ARCHIVE_TASK, { taskId: tasks.billing }, "call-2"),
+    answered(true, true),
+  );
+  assert.equal(await archivedAt(), stamped, "a second archive keeps the first stamp");
+
+  assert.deepEqual(
+    await call(CODER_TOOL.UNARCHIVE_TASK, { taskId: tasks.billing }, "call-3"),
+    answered(false, false),
+  );
+  assert.equal(await archivedAt(), undefined);
+  assert.ok((await listedBy(agents.teammates.userId)).includes(tasks.billing));
+  assert.deepEqual(
+    await call(CODER_TOOL.UNARCHIVE_TASK, { taskId: tasks.billing }, "call-4"),
+    answered(false, true),
+  );
+});
+
+test("archive_task refuses the task the caller works on, a task of another workspace its starter is also in, a stranger's, and an id that names no task, archiving none of them", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const strangersTask = Option.getOrThrow(
+    await database.run(readCodingAgent(agents.strangers.userId, agents.strangers.id)),
+  ).taskId;
+  assert.ok(strangersTask !== null);
+  const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+  const archive = (taskId: string) => call(CODER_TOOL.ARCHIVE_TASK, { taskId });
+
+  assert.deepEqual(await archive(tasks.invitations), rejected(ARCHIVE_TASK_REFUSAL.OWN_TASK));
+  assert.deepEqual(await archive(tasks.elsewhere), rejected(ARCHIVE_TASK_REFUSAL.NO_TASK));
+  assert.deepEqual(await archive(strangersTask), rejected(ARCHIVE_TASK_REFUSAL.NO_TASK));
+  assert.deepEqual(await archive(randomUUID()), rejected(ARCHIVE_TASK_REFUSAL.NO_TASK));
+  assert.deepEqual(
+    await call(CODER_TOOL.UNARCHIVE_TASK, { taskId: strangersTask }),
+    rejected(ARCHIVE_TASK_REFUSAL.NO_TASK),
+  );
+  assert.deepEqual(await archive("Billing"), rejected(ARCHIVE_TASK_REFUSAL.UNREADABLE));
+  const owners = [
+    [agents.caller.userId, tasks.invitations],
+    [agents.otherWorkspaces.userId, tasks.elsewhere],
+    [agents.strangers.userId, strangersTask],
+  ] as const;
+  for (const [userId, taskId] of owners) {
+    const read = Option.getOrThrow(await database.run(readTask(userId, taskId)));
+    assert.equal(read.task.archivedAt, undefined, taskId);
   }
 });
 

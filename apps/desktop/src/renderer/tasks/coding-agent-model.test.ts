@@ -439,7 +439,7 @@ test("the calls that move a task's agents are its starts, archives, and unarchiv
   assert.deepEqual(agentListCallIds([]), []);
 });
 
-test("the starts that made a new task and the accepted section calls are named by call id once answered, and a start on a task, a refused section call, a call still out, or another tool's answer names none", () => {
+test("the starts that made a new task and the accepted section and task archive calls are named by call id once answered, and a start on a task, a refused section or archive call, a call still out, or another tool's answer names none", () => {
   const call = (callId: string, tool: string, output?: WireRecord) => ({
     type: `tool-${tool}`,
     toolCallId: callId,
@@ -461,11 +461,15 @@ test("the starts that made a new task and the accepted section calls are named b
         call("c6", "move_task", { status: "rejected", reason: "Not moved." }),
         call("c7", "delete_section"),
         call("c8", "move_task", { status: "accepted", task: { id: "task-2" }, section: null }),
+        call("c9", "archive_task", { status: "accepted", task: { id: "task-3" }, archived: true }),
+        call("c10", "unarchive_task", { status: "accepted", task: { id: "task-3" } }),
+        call("c11", "archive_task", { status: "rejected", reason: "Not archived." }),
+        call("c12", "archive_task"),
       ],
     },
   ];
 
-  assert.deepEqual(sidebarCallIds(messages), ["c1", "c5", "c8"]);
+  assert.deepEqual(sidebarCallIds(messages), ["c1", "c5", "c8", "c9", "c10"]);
 });
 
 test("a working agent is starting until its turn opens, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {

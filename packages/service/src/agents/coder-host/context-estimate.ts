@@ -7,6 +7,7 @@ import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import {
   ARCHIVE_AGENT_TOOL,
+  ARCHIVE_TASK_TOOL,
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
   LIST_MODELS_TOOL,
@@ -16,6 +17,7 @@ import {
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
   UNARCHIVE_AGENT_TOOL,
+  UNARCHIVE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
@@ -161,6 +163,14 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.MOVE_TASK]: {
     description: MOVE_TASK_TOOL.description,
     inputSchema: emitJsonSchema(MOVE_TASK_TOOL.inputSchema),
+  },
+  [CODER_TOOL.ARCHIVE_TASK]: {
+    description: ARCHIVE_TASK_TOOL.description,
+    inputSchema: emitJsonSchema(ARCHIVE_TASK_TOOL.inputSchema),
+  },
+  [CODER_TOOL.UNARCHIVE_TASK]: {
+    description: UNARCHIVE_TASK_TOOL.description,
+    inputSchema: emitJsonSchema(UNARCHIVE_TASK_TOOL.inputSchema),
   },
   [CODER_TOOL.POST_CHAT]: {
     description: CHAT_TOOLS.POST.description,

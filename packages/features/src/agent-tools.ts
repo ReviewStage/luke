@@ -41,6 +41,9 @@ export const AGENT_TOOL = {
   CREATE_SECTION: "create_section",
   DELETE_SECTION: "delete_section",
   MOVE_TASK: "move_task",
+  // The workspace's tasks archived and brought back, named for any agent offered `list_tasks`.
+  ARCHIVE_TASK: "archive_task",
+  UNARCHIVE_TASK: "unarchive_task",
   // The models an agent may be started on, named for any agent offered `start_agent`.
   LIST_MODELS: "list_models",
   // The public reads, every role's.
