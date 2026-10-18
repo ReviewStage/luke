@@ -927,7 +927,43 @@ test("the comparison chosen for an image, and how far it is faded, outlast Refre
   );
   act(() => refresh?.click());
   await flush();
-  slot = lastDrawn().renderAnnotation("logo.png", "lead");
+  slot = await standNearView("logo.png");
 
   assert.equal(fade().value, "80");
+});
+
+test("after Refresh changes an image far from the view reads nothing until it comes near again", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  const asked = answerImages();
+  commits = { headSha: "b".repeat(40) };
+  files = [
+    changed("logo.png", {
+      status: CHANGED_FILE_STATUS.ADDED,
+      omitted: PATCH_OMITTED.BINARY,
+      patch: null,
+    }),
+  ];
+  await drawTab();
+  const slot = await standNearView("logo.png");
+  assert.equal(asked.length, 1);
+  // Pierre takes the file's place away as it scrolls far from the view.
+  slot.remove();
+
+  commits = { headSha: "c".repeat(40) };
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+  await flush();
+  comeIntoView();
+  await flush();
+  assert.equal(asked.length, 1, "nothing is read while the file is far from the view");
+
+  await standNearView("logo.png");
+  assert.deepEqual(
+    asked.at(-1),
+    `https://raw.githubusercontent.com/acme/relay/${"c".repeat(40)}/logo.png`,
+  );
 });

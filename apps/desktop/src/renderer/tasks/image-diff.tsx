@@ -256,34 +256,34 @@ export function imageDrawable(file: CodingAgentChangedFile, sides: ImageSides): 
 }
 
 /**
- * A changed image, read and drawn once it comes near the view: both sides
- * for one changed, the one it has for one added or deleted. Note that the
- * sides are drawn anew for each read of the changes, so a side whose read
- * did not land is asked for again, while the comparison chosen and how far
- * it is swiped stand here, above them, and outlast the read.
+ * A changed image's sides as one read of the changes names them, read once
+ * they come near the view: both for one changed, the one it has for one
+ * added or deleted.
  */
-export function ImageDiff({
+function ImageSidesNear({
   file,
   sides,
+  comparison,
+  onComparison,
 }: {
   file: CodingAgentChangedFile;
   sides: ImageSides;
+  comparison: Comparison;
+  onComparison: (comparison: Comparison) => void;
 }): React.JSX.Element {
   const [box, setBox] = useState<HTMLDivElement | null>(null);
   const near = useNearView(box);
-  const [comparison, setComparison] = useState(FIRST_COMPARISON);
   const { before, after } = sidesOf(file, sides);
-  const { agentId, read } = sides;
+  const { agentId } = sides;
   const drawn = (() => {
     if (before !== undefined && after !== undefined) {
       return (
         <BothSides
-          key={read}
           agentId={agentId}
           before={before}
           after={after}
           comparison={comparison}
-          onComparison={setComparison}
+          onComparison={onComparison}
         />
       );
     }
@@ -291,7 +291,6 @@ export function ImageDiff({
       const added = file.status === CHANGED_FILE_STATUS.ADDED;
       return (
         <OneSide
-          key={read}
           agentId={agentId}
           address={after}
           label={added ? IMAGE_WORDS.ADDED : IMAGE_WORDS.AFTER}
@@ -300,12 +299,39 @@ export function ImageDiff({
       );
     }
     return before === undefined ? null : (
-      <OneSide key={read} agentId={agentId} address={before} label={IMAGE_WORDS.DELETED} />
+      <OneSide agentId={agentId} address={before} label={IMAGE_WORDS.DELETED} />
     );
   })();
   return (
     <div ref={setBox} className="image-diff">
       {near ? drawn : <p className="image-diff-note">{IMAGE_WORDS.READING}</p>}
     </div>
+  );
+}
+
+/**
+ * A changed image, read and drawn once it comes near the view. Note that
+ * its sides are drawn anew for each read of the changes, and wait to come
+ * near the view again, so a side whose read did not land is asked for
+ * again and one far from the view is asked for nothing, while the
+ * comparison chosen and how far it is swiped stand here, above them, and
+ * outlast the read.
+ */
+export function ImageDiff({
+  file,
+  sides,
+}: {
+  file: CodingAgentChangedFile;
+  sides: ImageSides;
+}): React.JSX.Element {
+  const [comparison, setComparison] = useState(FIRST_COMPARISON);
+  return (
+    <ImageSidesNear
+      key={sides.read}
+      file={file}
+      sides={sides}
+      comparison={comparison}
+      onComparison={setComparison}
+    />
   );
 }
