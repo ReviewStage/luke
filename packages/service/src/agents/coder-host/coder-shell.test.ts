@@ -25,8 +25,7 @@ import { bashStartingIn } from "./shell.js";
  * transcript, so it reaches the shell as nothing, and what the model is
  * offered is recorded the way the wire's schemas are. A command whose
  * outcome Vercel Sandbox's API lost, as `@vercel/sandbox` and undici throw
- * it, answers that it is unknown where the sandbox still runs a command, and
- * fails as eve failed it where it does not.
+ * it, answers that it is unknown, and any other failure stands as eve threw it.
  */
 
 /** What eve's `bash` answers a command that finished. */
@@ -146,11 +145,8 @@ function nothing(): ReadableStream<Uint8Array> {
   return webBytes(Readable.from([]));
 }
 
-/**
- * A sandbox whose every command starts, then whose wait for it fails as
- * Vercel's API failed it; and which answers a command run whole as `up` says.
- */
-function sandboxLosing(failure: Error, up: boolean) {
+/** A sandbox whose every command starts, then whose wait for it fails as given. */
+function sandboxLosing(failure: Error) {
   return {
     spawn: async () => ({
       stdout: nothing(),
@@ -159,26 +155,22 @@ function sandboxLosing(failure: Error, up: boolean) {
         throw failure;
       },
     }),
-    run: async () => {
-      if (!up) throw sandboxApiError(404, "Vercel Sandbox not found.");
-      return { exitCode: 0, stdout: "", stderr: "" };
-    },
   };
 }
 
-test("a command whose output Vercel answered 404 for, in a sandbox still up, answers that its outcome is unknown", async () => {
+test("a command whose output Vercel answered 404 for answers that its outcome is unknown", async () => {
   const lost = sandboxApiError(404, "Vercel Sandbox not found.");
-  const answer = await call("/workspace/repository", sandboxLosing(lost, true), "git push");
+  const answer = await call("/workspace/repository", sandboxLosing(lost), "git push");
   assert.equal(answer.status, "unknown");
   assert.ok("message" in answer && answer.message.includes("before you run it again"));
 });
 
-test("a command whose output stream Vercel cut, in a sandbox still up, answers that its outcome is unknown", async () => {
-  const answer = await call("/workspace/repository", sandboxLosing(streamCut(), true), "pnpm test");
+test("a command whose output stream Vercel cut answers that its outcome is unknown", async () => {
+  const answer = await call("/workspace/repository", sandboxLosing(streamCut()), "pnpm test");
   assert.equal(answer.status, "unknown");
 });
 
-test("a command in a sandbox that no longer answers fails as eve failed it", async () => {
-  const lost = sandboxApiError(404, "Vercel Sandbox not found.");
-  await assert.rejects(call("/workspace/repository", sandboxLosing(lost, false), "ls"), lost);
+test("a failure Vercel's API did not lose a command to fails as eve failed it", async () => {
+  const refused = sandboxApiError(403, "Forbidden.");
+  await assert.rejects(call("/workspace/repository", sandboxLosing(refused), "ls"), refused);
 });

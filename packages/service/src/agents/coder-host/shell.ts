@@ -26,10 +26,12 @@ import { COMMAND_DESCRIPTION } from "../command-description.js";
  * those 404 "Vercel Sandbox not found" a moment after the start, or cuts
  * the stream of a long one, while the sandbox stays up and the command runs
  * on. eve throws either, so the model read that its sandbox was gone, of a
- * command that had in fact run (a push among them). Where the call fails so
- * and the sandbox still answers, the shell says instead that the command's
- * outcome was lost and may have taken effect, so the model checks before it
- * runs it again; where the sandbox does not answer, eve's failure stands.
+ * command that had in fact run (a push among them). Where the call fails so,
+ * the shell says instead that the command's outcome was lost and may have
+ * taken effect, so the model checks before it runs it again. It never runs
+ * the command again, and it asks the sandbox nothing more: a probe's own
+ * command is read over the same API, so its failure would prove nothing, and
+ * a sandbox gone indeed fails the model's next command in eve's own words.
  */
 
 /** eve's `bash` input as the model is offered it, with the description beside the command. */
@@ -38,20 +40,20 @@ const SHELL_INPUT = Schema.Struct({
   description: COMMAND_DESCRIPTION,
 });
 
-/** What the shell answers where a command's outcome was lost on the way back from a sandbox that is still up. */
-const OUTCOME_LOST = "unknown";
+/** How a command stands as the shell answers it: finished, still running in the background (eve's two), or its outcome lost. */
+const SHELL_STATUS = { COMPLETED: "completed", RUNNING: "running", UNKNOWN: "unknown" } as const;
 
 /** The shell's answers: eve's `bash`'s two, and a command whose outcome was lost. */
 const SHELL_OUTPUT = Schema.Union([
   Schema.Struct({
-    status: Schema.Literal("completed"),
+    status: Schema.Literal(SHELL_STATUS.COMPLETED),
     exitCode: Schema.Number,
     stderr: Schema.String,
     stdout: Schema.String,
     truncated: Schema.Boolean,
   }),
   Schema.Struct({
-    status: Schema.Literal("running"),
+    status: Schema.Literal(SHELL_STATUS.RUNNING),
     pid: Schema.Number,
     outputDirectory: Schema.String,
     message: Schema.String,
@@ -59,14 +61,14 @@ const SHELL_OUTPUT = Schema.Union([
     stdout: Schema.String,
     truncated: Schema.Boolean,
   }),
-  Schema.Struct({ status: Schema.Literal(OUTCOME_LOST), message: Schema.String }),
+  Schema.Struct({ status: Schema.Literal(SHELL_STATUS.UNKNOWN), message: Schema.String }),
 ]);
 
 type ShellOutput = typeof SHELL_OUTPUT.Type;
 
 /** What the model reads of a command whose outcome was lost. */
 const OUTCOME_LOST_MESSAGE =
-  "The sandbox is up, but Vercel Sandbox's API failed while this command ran, so its output and exit code were lost. " +
+  "Vercel Sandbox's API failed while this command ran, so its output and exit code were lost. " +
   "The command may have run in full, in part, or not at all, and may still be running. Check its effects with another " +
   "command (such as `git status`, `git log`, or the pull request) before you run it again, above all one that is not " +
   "safe to repeat, such as a push.";
@@ -123,32 +125,16 @@ function isOutcomeLost(cause: unknown): boolean {
   return false;
 }
 
-/** Whether the call's sandbox runs a command that does nothing, reached as eve hands it to the call. */
-async function sandboxAnswers(ctx: ToolContext): Promise<boolean> {
-  try {
-    await (await ctx.getSandbox()).run({ command: "true" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** A path as one single-quoted shell word. */
 function quoted(path: string): string {
   return `'${path.replaceAll("'", `'\\''`)}'`;
 }
 
-/**
- * A command's failure as the shell answers it: its outcome lost where
- * Vercel's API lost it and the sandbox still answers, and eve's failure as
- * it was thrown otherwise.
- */
-async function lostOrThrown(cause: unknown, ctx: ToolContext): Promise<ShellOutput> {
+/** A command's failure as the shell answers it: its outcome lost where Vercel's API lost it, and eve's failure as it was thrown otherwise. */
+function lostOrThrown(cause: unknown, ctx: ToolContext): ShellOutput {
   // A call the turn cancelled, or a failure of the command's own, stands as eve threw it.
   if (ctx.abortSignal?.aborted === true || !isOutcomeLost(cause)) throw cause;
-  // A sandbox that does not answer a command of its own is gone indeed, and eve's failure says so.
-  if (!(await sandboxAnswers(ctx))) throw cause;
-  return { status: OUTCOME_LOST, message: OUTCOME_LOST_MESSAGE };
+  return { status: SHELL_STATUS.UNKNOWN, message: OUTCOME_LOST_MESSAGE };
 }
 
 /**
