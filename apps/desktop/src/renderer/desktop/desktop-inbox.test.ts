@@ -3451,18 +3451,18 @@ test("Mark all as read in the view's menu, under the groupings, marks every unre
   assert.equal(menuItem("Mark all as read").matches(":disabled"), true);
 });
 
-test("Mark all as read, once the service took it, reads every listed plan and every agent with no plan again, since the write moves nothing main hears of", async () => {
+test("Mark all as read, once the service took it, reads every listed task and every agent with no task again, since the write moves nothing main hears of", async () => {
   listedWorkspace = ACME;
-  const planReads: string[] = [];
+  const taskReads: string[] = [];
   startRead = (taskId) => {
-    planReads.push(taskId);
+    taskReads.push(taskId);
     return undefined;
   };
   inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true }]);
   agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, unread: true }]]]);
   const { page } = mount([waitingTaskless(QUARANTINE)]);
   await settle();
-  const plansBefore = planReads.length;
+  const tasksBefore = taskReads.length;
   const agentsBefore = agentReads.length;
   const marksBefore = readMarks.length;
   const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
@@ -3471,7 +3471,7 @@ test("Mark all as read, once the service took it, reads every listed plan and ev
   await settle();
   assert.deepEqual(readMarks.slice(marksBefore), ["all:workspace-acme"]);
   assert.deepEqual(
-    [...new Set(planReads.slice(plansBefore))].toSorted(),
+    [...new Set(taskReads.slice(tasksBefore))].toSorted(),
     [BILLING.id, INVITES.id].toSorted(),
   );
   assert.deepEqual(agentReads.slice(agentsBefore), [SWEEP_AGENT]);

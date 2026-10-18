@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { allowed, CANARY, refusedAt, refusedIn, refusesSqlName } from "./lib/task-names.mjs";
+import { allowed, CANARY, refusedAt, refusedIn } from "./lib/task-names.mjs";
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -16,6 +16,7 @@ const SOURCE_PATHSPECS = [
   "packages/*.tsx",
   "packages/*.mts",
   "tools/*.ts",
+  "tools/*.tsx",
   "tools/*.mts",
 ];
 
@@ -34,11 +35,14 @@ async function canaryDrift() {
     if (allowed(name, file) === undefined)
       drift.push(`${name} is refused in ${file}, where it must stand`);
   }
+  // A schema's SQL names are read through the same walk as a schema file's, under a schema's path.
+  const schema = "packages/database/src/schemas/canary.ts";
+  const sqlRefused = (name) => refusedIn(schema, `export const name = "${name}";`).length > 0;
   for (const name of CANARY.SQL_REFUSED) {
-    if (!refusesSqlName(name)) drift.push(`the schema clause lets "${name}" stand`);
+    if (!sqlRefused(name)) drift.push(`the schema clause lets "${name}" stand`);
   }
   for (const name of CANARY.SQL_ALLOWED) {
-    if (refusesSqlName(name)) drift.push(`the schema clause refuses "${name}"`);
+    if (sqlRefused(name)) drift.push(`the schema clause refuses "${name}"`);
   }
   return drift;
 }

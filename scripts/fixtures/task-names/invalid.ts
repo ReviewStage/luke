@@ -29,3 +29,6 @@ export const planClosed = false;
 
 /** A chat member's task name, which is no automation run's wire key. */
 export const planName = "Teammate invitations";
+
+/** A task's board behind an allowed document word. */
+export const planDocumentPlanBoard = "";

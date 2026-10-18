@@ -230,10 +230,10 @@ const SCHEMAS = "packages/database/src/schemas/";
 
 /** A plan-spelled SQL name the document owns: its revisions, pages, pictures, comments, snapshot, and template. */
 const DOCUMENT_SQL_NAME =
-  /^plan_(attachment|comment|comment_thread|page_version|revision|snapshot|template)(_[a-z_]+)?$/;
+  /^plan_(attachment|comment|comment_thread|page_version|revision|snapshot|template)(_[a-z0-9_]+)?$/;
 
 /** A plan-spelled SQL name. */
-const PLAN_SQL_NAME = /^plan(_[a-z_]*)?$/;
+const PLAN_SQL_NAME = /^plan(_[a-z0-9_]*)?$/;
 
 /** The words of a name: camelCase, SCREAMING_SNAKE, and kebab or dotted file names alike. */
 function wordsOf(name) {
@@ -247,27 +247,38 @@ function within(file, places) {
   return places.some((place) => file === place || (place.endsWith("/") && file.startsWith(place)));
 }
 
-/** Why `name` may call something a plan in `file`, or undefined where it may not. */
-export function allowed(name, file) {
-  const words = wordsOf(name);
-  const at = words.findIndex((word) => PLAN_WORDS.has(word));
-  if (at === -1) return "no plan word";
-  if (words.length === 1 && BARE.has(words[0])) return "bare";
-  if (NOT_THE_CONCEPT.has(name)) return "not the concept";
-  if (Object.hasOwn(WIRE_NAME, name)) {
-    const places = WIRE_NAME[name];
-    return places === undefined || within(file, places) ? "wire" : undefined;
-  }
+/** Why the plan word at `at` in `words` may stand in `file`, or undefined where it may not. */
+function wordAllowed(words, at, file) {
   if (words[at] === "planning")
     return within(file, PLAN_SWITCH_FILES) ? "the Plan switch" : undefined;
   if (words[at] !== "plan" && words[at] !== "plans") return undefined;
-  if (DOCUMENT_NAME.has(name) || DOCUMENT_FILE.test(name)) return "document";
   if (DOCUMENT_BEFORE.has(words[at - 1])) return "document verb";
   const after = words[at + 1];
   if (DOCUMENT_AFTER.has(after)) return "document";
   if (Object.hasOwn(SCOPED_AFTER, after) && within(file, SCOPED_AFTER[after]))
     return "document here";
   return undefined;
+}
+
+/**
+ * Why `name` may call something a plan in `file`, or undefined where it may
+ * not. A name held whole (bare, a wire spelling, a document name) stands as
+ * it is; any other stands only where every plan word in it does, so an allowed
+ * `planDocument` cannot carry a `planBoard` in behind it.
+ */
+export function allowed(name, file) {
+  const words = wordsOf(name);
+  const at = words.flatMap((word, index) => (PLAN_WORDS.has(word) ? [index] : []));
+  if (at.length === 0) return "no plan word";
+  if (words.length === 1 && BARE.has(words[0])) return "bare";
+  if (NOT_THE_CONCEPT.has(name)) return "not the concept";
+  if (Object.hasOwn(WIRE_NAME, name)) {
+    const places = WIRE_NAME[name];
+    return places === undefined || within(file, places) ? "wire" : undefined;
+  }
+  if (DOCUMENT_NAME.has(name) || DOCUMENT_FILE.test(name)) return "document";
+  const why = at.map((index) => wordAllowed(words, index, file));
+  return why.includes(undefined) ? undefined : why[0];
 }
 
 /** The name a file is read under: its base name without its test and source extensions. */
@@ -325,6 +336,7 @@ export const CANARY = {
     "scripts/fixtures/task-names/invalid.ts:25:openSharedPlan",
     "scripts/fixtures/task-names/invalid.ts:28:planClosed",
     "scripts/fixtures/task-names/invalid.ts:31:planName",
+    "scripts/fixtures/task-names/invalid.ts:34:planDocumentPlanBoard",
   ],
   /** Names the rules must let stand, each in the file named beside it. */
   ALLOWED: [
@@ -342,16 +354,17 @@ export const CANARY = {
     ["useNewTaskPlanning", "apps/desktop/src/renderer/tasks/new-task-planning.ts"],
   ],
   /** The SQL names the schema clause must refuse, and those it must let stand. */
-  SQL_REFUSED: ["plan", "plan_id", "plan_board", "plan_pin"],
-  SQL_ALLOWED: ["plan_revision", "plan_comment_thread_seq", "plan_snapshot", "plan_template"],
+  SQL_REFUSED: ["plan", "plan_id", "plan_board", "plan_board2", "plan_pin"],
+  SQL_ALLOWED: [
+    "plan_revision",
+    "plan_comment_thread_seq",
+    "plan_revision_v2",
+    "plan_snapshot",
+    "plan_template",
+  ],
 };
 
 /** A refusal as `CANARY.REFUSED` writes one. */
 export function refusedAt(one) {
   return `${one.file}:${one.line}:${one.name}`;
-}
-
-/** Whether the schema clause refuses `name`. */
-export function refusesSqlName(name) {
-  return PLAN_SQL_NAME.test(name) && !DOCUMENT_SQL_NAME.test(name);
 }
