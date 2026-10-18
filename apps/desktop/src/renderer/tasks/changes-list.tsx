@@ -328,12 +328,9 @@ export function useChangesList(
   };
 }
 
-/** A pointer arriving over a control, as the window would say it; a window with no pointer events says it as a mouse's. */
-function pointerOver(): Event {
-  const init = { bubbles: true, pointerType: "mouse" };
-  return typeof PointerEvent === "function"
-    ? new PointerEvent("pointerover", init)
-    : new MouseEvent("pointerover", init);
+/** A pointer arriving over a control, as the window says it. */
+function pointerOver(): PointerEvent {
+  return new PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" });
 }
 
 /**
