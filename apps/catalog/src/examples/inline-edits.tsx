@@ -11,7 +11,8 @@ import { CatalogSection } from "../section";
 
 /**
  * inline-edits.tsx -- an InlineEdit showing a name and renaming it in
- * place, as a field on its own ground and bare in a well that rings it, and
+ * place, as a field on its own ground, as a settings input, and bare in a
+ * well that rings it, and
  * a long name in a narrow column.
  */
 
@@ -54,6 +55,11 @@ function InlineEdits(): React.JSX.Element {
       <CatalogSection id="inline-edit-field" title="As a field">
         <div className="catalog-column">
           <Renamed start="Ship the beta" look={INLINE_EDIT_LOOK.FIELD} />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="inline-edit-input" title="As an input">
+        <div className="catalog-column">
+          <Renamed start="Acme" look={INLINE_EDIT_LOOK.INPUT} />
         </div>
       </CatalogSection>
       <CatalogSection id="inline-edit-well" title="In a well">
