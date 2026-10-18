@@ -483,6 +483,14 @@ function answerHead(page: HTMLElement): string | null {
   );
 }
 
+/** Opens the fold holding what a settled item offered, by pressing its line. */
+function openOffered(within: ParentNode): void {
+  const line =
+    within.querySelector<HTMLElement>("[data-inbox-offered] > summary") ??
+    assert.fail("what was offered is folded");
+  act(() => line.click());
+}
+
 test("a settled choice folds what its agent offered to one line saying who picked which, which still holds every option with the pick marked, then the developer's answer as their comment: their pick as a chip over their note, under a line saying when and that it reached the agent", async () => {
   const { page } = mount();
   await settle();
@@ -499,6 +507,7 @@ test("a settled choice folds what its agent offered to one line saying who picke
     offered.querySelector("summary")?.textContent,
     "2 options · you picked Retry 3 times over an hour",
   );
+  act(() => offered.querySelector("summary")?.click());
   assert.deepEqual(
     [...offered.querySelectorAll<HTMLElement>("li.inbox-option")].map((option) => [
       option.dataset.picked,
@@ -646,6 +655,7 @@ test("a settled choice whose pick is not the one recommended marks each apart: t
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
+  openOffered(page);
 
   assert.deepEqual(optionHeads(page, "li.inbox-option"), [
     ["Retry 3 times over an hour", "Recommended"],
@@ -669,6 +679,7 @@ test("a teammate's answer names them by their disc and name, beside their pick a
 
   const pane = page.querySelector<HTMLElement>(".inbox-view-items");
   assert.ok(pane, "the pane is drawn");
+  openOffered(pane);
   const picked = pane.querySelector(".inbox-picked") ?? assert.fail("the pick is marked");
   assert.equal(wordsOf(picked), "Charles Pan’s pick");
   assert.equal(picked.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");

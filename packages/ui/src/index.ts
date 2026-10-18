@@ -15,6 +15,7 @@ export * from "./components/confirm-dialog/confirm-dialog.js";
 export * from "./components/data-table/data-table.js";
 export * from "./components/detail-page/detail-page.js";
 export * from "./components/dialog/dialog.js";
+export * from "./components/disclosure/disclosure.js";
 export * from "./components/empty-state/empty-state.js";
 export * from "./components/error-state/error-state.js";
 export * from "./components/folding-button/folding-button.js";

@@ -28,6 +28,10 @@ import {
   BackIcon,
   Badge,
   ChevronRightIcon,
+  DISCLOSURE_BODY,
+  Disclosure,
+  DisclosureBody,
+  DisclosureSummary,
   ErrorState,
   FoldingButton,
   type FoldingButtonHint,
@@ -797,13 +801,14 @@ function Offered({ item }: { item: InboxItem }): React.JSX.Element | null {
       ? `${optionsWords(options.length)} offered`
       : `${optionsWords(options.length)} · ${who} picked ${picked.join(", ")}`;
   return (
-    <details className="inbox-offered" data-inbox-offered="">
-      <summary>
-        <ChevronRightIcon />
+    <Disclosure data-inbox-offered="">
+      <DisclosureSummary>
         <span>{summary}</span>
-      </summary>
-      <Proposal item={item} />
-    </details>
+      </DisclosureSummary>
+      <DisclosureBody inset={DISCLOSURE_BODY.FLUSH}>
+        <Proposal item={item} />
+      </DisclosureBody>
+    </Disclosure>
   );
 }
 

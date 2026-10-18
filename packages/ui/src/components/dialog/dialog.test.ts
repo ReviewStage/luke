@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, createElement, useId, useRef, useState } from "react";
+import { act, createElement, createRef, useId, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test } from "vitest";
 import { DIALOG_ROLE, Dialog } from "./dialog.js";
@@ -12,7 +12,9 @@ import { DIALOG_ROLE, Dialog } from "./dialog.js";
  * window, or its owner taking it away puts it away and hands focus back to
  * the button; a press dragged out of the card puts nothing away; an input
  * method's keys stay the method's; no key or press inside reaches the window
- * behind; and a busy dialog holds focus on its card until it is done.
+ * behind; a busy dialog holds focus on its card until it is done; and one
+ * given a title and actions is named by the title, its answers after what
+ * it holds.
  */
 
 declare global {
@@ -243,4 +245,32 @@ test("a question that must be answered is an alert dialog, named by its title an
   expect(nameOf(question)).toBe("Delete plan?");
   const described = question.getAttribute("aria-describedby");
   expect(described && document.getElementById(described)?.textContent).toBe("It goes for good.");
+});
+
+test("a dialog given a title and actions is named by its title, and what it holds comes before its tool and then its answers, Tab wrapping from the last answer", () => {
+  const field = createRef<HTMLTextAreaElement>();
+  draw(
+    createElement(Dialog, {
+      title: "Send feedback",
+      initialFocus: field,
+      onDismiss: () => undefined,
+      actionsStart: createElement("button", { type: "button" }, "Attach"),
+      actions: [
+        createElement("button", { key: "cancel", type: "button" }, "Cancel"),
+        createElement("button", { key: "send", type: "button" }, "Send"),
+      ],
+      children: createElement("textarea", { ref: field, "aria-label": "Feedback" }),
+    }),
+  );
+  const dialog = card() ?? expect.fail("the dialog opens");
+  expect(nameOf(dialog)).toBe("Send feedback");
+  expect(dialog.querySelector("h2")?.textContent).toBe("Send feedback");
+  expect(holds(field.current)).toBe(true);
+  const controls = [...dialog.querySelectorAll("textarea, button")].map(
+    (control) => control.textContent || control.getAttribute("aria-label"),
+  );
+  expect(controls).toEqual(["Feedback", "Attach", "Cancel", "Send"]);
+  button("Send").focus();
+  key("Tab");
+  expect(holds(field.current)).toBe(true);
 });
