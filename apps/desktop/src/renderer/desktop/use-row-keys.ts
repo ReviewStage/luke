@@ -7,8 +7,8 @@ import { useEffect } from "react";
  * anywhere else, the sidebar or a field, is left to it.
  */
 
-/** The rows the arrow keys move through: every row drawn as the sidebar draws one. */
-const ROWS = ".sidebar-task";
+/** The rows the arrow keys move through: every row drawn as the sidebar draws one, and every `ListRow`'s press. */
+const ROWS = ".sidebar-task, button.luke-list-row-main";
 
 /**
  * ↑ and ↓ from the window itself, or from one of the page's rows, move the

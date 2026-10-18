@@ -8559,6 +8559,26 @@ button.automation-run:hover {
   margin-left: auto;
 }
 
+/* A ListRow's metadata on Home, the Issues list, and a person's page: what
+   the row is about, a teammate's face, the row's mark, and its time, set
+   apart by the line's own gap and centred on it. */
+.home-row-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+}
+
+/* Note that the context gives way before the marks and the time, because
+   the metadata's slot clips at its end and the time is what ends it. */
+.home-row-meta > .home-row-context {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.home-row-meta > :not(.home-row-context) {
+  flex: none;
+}
+
 .home-row-picture {
   display: inline-flex;
   width: 16px;
