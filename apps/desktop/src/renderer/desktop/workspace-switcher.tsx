@@ -1,5 +1,13 @@
 import type { Workspace } from "@luke/features/workspace-wire";
-import { ChevronDownIcon, dropBelowStart, GearIcon, PlusIcon, useMenu } from "@luke/ui";
+import {
+  ChevronDownIcon,
+  dropBelowStart,
+  GearIcon,
+  NAV_ITEM_VARIANT,
+  NavItem,
+  PlusIcon,
+  useMenu,
+} from "@luke/ui";
 import { UsersIcon } from "lucide-react";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { ActionMenu, type MenuAction } from "./action-menu";
@@ -85,22 +93,21 @@ export function WorkspaceSwitcher({
   const personal = tasks.workspaces[0]?.id === listed.id;
   return (
     <div className="sidebar-workspace">
-      <button
-        type="button"
-        className="sidebar-workspace-toggle"
+      <NavItem
+        variant={NAV_ITEM_VARIANT.IDENTITY}
         // The name a reader hears says who shares it too, since the label stands for the button's text.
         aria-label={[`Workspace: ${listed.name}`, sharedWords(listed.memberCount, personal)]
           .filter((part) => part !== undefined)
           .join(", ")}
-        {...menu.trigger(dropBelowStart)}
+        menu={menu.trigger(dropBelowStart)}
+        mark={<ChevronDownIcon />}
       >
         <WorkspaceRef
           workspace={listed}
           size={WORKSPACE_REF_SIZE.HEAD}
           line={sharedLine(listed.memberCount, personal)}
         />
-        <ChevronDownIcon />
-      </button>
+      </NavItem>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label="Workspaces"

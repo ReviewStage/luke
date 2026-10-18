@@ -94,27 +94,29 @@ export function useAddToPlan(): ViewerAction | undefined {
   const toast = useToast();
   return useMemo(() => {
     if (page === undefined || page.taskId === "" || page.workspace === "") return undefined;
-    const { taskId: planId, workspace } = page;
+    const { taskId, workspace } = page;
     const failed = (words: string) =>
       toast({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
     const save = (base: string, value: string): Promise<TasksEditAnswer> =>
-      act(ACT_KIND.TASKS_EDIT, { taskId: planId, edit: { document: { base, value } } }).catch(
+      act(ACT_KIND.TASKS_EDIT, { taskId: taskId, edit: { document: { base, value } } }).catch(
         (): TasksEditAnswer => ({ failure: TASK_CALL_FAILURE.UNANSWERED }),
       );
     const add = async (chip: FileChip) => {
       const encoded = await encodeImage(fileOf(chip), PICTURE_BOUNDS.MAX_BYTES);
       if (encoded === undefined) return failed(ADD_WORDS.NOT_A_PICTURE);
       const url = `data:${encoded.mediaType};base64,${encoded.base64}`;
-      const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId, picture: url }).catch(() => ({
-        failure: PICTURE_KEEP_FAILURE.UNANSWERED,
-      }));
+      const kept = await act(ACT_KIND.TASKS_PICTURE_KEEP, { planId: taskId, picture: url }).catch(
+        () => ({
+          failure: PICTURE_KEEP_FAILURE.UNANSWERED,
+        }),
+      );
       if ("failure" in kept) {
         return failed(
           kept.failure === PICTURE_KEEP_FAILURE.TOO_MANY ? ADD_WORDS.TOO_MANY : ADD_WORDS.NOT_SAVED,
         );
       }
-      keepPictureRead(planId, kept.id, url);
-      const address = planAttachmentAddress({ taskId: planId, attachmentId: kept.id }, workspace);
+      keepPictureRead(taskId, kept.id, url);
+      const address = planAttachmentAddress({ taskId: taskId, attachmentId: kept.id }, workspace);
       const line = taskPictureLine(wordsOf(chip), address);
       // Note that the edit is written on the plan's words as the page last read
       // them, and a conflict answers the text as it stands for the next.

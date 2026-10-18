@@ -27,7 +27,7 @@ import { TranscriptWords } from "./transcript-blocks";
  * Linear connected. Synthetic workspace, plan, and issue.
  */
 
-const PLAN = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const AT = 1_792_000_000_000;
 const ISSUE = "https://linear.app/acme/issue/ENG-1/start-a-plan-from-linear";
 
@@ -48,7 +48,7 @@ const ACME: Workspace = {
 const ACME_WITH_LINEAR: Workspace = { ...ACME, linear: { active: true } };
 
 const TASK: TaskSummary = {
-  id: PLAN,
+  id: TASK_ID,
   workspaceId: "workspace-acme",
   name: "Teammate invitations",
   createdAt: AT,
@@ -67,14 +67,14 @@ function stateWith(workspace: Workspace): AppStateSnapshot {
 
 /** The plan's page, as its words' chips stand on it. */
 const PAGE: TaskMentionsValue = {
-  taskId: PLAN,
+  taskId: TASK_ID,
   taskName: TASK.name,
   workspace: "acme",
   workspaceId: "workspace-acme",
   repository: "acme/relay",
   text: () => "",
   doors: {
-    taskId: PLAN,
+    taskId: TASK_ID,
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(),
     onOpenTask: () => undefined,

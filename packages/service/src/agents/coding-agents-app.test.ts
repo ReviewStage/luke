@@ -131,6 +131,8 @@ import {
   inboxAnsweredSchema,
   inboxAnswerSchema,
   inboxMessagedSchema,
+  inboxReadAllSchema,
+  inboxReadStateSchema,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
@@ -3093,6 +3095,7 @@ const INBOX_ITEM = "/api/inbox/item";
 const ACCOUNT_INBOX = "/api/inbox";
 const INBOX_ATTACHMENT = "/api/inbox/attachment";
 const INBOX_MESSAGES = "/api/inbox/messages";
+const INBOX_READ = "/api/inbox/read";
 
 /** The first bytes of a PNG, as a screenshot's file starts. */
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
@@ -3486,6 +3489,71 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal(sent.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
         const kept = (yield* read()).items.find((item) => item.id === asked.success.id);
         assert.equal(kept?.messages, undefined);
+      }),
+  );
+
+  it.effect(
+    "a member marks an item read and unread for themselves alone, or every item of a workspace's Inbox read, and an outsider, another method, and a malformed request are refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask, post, read, waiting } = yield* openInbox();
+        const asked = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(asked));
+        const { id } = asked.success;
+        const unread = () =>
+          Effect.map(read(), (page) => page.items.find((item) => item.id === id)?.unread);
+        const mark = (method: string, bearer = owner) =>
+          ask(request(INBOX_READ, bearer, { method, id }));
+        assert.equal(yield* unread(), true, "a new item is unread");
+        assert.deepEqual(
+          (yield* waiting()).items.map((entry) => [entry.id, entry.unread]),
+          [[id, true]],
+        );
+
+        assert.deepEqual(
+          readAnswer(inboxReadStateSchema, HOSTED_HTTP_STATUS.OK, yield* mark("PUT")),
+          { id, unread: false },
+        );
+        assert.equal(yield* unread(), false);
+        assert.deepEqual(
+          readAnswer(inboxReadStateSchema, HOSTED_HTTP_STATUS.OK, yield* mark("DELETE")),
+          { id, unread: true },
+        );
+        assert.equal(yield* unread(), true);
+
+        assert.deepEqual(
+          yield* mark("PUT", other),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+          "an account outside the workspace reaches no item",
+        );
+        assert.deepEqual(
+          yield* mark("POST"),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+        assert.deepEqual(
+          yield* ask(request(INBOX_READ, owner, { method: "DELETE", body: {} })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+          "nothing marks every item unread",
+        );
+
+        const all = (body: WireBoundaryInput) =>
+          ask(request(INBOX_READ, owner, { method: "PUT", body }));
+        assert.deepEqual(
+          yield* all({ workspaceId: "" }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          readAnswer(
+            inboxReadAllSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* all({ workspaceId: task.workspaceId }),
+          ),
+          { marked: 1 },
+        );
+        assert.equal(yield* unread(), false);
+        assert.deepEqual(readAnswer(inboxReadAllSchema, HOSTED_HTTP_STATUS.OK, yield* all({})), {
+          marked: 0,
+        });
       }),
   );
 

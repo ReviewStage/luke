@@ -43,6 +43,11 @@ import type {
  * words to raise and the press it wraps, whose pointer and focus handlers
  * land on the press itself.
  *
+ * A row's metadata stands at its middle, or, in a list read as a mail
+ * app's is (`LIST_ROW_META.TITLE`), at the end of its title's line, the
+ * description running the row's whole width under both and its leading
+ * mark level with the title.
+ *
  * A list stands plain, its rows apart on the ground, each lit on its own;
  * or as a card (`LIST_VARIANT.CARD`), its rows edge to edge on the card's
  * ground with a hairline between each and the next, as a settings section's
@@ -74,6 +79,14 @@ export const LIST_ROW_CURRENT = {
 } as const;
 
 export type ListRowCurrent = (typeof LIST_ROW_CURRENT)[keyof typeof LIST_ROW_CURRENT];
+
+/** Where a row's metadata stands: at the row's middle, or at the end of its title's line. */
+export const LIST_ROW_META = {
+  MIDDLE: "middle",
+  TITLE: "title",
+} as const;
+
+export type ListRowMeta = (typeof LIST_ROW_META)[keyof typeof LIST_ROW_META];
 
 /** What a hint hands the press it wraps: when to show and go, and what it says of the press. */
 interface ListRowHintProps {
@@ -122,6 +135,7 @@ export function ListRow({
   title,
   description,
   meta,
+  metaAt = LIST_ROW_META.MIDDLE,
   actions,
   onPress,
   current,
@@ -138,6 +152,8 @@ export function ListRow({
   description?: ReactNode;
   /** Metadata at the row's end, before its acts ("2h ago", "Owner"). */
   meta?: ReactNode;
+  /** Where the metadata stands: at the row's middle, or at the end of the title's line. */
+  metaAt?: ListRowMeta;
   /** The row's own acts (an IconButton, a Button), each a control beside the row's press. */
   actions?: ReactNode;
   /** What pressing the row does; a row without one is not a control. */
@@ -155,6 +171,8 @@ export function ListRow({
   /** A right-click, or the menu key, anywhere on the row. */
   onContextMenu?: ((event: MouseEvent<HTMLElement>) => void) | undefined;
 }): React.JSX.Element {
+  const heading = <span className="luke-list-row-title">{title}</span>;
+  const metadata = said(meta) ? <span className="luke-list-row-meta">{meta}</span> : null;
   const face = (
     <>
       {said(leading) ? (
@@ -163,12 +181,19 @@ export function ListRow({
         </span>
       ) : null}
       <span className="luke-list-row-text">
-        <span className="luke-list-row-title">{title}</span>
+        {metaAt === LIST_ROW_META.TITLE ? (
+          <span className="luke-list-row-head">
+            {heading}
+            {metadata}
+          </span>
+        ) : (
+          heading
+        )}
         {said(description) ? (
           <span className="luke-list-row-description">{description}</span>
         ) : null}
       </span>
-      {said(meta) ? <span className="luke-list-row-meta">{meta}</span> : null}
+      {metaAt === LIST_ROW_META.TITLE ? null : metadata}
     </>
   );
   const press = onPress ? (
@@ -187,6 +212,7 @@ export function ListRow({
     <li
       ref={onPress ? undefined : ref}
       className="luke-list-row"
+      data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
       data-current={current === undefined ? undefined : "true"}
       data-unread={unread === true ? "true" : undefined}
       onContextMenu={onContextMenu}

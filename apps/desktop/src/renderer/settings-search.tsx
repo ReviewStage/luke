@@ -23,7 +23,7 @@ import {
   type SettingsView,
 } from "@luke/settings/settings-views";
 import { APP_COMMAND, APP_SHORTCUTS, shownShortcutGroups } from "@luke/settings/shortcuts";
-import { SearchField } from "@luke/ui";
+import { NAV_CURRENT, NavItem, SearchField } from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -568,16 +568,12 @@ export function SettingsSearchResults({
           <ul>
             {group.items.map((entry) => (
               <li key={entry.id}>
-                <button
-                  type="button"
-                  className="sidebar-item"
-                  aria-current={entry.id === opened ? "location" : undefined}
+                <NavItem
+                  current={entry.id === opened ? NAV_CURRENT.LOCATION : undefined}
                   onClick={() => onOpen(entry)}
                 >
-                  <span className="settings-search-result">
-                    <Highlighted text={entry.label} tokens={search.tokens} />
-                  </span>
-                </button>
+                  <Highlighted text={entry.label} tokens={search.tokens} />
+                </NavItem>
               </li>
             ))}
           </ul>
