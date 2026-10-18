@@ -89,9 +89,13 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
     });
   };
 
-  // A press of the main part closes the menu, even one it refuses: the menu
-  // stands beside the button, so the focus moving to the main part is focus
-  // leaving the menu, which closes it unless it went to the chevron.
+  // A press of the main part closes the menu whether or not it starts
+  // anything. Note that a refused press, busy or unavailable, never reaches
+  // `press`, so the split button's own click, heard as it passes, closes it
+  // for any press but the chevron's, which toggles the menu itself.
+  const pressed = (event: React.MouseEvent<HTMLElement>) => {
+    if (!(event.target instanceof Node && chevron.current?.contains(event.target))) setOpen(false);
+  };
   const press = () => {
     setOpen(false);
     if (unavailable || start.busy) return;
@@ -114,25 +118,27 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           onRemedy={repositoryRemedy(start.note, () => press())}
         />
       ) : null}
-      <SplitButton
-        icon={<PlayIcon />}
-        label="Start a coding agent"
-        disabled={unavailable}
-        busy={start.busy ? "Starting" : undefined}
-        hint={Tooltip}
-        hintLabel={hint}
-        onClick={press}
-        menu={{
-          label: "Choose a model to start with",
-          "aria-haspopup": "dialog",
-          "aria-expanded": open,
-          "aria-controls": open ? menuId : undefined,
-          ref: chevron,
-          onClick: () => setOpen(!open),
-        }}
-      >
-        Start
-      </SplitButton>
+      <span className="start-agent-split" onClickCapture={pressed}>
+        <SplitButton
+          icon={<PlayIcon />}
+          label="Start a coding agent"
+          disabled={unavailable}
+          busy={start.busy ? "Starting" : undefined}
+          hint={Tooltip}
+          hintLabel={hint}
+          onClick={press}
+          menu={{
+            label: "Choose a model to start with",
+            "aria-haspopup": "dialog",
+            "aria-expanded": open,
+            "aria-controls": open ? menuId : undefined,
+            ref: chevron,
+            onClick: () => setOpen(!open),
+          }}
+        >
+          Start
+        </SplitButton>
+      </span>
       {drawn.mounted ? (
         <ModelMenu
           leaving={drawn.leaving}

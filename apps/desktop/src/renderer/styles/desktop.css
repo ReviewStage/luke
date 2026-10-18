@@ -8412,6 +8412,11 @@ button.automation-run:hover {
   gap: var(--luke-control-gap);
 }
 
+/* The split button's box, which hears its presses as they pass. */
+.start-agent-split {
+  display: flex;
+}
+
 /* The model menu hangs under the chevron, to the toolbar's right edge. */
 .start-agent-menu {
   right: 0;
