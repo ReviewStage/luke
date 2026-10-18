@@ -165,9 +165,11 @@ function OwnerCell({
 }
 
 /**
- * One automation's row: the glyph of what fires it wearing where its newest run
- * stands, its name over what fires it, its owner, when it runs next, a
- * failure's mark, and its switch. Everything but the switch is one press
+ * One automation's row: the glyph of what fires it on a tile, as a
+ * suggestion's is, wearing where its newest run stands, its name over what
+ * fires it, its owner, when it runs next with a failure's mark before it,
+ * and its switch. The owner and the next run each keep a column of their
+ * own, so they line up down the card whatever each row says. Everything but the switch is one press
  * that opens its page, as a sidebar task's row is, so the row opens wherever
  * it is pressed and the switch beside the press only switches. Its
  * right-click offers Copy link, and hands focus back to its press as the
@@ -201,7 +203,9 @@ function AutomationRow({
           press.current = node;
         }}
         leading={
-          <StateGlyph glyph={<FiringGlyph kind={automation.trigger.kind} />} state={state} />
+          <span className="automation-row-glyph">
+            <StateGlyph glyph={<FiringGlyph kind={automation.trigger.kind} />} state={state} />
+          </span>
         }
         title={
           <span className="automation-row-name" data-enabled={String(automation.enabled)}>
@@ -217,10 +221,12 @@ function AutomationRow({
               mine={automation.mine === true}
               workspace={workspace}
             />
-            <Tooltip label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}>
-              <span className="automation-row-when">{automationNextText(automation, now)}</span>
-            </Tooltip>
-            {stateEndMark(state, true)}
+            <span className="automation-row-next">
+              {stateEndMark(state, true)}
+              <Tooltip label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}>
+                <span className="automation-row-when">{automationNextText(automation, now)}</span>
+              </Tooltip>
+            </span>
           </span>
         }
         actions={

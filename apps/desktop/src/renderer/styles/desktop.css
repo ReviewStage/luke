@@ -4448,9 +4448,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
   color: var(--luke-color-text-muted);
 }
 
-/* Who owns it, never in doubt: the workspace in the text's own ink beside
-   its photo, Personal in the muted one, set in the label role, in a column
-   of its own so the owners line up down the card. */
+/* Who owns it, never in doubt: the workspace's photo or the maker's
+   picture beside its name, in the metadata's own type, in a column of its
+   own so the owners line up down the card. */
 .automation-owner {
   display: inline-flex;
   width: 112px; /* off-scale */
@@ -4458,10 +4458,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   align-items: center;
   gap: var(--luke-space-6);
   overflow: hidden;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-label-leading);
   white-space: nowrap;
 }
 
@@ -4471,8 +4467,24 @@ polygon.factory-campus-edge[data-edge="selected"] {
   text-overflow: ellipsis;
 }
 
-.automation-owner[data-owner="workspace"] {
-  color: var(--luke-color-text);
+/* When it runs next, in a column of its own set against the switch, wide
+   enough for a date and a time, so a short "Off" beside a long date never
+   moves the owners out of line; a failure's mark stands inside it, before
+   the words. */
+.automation-row-next {
+  display: inline-flex;
+  width: 144px; /* off-scale: "Next Nov 17, 10:30 PM" and a failure's mark */
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--luke-space-6);
+  overflow: hidden;
+}
+
+.automation-row-when {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* The suggested automations, each a card of its own in a grid that wraps
@@ -4523,7 +4535,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-bottom: var(--luke-space-6);
 }
 
-.automation-suggestion-glyph {
+/* What fires a suggestion, or an automation in the list, on a tile, so a
+   row and a suggestion read as the same kind of thing. */
+.automation-suggestion-glyph,
+.automation-row-glyph {
   display: grid;
   width: 32px; /* off-scale */
   height: 32px; /* off-scale */
