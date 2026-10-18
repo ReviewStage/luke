@@ -87,6 +87,8 @@ import {
   replyToReviewThread,
   setAutoMerge,
   setPullRequestDraft,
+  setPullRequestOpen,
+  setPullRequestTitle,
   setReviewThreadResolved,
   submitPullRequestReview,
   takeOutOfMergeQueue,
@@ -1103,6 +1105,12 @@ function writeOf(
       return setAutoMerge(token, id, undefined);
     case PULL_REQUEST_ACTION.DEQUEUE:
       return takeOutOfMergeQueue(token, id);
+    case PULL_REQUEST_ACTION.CLOSE:
+      return setPullRequestOpen(token, id, false);
+    case PULL_REQUEST_ACTION.REOPEN:
+      return setPullRequestOpen(token, id, true);
+    case PULL_REQUEST_ACTION.EDIT_TITLE:
+      return setPullRequestTitle(token, id, request.title);
     case PULL_REQUEST_ACTION.SUBMIT_REVIEW:
       return submitPullRequestReview(token, id, request);
     case PULL_REQUEST_ACTION.REPLY_TO_THREAD:

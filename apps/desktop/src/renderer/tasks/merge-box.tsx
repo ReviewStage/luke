@@ -12,10 +12,19 @@ import {
   type MergeMethod,
   PULL_REQUEST_ACTION,
 } from "@luke/features/pull-request-write-wire";
-import { ConfirmDialog, DIALOG_TONE, useConfirmDialog, useMenu } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  type ButtonVariant,
+  ConfirmDialog,
+  DIALOG_TONE,
+  SplitButton,
+  useConfirmDialog,
+  useMenu,
+} from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Schema } from "effect";
-import { ChevronDownIcon, GitMergeIcon } from "lucide-react";
+import { GitMergeIcon } from "lucide-react";
 import { useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { readKept, writeKept } from "../desktop/folded-groups";
@@ -133,19 +142,37 @@ function useMergeMethod(
   return [method, choose];
 }
 
-/** The chevron beside a press that names a method, opening the methods the repository allows. */
-function MethodPicker({
+/**
+ * A press that acts by the method chosen, joined to the chevron that opens
+ * the methods the repository allows (`@luke/ui`'s SplitButton); the press
+ * alone where the repository allows one method.
+ */
+function MethodPress({
+  variant,
+  label,
   methods,
   method,
   disabled,
+  onPress,
   onChoose,
 }: {
+  variant: ButtonVariant;
+  label: string;
   methods: readonly MergeMethod[];
   method: MergeMethod;
   disabled: boolean;
+  onPress: () => void;
   onChoose: (method: MergeMethod) => void;
 }): React.JSX.Element {
-  const menu = useMenu(true);
+  const menu = useMenu(methods.length > 1);
+  const icon = variant === BUTTON_VARIANT.PRIMARY ? <GitMergeIcon aria-hidden="true" /> : undefined;
+  if (methods.length < 2) {
+    return (
+      <Button variant={variant} icon={icon} disabled={disabled} onClick={onPress}>
+        {label}
+      </Button>
+    );
+  }
   const items: MenuAction[] = methods.map((each) => ({
     label: METHOD_WORDS[each],
     checked: each === method,
@@ -153,15 +180,15 @@ function MethodPicker({
   }));
   return (
     <>
-      <button
-        type="button"
-        className="toolbar-button bordered-button merge-box-picker"
-        aria-label={BOX_WORDS.CHOOSE_METHOD}
+      <SplitButton
+        variant={variant}
+        icon={icon}
         disabled={disabled}
-        {...menu.trigger()}
+        onClick={onPress}
+        menu={{ label: BOX_WORDS.CHOOSE_METHOD, ...menu.trigger() }}
       >
-        <ChevronDownIcon aria-hidden="true" />
-      </button>
+        {label}
+      </SplitButton>
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={BOX_WORDS.CHOOSE_METHOD}
@@ -181,11 +208,14 @@ function MethodPicker({
 export function MergeActions({
   pullRequest,
   repository,
+  shown,
   writes,
 }: {
   pullRequest: CodingAgentOverviewPullRequest;
   /** The agent's repository, which the method chosen is kept by. */
   repository: string | null;
+  /** Whether the panel the box stands in is on screen; a merge asked about goes with it. */
+  shown: boolean;
   writes: PullRequestWrites;
 }): React.JSX.Element | null {
   const { merging } = pullRequest;
@@ -193,30 +223,27 @@ export function MergeActions({
   // The merge asked about, as it stood when Merge was pressed: a read landing under the question never changes what it merges.
   const [asked, setAsked] = useState<{ method: MergeMethod; headSha: string } | undefined>();
   const confirm = useConfirmDialog(
-    { subject: asked !== undefined, surfaceOpen: true },
+    { subject: asked !== undefined, surfaceOpen: shown },
     async () => {
       if (asked !== undefined) await writes.write({ action: PULL_REQUEST_ACTION.MERGE, ...asked });
       return { status: ACTION_RESULT_STATUS.ACCEPTED };
     },
   );
+  // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.
+  if (!shown && asked !== undefined && !confirm.busy) setAsked(undefined);
   if (merging === undefined || pullRequest.state !== PULL_REQUEST_STATE.OPEN) return null;
   const action = mergeActionOf(pullRequest.merge, merging);
   const busy = writes.pending !== undefined;
   const { headSha } = merging;
-  const picker =
-    method !== undefined && merging.methods.length > 1 ? (
-      <MethodPicker methods={merging.methods} method={method} disabled={busy} onChoose={choose} />
-    ) : null;
-  const press = (label: string, onPress: () => void, primary: boolean) => (
-    <button
-      type="button"
-      className={`toolbar-button ${primary ? "primary-button" : "bordered-button"} merge-box-press`}
+  const press = (label: string, onPress: () => void, variant: ButtonVariant) => (
+    <Button
+      variant={variant}
+      icon={variant === BUTTON_VARIANT.PRIMARY ? <GitMergeIcon aria-hidden="true" /> : undefined}
       disabled={busy}
       onClick={onPress}
     >
-      {primary ? <GitMergeIcon aria-hidden="true" /> : null}
       {label}
-    </button>
+    </Button>
   );
   return (
     <span className="merge-box-actions">
@@ -230,46 +257,49 @@ export function MergeActions({
         ? press(
             BOX_WORDS.DEQUEUE,
             () => void writes.write({ action: PULL_REQUEST_ACTION.DEQUEUE }),
-            false,
+            BUTTON_VARIANT.OUTLINE,
           )
         : null}
       {action === MERGE_ACTION.DISABLE_AUTO_MERGE
         ? press(
             BOX_WORDS.DISABLE_AUTO_MERGE,
             () => void writes.write({ action: PULL_REQUEST_ACTION.DISABLE_AUTO_MERGE }),
-            false,
+            BUTTON_VARIANT.OUTLINE,
           )
         : null}
       {action === MERGE_ACTION.MERGE_WHEN_READY
         ? press(
             BOX_WORDS.MERGE_WHEN_READY,
             () => void writes.write({ action: PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE, headSha }),
-            true,
+            BUTTON_VARIANT.PRIMARY,
           )
         : null}
       {action === MERGE_ACTION.MERGE && method !== undefined ? (
-        <span className="merge-box-split">
-          {press(
-            METHOD_WORDS[method],
-            () => {
-              setAsked({ method, headSha });
-              confirm.ask();
-            },
-            true,
-          )}
-          {picker}
-        </span>
+        <MethodPress
+          variant={BUTTON_VARIANT.PRIMARY}
+          label={METHOD_WORDS[method]}
+          methods={merging.methods}
+          method={method}
+          disabled={busy}
+          onChoose={choose}
+          onPress={() => {
+            setAsked({ method, headSha });
+            confirm.ask();
+          }}
+        />
       ) : null}
       {action === MERGE_ACTION.ENABLE_AUTO_MERGE && method !== undefined ? (
-        <span className="merge-box-split">
-          {press(
-            BOX_WORDS.ENABLE_AUTO_MERGE,
-            () =>
-              void writes.write({ action: PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE, method, headSha }),
-            false,
-          )}
-          {picker}
-        </span>
+        <MethodPress
+          variant={BUTTON_VARIANT.OUTLINE}
+          label={BOX_WORDS.ENABLE_AUTO_MERGE}
+          methods={merging.methods}
+          method={method}
+          disabled={busy}
+          onChoose={choose}
+          onPress={() =>
+            void writes.write({ action: PULL_REQUEST_ACTION.ENABLE_AUTO_MERGE, method, headSha })
+          }
+        />
       ) : null}
       {asked === undefined ? null : (
         <ConfirmDialog
