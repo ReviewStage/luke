@@ -1638,9 +1638,11 @@ ul.actor-stack {
    once, as the release's pill does. A narrow foot draws its glyph alone, as
    it draws the release's, and so does a foot the release's pill stands in
    too, so the account's name keeps a name's room beside the two. Folded, it
-   stands in the title bar beside New task as a round its glyph alone, one
-   button wide, and the toolbar's clearance grows by that button, so nothing
-   the toolbar draws starts beneath it. Over the sign-in, where nothing
+   stands in the title bar beside New task as its glyph alone, drawn as the
+   buttons beside it draw theirs, on no fill and one button wide, so the row
+   keeps their spacing and a heading beside it no fill to crowd; the
+   toolbar's clearance grows by that button, so nothing the toolbar draws
+   starts beneath it. Over the sign-in, where nothing
    else stands in the title bar, it keeps its word. Over a drag region, it
    takes the pointer back so its hint can show. */
 .offline-mark {
@@ -1671,6 +1673,13 @@ ul.actor-stack {
   height: var(--luke-control-height);
   justify-content: center;
   padding: 0;
+  border-radius: var(--luke-control-radius);
+  background: none;
+}
+
+.desktop-shell .title-bar-controls .offline-mark svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 .desktop-shell .title-bar-controls .offline-mark-word {
@@ -2004,17 +2013,9 @@ ul.actor-stack {
   height: 13px;
 }
 
-/* A failure's line (`failure-note.tsx`): its words, then the press that
-   mends it inside a hairline, since it is the act the line is there for,
-   with Cancel or Retry quiet beside it. The press keeps the words' size and
-   goes onto the next line, whole, where the line has no room for it. */
-.failure-note {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-space-4) var(--luke-space-8);
-}
-
+/* A remedy pressed from a line of its own rather than a failure's (a
+   failure's is `@luke/ui`'s `ErrorState`): inside a hairline, at the words'
+   size, since it is the act the line is there for. */
 .failure-note-remedy {
   height: 24px;
   padding: 0 var(--luke-space-8);
@@ -3595,6 +3596,13 @@ body:has(.app-stage[data-capture="true"])
 .inbox-row-attention .attention-mark svg {
   width: 10px;
   height: 10px;
+}
+
+/* An item whose box holds a draft wears its pencil at the attention mark's
+   size, as a sidebar task's row wears it at its glyph's (`draft-mark.tsx`). */
+.home-row-meta .draft-mark {
+  width: 12px;
+  height: 12px;
 }
 
 /* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
@@ -7003,6 +7011,15 @@ body:has(.app-stage[data-capture="true"])
   gap: var(--luke-control-gap);
 }
 
+/* A refused start stands left of the button on the toolbar's one line, as
+   wide as its sentence and presses want and at most half the toolbar, so
+   the tabs keep the rest and the sentence gives way first. */
+.start-agent-note {
+  display: flex;
+  min-width: 0;
+  max-width: 50cqi;
+}
+
 /* The split button's box, which hears its presses as they pass. */
 .start-agent-split {
   display: flex;
@@ -7579,18 +7596,41 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   pointer-events: none;
 }
 
-/* A toast with an action shows its × at its end under the pointer or focus,
-   keeping its room at rest so the words never reflow as it comes. */
+/* A toast with an action shows its × as a disc over its top-left corner
+   under the pointer or focus, as a Mac's own notifications do, so it takes
+   no room in the row: the action stands at the card's end and the words
+   never reflow as it comes. At rest it lets the pointer through, so the
+   part of it past the card's edge never stands in the way of what is
+   under it. */
 .toast-dismiss {
+  position: absolute;
+  top: calc(-1 * var(--luke-space-8));
+  left: calc(-1 * var(--luke-space-8));
   display: flex;
-  flex: none;
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-full);
+  background: var(--luke-color-overlay);
+  box-shadow: 0 1px 3px var(--luke-color-shadow-soft);
   opacity: 0;
-  transition: opacity var(--duration-hover) ease;
+  transform: scale(0.85);
+  pointer-events: none;
+  transition:
+    opacity var(--duration-hover) ease,
+    transform var(--duration-hover) ease;
 }
 
 .toast:hover .toast-dismiss,
 .toast:focus-within .toast-dismiss {
   opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* Note that the × must let the pointer through under a modal too, because
+   one already under the pointer as the modal opens keeps its card hovered
+   by taking the pointer itself, past the card's own `none` above. */
+body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
+  pointer-events: none;
 }
 
 @keyframes toast-fade {

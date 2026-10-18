@@ -445,7 +445,12 @@ renders them; the name, App, state, and times of up to 100 checks on its head;
 its reviewers; and up to its 100 newest review threads on lines, each with the
 file and lines it is on, the part of the diff it was made on, whether it was
 resolved or outdated, and up to its first 50 comments, each whole with its
-author, as GitHub renders them. An image in the description or a comment is read by our
+author, as GitHub renders them; and the reactions on the description, those
+comments and reviews, and those review comments, with up to 10 of who gave
+each, except on a review comment, where only how many. Beside it, where you
+hold a GitHub sign-in, our service reads with your own GitHub token which of
+those reactions are yours, so the tab can light them; it keeps none of it, and
+the answer is never kept for anyone else. An image in the description or a comment is read by our
 service too, never by your Mac: an upload with the same one-repository token,
 through a fresh signed address GitHub gives for it, and any other image through
 GitHub's own image proxy, each up to 8 MB; other images are shown as links.
@@ -454,7 +459,7 @@ leaving out a patch over 100,000 characters. It stores none of it, and Luke
 holds it in memory while the tab is open, never on disk, except that
 downloading a patch writes it where you save it. A button in the tab that
 changes the pull request, such as Ready for review, Convert to draft, Merge,
-or Enable auto-merge, is
+Enable auto-merge, or giving or taking back a reaction, is
 sent to GitHub by our service as you, on the token of your own GitHub sign-in,
 whoever started the agent, so it can do only what your GitHub account may; it
 is never sent as the Luke GitHub App, and where you hold no GitHub sign-in

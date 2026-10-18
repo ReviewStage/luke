@@ -92,8 +92,68 @@
     overflow-wrap: anywhere;
   }
 
-  .luke-choice-head > .luke-badge {
+  /* The badge and the row's number keep their width at the head's right,
+     the number last, in the caption type's quiet figures. */
+  .luke-choice-end {
+    display: inline-flex;
     flex: none;
+    align-items: center;
+    gap: var(--luke-space-8);
+  }
+
+  .luke-choice-number {
+    min-width: 1ch;
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-body-leading);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
+
+  /* A marked row's radio or checkbox stands on the label's first line: a
+     ring at rest, filled in the accent once checked, a dot in a radio and a
+     tick in a box, both in the accent's ink. */
+  .luke-choice-control {
+    display: inline-grid;
+    flex: none;
+    align-self: flex-start;
+    place-items: center;
+    width: var(--luke-space-16);
+    height: var(--luke-space-16);
+    margin-top: calc((var(--luke-type-body-leading) - var(--luke-space-16)) / 2);
+    box-sizing: border-box;
+    border: 1.5px solid var(--luke-color-text-subtle);
+    border-radius: var(--luke-space-4);
+    transition:
+      background-color var(--duration-hover, 0s) ease,
+      border-color var(--duration-hover, 0s) ease;
+  }
+
+  .luke-choice-control[data-shape="radio"] {
+    border-radius: 50%;
+  }
+
+  [aria-checked="true"] > .luke-choice-control {
+    border-color: var(--luke-color-accent);
+    background: var(--luke-color-accent);
+  }
+
+  [aria-checked="true"] > .luke-choice-control[data-shape="radio"]::after {
+    width: var(--luke-space-6);
+    height: var(--luke-space-6);
+    border-radius: 50%;
+    background: var(--luke-color-on-accent);
+    content: "";
+  }
+
+  [aria-checked="true"] > .luke-choice-control[data-shape="box"]::after {
+    width: var(--luke-space-8);
+    height: var(--luke-space-4);
+    margin-top: -2px;
+    border-bottom: 2px solid var(--luke-color-on-accent);
+    border-left: 2px solid var(--luke-color-on-accent);
+    transform: rotate(-45deg);
+    content: "";
   }
 
   .luke-choice-detail {

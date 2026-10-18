@@ -12,73 +12,109 @@
   <img src="https://img.shields.io/badge/macOS-14%2B%20%C2%B7%20Apple%20silicon-black" alt="macOS 14 or newer, Apple silicon">
 </p>
 
-Luke is a macOS app for working through a task by voice before you hand it to
-a coding agent. You describe the task, Luke reads your repository and asks
-about what you left open, and a second model writes the plan during the call.
-Then you press Start and a coding agent implements the plan in a sandbox and
-opens the pull request, or you copy the plan into Claude Code, Codex, or any
-other agent.
+Luke is a macOS app for planning a change by talking it through, then handing
+it to coding agents and reviewing what they ship.
 
-![Luke's window with the task "Teammate invitations" open and its plan being written during a voice call.](docs/media/luke-plan.png)
+You describe the change out loud. Luke reads the repository while you talk,
+asks about what you left open, and writes the plan as a design doc during the
+call. Press **Start** and a coding agent implements the plan in a cloud
+sandbox and opens a pull request. Its questions come back to your Inbox, and
+you review the pull request without leaving the app. Or copy the plan into
+Claude Code, Codex, or any other agent.
+
+![A task's plan, written during a call: Context, Goal, Approach, Interfaces, and Alternatives, with the task's coding agents open as tabs beside it.](apps/web/public/changelog/0.12.0/the-plan-is-one-document.png)
+
+## How it works
+
+1. **Talk.** Create a task on a GitHub repository and press the microphone, or
+   hold ⌥Space from any app. Luke answers by voice. While you talk he runs
+   `grep`, `cat`, and `git log` on a checkout of the repository, and hands
+   longer searches to background workers so the call keeps going.
+2. **Plan.** A second model writes what the call settles into the task's plan:
+   a Markdown document you can edit, comment on, and restore from version
+   history. Each section says who last wrote it: you, Luke, a teammate, or an
+   agent.
+3. **Build.** **Start** hands the plan to a coding agent on the Claude or GPT
+   model you pick. It works on a full checkout in a sandbox of its own, runs
+   the tests, pushes a branch, opens the pull request as you with Luke as
+   co-author, and fixes the checks that fail. You can message it mid-run, open
+   a terminal in its sandbox, or ask Luke on a call how it is doing.
+4. **Review.** When an agent needs a decision, a manual step, or your eyes on
+   something, it posts to the Inbox with the lines of code or the screenshot
+   it is about, and your answer goes back to it. The pull request opens in a
+   tab with its conversation, checks, and diff, and a review left on GitHub
+   reaches the agent too.
+
+![The Call tab: two calls about the same task, with the commands, a background worker, and a command run on your Mac folded under the question that asked for them.](apps/web/public/changelog/0.12.0/the-call-tab.png)
+
+## Features
+
+- **Plans** start from a template you set in Settings › Plan template. The
+  default reads like a design doc: Context, Goal, Approach, Interfaces,
+  Alternatives, Hard parts, Not doing, Plan of attack, Testing, Open
+  questions, and Assumptions. Plans hold pictures and Mermaid diagrams.
+- **Coding agents** hand scoped work to read-only subagents on a model and
+  effort they choose, message and start other agents in the workspace, and
+  show you screenshots or an interactive HTML page of what they built.
+- **Workspaces** share tasks, agents, and calls with your team, on the
+  repositories of the GitHub account or organization the workspace connects.
+- **Integrations** reach Linear, Notion, Sentry, Slack, GitHub, Granola,
+  Mercury, Neon, PostHog, Supabase, Vercel, Y Combinator, and Executor through
+  each service's own MCP server, for Luke and every agent. A task can start
+  from a Linear issue.
+- **Skills** in the repository's `.agents/skills` or `.claude/skills` are
+  offered to Luke and agents, and `/` in an agent's message box picks one.
+- **Run on this Mac** checks an agent's branch out in a local worktree with
+  your own git login and opens a terminal on it inside Luke.
+- **Your own API keys**: coding agents run on your Anthropic or OpenAI key if
+  you add one in Settings › Coding agents, and on Luke's otherwise.
+
+Automations (agents started on a schedule, a GitHub event, or a webhook),
+issue tracking, and video calls are behind Settings › Experimental.
+
+![The Inbox: a coding agent asks whether invite links should expire after 7 or 14 days, over the two lines of code that decide it, with your pick and your reply.](apps/web/public/changelog/0.13.0/the-inbox-one-item-at-a-time.png)
 
 ## Install
 
 Requires an Apple silicon Mac on macOS 14 or newer.
 
-1. Download [Luke.dmg](https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg).
-2. Open the DMG and drag **Luke** into **Applications**.
-3. Open Luke and sign in with Google or GitHub. A workspace's repositories
-   come from the GitHub account or organization connected to it: an owner or
-   admin connects one in Settings › Workspace › Integrations, which installs
-   the Luke GitHub App there.
+1. Download [Luke.dmg](https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg),
+   open it, and drag **Luke** into **Applications**.
+2. Open Luke and sign in with Google or GitHub.
+3. Connect GitHub in Settings › Workspace › Integrations, which installs the
+   Luke GitHub App on the account or organization whose repositories you want
+   to work on. A workspace's owner or an admin connects it.
 
-Luke asks for microphone access the first time you start a call.
+Luke asks for microphone access the first time you start a call, and updates
+itself.
 
-## Usage
+## Where your code and data go
 
-1. Press **New task**, name it, and choose its GitHub repository.
-2. Press the microphone and describe the feature.
-3. Answer Luke's questions until the plan is complete.
-4. Press **Start** to have a coding agent implement it and open a pull
-   request, or **Copy plan** to paste it into your own.
+Luke is a desktop app backed by a hosted service, and both are in this
+repository.
 
-## Plan format
+- **Your code** is read in a [Vercel Sandbox](https://vercel.com/docs/sandbox),
+  not on your Mac. The GitHub App mints a token for that one repository, and
+  the service sets it at the sandbox's network firewall, so it never enters
+  the sandbox. Each coding agent gets a sandbox of its own and pushes through
+  the same App.
+- **Models.** Voice and Luke's reasoning run on OpenAI, on Luke's key. Coding
+  agents run on Anthropic or OpenAI, depending on the model you pick. Your
+  voice streams to OpenAI and does not pass through Luke's service.
+- **Commands on your Mac.** Luke and coding agents can run shell commands on
+  your Mac, in your login shell and without asking, and what they print goes
+  to the model. This is how an agent reads a local checkout or a server you
+  have running. It is on by default; turn it off in Settings › This Mac › Let
+  agents run commands on this Mac.
 
-| Section | Contents |
-| --- | --- |
-| Context | What happens today, who it affects, and why now |
-| Goal | What's true when it ships, each outcome checkable |
-| Approach | The design: the pieces, where they live, and the code they follow |
-| Interfaces | Every changed type, schema, route, or signature, as code |
-| Alternatives | Other approaches and why they lost (when there were any) |
-| Hard parts | Each tricky case and exactly what the change does in it |
-| Not doing | What's out of scope, and why |
-| Plan of attack | The order the work lands in (when order matters) |
-| Testing | "When …, then …" cases for every goal and hard part, and the end-to-end check |
-| Open questions | Anything not yet decided |
-| Assumptions | Defaults Luke chose that you didn't state |
-
-The plan reads like the design doc two engineers would write after talking a
-task through, and holds each section to the bar a coding agent needs to build
-from it.
-
-## Code access
-
-Nothing reads code on your Mac. Luke's service checks the task's repository
-out in a Vercel Sandbox, with a token the Luke GitHub App mints for that one
-repository and sets at the sandbox's firewall, never inside it, and Luke
-runs commands such as `ls`, `grep`, or `cat` there. A coding
-agent you start works in a sandbox of its own, on a full checkout, and pushes
-its branch and pull request through the same App, as the App's own bot.
-Run, in an agent tab's ⋯, checks the agent's pushed branch out in
-a clone Luke keeps on your Mac, with your own git login, and opens a terminal
-on it inside Luke, running the command you set under Settings › Workspace ›
-Repositories first, if any; the code stays on your Mac. See [PRIVACY.md](PRIVACY.md) for details.
+[PRIVACY.md](PRIVACY.md) lists everything Luke stores, every provider it sends
+data to, and how long each keeps it.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, see
-[SECURITY.md](SECURITY.md).
+Setup, repository layout, and checks are in [CONTRIBUTING.md](CONTRIBUTING.md).
+[CHANGELOG.md](CHANGELOG.md) describes every release and links the pull
+requests behind it. To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 

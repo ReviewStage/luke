@@ -73,7 +73,7 @@ import { useChatToasts } from "./tasks/chat-toast";
 import { useInboxToasts } from "./tasks/inbox-toast";
 import { MessageRevealProvider } from "./tasks/message-links";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy";
-import { OpenLinkProvider } from "./tasks/use-open-link";
+import { ListedPullRequestsProvider, OpenLinkProvider } from "./tasks/use-open-link";
 import { useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast";
 import { useUpdatedToast } from "./update-toast";
@@ -347,6 +347,11 @@ export function App(): React.JSX.Element {
   const automationsOn = useExperiment(EXPERIMENT.AUTOMATIONS);
   const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   const toast = useToast();
+  // A pull request a listed task's agent opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
+  const listedTasks = useMemo(
+    () => [...tasks.tasks, ...tasks.archived],
+    [tasks.tasks, tasks.archived],
+  );
   const openLukeLink = (link: ReadLink) => {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
@@ -672,138 +677,140 @@ export function App(): React.JSX.Element {
   return (
     <OpenSettingsProvider value={openSettings}>
       <OpenLinkProvider value={openLukeLink}>
-        <PageWorkspaceProvider value={copyLink.onPageWorkspace}>
-          <OpenPersonProvider value={openPerson}>
-            <OpenFeedbackProvider value={openFeedbackAbout}>
-              <RepositoryRemedyProvider value={repositoryRemedies}>
-                <GitHubConnectProvider
-                  value={{
-                    connection: tasks.github,
-                    connect: tasks.onConnectAccountGitHub,
-                    disconnect: tasks.onDisconnectAccountGitHub,
-                  }}
-                >
-                  <ListedAutomations tasks={tasks} on={automationsOn}>
-                    <div
-                      className="app-stage"
-                      data-capture={String(state.run.captureMode)}
-                      // The panel is drawn as an ordinary app window's content; desktop.css
-                      // lays it out.
-                      data-surface="desktop"
-                      // The sidebar's width lays out the shell and Settings' page list, and
-                      // places the captions over the work column beside it.
-                      style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
-                    >
-                      {/* The window's content. */}
-                      <div className="desktop-stage">
-                        <MessageRevealProvider
-                          value={{
-                            reveal: tasks.messageReveal,
-                            onRevealed: tasks.onMessageRevealed,
-                          }}
-                        >
-                          <DesktopShell
-                            gates={{
-                              accountRequired: state.run.accountRequired,
-                              signInWait: signIn.signInWait,
-                              signInFailure: signIn.signInFailure,
-                              lastSignIn,
-                              onBeginSignIn: signIn.beginSignIn,
-                              onCancelSignIn: signIn.cancelSignIn,
+        <ListedPullRequestsProvider value={listedTasks}>
+          <PageWorkspaceProvider value={copyLink.onPageWorkspace}>
+            <OpenPersonProvider value={openPerson}>
+              <OpenFeedbackProvider value={openFeedbackAbout}>
+                <RepositoryRemedyProvider value={repositoryRemedies}>
+                  <GitHubConnectProvider
+                    value={{
+                      connection: tasks.github,
+                      connect: tasks.onConnectAccountGitHub,
+                      disconnect: tasks.onDisconnectAccountGitHub,
+                    }}
+                  >
+                    <ListedAutomations tasks={tasks} on={automationsOn}>
+                      <div
+                        className="app-stage"
+                        data-capture={String(state.run.captureMode)}
+                        // The panel is drawn as an ordinary app window's content; desktop.css
+                        // lays it out.
+                        data-surface="desktop"
+                        // The sidebar's width lays out the shell and Settings' page list, and
+                        // places the captions over the work column beside it.
+                        style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
+                      >
+                        {/* The window's content. */}
+                        <div className="desktop-stage">
+                          <MessageRevealProvider
+                            value={{
+                              reveal: tasks.messageReveal,
+                              onRevealed: tasks.onMessageRevealed,
                             }}
-                            tab={tab}
-                            onTabChange={changeTab}
-                            tasks={tasks}
-                            history={history}
-                            sidebar={sidebar}
-                            call={call}
-                            captions={{
-                              caption,
-                              volumeHint: {
-                                wanted: volumeHintWanted,
-                                text: volumeHintText(outputAudio),
-                                onDismiss: dismissVolumeHint,
-                              },
-                            }}
-                            settings={{
-                              account: state.account,
-                              onSignOut: async () => {
-                                await act(ACT_KIND.ACCOUNT_SIGN_OUT);
-                              },
-                              // The delete happens at the service before anything local moves,
-                              // so a failure resolves to why and the account is still standing.
-                              onDeleteAccount: async () => {
-                                try {
-                                  await act(ACT_KIND.ACCOUNT_DELETE);
-                                  return { status: ACTION_RESULT_STATUS.ACCEPTED };
-                                } catch {
-                                  return {
-                                    status: ACTION_RESULT_STATUS.REJECTED,
-                                    reason:
-                                      "Luke could not delete the account. Try again in a moment.",
-                                  };
-                                }
-                              },
-                              view: shownView,
-                              onViewChange: setSettingsView,
-                              microphone,
-                              notifications: {
-                                status: state.notifications.status,
-                                packaged: state.run.packaged,
-                                onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
-                                onTest: () => tell(ACT_KIND.NOTIFICATIONS_TEST),
-                              },
-                              updates,
-                              settings,
-                              shortcuts,
-                              workspace,
-                              capabilities: state.run.capabilities,
-                            }}
-                          />
-                        </MessageRevealProvider>
-                      </div>
-                      {/* A note to the people who make Luke, written in a dialog over the
+                          >
+                            <DesktopShell
+                              gates={{
+                                accountRequired: state.run.accountRequired,
+                                signInWait: signIn.signInWait,
+                                signInFailure: signIn.signInFailure,
+                                lastSignIn,
+                                onBeginSignIn: signIn.beginSignIn,
+                                onCancelSignIn: signIn.cancelSignIn,
+                              }}
+                              tab={tab}
+                              onTabChange={changeTab}
+                              tasks={tasks}
+                              history={history}
+                              sidebar={sidebar}
+                              call={call}
+                              captions={{
+                                caption,
+                                volumeHint: {
+                                  wanted: volumeHintWanted,
+                                  text: volumeHintText(outputAudio),
+                                  onDismiss: dismissVolumeHint,
+                                },
+                              }}
+                              settings={{
+                                account: state.account,
+                                onSignOut: async () => {
+                                  await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+                                },
+                                // The delete happens at the service before anything local moves,
+                                // so a failure resolves to why and the account is still standing.
+                                onDeleteAccount: async () => {
+                                  try {
+                                    await act(ACT_KIND.ACCOUNT_DELETE);
+                                    return { status: ACTION_RESULT_STATUS.ACCEPTED };
+                                  } catch {
+                                    return {
+                                      status: ACTION_RESULT_STATUS.REJECTED,
+                                      reason:
+                                        "Luke could not delete the account. Try again in a moment.",
+                                    };
+                                  }
+                                },
+                                view: shownView,
+                                onViewChange: setSettingsView,
+                                microphone,
+                                notifications: {
+                                  status: state.notifications.status,
+                                  packaged: state.run.packaged,
+                                  onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+                                  onTest: () => tell(ACT_KIND.NOTIFICATIONS_TEST),
+                                },
+                                updates,
+                                settings,
+                                shortcuts,
+                                workspace,
+                                capabilities: state.run.capabilities,
+                              }}
+                            />
+                          </MessageRevealProvider>
+                        </div>
+                        {/* A note to the people who make Luke, written in a dialog over the
           window. */}
-                      <FeedbackDialog
-                        kind={feedbackKind}
-                        about={feedbackAbout}
-                        account={account}
-                        onClose={() => setFeedbackKind(undefined)}
-                      />
-                      {/* The window's passing notice: the thank-you after a note lands, what
+                        <FeedbackDialog
+                          kind={feedbackKind}
+                          about={feedbackAbout}
+                          account={account}
+                          onClose={() => setFeedbackKind(undefined)}
+                        />
+                        {/* The window's passing notice: the thank-you after a note lands, what
           came of a change made from a menu, and an update arrived. */}
-                      <ToastHost />
-                      {/* The plans, the open plan's agents and files, every command the
+                        <ToastHost />
+                        {/* The plans, the open plan's agents and files, every command the
           window can run now, and the settings, behind ⌘K, past the sign-in
           alone. */}
-                      <CommandPalette
-                        available={!accountGated}
-                        tab={tab}
-                        onTabChange={changeTab}
-                        tasks={tasks}
-                        links={copyLink}
-                        settings={{
-                          rows: settingsRowsInput({
-                            settings,
-                            microphone,
-                            account: state.account,
+                        <CommandPalette
+                          available={!accountGated}
+                          tab={tab}
+                          onTabChange={changeTab}
+                          tasks={tasks}
+                          links={copyLink}
+                          settings={{
+                            rows: settingsRowsInput({
+                              settings,
+                              microphone,
+                              account: state.account,
+                              capabilities: state.run.capabilities,
+                              workspace,
+                            }),
                             capabilities: state.run.capabilities,
-                            workspace,
-                          }),
-                          capabilities: state.run.capabilities,
-                          onViewChange: setSettingsView,
-                        }}
-                        readFiles={(taskId) =>
-                          act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })
-                        }
-                      />
-                    </div>
-                  </ListedAutomations>
-                </GitHubConnectProvider>
-              </RepositoryRemedyProvider>
-            </OpenFeedbackProvider>
-          </OpenPersonProvider>
-        </PageWorkspaceProvider>
+                            onViewChange: setSettingsView,
+                          }}
+                          readFiles={(taskId) =>
+                            act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })
+                          }
+                        />
+                      </div>
+                    </ListedAutomations>
+                  </GitHubConnectProvider>
+                </RepositoryRemedyProvider>
+              </OpenFeedbackProvider>
+            </OpenPersonProvider>
+          </PageWorkspaceProvider>
+        </ListedPullRequestsProvider>
       </OpenLinkProvider>
     </OpenSettingsProvider>
   );

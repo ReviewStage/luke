@@ -1,17 +1,22 @@
 /* error-state.css -- a failure among the rows, laid out as a row: the
    fault's glyph in red where a row's glyph stands, the sentence in the muted
-   ink of the words around it, and Retry at the row's end, its glyph alone
-   where the row is narrow. Alone in a region it is `EmptyState`, and draws
-   nothing here. A row that is itself the retry (`RetryRowLabel`) draws the
-   glyph and word after its sentence in the row's own type, held together. */
+   ink of the words around it, and its presses at the row's end, Retry's
+   glyph alone where the row is narrow; on a toolbar, one line whose
+   sentence gives way to its presses. Alone in a region it is `EmptyState`,
+   and draws nothing here. A row that is itself the retry (`RetryRowLabel`)
+   draws the glyph and word after its sentence in the row's own type, held
+   together. */
 
 @layer components {
   /* Every part stands on the row's first line, a control tall, so the glyph,
      the words, and Retry share one middle; a sentence too long for its room
-     wraps in its own column under its first line. The row is the container
-     its narrow look asks about, so it fills the width it is given. */
+     wraps in its own column under its first line. The words keep at least
+     half the row, so presses that would take more go, whole, onto the line
+     under them. The row is the container its narrow look asks about, so it
+     fills the width it is given. */
   .luke-error-state {
     display: flex;
+    flex-wrap: wrap;
     box-sizing: border-box;
     width: 100%;
     min-width: 0;
@@ -40,21 +45,64 @@
   /* The words' first line is centred in the control's height, as the glyph
      and Retry are, and any line after it runs on below. */
   .luke-error-state-words {
-    min-width: 0;
-    flex: 1;
+    min-width: 50%;
+    flex: 1 1 0;
     padding-block: calc((var(--luke-control-height) - var(--luke-type-caption-leading)) / 2);
+  }
+
+  /* The presses stand together at the row's end, on its first line or,
+     wrapped, under the words. Never wider than the row: presses that do not
+     fit beside each other wrap, and a remedy longer than the row is cut
+     short with an ellipsis, its words still its name. */
+  .luke-error-state-actions {
+    display: flex;
+    min-width: 0;
+    max-width: 100%;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--luke-control-gap);
+    margin-inline-start: auto;
+  }
+
+  .luke-error-state-retry {
+    display: contents;
+  }
+
+  /* On a toolbar it is one line as wide as it says, and no container, so the
+     toolbar can size it: the glyph and the presses stay whole, and the
+     sentence gives way to them, cut short with an ellipsis. */
+  .luke-error-state[data-placement="toolbar"] {
+    width: auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    container-type: normal;
+  }
+
+  .luke-error-state[data-placement="toolbar"] > .luke-error-state-words {
+    overflow: hidden;
+    min-width: 0;
+    flex: 0 1 auto;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .luke-error-state[data-placement="toolbar"] > .luke-error-state-actions {
+    flex: none;
+    flex-wrap: nowrap;
+    margin-inline-start: 0;
   }
 
   /* Narrow, Retry is drawn as a glyph alone is (`IconButton`): a control's
      square in the muted ink, its words kept for a reader and drawn nowhere. */
   @container luke-error-state (max-width: 360px) {
-    .luke-error-state > .luke-button {
+    .luke-error-state-retry > .luke-button {
       --luke-button-ink: var(--luke-color-text-muted);
       width: var(--luke-control-height);
       padding: 0;
     }
 
-    .luke-error-state > .luke-button .luke-button-words {
+    .luke-error-state-retry > .luke-button .luke-button-words {
       position: absolute;
       overflow: hidden;
       width: 1px;

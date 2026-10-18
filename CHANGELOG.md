@@ -92,6 +92,8 @@ pull request reaches the agent with what it says.
 [#3292](https://github.com/ReviewStage/luke/pull/3292),
 [#3308](https://github.com/ReviewStage/luke/pull/3308))
 
+![#214's Pull request tab in a wide side panel on its Conversation: open and ready to merge, Dana's approving review with her thread on src/members/invite.ts previewed with its diff and your reply, and Vercel's bot comment with its badge.](apps/web/public/changelog/0.17.0/pull-request-tab.png)
+
 ### Cards on every chip
 
 Every chip shows a card of what it names when you point at it. An agent's
@@ -108,6 +110,8 @@ issue's card names its assignee.
 [#3161](https://github.com/ReviewStage/luke/pull/3161),
 [#3191](https://github.com/ReviewStage/luke/pull/3191),
 [#3234](https://github.com/ReviewStage/luke/pull/3234))
+
+![A coding agent's closing words with its relay#214 chip's card open: Open, +412 −38 in 9 files, opened by dastratakos 31 minutes ago, main ← luke/teammate-invitations, three labels, and its comment and commit counts.](apps/web/public/changelog/0.17.0/cards-on-every-chip.png)
 
 ### Issues
 
@@ -265,6 +269,8 @@ iMessage, or X unfurls as Luke's card.
 [#3074](https://github.com/ReviewStage/luke/pull/3074),
 [#3098](https://github.com/ReviewStage/luke/pull/3098))
 
+![An Inbox item whose words carry chips: relay#217 Open, the Linear issue REL-142 In Progress, the Teammate invitations task, relay#209 Merged, relay#214 and #216 with their states, and Dana Moreno, around the lines of code it changes.](apps/web/public/changelog/0.16.0/links.png)
+
 ### Agents that start, mention, and archive agents
 
 A coding agent starts another coding agent on its own task or on any task of
@@ -284,6 +290,8 @@ coding agent is drawn under that agent's mark.
 [#3078](https://github.com/ReviewStage/luke/pull/3078),
 [#3088](https://github.com/ReviewStage/luke/pull/3088),
 [#3093](https://github.com/ReviewStage/luke/pull/3093))
+
+![A coding agent's transcript: asked to hand the invite email on, it starts a coding agent; Invite emails reports back under its own name; the agent mentions it as a chip and archives the Postmark spike.](apps/web/public/changelog/0.16.0/agents-that-start-agents.png)
 
 ### Start a task without planning
 
@@ -313,6 +321,8 @@ stay on screen in a short window.
 [#3043](https://github.com/ReviewStage/luke/pull/3043),
 [#3051](https://github.com/ReviewStage/luke/pull/3051),
 [#3059](https://github.com/ReviewStage/luke/pull/3059))
+
+![A side panel 340 points wide: its tab strip folded to glyphs beside the chosen invite.ts, and the file tree floating over the code.](apps/web/public/changelog/0.16.0/luke-at-any-width.png)
 
 ### Improvements
 
@@ -382,6 +392,8 @@ enough.
 [#2991](https://github.com/ReviewStage/luke/pull/2991),
 [#3008](https://github.com/ReviewStage/luke/pull/3008))
 
+![The Teammate invitations plan over the whole window, its Goal holding Dana's design of the invite dialog as a picture with its caption under it.](apps/web/public/changelog/0.15.0/pictures-in-plans.png)
+
 ### Pictures from coding agents
 
 A coding agent or its worker shows you pictures from its sandbox, such as a
@@ -397,6 +409,8 @@ with Undo.
 [#2927](https://github.com/ReviewStage/luke/pull/2927),
 [#2979](https://github.com/ReviewStage/luke/pull/2979),
 [#3004](https://github.com/ReviewStage/luke/pull/3004))
+
+![The picture viewer open over a coding agent's transcript on the second of three screenshots it took of Relay's members page, with Add to plan in its head.](apps/web/public/changelog/0.15.0/pictures-from-coding-agents.png)
 
 ### A person's page
 
@@ -414,6 +428,8 @@ A member who left keeps their picture, grayed, and their name says they left.
 [#2995](https://github.com/ReviewStage/luke/pull/2995),
 [#3001](https://github.com/ReviewStage/luke/pull/3001),
 [#3015](https://github.com/ReviewStage/luke/pull/3015))
+
+![Dana Moreno's page in acme: what she has working now, two questions waiting on her answer, the tasks she created, and her other agents, its ⋯ menu open on Copy link.](apps/web/public/changelog/0.15.0/a-persons-page.png)
 
 ### Copy link to anything
 
@@ -449,6 +465,8 @@ Workspace › Integrations. Then New task in the sidebar offers the workspace's
 Linear issues, and picking one starts the task with that issue as Luke's
 context. Agents in the workspace use its Linear connection.
 ([#2859](https://github.com/ReviewStage/luke/pull/2859))
+
+![The sidebar with New task's picker open on acme's Linear issues, each with its key and state, a search field above them and Blank task below.](apps/web/public/changelog/0.15.0/start-a-task-from-linear.png)
 
 ### Several accounts at one integration
 

@@ -1916,20 +1916,8 @@
    content inset, its dismissal at the row's end. */
 .pull-request-write-note {
   flex: 0 0 auto;
-  margin: 0;
   padding: var(--luke-space-4) var(--column-inset) var(--luke-space-4) var(--content-inset);
   border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.pull-request-write-note .failure-note-words {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.pull-request-write-dismiss {
-  margin-inline-start: auto;
 }
 
 /* The bar's Review press and the panel it opens (`pull-request-review.tsx`):
@@ -1966,17 +1954,6 @@
 
 .pull-request-review-preview > p:only-child {
   margin: 0;
-}
-
-.pull-request-review-note {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.pull-request-review-note .failure-note-words {
-  flex: 1 1 auto;
-  min-width: 0;
 }
 
 .pull-request-review-foot {
@@ -2610,23 +2587,13 @@
   gap: var(--luke-control-gap);
 }
 
-.pull-request-thread-note {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-}
-
-.pull-request-thread-note .failure-note-words {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 /* The reactions under a description or a comment, as GitHub draws them:
    a row of pills, each its emoji and how many gave it, the reader's own lit
    in the accent. */
 .pull-request-reactions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--luke-space-4);
   margin: 0;
   padding: 0;
@@ -2652,6 +2619,54 @@
 
 .pull-request-reaction-count {
   font-variant-numeric: tabular-nums;
+}
+
+/* A pill that gives or takes back the reader's own is a press: it fills on
+   hover, waits dimmed while any change is out, and the one whose change is
+   out pulses until GitHub answers. */
+button.pull-request-reaction {
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  transition: background-color var(--duration-hover) ease;
+}
+
+button.pull-request-reaction:hover:not(:disabled) {
+  background: var(--luke-color-fill-hover);
+}
+
+button.pull-request-reaction:disabled {
+  opacity: 0.6;
+}
+
+.pull-request-reaction[aria-busy="true"] {
+  animation: pull-request-reaction-wait 1.2s ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+@keyframes pull-request-reaction-wait {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Add reaction's row of GitHub's eight, hung from its button: one compact
+   line of the app's icon buttons, each wearing its emoji at the dialog's
+   type size, wrapping where a narrow panel leaves less room than eight. */
+.pull-request-reaction-picker {
+  position: relative;
+}
+
+.pull-request-reaction-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-space-2);
+  padding: var(--luke-space-4);
+}
+
+.pull-request-reaction-emoji {
+  font-size: var(--luke-type-dialog-size);
+  line-height: 1;
 }
 
 .pull-request-reaction[data-mine="true"] {
@@ -3477,14 +3492,6 @@ ol.transcript-list {
   color: var(--luke-color-danger-text);
 }
 
-.agent-end-dot {
-  margin: 0 var(--luke-space-4);
-}
-
-.agent-end-cost {
-  white-space: nowrap;
-}
-
 .agent-end-remedy {
   margin-left: var(--luke-space-8);
   vertical-align: middle;
@@ -3923,10 +3930,13 @@ ol.transcript-list {
   padding: 0 var(--luke-space-16) var(--luke-space-12);
 }
 
+/* A message that did not go: the failure's line (`ErrorState`), and under
+   it, where the agent takes no more, the press that continues it. */
 .agent-composer-note {
   display: flex;
-  align-items: center;
-  gap: var(--luke-space-8);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-4);
   padding-left: var(--luke-space-4);
 }
 
@@ -4138,6 +4148,12 @@ ol.transcript-list {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* What a send found the answer lacking reads in the attention ink, as the
+   item's own mark does, until it is filled. */
+.inbox-answer-quiet [data-wanting] {
+  color: var(--luke-color-attention);
 }
 
 .inbox-presses {
@@ -5541,13 +5557,9 @@ button.picture-frame {
   line-height: var(--luke-type-caption-leading);
 }
 
-.picture-status.failure-note {
-  gap: var(--luke-space-4);
-  color: var(--luke-color-danger-text);
-}
-
-.picture-status .failure-note-words {
-  margin-right: var(--luke-space-4);
+.picture-failure {
+  display: block;
+  margin-top: var(--luke-space-6);
 }
 
 /* Several pictures an agent showed at once (`agent-pictures.tsx`): one

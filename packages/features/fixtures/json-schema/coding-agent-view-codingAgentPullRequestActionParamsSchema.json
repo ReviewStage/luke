@@ -396,6 +396,42 @@
             "action": {
               "type": "string",
               "enum": [
+                "add-reaction",
+                "remove-reaction"
+              ]
+            },
+            "subject": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "content": {
+              "type": "string",
+              "enum": [
+                "thumbs_up",
+                "thumbs_down",
+                "laugh",
+                "hooray",
+                "confused",
+                "heart",
+                "rocket",
+                "eyes"
+              ]
+            }
+          },
+          "required": [
+            "action",
+            "subject",
+            "content"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
                 "mark-file-viewed"
               ]
             },
