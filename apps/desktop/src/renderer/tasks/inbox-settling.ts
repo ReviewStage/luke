@@ -3,7 +3,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INBOX_STATUS, type InboxItem, type InboxReply } from "@luke/features/inbox-wire";
 import type { AppInboxTask, AppInboxTasklessItem } from "@luke/host/app-state";
 import { Atom } from "effect/reactivity";
-import { useEffect, useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo } from "react";
 import { appStateNow } from "../use-app-state";
 
 /**
@@ -140,13 +140,43 @@ function changed(
   return next;
 }
 
-/** What the window sent, kept for the window's life whichever page draws it. */
-const settlingAtom: Atom.Writable<ReadonlyMap<string, Settling>, Change> = Atom.keepAlive(
-  Atom.writable(
-    (): ReadonlyMap<string, Settling> => NOTHING_LAID,
-    (ctx, change: Change) => ctx.setSelf(changed(ctx.get(settlingAtom), change)),
-  ),
+/** The account signed in to this window, whose sends the book holds: its id, or its address where its identity names none. */
+type Owner = string | null;
+
+const ownerAtom = Atom.keepAlive(Atom.make<Owner>(null));
+
+/** Each account's sends, apart, so what one account sent never stands over another's reads. */
+const settlingOf = Atom.family((_owner: Owner) => {
+  const self: Atom.Writable<ReadonlyMap<string, Settling>, Change> = Atom.keepAlive(
+    Atom.writable(
+      (): ReadonlyMap<string, Settling> => NOTHING_LAID,
+      (ctx, change: Change) => ctx.setSelf(changed(ctx.get(self), change)),
+    ),
+  );
+  return self;
+});
+
+/** What the account signed in to this window sent, kept for the window's life whichever page draws it. */
+const settlingAtom = Atom.writable(
+  (get) => get(settlingOf(get(ownerAtom))),
+  (ctx, change: Change) => ctx.set(settlingOf(ctx.get(ownerAtom)), change),
 );
+
+/**
+ * Hands the book to the account signed in to this window, before the window
+ * is painted, so a send one account made never stands over the next one's
+ * reads; a send still on its way when the account changes finds nothing of
+ * its own in the next account's book, and moves nothing there.
+ */
+export function useInboxSettlingOwner(
+  account: { readonly id?: string | undefined; readonly email: string } | undefined,
+): void {
+  const own = useAtomSet(ownerAtom);
+  const owner = account?.id ?? account?.email ?? null;
+  useLayoutEffect(() => {
+    own(owner);
+  }, [own, owner]);
+}
 
 /** Whether a read holds the item changed since the entry: posted again, or changed after the service's word on the send. */
 function passedBy(read: InboxItem, entry: Settling): boolean {

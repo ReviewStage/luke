@@ -73,6 +73,7 @@ import { settingsRowsInput } from "./settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "./settings-link";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast";
 import { useChatToasts } from "./tasks/chat-toast";
+import { useInboxSettlingOwner } from "./tasks/inbox-settling";
 import { useInboxToasts } from "./tasks/inbox-toast";
 import { MessageRevealProvider } from "./tasks/message-links";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy";
@@ -112,6 +113,7 @@ export function App(): React.JSX.Element {
   }, [accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
+  useInboxSettlingOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.TASKS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ACCOUNT);

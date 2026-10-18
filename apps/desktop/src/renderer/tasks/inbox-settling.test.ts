@@ -18,6 +18,7 @@ import { onRegistry } from "#testing/copy-feedback";
 import {
   type InboxSettler,
   useInboxSettler,
+  useInboxSettlingOwner,
   useSettledItems,
   useSettledWaiting,
 } from "./inbox-settling";
@@ -193,4 +194,31 @@ test("the window keeps only its latest answers: the oldest taken gives way once 
   render([], items);
   assert.equal(probe.drawn[0]?.status, INBOX_STATUS.OPEN, "the oldest answer was let go");
   assert.equal(probe.drawn[200]?.status, INBOX_STATUS.ANSWERED);
+});
+
+test("another account signed in to the window draws its reads as they hold them, never the answers the last account sent, and an answer the last account had out moves nothing of its", () => {
+  const registry = AtomRegistry.make();
+  const probe: Probe = { count: 0, drawn: [], settler: undefined };
+  function Page({ account }: { account: string }) {
+    useInboxSettlingOwner({ id: account, email: `${account}@example.com` });
+    probe.drawn = useSettledItems([ASKED]);
+    probe.settler = useInboxSettler();
+    return null;
+  }
+  root = createRoot(document.createElement("div"));
+  const signIn = (account: string) =>
+    act(() => root?.render(onRegistry(registry, createElement(Page, { account }))));
+  signIn("dana");
+  let sent: symbol | undefined;
+  act(() => {
+    sent = probe.settler?.answer(ASKED, NOTE);
+  });
+  assert.equal(probe.drawn[0]?.status, INBOX_STATUS.ANSWERED);
+
+  signIn("charles");
+  assert.equal(probe.drawn[0]?.status, INBOX_STATUS.OPEN);
+  act(() => {
+    if (sent !== undefined) probe.settler?.take(sent, { ...ASKED, status: INBOX_STATUS.ANSWERED });
+  });
+  assert.equal(probe.drawn[0]?.status, INBOX_STATUS.OPEN);
 });
