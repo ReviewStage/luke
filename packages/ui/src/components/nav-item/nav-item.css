@@ -4,9 +4,6 @@
 
 @layer components {
   .luke-nav-item {
-    /* Note that the rest ink is the sidebar's, a step under the primary,
-       as the task rows it heads are. */
-    --luke-nav-item-ink: var(--luke-color-sidebar-ink);
     display: flex;
     align-items: center;
     gap: var(--luke-icon-gap);
@@ -18,7 +15,9 @@
     border: 0;
     border-radius: var(--luke-control-radius);
     background: none;
-    color: var(--luke-nav-item-ink);
+    /* Note that the rest ink is the sidebar's, a step under the primary,
+       as the task rows it heads are. */
+    color: var(--luke-color-sidebar-ink);
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-body-size);
     line-height: var(--luke-type-label-leading);
@@ -63,7 +62,7 @@
   /* A fold's head speaks in the headings' voice and draws no fill, since
      the container around it and its actions draws one. */
   .luke-nav-item[data-variant="head"] {
-    --luke-nav-item-ink: var(--luke-color-text-muted);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     font-weight: var(--luke-weight-medium);
   }
@@ -74,7 +73,7 @@
 
   /* Who or where stands tall enough for a face, in the primary ink. */
   .luke-nav-item[data-variant="identity"] {
-    --luke-nav-item-ink: var(--luke-color-text);
+    color: var(--luke-color-text);
     height: auto;
     min-height: calc(var(--luke-control-height) + var(--luke-space-12));
     padding-block: var(--luke-space-6);
