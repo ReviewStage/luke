@@ -3774,6 +3774,58 @@ body:has(.app-stage[data-capture="true"])
   flex: none;
 }
 
+/* A form's fields stacked, each its name over its control at one left edge
+   (`inbox-pane.tsx`'s FormFields): "Optional" quiet after the name of one
+   that may be left empty, a number in a short field, and a select's name
+   over its pills in the label's type, as a field's label stands. */
+.inbox-field-optional {
+  margin-left: var(--luke-space-6);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-regular);
+}
+
+.inbox-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+}
+
+.inbox-field-name {
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-label-size);
+  font-weight: var(--luke-weight-medium);
+  line-height: var(--luke-type-label-leading);
+}
+
+.inbox-field-short {
+  max-width: calc(10 * var(--luke-space-16));
+}
+
+/* A form's text field is the composer's own field (`inbox-form-text.tsx`)
+   drawn at a text field's size: a field's ground in a hairline, its line
+   at the field's insets, growing a line at a time to eight, and the
+   focused field's ground once the caret is in it, as a text field's is. */
+.inbox-field-composer {
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-input);
+  transition: background-color var(--duration-hover) ease;
+}
+
+.inbox-field-composer:focus-within {
+  background: var(--luke-color-input-focus);
+}
+
+.inbox-field-composer .agent-composer-field {
+  --agent-composer-field-block: calc(2 * var(--luke-space-6));
+}
+
+.inbox-field-composer .agent-composer-input {
+  padding: var(--luke-space-6) var(--luke-control-inset);
+}
+
 /* A to-do's card (`inbox-pane.tsx`'s TodoCard): its step beside a checkbox,
    ticked in the complete green, and under a hairline a pill saying it could
    not be done, filled in the danger tint once picked. Each pick wears its

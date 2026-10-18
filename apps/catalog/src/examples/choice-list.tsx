@@ -17,7 +17,7 @@ import { CatalogSection } from "../section";
 /**
  * choice-list.tsx -- a pick-one list with a recommended option and an
  * unavailable one, a pick-several list, both marked with their radios or
- * checkboxes and numbered, a yes and a no across, toned, rows with a mark before their words, an
+ * checkboxes and numbered, a yes and a no across, toned, pills, rows with a mark before their words, an
  * unavailable list, a settled record of what was picked, and a
  * narrow column of long words.
  */
@@ -151,6 +151,18 @@ function ChoiceLists(): React.JSX.Element {
           look={CHOICE_LOOK.MARKED}
           flow={CHOICE_FLOW.ACROSS}
           numbered
+        />
+      </CatalogSection>
+      <CatalogSection id="choice-list-pill" title="Pills">
+        <Held
+          legend="Effort"
+          options={[
+            { value: "medium", label: "medium" },
+            { value: "high", label: "high" },
+            { value: "xhigh", label: "xhigh" },
+          ]}
+          start={["high"]}
+          look={CHOICE_LOOK.PILL}
         />
       </CatalogSection>
       <CatalogSection id="choice-list-mark" title="With a mark">

@@ -26,6 +26,36 @@
     align-items: flex-start;
   }
 
+  /* Pills wrap onto as many lines as they need, never jumping between a
+     line's end and the line under it. */
+  .luke-choice-list[data-look="pill"] {
+    flex-flow: row wrap;
+    gap: var(--luke-space-6);
+  }
+
+  .luke-choice-list[data-look="pill"] > .luke-choice {
+    gap: var(--luke-icon-gap);
+    min-height: var(--luke-control-height);
+    padding: 0 var(--luke-space-12);
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px var(--luke-color-border);
+    font-size: var(--luke-type-caption-size);
+  }
+
+  .luke-choice-list[data-look="pill"] > .luke-choice[aria-checked="true"] {
+    background: color-mix(in srgb, var(--luke-color-accent) 16%, transparent);
+    box-shadow: inset 0 0 0 1px var(--luke-color-accent);
+  }
+
+  .luke-choice-list[data-look="pill"] .luke-choice-check {
+    display: none;
+    margin: 0;
+  }
+
+  .luke-choice-list[data-look="pill"] > .luke-choice[aria-checked="true"] .luke-choice-check {
+    display: block;
+  }
+
   .luke-choice {
     display: flex;
     align-items: center;
