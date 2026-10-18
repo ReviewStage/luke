@@ -38,6 +38,7 @@ import { useCallback, useLayoutEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref";
 import { AttentionMark } from "../attention-mark";
 import { useAutomation } from "../automation-directory";
+import { useInboxItemDrafted } from "../composer-drafts";
 import { useCopyLinkItem } from "../copy-link-item";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
@@ -50,6 +51,7 @@ import {
 } from "../desktop/folded-groups";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge";
+import { DraftMark } from "../draft-mark";
 import { useMemberDirectory } from "../member-directory";
 import { Tooltip } from "../tooltip";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
@@ -266,7 +268,10 @@ export function ItemMark({
  * unread, wears the blue dot in a gutter before its tile, its title in the
  * unread weight and its preview in the body's ink; the gutter stands on
  * every row, so the tiles line up whether a row wears a dot or not. Where
- * the list hands down `onMark`, the row offers to mark it read or unread:
+ * an answer or a message waits unsent in the item's box and the item is not
+ * the one chosen, whose box shows its own words, the row wears the Draft
+ * pencil before its marks, as a sidebar task's row does (`draft-mark.tsx`).
+ * Where the list hands down `onMark`, the row offers to mark it read or unread:
  * a press over its time while the pointer rests on it or it holds the
  * keyboard, the time and its marks stepping aside, and the first item of
  * its right-click menu, which names the key that does the same to the
@@ -311,6 +316,7 @@ export function InboxItemRow({
   const directory = useMemberDirectory();
   const reader = directory.readerId ?? readerId;
   const needsYou = needsReader(item, reader);
+  const drafted = useInboxItemDrafted(item) && !chosen;
   const starter = readersItem(item, reader)
     ? undefined
     : personActor(item.startedBy, directory.members, reader, directory.former);
@@ -374,6 +380,7 @@ export function InboxItemRow({
             {starter === undefined || item.status !== INBOX_STATUS.OPEN ? null : (
               <span className="visually-hidden">{waitingOn(starter)}</span>
             )}
+            {drafted ? <DraftMark /> : null}
             {needsYou ? (
               <span className="inbox-row-attention">
                 <AttentionMark />

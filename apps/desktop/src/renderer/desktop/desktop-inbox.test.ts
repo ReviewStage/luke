@@ -65,6 +65,7 @@ import { readSegmented, segment, segmentedGroup } from "#testing/segmented";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import { appBridge } from "../app-bridge";
 import { runAppCommand, useAppKeymap } from "../app-commands";
+import { DRAFT_WORD } from "../draft-mark";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab";
 import { DesktopInbox } from "./desktop-inbox";
 
@@ -1686,6 +1687,31 @@ test("an item's box is the agent's message box: it takes no caret as the item op
     sent.map(({ itemId, reply, note }) => ({ itemId, reply, note })),
     [{ itemId: THRESHOLD.id, reply: INBOX_REPLY.ANSWERED, note: "Use 90%\ninstead" }],
   );
+});
+
+/** Whether an item's row wears the Draft pencil. */
+function rowDrafted(page: HTMLElement, title: string): boolean {
+  return rowNamed(page, title).querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
+}
+
+test("an item whose box holds unsent words wears the Draft pencil on its row while another item is chosen, as a sidebar task's row does, and none while it is the one chosen, whose box shows them", async () => {
+  const { page } = mount();
+  await settle();
+  typeInComposer(itemPane(page), "Use 90% instead");
+  await settle();
+  assert.equal(rowDrafted(page, "Alert at 80%?"), false, "the chosen item's box shows its words");
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  assert.equal(readTitle(page), "Expire after 7 days?");
+  assert.equal(rowDrafted(page, "Alert at 80%?"), true, "the draft is marked while away");
+  assert.equal(rowDrafted(page, "Expire after 7 days?"), false, "only the item holding it is");
+  assert.equal(rowDrafted(page, "How is a failed email retried?"), false);
+
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  assert.equal(composerEditor(itemPane(page)).textContent, "Use 90% instead");
+  assert.equal(rowDrafted(page, "Alert at 80%?"), false);
 });
 
 /** Hands `files` to the open item's box: picked in its hidden picker, or dropped on its card. */
