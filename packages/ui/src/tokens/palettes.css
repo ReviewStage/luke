@@ -109,6 +109,16 @@
   --luke-color-tooltip-text: rgba(255, 255, 255, 0.95);
   --luke-color-tooltip-chord: rgba(255, 255, 255, 0.5);
 
+  /* A veil over a picture and the words on it, the same in either appearance,
+     since it lies over the picture rather than the page. */
+  --luke-color-veil: rgba(0, 0, 0, 0.56);
+  --luke-color-on-veil: #fff;
+  /* A find's matches in a page's text, in the yellow and orange a browser's
+     find draws them in, with dark words on the one it is at. */
+  --luke-color-find-match: light-dark(rgba(255, 204, 0, 0.42), rgba(255, 214, 10, 0.3));
+  --luke-color-find-current: #ff9f0a;
+  --luke-color-on-find-current: #000;
+
   --luke-color-scrim: light-dark(rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.55));
   --luke-color-shadow-soft: light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.4));
   --luke-color-shadow: light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.5));
@@ -194,6 +204,12 @@
   --luke-color-tooltip-text: rgba(255, 255, 255, 0.95);
   --luke-color-tooltip-chord: rgba(255, 255, 255, 0.5);
 
+  --luke-color-veil: rgba(0, 0, 0, 0.56);
+  --luke-color-on-veil: #fff;
+  --luke-color-find-match: rgba(255, 204, 0, 0.42);
+  --luke-color-find-current: #ff9f0a;
+  --luke-color-on-find-current: #000;
+
   --luke-color-scrim: rgba(0, 0, 0, 0.25);
   --luke-color-shadow-soft: rgba(0, 0, 0, 0.08);
   --luke-color-shadow: rgba(0, 0, 0, 0.12);
@@ -269,6 +285,12 @@
   --luke-color-tooltip-edge: rgba(255, 255, 255, 0.1);
   --luke-color-tooltip-text: rgba(255, 255, 255, 0.95);
   --luke-color-tooltip-chord: rgba(255, 255, 255, 0.5);
+
+  --luke-color-veil: rgba(0, 0, 0, 0.56);
+  --luke-color-on-veil: #fff;
+  --luke-color-find-match: rgba(255, 214, 10, 0.3);
+  --luke-color-find-current: #ff9f0a;
+  --luke-color-on-find-current: #000;
 
   --luke-color-scrim: rgba(0, 0, 0, 0.55);
   --luke-color-shadow-soft: rgba(0, 0, 0, 0.4);
