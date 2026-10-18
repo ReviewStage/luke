@@ -610,7 +610,7 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
     moveTo = setListed;
     // The window's own guard, over doors guarded as the Plans tab guards its own.
     const leaveGuard = useLeaveGuard();
-    const plans = tasksControl({
+    const tasks = tasksControl({
       leaveGuard,
       agentView: {
         agentId: undefined,
@@ -634,11 +634,11 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
         onClose: () => undefined,
       },
     });
-    const base = plans.newTask;
-    openFactory = plans.factoryView.onOpen;
+    const base = tasks.newTask;
+    openFactory = tasks.factoryView.onOpen;
     return createElement(AutomationsPage, {
       tasks: {
-        ...plans,
+        ...tasks,
         newTask: {
           ...base,
           repositoriesIn: () => ({

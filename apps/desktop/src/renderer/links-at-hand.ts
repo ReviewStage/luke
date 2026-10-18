@@ -89,18 +89,18 @@ function slugOf(workspaces: readonly Workspace[], workspaceId: string | undefine
 
 /** The place a tab of the side panel shows, on its task; none for a tab whose thing has no link of its own: a file's, the board, the code, a terminal. */
 export function panelTabPlace(
-  planId: string,
+  taskId: string,
   tab: SidePanelTab | undefined,
 ): LinkPlace | undefined {
   if (tab === undefined) return undefined;
-  if (tab === SIDE_PANEL_TAB.CALL) return { kind: LINK_PLACE.CALL, planId };
-  if (isPageTab(tab)) return { kind: LINK_PLACE.PAGE, planId, pageId: tab.page };
-  if (isChangesTab(tab)) return { kind: LINK_PLACE.CHANGES, planId, agentId: tab.changes };
+  if (tab === SIDE_PANEL_TAB.CALL) return { kind: LINK_PLACE.CALL, planId: taskId };
+  if (isPageTab(tab)) return { kind: LINK_PLACE.PAGE, planId: taskId, pageId: tab.page };
+  if (isChangesTab(tab)) return { kind: LINK_PLACE.CHANGES, planId: taskId, agentId: tab.changes };
   if (!isSubagentTab(tab)) return undefined;
   const agent = tab.delegation?.agent;
   return agent === undefined
-    ? { kind: LINK_PLACE.WORKER, planId, callId: tab.subagent }
-    : { kind: LINK_PLACE.WORKER, planId, agentId: agent, callId: tab.subagent };
+    ? { kind: LINK_PLACE.WORKER, planId: taskId, callId: tab.subagent }
+    : { kind: LINK_PLACE.WORKER, planId: taskId, agentId: agent, callId: tab.subagent };
 }
 
 /** What a side panel tab's link is called, by the kind of place it names; none for a kind no tab of the panel shows. */
@@ -123,12 +123,12 @@ function panelThing(place: LinkPlace): LinkThing | undefined {
 function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   const { region } = tasks;
   if (region.kind !== DOCUMENT_REGION.READY) return [];
-  const { task: plan } = region;
-  const workspace = slugOf(tasks.workspaces, plan.workspaceId);
+  const { task: drawn } = region;
+  const workspace = slugOf(tasks.workspaces, drawn.workspaceId);
   const task: LinkAtHand = {
-    link: { workspace, place: { kind: LINK_PLACE.TASK, planId: plan.id } },
+    link: { workspace, place: { kind: LINK_PLACE.TASK, planId: drawn.id } },
     thing: LINK_THING.TASK,
-    name: plan.name,
+    name: drawn.name,
   };
   if (tasks.history.open) {
     const revision = tasks.history.selected;
@@ -136,7 +136,7 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
       ? [task]
       : [
           {
-            link: { workspace, place: { kind: LINK_PLACE.VERSION, planId: plan.id, revision } },
+            link: { workspace, place: { kind: LINK_PLACE.VERSION, planId: drawn.id, revision } },
             thing: LINK_THING.VERSION,
           },
           task,
@@ -148,11 +148,11 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
     agentId === undefined
       ? undefined
       : {
-          link: { workspace, place: { kind: LINK_PLACE.AGENT, planId: plan.id, agentId } },
+          link: { workspace, place: { kind: LINK_PLACE.AGENT, planId: drawn.id, agentId } },
           thing: LINK_THING.AGENT,
           name: tasks.agents.agents?.find((each) => each.id === agentId)?.title ?? undefined,
         };
-  const held = tasks.sidePanel.open ? panelTabPlace(plan.id, tasks.sidePanel.tab) : undefined;
+  const held = tasks.sidePanel.open ? panelTabPlace(drawn.id, tasks.sidePanel.tab) : undefined;
   const thing = held === undefined ? undefined : panelThing(held);
   const panel: LinkAtHand | undefined =
     held === undefined || thing === undefined

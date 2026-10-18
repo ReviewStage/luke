@@ -309,10 +309,15 @@ function SidebarSection({
       },
     ],
   ];
+  const glyph = sectionGlyph(section.icon);
   return (
-    <div className="sidebar-repository sidebar-own-section" data-row-drop={section.id}>
+    <div
+      className="sidebar-repository sidebar-own-section"
+      data-row-drop={section.id}
+      data-iconless={glyph === undefined ? "true" : undefined}
+    >
       <SidebarGroupHeader
-        glyph={sectionGlyph(section.icon)}
+        glyph={glyph}
         name={section.title}
         folded={folded}
         count={drawn.tasks.length}

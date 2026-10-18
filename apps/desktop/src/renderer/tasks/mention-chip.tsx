@@ -308,7 +308,7 @@ function MentionGlyph({
 function noteOf(
   mention: Mention,
   state: MentionState,
-  planId: string,
+  taskId: string,
   standing: LinkStanding | undefined,
 ): string | undefined {
   if (state === MENTION_STATE.GONE) return GONE_WORDS;
@@ -316,7 +316,7 @@ function noteOf(
   if (mention.kind === MENTION_KIND.PAGE) return PAGE_WORDS;
   if (mention.kind === MENTION_KIND.AGENT) {
     if (mention.taskId === undefined) return AGENT_WORDS.NO_TASK;
-    return mention.taskId === planId ? AGENT_WORDS.THIS_TASK : AGENT_WORDS.OTHER_TASK;
+    return mention.taskId === taskId ? AGENT_WORDS.THIS_TASK : AGENT_WORDS.OTHER_TASK;
   }
   return undefined;
 }

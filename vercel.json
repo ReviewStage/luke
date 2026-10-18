@@ -210,6 +210,14 @@
           "dest": "/api/default.js?route=inbox/messages&id=$1"
         },
         {
+          "src": "/api/inbox/([^/]+)/read",
+          "dest": "/api/default.js?route=inbox/read&id=$1"
+        },
+        {
+          "src": "/api/inbox/read",
+          "dest": "/api/default.js?route=inbox/read"
+        },
+        {
           "src": "/api/inbox/([^/]+)",
           "dest": "/api/default.js?route=inbox/item&id=$1"
         },

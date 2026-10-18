@@ -86,8 +86,10 @@ import {
   useConversationFilters,
 } from "./conversation-filters";
 import { PierreDiff, useDiffLook } from "./file-diff";
-import { OpenedBy, PersonRef, ReviewersLine, ReviewStanding } from "./pull-request-people";
+import { PullRequestLabels } from "./pull-request-labels";
+import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people";
 import { PullRequestReview } from "./pull-request-review";
+import { PullRequestStack } from "./pull-request-stack";
 import { ThreadActions, ThreadWritesProvider } from "./pull-request-thread-actions";
 import {
   PullRequestStateMenu,
@@ -132,10 +134,12 @@ import { useWorkingNow, workingTime } from "./working-time";
  * The header stays put while the tab under it scrolls: a bar like a File
  * tab's, wearing the pull request's mark and the word for where it stands,
  * with its doors (Review while it is open, `pull-request-review.tsx`,
- * then GitHub and the ⋯); its title and number; its branches;
- * who opened it and when, as the Changes tab names them
- * (`pull-request-people.tsx`), with its reviewers' faces wearing where each
- * stands; and, while it is open, whether it would merge as it stands, in
+ * then GitHub and the ⋯); its title and number; its labels in their
+ * GitHub colours (`pull-request-labels.tsx`); its branches, with the stack
+ * it stands in beside them (`pull-request-stack.tsx`); who opened it and
+ * when, as the Changes tab names them (`pull-request-people.tsx`), with its
+ * reviewers' first faces wearing where each stands; and, while it is open,
+ * whether it would merge as it stands, in
  * GitHub's own terms. Under it, a row of tabs, each its glyph, its name,
  * and a quiet count: Conversation, its description and its comments and
  * reviews in time order, as GitHub renders them (`body_html`), drawn
@@ -413,20 +417,30 @@ function barPullRequestOf(
 }
 
 /**
- * Who the pull request names as its reviewers: where each stands by their
- * reviews, as its conversation's read says, with those it still asks for a
- * review, as its own read says, standing asked whatever they said before,
- * as GitHub shows a re-requested reviewer; up to the bound.
+ * Who the pull request names as its reviewers, as stage-cli's header names
+ * them: where each stands by their reviews, as its conversation's read
+ * says, with those it still asks for a review, as its own read says,
+ * standing asked whatever they said before, as GitHub shows a re-requested
+ * reviewer, save one whose changes asked for still stand; its author left
+ * out, and Apps' bots after the people; up to the bound. Until the reviews
+ * land, those it asks stand asked.
  */
 function reviewersOf(
   requested: readonly CodingAgentOverviewPullRequest["requested"][number][],
   standings: readonly PullRequestReviewer[],
+  author: string | undefined,
 ): readonly PullRequestReviewer[] {
   const by = new Map<string, PullRequestReviewer>();
   for (const reviewer of standings) by.set(reviewer.by.login, reviewer);
-  for (const person of requested)
+  for (const person of requested) {
+    if (by.get(person.login)?.state === REVIEW_STATE.CHANGES_REQUESTED) continue;
     by.set(person.login, { by: person, state: REVIEW_STATE.REQUESTED });
-  return [...by.values()].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
+  }
+  const named = [...by.values()].filter((reviewer) => reviewer.by.login !== author);
+  return [
+    ...named.filter((reviewer) => !reviewer.by.bot),
+    ...named.filter((reviewer) => reviewer.by.bot),
+  ].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
 }
 
 /**
@@ -913,7 +927,7 @@ interface OverviewParts {
   };
 }
 
-/** Under the title: the branches, who opened it and when, its reviewers, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
+/** Under the title: its labels, the branches and the stack it stands in, who opened it and when, its reviewers, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
 function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }): React.JSX.Element {
   const { pullRequest: part, conversation } = parts;
   if (part.kind === PART.PENDING) {
@@ -930,18 +944,26 @@ function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }):
   }
   const pullRequest = part.value;
   const { author, mergedAt } = pullRequest;
-  const reviewers = reviewersOf(pullRequest.requested, landed(conversation)?.reviewers ?? []);
+  const reviewers = reviewersOf(
+    pullRequest.requested,
+    landed(conversation)?.reviewers ?? [],
+    author?.login,
+  );
   const open =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return (
     <>
-      <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
-        <p className="pull-request-branches">
-          <bdi>{pullRequest.base}</bdi>
-          {" ← "}
-          <bdi>{pullRequest.head}</bdi>
-        </p>
-      </Tooltip>
+      <PullRequestLabels labels={pullRequest.labels ?? []} />
+      <div className="pull-request-branch-row">
+        <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
+          <p className="pull-request-branches">
+            <bdi>{pullRequest.base}</bdi>
+            {" ← "}
+            <bdi>{pullRequest.head}</bdi>
+          </p>
+        </Tooltip>
+        <PullRequestStack stack={pullRequest.stack ?? []} number={pullRequest.number} />
+      </div>
       <div className="changes-people pull-request-people">
         {author === undefined ? null : <OpenedBy person={author} />}
         {/* Note that a merged one says when it merged, which is the moment that matters once it has. */}
@@ -949,7 +971,7 @@ function PullRequestHead({ parts, now }: { parts: OverviewParts; now: number }):
           {mergedAt === null ? null : "Merged "}
           <RelativeTime at={mergedAt ?? pullRequest.createdAt} now={now} ago />
         </span>
-        {reviewers.length === 0 ? null : <ReviewersLine reviewers={reviewers} />}
+        {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
       </div>
       {open ? <MergeLine pullRequest={pullRequest} /> : null}
     </>
