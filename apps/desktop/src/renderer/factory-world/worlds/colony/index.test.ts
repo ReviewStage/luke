@@ -192,8 +192,12 @@ test("every zone, agent, shipped pull request, planned issue, and defect can be 
 });
 
 test("each layer switched off leaves out what it names and nothing else; a failed agent stays, as a defect of its own", () => {
+  // Note that one world is switched layer by layer, as the developer switches them, because building one paints its soil, turf, and grain afresh.
+  const { host, pickable } = standInHost();
+  const colony = world.create(host);
+  const state = stateOf(SNAPSHOT);
   const off = (layer: WorldLayer) =>
-    drawn(stateOf(SNAPSHOT, { layers: { ...ALL_LAYERS, [layer]: false } }));
+    colony.update({ ...state, layers: { ...ALL_LAYERS, [layer]: false } });
   const kinds = [
     PICK_KIND.ZONE,
     PICK_KIND.AGENT,
@@ -201,7 +205,8 @@ test("each layer switched off leaves out what it names and nothing else; a faile
     PICK_KIND.PLANNED,
     PICK_KIND.DEFECT,
   ];
-  const all = drawn(stateOf(SNAPSHOT));
+  colony.update(state);
+  const all = new Map(kinds.map((kind) => [kind, pickable(kind)]));
   const leftOut = [
     { layer: WORLD_LAYER.BUILDING, kind: PICK_KIND.AGENT, kept: [FAILED] },
     { layer: WORLD_LAYER.SHIPPED, kind: PICK_KIND.SHIPPED, kept: [] },
@@ -209,10 +214,10 @@ test("each layer switched off leaves out what it names and nothing else; a faile
     { layer: WORLD_LAYER.DEFECTS, kind: PICK_KIND.DEFECT, kept: [] },
   ] as const;
   for (const { layer, kind, kept } of leftOut) {
-    const pickable = off(layer);
+    off(layer);
     assert.deepEqual(pickable(kind), new Set(kept), `${layer} off leaves out its own`);
     for (const other of kinds.filter((each) => each !== kind)) {
-      assert.deepEqual(pickable(other), all(other), `${layer} off keeps every ${other}`);
+      assert.deepEqual(pickable(other), all.get(other), `${layer} off keeps every ${other}`);
     }
   }
 });
