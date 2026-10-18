@@ -2305,10 +2305,14 @@ export function useTasksTab(input: {
   };
 
   // Note that a pull request two of the open task's agents share opens in the tab already open on it, whichever agent it stands under, as the panel's own door picks it (`changesTabOf`), so a link never stands a second tab on one pull request.
+  // Only a tab the task draws is taken, its agent one of the task's agents at hand: not an archived agent's, nor one of a page the panel stands beside instead.
   const sharedChangesAgent = (planId: string, agentId: string): string => {
     const url = planId === tasks.activeTaskId ? agents.pullRequests.get(agentId)?.url : undefined;
     if (url === undefined) return agentId;
-    const open = sidePanel.changes.find((tab) => agents.pullRequests.get(tab.changes)?.url === url);
+    const drawn = agents.agentIds ?? [];
+    const open = sidePanel.changes.find(
+      (tab) => drawn.includes(tab.changes) && agents.pullRequests.get(tab.changes)?.url === url,
+    );
     return open?.changes ?? agentId;
   };
 

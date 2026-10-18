@@ -900,7 +900,7 @@ test("a Luke link to an agent's worker opens the worker's own tab in the task's 
   assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
 });
 
-test("a link to an agent's Pull request tab, on a pull request another of the task's agents shares whose tab is open, opens that tab rather than a second", async () => {
+test("a link to an agent's Pull request tab, on a pull request another of the task's agents shares whose tab is open, opens that tab rather than a second, unless that agent was archived", async () => {
   const EARLIER = { ...RUNNING_AGENT, id: "5e3b6f1d-2a10-4c7a-9a55-7b0f5f3e2c1d", createdAt: 2 };
   const shared = {
     repository: "acme/relay",
@@ -916,11 +916,17 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
       changedFiles: 2,
     },
   };
+  let listed: readonly CodingAgentSummary[] = [EARLIER, RUNNING_AGENT];
   const tab = mount(
     { shown: true, tasks: OPEN },
     {
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [EARLIER, RUNNING_AGENT] }),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
       [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: () => Promise.resolve(shared),
+      [ACT_KIND.CODING_AGENTS_ARCHIVE]: () => {
+        const archived = { ...EARLIER, archivedAt: 5 };
+        listed = [archived, RUNNING_AGENT];
+        return Promise.resolve({ agent: archived });
+      },
     },
   );
   await settle();
@@ -937,6 +943,12 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
 
   assert.deepEqual(panelOf(tab), { open: true, tab: { changes: EARLIER.id } });
   assert.deepEqual(tab.control().sidePanel.changes, [{ changes: EARLIER.id }]);
+
+  // Archived, the earlier agent's tab is no longer drawn, so the link opens the later agent's own.
+  await act(() => tab.control().agents.onArchive(EARLIER.id, true));
+  await settle();
+  open(AGENT_ID);
+  assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
 });
 
 test("a Luke link to an agent's message opens the agent and asks its tab to bring the message into view, each ask its own, let go once answered", async () => {
