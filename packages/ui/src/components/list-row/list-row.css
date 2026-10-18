@@ -24,9 +24,10 @@
     transition: background-color var(--duration-hover) ease;
   }
 
-  /* The pointer lights a row that opens something, never past the open
-     row's own stronger fill. */
-  .luke-list-row:has(> button.luke-list-row-main):hover:not([data-current="true"]) {
+  /* The pointer lights a row that opens something, and its open menu keeps
+     it lit, never past the open row's own stronger fill. */
+  .luke-list-row:has(> button.luke-list-row-main):hover:not([data-current="true"]),
+  .luke-list-row[data-menu-open="true"]:not([data-current="true"]) {
     background: var(--luke-color-fill-hover);
   }
 
@@ -54,14 +55,20 @@
     cursor: pointer;
   }
 
+  button.luke-list-row-main:disabled {
+    cursor: default;
+  }
+
   /* A desktop row answers a press the way a Mac's list does, without the
      web's pointing hand. */
   [data-luke-profile="desktop"] button.luke-list-row-main {
     cursor: default;
   }
 
-  /* Beside its acts, the row's press gives its end inset to the acts. */
-  .luke-list-row:has(> .luke-list-row-actions) > .luke-list-row-main {
+  /* Beside its acts, the row's press gives its end inset to the acts; acts
+     laid over its end on hover take none of it. */
+  .luke-list-row:not([data-actions="on-hover"]):has(> .luke-list-row-actions)
+  > .luke-list-row-main {
     padding-inline-end: 0;
   }
 
@@ -122,5 +129,56 @@
     align-items: center;
     gap: var(--luke-space-4);
     padding-inline-end: var(--luke-space-12);
+  }
+
+  /* A row that goes deeper wears its chevron at its end, shown while the
+     row is reached for or open, its room kept so nothing moves as it shows. */
+  .luke-list-row-chevron {
+    display: inline-flex;
+    flex: none;
+    color: var(--luke-color-text-subtle);
+    opacity: 0;
+    transition: opacity var(--duration-hover) ease;
+  }
+
+  .luke-list-row-chevron > svg {
+    width: var(--luke-space-12);
+    height: var(--luke-space-12);
+  }
+
+  .luke-list-row:is(:hover, :has(:focus-visible), [data-current="true"]) .luke-list-row-chevron {
+    opacity: 1;
+  }
+
+  /* Acts shown on hover are laid over the row's end, where its metadata
+     stands, and take no room of the row's own: they step in, and the
+     metadata steps out, while the row is reached for or its menu is open. */
+  .luke-list-row[data-actions="on-hover"] {
+    position: relative;
+  }
+
+  .luke-list-row[data-actions="on-hover"] > .luke-list-row-actions {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    opacity: 0;
+  }
+
+  .luke-list-row[data-actions="on-hover"]:is(:hover, :has(:focus-visible), [data-menu-open="true"])
+    > .luke-list-row-actions {
+    opacity: 1;
+  }
+
+  .luke-list-row[data-actions="on-hover"]:is(:hover, :has(:focus-visible), [data-menu-open="true"])
+    .luke-list-row-meta {
+    visibility: hidden;
+  }
+
+  /* Note that the row holding the keyboard stands over its neighbours,
+     because its ring reaches past the list's gap and the next row's fill
+     would otherwise paint over the ring's foot. */
+  .luke-list-row:has(:focus-visible) {
+    position: relative;
+    z-index: 1;
   }
 }

@@ -4,9 +4,12 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { sandboxRead } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type TerminalSummary } from "@luke/features/terminal-wire";
 import {
+  ACTIONS_SHOWN,
   CloseIcon,
   ConfirmDialog,
   IconButton,
+  List,
+  ListRow,
   PlusIcon,
   useConfirmDialog,
   useMenu,
@@ -73,50 +76,54 @@ function ShellRow({
   surfaceOpen: boolean;
   session: Pick<TerminalSession, "onChoose" | "onCreate" | "onRename" | "onKill">;
 }): React.JSX.Element {
-  const row = useRef<HTMLButtonElement>(null);
+  const row = useRef<HTMLElement | null>(null);
   const menu = useMenu(true);
   const [renaming, setRenaming] = useState(false);
   const kill = `End ${shell.title}`;
   // Ending a shell ends what runs in it, which nothing brings back, so it asks first.
   const ending = useConfirmDialog({ subject: true, surfaceOpen }, () => session.onKill(shell.id));
   return (
-    <li className="terminal-shell" aria-current={shown ? "true" : undefined}>
-      <TerminalIcon className="terminal-shell-glyph" aria-hidden="true" />
-      {renaming ? (
-        <TaskNameField
-          name={shell.title}
-          className="terminal-shell-field"
-          label="Shell name"
-          maxLength={TITLE_MAX}
-          onEnd={({ name }) => {
-            setRenaming(false);
-            if (name !== undefined) session.onRename(shell.id, name);
-          }}
-        />
-      ) : (
-        <button
-          ref={row}
-          type="button"
-          className="terminal-shell-row"
-          onClick={() => session.onChoose(shell.id)}
-          onContextMenu={menu.contextMenu(row)}
-        >
-          <span className="terminal-shell-name">{shell.title}</span>
-          <span className="terminal-shell-detail">{shellDetail(shell)}</span>
-        </button>
-      )}
-      <span className="terminal-shell-mark">
-        {shell.running ? (
-          <span className="terminal-shell-running" role="img" aria-label="Running" />
-        ) : null}
-      </span>
-      {/* Note that the × stands in a box of its own, because the box is what
-          the stylesheet lays over the mark and a barrel button wears no mark. */}
-      <span className="terminal-shell-kill">
-        <Tooltip label={kill}>
-          <IconButton icon={<CloseIcon />} label={kill} onClick={ending.ask} />
-        </Tooltip>
-      </span>
+    <>
+      <ListRow
+        ref={(element) => {
+          row.current = element;
+        }}
+        leading={<TerminalIcon />}
+        title={
+          renaming ? (
+            <TaskNameField
+              name={shell.title}
+              className="terminal-shell-field"
+              label="Shell name"
+              maxLength={TITLE_MAX}
+              onEnd={({ name }) => {
+                setRenaming(false);
+                if (name !== undefined) session.onRename(shell.id, name);
+              }}
+            />
+          ) : (
+            shell.title
+          )
+        }
+        description={<span className="terminal-shell-detail">{shellDetail(shell)}</span>}
+        meta={
+          shell.running ? (
+            <span className="terminal-shell-running" role="img" aria-label="Running" />
+          ) : null
+        }
+        current={shown}
+        onPress={renaming ? undefined : () => session.onChoose(shell.id)}
+        onContextMenu={renaming ? undefined : menu.contextMenu(row)}
+        actionsShown={ACTIONS_SHOWN.ON_HOVER}
+        menuOpen={menu.open !== undefined}
+        actions={
+          renaming ? null : (
+            <Tooltip label={kill}>
+              <IconButton icon={<CloseIcon />} label={kill} onClick={ending.ask} />
+            </Tooltip>
+          )
+        }
+      />
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={shell.title}
@@ -150,7 +157,7 @@ function ShellRow({
         confirm={ending}
         question={{ title: `${kill}?`, verb: "End shell", running: "Ending the shell" }}
       />
-    </li>
+    </>
   );
 }
 
@@ -203,17 +210,19 @@ export function TerminalShells({
       {listed === undefined ? null : shells.length === 0 ? (
         <p className="terminal-shells-none">No shells.</p>
       ) : (
-        <ul className="terminal-shells-rows">
-          {shells.map((shell) => (
-            <ShellRow
-              key={shell.id}
-              shell={shell}
-              shown={shell.id === session.shell}
-              surfaceOpen={surfaceOpen && !leaving}
-              session={session}
-            />
-          ))}
-        </ul>
+        <div className="terminal-shells-rows">
+          <List label="Shell list">
+            {shells.map((shell) => (
+              <ShellRow
+                key={shell.id}
+                shell={shell}
+                shown={shell.id === session.shell}
+                surfaceOpen={surfaceOpen && !leaving}
+                session={session}
+              />
+            ))}
+          </List>
+        </div>
       )}
       <div className="terminal-shells-foot">
         <AgentRef subject={subject} models={models} onOpen={onOpenAgent}>

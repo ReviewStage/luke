@@ -61,6 +61,8 @@
   --content-inset: calc(var(--column-inset) + var(--row-inset));
   /* Between two items of a list. */
   --list-gap: var(--luke-space-2);
+  /* A row's own small act at its end (a sidebar plan's Pin, a version's ⋯). */
+  --sidebar-plan-mark: 22px;
   /* Every menu and popover draws from one set: the --luke-color-overlay ground
      inside a --luke-color-border-strong edge, this corner and shadow, and its items
      this inset from its edge, each row this tall and its glyph this big. The
@@ -1494,7 +1496,6 @@ ul.actor-stack {
    where it always is and nothing moves. They are the row's siblings, since
    a button holds no button, laid over its end. */
 .sidebar-task-item {
-  --sidebar-plan-mark: 22px;
   position: relative;
 }
 
@@ -6620,63 +6621,8 @@ button.automation-run:hover {
 
 /* Version history ------------------------------------------------------------ */
 
-/* The versions, newest first, one row each, the row whose version is drawn
-   lit as a chosen sidebar row is (desktop-version-history.tsx). */
-.version-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--list-gap);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.version-row {
-  display: flex;
-  width: 100%;
-  align-items: flex-start;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-8) var(--row-inset);
-  border-radius: var(--luke-control-radius);
-  background: none;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-/* A row fills while the pointer is anywhere on its item, its ⋯ included,
-   and no more than its hover does, so the chosen row keeps its stronger
-   fill. */
-:where(.version-item:hover) > .version-row {
-  background: var(--luke-color-fill-hover);
-}
-
-.version-row[aria-current="true"] {
-  background: var(--luke-color-fill-strong);
-}
-
-/* Who wrote the version, beside its two lines, as the rest of the window
-   draws them (`actor-ref.tsx`), level with the author's line. */
-.version-row > .actor-mark {
-  margin-top: 1px; /* off-scale: the author line's half-leading */
-}
-
-.version-row-text {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--luke-space-2);
-}
-
-.version-row-head {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-6);
-}
-
-/* Who wrote a version, in the label's type; when, and what it did, in the
-   caption's. */
+/* Who wrote a version, in the label's type, on its row and over its
+   sections alike. */
 .version-row-author {
   min-width: 0;
   overflow: hidden;
@@ -6688,17 +6634,6 @@ button.automation-run:hover {
   white-space: nowrap;
 }
 
-.version-row-time {
-  flex: none;
-  min-width: var(--sidebar-plan-mark);
-  margin-left: auto;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-variant-numeric: tabular-nums;
-  line-height: var(--luke-type-caption-leading);
-  text-align: right;
-}
-
 /* What a version did runs to two lines before it is cut short, so a
    restore's row says which version it brought back in a column the folded
    sidebar's width. */
@@ -6707,43 +6642,7 @@ button.automation-run:hover {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-/* A row's ⋯ stands in its time's place, which is always as wide as it, while
-   the row is hovered, holds the keyboard, or its menu is open, drawn as a
-   sidebar plan's Pin and Archive are: the row's sibling, since a button
-   holds no button, laid over its first line. */
-.version-item {
-  --sidebar-plan-mark: 22px;
-  position: relative;
-}
-
-.version-row-actions {
-  position: absolute;
-  top: var(--luke-space-8);
-  right: var(--row-inset);
-  display: flex;
-  height: var(--luke-type-label-leading);
-  align-items: center;
-  opacity: 0;
-}
-
-.version-item:is(:hover, :has(:focus-visible), [data-menu-open="true"]) > .version-row-actions {
-  opacity: 1;
-}
-
-/* The row holding the keyboard stands over its neighbours, as a sidebar
-   plan's does, so the next row's fill leaves its ring's foot. */
-.version-item:has(:focus-visible) {
-  z-index: 1;
-}
-
-.version-item:is(:hover, :has(:focus-visible), [data-menu-open="true"]):has(.version-row-actions)
-  .version-row-time {
-  visibility: hidden;
+  white-space: normal;
 }
 
 /* The versions and the sections of the one opened stand side by side in a
@@ -6812,47 +6711,6 @@ button.automation-run:hover {
 
 .version-sections-source:hover {
   background: var(--luke-color-fill-hover);
-}
-
-/* A section a revision changed, its name in the label's type and the word
-   beside it in the caption's. */
-.version-section-row {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-6) var(--row-inset);
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.version-section-row:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-.version-section-row[aria-current="true"] {
-  background: var(--luke-color-fill-strong);
-}
-
-.version-section-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.version-section-change {
-  flex: none;
-  margin-left: auto;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
 }
 
 /* The list's foot, a row in the caption's type whose failure wraps under
@@ -7267,7 +7125,6 @@ button.automation-run:hover {
 }
 
 .task-summary-archived-agent {
-  --sidebar-plan-mark: 22px;
   position: relative;
 }
 

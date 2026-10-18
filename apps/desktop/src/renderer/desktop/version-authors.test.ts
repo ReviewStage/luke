@@ -126,7 +126,7 @@ test("a version by a member who left names them as one, in its row and over its 
 
   const said = (selector: string) =>
     [...view.querySelectorAll(selector)].map((each) => each.textContent);
-  assert.deepEqual(said(".version-item .version-row-author"), [
+  assert.deepEqual(said('[aria-label="Version list"] .version-row-author'), [
     "Lee Park (former member)",
     "Lee Park (former member)",
   ]);

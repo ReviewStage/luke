@@ -1,4 +1,12 @@
-import type { KeyboardEvent, MouseEvent, ReactNode, RefCallback } from "react";
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  type RefCallback,
+  useEffect,
+} from "react";
+import { ChevronRightIcon } from "../../face/glyphs.js";
+import { useClipped } from "../../use-clipped.js";
 
 /**
  * list-row.tsx -- a List of rows, each a thing a collection holds: its title, a line under it, its metadata at the end, and the acts it offers beside it.
@@ -25,7 +33,45 @@ import type { KeyboardEvent, MouseEvent, ReactNode, RefCallback } from "react";
  * no keys, which would only be its acts'. `onContextMenu` hears a
  * right-click anywhere on the row, its acts included, so the app can open
  * its own menu there.
+ *
+ * A row's acts stand beside it always, or only while the pointer is on the
+ * row, it holds the keyboard, or its menu is open (`ACTIONS_SHOWN.ON_HOVER`),
+ * laid over its metadata's place, which steps out for them, so a column of
+ * rows keeps its times until one is reached for, as a Mac's sidebar keeps
+ * them. A row whose menu is open (`menuOpen`) stays lit as the pointer lights
+ * it, so the menu is seen to be its. A row that goes somewhere deeper wears a
+ * chevron at its end (`chevron`). A row whose press must leave the focus
+ * where it is, on a search field beside the list that holds the keys, keeps
+ * it (`keepFocus`), as a Button does; one of a roving list, which the
+ * keyboard enters at its current row and moves through by its own keys, is
+ * out of the tab order and takes the focus it is handed (`tabbable`), and
+ * one a field drives names its item by `id`, the field's active row. A row unavailable (`disabled`) refuses
+ * its press and leaves the tab order, as a deleting row's does. Where an
+ * app hints a row's whole title only when it is cut short, the row says
+ * whether it is (`onTitleClipped`), measured whenever its box resizes.
  */
+
+/** Whether a row's acts stand beside it always, or only while it is reached for, in its metadata's place. */
+export const ACTIONS_SHOWN = {
+  ALWAYS: "always",
+  ON_HOVER: "on-hover",
+} as const;
+
+export type ActionsShown = (typeof ACTIONS_SHOWN)[keyof typeof ACTIONS_SHOWN];
+
+/** A pointer's press that leaves the focus where it is. */
+function preventFocusMove(event: MouseEvent<HTMLElement>): void {
+  event.preventDefault();
+}
+
+/** Tells `onTitleClipped` whether the title is cut short, measuring it only where someone asks. */
+function useTitleClipped(
+  onTitleClipped: ((clipped: boolean) => void) | undefined,
+): RefCallback<HTMLElement> | undefined {
+  const [measured, clipped] = useClipped();
+  useEffect(() => onTitleClipped?.(clipped), [onTitleClipped, clipped]);
+  return onTitleClipped === undefined ? undefined : measured;
+}
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
@@ -56,6 +102,14 @@ export function ListRow({
   actions,
   onPress,
   current,
+  actionsShown = ACTIONS_SHOWN.ALWAYS,
+  menuOpen = false,
+  chevron = false,
+  keepFocus = false,
+  disabled = false,
+  tabbable = true,
+  onTitleClipped,
+  id,
   ref,
   onKeyDown,
   onContextMenu,
@@ -73,6 +127,22 @@ export function ListRow({
   onPress?: (() => void) | undefined;
   /** Whether the row is the one open now, drawn and announced as current. */
   current?: boolean | undefined;
+  /** Whether its acts stand always, or only while the row is reached for, over its metadata. */
+  actionsShown?: ActionsShown | undefined;
+  /** Whether the row's own menu is open, which keeps it lit and its acts shown. */
+  menuOpen?: boolean | undefined;
+  /** Whether a chevron at its end says the press goes somewhere deeper. */
+  chevron?: boolean | undefined;
+  /** Whether a pointer's press leaves the focus where it is, as on a field beside the list that holds the keys. */
+  keepFocus?: boolean | undefined;
+  /** Whether its press is unavailable: refused and out of the tab order. */
+  disabled?: boolean | undefined;
+  /** Whether Tab stops on its press; one that is not still takes the focus a roving list hands it. */
+  tabbable?: boolean | undefined;
+  /** Hears whether the title is cut short, whenever that changes, so a hint can say it whole only then. */
+  onTitleClipped?: ((clipped: boolean) => void) | undefined;
+  /** The id of the row's item, which a field driving the list names as its active row. */
+  id?: string | undefined;
   /** Handed the row's press, or its item where it opens nothing. A callback, so one list keeps each row's by its own key. */
   ref?: RefCallback<HTMLElement> | undefined;
   /** A key pressed on the row's press; a row that opens nothing hears none. */
@@ -80,6 +150,7 @@ export function ListRow({
   /** A right-click, or the menu key, anywhere on the row. */
   onContextMenu?: ((event: MouseEvent<HTMLElement>) => void) | undefined;
 }): React.JSX.Element {
+  const titleRef = useTitleClipped(onTitleClipped);
   const face = (
     <>
       {said(leading) ? (
@@ -88,19 +159,29 @@ export function ListRow({
         </span>
       ) : null}
       <span className="luke-list-row-text">
-        <span className="luke-list-row-title">{title}</span>
+        <span ref={titleRef} className="luke-list-row-title">
+          {title}
+        </span>
         {said(description) ? (
           <span className="luke-list-row-description">{description}</span>
         ) : null}
       </span>
       {said(meta) ? <span className="luke-list-row-meta">{meta}</span> : null}
+      {chevron ? (
+        <span className="luke-list-row-chevron" aria-hidden="true">
+          <ChevronRightIcon />
+        </span>
+      ) : null}
     </>
   );
   return (
     <li
+      id={id}
       ref={onPress ? undefined : ref}
       className="luke-list-row"
       data-current={current === true ? "true" : undefined}
+      data-actions={actionsShown}
+      data-menu-open={menuOpen ? "true" : undefined}
       onContextMenu={onContextMenu}
     >
       {onPress ? (
@@ -109,6 +190,10 @@ export function ListRow({
           type="button"
           className="luke-list-row-main"
           aria-current={current === true ? "true" : undefined}
+          disabled={disabled}
+          tabIndex={tabbable ? undefined : -1}
+          // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
+          onMouseDown={keepFocus ? preventFocusMove : undefined}
           onClick={onPress}
           onKeyDown={onKeyDown}
         >

@@ -4863,15 +4863,10 @@ button.attached-file-face:hover img {
 }
 
 .terminal-shells-rows {
-  display: flex;
   min-height: 0;
   flex: 1;
-  flex-direction: column;
-  gap: 1px;
-  margin: 0;
   padding: var(--luke-space-4);
   overflow-y: auto;
-  list-style: none;
 }
 
 .terminal-shells-none {
@@ -4883,76 +4878,16 @@ button.attached-file-face:hover img {
   line-height: var(--luke-type-caption-leading);
 }
 
-.terminal-shell {
-  position: relative;
-  display: flex;
-  min-height: 40px;
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: 0 var(--luke-space-4) 0 var(--luke-space-8);
-  border-radius: var(--luke-radius-8);
-}
-
-.terminal-shell:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-.terminal-shell[aria-current="true"] {
-  background: var(--luke-color-fill-strong);
-}
-
-.terminal-shell-glyph {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-  flex: none;
-  color: var(--luke-color-text-muted);
-}
-
-/* The row's press covers its words; the glyph, mark, and × stand on it. */
-.terminal-shell-row {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  align-self: stretch;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
-  text-align: left;
-}
-
-.terminal-shell-row::before {
-  position: absolute;
-  inset: 0;
-  content: "";
-}
-
-.terminal-shell-name,
+/* What runs in a shell, or where it stands, in the code face. */
 .terminal-shell-detail {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.terminal-shell-name {
-  font-weight: var(--luke-weight-medium);
-}
-
-.terminal-shell-detail {
-  color: var(--luke-color-text-subtle);
   font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
 }
 
+/* A shell renamed in place keeps its row: the field takes the name's own
+   line and type, ringed. */
 .terminal-shell-field {
+  width: 100%;
   min-width: 0;
-  flex: 1;
   padding: 1px var(--luke-space-4);
   border: 0;
   border-radius: var(--luke-radius-6);
@@ -4964,38 +4899,14 @@ button.attached-file-face:hover img {
   line-height: var(--luke-type-label-leading);
 }
 
-.terminal-shell-mark {
-  display: inline-flex;
-  width: 20px;
-  justify-content: center;
-}
-
+/* A dot while a command runs in the shell, centred where the × steps in. */
 .terminal-shell-running {
+  display: block;
   width: 6px;
   height: 6px;
+  margin-inline-end: var(--luke-space-12);
   border-radius: 50%;
   background: var(--luke-color-working);
-}
-
-/* The × stands in the mark's place while the row is pointed at or holds
-   focus, its control's square centred where the mark's is. */
-.terminal-shell-kill {
-  position: absolute;
-  right: calc(var(--luke-space-4) + 10px - var(--luke-control-height) / 2);
-  display: flex;
-  visibility: hidden;
-}
-
-.terminal-shell:is(:hover, :focus-within) .terminal-shell-kill {
-  visibility: visible;
-}
-
-.terminal-shell:has(.terminal-shell-field) .terminal-shell-kill {
-  visibility: hidden;
-}
-
-.terminal-shell:is(:hover, :focus-within) .terminal-shell-mark {
-  visibility: hidden;
 }
 
 .terminal-shells-foot {
