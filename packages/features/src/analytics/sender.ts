@@ -328,12 +328,30 @@ export class ProductEventSender {
   }
 
   #flushEffect(): Effect.Effect<void, never, HttpClient.HttpClient> {
-    return Effect.suspend(() => {
-      if (this.#queue.length === 0) return Effect.void;
+    return Effect.gen({ self: this }, function* () {
+      if (this.#queue.length === 0) return;
+      const holder = yield* this.#readAccountKey();
       // Gone whatever becomes of the request, save for the one end that never
       // authenticated at all.
-      const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
-      return this.#send(events);
+      const queued = this.#ownDays(this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT), holder);
+      if (queued.length > 0) yield* this.#send(queued);
+    });
+  }
+
+  /**
+   * The batch without the day marks of an account no longer signed in. The
+   * service counts a batch for whoever its bearer names, so a mark queued
+   * before a sign-out and another sign-in would count the first account's day
+   * for the second; it goes instead, and this run's guard forgets it, so the
+   * first account is counted if it signs in again today. Signed out, the
+   * batch is kept whole for the sign-in it waits on.
+   */
+  #ownDays(queued: QueuedEvent[], holder: string | undefined): QueuedEvent[] {
+    if (holder === undefined) return queued;
+    return queued.filter(({ recorded }) => {
+      if (!recorded || recorded.account === holder) return true;
+      this.#recordedDaysOf(recorded.name, recorded.discriminator).delete(recorded.account);
+      return false;
     });
   }
 

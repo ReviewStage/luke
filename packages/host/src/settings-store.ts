@@ -721,8 +721,9 @@ export class SettingsStore {
   }
 
   /**
-   * Keeps the day one once-a-day usage count was sent, dropping every entry
-   * from an earlier day, which no guard reads again.
+   * Keeps the day one once-a-day usage count was sent, unless a later one is
+   * already kept, dropping every entry from an earlier day, which no guard
+   * reads again.
    */
   keepProductEventDay(kept: KeptProductEventDay): Effect.Effect<void, PlatformError> {
     return this.#mutate((persisted) => {
@@ -733,7 +734,9 @@ export class SettingsStore {
           entry.discriminator === kept.discriminator &&
           entry.account === kept.account,
       );
-      if (held?.day === kept.day) return undefined;
+      // Note that we never move a day back, because a clock set back across
+      // midnight would otherwise let the newer day be counted twice.
+      if (held && held.day >= kept.day) return undefined;
       const others = entries.filter((entry) => entry !== held && entry.day >= kept.day);
       return { ...persisted, productEventDays: productEventDaysFrom([...others, kept]) };
     });

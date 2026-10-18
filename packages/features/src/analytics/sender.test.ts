@@ -194,3 +194,28 @@ it.effect("a day whose batch never reached the service is counted on the next la
     assert.equal(yield* launch(options), 1);
   }),
 );
+
+it.effect("a day marked for one account is never sent under the next account's bearer", () =>
+  Effect.gen(function* () {
+    let account = "ada@luke.test";
+    const options = {
+      recordedDays: keptDays(),
+      readAccountKey: () => Effect.succeed(account),
+    };
+    const { sender, requests } = yield* sharingSender(options);
+    yield* sender.markDayActive();
+    // Ada signs out and Grace signs in before the minute's flush.
+    account = "grace@luke.test";
+    yield* sender.flush;
+    assert.equal(dayMarkers(requests), 0);
+
+    // Grace's own day is hers to count, once; Ada's is counted when she is back.
+    yield* sender.markDayActive();
+    yield* sender.flush;
+    yield* sender.markDayActive();
+    yield* sender.flush;
+    assert.equal(dayMarkers(requests), 1);
+    account = "ada@luke.test";
+    assert.equal(yield* launch(options), 1);
+  }),
+);

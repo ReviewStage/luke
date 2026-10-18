@@ -375,6 +375,20 @@ test("the day a usage count was sent survives a reopen and a sign-out, by accoun
   assert.ok(!(await readSettingsFile(directory)).includes("grace@luke.test"));
 });
 
+test("a clock set back across midnight never moves the kept day back", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  const store = storeIn(directory);
+  const ada = { name: "app:day_active", discriminator: "day", account: "ada@luke.test" } as const;
+
+  await store.keepProductEventDay({ ...ada, day: "2026-08-20" });
+  await store.keepProductEventDay({ ...ada, day: "2026-08-19" });
+
+  assert.equal(
+    await storeIn(directory).lastProductEventDay(ada.name, ada.discriminator, ada.account),
+    "2026-08-20",
+  );
+});
+
 test("round-trips an encrypted account without exposing either token in snapshots", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
