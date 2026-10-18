@@ -33,6 +33,13 @@
     display: none;
   }
 
+  /* A summary's words wrap rather than run past a narrow pane, an unbroken
+     name among them. */
+  .luke-disclosure-summary > :not(svg, .luke-disclosure-turn) {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   .luke-disclosure-summary:hover {
     background: var(--luke-color-fill-strong);
     color: var(--luke-color-text);
@@ -69,7 +76,8 @@
     padding-top: var(--luke-space-4);
   }
 
-  /* Past the chevron, so the body's rows stand under the summary's words. */
+  /* In past the chevron, at the transcript's own indent; a row's own glyph
+     and inset carry its words the rest of the way under the summary's. */
   .luke-disclosure-body[data-inset="indented"] {
     margin-left: var(--luke-space-24);
   }
