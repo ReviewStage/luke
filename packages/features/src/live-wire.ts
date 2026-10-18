@@ -1,10 +1,12 @@
 import { Schema as EffectSchema } from "effect";
 import {
+  type AccountChatEntry,
   type AccountFailedRun,
   type AccountInboxAnswer,
   type AccountInboxAutomation,
   type AccountInboxEntry,
   type AccountInboxTask,
+  accountChatEntrySchema,
   accountFailedRunSchema,
   accountInboxAutomationSchema,
   accountInboxEntrySchema,
@@ -43,7 +45,8 @@ export type SealedLiveQueryWire = typeof sealedLiveQuerySchema.Type;
 /**
  * What waits on the developer across the account, sealed for following: the
  * address to subscribe at, and one statement per part of the account
- * inbox's answer (`account-inbox-wire.ts`). The service answers
+ * inbox's answer (`account-inbox-wire.ts`), what waits in chat as two: the
+ * open asks, and the messages the account's people were told of. The service answers
  * `unavailable` where its deployment has no Realtime, and the desktop holds
  * its read open as it did before.
  */
@@ -55,6 +58,8 @@ export const accountInboxLiveAnswerSchema = EffectSchema.Struct({
     plans: sealedLiveQuerySchema,
     automations: sealedLiveQuerySchema,
     failedRuns: sealedLiveQuerySchema,
+    chatAsks: sealedLiveQuerySchema,
+    chatNotices: sealedLiveQuerySchema,
   }),
 });
 
@@ -73,6 +78,8 @@ export const accountInboxLiveRowSchemas = {
   plans: accountInboxTaskSchema,
   automations: accountInboxAutomationSchema,
   failedRuns: accountFailedRunSchema,
+  chatAsks: accountChatEntrySchema,
+  chatNotices: accountChatEntrySchema,
 } as const;
 
 /** Each part's rows, decoded. */
@@ -82,6 +89,8 @@ export interface AccountInboxLiveRows {
   readonly plans: readonly AccountInboxTask[];
   readonly automations: readonly AccountInboxAutomation[];
   readonly failedRuns: readonly AccountFailedRun[];
+  readonly chatAsks: readonly AccountChatEntry[];
+  readonly chatNotices: readonly AccountChatEntry[];
 }
 
 /** How far back a run that failed to start is still carried to its automation's owner. */
@@ -96,6 +105,29 @@ function latestFirst<Row extends { readonly updatedAt: number }>(
     const [left, right] = [key(a), key(b)];
     return left < right ? 1 : left > right ? -1 : 0;
   };
+}
+
+/** The latest changed first, then the latest place, then by id, as `waitingOn` orders the asks. */
+function latestChatFirst(a: AccountChatEntry, b: AccountChatEntry): number {
+  if (a.updatedAt !== b.updatedAt) return b.updatedAt - a.updatedAt;
+  if (a.touchedSeq !== b.touchedSeq) return b.touchedSeq - a.touchedSeq;
+  return a.messageId < b.messageId ? 1 : a.messageId > b.messageId ? -1 : 0;
+}
+
+/**
+ * What waits in chat as `chat-waiting.ts` answers it from the live rows: the
+ * open asks, then each notice that is not of an ask already, which is said
+ * once as the ask, the latest changed first.
+ */
+function chatOfLiveRows(
+  asks: readonly AccountChatEntry[],
+  notices: readonly AccountChatEntry[],
+): readonly AccountChatEntry[] {
+  const asked = new Set(asks.map((entry) => entry.messageId));
+  return [
+    ...asks.toSorted(latestChatFirst),
+    ...notices.filter((entry) => !asked.has(entry.messageId)).toSorted(latestChatFirst),
+  ].toSorted((one, other) => other.updatedAt - one.updatedAt);
 }
 
 /**
@@ -121,6 +153,7 @@ export function accountInboxOfLiveRows(
     failedRuns: rows.failedRuns
       .filter((run) => run.failedAt >= now - FAILED_RUN_WINDOW_MILLIS)
       .toSorted((a, b) => b.failedAt - a.failedAt),
+    chat: chatOfLiveRows(rows.chatAsks, rows.chatNotices),
     cursor: "",
     readAt: now,
   };

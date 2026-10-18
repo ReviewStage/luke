@@ -3,10 +3,19 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   createAutomation,
   ownFailedRunsLiveStatement,
 } from "@luke/database/models/automation-store";
+import {
+  ensureMember,
+  ensureTaskChannel,
+  findOrMakeDm,
+  markNoticed,
+  postAsk,
+  postMessage,
+} from "@luke/database/models/chat-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { updateTask } from "@luke/database/models/task-store";
 import { organization, user } from "@luke/database/schemas/auth";
@@ -15,12 +24,14 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
+import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
+import { CHAT_ASK, CHAT_BLOCK, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   type CodingAgentAttachment,
@@ -37,6 +48,7 @@ import {
   type InboxPost,
 } from "@luke/features/inbox-wire";
 import { accountInboxLiveRowSchemas, accountInboxOfLiveRows } from "@luke/features/live-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { eq } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -189,6 +201,8 @@ const liveAnswerOf = (userId: string, readAt: number) =>
         plans: yield* runLive(parts.plans, accountInboxLiveRowSchemas.plans),
         automations: yield* runLive(parts.automations, accountInboxLiveRowSchemas.automations),
         failedRuns: yield* runLive(failedRuns, accountInboxLiveRowSchemas.failedRuns),
+        chatAsks: yield* runLive(parts.chatAsks, accountInboxLiveRowSchemas.chatAsks),
+        chatNotices: yield* runLive(parts.chatNotices, accountInboxLiveRowSchemas.chatNotices),
       },
       readAt,
     );
@@ -206,19 +220,98 @@ it.layer(getTestDB())("the inbox store", (it) => {
         yield* joinWorkspace(onPlan.workspaceId, teammate);
         const outsider = yield* openUser;
         yield* openWorkspace(outsider);
-        assert.ok(Result.isSuccess(yield* postInboxItem(onPlan.agent, SETTINGS)));
+        const first = yield* postInboxItem(onPlan.agent, SETTINGS);
+        assert.ok(Result.isSuccess(first));
         assert.ok(
           Result.isSuccess(yield* postInboxItem(onPlan.agent, { ...SETTINGS, key: "second" })),
         );
         assert.ok(Result.isSuccess(yield* postInboxItem(taskless, SETTINGS)));
+        // Read by the agent's starter and not by the teammate, so the two read it apart.
+        assert.equal(yield* markInboxItemRead(onPlan.agent.userId, first.success.id), true);
 
-        for (const reader of [onPlan.agent.userId, taskless.userId, teammate, outsider]) {
+        // Chat on for everyone but the taskless agent's starter: an open ask the plan's agent
+        // posts in its channel, a direct message to the teammate they were told of, and the
+        // starter told of the ask itself, which waits once.
+        const owner = onPlan.agent.userId;
+        const workspace = onPlan.workspaceId;
+        for (const each of [owner, teammate, outsider]) {
+          yield* writeAccountPreferences(each, { experiments: { [EXPERIMENT.CHAT]: true } });
+        }
+        const person = (userId: string) =>
+          Effect.map(
+            ensureMember(owner, workspace, { kind: MEMBER_KIND.HUMAN, userId }),
+            Option.getOrThrow,
+          );
+        const ownerMember = yield* person(owner);
+        const teammateMember = yield* person(teammate);
+        const agentMember = Option.getOrThrow(
+          yield* ensureMember(owner, workspace, {
+            kind: MEMBER_KIND.AGENT,
+            agentId: onPlan.agent.agentId,
+          }),
+        );
+        const channel = Option.getOrThrow(yield* ensureTaskChannel(owner, onPlan.agent.taskId));
+        const asked = Result.getOrThrow(
+          yield* postAsk(owner, workspace, {
+            authorMemberId: agentMember.id,
+            to: { channelId: channel.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Which expiry?" }],
+            mentions: [],
+            clientKey: randomUUID(),
+            key: "invite-expiry",
+            ask: {
+              title: "Invite expiry",
+              response: {
+                type: CHAT_ASK.CHOICE,
+                options: [{ label: "Seven days" }, { label: "Five days" }],
+              },
+            },
+          }),
+        );
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(owner, workspace, agentMember.id, teammateMember.id),
+        );
+        const direct = Result.getOrThrow(
+          yield* postMessage(owner, workspace, {
+            authorMemberId: agentMember.id,
+            to: { channelId: dm.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Can I take the invite file too?" }],
+            mentions: [],
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.ok(
+          yield* markNoticed(owner, workspace, teammateMember.id, dm.id, direct.message.seq),
+        );
+        assert.ok(
+          yield* markNoticed(owner, workspace, ownerMember.id, channel.id, asked.message.seq),
+        );
+
+        for (const reader of [owner, taskless.userId, teammate, outsider]) {
           const held = yield* accountInboxPast(reader, INBOX_CURSOR_START);
           const live = yield* liveAnswerOf(reader, held.readAt);
           assert.deepEqual(live, { ...held, cursor: "" });
         }
         const read = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
         assert.equal(read.items.length + (read.planless?.length ?? 0), 3);
+        const unreadOf = (answer: typeof read) =>
+          answer.items.find((item) => item.id === first.success.id)?.unread;
+        assert.equal(unreadOf(read), true, "the teammate has not read it");
+        assert.equal(unreadOf(yield* accountInboxPast(owner, INBOX_CURSOR_START)), false);
+        // Every change in a test lands at one instant, so the asks stand before the notices.
+        assert.deepEqual(
+          read.chat?.map((entry) => [entry.messageId, entry.reason, entry.from]),
+          [
+            [asked.message.id, ACCOUNT_CHAT_REASON.ASK, agentMember.handle],
+            [direct.message.id, ACCOUNT_CHAT_REASON.DIRECT, agentMember.handle],
+          ],
+        );
+        assert.deepEqual(
+          (yield* accountInboxPast(owner, INBOX_CURSOR_START)).chat?.map((entry) => entry.reason),
+          [ACCOUNT_CHAT_REASON.ASK],
+          "a notice of an ask is the ask",
+        );
+        assert.deepEqual((yield* accountInboxPast(outsider, INBOX_CURSOR_START)).chat, []);
       }),
   );
 

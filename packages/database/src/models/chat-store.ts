@@ -1,3 +1,4 @@
+import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import {
   ASK_STATUS,
   type AskStatus,
@@ -20,6 +21,7 @@ import {
   MEMBER_KIND,
   replyWords,
 } from "@luke/features/chat-wire";
+import { EXPERIMENT } from "@luke/settings";
 import {
   and,
   asc,
@@ -41,16 +43,19 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { attachment } from "../schemas/attachment.js";
 import { member, organization, user } from "../schemas/auth.js";
 import { chatChannel, chatMember, chatMessage, chatRead, workspaceChat } from "../schemas/chat.js";
 import { codingAgent } from "../schemas/coding-agent.js";
+import { accountPreference } from "../schemas/preferences.js";
 import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
-import { isWorkspaceMember, taskReachableBy } from "./workspace-store.js";
+import { isWorkspaceMember, taskReachableBy, workspaceReachableBy } from "./workspace-store.js";
 
 /**
  * chat-store.ts -- a workspace's chat as the store keeps it: its members and its channels.
@@ -2631,6 +2636,99 @@ export function waitingOn(userId: string): ChatStoreEffect<readonly WaitingAsk[]
 /** Where each ask `waitingOn` reads stands, the same asks and none of their words. */
 export function waitingStamps(userId: string): ChatStoreEffect<readonly WaitingStamp[]> {
   return findWaitingStamps({ userId });
+}
+
+/** What waits on the account in chat, written for Neon Realtime: its open asks, and the message each of its people's members was told of. */
+export interface ChatWaitingLiveStatements {
+  readonly chatAsks: LiveStatement;
+  readonly chatNotices: LiveStatement;
+}
+
+/**
+ * The condition that the account turned Chat on, as `chatEnabledFor` reads
+ * it: the experiment's key in its stored choices is `true`, and an account
+ * that stored none reads as off.
+ */
+function chatOnFor(userId: string): SQL {
+  return exists(
+    queryBuilder
+      .select({ userId: accountPreference.userId })
+      .from(accountPreference)
+      .where(
+        and(
+          eq(accountPreference.userId, userId),
+          sql`(${accountPreference.experiments} -> ${EXPERIMENT.CHAT}::text) = 'true'::jsonb`,
+        ),
+      ),
+  );
+}
+
+/**
+ * What waits on the account in chat, written for Neon Realtime as
+ * `chat-waiting.ts` reads it through `waitingOn` and `messageAt`, each column
+ * under the key `account-inbox-wire.ts` reads an entry by and the instant it
+ * changed in epoch milliseconds. The asks are `waitingOnAccount`'s; the
+ * notices are the message at the place each of the account's people's
+ * members was told of and has not read past, in a workspace the account is
+ * in, a direct message where its channel is one and a mention otherwise.
+ * Each names its author by handle, or by nothing where none stands, and none
+ * of its words. Both read nothing while Chat is off for the account. Note
+ * that a notice of an ask is left to the reader to say once, since the two
+ * statements are followed apart. None where a statement names a value
+ * Realtime cannot carry.
+ */
+export function chatWaitingLiveStatements(
+  userId: string,
+): Option.Option<ChatWaitingLiveStatements> {
+  const author = alias(chatMember, "chat_author");
+  const own = alias(chatMember, "chat_own");
+  const entryColumns = {
+    messageId: chatMessage.id,
+    seq: chatMessage.seq,
+    workspaceId: chatMessage.organizationId,
+    from: sql<string>`coalesce(${author.handle}, '')`,
+    planId: chatChannel.taskId,
+    touchedSeq: chatMessage.touchedSeq,
+  };
+  const asks = queryBuilder
+    .select(
+      liveSelection(
+        { ...entryColumns, reason: sql<string>`${ACCOUNT_CHAT_REASON.ASK}::text` },
+        { updatedAt: chatMessage.touchedAt },
+      ),
+    )
+    .from(chatMessage)
+    .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
+    .leftJoin(task, eq(task.id, chatChannel.taskId))
+    .leftJoin(author, eq(author.id, chatMessage.authorMemberId))
+    .where(and(waitingOnAccount(userId), chatOnFor(userId)));
+  const notices = queryBuilder
+    .select(
+      liveSelection(
+        {
+          ...entryColumns,
+          reason: sql<string>`case when ${chatChannel.kind} = ${CHANNEL_KIND.DM}::text then ${ACCOUNT_CHAT_REASON.DIRECT}::text else ${ACCOUNT_CHAT_REASON.MENTION}::text end`,
+        },
+        { updatedAt: chatMessage.touchedAt },
+      ),
+    )
+    .from(own)
+    .innerJoin(
+      chatMessage,
+      and(eq(chatMessage.organizationId, own.organizationId), eq(chatMessage.seq, own.noticeSeq)),
+    )
+    .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
+    .leftJoin(author, eq(author.id, chatMessage.authorMemberId))
+    .where(
+      and(
+        eq(own.kind, MEMBER_KIND.HUMAN),
+        eq(own.userId, userId),
+        gt(own.noticeSeq, own.readSeq),
+        workspaceReachableBy(userId, own.organizationId),
+        chatOnFor(userId),
+      ),
+    );
+  return Option.all({ chatAsks: liveStatementOf(asks), chatNotices: liveStatementOf(notices) });
 }
 
 /** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, and the bytes. */

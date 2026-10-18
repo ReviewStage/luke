@@ -66,6 +66,8 @@ const accountInboxLiveEndpoint = /* @__PURE__ */ Effect.fn("web/accountInboxLive
       plans: seal(statements.value.plans),
       automations: seal(statements.value.automations),
       failedRuns: seal(statements.value.failedRuns),
+      chatAsks: seal(statements.value.chatAsks),
+      chatNotices: seal(statements.value.chatNotices),
     }).pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries });
   },

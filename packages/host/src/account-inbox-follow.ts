@@ -88,12 +88,14 @@ interface PartRows {
   plans?: AccountInboxLiveRows["plans"];
   automations?: AccountInboxLiveRows["automations"];
   failedRuns?: AccountInboxLiveRows["failedRuns"];
+  chatAsks?: AccountInboxLiveRows["chatAsks"];
+  chatNotices?: AccountInboxLiveRows["chatNotices"];
 }
 
 function whole(rows: PartRows): Option.Option<AccountInboxLiveRows> {
-  const { items, planless, plans, automations, failedRuns } = rows;
-  return items && planless && plans && automations && failedRuns
-    ? Option.some({ items, planless, plans, automations, failedRuns })
+  const { items, planless, plans, automations, failedRuns, chatAsks, chatNotices } = rows;
+  return items && planless && plans && automations && failedRuns && chatAsks && chatNotices
+    ? Option.some({ items, planless, plans, automations, failedRuns, chatAsks, chatNotices })
     : Option.none();
 }
 
@@ -169,6 +171,16 @@ function liveAnswers(
               rows.failedRuns = read;
             },
           ),
+          chatAsks: follow(first.queries.chatAsks, accountInboxLiveRowSchemas.chatAsks, (read) => {
+            rows.chatAsks = read;
+          }),
+          chatNotices: follow(
+            first.queries.chatNotices,
+            accountInboxLiveRowSchemas.chatNotices,
+            (read) => {
+              rows.chatNotices = read;
+            },
+          ),
         })),
         (standing) =>
           Effect.sync(() => {
@@ -186,7 +198,15 @@ function liveAnswers(
         }
         const renewed = next;
         yield* Effect.forEach(
-          ["items", "planless", "plans", "automations", "failedRuns"] as const,
+          [
+            "items",
+            "planless",
+            "plans",
+            "automations",
+            "failedRuns",
+            "chatAsks",
+            "chatNotices",
+          ] as const,
           (part) =>
             Effect.tryPromise({
               try: () => subscriptions[part].renew(renewed.queries[part]),

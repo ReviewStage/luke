@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
+import {
+  ACCOUNT_CHAT_REASON,
+  type AccountChatEntry,
+  type AccountInboxEntry,
+} from "@luke/features/account-inbox-wire";
 import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
@@ -567,6 +571,8 @@ const SEALED: AccountInboxLiveAnswer = {
     plans: sealed("plans"),
     automations: sealed("automations"),
     failedRuns: sealed("failedRuns"),
+    chatAsks: sealed("chatAsks"),
+    chatNotices: sealed("chatNotices"),
   },
 };
 
@@ -995,6 +1001,24 @@ function failedRun(id: string, daysAgo: number) {
   };
 }
 
+/** One message waiting in chat, as a chat part's row delivers it. */
+function chatEntry(
+  messageId: string,
+  reason: AccountChatEntry["reason"],
+  updatedAt: number,
+): AccountChatEntry {
+  return {
+    messageId,
+    seq: 7,
+    workspaceId: "workspace-1",
+    reason,
+    from: "agent-1",
+    planId: null,
+    touchedSeq: 7,
+    updatedAt,
+  };
+}
+
 it.effect(
   "the account inbox is followed over Realtime where the service seals it: every part subscribed at the address it names, and once each part has its rows the answer published whole, in the held read's order, with the last week's failed runs, and never a sealed statement",
   () =>
@@ -1006,6 +1030,8 @@ it.effect(
       assert.deepEqual(realtime.opened, [SEALED.url]);
       assert.deepEqual(realtime.subscribed(), [
         "capability-automations",
+        "capability-chatAsks",
+        "capability-chatNotices",
         "capability-failedRuns",
         "capability-items",
         "capability-planless",
@@ -1017,6 +1043,19 @@ it.effect(
       realtime.deliver("planless", []);
       realtime.deliver("plans", [{ planId: TASK_ID, items: 2, updatedAt: NEWER.updatedAt }]);
       realtime.deliver("automations", []);
+      // A notice of an ask is the ask already, so only the other notice joins it.
+      const ask = chatEntry(
+        "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e7f",
+        ACCOUNT_CHAT_REASON.ASK,
+        NOW - 2,
+      );
+      const direct = chatEntry(
+        "5d6e7f8a-9b0c-4d1e-8f2a-3b4c5d6e7f8a",
+        ACCOUNT_CHAT_REASON.DIRECT,
+        NOW - 1,
+      );
+      realtime.deliver("chatAsks", [ask]);
+      realtime.deliver("chatNotices", [{ ...ask, reason: ACCOUNT_CHAT_REASON.MENTION }, direct]);
       yield* settled;
       // Nothing is published before every part has its first rows.
       assert.deepEqual(inboxes(), []);
@@ -1033,6 +1072,7 @@ it.effect(
           planless: [],
           automations: [],
           failedRuns: [failedRun(recent, 1)],
+          chat: [direct, ask],
           cursor: "",
           readAt: NOW,
         },
@@ -1058,6 +1098,8 @@ it.effect(
       yield* settled;
       assert.deepEqual(realtime.renewed.toSorted(), [
         "capability-automations",
+        "capability-chatAsks",
+        "capability-chatNotices",
         "capability-failedRuns",
         "capability-items",
         "capability-planless",

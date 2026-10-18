@@ -111,6 +111,48 @@
             "expiresAt"
           ],
           "additionalProperties": false
+        },
+        "chatAsks": {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "queryFingerprint": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "capability",
+            "queryFingerprint",
+            "expiresAt"
+          ],
+          "additionalProperties": false
+        },
+        "chatNotices": {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "queryFingerprint": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "capability",
+            "queryFingerprint",
+            "expiresAt"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -118,7 +160,9 @@
         "planless",
         "plans",
         "automations",
-        "failedRuns"
+        "failedRuns",
+        "chatAsks",
+        "chatNotices"
       ],
       "additionalProperties": false
     }

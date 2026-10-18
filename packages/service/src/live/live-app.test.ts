@@ -106,6 +106,8 @@ it.effect(
       const parts = Object.entries(answer.queries);
       assert.deepEqual(parts.map(([part]) => part).toSorted(), [
         "automations",
+        "chatAsks",
+        "chatNotices",
         "failedRuns",
         "items",
         "planless",
