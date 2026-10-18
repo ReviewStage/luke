@@ -20,6 +20,12 @@ import {
  * identifier is its workspace's prefix and its number, as `ACME-42`: the
  * prefix is read off the workspace's name rather than kept, so it follows a
  * rename.
+ *
+ * A filter narrows what is drawn before it is grouped: to a set of
+ * priorities, to the issues one member filed, and past settled issues gone
+ * quiet, a Done or Canceled issue last changed over a week before the
+ * moment its caller names, which a filter may leave out while a recent one
+ * still stands.
  */
 
 /** The prefix an identifier falls back on where the workspace's name holds no letter or digit. */
@@ -27,6 +33,12 @@ const FALLBACK_PREFIX = "ISSUE";
 
 /** The most characters a prefix spells. */
 const MAX_PREFIX_CHARS = 4;
+
+/** How long a settled issue stays in sight after its last change while settled issues gone quiet are left out: a week. */
+export const SETTLED_QUIET_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** The statuses an issue is settled in: done with, one way or the other. */
+const SETTLED: ReadonlySet<IssueStatus> = new Set([ISSUE_STATUS.DONE, ISSUE_STATUS.CANCELED]);
 
 /** The order a board's columns stand in: the order work moves through the statuses, the settled last. */
 const BOARD_ORDER: readonly IssueStatus[] = [
@@ -59,6 +71,81 @@ export const ISSUE_PRIORITY_WORDS = {
 export interface IssueGroup {
   readonly status: IssueStatus;
   readonly issues: readonly Issue[];
+}
+
+/**
+ * What a window leaves out of a workspace's issues: the priorities it
+ * shows, every one where none is named; the member whose issues alone it
+ * shows, by account id, everyone's where none is; and whether settled
+ * issues gone quiet show.
+ */
+export interface IssueFilter {
+  readonly priorities?: readonly IssuePriority[];
+  readonly createdBy?: string;
+  readonly showCompleted: boolean;
+}
+
+/** The filter that leaves nothing out, as a workspace's issues first draw. */
+export const NO_ISSUE_FILTER: IssueFilter = { showCompleted: true };
+
+/** Whether a filter may leave any issue out. */
+export function issueFilterOn(filter: IssueFilter): boolean {
+  return filter.priorities !== undefined || filter.createdBy !== undefined || !filter.showCompleted;
+}
+
+/**
+ * The filter with `priority` shown or no longer shown: from every priority
+ * it narrows to that one, and narrowed it adds or takes it away; taking the
+ * last away, or adding the last, shows every priority again.
+ */
+export function issueFilterToggledPriority(
+  filter: IssueFilter,
+  priority: IssuePriority,
+): IssueFilter {
+  const shown = filter.priorities ?? [];
+  const next = shown.includes(priority)
+    ? shown.filter((each) => each !== priority)
+    : [...shown, priority];
+  const every = Object.values(ISSUE_PRIORITY).every((each) => next.includes(each));
+  const rest = issueFilterAnyPriority(filter);
+  return next.length === 0 || every ? rest : { ...rest, priorities: next };
+}
+
+/** The filter showing every priority, the rest of it as it stands. */
+export function issueFilterAnyPriority(filter: IssueFilter): IssueFilter {
+  const { createdBy, showCompleted } = filter;
+  return createdBy === undefined ? { showCompleted } : { createdBy, showCompleted };
+}
+
+/** The filter showing one member's issues, by account id, or everyone's for undefined, the rest of it as it stands. */
+export function issueFilterCreatedBy(
+  filter: IssueFilter,
+  createdBy: string | undefined,
+): IssueFilter {
+  const { priorities, showCompleted } = filter;
+  const rest = priorities === undefined ? { showCompleted } : { priorities, showCompleted };
+  return createdBy === undefined ? rest : { ...rest, createdBy };
+}
+
+/** Whether an issue is settled and last changed over a week before `now`. */
+function settledQuiet(issue: Issue, now: number): boolean {
+  return SETTLED.has(issue.status) && now - issue.updatedAt > SETTLED_QUIET_MS;
+}
+
+/** The issues the filter keeps as of `now`, in the order given. */
+export function filteredIssues(
+  issues: readonly Issue[],
+  filter: IssueFilter,
+  now: number,
+): readonly Issue[] {
+  if (!issueFilterOn(filter)) return issues;
+  const { priorities, createdBy, showCompleted } = filter;
+  return issues.filter(
+    (issue) =>
+      (priorities === undefined || priorities.includes(issue.priority)) &&
+      (createdBy === undefined || issue.creator?.userId === createdBy) &&
+      (showCompleted || !settledQuiet(issue, now)),
+  );
 }
 
 /** The most pressing first, and of one priority the most recently changed first. */

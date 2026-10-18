@@ -1,12 +1,24 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { issueColumns, issueGroups, issueIdentifier } from "./issue-list-model.js";
+import {
+  filteredIssues,
+  issueColumns,
+  issueFilterAnyPriority,
+  issueFilterCreatedBy,
+  issueFilterOn,
+  issueFilterToggledPriority,
+  issueGroups,
+  issueIdentifier,
+  NO_ISSUE_FILTER,
+} from "./issue-list-model.js";
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "./issue-wire.js";
 
 /**
  * A workspace's issues as a window draws them: grouped by status with the
  * work under way first, the most pressing first inside a status, and each
- * named by its workspace's prefix and number. Synthetic ids and words.
+ * named by its workspace's prefix and number, and a filter leaving out
+ * priorities, other members' issues, and settled issues gone quiet as of a
+ * fixed moment. Synthetic ids and words.
  */
 
 function issue(number: number, extra: Partial<Issue> = {}): Issue {
@@ -84,4 +96,115 @@ test("a board stands a column for every status in the order work moves through t
       [ISSUE_STATUS.CANCELED, []],
     ],
   );
+});
+
+const DAY = 24 * 60 * 60 * 1000;
+
+/** The moment a filter is applied at. */
+const NOW = Date.UTC(2026, 9, 14, 12);
+
+/** The numbers of the issues kept, in the order given. */
+function numbers(issues: readonly Issue[]): number[] {
+  return issues.map((one) => one.number);
+}
+
+test("the filter a workspace starts on leaves nothing out, a quiet settled issue among them", () => {
+  const issues = [
+    issue(1, { status: ISSUE_STATUS.DONE, updatedAt: NOW - 30 * DAY }),
+    issue(2, { priority: ISSUE_PRIORITY.URGENT }),
+  ];
+
+  assert.equal(issueFilterOn(NO_ISSUE_FILTER), false);
+  assert.deepEqual(numbers(filteredIssues(issues, NO_ISSUE_FILTER, NOW)), [1, 2]);
+});
+
+test("a priority chosen from every priority narrows to it, another adds to it, and taking the last away shows every one again", () => {
+  const issues = [
+    issue(1, { priority: ISSUE_PRIORITY.URGENT }),
+    issue(2, { priority: ISSUE_PRIORITY.HIGH }),
+    issue(3, { priority: ISSUE_PRIORITY.NONE }),
+  ];
+  const urgent = issueFilterToggledPriority(NO_ISSUE_FILTER, ISSUE_PRIORITY.URGENT);
+  const urgentOrUnweighed = issueFilterToggledPriority(urgent, ISSUE_PRIORITY.NONE);
+  const unweighed = issueFilterToggledPriority(urgentOrUnweighed, ISSUE_PRIORITY.URGENT);
+  const none = issueFilterToggledPriority(unweighed, ISSUE_PRIORITY.NONE);
+
+  assert.deepEqual(numbers(filteredIssues(issues, urgent, NOW)), [1]);
+  assert.deepEqual(numbers(filteredIssues(issues, urgentOrUnweighed, NOW)), [1, 3]);
+  assert.deepEqual(numbers(filteredIssues(issues, unweighed, NOW)), [3]);
+  assert.equal(issueFilterOn(none), false, "no priority left chosen shows every one");
+  assert.deepEqual(numbers(filteredIssues(issues, none, NOW)), [1, 2, 3]);
+});
+
+test("choosing every priority one by one is the same as choosing none", () => {
+  const every = [
+    ISSUE_PRIORITY.URGENT,
+    ISSUE_PRIORITY.HIGH,
+    ISSUE_PRIORITY.MEDIUM,
+    ISSUE_PRIORITY.LOW,
+    ISSUE_PRIORITY.NONE,
+  ].reduce(issueFilterToggledPriority, NO_ISSUE_FILTER);
+
+  assert.equal(issueFilterOn(every), false);
+});
+
+test("a member's filter keeps the issues they filed and leaves out another's and one whose creator is gone", () => {
+  const issues = [
+    issue(1, { creator: { userId: "user-ada", name: "Ada" } }),
+    issue(2, { creator: { userId: "user-grace", name: "Grace" } }),
+    issue(3, { creator: null }),
+  ];
+
+  assert.deepEqual(
+    numbers(filteredIssues(issues, { ...NO_ISSUE_FILTER, createdBy: "user-ada" }, NOW)),
+    [1],
+  );
+});
+
+test("with completed issues hidden a settled issue quiet for over a week leaves while a recent one, and open work however old, stands", () => {
+  const issues = [
+    issue(1, { status: ISSUE_STATUS.DONE, updatedAt: NOW - 8 * DAY }),
+    issue(2, { status: ISSUE_STATUS.CANCELED, updatedAt: NOW - 8 * DAY }),
+    issue(3, { status: ISSUE_STATUS.DONE, updatedAt: NOW - 6 * DAY }),
+    issue(4, { status: ISSUE_STATUS.CANCELED, updatedAt: NOW - 7 * DAY }),
+    issue(5, { status: ISSUE_STATUS.BACKLOG, updatedAt: NOW - 90 * DAY }),
+  ];
+
+  assert.deepEqual(numbers(filteredIssues(issues, { showCompleted: false }, NOW)), [3, 4, 5]);
+});
+
+test("a priority and a member's filter together keep only what both keep", () => {
+  const ada = { userId: "user-ada", name: "Ada" };
+  const issues = [
+    issue(1, { priority: ISSUE_PRIORITY.HIGH, creator: ada }),
+    issue(2, { priority: ISSUE_PRIORITY.LOW, creator: ada }),
+    issue(3, { priority: ISSUE_PRIORITY.HIGH, creator: null }),
+  ];
+  const filter = issueFilterToggledPriority(
+    { ...NO_ISSUE_FILTER, createdBy: ada.userId },
+    ISSUE_PRIORITY.HIGH,
+  );
+
+  assert.deepEqual(numbers(filteredIssues(issues, filter, NOW)), [1]);
+});
+
+test("choosing a creator or every priority changes that alone, the rest of the filter standing", () => {
+  const narrowed = issueFilterToggledPriority(
+    { createdBy: "user-ada", showCompleted: false },
+    ISSUE_PRIORITY.HIGH,
+  );
+
+  assert.deepEqual(issueFilterCreatedBy(narrowed, undefined), {
+    priorities: [ISSUE_PRIORITY.HIGH],
+    showCompleted: false,
+  });
+  assert.deepEqual(issueFilterCreatedBy(narrowed, "user-grace"), {
+    priorities: [ISSUE_PRIORITY.HIGH],
+    showCompleted: false,
+    createdBy: "user-grace",
+  });
+  assert.deepEqual(issueFilterAnyPriority(narrowed), {
+    createdBy: "user-ada",
+    showCompleted: false,
+  });
 });
