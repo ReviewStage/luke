@@ -42,8 +42,8 @@ const WORKING_LINE = "Working…";
 /** What a finished turn's last line says before how long it worked. */
 const WORKED_WORDS = "Worked for ";
 
-/** How a working line and the line a finished turn ends on are both set: the transcript's quiet status type, in the muted colour. */
-export const STATUS_LINE_CLASS = "text-[12.5px] text-muted-foreground select-text";
+/** How a working line and the line a finished turn ends on are both set: the transcript's quiet status type, in the muted colour (`.status-line`, tasks.css). */
+export const STATUS_LINE_CLASS = "status-line";
 
 /** What separates how long a finished turn worked from when it ended. */
 export const WORKED_SEPARATOR = " · ";
@@ -84,20 +84,16 @@ export function useWorkingNow(): number | undefined {
  */
 export function WorkingTime({
   startedAt,
-  className = "ml-1.5",
+  className = "working-time-after",
 }: {
   startedAt: number;
-  /** Where it stands off the word before it: a word's breadth after a working word, unless said otherwise. */
+  /** Where it stands off the word before it: a word's breadth after a working word (`.working-time-after`), unless said otherwise. */
   className?: string;
 }): ReactNode {
   const now = useWorkingNow();
   if (now === undefined) return null;
   return (
-    <span
-      className={cn("text-muted-foreground tabular-nums", className)}
-      role="timer"
-      aria-live="off"
-    >
+    <span className={cn("working-time", className)} role="timer" aria-live="off">
       {workingTime(now - startedAt)}
     </span>
   );
@@ -134,7 +130,7 @@ export function WorkedFor({
       label={text}
       card={<TurnCard startedAt={startedAt} endedAt={endedAt} record={record} models={models} />}
     >
-      <p className={cn(STATUS_LINE_CLASS, "mt-2 mb-0 w-fit tabular-nums")} data-worked="">
+      <p className={STATUS_LINE_CLASS} data-worked="">
         <span data-worked-length="">
           {WORKED_WORDS}
           {workingTime(endedAt - startedAt)}
@@ -157,7 +153,7 @@ export function WorkingLine({
 }): ReactNode {
   // Note that only its top margin is cleared, because the conversation's gap below it is a bottom margin a cleared one would override, leaving what is said next touching it.
   return (
-    <p className={cn(STATUS_LINE_CLASS, "mt-0 last:mb-0")} data-working="" aria-live="polite">
+    <p className={STATUS_LINE_CLASS} data-working="" aria-live="polite">
       <Shimmer>{words}</Shimmer>
       {startedAt === undefined ? null : <WorkingTime startedAt={startedAt} />}
     </p>

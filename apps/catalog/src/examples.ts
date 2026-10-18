@@ -5,6 +5,7 @@ import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { AVATARS_EXAMPLE } from "./examples/avatars";
 import { BADGES_EXAMPLE } from "./examples/badges";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
+import { CARDS_EXAMPLE } from "./examples/cards";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
@@ -32,6 +33,7 @@ import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
+import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
@@ -61,6 +63,7 @@ export const EXAMPLES: readonly Example[] = [
   AVATARS_EXAMPLE,
   BADGES_EXAMPLE,
   BUTTONS_EXAMPLE,
+  CARDS_EXAMPLE,
   CHIPS_EXAMPLE,
   COLLECTION_PAGE_EXAMPLE,
   COMBOBOX_EXAMPLE,
@@ -88,6 +91,7 @@ export const EXAMPLES: readonly Example[] = [
   SETTINGS_PAGE_EXAMPLE,
   SETTINGS_SECTION_EXAMPLE,
   SPINNERS_EXAMPLE,
+  SPLIT_BUTTONS_EXAMPLE,
   SKELETONS_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,
   AUTH_PAGE_EXAMPLE,
