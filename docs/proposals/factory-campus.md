@@ -95,32 +95,80 @@ to merge"), and the Inbox badge counts Inbox items only.
 
 ## A town that grows and shrinks
 
-The header's Tasks switch shows the town with 3, 7, 16 or 30 tasks (the larger
-ones add seeded, made-up tasks). Plots are filled in start order, oldest at
-the back. The first eight are the hand-made master plan; past them the town
-adds a street and a row of four plots at a time, two either side of the
-avenue, each taking one of the smaller buildings in turn. The ground ends one
-plot past the newest task (where "+ New task" waits), so a small town is short
-and a big one long, and nothing about the layout is stored. Trees and lamps
-stand only where plots don't. The gate's lanes and the shipped lot stack their
-containers in layers once a row is full. In a town past twelve tasks, only
-buildings where something is happening keep a name label; the rest answer a
-hover.
+The header's Tasks switch shows the town with 3, 7, 16, 30, 100 or 300 tasks
+(the larger ones add seeded, made-up tasks). Plots are filled in start order,
+oldest at the back. The first eight are the hand-made master plan. Past them
+the town grows in pairs of plot columns with an avenue between each pair, and
+in rows down the page, taking as many pairs as keep it about as deep as it is
+wide, so a big town is a square rather than a long strip: 30 tasks make a town
+about 43 × 39 tiles, 300 tasks about 108 × 110. The ground ends one plot past
+the newest task (where "+ New task" waits), so a small town is short. Nothing
+about the layout is stored; it is worked out from the task count on every
+draw. Adding a pair of columns does reflow the newer plots, so a real view
+would want to add columns rarely, or only when the Factory isn't open.
+
+Trees and lamps stand only where plots don't. The gate's lanes and the shipped
+lot stack their containers in layers once a row is full.
+
+Names are placed most important first: the open task, then a question, a
+failed agent, the call, an agent running. A name that would overlap one
+already on screen is left off and answers a hover instead, and in a town past
+twelve tasks a quiet building gets no name at all. Names are refitted when the
+zoom settles.
+
+## Keeping it fast
+
+What grows is the number of tasks in the plan list, not the size of the
+codebase: the Factory draws tasks, their agents and their pull requests, and
+reads nothing of the code. Archived tasks are already left out of that list.
+The plan list is the one the sidebar already holds, so the overview fetches
+nothing; an opened task fetches its own agent list and pull requests, once.
+
+Measured in headless Chromium with software rendering (a Mac with a GPU does
+better), the cost of a full redraw and the worst frame while the scene runs:
+
+| Tasks | Before: elements / redraw / worst frame | Now: elements / redraw / worst frame |
+| --- | --- | --- |
+| 7 | 975 / 15 ms / 83 ms | 757 / 9 ms / 17 ms |
+| 30 | 3,034 / 38 ms / 267 ms | 2,266 / 29 ms / 50 ms |
+| 100 | 9,288 / 116 ms / 783 ms | 4,218 / 35 ms / 17 ms |
+| 300 | 28,708 / 305 ms / 2,067 ms | 12,795 / 109 ms / 50 ms |
+
+What the mockup now does:
+
+- **Interiors only when opened.** Every building used to carry its hidden
+  interior. Now only the open one does; it is drawn the moment the roof lifts.
+- **Level of detail.** When a tile is under 13 pixels across, a face's windows
+  become one lit band, nothing glows (a blur per window was the dearest thing
+  on the page), shadows are dropped and cranes stop turning.
+- **Culling.** In a town past twenty tasks, zoomed in, only what is on screen
+  and a margin round it is drawn. Panning or zooming past the margin redraws
+  when the camera settles.
+- **One layout per draw.** The plot order and container positions are worked
+  out once per draw and shared, rather than once per tree or per building.
+
+For a real view, beyond this:
+
+- **Redraw what changed.** Each event here redraws the whole scene (about
+  110 ms at 300 tasks). The app would redraw only the buildings an event
+  touched, keyed by task id, since the plan list already arrives as a diff.
+- **A back lot.** Tasks with nothing open and nothing recent could fold into
+  a compact back lot, so the town's size follows active work rather than
+  history.
+- **Canvas or WebGL past a few hundred.** SVG keeps every building a real
+  element for hover cards and the keyboard. Much past 300 tasks, drawing the
+  town on a canvas and keeping invisible hit targets (or a list) for access
+  would be the next step.
 
 ## Inside a building
 
-Opening a task lifts its roof onto one of two interiors, switched in the
-header. Both draw the task's whole agent list, with no cap.
-
-- **Desks:** a desk per agent with a screen that says how it stands (lines
-  scrolling while it runs, "!" when it failed, a tick when its turn ended), a
-  "?" over one with an open question, and the task's pull requests pinned to
-  the back wall in their checks' colours. Only agents still at it are named
-  over their desks.
-- **Line:** an assembly line through the hall, a station per agent with a
-  lamp in its state's colour and a belt that moves while that agent runs. The
-  task's open pull requests wait packed at the end of the line, by the door
-  they leave through for the gate.
+Opening a task lifts its roof onto an assembly line through the hall: a
+station per agent in the task's whole agent list, with no cap. Each station's
+lamp is in its agent's state's colour and its belt moves while that agent
+runs, and a "?" floats over one with an open question. Only stations whose
+agent is still at it are named, so a full hall stays readable. The task's open
+pull requests wait packed at the end of the line, by the door they leave
+through for the gate.
 
 ## The chosen styles
 

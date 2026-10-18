@@ -318,6 +318,8 @@ svg.glyph { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: curre
 .new-plot:focus-visible .plot-dash { stroke: var(--focus-ring); stroke-width: 2; }
 .route { fill: none; stroke-width: 1.6; stroke-dasharray: 4 3; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .win-lit { filter: url(#glow); }
+/* Far out, nothing glows: a blur per window is the dearest thing on the page. */
+.scene[data-lod="far"] [filter], .scene[data-lod="far"] .win-lit { filter: none; }
 :root[data-theme="light"] .win-lit { filter: none; }
 
 /* Loops, only while something is happening. Each answers --loop-motion. */
@@ -545,11 +547,8 @@ svg.working-mark { display: block; width: 12px; height: 12px; flex: none; fill: 
     <button type="button" data-town="sample" aria-pressed="true">7</button>
     <button type="button" data-town="many">16</button>
     <button type="button" data-town="lots">30</button>
-  </div>
-  <span class="sim-label">Inside</span>
-  <div class="segmented" id="inside-style">
-    <button type="button" data-inside="desks" aria-pressed="true">Desks</button>
-    <button type="button" data-inside="line">Line</button>
+    <button type="button" data-town="huge">100</button>
+    <button type="button" data-town="giant">300</button>
   </div>
   <span class="sim-label">Events <span id="sim-step"></span></span>
   <div class="segmented">
@@ -800,6 +799,8 @@ const TOWN = {
   sample: () => SAMPLE_TASKS,
   many: () => [...SAMPLE_TASKS, ...moreTasks(9)],
   lots: () => [...SAMPLE_TASKS, ...moreTasks(23)],
+  huge: () => [...SAMPLE_TASKS, ...moreTasks(93)],
+  giant: () => [...SAMPLE_TASKS, ...moreTasks(293)],
 };
 let townSize = "sample";
 const TASKS = JSON.parse(JSON.stringify(TOWN[townSize]()));
@@ -855,14 +856,16 @@ function taskTone(t) {
 const N = 20;
 /* How deep the town runs: it grows a row of plots at a time as tasks are added, and draws in as they go. */
 let NY = 20;
+/* And how wide: past the hand-made plan it adds columns as well as rows, so a big town is a square, not a strip. */
+let NX = 20;
 const DX = 22, DY = 11, DZ = 25;
 let rot = 0;
 const near = (a, b) => Math.abs(a - b) < 1e-6;
 function R(x, y) {
   switch (rot) {
     case 1: return [NY - y, x];
-    case 2: return [N - x, NY - y];
-    case 3: return [y, N - x];
+    case 2: return [NX - x, NY - y];
+    case 3: return [y, NX - x];
     default: return [x, y];
   }
 }
@@ -942,6 +945,15 @@ function boxSVG(b, mat, opts = {}) {
 function windowsSVG(t, win) {
   const { x0, x1, y0, y1, z } = t;
   const hTop = Math.min(t.h00, t.h10, t.h11, t.h01);
+  if (lod === "far") {
+    /* Far out, a face's windows are one band, lit as much as its windows would be. */
+    const za = z + 0.18, zb = z + hTop - 0.14;
+    if (zb <= za) return "";
+    const fill = win.lit ? win.lit : win.band ? shade(C().glass, FX) : C().unlit;
+    const op = win.lit ? Math.min(0.85, (win.ratio ?? 0.8) * (win.opacity ?? 0.9)) : 1;
+    return poly([P(x1, y0 + 0.12, za), P(x1, y1 - 0.12, za), P(x1, y1 - 0.12, zb), P(x1, y0 + 0.12, zb)], fill, `opacity="${op.toFixed(2)}"`) +
+      poly([P(x0 + 0.12, y1, za), P(x1 - 0.12, y1, za), P(x1 - 0.12, y1, zb), P(x0 + 0.12, y1, zb)], fill, `opacity="${op.toFixed(2)}"`);
+  }
   const rows = win.rows || Math.max(1, Math.floor((hTop - 0.25) / 0.55));
   const per = win.per || 2;
   let s = "";
@@ -1095,9 +1107,18 @@ const SLOTS = [
     ],
     roof: [13.9, 18.4, 1.55], stack: null, crane: { at: [15.95, 17.6], h: 3.0, jib: 2.1 } },
 ];
-/* Past the hand-made eight, the town grows rows of four plots, two either side of the avenue, each taking one of the smaller buildings in turn. */
-const ROW0 = 20.6, ROW_STEP = 6.0, CELL_W = 4.4, CELL_D = 5.4;
-const CELL_X = [0.25, 4.55, 11.15, 15.45];
+/* Past the hand-made eight, the town grows in pairs of plot columns, an
+   avenue between each pair, and rows of them down the page. It takes as many
+   pairs as keep the town about as deep as it is wide, so it grows as a square
+   rather than a long strip; each plot takes one of the smaller buildings in
+   turn. Worked out from the task count on every draw; nothing is stored. */
+const ROW0 = 20.6, ROW_STEP = 6.0, CELL_W = 4.4, CELL_D = 5.4, PAIR_STEP = 10.9;
+const CELL_X = [0.25, 4.55];
+let PAIRS = 2;
+function choosePairs(extra) {
+  for (let pairs = 2; ; pairs++) if (ROW0 + Math.ceil(extra / (2 * pairs)) * ROW_STEP <= pairs * PAIR_STEP + 8) return pairs;
+}
+const avenues = () => [9, ...Array.from({ length: Math.max(0, PAIRS - 2) }, (_, k) => (k + 2) * PAIR_STEP - 1.9)];
 const EXTRA = [0, 1, 4, 6, 7];
 function shifted(slot, dx, dy) {
   const mv = (o) => o && { ...o, x: o.x + dx, y: o.y + dy };
@@ -1114,21 +1135,31 @@ function shifted(slot, dx, dy) {
 const slotCache = new Map();
 function slotAt(i) {
   if (i < SLOTS.length) return SLOTS[i];
-  if (slotCache.has(i)) return slotCache.get(i);
+  const key = `${PAIRS}:${i}`;
+  if (slotCache.has(key)) return slotCache.get(key);
   const k = i - SLOTS.length;
+  const cols = PAIRS * 2;
+  const col = k % cols;
   const base = SLOTS[EXTRA[k % EXTRA.length]];
-  const x = CELL_X[k % 4] + (CELL_W - base.plot[2]) / 2;
-  const y = ROW0 + Math.floor(k / 4) * ROW_STEP + (CELL_D - base.plot[3]) / 2;
+  const x = Math.floor(col / 2) * PAIR_STEP + CELL_X[col % 2] + (CELL_W - base.plot[2]) / 2;
+  const y = ROW0 + Math.floor(k / cols) * ROW_STEP + (CELL_D - base.plot[3]) / 2;
   const slot = shifted(base, x - base.plot[0], y - base.plot[1]);
-  slotCache.set(i, slot);
+  slotCache.set(key, slot);
   return slot;
 }
-const extraRows = () => Math.max(0, Math.ceil((TASKS.length + 1 - SLOTS.length) / 4));
+const extraRows = () => Math.max(0, Math.ceil((TASKS.length + 1 - SLOTS.length) / (PAIRS * 2)));
+/* Within one draw, the layout is worked out once and shared. */
+let memo = null;
 function placed() {
-  return TASKS.slice().sort((a, b) => a.createdAt - b.createdAt).map((task, i) => ({ task, slot: slotAt(i) }));
+  if (memo?.placed) return memo.placed;
+  const list = TASKS.slice().sort((a, b) => a.createdAt - b.createdAt).map((task, i) => ({ task, slot: slotAt(i) }));
+  if (memo) memo.placed = list;
+  return list;
 }
 /* The town's depth: as far as its last plot (and the next, empty one), never shallower than the gate and the lot. */
 function measureTown() {
+  PAIRS = choosePairs(Math.max(0, TASKS.length + 1 - SLOTS.length));
+  NX = extraRows() ? Math.max(N, PAIRS * PAIR_STEP - 1.1) : N;
   let bottom = LOT.y + LOT.d + 0.6;
   for (let i = 0; i <= TASKS.length; i++) { const pl = slotAt(i).plot; bottom = Math.max(bottom, pl[1] + pl[3] + 0.6); }
   NY = Math.max(13.4, Math.ceil(bottom * 2) / 2);
@@ -1156,7 +1187,9 @@ function sizeOf(p) {
   return { w: p ? Math.max(CONTAINER_MIN, linesOf(p) / CONTAINER_PER_TILE) : 0.6, d: CONTAINER_W, h: CONTAINER_H };
 }
 function cratePositions() {
+  if (memo?.crates) return memo.crates;
   const list = [];
+  if (memo) memo.crates = list;
   const push = (pr, x, y, size, where, extra = {}) => list.push({ pr, x, y, ...size, e: Math.max(size.w, size.d), where, z: 0, ...extra });
   /* A lane holds a row of containers, then stacks the next on top, as a port does. */
   for (const lane of LANES) {
@@ -1407,11 +1440,13 @@ function litFor(task) {
 
 function renderGround() {
   const c = C();
-  let s = boxSVG({ x: 0, y: 0, w: N, d: NY, z: -0.6, h: 0.6 }, "slab", { topFill: c.grass });
+  let s = boxSVG({ x: 0, y: 0, w: N, d: Math.min(NY, 20), z: -0.6, h: 0.6 }, "slab", { topFill: c.grass });
+  if (NY > 20) s += boxSVG({ x: 0, y: 20, w: NX, d: NY - 20, z: -0.6, h: 0.6 }, "slab", { topFill: c.grass });
   s += boxSVG({ x: N, y: LOT.y - 0.3, w: LOT.x + LOT.w - N + 0.3, d: LOT.d + 0.6, z: -0.6, h: 0.6 }, "slab", { topFill: c.lot });
   s += flat(0, 9, N, 2, c.road, 0.01) + flat(9, 0, 2, NY, c.road, 0.01) + flat(N, 9, LOT.x - N + 0.2, 2, c.road, 0.01);
   /* A street before each row the town has grown. */
-  for (let r = 0; r < extraRows(); r++) s += flat(0, ROW0 + r * ROW_STEP - 0.75, N, 0.6, c.road, 0.01);
+  for (let r = 0; r < extraRows(); r++) s += flat(0, ROW0 + r * ROW_STEP - 0.75, NX, 0.6, c.road, 0.01);
+  for (const ax of avenues().slice(1)) if (NY > 20) s += flat(ax, 20, 2, NY - 20, c.road, 0.01);
   for (let i = 0.4; i < NY; i += 1.2) {
     if (i > 8.6 && i < 11.4) continue;
     if (i < N) s += flat(i, 9.96, 0.6, 0.08, c.line, 0.02);
@@ -1432,6 +1467,7 @@ function renderPlots() {
   let s = "";
   for (const { task, slot } of placed()) {
     const [x, y, w, d] = slot.plot;
+    if (task.id !== openId && !inView(x + w / 2, y + d / 2)) continue;
     const edge = [PR_(x, y, 0.1), PR_(x + w, y, 0.1), PR_(x + w, y + d, 0.1), PR_(x, y + d, 0.1)];
     s += `<g class="plot" data-plot="${task.id}">${boxSVG({ x, y, w, d, z: 0, h: 0.1 }, "pad", { topFill: c.pad })}<polygon class="plot-edge" points="${pts(edge)}"/></g>`;
     /* Light spilling from a building where something is happening. */
@@ -1463,14 +1499,17 @@ function renderPlots() {
 
 function renderShadows() {
   let s = "";
+  /* Far out, shadows are a pixel or two: the ground's own shade stands in for them. */
+  if (lod === "far") { $("layer-shadows").innerHTML = ""; return; }
   for (const { task, slot } of placed()) {
+    if (task.id !== openId && !inView(slot.plot[0] + slot.plot[2] / 2, slot.plot[1] + slot.plot[3] / 2)) continue;
     for (const p of slot.parts(litFor(task))) {
       if (p.box && (p.box.z || 0) === 0) s += shadowSVG(p.box);
       if (p.cyl && p.solid) s += shadowCyl(p.cyl[0], p.cyl[1], p.cyl[2], p.cyl[4]);
     }
   }
   for (const c of cratePositions()) if (!c.z) s += shadowSVG({ x: c.x - c.w / 2, y: c.y - c.d / 2, w: c.w, d: c.d, z: 0, h: c.h });
-  for (const [x, y] of TREES) if (y < NY - 0.4 && !placed().some(({ slot }) => { const [px, py, pw, pd] = slot.plot; return x > px - 0.3 && x < px + pw + 0.3 && y > py - 0.3 && y < py + pd + 0.3; })) s += shadowCyl(x, y, 0.3, 1.1);
+  for (const [x, y] of TREES) if (y < NY - 0.4 && inView(x, y) && !placed().some(({ slot }) => { const [px, py, pw, pd] = slot.plot; return x > px - 0.3 && x < px + pw + 0.3 && y > py - 0.3 && y < py + pd + 0.3; })) s += shadowCyl(x, y, 0.3, 1.1);
   s += shadowSVG({ ...GATEHOUSE, z: 0, h: 1 });
   $("layer-shadows").innerHTML = s;
 }
@@ -1512,8 +1551,7 @@ function agentTone(agent) {
   return null;
 }
 /* Inside, with the roof off: the task's whole agent list, as opening it reads
-   it, in one of two layouts the page's header switches between. */
-let insideStyle = "desks";
+   it, as an assembly line. */
 const shortTitle = (a) => { const t = a.title || a.model; return t.length > 22 ? `${t.slice(0, 21)}…` : t; };
 function bubble(x, y, z, dx = 16) {
   const [qx, qy] = PR_(x, y, z);
@@ -1528,48 +1566,7 @@ function insideSVG(task, slot) {
       figure(cx + 0.6, cy - 0.3, theme === "dark" ? "#e8eaf0" : "#2a2a30") + agentTag(cx + 0.6, cy - 0.3, 1.05, "Luke");
   }
   if (!task.agentList.length) return "";
-  return insideStyle === "line" ? lineInside(task, slot) : desksInside(task, slot);
-}
-/* Desks: a desk per agent, its screen saying how the agent stands, and the task's pull requests pinned to the back wall. */
-function desksInside(task, slot) {
-  const c = C();
-  const hb = slot.hollow;
-  const agents = task.agentList;
-  const n = agents.length;
-  let s = "";
-  /* The back wall's board: a card per pull request, in its state's colour. */
-  const t = turnBox({ ...hb, z: 0 });
-  task.prList.slice(0, 6).forEach((p, k) => {
-    const u = 0.25 + k * 0.42;
-    if (u + 0.3 > t.x1 - t.x0) return;
-    const tone = p.state === PR.MERGED ? "--state-merged" : p.checks === CHECKS.FAILING ? "--danger" : p.checks === CHECKS.PENDING ? "--state-attention" : "--state-complete";
-    s += poly([P(t.x0 + u, t.y0 + 0.01, hb.h * 0.45), P(t.x0 + u + 0.3, t.y0 + 0.01, hb.h * 0.45), P(t.x0 + u + 0.3, t.y0 + 0.01, hb.h * 0.45 + 0.22), P(t.x0 + u, t.y0 + 0.01, hb.h * 0.45 + 0.22)], css(tone), 'opacity="0.85"');
-  });
-  const cols = Math.max(1, Math.ceil(Math.sqrt((n * hb.w) / hb.d)));
-  const rows = Math.ceil(n / cols);
-  const cw = hb.w / cols, rh = hb.d / rows;
-  const desks = agents.map((a, i) => ({ a, x: hb.x + cw * ((i % cols) + 0.5), y: hb.y + rh * (Math.floor(i / cols) + 0.4) }));
-  desks.sort((p, q) => depthOf(p.x, p.y) - depthOf(q.x, q.y));
-  const dw = Math.min(0.7, cw * 0.6), dd = Math.min(0.44, rh * 0.35);
-  for (const { a, x, y } of desks) {
-    const tone = agentTone(a);
-    const done = a.status === AGENT.COMPLETED || a.status === AGENT.CANCELLED;
-    s += boxSVG({ x: x - dw / 2, y: y - dd / 2, w: dw, d: dd, z: 0, h: 0.3 }, "deskTop");
-    s += boxSVG({ x: x - dw * 0.42, y: y - dd / 2, w: dw * 0.84, d: 0.05, z: 0.3, h: 0.32 }, "metal", { topFill: c.unlit });
-    /* The screen: lines scrolling while it works, a mark when it asks or fails, a quiet tick when its turn ended. */
-    const [sx, sy] = PR_(x, y - dd / 2 + 0.06, 0.47);
-    const screen = tone ? css(tone) : theme === "dark" ? "#2c2e36" : "#c5c8d0";
-    s += `<rect x="${sx - 9}" y="${sy - 6}" width="18" height="9" rx="1" fill="${screen}" opacity="${tone ? 0.9 : 0.6}" ${tone && theme === "dark" ? 'filter="url(#glow)"' : ""}/>`;
-    if (a.status === AGENT.RUNNING) for (let k = 0; k < 3; k++) s += `<rect class="loop screen" style="animation-delay:${-k * 0.4}s" x="${sx - 7}" y="${sy - 4.5 + k * 2.6}" width="${8 + ((k * 5) % 7)}" height="1.2" fill="#fff" opacity="0.7"/>`;
-    else if (a.status === AGENT.FAILED) s += `<text x="${sx}" y="${sy + 1.5}" text-anchor="middle" font-size="8" font-weight="800" fill="#fff">!</text>`;
-    else if (done) s += `<path d="M${sx - 3},${sy - 1.5} l2,2 l4,-4" fill="none" stroke="${css("--text-tertiary")}" stroke-width="1.2"/>`;
-    const fy = y + dd / 2 + Math.min(0.3, rh * 0.25);
-    s += `<g opacity="${done ? 0.55 : 1}">${figure(x, fy, "#d97757")}</g>`;
-    /* Only an agent still at it is named over its desk; the rest are in the pane, so a full hall doesn't stack labels. */
-    if (!done) s += agentTag(x, fy, 1.05, shortTitle(a));
-    if (INBOX.some((i) => i.agentId === a.id)) s += bubble(x, fy, 1.6);
-  }
-  return s;
+  return lineInside(task, slot);
 }
 /* An assembly line: a belt through the hall, a station per agent along it,
    moving where its agent works; the task's open pull requests wait packed at
@@ -1611,7 +1608,8 @@ function lineInside(task, slot) {
     const [bx2, by2] = at((u0 + u1) / 2, side * 0.18);
     const [ax2, ay2] = PR_(mx, my, 0.45), [tx2, ty2] = PR_(bx2, by2, 0.4);
     g += `<line x1="${ax2}" y1="${ay2}" x2="${tx2}" y2="${ty2}" stroke="#d97757" stroke-width="2.2" stroke-linecap="round"/>`;
-    g += agentTag(mx, my, 1.15, shortTitle(a));
+    /* Only a station whose agent is still at it is named; the pane lists the rest, so a full hall doesn't stack labels. */
+    if (tone) g += agentTag(mx, my, 1.15, shortTitle(a));
     if (INBOX.some((q) => q.agentId === a.id)) g += bubble(mx, my, 1.4, 22);
     items.push({ d: depthOf(mx, my), svg: g });
   });
@@ -1717,7 +1715,8 @@ function buildingSVG(task, slot) {
   let body = "";
   let cutDone = false;
   for (const it of items) {
-    if (it.role === "shell" && !cutDone) { body += `<g class="cut">${cutawaySVG(task, slot)}</g>`; cutDone = true; }
+    /* The inside is drawn only for the open building: a hundred hidden interiors would cost more than the town. */
+    if (it.role === "shell" && !cutDone) { body += `<g class="cut">${task.id === openId ? cutawaySVG(task, slot) : ""}</g>`; cutDone = true; }
     if (it.role === "crane") { body += `<g class="upper" data-crane="${task.id}">${craneSVG(slot.crane)}</g>`; continue; }
     body += `<g class="${it.role === "shell" ? "shell" : it.role === "upper" ? "upper" : "keep"}">${it.svg}</g>`;
   }
@@ -1807,15 +1806,16 @@ function renderObjects() {
   const list = [];
   for (const { task, slot } of placed()) {
     const [x, y, w, d] = slot.plot;
+    if (task.id !== openId && !inView(x + w / 2, y + d / 2, 1)) continue;
     const label = `${task.name}: ${statusLine(task)}`;
     list.push({ depth: depthOf(x + w / 2, y + d / 2), svg: `<g class="bldg" data-id="${task.id}" data-card="task:${task.id}" ${fresh.has(`rise:${task.id}`) ? 'data-fresh="rise"' : ""} tabindex="0" role="button" aria-label="${label}" ${openId === task.id ? "data-open" : ""}>${buildingSVG(task, slot)}</g>` });
   }
-  for (const c of cratePositions()) list.push({ depth: depthOf(c.x, c.y) + (c.z || 0) * 0.5, svg: crateSVG(c) });
+  for (const c of cratePositions()) if (c.where !== "door" || inView(c.x, c.y)) list.push({ depth: depthOf(c.x, c.y) + (c.z || 0) * 0.5, svg: crateSVG(c) });
   const used = placed().map((p) => p.slot.plot).concat([slotAt(TASKS.length).plot]);
   const clear = ([x, y]) => y < NY - 0.4 && !used.some(([px, py, pw, pd]) => x > px - 0.3 && x < px + pw + 0.3 && y > py - 0.3 && y < py + pd + 0.3);
-  for (const [x, y] of TREES.filter(clear)) list.push({ depth: depthOf(x, y), svg: treeSVG(x, y) });
-  for (const [x, y] of LAMPS.filter(clear)) list.push({ depth: depthOf(x, y), svg: lampSVG(x, y) });
-  for (let r = 0; r < extraRows(); r++) for (const x of [8.7, 11.3]) { const y = ROW0 + r * ROW_STEP - 1.0; if (y < NY) list.push({ depth: depthOf(x, y), svg: lampSVG(x, y) }); }
+  for (const [x, y] of TREES.filter(clear)) if (inView(x, y)) list.push({ depth: depthOf(x, y), svg: treeSVG(x, y) });
+  for (const [x, y] of LAMPS.filter(clear)) if (inView(x, y)) list.push({ depth: depthOf(x, y), svg: lampSVG(x, y) });
+  for (let r = 0; r < extraRows(); r++) for (const ax of avenues()) for (const x of [ax - 0.3, ax + 2.3]) { const y = ROW0 + r * ROW_STEP - 1.0; if (y < NY && inView(x, y)) list.push({ depth: depthOf(x, y), svg: lampSVG(x, y) }); }
   for (const lane of LANES) list.push({ depth: depthOf(YARD.x + 0.35, lane.y + LANE_D / 2), svg: laneLampSVG(lane) });
   list.push({ depth: depthOf(GATEHOUSE.x + 0.4, GATEHOUSE.y + 0.4), svg: `<g id="gate">${gateSVG(gateOpen)}</g>` });
   list.push({ depth: depthOf(LOT.x + LOT.w - 0.4, LOT.y + 0.4), svg: lotFlagSVG() });
@@ -1844,21 +1844,39 @@ function tagSVG(id, x, y, text, tone) {
     (tone ? `<circle cx="${-width / 2 + 10}" cy="-15.5" r="3.5" fill="${css(tone)}"/>` : "") +
     `<text x="${-width / 2 + (tone ? 18 : 7)}" y="-11.5">${text}</text></g>`;
 }
+/* Names are placed most-important first, and one that would overlap a name
+   already placed on screen is left off: it answers a hover instead. So a big
+   town shows only as many names as fit, and the ones that matter. */
+const tagRank = (t) => (t.id === openId ? 0 : asking(t) ? 1 : failed(t) ? 2 : t.id === callTaskId ? 3 : running(t) ? 4 : 9);
+let tagScale = 0;
 function renderTags() {
+  tagScale = cam.s;
+  const taken = [];
+  const fits = (x, y, text) => {
+    const w = textWidth(text, 12, 500) + 30, h = 23;
+    const sx = x * cam.s, sy = y * cam.s;
+    const box = [sx - w / 2, sy - 27, sx + w / 2, sy - 27 + h];
+    if (taken.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) return false;
+    taken.push(box);
+    return true;
+  };
   let s = "";
+  const [gx, gy] = PR_(GATEHOUSE.x + GATEHOUSE.w / 2, GATEHOUSE.y + GATEHOUSE.d / 2, 1.5);
+  const [lx, ly] = PR_(LOT.x + LOT.w / 2, LOT.y + LOT.d, -0.2);
+  if (fits(gx, gy, "Merge gate")) s += tagSVG("gate", gx, gy, "Merge gate", null);
+  if (fits(lx, ly + 34 / cam.s, "Shipped")) s += tagSVG("shipped", lx, ly + 34 / cam.s, "Shipped", "--state-merged");
+  const cands = [];
   for (const { task, slot } of placed()) {
     const [rx, ry, rz] = slot.roof;
+    /* A big town names only the buildings where something is happening; the rest answer a hover. */
+    if (TASKS.length > 12 && tagRank(task) === 9) continue;
+    if (openId !== task.id && !inView(rx, ry, rz)) continue;
     const lift = task.id === callTaskId ? 1.6 : asking(task) ? 1.1 : shippedAll(task) ? 1.5 : 0.35;
     const [x, y] = PR_(rx, ry, rz + lift + (underway(task) ? 1.4 : 0));
-    /* A big town names only the buildings where something is happening; the rest answer a hover. */
-    const quiet = ["--text-tertiary", "--state-merged"].includes(taskTone(task));
-    if (TASKS.length > 12 && quiet && openId !== task.id) continue;
-    s += tagSVG(task.id, x, y, task.name, taskTone(task));
+    cands.push({ task, x, y });
   }
-  const [gx, gy] = PR_(GATEHOUSE.x + GATEHOUSE.w / 2, GATEHOUSE.y + GATEHOUSE.d / 2, 1.5);
-  s += tagSVG("gate", gx, gy, "Merge gate", null);
-  const [lx, ly] = PR_(LOT.x + LOT.w / 2, LOT.y + LOT.d, -0.2);
-  s += tagSVG("shipped", lx, ly + 34, "Shipped", "--state-merged");
+  cands.sort((a, b) => tagRank(a.task) - tagRank(b.task) || b.task.createdAt - a.task.createdAt);
+  for (const { task, x, y } of cands) if (fits(x, y, task.name)) s += tagSVG(task.id, x, y, task.name, taskTone(task));
   $("layer-tags").innerHTML = s;
   applyTagScale();
 }
@@ -1882,12 +1900,50 @@ function renderRoutes() {
   $("layer-routes").innerHTML = s;
 }
 
+/* Two things keep a big town cheap. Far out, a building's windows are drawn
+   as one lit band a face and nothing glows; close in, only what is on screen
+   (and a margin round it) is drawn at all. The camera settling redraws when
+   either would change. A small town is always drawn whole. */
+const CULL_FROM = 20;
+let lod = "near";
+let view = null;
+let culled = 0;
+const lodFor = (scale) => (scale * DX < 13 ? "far" : "near");
+function visibleRect(margin) {
+  const st = $("stage").getBoundingClientRect();
+  return { x0: (-cam.x - st.width * margin) / cam.s, x1: (st.width * (1 + margin) - cam.x) / cam.s, y0: (-cam.y - st.height * margin) / cam.s, y1: (st.height * (1 + margin) - cam.y) / cam.s };
+}
+function inView(x, y, z = 0) {
+  if (!view) return true;
+  const [px, py] = PR_(x, y, z);
+  const ok = px > view.x0 && px < view.x1 && py > view.y0 && py < view.y1;
+  if (!ok) culled++;
+  return ok;
+}
+let settleTimer = 0;
+function settle(delay) {
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => {
+    if (!view && lodFor(cam.s) === lod && TASKS.length <= CULL_FROM) return;
+    const now = visibleRect(0);
+    const inside = view && now.x0 >= view.x0 && now.x1 <= view.x1 && now.y0 >= view.y0 && now.y1 <= view.y1;
+    if (lodFor(cam.s) !== lod || (TASKS.length > CULL_FROM && !inside) || (!view && TASKS.length > CULL_FROM)) renderAll();
+    else if (Math.abs(cam.s - tagScale) / tagScale > 0.12) { memo = {}; renderTags(); memo = null; syncMarks(); }
+  }, delay);
+}
 function renderAll() {
+  memo = {};
   measureTown();
+  lod = lodFor(cam.s);
+  culled = 0;
+  view = TASKS.length > CULL_FROM && camReady ? visibleRect(0.3) : null;
+  $("scene").dataset.lod = lod;
   gradients.clear();
   queueMicrotask(() => { for (const k of [...fresh]) if (k.startsWith("ping:")) fresh.delete(k); });
   for (const g of document.querySelectorAll("#scene defs linearGradient")) g.remove();
   renderGround(); renderPlots(); renderShadows(); renderObjects(); renderTags(); renderRoutes();
+  memo = null;
+  $("scene").dataset.culled = String(culled);
   syncMarks();
 }
 
@@ -1897,7 +1953,7 @@ function renderAll() {
 const cam = { x: 0, y: 0, s: 1 };
 let lastSize = null;
 function sceneBounds() {
-  const corners = [[0, 0], [N, 0], [N, NY], [0, NY], [LOT.x + LOT.w, LOT.y], [LOT.x + LOT.w, LOT.y + LOT.d]].map(([x, y]) => PR_(x, y, 0));
+  const corners = [[0, 0], [N, 0], [NX, 20], [NX, NY], [0, NY], [LOT.x + LOT.w, LOT.y], [LOT.x + LOT.w, LOT.y + LOT.d]].map(([x, y]) => PR_(x, y, 0));
   const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
   return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys) - 4.4 * DZ, y1: Math.max(...ys) + 1.5 * DZ };
 }
@@ -1905,7 +1961,10 @@ function applyTagScale() {
   const k = 1 / cam.s;
   for (const t of document.querySelectorAll(".tag")) t.setAttribute("transform", `translate(${t.dataset.anchor}) scale(${k.toFixed(4)})`);
 }
+let camReady = false;
 function applyCamera(instant) {
+  camReady = true;
+  settle(instant ? 160 : 520);
   const g = $("camera");
   g.toggleAttribute("data-instant", !!instant);
   g.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`;
@@ -1971,6 +2030,9 @@ function syncMarks() {
 let shownPR = null;
 function openDetails(id, prNumber) {
   openId = id;
+  const spot = byId[id] && placed().find((p) => p.task.id === id);
+  const cut = document.querySelector(`.bldg[data-id="${id}"] .cut`);
+  if (spot && cut && !cut.childElementCount) { cut.innerHTML = cutawaySVG(spot.task, spot.slot); void cut.getBoundingClientRect(); }
   shownPR = prNumber ?? null;
   hotPR = prNumber ? allPRs().find((p) => p.number === prNumber) : null;
   syncMarks();
@@ -2336,6 +2398,7 @@ function frame(now) {
   last = now;
   tickMovers(dt);
   if (!reduced.matches && !document.hidden) {
+    if (lod === "far") { requestAnimationFrame(frame); return; }
     craneAngle += dt * 0.18;
     for (const cr of document.querySelectorAll("[data-crane]")) cr.innerHTML = craneSVG(slotOf(cr.dataset.crane).crane);
   }
@@ -2354,7 +2417,7 @@ setTheme(initialTheme);
 for (let i = 0; i < rotParam; i++) turn();
 fitCampus(true);
 if (openParam) select(openParam);
-/* Switching the town's size starts its work over at that size; switching the inside redraws the open building. */
+/* Switching the town's size starts its work over at that size. */
 const SAMPLE_INBOX = JSON.stringify(INBOX);
 function setTown(size) {
   townSize = size;
@@ -2370,11 +2433,6 @@ function setTown(size) {
   schedule(STEP_MS);
 }
 for (const b of document.querySelectorAll("[data-town]")) b.addEventListener("click", () => setTown(b.dataset.town));
-for (const b of document.querySelectorAll("[data-inside]")) b.addEventListener("click", () => {
-  insideStyle = b.dataset.inside;
-  for (const x of document.querySelectorAll("[data-inside]")) x.setAttribute("aria-pressed", String(x === b));
-  refreshAll();
-});
 $("sim-toggle").addEventListener("click", () => { sim.on = !sim.on; renderSimStatus(); if (sim.on) schedule(600); else clearTimeout(sim.timer); });
 $("sim-restart").addEventListener("click", () => { resetWork(); schedule(1200); });
 renderSimStatus();
