@@ -270,12 +270,17 @@ test("the task on the call stands in Talk however old, and with nothing standing
   const { page } = mount([old]);
   assert.equal(page.querySelector(".luke-empty-state p")?.textContent, "No agents at work");
   assert.equal(page.querySelector("section[data-step]"), null);
-  assert.equal(page.querySelector(".factory-scroll button"), null);
+  assert.deepEqual(
+    [...page.querySelectorAll("button")].filter(
+      (each) => each.closest(".desktop-toolbar") === null,
+    ),
+    [],
+  );
 });
 
 test("until the plan list is read nothing stands, not even the empty state", () => {
   const { page } = mount([], { listRead: false });
-  assert.equal(page.querySelector(".factory-scroll")?.childElementCount, 0);
+  assert.equal(page.querySelector(".factory-board")?.childElementCount, 0);
 });
 
 test("a plan list that could not be read says so, and Retry reads it again", () => {
