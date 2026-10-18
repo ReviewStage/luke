@@ -249,7 +249,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
     work: {
       conversation: undefined,
-      callLive: false,
       onLoadEarlier: () => Promise.resolve(),
       readWorker: () => Promise.reject(new Error("No planning worker is read in this test.")),
     },

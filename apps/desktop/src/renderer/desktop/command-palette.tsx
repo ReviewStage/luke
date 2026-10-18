@@ -605,7 +605,7 @@ function agentRows(
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
   const taskName = [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.name;
-  const workers = taskWorkers(workRowsOf(tasks.work.conversation, tasks.work.callLive));
+  const workers = taskWorkers(workRowsOf(tasks.work.conversation));
   const inbox = inboxEntries(tasks.agents, () => tasks.onShowInbox(taskId));
   const chat = chatEntries(chatOn && tasks.chatView.available, () => tasks.onShowChat(taskId));
   const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({

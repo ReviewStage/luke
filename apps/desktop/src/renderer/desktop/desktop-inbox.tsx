@@ -698,7 +698,6 @@ function InboxSidePanel({
   // The task's agents' workers are their delegations, read through their own transcripts, so the panel's work is none.
   const work = {
     conversation: undefined,
-    callLive: false,
     onLoadEarlier: () => Promise.resolve(),
     readWorker: agents.readTranscript,
   };

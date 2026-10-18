@@ -169,7 +169,6 @@ async function mount(): Promise<HTMLElement> {
       conversation: conversationOf([
         workTurn(TASK_WORK_STATE.RUNNING, [workerCall(READER)], { workers: [READER] }),
       ]),
-      callLive: true,
     },
     agents: codingAgentsControl({
       agents: [WORKING, DONE],

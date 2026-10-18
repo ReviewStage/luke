@@ -430,7 +430,7 @@ function withCards(
  */
 function summaryRows(tasks: TasksControl, inbox: InboxBoardView) {
   const { sidePanel, mainTabs, agents, work } = tasks;
-  const workers = taskWorkers(workRowsOf(work.conversation, work.callLive));
+  const workers = taskWorkers(workRowsOf(work.conversation));
   const files = shownFiles(tasks.shownCode ?? []);
   const changes = changesOffers(agents, sidePanel.changes);
   const inboxHolds = inbox.open.length + inbox.settled.length > 0;

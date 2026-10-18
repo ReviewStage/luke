@@ -936,10 +936,9 @@ interface SidePanelTranscript {
   reveal?: { readonly call: string; readonly onRevealed: () => void } | undefined;
 }
 
-/** What the brain wrote and ran on the open task's calls, and whether a call still stands. */
+/** What the brain wrote and ran on the open task's calls. */
 interface SidePanelWork {
   conversation: TaskConversation;
-  callLive: boolean;
   onLoadEarlier: () => Promise<void>;
   /** Reads a brain's worker's session past a cursor, as an agent's worker's tab reads its own, the task standing in the agent's place. */
   readWorker: TranscriptReader;
@@ -1505,7 +1504,6 @@ function TabContent({
           region={transcript.region}
           onRetry={transcript.onRetry}
           conversation={work.conversation}
-          callLive={work.callLive}
           onLoadEarlier={work.onLoadEarlier}
           onOpenSubagent={onOpenSubagent}
           onOpenTarget={onOpenTarget}
@@ -1790,7 +1788,7 @@ export function SidePanel({
   // Every subagent the task's work holds, and those with a tab open, each
   // with its session, in the order started and the strip's order; a
   // delegated worker's tab stands while its agent's does.
-  const workRows = workRowsOf(work.conversation, work.callLive);
+  const workRows = workRowsOf(work.conversation);
   const workers = taskWorkers(workRows);
   const { held: drawnTranscripts, standings } = views;
   const subagents = drawnSubagents(panel.subagents, workRows, standings, drawnTranscripts, {
