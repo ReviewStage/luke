@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from "react";
+import type { ComponentPropsWithRef, ReactNode, Ref } from "react";
 import { useId, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { type ComboboxField, useComboboxField } from "./use-combobox-field.js";
@@ -76,33 +76,33 @@ export interface ComboboxGroup {
   readonly options: readonly ComboboxOption[];
 }
 
-/** One option's row: a press chooses it and keeps the caret in the field, a pointer moving over it makes it active. */
-function OptionRow({
-  id,
+/** What a list engine hands the row it owns: its role, names, data, handlers, and ref, and never a class or a style. */
+export type ComboboxOptionEngineProps = Omit<
+  ComponentPropsWithRef<"div">,
+  "className" | "style" | "children"
+>;
+
+/**
+ * One option as every list draws it: its glyph, its name, its detail, its
+ * hint, and its end, lit while it is `aria-selected`. It is the row to use
+ * where a list engine of the app's (cmdk) owns the item, handed through the
+ * engine's `asChild`: the engine's role, names, handlers, and ref pass
+ * through, and no class or style does, so the row is drawn only as here.
+ */
+export function ComboboxOptionItem({
   option,
-  active,
-  onActive,
-  onChoose,
-}: {
-  id: string;
-  option: ComboboxOption;
-  active: boolean;
-  onActive: () => void;
-  onChoose: () => void;
-}): React.JSX.Element {
+  ...engine
+}: { option: ComboboxOption } & ComboboxOptionEngineProps): React.JSX.Element {
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the field reads the keys and names this option active.
     <div
-      id={id}
       role="option"
       // Note that an option is focusable by a press alone, which the list keeps from taking focus.
       tabIndex={-1}
-      className="luke-combobox-option"
-      aria-selected={active}
       aria-disabled={option.disabled === true ? "true" : undefined}
       aria-current={option.current === true ? "true" : undefined}
-      onMouseMove={active || option.disabled === true ? undefined : onActive}
-      onClick={option.disabled === true ? undefined : onChoose}
+      {...engine}
+      className="luke-combobox-option"
+      style={undefined}
     >
       {option.icon === undefined ? null : (
         <span className="luke-combobox-option-glyph">{option.icon}</span>
@@ -122,6 +122,31 @@ function OptionRow({
         <span className="luke-combobox-option-end">{option.current ? <CheckIcon /> : null}</span>
       )}
     </div>
+  );
+}
+
+/** One option's row: a press chooses it and keeps the caret in the field, a pointer moving over it makes it active. */
+function OptionRow({
+  id,
+  option,
+  active,
+  onActive,
+  onChoose,
+}: {
+  id: string;
+  option: ComboboxOption;
+  active: boolean;
+  onActive: () => void;
+  onChoose: () => void;
+}): React.JSX.Element {
+  return (
+    <ComboboxOptionItem
+      id={id}
+      option={option}
+      aria-selected={active}
+      onMouseMove={active || option.disabled === true ? undefined : onActive}
+      onClick={option.disabled === true ? undefined : onChoose}
+    />
   );
 }
 

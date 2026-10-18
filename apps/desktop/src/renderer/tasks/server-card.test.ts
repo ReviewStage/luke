@@ -260,7 +260,7 @@ async function cardOf(chip: Element | null | undefined) {
   assert.ok(card, "the chip hangs the server's card");
   const drawnSwitch = card.querySelector<HTMLElement>(".luke-switch");
   const look = {
-    name: card.querySelector(".task-compose-menu-name")?.textContent,
+    name: card.querySelector(".agent-servers-name")?.textContent,
     count: card.querySelector(".agent-servers-count")?.textContent,
     on: drawnSwitch === null ? undefined : drawnSwitch.dataset.checked,
     note: card.querySelector(".agent-servers-row + .luke-hover-card-note")?.textContent,

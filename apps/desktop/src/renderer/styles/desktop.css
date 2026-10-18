@@ -2067,143 +2067,6 @@ ul.actor-stack {
   visibility: hidden;
 }
 
-/* One row for every menu: an action menu's item, a picker's row, and ⌘K's,
-   each its glyph slot, its words, and at its end a muted hint and the end
-   slot. A row is one fixed height and flexes in no column it stands in. */
-.menu-item {
-  display: flex;
-  flex: none;
-  width: 100%;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  height: var(--luke-menu-row-height);
-  padding: 0 var(--row-inset);
-  border-radius: var(--luke-menu-row-radius);
-  background: none;
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  text-align: left;
-  white-space: nowrap;
-  cursor: default;
-}
-
-/* The row a menu is on is filled, never ringed. In an action menu focus
-   moves with the pointer and the arrows alike, so the pointer and focus
-   both light a row, and a submenu's item stays lit while its submenu
-   stands beside it. */
-.menu-item:is(:hover, :focus-visible),
-.menu-item[data-open="true"] {
-  outline: none; /* no ring: the row's fill marks it */
-  background: var(--luke-color-fill-strong);
-}
-
-/* A list whose keys stay in its field (the MCP popover's and ⌘K's) has
-   one highlight, which the arrows and the pointer both move, so the
-   pointer's own hover draws nothing of its own. The popover's rows carry
-   it as a data attribute, and ⌘K's rows as cmdk's. */
-:is(.searchable-menu, .command-palette) .menu-item:hover {
-  background: none;
-}
-
-:is(.searchable-menu, .command-palette)
-  .menu-item:is(
-    [aria-selected="true"],
-    [data-highlighted="true"],
-    [data-selected="true"],
-    :focus-visible
-  ) {
-  background: var(--luke-color-fill-strong);
-}
-
-.menu-item[data-danger="true"] {
-  color: var(--luke-color-danger-text);
-}
-
-.menu-item[data-danger="true"]:is(:hover, :focus-visible) {
-  background: color-mix(in srgb, var(--luke-color-danger) 16%, transparent);
-}
-
-/* A row that cannot be chosen now is dimmed with its mark and lit by
-   nothing. Note that the selector is as specific as a highlight's, because
-   a highlight that lands on a dimmed row must not light it. */
-:is(.menu-item, .searchable-menu .menu-item):is(:disabled, [aria-disabled="true"]) {
-  background: none;
-  opacity: 0.4;
-}
-
-/* The glyph slot: a mark in a glyph's column, muted beside the words, and
-   red with them on an act that cannot be taken back. An action menu draws
-   the slot whether or not the item has a mark, so its labels start in one
-   line down the menu. */
-.menu-item-glyph {
-  display: inline-flex;
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.menu-item[data-danger="true"] .menu-item-glyph {
-  color: inherit;
-}
-
-/* A glyph is sized by what it sits in, as every glyph is: an SVG with no
-   size of its own fills the row it is in. */
-.menu-item > :is(svg, .repository-picture),
-.menu-item-glyph :is(svg, .repository-picture),
-.menu-item-end > svg {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
-}
-
-/* A row's shortcut, or why it cannot be picked now, at its end before the
-   end slot, the way a system menu prints a chord. */
-.menu-item-hint {
-  flex: 0 0 auto;
-  margin-left: auto;
-  padding-left: var(--luke-space-16);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  white-space: nowrap;
-}
-
-/* The end slot is one glyph wide, so a name ends where every other does
-   wherever the slot is drawn; the check is the text's own colour, a choice
-   rather than a state, and a mark or a chevron is quieter. */
-.menu-item-end {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  margin-left: auto;
-  color: var(--luke-color-text-subtle);
-}
-
-.menu-item-hint + .menu-item-end {
-  margin-left: 0;
-}
-
-.menu-item-end .credential-check {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  color: var(--luke-color-text);
-}
-
-.menu-item-end .settings-chevron {
-  width: 14px;
-  height: 14px;
-}
-
-.menu-item-end .link-icon {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-}
-
 /* Plan actions ---------------------------------------------------------- */
 
 /* The window's own menu is `@luke/ui`'s `Menu` (`action-menu.tsx`), its
@@ -2929,56 +2792,6 @@ ul.actor-stack {
   padding: 0;
 }
 
-.task-compose-menu-search {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  height: 38px;
-  padding: 0 var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-subtle);
-}
-
-/* The glyph is sized here, as every glyph is by what it sits in: an SVG
-   with no size of its own fills the row it is in. */
-.task-compose-menu-search svg {
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
-}
-
-.task-compose-menu-search input {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  outline: none; /* no ring: a menu's filter, which always holds the caret */
-  background: none;
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-body-size);
-}
-
-.task-compose-menu-search input::placeholder {
-  color: var(--luke-color-text-subtle);
-}
-
-/* The list scrolls down and never sideways: a row's words that outrun the
-   menu's width fade at their end inside the row instead. */
-.task-compose-menu-list {
-  display: block;
-  max-height: 288px;
-  padding: var(--luke-menu-inset);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.task-compose-menu-list:focus-visible {
-  outline: none; /* no ring: the highlighted row marks it */
-}
-
 .task-compose-menu-foot {
   display: block;
   flex: 0 0 auto;
@@ -2994,20 +2807,6 @@ ul.actor-stack {
 
 .task-compose-submenu > .task-compose-menu-foot-note {
   padding-bottom: var(--luke-menu-inset);
-}
-
-/* What stands in the list's place: one quiet line, centred, at a row or
-   two's height, so a menu with nothing to list never falls to a sliver. */
-.task-compose-menu-note {
-  display: flex;
-  min-height: 40px;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: var(--luke-space-4) var(--luke-space-12);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  text-align: center;
 }
 
 /* A submenu stands beside the pinned row that opened it, its top level
@@ -3035,12 +2834,6 @@ ul.actor-stack {
 .task-compose-submenu[data-stand="up"] {
   top: auto;
   bottom: 0;
-}
-
-.task-compose-menu-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* A searchable menu hung from its own button (`@luke/ui`'s
@@ -3096,31 +2889,13 @@ body:has(.app-stage[data-capture="true"])
   --luke-duration-exit: 0s;
 }
 
-.task-compose-menu-name {
-  min-width: 0;
-  flex: 0 1 auto;
-  font-weight: var(--luke-weight-medium);
-}
-
-/* The MCP popover's words fade where they are cut rather than end in an
-   ellipsis, as a tab's label does. */
-.searchable-menu .task-compose-menu-name {
-  text-overflow: clip;
-}
-
-/* The heading over a menu section's rows, a searchable menu's and ⌘K's
-   alike: quiet, inset as a row's words are, and a little apart from the
-   section above it. cmdk draws the palette's heading itself, so it is
-   reached by its attribute rather than given the class. */
-.menu-heading,
+/* The heading over a section of ⌘K's rows: inset as a row's words are,
+   and a little apart from the section above it. cmdk draws the heading's
+   box itself, so it is reached by its attribute; its words are a caption. */
 .command-palette [cmdk-group-heading] {
   padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
 }
 
-[role="group"]:first-child > .menu-heading,
 .command-palette [cmdk-group]:first-child [cmdk-group-heading] {
   padding-top: var(--luke-space-2);
 }
@@ -7073,34 +6848,6 @@ body:has(.app-stage[data-capture="true"])
 
 .command-palette-list:focus-visible {
   outline: none; /* no ring: the highlighted row marks it */
-}
-
-.command-palette-name {
-  min-width: 0;
-  flex: 0 1 auto;
-  overflow: hidden;
-  font-weight: var(--luke-weight-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A name with a detail after it keeps its whole width, up to most of the
-   row, and the detail is what gives way: an action's name is short and says
-   what the row does, where its detail (the task it acts on) can run long. */
-.command-palette-name:has(+ .command-palette-detail) {
-  max-width: 70%;
-  flex: none;
-}
-
-/* A plan's repository follows its name, as the sidebar's row says it. */
-.command-palette-detail {
-  min-width: 0;
-  flex: 0 1 auto;
-  overflow: hidden;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* The keys' hints along the card's foot, each chord a step louder than the

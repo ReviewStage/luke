@@ -239,8 +239,11 @@ function heard(node: Node): string {
 
 /** Each row the palette lists, as its name and the muted words after it. */
 function rows(): string[] {
-  return [...document.querySelectorAll(".menu-item")].map((row) =>
-    [row.querySelector(".command-palette-name"), row.querySelector(".command-palette-detail")]
+  return [...document.querySelectorAll('[role="option"]')].map((row) =>
+    [
+      row.querySelector(".luke-combobox-option-label"),
+      row.querySelector(".luke-combobox-option-detail"),
+    ]
       .filter((part) => part !== null)
       .map(heard)
       .join(" · "),
@@ -250,7 +253,7 @@ function rows(): string[] {
 /** Presses the row listed as exactly these words. */
 function press(listed: string): void {
   const at = rows().indexOf(listed);
-  const row = document.querySelectorAll<HTMLElement>(".menu-item")[at];
+  const row = document.querySelectorAll<HTMLElement>('[role="option"]')[at];
   assert.ok(row, `${listed} is listed`);
   act(() => row.click());
 }
@@ -322,7 +325,7 @@ test("choosing a page opens Settings on that page", () => {
   press("Integrations");
 
   assert.deepEqual(sent, { tabs: [PANEL_TAB.SETTINGS], views: [SETTINGS_VIEW.INTEGRATIONS] });
-  assert.equal(document.querySelector(".menu-item"), null, "the palette closed");
+  assert.equal(document.querySelector('[role="option"]'), null, "the palette closed");
 });
 
 /** The filter whose chip stands pressed. */
@@ -476,7 +479,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
     "Inbox · Billing usage alerts",
     "Invoice export · Billing usage alerts",
   ]);
-  const row = document.querySelectorAll<HTMLElement>(".menu-item")[1];
+  const row = document.querySelectorAll<HTMLElement>('[role="option"]')[1];
   assert.ok(row, "the agent is listed");
   act(() => {
     row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
@@ -628,7 +631,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
     });
     chooseFilter("Agents");
-    const row = [...document.querySelectorAll<HTMLElement>(".menu-item")].find((each) =>
+    const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
       each.textContent?.includes("Invoice export"),
     );
     assert.ok(row, "the agent is listed");
@@ -831,9 +834,9 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
     files: shownFiles([showing]),
   });
   assert.ok(plus, 'the "+" offers the file');
-  const row = document.querySelector<HTMLElement>(".menu-item");
+  const row = document.querySelector<HTMLElement>('[role="option"]');
   assert.equal(
-    row?.querySelector(".menu-item-glyph")?.innerHTML,
+    row?.querySelector(".luke-combobox-option-glyph")?.innerHTML,
     renderToStaticMarkup(plus.row.icon),
     'the row wears the icon the "+" row does',
   );
@@ -893,7 +896,8 @@ test("Search lists the listed workspace's plans first, then every other workspac
   assert.deepEqual(listed, ["Dotfiles sync", "Checkout retries · Northwind · northwind/shop"]);
   assert.deepEqual(rows(), ["Checkout retries · Northwind · northwind/shop"]);
   assert.equal(
-    document.querySelector(".command-palette-detail .workspace-ref .workspace-tile")?.textContent,
+    document.querySelector(".luke-combobox-option-detail .workspace-ref .workspace-tile")
+      ?.textContent,
     "N",
     "the other workspace is named by its tile and its name",
   );
@@ -920,14 +924,14 @@ test("a teammate's task wears its creator's face at its row's end, and is found 
   );
   chooseFilter("Tasks");
   const faces = () =>
-    [...document.querySelectorAll(".menu-item")].map(
-      (row) => row.querySelector(".menu-item-end .actor-mark")?.textContent ?? null,
+    [...document.querySelectorAll('[role="option"]')].map(
+      (row) => row.querySelector(".luke-combobox-option-hint .actor-mark")?.textContent ?? null,
     );
 
   assert.deepEqual(rows(), ["Retry budget · acme/relay", "Rate limits · acme/relay"]);
   assert.deepEqual(faces(), ["C", null]);
   assert.match(
-    document.querySelector(".menu-item-end")?.textContent ?? "",
+    document.querySelector(".luke-combobox-option-hint")?.textContent ?? "",
     /\(created by Charles Pan\)/u,
   );
   type("charles");
@@ -959,8 +963,8 @@ test("a command ⌘K alone offers, the sidebar's Show my tasks, is listed by its
   openPalette();
   type("my tasks");
   assert.ok(rows().includes("Show my tasks"), "Show my tasks is listed");
-  const row = [...document.querySelectorAll(".menu-item")][rows().indexOf("Show my tasks")];
-  assert.equal(row?.querySelector(".menu-item-hint"), null, "no chord is printed");
+  const row = [...document.querySelectorAll('[role="option"]')][rows().indexOf("Show my tasks")];
+  assert.equal(row?.querySelector(".luke-combobox-option-hint"), null, "no chord is printed");
   press("Show my tasks");
   assert.deepEqual(ran, ["show my tasks"]);
 });
@@ -1016,7 +1020,7 @@ test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⌥�
   openPalette(ON_AGENT_TAB);
   type("copy link");
   const listed = rows().filter((row) => row.startsWith("Copy link to "));
-  const chord = document.querySelector(".menu-item .menu-item-hint")?.textContent;
+  const chord = document.querySelector('[role="option"] .luke-combobox-option-hint')?.textContent;
 
   press("Copy link to agent · Expire old invites");
   await act(async () => undefined);
@@ -1183,7 +1187,7 @@ test("⌘K pressed with the keyboard in the side panel offers its tab's link fir
     }),
   );
   type("copy link");
-  const chord = document.querySelector(".menu-item .menu-item-hint")?.textContent;
+  const chord = document.querySelector('[role="option"] .luke-combobox-option-hint')?.textContent;
 
   assert.deepEqual(
     rows().filter((row) => row.startsWith("Copy link to ")),
@@ -1264,7 +1268,7 @@ test("People lists the listed workspace's members by name and role, the reader a
   assert.deepEqual(rows(), ["Dean Stratakos · You · Owner", "Charles Pan · Member"]);
   type("charles@");
   assert.deepEqual(rows(), ["Charles Pan · Member"]);
-  act(() => document.querySelector<HTMLElement>(".menu-item")?.click());
+  act(() => document.querySelector<HTMLElement>('[role="option"]')?.click());
   assert.deepEqual(opened, ["user-charles"]);
   assert.deepEqual(sent.tabs, []);
 });

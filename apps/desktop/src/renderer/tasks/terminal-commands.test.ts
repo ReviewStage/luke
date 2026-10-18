@@ -196,13 +196,13 @@ function picker() {
   return {
     question: dialog.querySelector("input")?.getAttribute("placeholder"),
     rows: [...dialog.querySelectorAll('[role="option"]')].map((row) => ({
-      name: row.querySelector(".command-palette-name")?.textContent,
-      detail: row.querySelector(".command-palette-detail")?.textContent,
+      name: row.querySelector(".luke-combobox-option-label")?.textContent,
+      detail: row.querySelector(".luke-combobox-option-detail")?.textContent,
       chosen: row.getAttribute("aria-selected") === "true",
     })),
     choose: async (name: string) => {
       const row = [...dialog.querySelectorAll<HTMLElement>('[role="option"]')].find(
-        (each) => each.querySelector(".command-palette-name")?.textContent === name,
+        (each) => each.querySelector(".luke-combobox-option-label")?.textContent === name,
       );
       assert.ok(row, `a row named ${name}`);
       await act(async () => row.click());

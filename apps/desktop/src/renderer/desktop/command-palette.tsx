@@ -69,6 +69,7 @@ import {
 import {
   CHIP_LOOK,
   Chip,
+  ComboboxOptionItem,
   ErrorState,
   GearIcon,
   PinIcon,
@@ -896,30 +897,41 @@ function PaletteItem({
   const detail = creatorExplains(row, query, tokens)
     ? [row.detail, row.creator].filter((words) => words !== undefined).join(" · ")
     : row.detail;
+  const words =
+    detail === undefined && row.workspace === undefined ? undefined : (
+      <>
+        {row.workspace === undefined ? null : (
+          <WorkspaceRef
+            workspace={row.workspace}
+            name={<Highlighted text={row.workspace.name} tokens={tokens} />}
+          />
+        )}
+        {row.workspace === undefined || detail === undefined ? null : " · "}
+        {detail === undefined ? null : <Highlighted text={detail} tokens={tokens} />}
+      </>
+    );
+  // Spoken, since a palette row is an option, which carries no
+  // `aria-keyshortcuts` to say the chord for it.
+  const end =
+    row.command === undefined && row.endMark === undefined ? undefined : (
+      <>
+        {row.command === undefined ? null : (
+          <Shortcut chord={APP_SHORTCUTS[row.command].chord} spoken />
+        )}
+        {row.endMark}
+      </>
+    );
   const item = (
-    <Command.Item className="menu-item" value={value} onSelect={row.onChoose}>
-      {row.icon === undefined ? null : <span className="menu-item-glyph">{row.icon}</span>}
-      <span className="command-palette-name">
-        <Highlighted text={row.label} tokens={tokens} />
-      </span>
-      {detail === undefined && row.workspace === undefined ? null : (
-        <span className="command-palette-detail">
-          {row.workspace === undefined ? null : (
-            <WorkspaceRef
-              workspace={row.workspace}
-              name={<Highlighted text={row.workspace.name} tokens={tokens} />}
-            />
-          )}
-          {row.workspace === undefined || detail === undefined ? null : " · "}
-          {detail === undefined ? null : <Highlighted text={detail} tokens={tokens} />}
-        </span>
-      )}
-      {/* Spoken, since a palette row is an option, which carries no
-          `aria-keyshortcuts` to say the chord for it. */}
-      {row.command === undefined ? null : (
-        <Shortcut chord={APP_SHORTCUTS[row.command].chord} className="menu-item-hint" spoken />
-      )}
-      {row.endMark === undefined ? null : <span className="menu-item-end">{row.endMark}</span>}
+    <Command.Item asChild value={value} onSelect={row.onChoose}>
+      <ComboboxOptionItem
+        option={{
+          id: value,
+          label: <Highlighted text={row.label} tokens={tokens} />,
+          icon: row.icon,
+          detail: words,
+          hint: end,
+        }}
+      />
     </Command.Item>
   );
   if (row.card === undefined) return item;
@@ -1280,7 +1292,14 @@ export function CommandPalette({
           <NoticeLine notice={notice} />
         )}
         {sections.map((section) => (
-          <Command.Group key={section.kind} heading={FILTER_LABEL[section.kind]}>
+          <Command.Group
+            key={section.kind}
+            heading={
+              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+                {FILTER_LABEL[section.kind]}
+              </Text>
+            }
+          >
             {section.rows.map((row) => {
               place += 1;
               return (

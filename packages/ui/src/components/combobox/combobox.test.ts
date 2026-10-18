@@ -388,3 +388,33 @@ test("a note stands after the options, whether or not any do", () => {
 
   assert.match(list.textContent ?? "", /Cherry.*Reading more fruit…$/u);
 });
+
+test("an option a list engine owns is lit by the engine's aria-selected, and a press reaches the engine's handler", async () => {
+  const { ComboboxOptionItem } = await import("../../index.js");
+  const pressed: string[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  let held: HTMLDivElement | null = null;
+  act(() =>
+    root.render(
+      createElement(ComboboxOptionItem, {
+        option: { id: "relay", label: "relay", detail: "ada", hint: "⌘1" },
+        id: "engine-relay",
+        "aria-selected": true,
+        onClick: () => pressed.push("relay"),
+        ref: (element: HTMLDivElement | null) => {
+          held = element;
+        },
+      }),
+    ),
+  );
+  const option = container.querySelector<HTMLElement>('[role="option"]') ?? assert.fail("option");
+  act(() => option.click());
+
+  assert.equal(option.getAttribute("aria-selected"), "true");
+  assert.equal(option.id, "engine-relay");
+  assert.equal(option.textContent, "relayada⌘1");
+  assert.equal(held, option);
+  assert.deepEqual(pressed, ["relay"]);
+});
