@@ -1408,7 +1408,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const started = yield* served(client.create(request));
             if (!started.ok) return carried<TasksStartAnswer>({ failure: started.failure });
-            const task = started.answer;
+            const { task, agent } = started.answer;
             // A task just started has had no call. A call about another task
             // is left to the start's own Talk press, which moves it here.
             view = {
@@ -1420,7 +1420,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             publish();
             yield* openConversation(task.id);
             yield* readList;
-            return carried<TasksStartAnswer>({ planId: task.id });
+            return carried<TasksStartAnswer>({
+              planId: task.id,
+              ...(agent === undefined ? undefined : { agentStart: agent }),
+            });
           }),
         );
       }),

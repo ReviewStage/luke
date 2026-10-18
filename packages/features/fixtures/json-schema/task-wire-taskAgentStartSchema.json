@@ -1,0 +1,77 @@
+{
+  "type": "object",
+  "properties": {
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "effort": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "contextWindow": {
+      "type": "string",
+      "enum": [
+        "standard",
+        "long"
+      ]
+    },
+    "prompt": {
+      "type": "string",
+      "maxLength": 16000
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "mediaType": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/webp",
+              "application/pdf",
+              "text/plain"
+            ]
+          },
+          "data": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "name",
+          "mediaType",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 10
+    },
+    "disabledServers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 64
+      },
+      "maxItems": 32
+    }
+  },
+  "required": [
+    "idempotencyKey"
+  ],
+  "additionalProperties": false
+}

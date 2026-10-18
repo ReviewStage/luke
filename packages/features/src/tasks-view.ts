@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
+import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
 import {
   CODING_AGENT_BOUNDS,
   codingAgentCallIdSchema,
@@ -599,9 +600,16 @@ const START_CALL_FAILURES = [
 
 export type StartCallFailure = (typeof START_CALL_FAILURES)[number];
 
-/** Starting a task, as the window hears it: the task now active, or why none started. */
+/**
+ * Starting a task, as the window hears it: the task now active, with the
+ * agent started on it, or why it was not, where the start named one, as an
+ * agent's Start answers; or why no task started.
+ */
 export const tasksStartAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ planId: EffectSchema.String }),
+  EffectSchema.Struct({
+    planId: EffectSchema.String,
+    agentStart: EffectSchema.optionalKey(codingAgentAgentAnswerSchema),
+  }),
   EffectSchema.Struct({ failure: EffectSchema.Literals(START_CALL_FAILURES) }),
 ]);
 

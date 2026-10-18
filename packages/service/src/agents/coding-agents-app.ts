@@ -22,7 +22,6 @@ import {
 } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
-  base64Chars,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_LIST_ARCHIVED,
@@ -151,7 +150,12 @@ import {
   withPublishedCache,
 } from "./coder-host/published.js";
 import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay-summary.js";
-import { acceptedAgentChoice, startCodingAgent } from "./coder-host/start.js";
+import {
+  acceptedAgentChoice,
+  MAXIMUM_ATTACHMENTS_BODY_BYTES,
+  MAXIMUM_START_BODY_BYTES,
+  startRequestedAgent,
+} from "./coder-host/start.js";
 import {
   codingAgentPage,
   codingAgentSummary,
@@ -347,15 +351,6 @@ const QUERY = {
   SRC: "src",
 } as const;
 
-/** The files one message or Start may carry: their base64 together, and each one's name at JSON's widest escape with room for the keys around it. */
-const MAXIMUM_ATTACHMENTS_BODY_BYTES =
-  base64Chars(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) +
-  CODING_AGENT_BOUNDS.MAX_ATTACHMENTS * (6 * CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS + 128);
-
-/** A Start names a key, a choice, and a task with its files at most: the task's bound at JSON's widest escape, the files, and room for the rest. */
-const MAXIMUM_START_BODY_BYTES =
-  6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 4_096;
-
 /** An answer is a note, a few short fields, and the files a message may carry: the note's bound at JSON's widest escape, the files, and room for the rest. */
 const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
   6 *
@@ -483,29 +478,6 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const body = yield* readJsonBodyEffect(MAXIMUM_START_BODY_BYTES);
   const asked = readEither(codingAgentStartRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const {
-    idempotencyKey,
-    model,
-    effort,
-    contextWindow,
-    prompt,
-    attachments,
-    disabledServers,
-    from,
-    note,
-  } = asked.success;
-  // A choice is one thing: a model without its effort, or the reverse, names nothing to run on,
-  // and a window without them is a window of no model.
-  if (
-    (model === undefined) !== (effort === undefined) ||
-    (contextWindow !== undefined && model === undefined)
-  ) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const choice =
-    model !== undefined && effort !== undefined
-      ? { model, effort, ...(contextWindow === undefined ? undefined : { contextWindow }) }
-      : undefined;
   const environment = yield* HostedEnvironment;
   const summaryModel: SummaryModelOf =
     seams.summaryModel ??
@@ -513,31 +485,15 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       productionSummaryModel(owner, chosen, effort).pipe(
         Effect.provideService(HostedEnvironment, environment),
       ));
-  const { agent, created } = yield* choiceOrInvalid(
-    startCodingAgent(eveFor(seams, request), userId, {
-      taskId,
-      idempotencyKey,
-      choice,
-      prompt,
-      attachments,
-      disabledServers,
-      from,
-      // Note that the wire takes a note only beside a source, and an empty one is no note: its files carry it alone.
-      note: note === "" ? undefined : note,
-      summaryModel,
-    }),
+  const { agent, created } = yield* startRequestedAgent(
+    eveFor(seams, request),
+    userId,
+    taskId,
+    asked.success,
+    summaryModel,
   );
-  if (!created) {
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
-  }
-  const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
-    agent: codingAgentSummary(
-      agent,
-      { turn: undefined, awaitingLineAt: undefined },
-      yield* Clock.currentTimeMillis,
-      names,
-    ),
+  return hostedJsonResponse(created ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK, {
+    agent,
   });
 });
 

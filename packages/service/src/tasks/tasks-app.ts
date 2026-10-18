@@ -1,7 +1,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readBoard, writeScene } from "@luke/database/models/board-store";
 import { childTitlesOf } from "@luke/database/models/child-titles";
-import { listCodingAgents } from "@luke/database/models/coding-agent-store";
+import { listCodingAgents, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readIssue } from "@luke/database/models/issue-store";
 import {
@@ -41,14 +41,18 @@ import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@luke/features/plan-ed
 import {
   planRevisionSeqSchema,
   TASK_BOUNDS,
+  type Task,
+  type TaskAgentStart,
   type TaskAnswer,
   type TaskFileRequest,
+  type TaskStartAnswer,
   taskFileRequestSchema,
 } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Data, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { type EveReach, eveFor, stoppedForGood } from "../agents/coder-host/stop.js";
+import { MAXIMUM_START_BODY_BYTES, startRequestedAgent } from "../agents/coder-host/start.js";
+import { type EveReach, eveFor, stoppedForGood, summaryOf } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   CURSOR_START,
@@ -271,6 +275,9 @@ const ATTACHMENT_QUERY = "attachment";
 /** A start or a change is a name and a repository's name at most, so a body past this is neither. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
 
+/** A start is a change's few fields and, where it names one, an agent's Start beside them. */
+const MAXIMUM_TASK_START_BODY_BYTES = MAXIMUM_NAME_BODY_BYTES + MAXIMUM_START_BODY_BYTES;
+
 /** An edit is the plan's text twice, its base and its value, each at its bound with every character escaped. */
 const MAXIMUM_EDIT_BODY_BYTES = TASK_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
 
@@ -460,7 +467,54 @@ function listsArchived(request: Request): boolean {
   return asked === TASK_LIST_ARCHIVED.INCLUDE;
 }
 
-/** GET lists the account's plans, and beside them the agents with no plan in its workspaces; POST starts one with an empty document, its repository confirmed and its Linear issue and its own issue read first. */
+/**
+ * The task and the agent a start's earlier request made under the agent's
+ * key, where it made one and the account still reaches its task: a retry
+ * after a lost answer is answered with them rather than with a second task.
+ */
+const startedBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  idempotencyKey: string,
+): Effect.fn.Return<Option.Option<TaskStartAnswer>, HostedRefusal, DatabaseServices> {
+  const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, idempotencyKey));
+  if (Option.isNone(made) || made.value.taskId === null) return Option.none();
+  const task = yield* hostedStoreOrUnavailable(readTask(userId, made.value.taskId));
+  if (Option.isNone(task)) return Option.none();
+  return Option.some({ plan: task.value.task, agent: yield* summaryOf(userId, made.value) });
+});
+
+/**
+ * The agent a start asks for, started on the task it just made through the
+ * agent's own Start (`startRequestedAgent`), reaching eve as the developer;
+ * a refusal is answered beside the task rather than in its place, since the
+ * task stands either way and the developer's words are theirs to try again.
+ */
+const startedAgentOn = (
+  seams: TasksAppSeams,
+  request: Request,
+  userId: string,
+  task: Task,
+  agent: TaskAgentStart,
+): Effect.Effect<TaskStartAnswer, never, TasksServices> =>
+  startRequestedAgent(eveFor(seams, request), userId, task.id, agent).pipe(
+    Effect.map((started): TaskStartAnswer => ({ plan: task, agent: started.agent })),
+    Effect.catch((refusal) =>
+      Effect.as(
+        Effect.logWarning(`the agent a task's start asked for was refused: ${refusal.error}`),
+        { plan: task, agentRefusal: { error: refusal.error } } satisfies TaskStartAnswer,
+      ),
+    ),
+  );
+
+/**
+ * GET lists the account's plans, and beside them the agents with no plan in
+ * its workspaces; POST starts one with an empty document, its repository
+ * confirmed and its Linear issue and its own issue read first, and, where it
+ * names an agent, starts that agent on it: a start naming an agent and no
+ * repository is refused as an agent's Start on such a task is, before
+ * anything is written, and one whose agent's key already started an agent
+ * answers that agent's task and the agent.
+ */
 const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoint")(function* (
   seams: TasksAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -485,9 +539,17 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
       planlessAgents: tasklessAgents,
     });
   }
-  const body = yield* readJsonBodyEffect(MAXIMUM_NAME_BODY_BYTES);
+  const body = yield* readJsonBodyEffect(MAXIMUM_TASK_START_BODY_BYTES);
   const started = readEither(taskCreateRequestSchema)(body);
   if (Result.isFailure(started)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const { agent } = started.success;
+  if (agent !== undefined) {
+    if (started.success.repository === undefined || started.success.repository === null) {
+      return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+    }
+    const before = yield* startedBefore(userId, agent.idempotencyKey);
+    if (Option.isSome(before)) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, before.value);
+  }
   const organizationId = yield* startingWorkspace(seams, userId, started.success.workspaceId);
   const repository = yield* reachableRepository(
     Effect.succeed(organizationId),
@@ -501,6 +563,8 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
     started.success.issueId === undefined
       ? undefined
       : yield* startingIssue(userId, organizationId, started.success.issueId);
+  // An agent is the start, so its task opens with no planning phase.
+  const planning = agent === undefined ? started.success.planning : false;
   const task = yield* hostedStoreOrUnavailable(
     createTask(userId, {
       organizationId,
@@ -508,12 +572,14 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
       repository,
       ...(issue === undefined ? undefined : { linearIssue: issue }),
       ...(issueId === undefined ? undefined : { issueId }),
-      ...(started.success.planning === undefined
-        ? undefined
-        : { planning: started.success.planning }),
+      ...(planning === undefined ? undefined : { planning }),
     }),
   );
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { plan: task } satisfies TaskAnswer);
+  const answer: TaskStartAnswer =
+    agent === undefined
+      ? { plan: task }
+      : yield* startedAgentOn(seams, request, userId, task, agent);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, answer);
 });
 
 /**

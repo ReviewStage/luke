@@ -163,6 +163,7 @@ import {
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
+import type { TaskAgentRefusal } from "./task-wire.js";
 
 /**
  * coding-agent-client.ts -- the window's side of a task's coding agents, as the host asks the service for them.
@@ -272,6 +273,11 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   if (failure !== CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) return { failure };
   const reached = Result.getOrUndefined(readServiceAnswer(repositoryNotReachableSchema)(payload));
   return reached === undefined ? { failure } : { failure, unreached: reached.unreached };
+}
+
+/** A Start's refusal the service answered beside a task it made all the same (`task-wire.ts`'s `taskStartAnswerSchema`), read as a refused Start is. */
+export function startRefusedAs(refusal: TaskAgentRefusal): Failed {
+  return refusedAs(unparsedWire(refusal), START_REFUSALS);
 }
 
 /** An image's bytes read whole and spelled in base64 under the type the service named, or unanswered where the type is none an image block may be or the body could not be read. */

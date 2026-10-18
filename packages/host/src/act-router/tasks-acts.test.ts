@@ -473,24 +473,38 @@ it.effect(
     }),
 );
 
-it.effect("a started task opens its call, and one started without planning opens none", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-    f.start.answer = { planId: TASK_ID };
+it.effect(
+  "a started task opens its call, and one started without planning or with an agent opens none",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      f.start.answer = { planId: TASK_ID };
 
-    const planned = yield* f.router.performAct(
-      { kind: ACT_KIND.TASKS_START, payload: { name: "Invitations" } },
-      PANEL,
-    );
-    const unplanned = yield* f.router.performAct(
-      { kind: ACT_KIND.TASKS_START, payload: { name: "Typo", planning: false } },
-      PANEL,
-    );
+      const planned = yield* f.router.performAct(
+        { kind: ACT_KIND.TASKS_START, payload: { name: "Invitations" } },
+        PANEL,
+      );
+      const unplanned = yield* f.router.performAct(
+        { kind: ACT_KIND.TASKS_START, payload: { name: "Typo", planning: false } },
+        PANEL,
+      );
+      const withAgent = yield* f.router.performAct(
+        {
+          kind: ACT_KIND.TASKS_START,
+          payload: {
+            name: "Expiry",
+            repository: "acme/relay",
+            agent: { idempotencyKey: "start-1", prompt: "Expire invitations." },
+          },
+        },
+        PANEL,
+      );
 
-    assert.deepEqual(planned, { status: ACT_OUTCOME_STATUS.DONE, value: { planId: TASK_ID } });
-    assert.deepEqual(unplanned, planned);
-    assert.deepEqual(f.talked, [TASK_ID]);
-  }),
+      assert.deepEqual(planned, { status: ACT_OUTCOME_STATUS.DONE, value: { planId: TASK_ID } });
+      assert.deepEqual(unplanned, planned);
+      assert.deepEqual(withAgent, planned);
+      assert.deepEqual(f.talked, [TASK_ID]);
+    }),
 );
 
 it.effect("the voice window does not reach the plans", () =>
