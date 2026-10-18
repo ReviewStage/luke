@@ -40,7 +40,7 @@
   flex: none;
   min-width: 7ch;
   color: var(--luke-color-text-subtle);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
 }
 
@@ -51,8 +51,8 @@
 }
 
 .issue-status-glyph svg {
-  width: 15px;
-  height: 15px;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 .issue-status-glyph[data-status="todo"] {
@@ -105,7 +105,7 @@
 .issue-description-empty {
   margin: 0;
   color: var(--luke-color-text-subtle);
-  font-size: 13px;
+  font-size: var(--luke-type-body-size);
 }
 
 /* The description at rest is a press away from its field: the Markdown it
@@ -113,7 +113,7 @@
 .issue-description {
   margin: 0 calc(var(--luke-space-8) * -1);
   padding: var(--luke-space-4) var(--luke-space-8);
-  border-radius: 8px;
+  border-radius: var(--luke-control-radius);
   cursor: text;
   transition: background-color var(--duration-hover) ease;
 }
@@ -139,7 +139,7 @@
 .issue-description-refused {
   margin: 0;
   color: var(--luke-color-danger-text);
-  font-size: 12px;
+  font-size: var(--luke-type-caption-size);
 }
 
 /* The board fills the page's height, so it never scrolls down and each
