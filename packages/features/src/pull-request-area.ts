@@ -21,6 +21,7 @@ import { countedNumber } from "./service-wire.js";
  * last answered it, and the Factory's world reads them to place the work.
  */
 
+/** @public Read by the world's storage, route, and view model, which land above this contract. */
 export const PULL_REQUEST_AREA_BOUNDS = {
   /** The most areas one pull request names, the remainder among them. */
   MAX_AREAS: 16,
@@ -29,7 +30,11 @@ export const PULL_REQUEST_AREA_BOUNDS = {
 /** How many directories deep a file is counted: deep enough to tell a package's modules apart. */
 const AREA_DEPTH = 4;
 
-/** The two area paths that are no directory under the root. */
+/**
+ * The two area paths that are no directory under the root.
+ *
+ * @public Read by the world's storage, route, and view model, which land above this contract.
+ */
 export const AREA_PATH = {
   /** The repository's root, where a file with no directory counts. */
   ROOT: ".",
@@ -48,14 +53,23 @@ export const pullRequestAreaSchema = EffectSchema.Struct({
   deletions: countedNumber,
 });
 
+/** @public Read by the world's storage, route, and view model, which land above this contract. */
 export type PullRequestArea = typeof pullRequestAreaSchema.Type;
 
-/** A pull request's areas, largest first and the remainder last, within their bound. */
+/**
+ * A pull request's areas, largest first and the remainder last, within their bound.
+ *
+ * @public Read by the world's storage, route, and view model, which land above this contract.
+ */
 export const pullRequestAreasSchema = EffectSchema.Array(pullRequestAreaSchema).check(
   EffectSchema.isMaxLength(PULL_REQUEST_AREA_BOUNDS.MAX_AREAS),
 );
 
-/** One file a pull request changed, as GitHub lists it: its path from the root, and its lines. */
+/**
+ * One file a pull request changed, as GitHub lists it: its path from the root, and its lines.
+ *
+ * @public Read by the world's storage, route, and view model, which land above this contract.
+ */
 export interface ChangedFileLines {
   readonly path: string;
   readonly additions: number;

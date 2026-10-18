@@ -26,7 +26,11 @@ import { workspaceIdSchema } from "./task-wire.js";
  * and is view-only: nothing in it is a handle to change anything by.
  */
 
-/** How much of a repository one snapshot names; a repository with more names the largest, the newest, or the most pressing first. */
+/**
+ * How much of a repository one snapshot names; a repository with more names the largest, the newest, or the most pressing first.
+ *
+ * @public Read by the world's storage, route, and view model, which land above this contract.
+ */
 export const FACTORY_WORLD_BOUNDS = {
   /** The most zones a snapshot names, the largest by bytes first. */
   MAX_ZONES: 200,
@@ -42,7 +46,11 @@ export const FACTORY_WORLD_BOUNDS = {
   MAX_PLACES: 16,
 } as const;
 
-/** A Linear issue's priority, as Linear numbers it: none set, then urgent down to low. */
+/**
+ * A Linear issue's priority, as Linear numbers it: none set, then urgent down to low.
+ *
+ * @public Read by the world's storage, route, and view model, which land above this contract.
+ */
 export const LINEAR_PRIORITY = {
   NONE: 0,
   URGENT: 1,
@@ -51,6 +59,7 @@ export const LINEAR_PRIORITY = {
   LOW: 4,
 } as const;
 
+/** @public Read by the world's storage, route, and view model, which land above this contract. */
 export type LinearPriority = (typeof LINEAR_PRIORITY)[keyof typeof LINEAR_PRIORITY];
 
 /** The zones a snapshot names one of its items on, by path. */
@@ -58,12 +67,17 @@ const zonePathsSchema = EffectSchema.Array(EffectSchema.String).check(
   EffectSchema.isMaxLength(FACTORY_WORLD_BOUNDS.MAX_PLACES),
 );
 
-/** The repository a snapshot draws: `owner/name`, and the branch its merged work lands on. */
+/**
+ * The repository a snapshot draws: `owner/name`, and the branch its merged work lands on.
+ *
+ * @public Read by the world's storage, route, and view model, which land above this contract.
+ */
 export const factoryRepositorySchema = EffectSchema.Struct({
   fullName: githubRepositoryFullNameSchema,
   defaultBranch: EffectSchema.String,
 });
 
+/** @public Read by the world's storage, route, and view model, which land above this contract. */
 export type FactoryRepository = typeof factoryRepositorySchema.Type;
 
 /**
@@ -71,6 +85,8 @@ export type FactoryRepository = typeof factoryRepositorySchema.Type;
  * is drawn under, how many files and bytes it holds on the default branch,
  * and the zones it depends on, by path: those its `package.json` names among
  * the workspace's own packages, and the zone it sits inside.
+ *
+ * @public Read by the world's storage, route, and view model, which land above this contract.
  */
 export const factoryZoneSchema = EffectSchema.Struct({
   path: EffectSchema.String,
@@ -83,6 +99,7 @@ export const factoryZoneSchema = EffectSchema.Struct({
   ),
 });
 
+/** @public Read by the world's storage, route, and view model, which land above this contract. */
 export type FactoryZone = typeof factoryZoneSchema.Type;
 
 /**
@@ -97,6 +114,7 @@ export const factoryPullRequestSchema = EffectSchema.Struct({
   areas: pullRequestAreasSchema,
 });
 
+/** @public Read by the world's storage, route, and view model, which land above this contract. */
 export type FactoryPullRequest = typeof factoryPullRequestSchema.Type;
 
 /**
@@ -119,9 +137,14 @@ export const factoryAgentSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(factoryPullRequestSchema),
 });
 
+/** @public Read by the world's storage, route, and view model, which land above this contract. */
 export type FactoryAgent = typeof factoryAgentSchema.Type;
 
-/** One pull request merged within the window: what it was, when it merged, its size, the areas it landed in, and the agent and task it came from where known. */
+/**
+ * One pull request merged within the window: what it was, when it merged, its size, the areas it landed in, and the agent and task it came from where known.
+ *
+ * @public Read by the world's storage, route, and view model, which land above this contract.
+ */
 export const factoryShippedSchema = EffectSchema.Struct({
   number: countedNumber,
   title: EffectSchema.String,
@@ -137,6 +160,7 @@ export const factoryShippedSchema = EffectSchema.Struct({
   taskId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
+/** @public Read by the world's storage, route, and view model, which land above this contract. */
 export type FactoryShipped = typeof factoryShippedSchema.Type;
 
 /**
@@ -156,9 +180,14 @@ export const factoryPlannedSchema = EffectSchema.Struct({
   zonePaths: zonePathsSchema,
 });
 
+/** @public Read by the world's storage, route, and view model, which land above this contract. */
 export type FactoryPlanned = typeof factoryPlannedSchema.Type;
 
-/** One defect a monitor reports: its id there, its title, how many events and users it reached, and the zones it is placed on. Nothing fills it yet. */
+/**
+ * One defect a monitor reports: its id there, its title, how many events and users it reached, and the zones it is placed on. Nothing fills it yet.
+ *
+ * @public Read by the world's storage, route, and view model, which land above this contract.
+ */
 export const factoryDefectSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   title: EffectSchema.String,
@@ -167,9 +196,14 @@ export const factoryDefectSchema = EffectSchema.Struct({
   zonePaths: zonePathsSchema,
 });
 
+/** @public Read by the world's storage, route, and view model, which land above this contract. */
 export type FactoryDefect = typeof factoryDefectSchema.Type;
 
-/** One snapshot of a workspace's repository, as of `snapshotAt`. */
+/**
+ * One snapshot of a workspace's repository, as of `snapshotAt`.
+ *
+ * @public Read by the world's storage, route, and view model, which land above this contract.
+ */
 export const factoryWorldSchema = EffectSchema.Struct({
   /** Epoch milliseconds the snapshot was read. */
   snapshotAt: countedNumber,
@@ -193,18 +227,29 @@ export const factoryWorldSchema = EffectSchema.Struct({
   ),
 });
 
+/** @public Read by the world's storage, route, and view model, which land above this contract. */
 export type FactoryWorld = typeof factoryWorldSchema.Type;
 
-/** The world a member asks for (POST): the workspace, whose repository the service chooses. */
+/**
+ * The world a member asks for (POST): the workspace, whose repository the service chooses.
+ *
+ * @public Read by the world's storage, route, and view model, which land above this contract.
+ */
 export const factoryWorldRequestSchema = EffectSchema.Struct({
   workspaceId: workspaceIdSchema,
 });
 
+/** @public Read by the world's storage, route, and view model, which land above this contract. */
 export type FactoryWorldRequest = typeof factoryWorldRequestSchema.Type;
 
-/** The workspace's world; null where it has no repository to draw. */
+/**
+ * The workspace's world; null where it has no repository to draw.
+ *
+ * @public Read by the world's storage, route, and view model, which land above this contract.
+ */
 export const factoryWorldAnswerSchema = EffectSchema.Struct({
   world: EffectSchema.NullOr(factoryWorldSchema),
 });
 
+/** @public Read by the world's storage, route, and view model, which land above this contract. */
 export type FactoryWorldAnswer = typeof factoryWorldAnswerSchema.Type;
