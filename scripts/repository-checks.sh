@@ -731,25 +731,30 @@ node --input-type=module -e '
 
   const root = process.argv[1];
   const SCROLLING = /^(?:auto|scroll)$/;
+  // A sideways value that stands beside a scroll; `visible` and the resets
+  // compute to `auto` there, so they name nothing.
+  const KEEPS_X = /^(?:hidden|clip|auto|scroll)$/;
   const CLASS_SCROLLS = /(?<![\w-])overflow-(?:y-)?(?:auto|scroll)(?![\w-])/;
   const CLASS_NAMES_X = /(?<![\w-])overflow-x-\w+/;
   // Whether a block scrolls up and down with its sideways overflow left to
-  // the default, read in order, since a later `overflow` resets both axes.
+  // compute to `auto`, read in order, since a later `overflow` resets both
+  // axes. Note that a one-value `overflow: auto` counts as naming no axis,
+  // since it is the very spelling that scrolls sideways unasked.
   const scrollsUnnamed = (body) => {
     let scrollsY = false;
-    let namesX = false;
+    let x;
     for (const declaration of body.split(";")) {
       const match = declaration.match(/(?:^|\s)(overflow(?:-x|-y)?)\s*:\s*(.+)$/s);
       if (match === null) continue;
       const values = match[2].trim().split(/\s+/);
-      if (match[1] === "overflow-x") namesX = true;
+      if (match[1] === "overflow-x") x = values[0];
       else if (match[1] === "overflow-y") scrollsY = SCROLLING.test(values[0]);
       else {
         scrollsY = SCROLLING.test(values[values.length - 1]);
-        namesX = values.length > 1 || !SCROLLING.test(values[0]);
+        x = values.length > 1 || !SCROLLING.test(values[0]) ? values[0] : undefined;
       }
     }
-    return scrollsY && !namesX;
+    return scrollsY && (x === undefined || !KEEPS_X.test(x));
   };
   const files = execFileSync("git", ["-C", root, "ls-files", "-z", "--", "apps", "packages"], {
     encoding: "utf8",
