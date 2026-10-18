@@ -7,6 +7,7 @@ import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing"
 import { CHANGES_BOUNDS, REVIEW_STATE } from "@luke/features/coding-agent-wire";
 import { Effect, Redacted } from "effect";
 import {
+  GITHUB_FIXTURE,
   GITHUB_FIXTURE_BOT,
   githubReaching,
   type RepositoryScript,
@@ -47,9 +48,18 @@ type GitHubRecord = ReturnType<typeof githubUser>;
 const CHARLES = githubUser(1001, "charlespan");
 const PRIYA = githubUser(1002, "priyan");
 const STRANGER = githubUser(1003, "octostranger", "https://evil.example.com/a.png");
-const DEVIN = githubUser(1004, "devin-ai-integration[bot]");
+/** An App's bot GitHub draws by its App's logo, at its App's address. */
+const DEVIN_AVATAR = "https://avatars.githubusercontent.com/in/811515?v=4";
+const DEVIN = githubUser(1004, "devin-ai-integration[bot]", DEVIN_AVATAR);
 const PAIR = githubUser(1005, "pairdev");
-const LUKE = githubUser(GITHUB_FIXTURE_BOT.id, GITHUB_FIXTURE_BOT.login);
+const RENOVATE = githubUser(
+  1006,
+  "renovate[bot]",
+  "https://avatars.githubusercontent.com/in/2740?v=4",
+);
+/** Luke's own App's bot, whose logo GitHub serves at the fixture App's id. */
+const LUKE_AVATAR = `https://avatars.githubusercontent.com/in/${GITHUB_FIXTURE.APP_ID}?v=4`;
+const LUKE = githubUser(GITHUB_FIXTURE_BOT.id, GITHUB_FIXTURE_BOT.login, LUKE_AVATAR);
 
 /** A review as GitHub lists one. */
 function review(by: GitHubRecord, state: string, body: string, at: string) {
@@ -136,7 +146,8 @@ it.layer(getTestDB())("who a pull request names", (it) => {
           userId: charles,
         };
         const asPriya = { login: PRIYA.login, bot: false, avatarUrl: PRIYA.avatar_url };
-        const devin = { login: DEVIN.login, bot: true, avatarUrl: DEVIN.avatar_url };
+        // Note that a bot reviewer stands by its App's logo, the address GitHub gives it.
+        const devin = { login: DEVIN.login, bot: true, avatarUrl: DEVIN_AVATAR };
         assert.deepEqual(people.author, luke);
         assert.deepEqual(people.reviewers, [
           { by: asCharles, state: REVIEW_STATE.APPROVED },
@@ -252,7 +263,7 @@ it.layer(getTestDB())("who a pull request names", (it) => {
   );
 
   it.effect(
-    "a pull request a developer opened with Luke's agent names Luke's bot among the commit authors, as the co-author its commits' trailers name by its noreply address, a person co-authoring there by the avatar GitHub serves for their id, and a co-author at any other address, or a trailer-shaped line in a commit's body, is left out",
+    "a pull request a developer opened with Luke's agent names Luke's bot among the commit authors, as the co-author its commits' trailers name by its noreply address, by its App's logo; another App's bot co-authoring there by the logo the read gives it elsewhere, and by its robot where the read gives none; a person co-authoring there by the avatar GitHub serves for their id; and a co-author at any other address, or a trailer-shaped line in a commit's body, is left out",
     () =>
       Effect.gen(function* () {
         const charles = yield* linkedAccount(CHARLES.id);
@@ -263,7 +274,9 @@ it.layer(getTestDB())("who a pull request names", (it) => {
           workspace,
           repository({
             pull: { user: CHARLES, requested_reviewers: [] },
-            reviews: [],
+            reviews: [
+              review(DEVIN, "COMMENTED", "Found 1 potential issue.", "2026-10-15T10:00:00Z"),
+            ],
             commits: [
               { author: CHARLES, commit: { message: `Add invitations\n\n${coAuthor}` } },
               {
@@ -283,6 +296,12 @@ it.layer(getTestDB())("who a pull request names", (it) => {
                   message: `Pair on the copy\n\nCo-authored-by: ${PAIR.login} <${PAIR.id}+${PAIR.login}@users.noreply.github.com>`,
                 },
               },
+              {
+                author: CHARLES,
+                commit: {
+                  message: `Apply the review\n\nCo-authored-by: Devin <${DEVIN.id}+${DEVIN.login}@users.noreply.github.com>\nCo-authored-by: Renovate <${RENOVATE.id}+${RENOVATE.login}@users.noreply.github.com>`,
+                },
+              },
             ],
           }),
         );
@@ -296,12 +315,14 @@ it.layer(getTestDB())("who a pull request names", (it) => {
         assert.deepEqual(people.author, asCharles);
         assert.deepEqual(people.commitAuthors, [
           asCharles,
-          { login: LUKE.login, bot: true },
+          { login: LUKE.login, bot: true, avatarUrl: LUKE_AVATAR },
           {
             login: PAIR.login,
             bot: false,
             avatarUrl: "https://avatars.githubusercontent.com/u/1005?v=4",
           },
+          { login: DEVIN.login, bot: true, avatarUrl: DEVIN_AVATAR },
+          { login: RENOVATE.login, bot: true },
         ]);
       }),
   );
