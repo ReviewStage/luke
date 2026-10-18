@@ -1877,6 +1877,93 @@
   white-space: nowrap;
 }
 
+/* The branches and, beside them, the stack it stands in
+   (`pull-request-stack.tsx`): the branches give way first. */
+.pull-request-branch-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.pull-request-branch-row > .pull-request-branches {
+  flex: 0 1 auto;
+}
+
+/* "Stack 2/4", a quiet outlined button whose menu lists the stack. */
+.pull-request-stack {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-4);
+  height: 22px;
+  margin-top: var(--space-2);
+  padding: 0 var(--space-6);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.pull-request-stack:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.pull-request-stack > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.pull-request-stack-count {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Its labels under the title, each a pill in its GitHub colour
+   (`pull-request-labels.tsx`): a tint with its words in the colour on the
+   dark ground, a solid fill on the light one; one whose colour GitHub
+   spelled otherwise stands quiet. */
+.pull-request-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: var(--space-6) 0 var(--space-2);
+  padding: 0 var(--row-inset);
+  list-style: none;
+}
+
+.pull-request-label {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px var(--space-8);
+  border: 1px solid var(--label-edge-dark, var(--hairline));
+  border-radius: 999px;
+  background: var(--label-fill-dark, transparent);
+  color: var(--label-words-dark, var(--text-secondary));
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-color-scheme: light) {
+  .pull-request-label {
+    border-color: var(--label-edge-light, var(--hairline));
+    background: var(--label-fill-light, transparent);
+    color: var(--label-words-light, var(--text-secondary));
+  }
+}
+
+/* The reviewers' glyph, standing for the word in the header's one line. */
+.pull-request-reviewers-glyph {
+  width: 14px;
+  height: 14px;
+  color: var(--text-tertiary);
+}
+
 .pull-request-page {
   min-height: 0;
   flex: 1;
