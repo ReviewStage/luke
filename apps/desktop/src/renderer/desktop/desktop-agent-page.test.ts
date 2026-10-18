@@ -652,15 +652,16 @@ test("the agent's pull request is a row pinned over its box while it still works
   await settle();
 
   const row =
-    container.querySelector<HTMLButtonElement>(".agent-tab-foot [data-published-row]") ??
-    assert.fail("the pull request's row stands over the box");
+    container.querySelector<HTMLButtonElement>(
+      '.agent-tab-foot [aria-label="Pull request"] li > button',
+    ) ?? assert.fail("the pull request's row stands over the box");
   assert.ok(
     row.compareDocumentPosition(
       container.querySelector(".agent-composer") ?? assert.fail("the box stands"),
     ) & Node.DOCUMENT_POSITION_FOLLOWING,
     "the row stands above the box",
   );
-  assert.equal(container.querySelector("[role='log'] [data-published-row]"), null);
+  assert.equal(container.querySelector("[role='log'] [aria-label='Pull request']"), null);
   assert.ok(
     !(container.querySelector(".agent-composer")?.textContent ?? "").includes("#2911"),
     "the box's foot names no pull request",

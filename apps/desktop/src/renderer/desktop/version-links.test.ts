@@ -114,7 +114,9 @@ function drawn(): HTMLElement {
 
 test("a version's row offers Copy link, which copies its plan's address under the version's number and says Link copied", async () => {
   const container = drawn();
-  const second = container.querySelectorAll<HTMLButtonElement>(".version-row")[1];
+  const second = container.querySelectorAll<HTMLButtonElement>(
+    '[aria-label="Version list"] li > button',
+  )[1];
   assert.ok(second, "the second version is listed");
 
   act(() => {

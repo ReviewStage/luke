@@ -30,6 +30,12 @@
     background: var(--luke-color-fill-hover);
   }
 
+  /* A row whose menu is open is ringed, the way Finder rings the row a
+     right-click is about, so the menu is plainly about it. */
+  .luke-list-row[data-menu-open="true"] {
+    box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
+  }
+
   .luke-list-row[data-current="true"] {
     background: var(--luke-color-fill-strong);
   }
@@ -52,6 +58,10 @@
 
   button.luke-list-row-main {
     cursor: pointer;
+  }
+
+  button.luke-list-row-main:disabled {
+    cursor: default;
   }
 
   /* A desktop row answers a press the way a Mac's list does, without the
@@ -104,10 +114,83 @@
     padding-inline-end: var(--luke-space-8);
   }
 
+  /* A dense row is one line a control's height: its title in the body's
+     type, its description after it on that line, giving way before it. */
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+  > .luke-list-row-main {
+    min-height: var(--luke-control-height);
+    padding: 0 var(--luke-space-8);
+  }
+
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    .luke-list-row-text {
+    flex-direction: row;
+    align-items: baseline;
+    gap: var(--luke-space-8);
+  }
+
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    .luke-list-row-title {
+    flex: 0 1 auto;
+    font-size: var(--luke-type-body-size);
+    font-weight: var(--luke-weight-regular);
+  }
+
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    .luke-list-row-description {
+    flex: 0 100 auto;
+    min-width: 0;
+  }
+
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    > .luke-list-row-actions {
+    padding-inline-end: var(--luke-space-8);
+  }
+
+  /* A dense row's description that alerts, a refusal, takes a line of its
+     own under the title and keeps its words whole, rather than giving way. */
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+  .luke-list-row-text:has(> .luke-list-row-description [role="alert"]) {
+    flex-wrap: wrap;
+    padding-block: var(--luke-space-6);
+  }
+
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    .luke-list-row-description:has([role="alert"]) {
+    flex-basis: 100%;
+    white-space: normal;
+  }
+
+  /* An unread dense row's title steps up to the semibold, enough beside
+     the regular a dense row reads in. */
+  :is(
+    .luke-list[data-density="dense"] > .luke-list-row,
+    .luke-list-row[data-density="dense"]
+  )[data-unread="true"] .luke-list-row-title {
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  /* A sidebar's row rests its title in the sidebar's quieter ink, lifted to
+     the text's own while it is reached for, open, unread, or its menu is. */
+  .luke-list-row[data-ink="sidebar"] .luke-list-row-title {
+    color: var(--luke-color-sidebar-ink);
+    transition: color var(--duration-hover) ease;
+  }
+
+  .luke-list-row[data-ink="sidebar"]:is(
+      :hover,
+      [data-current="true"],
+      [data-unread="true"],
+      [data-menu-open="true"]
+    )
+    .luke-list-row-title {
+    color: var(--luke-color-text);
+  }
+
   /* Beside its acts, the row's press gives its end inset to the acts,
      whatever its list's variant or density set it (so this rule stays below
-     theirs). */
-  .luke-list-row:has(> .luke-list-row-actions) > .luke-list-row-main {
+     theirs); acts laid over its end on hover take none of it. */
+  .luke-list-row:not([data-actions="hover"]):has(> .luke-list-row-actions) > .luke-list-row-main {
     padding-inline-end: 0;
   }
 
@@ -204,10 +287,29 @@
     padding-inline-end: var(--luke-space-12);
   }
 
+  /* A row that goes deeper wears its chevron at its end, shown while the
+     row is reached for or open, its room kept so nothing moves as it shows. */
+  .luke-list-row-chevron {
+    display: inline-flex;
+    flex: none;
+    color: var(--luke-color-text-subtle);
+    opacity: 0;
+    transition: opacity var(--duration-hover) ease;
+  }
+
+  .luke-list-row-chevron > svg {
+    width: var(--luke-space-12);
+    height: var(--luke-space-12);
+  }
+
+  .luke-list-row:is(:hover, :has(:focus-visible), [data-current="true"]) .luke-list-row-chevron {
+    opacity: 1;
+  }
+
   /* Acts offered to the row in hand stand over its metadata's end, at the
      title's line where the metadata stands there, and come in while the
-     pointer rests on the row or it holds the keyboard, the metadata
-     stepping aside so nothing moves. The press keeps its end inset, since
+     pointer rests on the row, it holds the keyboard, or its menu is open,
+     the metadata stepping aside so nothing moves. The press keeps its end inset, since
      the acts take no room beside it. */
   .luke-list-row[data-actions="hover"] {
     position: relative;
@@ -231,13 +333,28 @@
     height: var(--luke-type-label-leading);
   }
 
-  .luke-list-row[data-actions="hover"]:is(:hover, :has(:focus-visible)) .luke-list-row-actions {
+  .luke-list-row[data-actions="hover"]:is(:hover, :has(:focus-visible), [data-menu-open="true"])
+    .luke-list-row-actions {
     opacity: 1;
     pointer-events: auto;
   }
 
-  .luke-list-row[data-actions="hover"]:is(:hover, :has(:focus-visible)) .luke-list-row-meta {
+  /* Note that a row offering no acts keeps its metadata, since nothing
+     steps in for it. */
+  .luke-list-row[data-actions="hover"]:has(.luke-list-row-actions):is(
+    :hover,
+    :has(:focus-visible),
+    [data-menu-open="true"]
+  ) .luke-list-row-meta {
     visibility: hidden;
+  }
+
+  /* Note that the row holding the keyboard stands over its neighbours,
+     because its ring reaches past the list's gap and the next row's fill
+     would otherwise paint over the ring's foot. */
+  .luke-list-row:has(:focus-visible) {
+    position: relative;
+    z-index: 1;
   }
 
   /* A row swiped right to its one act (`use-row-swipe.ts`): its face slides

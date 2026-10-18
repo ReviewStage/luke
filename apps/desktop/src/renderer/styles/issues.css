@@ -201,7 +201,7 @@
 
 /* A card being dragged stays in its column as its own placeholder, faded,
    while its copy follows the pointer over the board. */
-.issue-column .sidebar-tasks > .sidebar-task-item[data-dragging="true"] {
+.issue-column .sidebar-tasks > li[data-dragging="true"] {
   z-index: auto;
   background: none;
   box-shadow: none;
@@ -209,7 +209,7 @@
   transition: opacity var(--duration-quick) var(--motion-exit);
 }
 
-.issue-column .sidebar-tasks > .sidebar-task-item {
+.issue-column .sidebar-tasks > li {
   transition:
     transform var(--duration-fast) var(--spring-fast),
     opacity var(--duration-quick) var(--motion-exit);

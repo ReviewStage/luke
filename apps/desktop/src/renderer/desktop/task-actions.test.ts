@@ -176,7 +176,7 @@ function mountSidebarTask(
   current = false,
 ): HTMLButtonElement {
   const container = mount(sidebarTask(tasks, task, asked, current));
-  const row = container.querySelector(".sidebar-task");
+  const row = container.querySelector("ul > li > button");
   assert.ok(row instanceof HTMLButtonElement);
   return row;
 }
@@ -329,9 +329,8 @@ test("a sidebar task someone else created wears its creator's face before its ti
     );
     const marks = container.querySelectorAll(".sidebar-task-time .actor-mark");
     // What the row says while it holds the keyboard, its time stepped out for Pin and Archive.
-    const line = container.querySelector(".sidebar-task-line");
+    const line = container.querySelector(".luke-list-row-title");
     const said = [...(line?.childNodes ?? [])]
-      .filter((part) => !(part instanceof Element && part.matches(".sidebar-task-time")))
       .map(heard)
       .join("")
       .match(/\(created by [^)]*\)/u)?.[0];

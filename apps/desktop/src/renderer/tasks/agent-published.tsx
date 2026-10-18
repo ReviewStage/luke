@@ -4,12 +4,21 @@ import {
   type CodingAgentPullRequestAnswer,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { CHIP_LOOK, Chip, ChipName, CopyIcon, ProviderMark, useMenu } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
+import {
+  CHIP_LOOK,
+  Chip,
+  ChipName,
+  CopyIcon,
+  LIST_VARIANT,
+  List,
+  ListRow,
+  ProviderMark,
+  useMenu,
+} from "@luke/ui";
 import { GitBranchIcon, TerminalIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { Tooltip } from "../tooltip";
+import { RowHint, RowHintOptions, Tooltip } from "../tooltip";
 import {
   checkoutCommand,
   publishedUrl,
@@ -157,7 +166,7 @@ export function LinesChanged({
   );
 }
 
-/** The pull request's row pinned over the box: its number and title, that its checks failed where they did, where it stands if that matters, and the lines it adds and removes; a press opens its tab, or the page on GitHub, and a right-click offers the rest. A narrow row gives up the checks' word, then the lines, before the number (tasks.css). */
+/** The pull request's row pinned over the box, a card of one row: its number and title, that its checks failed where they did, where it stands if that matters, and the lines it adds and removes; a press opens its tab, or the page on GitHub, a right-click offers the rest, and the pointer reads its title whole where it is cut short. A narrow row gives up the checks' word, then the lines, before the number (tasks.css). */
 export function PublishedRow({
   pullRequest,
   branch,
@@ -169,39 +178,48 @@ export function PublishedRow({
   doors: PublishedDoors;
 }): ReactNode {
   const menu = useMenu(true);
-  // Whether the title is cut short, which fades it and lets the pointer read it whole.
-  const [words, clipped] = useClipped();
+  // Whether the title is cut short, which lets the pointer read it whole.
+  const [clipped, setClipped] = useState(false);
   const state = pullRequestStateWord(pullRequest.state);
   const inPanel = doors.openPullRequest;
   const actions = branchActions(branch, doors, inPanel === undefined ? undefined : pullRequest.url);
   return (
     <>
-      <Tooltip label={clipped ? pullRequest.title : undefined}>
-        <button
-          type="button"
-          className="agent-published-row"
-          data-published-row=""
-          onClick={() => {
-            menu.close(false);
-            if (inPanel === undefined) doors.openGitHub(pullRequest.url);
-            else inPanel();
-          }}
-          onContextMenu={actions.length === 0 ? undefined : menu.contextMenu()}
-        >
-          <PullRequestMark pullRequest={pullRequest} />
-          <span className="agent-published-name">
-            <span className="agent-published-number">{pullRequestNumberLabel(pullRequest)} ·</span>
-            <span ref={words} className="agent-published-title" data-overflow={String(clipped)}>
-              {pullRequest.title}
-            </span>
-          </span>
-          {pullRequest.checks === CHECK_SUMMARY.FAILING ? (
-            <span className="agent-published-checks">{CHECKS_FAILING}</span>
-          ) : null}
-          {state === undefined ? null : <span className="agent-published-state">{state}</span>}
-          <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
-        </button>
-      </Tooltip>
+      <div className="agent-published">
+        <List label="Pull request" variant={LIST_VARIANT.CARD}>
+          <RowHintOptions shown={clipped}>
+            <ListRow
+              leading={<PullRequestMark pullRequest={pullRequest} />}
+              title={
+                <>
+                  {pullRequestNumberLabel(pullRequest)} · {pullRequest.title}
+                </>
+              }
+              meta={
+                <span className="agent-published-meta">
+                  {pullRequest.checks === CHECK_SUMMARY.FAILING ? (
+                    <span className="agent-published-checks">{CHECKS_FAILING}</span>
+                  ) : null}
+                  {state === undefined ? null : <span>{state}</span>}
+                  <LinesChanged
+                    additions={pullRequest.additions}
+                    deletions={pullRequest.deletions}
+                  />
+                </span>
+              }
+              hint={{ Hint: RowHint, label: pullRequest.title }}
+              onTitleClipped={setClipped}
+              menuOpen={menu.open !== undefined}
+              onPress={() => {
+                menu.close(false);
+                if (inPanel === undefined) doors.openGitHub(pullRequest.url);
+                else inPanel();
+              }}
+              onContextMenu={actions.length === 0 ? undefined : menu.contextMenu()}
+            />
+          </RowHintOptions>
+        </List>
+      </div>
       {menu.drawn === undefined || actions.length === 0 ? null : (
         <ActionMenu menu={menu.drawn} groups={actions} label={MENU_LABEL} onClose={menu.close} />
       )}

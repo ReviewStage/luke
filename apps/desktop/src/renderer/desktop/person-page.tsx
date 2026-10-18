@@ -10,6 +10,7 @@ import {
   Button,
   ErrorState,
   IconButton,
+  List,
   ListRow,
   SKELETON_SHAPE,
   Skeleton,
@@ -139,7 +140,7 @@ function PersonSection({
           {count}
         </Text>
       </header>
-      <ul className="sidebar-tasks">{children}</ul>
+      <List label={title}>{children}</List>
     </section>
   );
 }
@@ -191,26 +192,21 @@ function AgentRow({
   const { task, agent } = each;
   const subject = lineSubject(agent, tasks.agents.models, tasks.me);
   return (
-    <li className="sidebar-task-item home-row">
-      <button
-        type="button"
-        className="sidebar-task"
-        onClick={() => tasks.onShowAgent(task.id, agent.id)}
-      >
-        <span className="sidebar-task-line">
-          <span className="home-row-picture">
-            <ActorMark actor={subject.tile} />
-          </span>
-          <span className="sidebar-task-name">{subject.name}</span>
-          <span className="home-row-context">{task.name}</span>
-          {agent.at === undefined ? null : (
-            <span className="sidebar-task-time">
-              <RelativeTime at={agent.at} now={now} />
-            </span>
-          )}
+    <ListRow
+      leading={
+        <span className="home-row-picture">
+          <ActorMark actor={subject.tile} />
         </span>
-      </button>
-    </li>
+      }
+      title={subject.name}
+      meta={
+        <span className="home-row-meta">
+          <span className="home-row-context">{task.name}</span>
+          {agent.at === undefined ? null : <RelativeTime at={agent.at} now={now} />}
+        </span>
+      }
+      onPress={() => tasks.onShowAgent(task.id, agent.id)}
+    />
   );
 }
 
@@ -344,19 +340,22 @@ function AutomationRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <li className="sidebar-task-item home-row">
-      <button type="button" className="sidebar-task" onClick={onOpen}>
-        <span className="sidebar-task-line">
-          <span className="home-row-picture">
-            <ActorMark actor={automationActor(automation)} />
-          </span>
-          <span className="sidebar-task-name">{automation.name}</span>
+    <ListRow
+      leading={
+        <span className="home-row-picture">
+          <ActorMark actor={automationActor(automation)} />
+        </span>
+      }
+      title={automation.name}
+      meta={
+        <span className="home-row-meta">
           <span className="home-row-context">
             {automationTriggerText(automation.trigger, automation.repositories ?? [])}
           </span>
         </span>
-      </button>
-    </li>
+      }
+      onPress={onOpen}
+    />
   );
 }
 
