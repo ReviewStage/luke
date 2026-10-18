@@ -97,6 +97,13 @@
     min-width: calc(2.5em + 12px);
   }
 
+  /* Note that a crumb whose chevron a width hides takes no chevron's room
+     in its floor there, as below for the narrower widths. */
+  .luke-breadcrumbs[data-variant="caption"]
+  li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
+    min-width: 2.5em;
+  }
+
   /* Note that the last crumb's share is a whole one, because shares summing
      to less than one leave the rest of the overflow standing. */
   .luke-breadcrumbs[data-variant="caption"] li:last-child {
@@ -176,6 +183,16 @@
     .luke-breadcrumb-separator[data-narrow="false"] {
       display: none;
     }
+
+    .luke-breadcrumbs[data-variant="caption"]
+      li:has(> .luke-breadcrumb-separator[data-wide="false"]) {
+      min-width: calc(2.5em + 12px);
+    }
+
+    .luke-breadcrumbs[data-variant="caption"]
+      li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
+      min-width: 2.5em;
+    }
   }
 
   @container luke-breadcrumb-bar (max-width: 299px) {
@@ -193,6 +210,16 @@
 
     .luke-breadcrumb-separator[data-narrowest="false"] {
       display: none;
+    }
+
+    .luke-breadcrumbs[data-variant="caption"]
+      li:has(> .luke-breadcrumb-separator[data-narrow="false"]) {
+      min-width: calc(2.5em + 12px);
+    }
+
+    .luke-breadcrumbs[data-variant="caption"]
+      li:has(> .luke-breadcrumb-separator[data-narrowest="false"]) {
+      min-width: 2.5em;
     }
   }
 }
