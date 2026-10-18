@@ -182,6 +182,10 @@
           "dest": "/api/default.js?route=agents/github-image&id=$1"
         },
         {
+          "src": "/api/agents/([^/]+)/review-options",
+          "dest": "/api/default.js?route=agents/review-options&id=$1"
+        },
+        {
           "src": "/api/agents/([^/]+)/inbox",
           "dest": "/api/default.js?route=agents/inbox&id=$1"
         },

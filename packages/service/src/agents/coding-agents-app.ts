@@ -77,6 +77,7 @@ import {
   changesPeople,
   namedOverviewConversation,
   namedOverviewPullRequest,
+  namedReviewOptions,
 } from "../github/github-people.js";
 import { githubReadOrRefusal, logGitHubReadFailure } from "../github/github-refusal.js";
 import { pullRequestMerging } from "../github/pull-request-merging.js";
@@ -86,9 +87,11 @@ import {
   pullRequestNodeId,
   replyToReviewThread,
   setAutoMerge,
+  setLabelled,
   setPullRequestDraft,
   setPullRequestOpen,
   setPullRequestTitle,
+  setReviewRequested,
   setReviewThreadResolved,
   submitPullRequestReview,
   takeOutOfMergeQueue,
@@ -102,6 +105,7 @@ import {
   pullRequestDeployments,
   pullRequestFiles,
   pullRequestOverview,
+  pullRequestReviewOptions,
 } from "../github/pull-requests.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -248,7 +252,10 @@ import {
  * thread, is made on GitHub as the member who asks, on their own GitHub
  * sign-in and never the App's, through the one seam every such change takes
  * (`pull-request-write.ts`), and answers how GitHub took it; the agent's kept
- * published answer is let go, so the next read asks GitHub afresh. An image
+ * published answer is let go, so the next read asks GitHub afresh. What the
+ * reviewer and label pickers offer (`GET /api/agents/{id}/review-options`),
+ * the repository's labels, collaborators, and teams, is read on a token for
+ * the agent's repository, as the overview is. An image
  * those words name (`GET /api/agents/{id}/github-image`) is
  * read on a token for the agent's repository too, an upload re-signed by its
  * asset's id (`github/github-images.ts`), and answered as bytes.
@@ -286,6 +293,8 @@ const AGENTS_PATH = {
   OVERVIEW_CONVERSATION: "/api/agents/overview-conversation",
   /** POST makes one change to the agent's pull request as the asking member; the rewrite moves the path's agent id into the `id` query. */
   PULL_REQUEST_ACTION: "/api/agents/pull-request-action",
+  /** GET reads what the reviewer and label pickers of the agent's Pull request tab offer; the rewrite moves the path's agent id into the `id` query. */
+  REVIEW_OPTIONS: "/api/agents/review-options",
   /** GET reads one image its pull request's overview names, by its address in the `src` query; the rewrite moves the path's agent id into the `id` query. */
   GITHUB_IMAGE: "/api/agents/github-image",
   /** GET reads a worker's transcript past `after`; the rewrite moves the path's agent id into the `id` query and the delegation call's id into `call`. */
@@ -1086,9 +1095,21 @@ const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
   );
 });
 
+/** The changes made by the pull request's number on GitHub's REST API, its requested reviewers and labels, which GraphQL cannot take a reviewer off of. */
+type RestActionRequest = Extract<
+  PullRequestActionRequest,
+  {
+    readonly action:
+      | typeof PULL_REQUEST_ACTION.REQUEST_REVIEW
+      | typeof PULL_REQUEST_ACTION.REMOVE_REVIEW_REQUEST
+      | typeof PULL_REQUEST_ACTION.ADD_LABEL
+      | typeof PULL_REQUEST_ACTION.REMOVE_LABEL;
+  }
+>;
+
 /** The write a change makes on the pull request, on the member's token, by the pull request's GraphQL id. */
 function writeOf(
-  request: PullRequestActionRequest,
+  request: Exclude<PullRequestActionRequest, RestActionRequest>,
   token: Redacted.Redacted,
   id: string,
 ): Effect.Effect<void, GitHubWriteFailure, HttpClient.HttpClient> {
@@ -1132,10 +1153,32 @@ function actionWrite(
 ): (
   pullRequest: MemberPullRequest,
 ) => Effect.Effect<void, GitHubWriteFailure, HttpClient.HttpClient> {
-  return ({ token, repository, number }) =>
-    Effect.flatMap(pullRequestNodeId(token, repository, number), (id) =>
-      writeOf(request, token, id),
-    );
+  return ({ token, repository, number }) => {
+    switch (request.action) {
+      case PULL_REQUEST_ACTION.REQUEST_REVIEW:
+      case PULL_REQUEST_ACTION.REMOVE_REVIEW_REQUEST:
+        return setReviewRequested(
+          token,
+          repository,
+          number,
+          request.reviewer,
+          request.action === PULL_REQUEST_ACTION.REQUEST_REVIEW,
+        );
+      case PULL_REQUEST_ACTION.ADD_LABEL:
+      case PULL_REQUEST_ACTION.REMOVE_LABEL:
+        return setLabelled(
+          token,
+          repository,
+          number,
+          request.label,
+          request.action === PULL_REQUEST_ACTION.ADD_LABEL,
+        );
+      default:
+        return Effect.flatMap(pullRequestNodeId(token, repository, number), (id) =>
+          writeOf(request, token, id),
+        );
+    }
+  };
 }
 
 /**
@@ -1215,6 +1258,46 @@ const githubImageEndpoint = /* @__PURE__ */ Effect.fn("web/agentGitHubImageEndpo
     headers: HOSTED_BYTES_HEADERS,
   });
 });
+
+/**
+ * GET reads what the reviewer and label pickers offer, of the agent's
+ * repository rather than its pull request, on a token minted for it: its
+ * labels, its collaborators named against the workspace's members, and the
+ * teams that reach it.
+ */
+const reviewOptionsEndpoint = /* @__PURE__ */ Effect.fn("web/agentReviewOptionsEndpoint")(
+  function* (
+    seams: CodingAgentsAppSeams,
+  ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+    const incoming = yield* HttpServerRequest.HttpServerRequest;
+    if (incoming.method !== HTTP_METHOD.GET) {
+      return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+    }
+    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+    const { userId, agent } = yield* reachedAgent(seams, request);
+    const options = yield* Effect.gen(function* () {
+      const { token } = yield* agentPullRequestReach(userId, agent);
+      return yield* namedReviewOptions(
+        agent,
+        yield* pullRequestReviewOptions(token, agent.repository),
+      );
+    }).pipe(
+      Effect.catch((failure) => {
+        switch (failure._tag) {
+          case "RepositoryNotReachable":
+            return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+          case "SqlError":
+          case "EffectDrizzleQueryError":
+          case "SchemaError":
+            return hostedStoreOrUnavailable(Effect.fail(failure));
+          default:
+            return githubReadOrRefusal(Effect.fail(failure));
+        }
+      }),
+    );
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, options);
+  },
+);
 
 /** The inbox cursor the request reads past, or the start where it names none; refused where it names something else. */
 const inboxCursorOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -1616,6 +1699,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.GITHUB_IMAGE,
           hostedRefusing(githubImageEndpoint(seams)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.REVIEW_OPTIONS,
+          hostedRefusing(reviewOptionsEndpoint(seams)),
         ),
         HttpRouter.add(
           ANY_METHOD,

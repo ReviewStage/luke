@@ -920,6 +920,20 @@ export function githubPost<Body extends object>(
   );
 }
 
+/** One write of the API under the bearer given by the method given, its JSON body where one is given, the path rooted at the API's origin. */
+export function githubSendRequest<Body extends object>(
+  method: "POST" | "DELETE",
+  path: string,
+  bearer: Redacted.Redacted,
+  body?: Body,
+): HttpClientRequest.HttpClientRequest {
+  const request = HttpClientRequest.make(method)(`${GITHUB_API}${path}`).pipe(
+    HttpClientRequest.bearerToken(bearer),
+    HttpClientRequest.setHeaders(GITHUB_HEADERS),
+  );
+  return body === undefined ? request : HttpClientRequest.bodyJsonUnsafe(request, body);
+}
+
 /** The one write the App makes as itself: a token mint, its JSON body under the App's own JWT. */
 function githubMintAsApp(
   path: string,

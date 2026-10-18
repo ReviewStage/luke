@@ -939,6 +939,15 @@ function withRendering(
   return HttpClientRequest.setHeader(request, "accept", FULL_MEDIA_TYPE);
 }
 
+/** A team as GitHub names one: its slug, which a review request names it by, and its name. */
+const TeamSchema = Schema.Struct({ slug: Schema.String, name: Schema.String });
+
+/** A team as the overview and the pickers hold one. */
+interface GitHubTeam {
+  readonly slug: string;
+  readonly name: string;
+}
+
 /** A pull request read whole for its overview: what its pill says, and its description, branches, times, mergeability, and people. */
 const OverviewPullSchema = Schema.Struct({
   ...PullRequestSchema.fields,
@@ -959,6 +968,7 @@ const OverviewPullSchema = Schema.Struct({
   mergeable_state: Schema.optionalKey(Schema.String),
   user: Schema.NullOr(GitHubAccountSchema),
   requested_reviewers: Schema.optionalKey(Schema.Array(GitHubAccountSchema)),
+  requested_teams: Schema.optionalKey(Schema.Array(TeamSchema)),
 });
 
 /** A head's check runs, each read for its row. */
@@ -1068,6 +1078,8 @@ export interface GitHubOverviewPullRequest {
   readonly author: GitHubAccount | undefined;
   /** Who it still asks for a review, up to the bound. */
   readonly requested: readonly GitHubAccount[];
+  /** The teams it still asks for a review, up to the bound. */
+  readonly requestedTeams: readonly GitHubTeam[];
   /** Its labels, up to the bound. */
   readonly labels: readonly GitHubLabel[];
   /** The stack it stands in, base first and itself among it; empty where it stands in none, or is not open. */
@@ -1950,6 +1962,9 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
     merge: GITHUB_MERGE_STATE.get(pull.mergeable_state ?? "") ?? MERGE_STATE.UNKNOWN,
     author: pull.user === null ? undefined : accountOf(pull.user),
     requested: distinctAccounts((pull.requested_reviewers ?? []).map(accountOf)),
+    requestedTeams: (pull.requested_teams ?? [])
+      .map(({ slug, name }) => ({ slug: nameOf(slug), name }))
+      .slice(0, CHANGES_BOUNDS.MAX_PEOPLE),
     labels: (pull.labels ?? []).slice(0, OVERVIEW_BOUNDS.MAX_LABELS),
     stack: stands && open !== undefined ? stackOf(current, open) : [],
   });
@@ -2175,3 +2190,73 @@ export function pullRequestDeployments(
     ),
   );
 }
+
+/** The repository's labels, as its pickers list them. */
+const LabelsSchema = Schema.Array(Schema.Struct({ name: Schema.String, color: Schema.String }));
+
+/** The repository's collaborators, each an account. */
+const CollaboratorsSchema = Schema.Array(GitHubAccountSchema);
+
+/** The teams that reach the repository. */
+const TeamsSchema = Schema.Array(TeamSchema);
+
+/** The most pages of each of the pickers' listings read: their bound, a hundred to a page. */
+const OPTIONS_MAX_PAGES = Math.ceil(OVERVIEW_BOUNDS.MAX_OPTIONS / PEOPLE_PER_PAGE);
+
+/** What the reviewer and label pickers offer, read of the repository: its labels, its collaborators, and its teams, each up to the bound. */
+export interface GitHubReviewOptions {
+  readonly labels: readonly GitHubLabel[];
+  readonly users: readonly GitHubAccount[];
+  readonly teams: readonly GitHubTeam[];
+}
+
+/**
+ * One of the pickers' listings, every page up to the bound. Note that one
+ * the App may not read, as the teams of a repository a person owns or of an
+ * installation that never granted the read, lists none, said once in the
+ * log, because the others stand without it; and that any other failure, a
+ * GitHub that did not answer, fails the read, so the pickers read it again
+ * rather than hold an empty list that is no answer at all.
+ */
+function optionsListing<A>(
+  token: Redacted.Redacted,
+  path: string,
+  schema: Schema.Codec<readonly A[], unknown>,
+  what: string,
+): Read<readonly A[]> {
+  return everyPage(token, path, schema, OPTIONS_MAX_PAGES).pipe(
+    Effect.map((listed) => listed.slice(0, OVERVIEW_BOUNDS.MAX_OPTIONS)),
+    Effect.catch((failure) =>
+      failure.status === GITHUB_HTTP_STATUS.FORBIDDEN
+        ? Effect.as(Effect.logWarning(`the App may not read the repository's ${what}`), [])
+        : Effect.fail(failure),
+    ),
+  );
+}
+
+/**
+ * What the reviewer and label pickers offer, read on the token of the
+ * agent's repository in three asks at once: its labels, its collaborators,
+ * who may be asked for a review, and the teams that reach it.
+ */
+export const pullRequestReviewOptions = /* @__PURE__ */ Effect.fn("web/pullRequestReviewOptions")(
+  function* (
+    token: Redacted.Redacted,
+    fullName: string,
+  ): Effect.fn.Return<GitHubReviewOptions, PullRequestReadFailure, HttpClient.HttpClient> {
+    const path = repositoryPath(fullName);
+    const [labels, users, teams] = yield* Effect.all(
+      [
+        optionsListing(token, `${path}/labels`, LabelsSchema, "labels"),
+        optionsListing(token, `${path}/collaborators`, CollaboratorsSchema, "collaborators"),
+        optionsListing(token, `${path}/teams`, TeamsSchema, "teams"),
+      ],
+      { concurrency: "unbounded" },
+    );
+    return {
+      labels,
+      users: users.map(accountOf),
+      teams: teams.map(({ slug, name }) => ({ slug: nameOf(slug), name })),
+    };
+  },
+);
