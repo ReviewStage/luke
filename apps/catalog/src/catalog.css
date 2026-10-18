@@ -339,6 +339,21 @@ body {
   width: 160px;
 }
 
+/* A card in a column narrower than its words. */
+.catalog-card-narrow {
+  width: 200px;
+}
+
+/* A line a flush card's list draws, inset as a table's cell is, with a
+   hairline between it and the line above. */
+.catalog-card-row {
+  padding: var(--luke-space-12) var(--luke-space-20);
+}
+
+.catalog-card-row + .catalog-card-row {
+  border-top: 1px solid var(--luke-color-border);
+}
+
 /* A form's column at a settings page's measure. */
 .catalog-column {
   max-width: 360px;
