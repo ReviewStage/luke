@@ -566,7 +566,7 @@ test("the Automations page's sidebar row and its command stand only while the ac
   assert.equal(runAppCommand(APP_COMMAND.AUTOMATIONS), true);
 });
 
-test("Escape pressed while the Automations pages are still loading closes Automations, as the list does once it stands", async () => {
+test("while the Automations pages are still loading their frame stands the list as quiet rows, and Escape closes Automations as the list does once it stands", async () => {
   const closed: string[] = [];
   const automationsView = {
     open: false,
@@ -601,7 +601,11 @@ test("Escape pressed while the Automations pages are still loading closes Automa
   );
   const loading = page.querySelector("section[aria-label=Automations]");
   assert.ok(loading, "the pages' frame stands");
-  assert.equal(loading.childElementCount, 0, "their chunk has not loaded yet");
+  assert.equal(loading.querySelector("h1")?.textContent, "Automations");
+  const wait = loading.querySelector("[role=status]");
+  assert.equal(wait?.textContent, "Reading your automations…", "the list stands as quiet rows");
+  assert.ok((wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0);
+  assert.equal(loading.querySelector("[role=switch]"), null, "their chunk has not loaded yet");
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS), "Automations' way out is offered");
   });

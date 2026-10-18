@@ -148,6 +148,8 @@ let agentsAsked: unknown[] = [];
 let runs: AutomationRunSummary[] = [];
 /** Every Run now asked, by the automation it runs. */
 let runsAsked: string[] = [];
+/** Whether a read of an automation's runs is held unanswered, as one still out on the wire. */
+let runsHeld = false;
 /** Whether a Run now is held unanswered, as one still out on the wire. */
 let runHeld = false;
 /** What a Run now answers where it does not start a run. */
@@ -193,6 +195,7 @@ beforeEach(() => {
   agentsAsked = [];
   runs = [];
   runsAsked = [];
+  runsHeld = false;
   runHeld = false;
   runRefusal = undefined;
   agentsOpened = [];
@@ -285,6 +288,7 @@ beforeEach(() => {
         });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_RUNS) {
+        if (runsHeld) return new Promise<never>(() => undefined);
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { runs } });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
@@ -577,6 +581,51 @@ test("with no automations the page says what one is, and with no workspace liste
   mount(tasksControl({ workspace: undefined }));
   await settle();
   assert.deepEqual(listed, []);
+});
+
+test("while the list is first read it stands as quiet rows under its toolbar, said to a reader as being read", async () => {
+  listHeld = true;
+  const page = mount();
+  await settle();
+
+  const wait = page.querySelector(".automations-scroll [role=status]");
+  assert.equal(wait?.textContent, "Reading your automations…");
+  assert.ok((wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0);
+  assert.ok(
+    page.querySelector("h1")?.textContent === "Automations",
+    "its toolbar stands over them",
+  );
+});
+
+test("with no workspace listed the list stands as quiet rows until the workspaces are read, then empty, or failed with Retry where they could not be", async () => {
+  standing = [];
+  let retried = 0;
+  const control = (patch: Partial<ReturnType<typeof tasksControl>>) =>
+    tasksControl({
+      workspace: undefined,
+      onRetryList: () => {
+        retried += 1;
+      },
+      ...patch,
+    });
+  const page = mount(control({ listRead: false, listFailed: false }));
+  await settle();
+  assert.equal(
+    page.querySelector(".automations-scroll [role=status]")?.textContent,
+    "Reading your automations…",
+  );
+
+  render(control({ listRead: true, listFailed: false }));
+  await settle();
+  assert.equal(page.querySelector("[role=status]"), null);
+  assert.match(page.textContent ?? "", /No automations yet/u);
+
+  render(control({ listRead: false, listFailed: true }));
+  await settle();
+  assert.match(page.textContent ?? "", /The automations could not be read\./u);
+  act(() => button("Retry").click());
+  assert.equal(retried, 1);
+  assert.deepEqual(listed, [], "no workspace's list is asked for");
 });
 
 /** The workspace the account made first, its personal one, where everything is its own. */
@@ -1350,6 +1399,30 @@ test("a page naming an automation the list does not hold, as a link to another w
   );
 });
 
+test("an automation's page opened before the list is read stands its toolbar's way back over its form as quiet blocks", async () => {
+  listHeld = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  const wait = page.querySelector(".automations-scroll [role=status]");
+  assert.equal(wait?.textContent?.startsWith("Reading the automation…"), true);
+  assert.ok((wait?.querySelectorAll(".luke-settings-row .luke-skeleton").length ?? 0) > 0);
+  assert.match(crumbs(page), /^Automations/u);
+  act(() => button("Automations").click());
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+});
+
+test("Escape leaves an automation's page still waiting on the list for the list", async () => {
+  listHeld = true;
+  mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS), "its way out is offered");
+  });
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+});
+
 test("what is typed while a save is out stands, unsaved, once the save lands", async () => {
   heldChanges = [];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
@@ -1751,6 +1824,16 @@ test("an automation's runs stand on its page's right, newest first, a run that s
     1,
     "a run that started no agent is no press",
   );
+});
+
+test("an automation's runs stand as quiet rows under the panel's heading while they are first read", async () => {
+  runsHeld = true;
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+
+  const wait = page.querySelector("aside[aria-label='Runs'] [role=status]");
+  assert.equal(wait?.textContent, "Reading its runs…");
+  assert.ok((wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0);
 });
 
 test("Run now starts a run under a key of its own, and the run stands first once it settles", async () => {
