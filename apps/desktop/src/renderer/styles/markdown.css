@@ -73,7 +73,7 @@
   border-radius: 0;
   background: transparent;
   font-weight: var(--luke-weight-regular);
-  line-height: 1.45;
+  line-height: var(--luke-type-reading-leading);
   white-space: pre;
 }
 

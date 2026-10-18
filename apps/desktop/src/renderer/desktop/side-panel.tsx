@@ -100,7 +100,7 @@ import {
 } from "../tasks/transcript-copy";
 import type { TranscriptReader } from "../tasks/use-agent-transcript";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents";
-import { OpenHereProvider } from "../tasks/use-open-link";
+import { PullRequestsOnGitHub } from "../tasks/use-open-link";
 import {
   type DrawnTabs,
   drawsChanges,
@@ -1369,7 +1369,7 @@ function TabContent({
   if (isChangesTab(tab)) {
     // Note that a link in a pull request's own tab, to its earlier entries or a reply, leaves for GitHub, because the tab already is that pull request.
     return (
-      <OpenHereProvider key={tab.changes} value={undefined}>
+      <PullRequestsOnGitHub key={tab.changes}>
         <AgentPullRequestTab
           agentId={tab.changes}
           control={agents}
@@ -1379,7 +1379,7 @@ function TabContent({
           view={pullRequestViews[tab.changes] ?? PULL_REQUEST_VIEW.CONVERSATION}
           onView={(view) => onPullRequestView(tab.changes, view)}
         />
-      </OpenHereProvider>
+      </PullRequestsOnGitHub>
     );
   }
   if (isFileTab(tab)) {
