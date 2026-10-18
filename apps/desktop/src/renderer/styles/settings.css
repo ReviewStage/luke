@@ -52,9 +52,12 @@
   }
 }
 
-/* A chip and a menu item draw their own chevron (`chip.css`, `menu.css`),
-   which this unlayered rule would otherwise win over. */
-.settings-chevron:where(:not(.luke-chip *, .luke-menu-item-end > *)) {
+/* A chip, a menu item, and a picker's option draw their own chevron
+   (`chip.css`, `menu.css`, `combobox.css`), which this unlayered rule would
+   otherwise win over. */
+.settings-chevron:where(
+  :not(.luke-chip *, .luke-menu-item-end > *, .luke-combobox-option-end > *)
+) {
   width: 11px;
   height: 11px;
   flex: 0 0 auto;
