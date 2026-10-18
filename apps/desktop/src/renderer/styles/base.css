@@ -340,7 +340,7 @@
     button,
     a[href],
     summary,
-    input[type="checkbox"],
+    input:is([type="checkbox"], [type="radio"], [type="range"]),
     [role="button"],
     [role="tab"],
     [role="switch"],
@@ -376,7 +376,7 @@
     button,
     a[href],
     summary,
-    input[type="checkbox"],
+    input:is([type="checkbox"], [type="radio"], [type="range"]),
     [role="button"],
     [role="tab"],
     [role="switch"],
@@ -394,7 +394,11 @@
 
   /* A field holding the caret wears no ring, however the caret got there:
      the caret and the field's own ground say where typing goes. */
-  :is(textarea, [contenteditable], input:not([type="checkbox"])):focus-visible {
+  :is(
+    textarea,
+    [contenteditable],
+    input:not([type="checkbox"], [type="radio"], [type="range"])
+  ):focus-visible {
     outline: none; /* no ring: the caret marks the field */
   }
 }

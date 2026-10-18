@@ -22,6 +22,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* A field holding the caret wears no ring, as in the apps (desktop base.css). */
+:is(
+  textarea,
+  [contenteditable],
+  input:not([type="checkbox"], [type="radio"], [type="range"])
+):focus-visible {
+  outline: none; /* no ring: the caret marks the field */
+}
+
 /* A brand whose one-colour mark is published in named inks wears them by
    the ground, as each app sets them for its own (`marks/provider-mark.tsx`). */
 [data-luke-theme="dark"]
