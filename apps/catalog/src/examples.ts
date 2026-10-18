@@ -27,6 +27,7 @@ import { INLINE_REFS_EXAMPLE } from "./examples/inline-refs";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
+import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
@@ -96,6 +97,7 @@ export const EXAMPLES: readonly Example[] = [
   TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
+  NAV_ITEMS_EXAMPLE,
   PAGINATION_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,

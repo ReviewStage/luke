@@ -1,6 +1,15 @@
 import type { TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ArchiveIcon, CHIP_LOOK, Chip, ChipName, IconButton, useMenu } from "@luke/ui";
+import {
+  ArchiveIcon,
+  CHIP_LOOK,
+  Chip,
+  ChipName,
+  IconButton,
+  NAV_ITEM_VARIANT,
+  NavItem,
+  useMenu,
+} from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
 import { TASK_GROUPING, TASK_ORDER } from "@luke/ui/task-list-model";
 import {
@@ -67,22 +76,21 @@ export function SidebarSectionHead({
       {onToggle === undefined ? (
         <span className="sidebar-section-head-name">{name}</span>
       ) : (
-        <button
-          type="button"
-          className="sidebar-section-head-name"
-          aria-expanded={folded !== true}
+        <NavItem
+          variant={NAV_ITEM_VARIANT.HEAD}
+          expanded={folded !== true}
+          count={
+            folded === true && count !== undefined
+              ? {
+                  value: count,
+                  noun: noun === undefined ? undefined : count === 1 ? noun.one : noun.many,
+                }
+              : undefined
+          }
           onClick={onToggle}
         >
           {name}
-          {folded === true && count !== undefined ? (
-            <span className="sidebar-section-head-count">
-              {count}
-              {noun === undefined ? null : (
-                <span className="luke-visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
-              )}
-            </span>
-          ) : null}
-        </button>
+        </NavItem>
       )}
       {children}
     </div>

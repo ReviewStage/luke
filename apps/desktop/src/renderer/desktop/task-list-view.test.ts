@@ -231,13 +231,21 @@ function choose(sidebar: HTMLElement, submenu: string, choice: string): void {
   act(() => menuItem(choice).click());
 }
 
+/** The first of a button's words a reader hears: a row's or a fold's name, before its count and its chord. */
+function heardName(button: Element): string {
+  const heard = [...button.children].find((part) => part.getAttribute("aria-hidden") !== "true");
+  return heard?.textContent ?? "";
+}
+
 /** The Tasks section's group headers, in order. */
 function groupNames(sidebar: HTMLElement): string[] {
   const tasks = sidebar.querySelector(TASK_LIST);
   assert.ok(tasks, "the Tasks section stands");
-  return [...tasks.querySelectorAll(".sidebar-repository-name")].map(
-    (name) => name.textContent ?? "",
-  );
+  return [
+    ...tasks.querySelectorAll(
+      ".sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+    ),
+  ].map(heardName);
 }
 
 /** The rows of the Tasks section: each name, the repository it says, and whether it wears a face. */
@@ -469,7 +477,9 @@ test("an empty workspace under a filter says only that it holds no tasks", async
 
 /** The Tasks section's head, as it names the section. */
 function headName(sidebar: HTMLElement): string | undefined {
-  return sidebar.querySelector(`${TASK_LIST} .sidebar-section-head-name`)?.textContent ?? undefined;
+  const head = sidebar.querySelector(`${TASK_LIST} .sidebar-section-head > :first-child`);
+  if (head?.matches("button") !== true) return head?.textContent ?? undefined;
+  return heardName(head);
 }
 
 /** Turns the Tasks section to the archived tasks, or back, from View options. */

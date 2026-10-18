@@ -412,12 +412,19 @@ function needsYouMark(row: HTMLElement): string {
   return mark || said ? "?" : "";
 }
 
+/** The first of a button's words a reader hears: a row's or a fold's name, before its count and its chord. */
+function heardName(button: Element): string {
+  const heard = [...button.children].find((part) => part.getAttribute("aria-hidden") !== "true");
+  return heard?.textContent ?? "";
+}
+
 /** The list as a reader hears it: each group's name, then its rows, `▸ ` where chosen and `*` where marked as needing the developer. */
 function listed(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
-  return [...list.querySelectorAll(".sidebar-repository-name, li > button")].map((node) => {
-    if (!(node instanceof HTMLButtonElement)) return `# ${node.textContent}`;
+  const fold = ".sidebar-repository-header button[aria-expanded]:not([aria-haspopup])";
+  return [...list.querySelectorAll(`${fold}, li > button`)].map((node) => {
+    if (node.matches(fold) || !(node instanceof HTMLButtonElement)) return `# ${heardName(node)}`;
     const name = node.querySelector(ROW_TITLE)?.textContent ?? "";
     return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${name}`;
   });
@@ -1079,7 +1086,9 @@ test("a folded plan counts what in it needs you, and one where nothing does coun
   );
   await settle();
   const headers = () => [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-repository-toggle"),
+    ...page.querySelectorAll<HTMLButtonElement>(
+      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+    ),
   ];
   for (const header of headers()) act(() => header.click());
   assert.deepEqual(
@@ -2298,8 +2307,10 @@ const BUMP: InboxItem = {
 /** The header of a group in the list, by its name. */
 function headerNamed(page: HTMLElement, name: string): HTMLButtonElement {
   const header = [
-    ...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks .sidebar-repository-toggle"),
-  ].find((each) => each.querySelector(".sidebar-repository-name")?.textContent === name);
+    ...page.querySelectorAll<HTMLButtonElement>(
+      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+    ),
+  ].find((each) => heardName(each) === name);
   assert.ok(header, `no header for ${name}`);
   return header;
 }
@@ -2333,7 +2344,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
 
   const sweep = headerNamed(page, "Nightly flake sweep");
   assert.ok(
-    sweep.querySelector('.sidebar-repository-glyph .actor-mark[data-kind="automation"]'),
+    sweep.querySelector(':scope > [aria-hidden="true"] .actor-mark[data-kind="automation"]'),
     "the automation's group wears its clock tile",
   );
   assert.match(hoveredCard(sweep, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
@@ -2349,7 +2360,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   const others = headerNamed(page, "Other agents");
   assert.ok(others.querySelector(".actor-mark") === null, "a group of agents names no actor");
   assert.ok(
-    others.querySelector(".sidebar-repository-glyph .lucide-factory"),
+    others.querySelector(':scope > [aria-hidden="true"] .lucide-factory'),
     "a group of agents wears the Factory's glyph, as the sidebar's row of every agent does",
   );
 

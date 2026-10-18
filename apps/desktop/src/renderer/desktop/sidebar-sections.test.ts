@@ -201,11 +201,17 @@ async function mountSidebar(writes: TaskSectionWrite[], sections = SECTIONS): Pr
 }
 
 /** The header of the section titled `title`, failing where none is drawn. */
+/** The first of a button's words a reader hears: a row's or a fold's name, before its count and its chord. */
+function heardName(button: Element): string {
+  const heard = [...button.children].find((part) => part.getAttribute("aria-hidden") !== "true");
+  return heard?.textContent ?? "";
+}
+
 function sectionHeader(sidebar: HTMLElement, title: string): HTMLElement {
-  const name = [
-    ...sidebar.querySelectorAll('nav[aria-label="Sections"] .sidebar-repository-name'),
-  ].find((each) => each.textContent === title);
-  const found = name?.closest<HTMLElement>(".sidebar-repository-header");
+  const fold = [
+    ...sidebar.querySelectorAll('nav[aria-label="Sections"] button[aria-expanded]'),
+  ].find((each) => heardName(each) === title);
+  const found = fold?.closest<HTMLElement>(".sidebar-repository-header");
   return found ?? assert.fail(`no ${title} section`);
 }
 
@@ -261,8 +267,8 @@ test("with the experiment on a section stands over its tasks, which Tasks leaves
 
   assert.deepEqual(namesIn(sidebar, "Sections"), ["Invite expiry"]);
   assert.deepEqual(namesIn(sidebar, "Tasks"), ["Retry audit"]);
-  const header = sidebar.querySelector('nav[aria-label="Sections"] .sidebar-repository-name');
-  assert.equal(header?.textContent, "Launch");
+  const header = sidebar.querySelector('nav[aria-label="Sections"] button[aria-expanded]');
+  assert.equal(header === null ? undefined : heardName(header), "Launch");
 });
 
 test("a task's Move to section puts it on top of the section chosen", async () => {
@@ -325,10 +331,12 @@ test("a section without an icon draws its title alone, with no glyph before it",
   handState(experimentsOn(EXPERIMENT.SECTIONS));
   const sidebar = await mountSidebar([], ICONLESS);
 
-  const toggle = sectionHeader(sidebar, "Someday").querySelector(".sidebar-repository-toggle");
-  assert.equal(toggle?.firstElementChild?.className, "sidebar-repository-name");
+  const toggle = sectionHeader(sidebar, "Someday").querySelector("button[aria-expanded]");
+  assert.equal(toggle?.querySelector('[aria-hidden="true"]'), null);
   assert.equal(toggle?.querySelector("svg"), null);
-  const launch = sectionHeader(sidebar, "Launch").querySelector(".sidebar-repository-glyph");
+  const launch = sectionHeader(sidebar, "Launch").querySelector(
+    'button[aria-expanded] > [aria-hidden="true"]',
+  );
   assert.equal(launch?.textContent, "🚀");
 });
 
@@ -622,7 +630,9 @@ test("a section's glyph beyond the suggested ones is drawn in its color, and one
 
   // Note that each check reads words off the nodes, since a failed check printing a node prints the whole document.
   const glyphOf = (title: string) =>
-    sectionHeader(sidebar, title).querySelector(".sidebar-repository-glyph")?.firstElementChild;
+    sectionHeader(sidebar, title).querySelector(
+      'button[aria-expanded] > [aria-hidden="true"] > :first-child',
+    )?.firstElementChild;
   assert.equal(glyphOf("Stars")?.tagName.toLowerCase(), "svg");
   assert.equal(glyphOf("Stars")?.getAttribute("data-icon-color"), TASK_SECTION_ICON_COLOR.TEAL);
   assert.equal(glyphOf("Lost")?.getAttribute("class"), "section-glyph-blank");

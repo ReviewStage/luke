@@ -22,6 +22,8 @@ import {
   ErrorState,
   FolderIcon,
   IconButton,
+  NAV_CURRENT,
+  NavItem,
   PinIcon,
   PlusIcon,
   ProviderMark,
@@ -917,18 +919,16 @@ function SidebarHomeRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-home"
-      aria-current={current ? "page" : undefined}
+    <NavItem
+      icon={<HouseIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.HOME)}
+      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.HOME].chord} />}
       disabled={disabled}
       onClick={onOpen}
     >
-      <HouseIcon />
       Home
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.HOME].chord} className="row-shortcut" />
-    </button>
+    </NavItem>
   );
 }
 
@@ -953,27 +953,20 @@ function SidebarInboxRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-inbox"
-      aria-current={current ? "page" : undefined}
+    <NavItem
+      icon={<InboxIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
+      count={{
+        value: waiting,
+        noun: waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many,
+      }}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
+      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
       disabled={disabled}
       onClick={onOpen}
     >
-      <InboxIcon />
       Inbox
-      {waiting === 0 ? null : (
-        <span className="sidebar-inbox-waiting">
-          {waiting}
-          <span className="luke-visually-hidden">
-            {" "}
-            {waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}
-          </span>
-        </span>
-      )}
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} className="row-shortcut" />
-    </button>
+    </NavItem>
   );
 }
 
@@ -999,21 +992,14 @@ function SidebarChatRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-inbox"
-      aria-current={current ? "page" : undefined}
+    <NavItem
+      icon={<MessagesSquareIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
+      count={{ value: waiting, noun: "waiting on you" }}
       onClick={onOpen}
     >
-      <MessagesSquareIcon />
       Chat
-      {waiting === 0 ? null : (
-        <span className="sidebar-inbox-waiting">
-          {waiting}
-          <span className="luke-visually-hidden"> waiting on you</span>
-        </span>
-      )}
-    </button>
+    </NavItem>
   );
 }
 
@@ -1023,11 +1009,11 @@ interface FloatingSidebar extends HoverPane {
   readonly inSight: boolean;
 }
 
-/** Where a sidebar opened from away takes the keyboard: the row it marks, else New plan. */
+/** Where a sidebar opened from away takes the keyboard: the row it marks, else New task, the first of its places. */
 function sidebarFocus(sidebar: HTMLElement): HTMLElement | null {
   return (
     sidebar.querySelector<HTMLElement>('[aria-current="page"]') ??
-    sidebar.querySelector<HTMLElement>(".sidebar-new-task")
+    sidebar.querySelector<HTMLElement>(".sidebar-places > button")
   );
 }
 
@@ -1061,16 +1047,14 @@ function SidebarFactoryRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-factory"
-      aria-current={current ? "page" : undefined}
+    <NavItem
+      icon={<FactoryIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
       disabled={disabled}
       onClick={onOpen}
     >
-      <FactoryIcon />
       Factory
-    </button>
+    </NavItem>
   );
 }
 
@@ -1089,18 +1073,16 @@ function SidebarIssuesRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-issues"
-      aria-current={current ? "page" : undefined}
+    <NavItem
+      icon={<ListTodoIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.ISSUES)}
+      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.ISSUES].chord} />}
       disabled={disabled}
       onClick={onOpen}
     >
-      <ListTodoIcon />
       Issues
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.ISSUES].chord} className="row-shortcut" />
-    </button>
+    </NavItem>
   );
 }
 
@@ -1124,23 +1106,17 @@ function SidebarAutomationsRow({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-search sidebar-automations"
-      aria-current={current ? "page" : undefined}
+    <NavItem
+      icon={<ZapIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
+      mark={failed ? stateEndMark(GLYPH_STATE.FAILED, false) : undefined}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.AUTOMATIONS)}
+      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.AUTOMATIONS].chord} />}
       disabled={disabled}
       onClick={onOpen}
     >
-      <ZapIcon />
       Automations
-      {failed ? (
-        <span className="sidebar-automations-failed">
-          {stateEndMark(GLYPH_STATE.FAILED, false)}
-        </span>
-      ) : null}
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.AUTOMATIONS].chord} className="row-shortcut" />
-    </button>
+    </NavItem>
   );
 }
 
@@ -1219,17 +1195,15 @@ function NewTaskButton({
   onNewTask: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="sidebar-new-task"
+    <NavItem
+      icon={<ComposeIcon />}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_TASK)}
+      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} />}
       disabled={!tasks.signedIn}
       onClick={onNewTask}
     >
-      <ComposeIcon />
       New task
-      <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} className="row-shortcut" />
-    </button>
+    </NavItem>
   );
 }
 
@@ -1578,59 +1552,56 @@ function SidebarColumn({
         <LukeIdentity />
       )}
 
-      <NewTaskButton tasks={tasks} onNewTask={chosen(newTask)} />
-      {/* Search is a second door to the command palette, drawn as New task
+      <div className="sidebar-places">
+        <NewTaskButton tasks={tasks} onNewTask={chosen(newTask)} />
+        {/* Search is a second door to the command palette, drawn as New task
           is, since it heads the list the same way. */}
-      <button
-        type="button"
-        className="sidebar-search"
-        aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
-        onClick={chosen(() => runAppCommand(APP_COMMAND.COMMAND_PALETTE))}
-      >
-        <SearchIcon />
-        Search
-        <Shortcut
-          chord={APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord}
-          className="row-shortcut"
-        />
-      </button>
-      <SidebarHomeRow current={atHome} disabled={!tasks.signedIn} onOpen={chosen(goHome)} />
-      <SidebarInboxRow
-        waiting={tasks.signedIn ? waitingItems(tasks) : 0}
-        current={inInbox}
-        disabled={!tasks.signedIn}
-        onOpen={chosen(openInbox)}
-      />
-      {/* Chat's row stands while the account has it on wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
-      {chatOn && tasks.signedIn && tasks.chatView.available ? (
-        <SidebarChatRow
-          waiting={waitingMessages(tasks)}
-          current={inChat}
-          onOpen={chosen(openChat)}
-        />
-      ) : null}
-      {factoryOn ? (
-        <SidebarFactoryRow
-          current={inFactory}
+        <NavItem
+          icon={<SearchIcon />}
+          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
+          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord} />}
+          onClick={chosen(() => runAppCommand(APP_COMMAND.COMMAND_PALETTE))}
+        >
+          Search
+        </NavItem>
+        <SidebarHomeRow current={atHome} disabled={!tasks.signedIn} onOpen={chosen(goHome)} />
+        <SidebarInboxRow
+          waiting={tasks.signedIn ? waitingItems(tasks) : 0}
+          current={inInbox}
           disabled={!tasks.signedIn}
-          onOpen={chosen(openFactory)}
+          onOpen={chosen(openInbox)}
         />
-      ) : null}
-      {automationsOn ? (
-        <SidebarAutomationsRow
-          current={inAutomations}
-          failed={automationFailed}
-          disabled={!tasks.signedIn}
-          onOpen={chosen(openAutomations)}
-        />
-      ) : null}
-      {issuesOn ? (
-        <SidebarIssuesRow
-          current={inIssues}
-          disabled={!tasks.signedIn}
-          onOpen={chosen(openIssues)}
-        />
-      ) : null}
+        {/* Chat's row stands while the account has it on wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
+        {chatOn && tasks.signedIn && tasks.chatView.available ? (
+          <SidebarChatRow
+            waiting={waitingMessages(tasks)}
+            current={inChat}
+            onOpen={chosen(openChat)}
+          />
+        ) : null}
+        {factoryOn ? (
+          <SidebarFactoryRow
+            current={inFactory}
+            disabled={!tasks.signedIn}
+            onOpen={chosen(openFactory)}
+          />
+        ) : null}
+        {automationsOn ? (
+          <SidebarAutomationsRow
+            current={inAutomations}
+            failed={automationFailed}
+            disabled={!tasks.signedIn}
+            onOpen={chosen(openAutomations)}
+          />
+        ) : null}
+        {issuesOn ? (
+          <SidebarIssuesRow
+            current={inIssues}
+            disabled={!tasks.signedIn}
+            onOpen={chosen(openIssues)}
+          />
+        ) : null}
+      </div>
       <hr className="sidebar-rule" />
 
       {/* One scroller for both sections, so the pinned tasks scroll away
