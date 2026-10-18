@@ -21,9 +21,8 @@ import { LinkWorkspaceProvider } from "../copy-link-item";
 import { FIND_PAGE, PageFind } from "../find-in-tab";
 import { MemberDirectory } from "../member-directory";
 import { NOT_FOUND_THING, NotFound } from "../not-found";
-import { SPINNER_SIZE, Spinner } from "../spinner";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns";
-import { InboxList, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
+import { InboxList, InboxListSkeleton, ItemMark, NeedsYouEmpty } from "../tasks/inbox-list";
 import {
   anyNeedsYou,
   firstChoice,
@@ -35,18 +34,18 @@ import {
   itemWorkspaceId,
   listedItems,
   NEEDS_YOU,
-  type PlanlessAgent,
+  type TasklessInboxAgent,
   taskHolder,
   tasklessGroups,
 } from "../tasks/inbox-model";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager";
 import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane";
-import {
-  type PlanlessPlace,
-  planlessMentions,
-  useMentionAgentsReader,
-} from "../tasks/plan-mentions";
 import { SkillFiles } from "../tasks/skill-chip";
+import {
+  type TasklessPlace,
+  tasklessMentions,
+  useMentionAgentsReader,
+} from "../tasks/task-mentions";
 import { useMinute } from "../tasks/task-time";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model";
 import { type CodingAgentsControl, useCodingAgents } from "../tasks/use-coding-agents";
@@ -124,7 +123,7 @@ function listedHoldings(
   return holdings.filter((holding) => listed.some((task) => task.id === holding.taskId));
 }
 
-/** What stands under the list's rows: a read that did not answer, the spinner while nothing is read, Needs you's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
+/** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, Needs you's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
 function ListNote({
   failed,
   reading,
@@ -153,7 +152,7 @@ function ListNote({
     );
   }
   if (!empty) return null;
-  if (reading) return <Spinner label="Loading inbox" size={SPINNER_SIZE.INLINE} />;
+  if (reading) return <InboxListSkeleton />;
   if (filteredOut !== undefined) return <NeedsYouEmpty needsYou={filteredOut} onList={onList} />;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
   if (alone) return <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>;
@@ -260,7 +259,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
       : taskless.items;
   // An agent with no plan that a link names, none of whose items waits any longer, is grouped by its own read, which the account's list of waiting agents leaves out, in its own workspace's list alone.
   const pageAgent = agents.agents?.[0] ?? agents.archived?.[0];
-  const settledAgent: PlanlessAgent[] =
+  const settledAgent: TasklessInboxAgent[] =
     chosenAgentId !== undefined &&
     holdsLive &&
     pageAgent !== undefined &&
@@ -384,7 +383,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   const mentions =
     place === undefined
       ? undefined
-      : planlessMentions(place, tasks.onShowMention, readMentionAgents);
+      : tasklessMentions(place, tasks.onShowMention, readMentionAgents);
   const onRetry = () => {
     read.onRetry();
     taskless.onRetry();
@@ -569,14 +568,14 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
  * names them, never its group's, which agents of other repositories share
  * and which an agent a link reached stands under with none. Its box
  * mentions what that repository and workspace hold, as the page of an
- * agent no plan holds does (`planlessMentions`), and its skills' files
+ * agent no plan holds does (`tasklessMentions`), and its skills' files
  * open there. None until both are known.
  */
 function answerPlace(
   chosen: InboxListed,
   agents: CodingAgentsControl,
   tasks: TasksControl,
-): PlanlessPlace | undefined {
+): TasklessPlace | undefined {
   const { holder, item } = chosen;
   const workspaceId =
     holder.kind === INBOX_HOLDER.TASK

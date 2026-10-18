@@ -93,22 +93,18 @@ export function UpdatesSection({
               </span>
             }
             description={
-              <>
-                {/* Note that a failure mounts an element of its own, an alert,
-                  so it is announced as it lands; every other detail is read
-                  with the row rather than spoken over whatever the reader is
-                  on. */}
-                {row.failed ? (
-                  <span key="failed" className="error-message" role="alert">
-                    {row.detail}
-                  </span>
-                ) : (
-                  row.detail
-                )}
-                {/* Note that the bar is the picture of the detail's numbers, so it says nothing to a reader. */}
-                {row.progress === undefined ? null : <Progress value={row.progress} />}
-              </>
+              row.failed ? undefined : (
+                <>
+                  {row.detail}
+                  {/* Note that the bar is the picture of the detail's numbers, so it says nothing to a reader. */}
+                  {row.progress === undefined ? null : <Progress value={row.progress} />}
+                </>
+              )
             }
+            // Note that a failure is the row's error, announced as it lands;
+            // every other detail is read with the row rather than spoken over
+            // whatever the reader is on.
+            error={row.failed ? row.detail : undefined}
           >
             {() => updateButton(row.action, control)}
           </SettingsRow>

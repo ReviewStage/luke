@@ -197,7 +197,7 @@ export const APP_SETTING_SCHEMA = {
     values: VIDEO_AVATAR_LIST,
     token: (avatar) => avatar,
     optionLabel: (avatar) => VIDEO_AVATAR_NAME[avatar],
-    // Each stock avatar's face, loaded from Keyframe as the menu draws it.
+    // Each stock avatar's face, loaded from Keyframe as the row draws it, and chosen from.
     optionPicture: videoAvatarCover,
     guard: (value: UnparsedWireValue) => optional(value, isVideoAvatar),
     default: DEFAULT_VIDEO_AVATAR,

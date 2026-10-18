@@ -41,12 +41,8 @@ export function SwitchRow({
   const { busy, rejection, run } = useSettingWrite(onChange);
   return (
     <SettingsRow
-      label={
-        <>
-          {label}
-          {changed ? <ChangedMark /> : null}
-        </>
-      }
+      label={label}
+      adornment={changed ? <ChangedMark /> : null}
       description={detail}
       error={rejection}
       density={density}

@@ -4,10 +4,11 @@ import {
   HoverCardHead,
   HoverCardNote,
   HoverCardRow,
+  INLINE_REF_LOOK,
 } from "@luke/ui";
 import { type SkillOption, skillWord } from "@luke/ui/skill-mention";
 import { BookOpenIcon } from "lucide-react";
-import { Tooltip } from "../tooltip";
+import { InlineRef } from "../inline-ref";
 import { FileTypeIcon } from "./file-type-icon";
 
 /**
@@ -50,13 +51,16 @@ export function SkillCard({ subject }: { subject: SkillSubject }): React.JSX.Ele
   );
 }
 
-/** A skill named in place: its `/name` as the composer's chip, one button that hangs its card and opens its file. */
+/** A skill named in place: its `/name` as a mention's pill, one button that hangs its card and opens its file. */
 export function SkillRef({ subject }: { subject: SkillSubject }): React.JSX.Element {
   return (
-    <Tooltip label={subject.skill.path} card={<SkillCard subject={subject} />}>
-      <button type="button" className="skill-chip" data-skill-ref="" onClick={subject.onOpen}>
-        {skillWord(subject.skill.name)}
-      </button>
-    </Tooltip>
+    <InlineRef
+      look={INLINE_REF_LOOK.PILL}
+      label={skillWord(subject.skill.name)}
+      onPress={() => subject.onOpen()}
+      hintLabel={subject.skill.path}
+      card={<SkillCard subject={subject} />}
+      data-skill-ref=""
+    />
   );
 }

@@ -109,7 +109,7 @@ function HoverCards(): React.JSX.Element {
       <CatalogSection id="hover-card-heads" title="Heads">
         <Inline gap={GAP.CONTROL}>
           <Carded
-            label="Plan"
+            label="Task"
             card={
               <HoverCard>
                 <HoverCardHead name="Teammate invitations" sub="acme/relay" corner="3h" />
