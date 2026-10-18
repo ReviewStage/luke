@@ -998,14 +998,22 @@ test("on the board ↓ and ↑ move down a column, ← and → to the nearest ca
 
 /**
  * The board laid out as a narrow window lays it: each column 300px wide,
- * side by side from the scroller's start, in a scroller 700px wide that
- * scrolls sideways. jsdom lays nothing out, so this answers the geometry the
- * browser would. Answers each scroller's sideways scroll as it stands.
+ * side by side from the page's scroll's start, in that scroll 700px wide,
+ * which scrolls sideways. jsdom lays nothing out and reads no stylesheet,
+ * so this answers the geometry and the overflow the browser would. Answers
+ * the page's sideways scroll as it stands.
  */
 function layBoardOut(): () => number {
   const COLUMN = 300;
   const scrolled = new WeakMap<Element, number>();
-  const scroller = () => document.querySelector(".issue-board-scroll");
+  const SCROLL = ".luke-collection-page-scroll";
+  const scroller = () => document.querySelector<HTMLElement>(SCROLL);
+  const computed = globalThis.getComputedStyle;
+  vi.spyOn(globalThis, "getComputedStyle").mockImplementation((element, pseudo) => {
+    const style = computed(element, pseudo);
+    if (element.matches(SCROLL)) style.overflowX = "auto";
+    return style;
+  });
   vi.spyOn(Element.prototype, "scrollLeft", "get").mockImplementation(function (this: Element) {
     return scrolled.get(this) ?? 0;
   });
@@ -1016,7 +1024,7 @@ function layBoardOut(): () => number {
     scrolled.set(this, left);
   });
   vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
-    return this.matches(".issue-board-scroll") ? 700 : 0;
+    return this.matches(SCROLL) ? 700 : 0;
   });
   vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
     this: HTMLElement,
@@ -1026,7 +1034,9 @@ function layBoardOut(): () => number {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const columns = [...document.querySelectorAll("[data-issue-column]")];
     const at = columns.indexOf(this);
-    const left = at < 0 ? 0 : at * COLUMN - (scrolled.get(scroller() ?? this) ?? 0);
+    const shift = scrolled.get(scroller() ?? this) ?? 0;
+    if (this.matches(".issue-board")) return new DOMRect(-shift, 0, columns.length * COLUMN, 0);
+    const left = at < 0 ? 0 : at * COLUMN - shift;
     return new DOMRect(left, 0, at < 0 ? 0 : COLUMN, 0);
   });
   return () => {
@@ -1084,6 +1094,28 @@ test("View options lays the page out as the list and back as the board, and an i
   assert.ok(stillListed, "the list is what the page goes back to");
   assert.ok(page.querySelector("[data-issue-column]"), "Board lays it out as the board again");
   assert.equal(page.querySelector(".home-section"), null);
+});
+
+test("while the issues are read the list stands rows of blocks, said as reading, and the board stands nothing until its columns can", async () => {
+  standing = [issue(1)];
+  window.localStorage.setItem("luke.issuesLayout", JSON.stringify("list"));
+  const list = mount();
+  const reading = list.querySelector('[role="status"]')?.textContent;
+  await settle();
+  const read = list.querySelector('[role="status"]');
+  const listedGroups = groups(list);
+  act(() => root?.unmount());
+
+  window.localStorage.setItem("luke.issuesLayout", JSON.stringify("board"));
+  const board = mount();
+  const boardReading = board.querySelector('[role="status"]');
+  await settle();
+
+  assert.equal(reading, "Reading issues");
+  assert.equal(read, null);
+  assert.deepEqual(listedGroups, [["Backlog1", ["ACME-1 Issue 1"]]]);
+  assert.equal(boardReading, null);
+  assert.deepEqual(columns(board)[0], ["Backlog1", ["ACME-1"]]);
 });
 
 test("the page opens again in the layout last chosen, the list after List and the board after Board", async () => {
