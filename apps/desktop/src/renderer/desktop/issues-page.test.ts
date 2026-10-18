@@ -10,17 +10,21 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { lineWords } from "#testing/actor-line";
 import { fakeAppBridge } from "#testing/app-bridge";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { onRegistry } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { landedBundles, onSideBundles, unlandedBundles } from "#testing/side-bundles";
 import { tasksControl } from "#testing/tasks-control";
 import { runAppCommand, useAppKeymap } from "../app-commands";
+import type { SideBundles } from "../bundle-loader";
+import type { PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
 import { ISSUES_PAGE, type IssuesPlace } from "../tasks/use-tasks-tab";
 import { ToastHost } from "../toast";
 import { IssuesPage } from "./issues-page";
@@ -29,6 +33,9 @@ import { IssuesPage } from "./issues-page";
  * issues-page.test.ts -- the Issues page as the window draws it: the listed workspace's issues under a heading for each status, the work under way first, a title typed and Return filing a new one into its group, ↑ ↓ and Return opening a row, an issue's page saying who filed it and when it was filed and last changed, and a read that did not land said with a retry.
  *
  * The service is a script at the act boundary; synthetic issues and words throughout.
+ * The description's editor is the plan's TipTap bundle, tested beside it
+ * (`../plan-editor/`); here a stand-in at the bundle's importer is typed
+ * into, finished, and left as the editor would be.
  */
 
 const WORKSPACE: Workspace = {
@@ -78,6 +85,57 @@ function issue(number: number, patch: Partial<Issue> = {}): Issue {
 }
 
 let root: Root | undefined;
+
+/** An editor the description mounted: what it was handed, the words it holds now, and its element. */
+interface StandInEditor {
+  readonly props: PlanEditorProps;
+  readonly element: HTMLElement;
+  text: string;
+  destroyed: boolean;
+}
+
+/** Every editor the description mounted, newest last. */
+const editors: StandInEditor[] = [];
+
+/** The plan editor's stand-in: an editable element holding the words it was handed, focused where it is asked to be. */
+const EDITOR_STAND_IN: PlanEditorModule = {
+  mount: (host, props) => {
+    const element = document.createElement("div");
+    element.setAttribute("contenteditable", "true");
+    element.setAttribute("role", "textbox");
+    element.setAttribute("aria-label", props.label);
+    element.tabIndex = 0;
+    host.append(element);
+    const editor: StandInEditor = { props, element, text: props.markdown, destroyed: false };
+    editors.push(editor);
+    if (props.focus) element.focus();
+    return {
+      take: (_sent, merged) => ({ base: merged, text: merged }),
+      chooseMention: () => undefined,
+      markdown: () => editor.text,
+      insertPictures: () => undefined,
+      settlePicture: () => undefined,
+      removePicture: () => undefined,
+      destroy: () => {
+        editor.destroyed = true;
+        element.remove();
+      },
+    };
+  },
+  mountComposer: () => assert.fail("the issue's page mounts no message box"),
+};
+
+/** The bundles the page is drawn over: the editor's stand-in landed, unless a test draws it over others. */
+let landed: SideBundles;
+let bundles: SideBundles;
+
+// Landed before any page renders, as it is once a plan or an issue has been shown in this window.
+beforeAll(async () => {
+  landed = await Effect.runPromise(
+    landedBundles({ planEditor: () => Promise.resolve(EDITOR_STAND_IN) }),
+  );
+});
+
 /** The service's issues, as a read of the list answers them and a filing adds to them. */
 let standing: Issue[] = [];
 /** How the next reads of the list answer before the service's own, in order. */
@@ -121,6 +179,8 @@ beforeEach(() => {
   heldCreates = undefined;
   changeRefused = false;
   copied = [];
+  editors.length = 0;
+  bundles = landed;
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   fakeAppBridge({
     act: (request: Act) => {
@@ -260,7 +320,11 @@ function mount(start?: IssuesPlace): HTMLElement {
 
 /** The pages drawn again in place, listing the workspace given. */
 function list(workspace: Workspace, start?: IssuesPlace): void {
-  act(() => root?.render(onRegistry(registry, createElement(Pages, { workspace, start }))));
+  act(() =>
+    root?.render(
+      onRegistry(registry, onSideBundles(bundles, createElement(Pages, { workspace, start }))),
+    ),
+  );
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -373,23 +437,41 @@ function pick(page: HTMLElement, label: string, option: string): void {
   act(() => row.click());
 }
 
-/** The description's field, opened by a press on the description. */
-function openDescription(page: HTMLElement): HTMLTextAreaElement {
-  const description = page.querySelector<HTMLElement>("[aria-label='Edit description']");
+/** The description as its page draws it at rest. */
+function descriptionOf(page: HTMLElement): HTMLElement {
+  const description = page.querySelector<HTMLElement>("[role=group][aria-label='Description']");
   assert.ok(description, "the description stands");
-  act(() => description.click());
-  const field = page.querySelector<HTMLTextAreaElement>("textarea[aria-label='Description']");
-  assert.ok(field, "the description's field opens");
-  return field;
+  return description;
 }
 
-/** Types into a field as the developer would. */
-function type(field: HTMLTextAreaElement, words: string): void {
+/** The description's editor open now. */
+function openEditor(): StandInEditor {
+  const editor = editors.filter((each) => !each.destroyed).at(-1);
+  assert.ok(editor, "the description's editor is open");
+  return editor;
+}
+
+/** The description's editor, opened by a click into its words at the point given. */
+function openDescription(page: HTMLElement, at = { x: 40, y: 12 }): StandInEditor {
   act(() => {
-    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-    set?.call(field, words);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
+    descriptionOf(page).dispatchEvent(
+      new MouseEvent("click", { bubbles: true, clientX: at.x, clientY: at.y }),
+    );
   });
+  return openEditor();
+}
+
+/** Words typed into the editor, as it hands each change over. */
+function type(editor: StandInEditor, words: string): void {
+  act(() => {
+    editor.text = words;
+    editor.props.onDraft(words);
+  });
+}
+
+/** Esc or ⌘↩ in the editor, which finishes it. */
+function finish(editor: StandInEditor): void {
+  act(() => editor.props.onFinish(0));
 }
 
 /** The new issue's title field, on the card standing over the window. */
@@ -527,7 +609,7 @@ test("C pressed on the page opens the card, and a c typed into the card's title,
   act(() => title.focus());
   press("c", title);
   const description = openDescription(page);
-  press("c", description);
+  press("c", description.element);
 
   assert.equal(document.querySelectorAll("[role=dialog]").length, 0, "no card opened while typing");
 });
@@ -774,91 +856,279 @@ test("two changes at once draw the newest's answer, though the older one is answ
   assert.equal(picked(page, "Priority"), "Urgent");
 });
 
-test("the description pressed opens its field, and leaving it sends what was typed and draws it as Markdown", async () => {
+test("a click into the description opens the plan's editor in its place, the caret where the click landed, and leaving it sends what was typed and draws it as Markdown", async () => {
   standing = [issue(1)];
   const page = await openIssue(issue(1).id);
 
-  const field = openDescription(page);
-  type(field, "## Plan\n\n- reproduce\n- fix");
-  act(() => field.blur());
+  const editor = openDescription(page, { x: 120, y: 48 });
+  const opened = {
+    markdown: editor.props.markdown,
+    placement: editor.props.placement,
+    placeholder: editor.props.placeholder,
+    focused: document.activeElement === editor.element,
+    masked: editor.element.closest(".ph-no-capture") !== null,
+    resting: page.querySelector("[role=group][aria-label='Description']"),
+  };
+  type(editor, "## Plan\n\n- reproduce\n- fix");
+  act(() => editor.element.blur());
   await settle();
 
+  assert.deepEqual(opened, {
+    markdown: "",
+    placement: { x: 120, y: 48 },
+    placeholder: "Add a description…",
+    focused: true,
+    masked: true,
+    resting: null,
+  });
   assert.deepEqual(changes, [
     { issueId: issue(1).id, change: { description: "## Plan\n\n- reproduce\n- fix" } },
   ]);
-  assert.equal(page.querySelector("textarea[aria-label='Description']"), null);
-  const drawn = page.querySelector(".issue-description");
-  assert.equal(drawn?.querySelector(".markdown-heading[data-level='2']")?.textContent, "Plan");
+  assert.ok(editor.destroyed, "the editor closes once the save is kept");
+  const drawn = descriptionOf(page);
+  assert.equal(drawn.querySelector(".markdown-heading[data-level='2']")?.textContent, "Plan");
   assert.deepEqual(
-    [...(drawn?.querySelectorAll("li") ?? [])].map((item) => item.textContent),
+    [...drawn.querySelectorAll("li")].map((item) => item.textContent),
     ["reproduce", "fix"],
   );
 });
 
-test("Escape puts back the description the field opened on and sends nothing, leaving the issue's page standing", async () => {
+test("Return on the description opens the editor with the caret at the end of its last section", async () => {
+  standing = [issue(1, { description: "Fails on CI.\n\n## Steps\n\nRun it twice." })];
+  const page = await openIssue(issue(1).id);
+
+  const description = descriptionOf(page);
+  act(() => description.focus());
+  press("Enter", description);
+
+  assert.deepEqual(openEditor().props.placement, { section: 1 });
+  assert.equal(openEditor().props.markdown, "Fails on CI.\n\n## Steps\n\nRun it twice.");
+});
+
+test("Esc sends what was typed, leaving the issue's page standing, and gives the keyboard back to the description", async () => {
   standing = [issue(1, { description: "Fails on CI." })];
   const page = await openIssue(issue(1).id);
 
-  const field = openDescription(page);
-  type(field, "Something else entirely");
-  act(() => {
-    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  });
+  const editor = openDescription(page);
+  type(editor, "Fails on CI, twice.");
+  finish(editor);
   await settle();
 
-  assert.deepEqual(changes, []);
-  assert.equal(page.querySelector(".issue-description")?.textContent, "Fails on CI.");
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "Fails on CI, twice." } },
+  ]);
+  assert.equal(descriptionOf(page).textContent, "Fails on CI, twice.");
+  assert.equal(document.activeElement, descriptionOf(page));
   assert.equal(closed, 0);
   assert.deepEqual(opened, [{ kind: ISSUES_PAGE.ISSUE, issueId: issue(1).id }]);
 });
 
-test("a save the service refused keeps every word typed in the field and says so", async () => {
+test("a description left as it opened sends nothing and closes", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  const page = await openIssue(issue(1).id);
+
+  const editor = openDescription(page);
+  type(editor, "Fails on CI!");
+  type(editor, "Fails on CI.");
+  finish(editor);
+  await settle();
+
+  assert.deepEqual(changes, []);
+  assert.ok(editor.destroyed);
+  assert.equal(descriptionOf(page).textContent, "Fails on CI.");
+});
+
+test("a save the service refused keeps every word typed in the open editor and says so", async () => {
   standing = [issue(1)];
   changeRefused = true;
   const page = await openIssue(issue(1).id);
 
-  const field = openDescription(page);
-  type(field, "Steps to reproduce");
-  act(() => {
-    field.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
-    );
-  });
+  const editor = openDescription(page);
+  type(editor, "Steps to reproduce");
+  finish(editor);
   await settle();
 
-  const kept = page.querySelector<HTMLTextAreaElement>("textarea[aria-label='Description']");
-  assert.equal(kept?.value, "Steps to reproduce");
+  assert.ok(!editor.destroyed, "the editor stays open");
+  assert.equal(editor.text, "Steps to reproduce");
   assert.match(page.textContent ?? "", /Couldn't save the description/u);
 });
 
-test("while a description's save is out the field takes no typing and no Escape, and closes once the save is kept", async () => {
+test("a description past its bound is not sent, and the open editor says why", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+
+  const editor = openDescription(page);
+  type(editor, "a".repeat(20_001));
+  finish(editor);
+  await settle();
+
+  assert.deepEqual(changes, []);
+  assert.ok(!editor.destroyed, "the editor stays open");
+  assert.match(page.textContent ?? "", /The description is too long/u);
+});
+
+test("a finish while a save is out waits for it, then sends the words typed meanwhile, and the editor closes once those are kept", async () => {
   standing = [issue(1)];
   const page = await openIssue(issue(1).id);
   heldChanges = [];
   const held = heldChanges;
 
-  const field = openDescription(page);
-  type(field, "First draft");
+  const editor = openDescription(page);
+  type(editor, "First draft");
+  finish(editor);
+  await settle();
+  type(editor, "First draft, and more");
+  finish(editor);
+  await settle();
+  const sentWhileOut = changes.length;
+  act(() => held[0]?.());
+  await settle();
+  const openBetween = !editor.destroyed;
+  act(() => held[1]?.());
+  await settle();
+
+  assert.equal(sentWhileOut, 1, "nothing more is sent while the first save is out");
+  assert.ok(openBetween, "the newer words keep the editor open");
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "First draft" } },
+    { issueId: issue(1).id, change: { description: "First draft, and more" } },
+  ]);
+  assert.ok(editor.destroyed);
+  assert.equal(descriptionOf(page).textContent, "First draft, and more");
+});
+
+test("words typed while a save is out are sent once it is kept, though the page left the issue meanwhile", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const editor = openDescription(page);
+  type(editor, "First draft");
+  finish(editor);
+  await settle();
+  type(editor, "First draft, plus details");
   act(() => {
-    field.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
-    );
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
   });
   await settle();
-  const lockedWhileOut = field.readOnly;
+  act(() => held[0]?.());
+  await settle();
+  act(() => held[1]?.());
+  await settle();
+
+  assert.equal(page.querySelector("[role=group][aria-label='Description']"), null);
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "First draft" } },
+    { issueId: issue(1).id, change: { description: "First draft, plus details" } },
+  ]);
+});
+
+test("words typed back to the description it opened on while a save is out are sent once it is kept, though the page left the issue", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const editor = openDescription(page);
+  type(editor, "Fails on CI, twice.");
+  finish(editor);
+  await settle();
+  type(editor, "Fails on CI.");
   act(() => {
-    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
   });
   await settle();
-  const standsWhileOut = page.querySelector("textarea[aria-label='Description']") !== null;
+  act(() => held[0]?.());
+  await settle();
+  act(() => held[1]?.());
+  await settle();
+
+  assert.equal(page.querySelector("[role=group][aria-label='Description']"), null);
+  assert.deepEqual(changes, [
+    { issueId: issue(1).id, change: { description: "Fails on CI, twice." } },
+    { issueId: issue(1).id, change: { description: "Fails on CI." } },
+  ]);
+});
+
+test("a description reopened on words a later change's answer drew, and left as it opened, sends nothing", async () => {
+  standing = [issue(1, { description: "Original" })];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const editor = openDescription(page);
+  type(editor, "Revised");
+  finish(editor);
+  await settle();
+  // The service answers a status change made meanwhile from the issue as it stood before the description landed.
+  standing = [issue(1, { description: "Original" })];
+  pick(page, "Status", "Todo");
+  await settle();
+  act(() => held[0]?.());
+  await settle();
+  act(() => held[1]?.());
+  await settle();
+  const shown = descriptionOf(page).textContent;
+  finish(openDescription(page));
+  await settle();
+
+  assert.equal(shown, "Original");
+  assert.equal(changes.length, 2, "reopening and leaving the words as they opened sends nothing");
+});
+
+test("a control pressed while a finished save is out keeps the keyboard once the save closes the editor", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+  heldChanges = [];
+  const held = heldChanges;
+
+  const editor = openDescription(page);
+  type(editor, "Steps");
+  finish(editor);
+  await settle();
+  const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
+  assert.ok(title);
+  act(() => title.focus());
   act(() => held[0]?.());
   await settle();
 
-  assert.ok(lockedWhileOut, "the field takes no typing while its save is out");
-  assert.ok(standsWhileOut, "Escape does not take back a save under way");
-  assert.equal(page.querySelector("textarea[aria-label='Description']"), null);
-  assert.equal(page.querySelector(".issue-description")?.textContent, "First draft");
-  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { description: "First draft" } }]);
+  assert.ok(editor.destroyed);
+  assert.equal(document.activeElement, title);
+});
+
+test("focus leaving the description before its editor has loaded opens nothing", async () => {
+  standing = [issue(1, { description: "Fails on CI." })];
+  bundles = unlandedBundles();
+  const page = await openIssue(issue(1).id);
+
+  const description = descriptionOf(page);
+  act(() => description.focus());
+  act(() => description.click());
+  const busy = description.closest("[aria-busy='true']") !== null;
+  const title = page.querySelector<HTMLElement>("[aria-label='Issue title']");
+  assert.ok(title);
+  act(() => title.focus());
+
+  assert.ok(busy, "the description waits on its editor, keeping its words");
+  assert.equal(descriptionOf(page), description, "the words pressed are the ones drawn");
+  assert.equal(page.querySelector("[aria-busy='true']"), null);
+  assert.equal(document.activeElement, title);
+});
+
+test("words typed in the description are sent as the page leaves the issue with its editor open", async () => {
+  standing = [issue(1)];
+  const page = await openIssue(issue(1).id);
+
+  const editor = openDescription(page);
+  type(editor, "Half a thought");
+  act(() => {
+    runAppCommand(APP_COMMAND.EXIT_ISSUES);
+  });
+  await settle();
+
+  assert.equal(page.querySelector("[role=group][aria-label='Description']"), null);
+  assert.deepEqual(changes, [{ issueId: issue(1).id, change: { description: "Half a thought" } }]);
 });
 
 test("a Return that chooses a word the input method composes is the method's, and sends no title", async () => {
