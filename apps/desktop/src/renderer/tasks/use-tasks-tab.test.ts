@@ -2623,3 +2623,48 @@ test("a task started from an issue's Start agent… presses its Start once it st
   assert.equal(agentStarts().length, 2);
   assert.ok(tab.control().agents.start.note, "why the agent did not start stands beside the Start");
 });
+
+test("an agent asked of Start agent… whose task was left before it could start starts nothing when the task is opened again", async () => {
+  const started: Task = { ...TASK, id: OTHER_TASK_ID, name: "Invites", repository: "acme/web" };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
+      [ACT_KIND.CODING_AGENTS_START]: () =>
+        Promise.resolve({ agent: { ...RUNNING_AGENT, id: AGENT_ID } }),
+    },
+  );
+  await settle();
+  const standOn = (task: Task) =>
+    tab.stand({
+      tasks: { ...OPEN, activeTaskId: task.id, document: { status: TASKS_READ.READY, task } },
+    });
+
+  act(() =>
+    tab
+      .control()
+      .onNewTaskFrom(
+        { id: "issue-1", workspaceId: "workspace-acme", identifier: "ACME-7", title: "Invites" },
+        true,
+      ),
+  );
+  await act(async () => {
+    await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
+      issueId: "issue-1",
+      agent: true,
+    });
+  });
+  // The new task opens while its repository is still unread, and the developer leaves it for another.
+  standOn({ ...started, repository: null });
+  await settle();
+  standOn(TASK);
+  await settle();
+  standOn(started);
+  await settle();
+
+  assert.deepEqual(
+    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START),
+    [],
+  );
+});

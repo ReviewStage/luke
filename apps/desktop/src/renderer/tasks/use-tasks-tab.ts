@@ -1293,12 +1293,21 @@ export function useTasksTab(input: {
   // stands open with its repository: it is handed the task's plan, on the
   // account's default choice, and its tab opens once it lands, while one
   // that did not start says why beside the task's Start.
+  // Note that the ask goes once the developer leaves its task before it
+  // could start, so coming back to the task later starts nothing unasked.
   const [agentAskedFor, setAgentAskedFor] = useState<string | undefined>(undefined);
+  const askedTaskOpened = useRef(false);
   const pressStart = useRef(agents.start.onPress);
   pressStart.current = agents.start.onPress;
   const startable = agents.start.available && openDocument?.id === viewed.activeTaskId;
   useEffect(() => {
-    if (agentAskedFor === undefined || viewed.activeTaskId !== agentAskedFor || !startable) return;
+    if (agentAskedFor === undefined) return;
+    if (viewed.activeTaskId !== agentAskedFor) {
+      if (askedTaskOpened.current) setAgentAskedFor(undefined);
+      return;
+    }
+    askedTaskOpened.current = true;
+    if (!startable) return;
     setAgentAskedFor(undefined);
     pressStart.current();
   }, [agentAskedFor, viewed.activeTaskId, startable]);
@@ -2306,7 +2315,10 @@ export function useTasksTab(input: {
           askOnOpen.current = answer.planId;
           setAskedFor(answer.planId);
         }
-        if (from.agent === true) setAgentAskedFor(answer.planId);
+        if (from.agent === true) {
+          askedTaskOpened.current = false;
+          setAgentAskedFor(answer.planId);
+        }
         return undefined;
       },
       (refused: Error) => refusedWith(refused.message),

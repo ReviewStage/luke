@@ -376,8 +376,15 @@ const beginIssue = SqlSchema.findOneOption({
  * were, so asking again moves nothing and nothing ever moves an issue back.
  */
 export function beginIssueWork(userId: string, issueId: string): IssueStoreEffect<boolean> {
-  return Effect.gen(function* () {
-    const now = yield* DateTime.nowAsDate;
-    return Option.isSome(yield* beginIssue({ userId, issueId, now }));
-  });
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        // Note that the row is locked before the clock is read, as a change's is, so a change landing meanwhile is never stamped later than this move.
+        const locked = yield* lockReachableIssue({ userId, issueId });
+        if (Option.isNone(locked)) return false;
+        const now = yield* DateTime.nowAsDate;
+        return Option.isSome(yield* beginIssue({ userId, issueId, now }));
+      }),
+    ),
+  );
 }
