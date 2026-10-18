@@ -15,6 +15,7 @@ import {
   ArchiveIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
+  BUTTON_SIZE,
   Button,
   ComposeIcon,
   EllipsisIcon,
@@ -676,27 +677,23 @@ function RepositorySection({
           <>
             {actionGroups.length === 0 ? null : (
               <Tooltip label="Repository actions">
-                <button
+                <IconButton
                   ref={ellipsis}
-                  type="button"
-                  className="sidebar-repository-action"
-                  aria-label={`Actions for ${named}`}
+                  icon={<EllipsisIcon />}
+                  label={`Actions for ${named}`}
+                  size={BUTTON_SIZE.COMPACT}
                   {...menu.trigger()}
-                >
-                  <EllipsisIcon />
-                </button>
+                />
               </Tooltip>
             )}
             {repository === null ? null : (
               <Tooltip label={`New task in ${label}`}>
-                <button
-                  type="button"
-                  className="sidebar-repository-action sidebar-repository-new"
-                  aria-label={`New task in ${label}`}
+                <IconButton
+                  icon={<PlusIcon />}
+                  label={`New task in ${label}`}
+                  size={BUTTON_SIZE.COMPACT}
                   onClick={() => onNewTaskIn(repository)}
-                >
-                  <PlusIcon />
-                </button>
+                />
               </Tooltip>
             )}
           </>
@@ -1324,11 +1321,11 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.onSelect(taskId);
   };
-  const showPlans = () => {
+  const showTasks = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
   };
   const newTask = () => {
-    showPlans();
+    showTasks();
     tasks.onNewTask();
   };
   const openPinnedTab = (pin: PinnedTab) => {
@@ -1508,7 +1505,7 @@ function SidebarColumn({
   // Note that the pins are never filtered, because a pin is already the
   // reader's own choice, and stand aside while the archived tasks are shown.
   // The agents with no plan stand among the plans, the archived ones among the archived.
-  const unpinnedPlans = archive.shown
+  const unpinnedTasks = archive.shown
     ? listedRows.archived
     : listedRows.tasks.filter(
         (plan) => plan.pinnedAt === undefined && !sectioned.taskIds.has(plan.id),
@@ -1516,7 +1513,7 @@ function SidebarColumn({
   const unpinnedAgents = archive.shown
     ? listedAgents.archived
     : listedAgents.standing.filter((agent) => agent.pinnedAt === undefined);
-  const unpinned = [...unpinnedPlans.map(taskRow), ...unpinnedAgents.map(agentRow)];
+  const unpinned = [...unpinnedTasks.map(taskRow), ...unpinnedAgents.map(agentRow)];
   const rows = taskRowsCreatedBy(unpinned, createdBy);
   const { grouping, order } = taskView.view;
   const sections = taskSections(
@@ -1704,7 +1701,7 @@ function SidebarColumn({
           {tasks.signedIn ? (
             <ViewChips
               createdBy={createdBy}
-              tasks={unpinnedPlans}
+              tasks={unpinnedTasks}
               onClearCreatedBy={() => taskView.onCreatedBy(undefined)}
               archive={archive}
             />

@@ -15,7 +15,7 @@ import { fakeAppBridge } from "#testing/app-bridge";
 import { signedInAs } from "#testing/app-state";
 import { onRegistry } from "#testing/copy-feedback";
 import { markdownHtmlParserLanded } from "#testing/markdown";
-import { PlanMentions, type PlanMentionsValue } from "./plan-mentions";
+import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 import { TranscriptWords } from "./transcript-blocks";
 
 /**
@@ -66,7 +66,7 @@ function stateWith(workspace: Workspace): AppStateSnapshot {
 }
 
 /** The plan's page, as its words' chips stand on it. */
-const PAGE: PlanMentionsValue = {
+const PAGE: TaskMentionsValue = {
   taskId: PLAN,
   taskName: TASK.name,
   workspace: "acme",
@@ -138,7 +138,7 @@ async function drawn(text: string, workspace: Workspace, onTask = true) {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        onTask ? createElement(PlanMentions, { value: PAGE, children: words }) : words,
+        onTask ? createElement(TaskMentions, { value: PAGE, children: words }) : words,
       ),
     ),
   );
@@ -148,9 +148,9 @@ async function drawn(text: string, workspace: Workspace, onTask = true) {
 
 /** Each chip drawn: the name it says and the state after it. */
 function chips(container: HTMLElement): [string | null, string | null][] {
-  return [...container.querySelectorAll<HTMLElement>(".mention-chip")].map((chip) => [
-    chip.querySelector(".mention-chip-label")?.textContent ?? null,
-    chip.querySelector(".mention-chip-state")?.textContent ?? null,
+  return [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => [
+    chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
+    chip.querySelector(".luke-inline-ref-state")?.textContent ?? null,
   ]);
 }
 
@@ -224,7 +224,7 @@ function cardNotes(chip: Element | undefined): (string | null)[] {
 test("a Linear issue's card says who it is assigned to, as the workspace's Linear answers it, in place of its address", async () => {
   const { container } = await drawn(`See ${ISSUE}.`, ACME_WITH_LINEAR);
 
-  assert.deepEqual(cardNotes(container.querySelector(".mention-chip") ?? undefined), [
+  assert.deepEqual(cardNotes(container.querySelector("[data-mention-ref]") ?? undefined), [
     "ENG-1 · In Progress",
     "Assigned to Sam Okafor",
   ]);

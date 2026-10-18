@@ -142,7 +142,7 @@ test("a sent chip's hover card is the plan card: the skill's mark and name, what
   const { container, opened } = await mounted(
     createElement(SentWords, { text: "Cut it with /release now." }),
   );
-  const chip = container.querySelector<HTMLButtonElement>("button.skill-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-skill-ref]");
   assert.ok(chip, "the skill is a chip");
   // The card hangs as the keyboard reaches the chip, as it does under a resting pointer.
   document.documentElement.dataset.keyboard = "true";
@@ -211,7 +211,7 @@ test("a loaded skill's row in the transcript names the skill as its chip does, h
       createElement("div", { className: "turn" }, agentTurn(loadedTurn("release"))),
     ),
   );
-  const chip = container.querySelector<HTMLButtonElement>("button.skill-chip");
+  const chip = container.querySelector<HTMLButtonElement>("button[data-skill-ref]");
   const row = container.querySelector<HTMLButtonElement>(".turn button[data-opens]");
   assert.ok(chip, "the sent message names the skill as its chip");
   assert.ok(row, "the loaded skill's row is one button");

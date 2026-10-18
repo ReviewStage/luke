@@ -19,7 +19,7 @@ import { useAct } from "../act";
 import { encodeImage } from "../feedback-images";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import type { ViewerAction } from "./attachment-viewer";
-import { usePlanMentions } from "./plan-mentions";
+import { useTaskMentions } from "./task-mentions";
 
 /**
  * add-to-plan.tsx -- a picture an agent showed, added to the plan it works on: kept on the plan as a picture of its own and written at the end of its text, as the developer's edit, with Undo.
@@ -89,7 +89,7 @@ async function edited(
  * where it is drawn off one, as an agent with no plan's is.
  */
 export function useAddToPlan(): ViewerAction | undefined {
-  const page = usePlanMentions();
+  const page = useTaskMentions();
   const { act } = useAct();
   const toast = useToast();
   return useMemo(() => {

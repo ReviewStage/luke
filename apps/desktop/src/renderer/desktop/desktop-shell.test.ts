@@ -369,7 +369,7 @@ test("a plan opened on its Inbox tab rather than its own is read at once, its ro
 });
 
 /** A second plan beside `DOCUMENT_PLAN`, saved after it. */
-const NOTES_PLAN: Task = {
+const NOTES_TASK: Task = {
   ...DOCUMENT_TASK,
   id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
   name: "Release notes",
@@ -440,9 +440,9 @@ function rowReadMark(name: string, choose = false): string | undefined {
 }
 
 test("Mark as unread on the task being looked at draws its row unread through a save landing as it stays, and until it is opened again", () => {
-  const draw = mountListing([DOCUMENT_TASK, NOTES_PLAN], {
+  const draw = mountListing([DOCUMENT_TASK, NOTES_TASK], {
     [DOCUMENT_TASK.id]: DOCUMENT_TASK.updatedAt,
-    [NOTES_PLAN.id]: NOTES_PLAN.updatedAt,
+    [NOTES_TASK.id]: NOTES_TASK.updatedAt,
   });
   draw(DOCUMENT_TASK);
   assert.equal(rowUnread(DOCUMENT_NAME), "false");
@@ -452,7 +452,7 @@ test("Mark as unread on the task being looked at draws its row unread through a 
   draw({ ...DOCUMENT_TASK, updatedAt: DOCUMENT_TASK.updatedAt + 1 });
   assert.equal(rowUnread(DOCUMENT_NAME), "true");
 
-  draw(NOTES_PLAN);
+  draw(NOTES_TASK);
   assert.equal(rowUnread(DOCUMENT_NAME), "true");
 
   draw(DOCUMENT_TASK);
@@ -460,21 +460,21 @@ test("Mark as unread on the task being looked at draws its row unread through a 
 });
 
 test("a task's menu offers Mark as read while its row is unread, which draws it read, and Mark as unread after", () => {
-  const draw = mountListing([DOCUMENT_TASK, NOTES_PLAN], {
+  const draw = mountListing([DOCUMENT_TASK, NOTES_TASK], {
     [DOCUMENT_TASK.id]: DOCUMENT_TASK.updatedAt,
-    [NOTES_PLAN.id]: NOTES_PLAN.updatedAt - 1,
+    [NOTES_TASK.id]: NOTES_TASK.updatedAt - 1,
   });
   draw(undefined);
-  assert.equal(rowUnread(NOTES_PLAN.name), "true");
+  assert.equal(rowUnread(NOTES_TASK.name), "true");
   assert.equal(rowReadMark(DOCUMENT_NAME), "Mark as unread");
 
-  assert.equal(rowReadMark(NOTES_PLAN.name, true), "Mark as read");
-  assert.equal(rowUnread(NOTES_PLAN.name), "false");
-  assert.equal(rowReadMark(NOTES_PLAN.name), "Mark as unread");
+  assert.equal(rowReadMark(NOTES_TASK.name, true), "Mark as read");
+  assert.equal(rowUnread(NOTES_TASK.name), "false");
+  assert.equal(rowReadMark(NOTES_TASK.name), "Mark as unread");
 
-  assert.equal(rowReadMark(NOTES_PLAN.name, true), "Mark as unread");
-  assert.equal(rowUnread(NOTES_PLAN.name), "true");
-  assert.equal(rowReadMark(NOTES_PLAN.name), "Mark as read");
+  assert.equal(rowReadMark(NOTES_TASK.name, true), "Mark as unread");
+  assert.equal(rowUnread(NOTES_TASK.name), "true");
+  assert.equal(rowReadMark(NOTES_TASK.name), "Mark as read");
 });
 
 /** Lets every promise settled so far run its continuations. */
@@ -920,7 +920,7 @@ test("a plan's chip in a plan's version history hangs the plan's card, as the pl
       },
     },
   });
-  const chip = page.querySelector(".mention-chip");
+  const chip = page.querySelector("[data-mention-ref]");
   assert.ok(chip, "the version draws the plan's chip");
 
   act(() => {

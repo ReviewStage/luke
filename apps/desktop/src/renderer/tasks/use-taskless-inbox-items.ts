@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act";
 
 /**
- * use-planless-inbox-items.ts -- the items of each agent with no task that something waits on, for the window's Inbox, each agent read whole once and again only when main says its items moved.
+ * use-taskless-inbox-items.ts -- the items of each agent with no task that something waits on, for the window's Inbox, each agent read whole once and again only when main says its items moved.
  *
  * Main's read of the account carries the items of agents with no task that
  * wait on the developer, in brief, as it carries a task's. So each such

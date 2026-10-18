@@ -15,10 +15,10 @@ import { MarkdownMessage } from "../markdown-message";
 import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast";
 import { Tooltip } from "../tooltip";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model";
-import { type MentionedTask, useMentionLink } from "./plan-mentions";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
+import { type MentionedTask, useMentionLink } from "./task-mentions";
 import { dayAndTimeText, momentText } from "./task-time";
-import { PlanTitle } from "./task-title";
+import { TaskTitle } from "./task-title";
 import { useOpenLink } from "./use-open-link";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 
@@ -106,7 +106,7 @@ function VersionBody({
   const picture = usePlanPictureDrawer();
   return (
     <div className="plan-body">
-      {title === undefined || section !== undefined ? null : <PlanTitle name={title} />}
+      {title === undefined || section !== undefined ? null : <TaskTitle name={title} />}
       {units.map((unit, at) => (
         <MarkdownMessage
           // A unit's heading may stand twice, struck and written again, so its place keys it.

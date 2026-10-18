@@ -30,7 +30,7 @@ import { CatalogSection } from "../section";
 
 const ignore = () => undefined;
 
-const PLAN_ACTIONS: readonly (readonly MenuEntry[])[] = [
+const TASK_ACTIONS: readonly (readonly MenuEntry[])[] = [
   [
     { label: "Rename", icon: <PencilIcon />, hint: "⌘R", onSelect: ignore },
     { label: "Copy link", icon: <CopyIcon />, hint: "⇧⌘C", onSelect: ignore },
@@ -40,14 +40,14 @@ const PLAN_ACTIONS: readonly (readonly MenuEntry[])[] = [
   [{ label: "Delete", icon: <TrashIcon />, danger: true, onSelect: ignore }],
 ];
 
-/** A ⋯ and the plan's menu it drops. */
-function PlanMenu(): React.JSX.Element {
+/** A ⋯ and the task's menu it drops. */
+function TaskMenu(): React.JSX.Element {
   const menu = useMenu(true);
   return (
     <>
-      <IconButton icon={<EllipsisIcon />} label="Plan actions" {...menu.trigger()} />
+      <IconButton icon={<EllipsisIcon />} label="Task actions" {...menu.trigger()} />
       {menu.drawn && (
-        <Menu label="Plan actions" menu={menu.drawn} groups={PLAN_ACTIONS} onClose={menu.close} />
+        <Menu label="Task actions" menu={menu.drawn} groups={TASK_ACTIONS} onClose={menu.close} />
       )}
     </>
   );
@@ -124,7 +124,7 @@ function AccountMenu(): React.JSX.Element {
   );
 }
 
-/** A row a right-click opens the plan's menu on, at the pointer. */
+/** A row a right-click opens the task's menu on, at the pointer. */
 function RightClickRow(): React.JSX.Element {
   const menu = useMenu(true);
   return (
@@ -133,7 +133,7 @@ function RightClickRow(): React.JSX.Element {
         <Text tone={TEXT_TONE.MUTED}>Right-click anywhere in this row.</Text>
       </button>
       {menu.drawn && (
-        <Menu label="Plan actions" menu={menu.drawn} groups={PLAN_ACTIONS} onClose={menu.close} />
+        <Menu label="Task actions" menu={menu.drawn} groups={TASK_ACTIONS} onClose={menu.close} />
       )}
     </>
   );
@@ -144,7 +144,7 @@ function MenuExample(): React.JSX.Element {
     <>
       <CatalogSection id="menu-buttons" title="From a button">
         <Inline gap={GAP.CONTROL}>
-          <PlanMenu />
+          <TaskMenu />
           <ViewMenu />
           <AccountMenu />
         </Inline>

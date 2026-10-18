@@ -581,8 +581,8 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
   const container = await mountPanelPage();
   await settle();
   const chip = (name: string) =>
-    [...container.querySelectorAll<HTMLButtonElement>(".agent-page .mention-chip")].find((each) =>
-      each.querySelector(".mention-chip-label")?.textContent?.includes(name),
+    [...container.querySelectorAll<HTMLButtonElement>(".agent-page [data-mention-ref]")].find(
+      (each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name),
     );
 
   const own = chip("relay#2911");
@@ -626,7 +626,7 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md on G
 
   // The skills are read once a sent message first asks for them, a settle after the transcript lands.
   await settle();
-  const chip = page.querySelector<HTMLButtonElement>("button.skill-chip");
+  const chip = page.querySelector<HTMLButtonElement>("button[data-skill-ref]");
   assert.ok(chip, "the skill is its chip");
   act(() => chip.click());
 
@@ -808,8 +808,8 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   );
   await settle();
 
-  const sender = page.querySelector(".is-user:not(.agent-origin) .message-sender .actor-ref");
-  assert.equal(sender?.querySelector(".actor-ref-name")?.textContent, "Charles Pan");
+  const sender = page.querySelector(".is-user:not(.agent-origin) .message-sender [data-actor-ref]");
+  assert.equal(sender?.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
   assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
 });
 
@@ -865,7 +865,7 @@ test("an automation's agent opens on the automation's prompt alone, sent by the 
   await settle();
 
   const { card, sender } = origin(page);
-  const automation = sender?.querySelector<HTMLButtonElement>("button.actor-ref");
+  const automation = sender?.querySelector<HTMLButtonElement>("button[data-actor-ref]");
   assert.equal(words(automation), "Flaky-test sweep");
   assert.match(card.textContent ?? "", /Sweep the flaky tests\./u);
   assert.doesNotMatch(card.textContent ?? "", /Luke started this run/u);
@@ -917,7 +917,7 @@ test("a GitHub event's run names its pull request beside the automation, which o
 
   const { sender } = origin(page);
   assert.equal(words(sender), "Flaky-test sweep · #2905 View commands · Run by you");
-  act(() => sender?.querySelector<HTMLElement>(".mention-chip")?.click());
+  act(() => sender?.querySelector<HTMLElement>("[data-mention-ref]")?.click());
   assert.deepEqual(openedOnGitHub, [url]);
 });
 
@@ -943,11 +943,11 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
   const page = mount(tasksControl({ workspaces: [acme] }));
   await settle();
 
-  const chip = origin(page).sender?.querySelector<HTMLElement>(".mention-chip");
+  const chip = origin(page).sender?.querySelector<HTMLElement>("[data-mention-ref]");
   assert.deepEqual(
     [
-      chip?.querySelector(".mention-chip-label")?.textContent,
-      chip?.querySelector(".mention-chip-state")?.textContent,
+      chip?.querySelector(".luke-inline-ref-label")?.textContent,
+      chip?.querySelector(".luke-inline-ref-state")?.textContent,
       chip?.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
     ],
     ["#2905 View commands", "Open", PULL_REQUEST_STATE.OPEN],

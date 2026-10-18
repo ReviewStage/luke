@@ -1,10 +1,20 @@
 import { MAC_REPOSITORY_BOUNDS, type MacRepository } from "@luke/features/mac-terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
-import { BUTTON_TYPE, BUTTON_VARIANT, Button } from "@luke/ui";
+import {
+  BUTTON_TYPE,
+  BUTTON_VARIANT,
+  Button,
+  ErrorState,
+  SettingsLine,
+  SettingsRow,
+  SettingsSection,
+  TEXT_FIELD_AUTO_COMPLETE,
+  TEXT_FIELD_FONT,
+  TextField,
+} from "@luke/ui";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act";
-import { ReadFailed, SettingsGroup } from "./settings-group";
 
 /**
  * mac-repository-settings.tsx -- the Workspace page's Repositories group: the command Run, in an agent tab's ⋯, runs for each repository on this Mac.
@@ -103,66 +113,62 @@ function MacRepositoryRow({
   );
   const typed = command.trim();
   const changed = typed !== savedCommand;
-  const id = `mac-repository-${repository.toLowerCase().replace(/[^a-z0-9]/gu, "-")}`;
   return (
-    <div className="mac-repository">
-      <form
-        className="settings-row"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (changed) write({ repository, command: typed === "" ? null : typed });
-        }}
-      >
-        <label className="settings-copy mac-repository-name" htmlFor={id}>
-          {repository}
-        </label>
-        <input
-          id={id}
-          className="settings-input mac-repository-command"
-          placeholder="pnpm dev"
-          autoComplete="off"
-          spellCheck={false}
-          maxLength={MAC_REPOSITORY_BOUNDS.MAX_COMMAND_CHARS}
-          value={command}
-          disabled={busy}
-          onChange={(event) => setCommand(event.target.value)}
-        />
-        <Button
-          type={BUTTON_TYPE.SUBMIT}
-          variant={BUTTON_VARIANT.PRIMARY}
-          busy={busy}
-          busyLabel="Saving"
-          disabled={!changed}
-        >
-          Save
-        </Button>
-      </form>
-      {rejection === undefined ? null : (
-        <p className="error-message" role="alert">
-          {rejection}
-        </p>
-      )}
-    </div>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (changed) write({ repository, command: typed === "" ? null : typed });
+      }}
+    >
+      <SettingsRow label={repository} error={rejection}>
+        {(control) => (
+          <>
+            <TextField
+              label={`${repository} run command`}
+              describedBy={control["aria-describedby"]}
+              invalid={control["aria-invalid"]}
+              font={TEXT_FIELD_FONT.MONO}
+              placeholder="pnpm dev"
+              autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+              spellCheck={false}
+              maxLength={MAC_REPOSITORY_BOUNDS.MAX_COMMAND_CHARS}
+              value={command}
+              disabled={busy}
+              onChange={setCommand}
+            />
+            <Button
+              type={BUTTON_TYPE.SUBMIT}
+              variant={BUTTON_VARIANT.PRIMARY}
+              busy={busy}
+              busyLabel="Saving"
+              disabled={!changed}
+            >
+              Save
+            </Button>
+          </>
+        )}
+      </SettingsRow>
+    </form>
   );
 }
 
 export function MacRepositoriesGroup({ workspaceId }: { workspaceId: string }): React.JSX.Element {
   const read = useMacRepositoriesRead(workspaceId);
   return (
-    <SettingsGroup title="Repositories" anchor={SETTINGS_SECTION.MAC_REPOSITORIES}>
-      <p className="settings-card-line settings-note">
+    <SettingsSection title="Repositories" anchor={SETTINGS_SECTION.MAC_REPOSITORIES}>
+      <SettingsLine>
         Run, in an agent tab&apos;s ⋯, checks the agent&apos;s pushed branch out on this Mac with
         your own git login and opens a terminal on it inside Luke. A repository&apos;s run command,
         if it has one, runs there first. Commands are kept on this Mac only.
-      </p>
+      </SettingsLine>
       {read.failed ? (
-        <ReadFailed line={NOT_READ} onRetry={read.reread} />
+        <SettingsLine>
+          <ErrorState onRetry={read.reread}>{NOT_READ}</ErrorState>
+        </SettingsLine>
       ) : read.names === undefined ? (
-        <p className="settings-card-line settings-note">Reading the repositories…</p>
+        <SettingsLine>Reading the repositories…</SettingsLine>
       ) : read.names.length === 0 ? (
-        <p className="settings-card-line settings-note">
-          This workspace reaches no repositories on GitHub yet.
-        </p>
+        <SettingsLine>This workspace reaches no repositories on GitHub yet.</SettingsLine>
       ) : (
         read.names.map((repository) => (
           <MacRepositoryRow
@@ -173,6 +179,6 @@ export function MacRepositoriesGroup({ workspaceId }: { workspaceId: string }): 
           />
         ))
       )}
-    </SettingsGroup>
+    </SettingsSection>
   );
 }

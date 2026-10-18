@@ -9,12 +9,19 @@ import {
   type InboxReplyKind,
   knownResponse,
 } from "@luke/features/inbox-wire";
-import { BUTTON_VARIANT, Button, IconButton, PlusIcon, TEXT_TONE, Text } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  IconButton,
+  PlusIcon,
+  SUBMIT_STATE,
+  TEXT_TONE,
+  Text,
+} from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useRef, useState } from "react";
 import {
-  PROMPT_INPUT_STATUS,
   PromptInput,
   PromptInputFooter,
   PromptInputSubmit,
@@ -170,8 +177,8 @@ function SendPresses({
   return (
     <Tooltip label={SEND}>
       <PromptInputSubmit
-        aria-label={SEND}
-        status={sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY}
+        label={SEND}
+        status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
         disabled={held || inboxReply(item, draft) === undefined}
       />
     </Tooltip>
@@ -409,8 +416,8 @@ function AnswerCard({
                   ) : (
                     <Tooltip label={SEND_MESSAGE}>
                       <PromptInputSubmit
-                        aria-label={SEND_MESSAGE}
-                        status={sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY}
+                        label={SEND_MESSAGE}
+                        status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
                         disabled={sending || reading > 0 || inboxMessageOf(draft) === undefined}
                       />
                     </Tooltip>

@@ -5,8 +5,8 @@ import { type ReactNode, useMemo } from "react";
 import { MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import type { FileNote } from "./file-tab-model";
-import { useMentionLink } from "./plan-mentions";
 import { RelativeTime } from "./relative-time";
+import { useMentionLink } from "./task-mentions";
 import { agoText, useMinute } from "./task-time";
 import { useOpenLink } from "./use-open-link";
 

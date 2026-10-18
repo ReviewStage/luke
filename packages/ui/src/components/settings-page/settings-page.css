@@ -1,7 +1,28 @@
 /* settings-page.css -- a settings page: a column at its measure, inset from
    the page's edges, scrolling inside them, with the title's line above the
    sections and a section's gap between each and the next. The sections'
-   own heading and card are theirs (`settings-section.css`). */
+   own heading and card are theirs (`settings-section.css`). Rows scrolled
+   up dissolve into the page's top edge, the sections stand hidden while the
+   page holds them back, and an empty state that is the page's content fills
+   the room under the title. */
+
+/* The depth of the top's fade, a registered length so a scroll timeline can
+   ease it from none to the whole fade over the page's first scroll. */
+@property --luke-settings-page-fade {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes luke-settings-page-fade {
+  from {
+    --luke-settings-page-fade: 0px;
+  }
+
+  to {
+    --luke-settings-page-fade: var(--luke-space-24);
+  }
+}
 
 @layer components {
   /* Note that the page is its own container, and its inset is its column's,
@@ -14,6 +35,8 @@
     --luke-settings-page-measure: var(--luke-settings-measure);
     container: luke-settings-page / inline-size;
     box-sizing: border-box;
+    /* The room its frame leaves it, beside a drag strip in a column too. */
+    flex: 1 1 0;
     block-size: 100%;
     min-block-size: 0;
     min-width: 0;
@@ -23,6 +46,15 @@
     scrollbar-gutter: stable;
     /* A control a search lands on scrolls to the inset's line, not the edge. */
     scroll-padding-block: var(--luke-page-inset);
+    /* Note that the fade is a mask, so its black is an alpha and the rows
+       dissolve into whatever ground the page stands on. It deepens over the
+       first stretch of scrolling, so a page at rest at its top, or one with
+       nothing to scroll, whose timeline never runs, is left whole. A scroll
+       timeline is not motion, so reduced motion leaves it be. */
+    mask-image: linear-gradient(to bottom, transparent, #000 var(--luke-settings-page-fade));
+    animation: luke-settings-page-fade linear both;
+    animation-timeline: scroll(self block);
+    animation-range: 0 var(--luke-space-24);
   }
 
   .luke-settings-page-column {
@@ -47,11 +79,16 @@
     min-width: 0;
   }
 
+  /* A quiet act ends the line flush with the cards' edge. Note that the
+     actions take the margin rather than the button, because a button wider
+     than its container by its own negative margin would be held to it and
+     cut short. */
   .luke-settings-page-actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--luke-control-gap);
+    margin-inline-end: calc(-1 * var(--luke-control-inset));
   }
 
   .luke-settings-page-sections {
@@ -59,6 +96,33 @@
     flex-direction: column;
     gap: var(--luke-settings-section-gap);
     min-width: 0;
+  }
+
+  .luke-settings-page-sections[data-pending="true"] {
+    visibility: hidden;
+  }
+
+  /* A page whose content is an empty state gives it the room under the
+     title, the column filling the page's height at its measure, and the
+     state standing in the middle of what the head leaves. */
+  .luke-settings-page:has(
+    > .luke-settings-page-column > .luke-settings-page-sections > .luke-empty-state
+  ) {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .luke-settings-page-column:has(> .luke-settings-page-sections > .luke-empty-state) {
+    display: flex;
+    box-sizing: border-box;
+    flex-direction: column;
+    flex: 1 0 auto;
+    width: 100%;
+    max-width: calc(var(--luke-settings-page-measure) + 2 * var(--luke-page-inset));
+  }
+
+  .luke-settings-page-sections:has(> .luke-empty-state) {
+    flex: 1 0 auto;
   }
 
   /* A container query cannot read a custom property, so the contract's

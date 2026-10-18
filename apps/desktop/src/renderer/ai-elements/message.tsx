@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { cn } from "@luke/ui";
+import { BUTTON_SIZE, cn, IconButton } from "@luke/ui";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import type { UIMessage } from "ai";
 import { AsyncResult } from "effect/reactivity";
@@ -96,33 +96,25 @@ export function MessageActions({
   );
 }
 
-export type MessageActionProps = Omit<ComponentProps<"button">, "aria-label"> & {
+export type MessageActionProps = {
   /** What the action does, which is its accessible name and, when `tooltip` is set, the hint it shows. */
   label: string;
   /** Whether it hangs a hint: its label, or the words given here in its place. */
   tooltip?: boolean | string;
+  onClick: () => void;
+  /** Its glyph. */
+  children: ReactNode;
 };
 
-/** One action: a 24px ghost button around a 16px icon. */
+/** One action: the shared compact glyph button, as a row's marks are. */
 export function MessageAction({
   label,
   tooltip = false,
-  className,
+  onClick,
   children,
-  ...props
 }: MessageActionProps): ReactNode {
   const button = (
-    <button
-      type="button"
-      aria-label={label}
-      className={cn(
-        "flex size-6 cursor-default items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground [&>svg]:size-4",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </button>
+    <IconButton icon={children} label={label} size={BUTTON_SIZE.COMPACT} onClick={onClick} />
   );
   if (tooltip === false) return button;
   return <Tooltip label={tooltip === true ? label : tooltip}>{button}</Tooltip>;
