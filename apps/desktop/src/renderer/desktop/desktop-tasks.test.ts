@@ -588,7 +588,7 @@ test("a plan's Inbox tab too narrow for its list and the item side by side shows
   inbox.unmount();
 });
 
-test("a plan's document opens on its Edited by line, with no crumb over it", () => {
+test("a plan's document opens on its title, with who created it and last edited it under the title, and no crumb over it", () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
@@ -625,12 +625,15 @@ test("a plan's document opens on its Edited by line, with no crumb over it", () 
       ),
     ),
   );
-  const scroll = container.querySelector(".desktop-document .plan-document-scroll");
-  const first = scroll?.firstElementChild;
+  const body = container.querySelector(".desktop-document .plan-document-scroll .plan-body");
+  const first = body?.firstElementChild;
+  const byline = first?.nextElementSibling;
 
   assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
-  assert.ok(first?.classList.contains("plan-edit-note"), "the Edited by line leads the document");
-  assert.match(first?.textContent ?? "", /^Edited by .*Lee Park/u);
+  assert.equal(body?.previousElementSibling, null, "nothing stands over the document's title");
+  assert.ok(first?.querySelector(".task-title"), "the title leads the document");
+  assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
+  assert.match(byline?.textContent ?? "", /^Created by .*Last edited by .*Lee Park/u);
   act(() => root.unmount());
   container.remove();
 });
