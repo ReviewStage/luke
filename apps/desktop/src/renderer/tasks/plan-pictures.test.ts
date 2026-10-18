@@ -189,7 +189,7 @@ test("a picture from outside Luke is a link to it, and nothing is read for it", 
   const view = await drawn(createElement(PlanBody, { task: taskOf(planId, body), live: false }));
 
   assert.equal(view.querySelector("img"), null);
-  assert.equal(view.querySelector(".text-link")?.textContent, "SSO flow");
+  assert.equal(view.querySelector(".luke-text-link")?.textContent, "SSO flow");
   assert.deepEqual(asked, []);
 });
 

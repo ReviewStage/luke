@@ -1,28 +1,45 @@
 /* text-link.css -- TextLink: the quiet and underlined looks, a type role
-   where one is set, and a control's height where the link stands alone.
-   The keyboard's ring is the app's reset's, as it is for every control. */
+   where one is set, a control's height where the link stands alone, and the
+   ↗ an external link wears. The keyboard's ring is the app's reset's, as it
+   is for every control. */
 
 @layer components {
   .luke-text-link {
+    /* A hairline corner, so the keyboard's ring hugs the words. */
+    border-radius: 2px;
     color: var(--luke-color-text-muted);
     text-decoration: none;
     overflow-wrap: anywhere;
-    transition: color var(--duration-hover) ease;
+    transition:
+      color var(--duration-hover) ease,
+      text-decoration-color var(--duration-hover) ease;
   }
 
-  .luke-text-link:hover,
+  a.luke-text-link {
+    cursor: pointer;
+  }
+
+  /* In an editor a link is words being written, so it keeps the caret's cursor. */
+  [contenteditable] a.luke-text-link {
+    cursor: text;
+  }
+
+  a.luke-text-link:hover,
   .luke-text-link[aria-current] {
     color: var(--luke-color-text);
   }
 
   .luke-text-link[data-look="underlined"] {
     color: inherit;
-    text-decoration: underline;
-    text-underline-offset: var(--luke-space-2);
+    text-decoration-line: underline;
+    text-decoration-color: color-mix(in srgb, currentColor 32%, transparent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.24em;
   }
 
-  .luke-text-link[data-look="underlined"]:hover {
-    color: var(--luke-color-text);
+  .luke-text-link[data-look="underlined"]:is(:hover, :focus-visible) {
+    color: inherit;
+    text-decoration-color: currentColor;
   }
 
   .luke-text-link[data-height="control"] {
@@ -31,13 +48,19 @@
     min-height: var(--luke-control-height);
   }
 
-  /* The external glyph follows the words' size, a hair apart from them. */
+  /* The ↗ follows the words' size, faint until the link lights. */
   .luke-text-link svg {
     display: inline-block;
-    width: 1em;
-    height: 1em;
-    margin-inline-start: var(--luke-space-4);
-    vertical-align: -0.125em;
+    width: 0.78em;
+    height: 0.78em;
+    margin-inline-start: 0.12em;
+    opacity: 0.55;
+    vertical-align: -0.02em;
+    transition: opacity var(--duration-hover) ease;
+  }
+
+  .luke-text-link:is(:hover, :focus-visible) svg {
+    opacity: 1;
   }
 
   .luke-text-link[data-variant="body"] {

@@ -258,6 +258,7 @@ export function DashboardScreen({
                   href={metrics.reliability.analyticsConsoleUrl}
                   look={TEXT_LINK_LOOK.UNDERLINED}
                   external
+                  newTab
                 >
                   the analytics processor
                 </TextLink>

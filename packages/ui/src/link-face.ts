@@ -11,9 +11,6 @@
  * both of the desktop's Markdown renderers read the same face.
  */
 
-/** The class every plain link wears, in the panel and in the plan's editor alike, which the desktop's `markdown.css` draws. */
-export const TEXT_LINK_CLASS = "text-link";
-
 /** A link's face: the words it says, and whether they are its address cut short. */
 export interface LinkFace {
   readonly words: string;

@@ -9,8 +9,9 @@ import { TEXT_LINK_CURRENT, TEXT_LINK_LOOK, TextLink } from "./text-link.js";
  * text-link.test.ts -- a TextLink is a link a reader finds by its words,
  * going where its address says; only the link to where the reader is is
  * announced as current, as the page or as the part of the site; an external
- * link opens in a new tab and is still named by its words alone; and its
- * press is heard before the browser follows it.
+ * link in a new tab opens there and is still named by its words alone; a
+ * link with no address is its words and no link; and its press is heard
+ * before the browser follows it.
  */
 
 const roots: Root[] = [];
@@ -67,12 +68,13 @@ test("only the link to where the reader is is announced current, as the page or 
   ]);
 });
 
-test("an external link opens in a new tab and is named by its words, not its glyph", () => {
+test("an external link in a new tab opens there and is named by its words, not its glyph", () => {
   const container = mount(
     createElement(TextLink, {
       href: "https://example.com/console",
       look: TEXT_LINK_LOOK.UNDERLINED,
       external: true,
+      newTab: true,
       children: "the analytics processor",
     }),
   );
@@ -100,4 +102,17 @@ test("a press on a TextLink is heard, and the link is still followed", () => {
   act(() => link?.click());
 
   expect(presses).toEqual([false]);
+});
+
+test("a TextLink with no address is its words, and no link", () => {
+  const container = mount(
+    createElement(TextLink, {
+      href: undefined,
+      look: TEXT_LINK_LOOK.UNDERLINED,
+      children: "the docs",
+    }),
+  );
+
+  expect(container.querySelector("a")).toBeNull();
+  expect(container.textContent).toBe("the docs");
 });

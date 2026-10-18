@@ -42,7 +42,7 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
  * follows its address, so it opens in a new tab, copies, and hands off as
  * any link does; it is never unavailable or busy, since a link that cannot
  * be followed is not drawn. An IconButtonLink is an IconButton's look on a
- * link, named by its `label`; an `external` one opens in a new tab.
+ * link, named by its `label`, which may open in a `newTab`.
  *
  * An app's hint wraps a button and hands it the pointer and focus handlers
  * it shows and goes on, and the chord it names (`HintProps`), which land on
@@ -228,7 +228,7 @@ export function IconButtonLink({
   icon,
   label,
   variant,
-  external = false,
+  newTab = false,
 }: {
   href: string;
   icon: ReactNode;
@@ -236,7 +236,7 @@ export function IconButtonLink({
   label: string;
   variant?: ButtonVariant;
   /** Whether it opens in a new tab, leaving the page it is on where it was. */
-  external?: boolean;
+  newTab?: boolean;
 }): React.JSX.Element {
   return (
     <a
@@ -245,8 +245,8 @@ export function IconButtonLink({
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
       href={href}
       aria-label={label}
-      target={external ? "_blank" : undefined}
-      rel={external ? "noreferrer" : undefined}
+      target={newTab ? "_blank" : undefined}
+      rel={newTab ? "noreferrer" : undefined}
     >
       <span className="luke-button-face">{icon}</span>
     </a>

@@ -327,6 +327,16 @@ export function UpdateIcon(): React.JSX.Element {
   );
 }
 
+/** An arrow up and to the right, set after a link's words: a press leaves the place for another. */
+export function ArrowUpRightIcon(): React.JSX.Element {
+  return (
+    <Glyph className="link-out-glyph">
+      <path d="M7 17 17 7" />
+      <path d="M8 7h9v9" />
+    </Glyph>
+  );
+}
+
 /** Drawn rather than typed: a ↗ character depends on a font having one. */
 export function ExternalIcon(): React.JSX.Element {
   return (

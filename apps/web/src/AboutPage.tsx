@@ -100,14 +100,14 @@ function FounderSocials({
   return (
     /* The negative margin pulls the links' 44px squares back so the marks
        line up with the name above them rather than sitting inset from it. */
-    <div className="-ml-3.5 mt-1 flex items-center">
+    <div className="-my-2 -ml-3.5 mt-1 flex items-center">
       <IconButtonLink
         href={socials.linkedin}
         icon={<LinkedInMark />}
         label={`${name} on LinkedIn`}
-        external
+        newTab
       />
-      <IconButtonLink href={socials.x} icon={<XMark />} label={`${name} on X`} external />
+      <IconButtonLink href={socials.x} icon={<XMark />} label={`${name} on X`} newTab />
     </div>
   );
 }

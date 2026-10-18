@@ -55,7 +55,7 @@ function TextLinks(): React.JSX.Element {
               Get Luke
             </TextLink>{" "}
             and press again, or read the numbers in{" "}
-            <TextLink href="#text-links-sentence" look={TEXT_LINK_LOOK.UNDERLINED} external>
+            <TextLink href="#text-links-sentence" look={TEXT_LINK_LOOK.UNDERLINED} external newTab>
               the analytics processor
             </TextLink>
             .

@@ -215,12 +215,10 @@ blockquote.markdown-quote > * + * {
   border-top: 1px solid var(--markdown-edge);
 }
 
-/* A plain link (`text-link.tsx`), drawn alike in a transcript, the plan, its
-   versions, Luke's notes, and the plan's editor: the words' own ink over a
-   thin underline in a faint wash of it, which goes full strength under the
-   pointer or the keyboard, so a link reads by its line and not its colour
-   alone and sits apart from a mention's filled chip. A bare address cut
-   short wears a small ↗ after it, which says a press leaves the window. */
+/* A button that reads as a link (`replay-card.tsx`'s way to the full
+   transcript) wears an underlined TextLink's line: the words' own ink over a
+   thin underline in a faint wash of it, full strength under the pointer or
+   the keyboard. */
 .text-link {
   border-radius: 2px;
   color: inherit;
@@ -231,31 +229,18 @@ blockquote.markdown-quote > * + * {
   transition: text-decoration-color var(--duration-hover) ease;
 }
 
-a.text-link {
-  cursor: pointer;
-}
-
 .text-link:is(:hover, :focus-visible) {
   text-decoration-color: currentColor;
 }
 
-/* In the editor a link is words being written, so it keeps the caret's cursor. */
-[contenteditable] a.text-link {
-  cursor: text;
-}
-
+/* The ↗ a Factory row that opens on GitHub wears, as an external TextLink's. */
 .text-link-out {
   display: inline-block;
   width: 0.78em;
   height: 0.78em;
   margin-left: 0.12em;
   opacity: 0.55;
-  transition: opacity var(--duration-hover) ease;
   vertical-align: -0.02em;
-}
-
-.text-link:is(:hover, :focus-visible) .text-link-out {
-  opacity: 1;
 }
 
 /* An address the window opens nothing for, a file's say: the same line,

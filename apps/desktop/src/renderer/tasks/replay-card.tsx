@@ -3,6 +3,7 @@ import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-age
 import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
+import { TEXT_LINK_LOOK, TextLink } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -363,16 +364,16 @@ function ReplayFoot({
       {pullRequest === undefined || pullRequest === null || words === undefined ? null : (
         <span className="agent-origin-chip">
           {linkChip(pullRequest.url, words, doors) ?? (
-            <a
-              className="text-link"
+            <TextLink
               href={pullRequest.url}
+              look={TEXT_LINK_LOOK.UNDERLINED}
               onClick={(event) => {
                 event.preventDefault();
                 place.openGitHub(pullRequest.url);
               }}
             >
               {words}
-            </a>
+            </TextLink>
           )}
         </span>
       )}

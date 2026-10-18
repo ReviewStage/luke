@@ -19,7 +19,7 @@ import {
  * yet takes the focus a roving group hands it and is pressed as any other;
  * an ordinary button stays a Tab stop. A button that keeps focus leaves it
  * on the field that held it when a pointer presses it. An IconButtonLink is
- * a link named by its label, and an external one opens in a new tab.
+ * a link named by its label, and one in a new tab opens there.
  */
 
 const roots: Root[] = [];
@@ -178,7 +178,7 @@ test("a toggle is announced pressed while it is on, in any look, and a plain but
   ).toBe(false);
 });
 
-test("an IconButtonLink is a link named by its label, and an external one opens in a new tab", () => {
+test("an IconButtonLink is a link named by its label, and one in a new tab opens there", () => {
   const container = mount(
     createElement(
       "div",
@@ -192,7 +192,7 @@ test("an IconButtonLink is a link named by its label, and an external one opens 
         href: "https://x.com/example",
         icon: createElement("svg", { "aria-hidden": true }),
         label: "Example on X",
-        external: true,
+        newTab: true,
       }),
     ),
   );
