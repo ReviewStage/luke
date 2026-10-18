@@ -32,7 +32,9 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list";
 import {
   anyUnread,
+  EVERYONES,
   firstChoice,
+  INBOX_GROUPING,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
@@ -357,11 +359,16 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     ...inboxCounts(standing, tasks.me, choices.whose),
     [INBOX_SHOW.ARCHIVED]: archivedCount,
   };
+  // Note that the Archived tab lists every archived item, whoever's, as main's count of them does, and
+  // groups by task where Status is chosen, since nothing in it needs anyone or waits on anyone.
   const filter = {
-    grouping: choices.grouping,
+    grouping:
+      showArchived && choices.grouping === INBOX_GROUPING.STATUS
+        ? INBOX_GROUPING.TASK
+        : choices.grouping,
     show: choices.show,
     sort: choices.sort,
-    whose: choices.whose,
+    whose: showArchived ? EVERYONES : choices.whose,
     readerId: tasks.me,
   };
   // The rows hold what the filter lists alone, while the steps keep the item the pane shows in its place.
@@ -425,6 +432,12 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     chosen === undefined && !chosenWaits && !missing && asked?.opened !== true
       ? firstChoice(list)
       : undefined;
+  // An item a link or a notification asked for on an archived task is shown on the Archived tab, the one that lists it.
+  const { onShow } = choices;
+  const opensArchived = asked?.opened === true && chosenArchived && !showArchived;
+  useEffect(() => {
+    if (opensArchived) onShow(INBOX_SHOW.ARCHIVED);
+  }, [opensArchived, onShow]);
   const { onChoose } = view;
   const choose = useCallback(
     ({ holder, item }: InboxListed) =>

@@ -1767,6 +1767,16 @@ test("an archived task's items stand on the Archived tab alone, counted there an
   assert.equal(window.localStorage.getItem(SHOW_KEY), JSON.stringify("all"));
 });
 
+test("a link to an archived task's item opens it on the Archived tab, which lists it, rather than saying it is not found", async () => {
+  const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
+  const { page } = mount([], { standing: [BILLING], archived: [archivedInvites] });
+  await settle();
+  act(() => chooseFromOutside({ taskId: INVITES.id, itemId: EXPIRY.id, opened: true }));
+  await settle();
+  assert.equal(showTab(page, "Archived").getAttribute("aria-selected"), "true");
+  assert.deepEqual(subjectOf(page), ["Expire after 7 days?", "Archived", false]);
+});
+
 test("a fresh profile opens the Inbox on All open, grouped by task, a settled item left out until Everything is pressed", async () => {
   window.localStorage.clear();
   const { page } = mount();
