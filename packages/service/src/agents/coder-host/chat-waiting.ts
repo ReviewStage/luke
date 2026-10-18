@@ -13,7 +13,7 @@ import { listWorkspaces } from "@luke/database/models/workspace-store";
 import { ACCOUNT_CHAT_REASON, type AccountChatEntry } from "@luke/features/account-inbox-wire";
 import { ASK_STATUS, CHANNEL_KIND, MEMBER_KIND } from "@luke/features/chat-wire";
 import { Effect, Option, type Schema } from "effect";
-import type { InboxStamp } from "../../inbox/inbox-store.js";
+import type { CursorStamp } from "../../http/held-read.js";
 
 /**
  * chat-waiting.ts -- what waits on a person in their workspaces' chat, as the account's held read carries it beside the inbox: the asks open to them, and the message their member was last told of.
@@ -70,7 +70,7 @@ function rostersOf(userId: string) {
  */
 export function chatWaitingStamps(
   userId: string,
-): Effect.Effect<readonly InboxStamp[], ChatWaitingFailure, DatabaseServices> {
+): Effect.Effect<readonly CursorStamp[], ChatWaitingFailure, DatabaseServices> {
   return Effect.gen(function* () {
     // Chat is an experiment: an account with it off has nothing waiting in it.
     if (!(yield* chatEnabledFor(userId))) return [];

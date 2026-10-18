@@ -13,6 +13,7 @@ import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxAttachment } from "@luke/database/schemas/inbox-attachment";
+import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { inboxMessage } from "@luke/database/schemas/inbox-message";
 import { task } from "@luke/database/schemas/task";
 import { INBOX_ATTACHMENT_KIND } from "@luke/database/storage-vocabulary";
@@ -101,6 +102,15 @@ import { SqlClient, SqlSchema } from "effect/sql";
  * item's key leaves the thread and its files standing. What waits across
  * the account, every open item on a task it has not archived, is read on
  * its own index, so a desktop can hold that read whichever task is open.
+ * Every read of an item says whether it is unread for the member reading
+ * it, by that member's own marker (`@luke/database/schemas/inbox-item-read`):
+ * an item is unread while it changed after the last change they read
+ * through, or while they marked it unread and have not read it since. A
+ * member's own answer or message marks it read for them in the same write,
+ * and marking an item read, or every item their Inbox lists, writes only
+ * their own marker and only where it moves, so opening an item already
+ * read writes nothing. The stamps a held read compares carry the reader's
+ * unread state too, so a marker moved wakes that member's held reads.
  * Every function is an effect over the ambient `SqlClient` and names no
  * database of its own.
  */
@@ -133,6 +143,8 @@ export interface InboxStamp {
   readonly revision: number;
   readonly status: InboxItem["status"];
   readonly updatedAt: number;
+  /** Whether the item is unread for the member the stamps were read for. */
+  readonly unread: boolean;
 }
 
 /** An item as the service holds it, beyond what the wire carries: the key its answer was taken under. */
@@ -203,6 +215,30 @@ const MESSAGES = sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('id'
 /** Whether the item is settled: answered, or closed by its agent. */
 const SETTLED = sql`${inboxItem.status} <> ${INBOX_STATUS.OPEN}`;
 
+const ITEM_TABLE = sql.identifier(getTableName(inboxItem));
+const ITEM_UPDATED_AT = sql`${ITEM_TABLE}.${sql.identifier(inboxItem.updatedAt.name)}`;
+const ITEM_READ_THROUGH = sql`${ITEM_TABLE}.${sql.identifier(inboxItem.readThrough.name)}`;
+
+const READ = {
+  itemId: qualified(inboxItemRead, inboxItemRead.itemId),
+  userId: qualified(inboxItemRead, inboxItemRead.userId),
+  readThrough: qualified(inboxItemRead, inboxItemRead.readThrough),
+  markedUnread: qualified(inboxItemRead, inboxItemRead.markedUnread),
+};
+
+/**
+ * Whether the item is unread for the reader: marked unread by them, or
+ * changed after the later of the change they read through and the instant
+ * the item itself is read through by everyone, which stands only on an item
+ * from before unread was kept. A reader with no marker reads it by the
+ * item's instant alone, so an item posted since is unread until they read
+ * it and one that stood before is read until it changes.
+ */
+function unreadFor(readerId: string): SQL<boolean> {
+  const noMarker = sql`${ITEM_UPDATED_AT} > coalesce(${ITEM_READ_THROUGH}, '-infinity'::timestamptz)`;
+  return sql<boolean>`coalesce((select ${READ.markedUnread} or ${ITEM_UPDATED_AT} > coalesce(greatest(${READ.readThrough}, ${ITEM_READ_THROUGH}), '-infinity'::timestamptz) from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId}), ${noMarker})`;
+}
+
 /**
  * When a settled item was settled, in epoch milliseconds: the instant kept,
  * or, on an item settled before it was kept, its last change, which no
@@ -212,8 +248,16 @@ const SETTLED_AT = sql<
   number | null
 >`floor(extract(epoch from coalesce(${inboxItem.settledAt}, case when ${SETTLED} then ${inboxItem.updatedAt} end)) * 1000)::float8`;
 
-/** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
-const INBOX_COLUMNS = {
+/** The columns every read and every `returning` projects for the reader, so a row decodes one way whatever wrote it. */
+function inboxColumns(readerId: string) {
+  return {
+    ...INBOX_ITEM_COLUMNS,
+    unread: unreadFor(readerId),
+  };
+}
+
+/** What an item says whoever reads it. */
+const INBOX_ITEM_COLUMNS = {
   id: inboxItem.id,
   agentId: inboxItem.agentId,
   key: inboxItem.key,
@@ -298,6 +342,7 @@ const InboxRowSchema = Schema.Struct({
   postedAt: InstantColumnSchema,
   settledAt: Schema.NullOr(Schema.Number),
   updatedAt: InstantColumnSchema,
+  unread: Schema.Boolean,
 });
 
 type InboxRow = typeof InboxRowSchema.Type;
@@ -329,6 +374,7 @@ function storedItem(row: InboxRow): StoredInboxItem {
       postedAt: row.postedAt.getTime(),
       ...(row.settledAt === null ? undefined : { settledAt: row.settledAt }),
       updatedAt: row.updatedAt.getTime(),
+      unread: row.unread,
     },
     answerKey: row.answerKey,
   };
@@ -632,7 +678,7 @@ const upsertItem = SqlSchema.findOne({
           target: [inboxItem.agentId, inboxItem.key],
           set: { ...posted, revision: sql`${inboxItem.revision} + 1` },
         })
-        .returning(INBOX_COLUMNS),
+        .returning(inboxColumns(write.userId)),
     );
   },
 });
@@ -660,7 +706,7 @@ const closeItem = SqlSchema.findOneOption({
         .where(
           and(eq(inboxItem.userId, userId), eq(inboxItem.agentId, agentId), eq(inboxItem.key, key)),
         )
-        .returning(INBOX_COLUMNS),
+        .returning(inboxColumns(userId)),
     ),
 });
 
@@ -701,7 +747,7 @@ const findOpenItems = SqlSchema.findAll({
   execute: (scope) =>
     Database.use((db) =>
       db
-        .select(INBOX_COLUMNS)
+        .select(inboxColumns(scope.userId))
         .from(inboxItem)
         .where(and(inScope(scope), eq(inboxItem.status, INBOX_STATUS.OPEN)))
         .orderBy(...LATEST_FIRST),
@@ -715,7 +761,7 @@ const findSettledItems = SqlSchema.findAll({
   execute: ({ limit, ...scope }) =>
     Database.use((db) =>
       db
-        .select(INBOX_COLUMNS)
+        .select(inboxColumns(scope.userId))
         .from(inboxItem)
         .where(and(inScope(scope), ne(inboxItem.status, INBOX_STATUS.OPEN)))
         .orderBy(...LATEST_FIRST)
@@ -729,14 +775,19 @@ const StampRowSchema = Schema.Struct({
   revision: Schema.Number,
   status: Schema.Literals(Object.values(INBOX_STATUS)),
   updatedAt: InstantColumnSchema,
+  unread: Schema.Boolean,
 });
 
-const STAMP_COLUMNS = {
-  id: inboxItem.id,
-  revision: inboxItem.revision,
-  status: inboxItem.status,
-  updatedAt: inboxItem.updatedAt,
-};
+/** Where an item stands for the reader: its own stamp, and whether it is unread for them, so their marker moving wakes their held reads. */
+function stampColumns(readerId: string) {
+  return {
+    id: inboxItem.id,
+    revision: inboxItem.revision,
+    status: inboxItem.status,
+    updatedAt: inboxItem.updatedAt,
+    unread: unreadFor(readerId),
+  };
+}
 
 const findOpenStamps = SqlSchema.findAll({
   Request: ScopeSchema,
@@ -744,7 +795,7 @@ const findOpenStamps = SqlSchema.findAll({
   execute: (scope) =>
     Database.use((db) =>
       db
-        .select(STAMP_COLUMNS)
+        .select(stampColumns(scope.userId))
         .from(inboxItem)
         .where(and(inScope(scope), eq(inboxItem.status, INBOX_STATUS.OPEN)))
         .orderBy(...LATEST_FIRST),
@@ -757,7 +808,7 @@ const findSettledStamps = SqlSchema.findAll({
   execute: ({ limit, ...scope }) =>
     Database.use((db) =>
       db
-        .select(STAMP_COLUMNS)
+        .select(stampColumns(scope.userId))
         .from(inboxItem)
         .where(and(inScope(scope), ne(inboxItem.status, INBOX_STATUS.OPEN)))
         .orderBy(...LATEST_FIRST)
@@ -802,6 +853,7 @@ const WaitingRowSchema = Schema.Struct({
   status: Schema.Literals(Object.values(INBOX_STATUS)),
   postedAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
+  unread: Schema.Boolean,
 });
 
 const findWaitingItems = SqlSchema.findAll({
@@ -822,6 +874,7 @@ const findWaitingItems = SqlSchema.findAll({
           status: inboxItem.status,
           postedAt: inboxItem.postedAt,
           updatedAt: inboxItem.updatedAt,
+          unread: unreadFor(userId),
         })
         .from(inboxItem)
         .innerJoin(task, eq(task.id, inboxItem.taskId))
@@ -847,6 +900,7 @@ const TasklessRowSchema = Schema.Struct({
   status: Schema.Literals(Object.values(INBOX_STATUS)),
   postedAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
+  unread: Schema.Boolean,
 });
 
 const findTasklessWaitingItems = SqlSchema.findAll({
@@ -870,6 +924,7 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           status: inboxItem.status,
           postedAt: inboxItem.postedAt,
           updatedAt: inboxItem.updatedAt,
+          unread: unreadFor(userId),
         })
         .from(inboxItem)
         .innerJoin(codingAgent, eq(codingAgent.id, inboxItem.agentId))
@@ -890,7 +945,7 @@ const findWaitingStamps = SqlSchema.findAll({
   execute: ({ userId }) =>
     Database.use((db) =>
       db
-        .select(STAMP_COLUMNS)
+        .select(stampColumns(userId))
         .from(inboxItem)
         .leftJoin(task, eq(task.id, inboxItem.taskId))
         .where(or(accountWaiting(userId), tasklessWaiting(userId)))
@@ -979,18 +1034,20 @@ const findItem = SqlSchema.findOneOption({
   execute: ({ userId, itemId }) =>
     Database.use((db) =>
       db
-        .select(INBOX_COLUMNS)
+        .select(inboxColumns(userId))
         .from(inboxItem)
         .where(and(eq(inboxItem.id, itemId), itemReachableBy(userId))),
     ),
 });
 
-/** The item by its id alone, read where the caller has reached it already. */
+/** The item by its id alone, read for the reader named where the caller has reached it already. */
 const findItemOf = SqlSchema.findOneOption({
-  Request: Schema.Struct({ itemId: Schema.String }),
+  Request: Schema.Struct({ readerId: Schema.String, itemId: Schema.String }),
   Result: InboxRowSchema,
-  execute: ({ itemId }) =>
-    Database.use((db) => db.select(INBOX_COLUMNS).from(inboxItem).where(eq(inboxItem.id, itemId))),
+  execute: ({ readerId, itemId }) =>
+    Database.use((db) =>
+      db.select(inboxColumns(readerId)).from(inboxItem).where(eq(inboxItem.id, itemId)),
+    ),
 });
 
 /** The account, task, and workspace an item stands under, which its attachments are written under too. */
@@ -1018,6 +1075,135 @@ const findItemScope = SqlSchema.findOne({
 function itemScope(request: { readonly itemId: string }) {
   return findItemScope(request).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
 }
+
+/** A marker's column as the row an insert would have written, which an upsert's update takes. */
+function excluded(column: AnyPgColumn): SQL {
+  return sql`excluded.${sql.identifier(column.name)}`;
+}
+
+const ReaderItemSchema = Schema.Struct({ userId: Schema.String, itemId: Schema.String });
+
+const MarkedSchema = Schema.Struct({ itemId: Schema.String });
+
+/**
+ * The member's marker on the item read through its last change, where the
+ * account reaches the item; nothing where the marker already read through
+ * that change and was not marked unread, so a read already standing writes
+ * no row.
+ */
+const upsertRead = SqlSchema.findOneOption({
+  Request: ReaderItemSchema,
+  Result: MarkedSchema,
+  execute: ({ userId, itemId }) =>
+    Database.use((db) =>
+      db
+        .insert(inboxItemRead)
+        .select(
+          db
+            .select({
+              itemId: inboxItem.id,
+              userId: sql<string>`${userId}::text`.as(inboxItemRead.userId.name),
+              readThrough: inboxItem.updatedAt,
+              markedUnread: sql<boolean>`false`.as(inboxItemRead.markedUnread.name),
+            })
+            .from(inboxItem)
+            .where(and(eq(inboxItem.id, itemId), itemReachableBy(userId))),
+        )
+        .onConflictDoUpdate({
+          target: [inboxItemRead.itemId, inboxItemRead.userId],
+          set: { readThrough: excluded(inboxItemRead.readThrough), markedUnread: false },
+          setWhere: sql`${inboxItemRead.markedUnread} or ${inboxItemRead.readThrough} is distinct from ${excluded(inboxItemRead.readThrough)}`,
+        })
+        .returning({ itemId: inboxItemRead.itemId }),
+    ),
+});
+
+/** The member's marker on the item marked unread, where the account reaches the item; nothing where it stands marked already. */
+const upsertUnread = SqlSchema.findOneOption({
+  Request: ReaderItemSchema,
+  Result: MarkedSchema,
+  execute: ({ userId, itemId }) =>
+    Database.use((db) =>
+      db
+        .insert(inboxItemRead)
+        .select(
+          db
+            .select({
+              itemId: inboxItem.id,
+              userId: sql<string>`${userId}::text`.as(inboxItemRead.userId.name),
+              markedUnread: sql<boolean>`true`.as(inboxItemRead.markedUnread.name),
+            })
+            .from(inboxItem)
+            .where(and(eq(inboxItem.id, itemId), itemReachableBy(userId))),
+        )
+        .onConflictDoUpdate({
+          target: [inboxItemRead.itemId, inboxItemRead.userId],
+          set: { markedUnread: true },
+          setWhere: sql`not ${inboxItemRead.markedUnread}`,
+        })
+        .returning({ itemId: inboxItemRead.itemId }),
+    ),
+});
+
+/** The item's id, where the account reaches it. */
+const findReachedItem = SqlSchema.findOneOption({
+  Request: ReaderItemSchema,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, itemId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: inboxItem.id })
+        .from(inboxItem)
+        .where(and(eq(inboxItem.id, itemId), itemReachableBy(userId))),
+    ),
+});
+
+/**
+ * The items the account's Inbox lists, open or settled, whichever member's
+ * agent posted each: those on the tasks of its workspaces it has not
+ * archived, and those of agents with no task in its workspaces. Note that
+ * the task is joined on the left, because an item with no task has none.
+ */
+function inboxListed(userId: string) {
+  return or(
+    and(taskReachableBy(userId), isNull(task.archivedAt)),
+    and(isNull(inboxItem.taskId), itemReachableBy(userId)),
+  );
+}
+
+/** Every item the account's Inbox lists that is unread for it, in the one workspace named or in all of them, marked read through its last change: the markers moved. */
+const upsertAllRead = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, workspaceId: Schema.NullOr(Schema.String) }),
+  Result: MarkedSchema,
+  execute: ({ userId, workspaceId }) =>
+    Database.use((db) =>
+      db
+        .insert(inboxItemRead)
+        .select(
+          db
+            .select({
+              itemId: inboxItem.id,
+              userId: sql<string>`${userId}::text`.as(inboxItemRead.userId.name),
+              readThrough: inboxItem.updatedAt,
+              markedUnread: sql<boolean>`false`.as(inboxItemRead.markedUnread.name),
+            })
+            .from(inboxItem)
+            .leftJoin(task, eq(task.id, inboxItem.taskId))
+            .where(
+              and(
+                inboxListed(userId),
+                workspaceId === null ? undefined : eq(inboxItem.organizationId, workspaceId),
+                unreadFor(userId),
+              ),
+            ),
+        )
+        .onConflictDoUpdate({
+          target: [inboxItemRead.itemId, inboxItemRead.userId],
+          set: { readThrough: excluded(inboxItemRead.readThrough), markedUnread: false },
+        })
+        .returning({ itemId: inboxItemRead.itemId }),
+    ),
+});
 
 /** The answer written on the item where it is open at the revision named; nothing where it is not. */
 const answerItem = SqlSchema.findOneOption({
@@ -1050,7 +1236,7 @@ const answerItem = SqlSchema.findOneOption({
             eq(inboxItem.status, INBOX_STATUS.OPEN),
           ),
         )
-        .returning(INBOX_COLUMNS),
+        .returning(inboxColumns(userId)),
     ),
 });
 
@@ -1221,6 +1407,48 @@ export function readInboxItem(
   return Effect.map(findItem({ userId, itemId }), Option.map(storedItem));
 }
 
+/** Whether the marker's write found the item: it moved the marker, or the account reaches an item whose marker stood as asked already. */
+function markerFound(
+  marked: Option.Option<typeof MarkedSchema.Type>,
+  request: typeof ReaderItemSchema.Type,
+): InboxStoreEffect<boolean> {
+  if (Option.isSome(marked)) return Effect.succeed(true);
+  return Effect.map(findReachedItem(request), Option.isSome);
+}
+
+/**
+ * The item marked read for the member, read through its last change and
+ * no longer marked unread, which is what opening it does; whether the
+ * account reaches the item. A read already standing writes nothing, so
+ * marking an item read again is one statement and one lookup.
+ */
+export function markInboxItemRead(userId: string, itemId: string): InboxStoreEffect<boolean> {
+  const request = { userId, itemId };
+  return Effect.flatMap(upsertRead(request), (marked) => markerFound(marked, request));
+}
+
+/** The item marked unread for the member, standing so until they read it again, whatever changes meanwhile; whether the account reaches the item. */
+export function markInboxItemUnread(userId: string, itemId: string): InboxStoreEffect<boolean> {
+  const request = { userId, itemId };
+  return Effect.flatMap(upsertUnread(request), (marked) => markerFound(marked, request));
+}
+
+/**
+ * Every item the member's Inbox lists marked read for them, open or
+ * settled, in the one workspace named or in every workspace of theirs
+ * where none is: how many were unread. An item already read is not
+ * written, and another member's markers are never touched.
+ */
+export function markInboxRead(
+  userId: string,
+  workspaceId: string | undefined,
+): InboxStoreEffect<number> {
+  return Effect.map(
+    upsertAllRead({ userId, workspaceId: workspaceId ?? null }),
+    (marked) => marked.length,
+  );
+}
+
 /** The answer taken back off the item it was taken on under the key, opening it again; nothing where that answer no longer stands. */
 const withdrawAnswer = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -1250,7 +1478,7 @@ const withdrawAnswer = SqlSchema.findOneOption({
             eq(inboxItem.status, INBOX_STATUS.ANSWERED),
           ),
         )
-        .returning(INBOX_COLUMNS),
+        .returning(inboxColumns(userId)),
     ),
 });
 
@@ -1267,7 +1495,9 @@ export function withdrawInboxAnswer(
         const withdrawn = yield* withdrawAnswer({ userId, itemId, answerKey, now });
         if (Option.isNone(withdrawn)) return Option.none();
         yield* deleteAnswerFiles({ itemId });
-        // Note that the row is read again, because what `returning` projected still named the files.
+        // The answer taken back is the member's own, so it leaves the item read for them as the answer did.
+        yield* upsertRead({ userId, itemId });
+        // Note that the row is read again, because what `returning` projected still named the files and was read before the marker moved.
         return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
       }),
     ),
@@ -1298,22 +1528,24 @@ export function answerInboxItem(
       Effect.gen(function* () {
         const now = yield* DateTime.nowAsDate;
         const answered = yield* answerItem({ userId, itemId, revision, answer, answerKey, now });
-        if (Option.isNone(answered) || files.length === 0) {
-          return Option.map(answered, (row) => storedItem(row).item);
+        if (Option.isNone(answered)) return Option.none();
+        // The member's own answer leaves the item read for them, and unread for every other member.
+        yield* upsertRead({ userId, itemId });
+        if (files.length > 0) {
+          const scope = yield* itemScope({ itemId });
+          yield* Effect.forEach(files, (file, position) =>
+            insertAnswerFile({
+              ...scope,
+              itemId,
+              name: file.name,
+              position,
+              contentType: file.mediaType,
+              bytes: bytesOf(file),
+              now,
+            }),
+          );
         }
-        const scope = yield* itemScope({ itemId });
-        yield* Effect.forEach(files, (file, position) =>
-          insertAnswerFile({
-            ...scope,
-            itemId,
-            name: file.name,
-            position,
-            contentType: file.mediaType,
-            bytes: bytesOf(file),
-            now,
-          }),
-        );
-        // Note that the row is read again, because what `returning` projected was read before the files were written.
+        // Note that the row is read again, because what `returning` projected was read before the marker moved and the files were written.
         return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
       }),
     ),
@@ -1398,10 +1630,14 @@ function sameMessage(
  * its key is the one already written, which writes nothing and moves
  * nothing; another message under a key already taken, by another member or
  * with other words or files, is refused as the key reused, so the thread
- * never names one message while the agent hears another. The caller has read the item as the writer may reach it, so the
+ * never names one message while the agent hears another. A member's
+ * message marks the item read for them in the same write. The item comes
+ * back as the reader named reads it: the member, or the agent's starter.
+ * The caller has read the item as the writer may reach it, so the
  * item named is one that stands.
  */
 function writeInboxMessage(
+  readerId: string,
   itemId: string,
   writer: InboxMessageWriter,
   text: string,
@@ -1433,11 +1669,13 @@ function writeInboxMessage(
             }),
           );
           yield* touchItem({ itemId, now });
+          // A member's own message leaves the item read for them, and unread for every other member.
+          if (member !== undefined) yield* upsertRead({ userId: member.userId, itemId });
         }
         const outcome = Option.isSome(written)
           ? INBOX_MESSAGE_OUTCOME.WRITTEN
           : yield* repeatOutcome(itemId, member, text, files);
-        const found = yield* findItemOf({ itemId });
+        const found = yield* findItemOf({ readerId, itemId });
         return Option.map(found, (row) => ({ item: storedItem(row).item, outcome }));
       }),
     ),
@@ -1477,6 +1715,7 @@ export function postInboxMessage(
     Option.isNone(found)
       ? Effect.succeed(Option.none())
       : writeInboxMessage(
+          userId,
           itemId,
           { author: INBOX_MESSAGE_AUTHOR.MEMBER, userId, clientKey: message.clientKey },
           message.text,
@@ -1526,7 +1765,13 @@ export function replyInboxItem(
     Option.isNone(found)
       ? Effect.succeed(Option.none())
       : Effect.map(
-          writeInboxMessage(found.value.id, { author: INBOX_MESSAGE_AUTHOR.AGENT }, text, pictures),
+          writeInboxMessage(
+            agent.userId,
+            found.value.id,
+            { author: INBOX_MESSAGE_AUTHOR.AGENT },
+            text,
+            pictures,
+          ),
           Option.map((written) => written.item),
         ),
   );

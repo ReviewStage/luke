@@ -56,6 +56,12 @@ export const HOSTED_SERVICE_PATH = {
    */
   INBOX: "/api/inbox",
   /**
+   * Every item the asking member's Inbox lists, marked read for them (PUT),
+   * in the one workspace the body names or in all of theirs.
+   * `inbox-wire.ts` declares the request and the answer.
+   */
+  INBOX_READ: "/api/inbox/read",
+  /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to
    * one repository where the query names one (GET), what an automation's
@@ -531,6 +537,11 @@ export function inboxItemPath(itemId: string): string {
 /** One item's thread, a member's message written on it (POST), open or settled; `inbox-wire.ts` declares the request and the answer. */
 export function inboxMessagesPath(itemId: string): string {
   return `${inboxItemPath(itemId)}/messages`;
+}
+
+/** One item's read state for the asking member: marked read (PUT), as opening it does, or unread (DELETE); `inbox-wire.ts` declares the answer. */
+export function inboxItemReadPath(itemId: string): string {
+  return `${inboxItemPath(itemId)}/read`;
 }
 
 /** One workspace's photo, as its bytes under its own media type (GET), served to the workspace's members alone. */
