@@ -8,7 +8,11 @@
  * once its leading edge crosses that row's middle. Letting go puts it there;
  * Escape, or the system taking the pointer away, puts every row back and
  * changes nothing. A row changed under the drag puts it back as well, since
- * the places it measured have moved.
+ * the places it measured have moved. Held at the top or the foot of the
+ * column that scrolls the list (the sidebar's), or past it, the row runs
+ * the column along that way, faster the nearer the edge, as the tab strip
+ * runs along under a tab held at its edge, so a row reaches a place, or a
+ * zone, scrolled out of sight.
  *
  * The drag is drawn on the rows' own `transform` and nothing else, and the
  * stylesheet (desktop.css) times every slide from the motion tokens, so
@@ -51,6 +55,12 @@ import { flushSync } from "react-dom";
 
 /** How far the pointer goes up or down, or any way in a drop scope, in CSS pixels, before a press is a drag rather than a click. */
 const DRAG_THRESHOLD = 4;
+
+/** How near the scrolling column's top or foot, in CSS pixels, a held row runs it along: about its faded edge. */
+const EDGE_REACH = 32;
+
+/** The most the column runs along in a frame, in CSS pixels, with the pointer at its edge or past it. */
+const EDGE_SPEED = 12;
 
 /** The list's rows that move. */
 const ROW = ":scope > li";
@@ -128,6 +138,8 @@ interface RowPress {
   scope: Element | null;
   /** The copy carried over the scope once the press is a drag. */
   carried: Carried | undefined;
+  /** The frame the scrolling column next runs along in, while the pointer is held at its edge. */
+  frame: number | undefined;
 }
 
 /** What a list's rows may do beyond moving among themselves. */
@@ -193,6 +205,36 @@ function zoneUnder(press: RowPress, list: HTMLElement): ZoneLanding | undefined 
   const id = zone?.getAttribute(DROP_ZONE);
   if (zone === undefined || zone === own || id === null || id === undefined) return undefined;
   return { zone, id, at: landingIn(zone, press.pointer) };
+}
+
+/** The nearest element around the list that scrolls it up and down, the sidebar's column, as the press begins; none where nothing does. */
+function scrollerOf(list: HTMLElement): HTMLElement | undefined {
+  for (let each = list.parentElement; each !== null; each = each.parentElement) {
+    const { overflowY } = getComputedStyle(each);
+    const scrolls = overflowY === "auto" || overflowY === "scroll";
+    if (scrolls && each.scrollHeight > each.clientHeight) return each;
+  }
+  return undefined;
+}
+
+/**
+ * How far the column runs along this frame, toward the edge the pointer is
+ * held at: faster the nearer the edge, the whole of `EDGE_SPEED` at it or
+ * past it, and none away from both edges or where the column has no further
+ * to go that way. Each edge reaches at most half the column, so in a column
+ * too short for both a pointer is near one edge only and the column never
+ * turns back and forth beneath it.
+ */
+function edgeRun(scroller: HTMLElement, y: number): number {
+  const box = scroller.getBoundingClientRect();
+  const reach = Math.min(EDGE_REACH, box.height / 2);
+  const above = box.top + reach - y;
+  const below = y - (box.bottom - reach);
+  const speed = (into: number) => Math.ceil(EDGE_SPEED * Math.min(1, into / reach));
+  if (above > 0 && scroller.scrollTop > 0) return -speed(above);
+  const end = scroller.scrollHeight - scroller.clientHeight;
+  if (below > 0 && scroller.scrollTop < end) return speed(below);
+  return 0;
 }
 
 /** Takes down the marks of the zone the row was carried over. */
@@ -350,6 +392,25 @@ export function useRowDrag(
 
   const begin = (list: HTMLElement, press: RowPress) => {
     const pressed = () => press.rows[press.at];
+    // A scope's rows are carried over it as a copy, so only a list that
+    // moves its own rows runs the column it stands in.
+    const scroller = press.scope === null ? scrollerOf(list) : undefined;
+    // Note that the column is run along at once rather than gliding, because
+    // a glide would be restarted, and cut short, by every frame.
+    const runAlong = () => {
+      press.frame = undefined;
+      if (!press.dragging || scroller === undefined) return;
+      const from = scroller.scrollTop;
+      const by = edgeRun(scroller, press.pointer);
+      if (by === 0) return;
+      scroller.style.scrollBehavior = "auto";
+      scroller.scrollTop = from + by;
+      scroller.style.scrollBehavior = "";
+      // A column already at its end stops running however the pointer is held.
+      if (scroller.scrollTop === from) return;
+      draw(press, list, out);
+      press.frame = requestAnimationFrame(runAlong);
+    };
     const move = (event: PointerEvent) => {
       if (event.pointerId !== press.pointerId) return;
       const across = press.scope === null ? 0 : Math.abs(event.clientX - press.x);
@@ -368,6 +429,9 @@ export function useRowDrag(
       press.pointer = event.clientY;
       press.pointerX = event.clientX;
       draw(press, list, out);
+      if (press.frame === undefined && scroller !== undefined) {
+        press.frame = requestAnimationFrame(runAlong);
+      }
     };
     const putBack = () => {
       release.current?.();
@@ -426,6 +490,8 @@ export function useRowDrag(
     window.addEventListener("keydown", onEscape, true);
     window.addEventListener("scroll", runBeneath, true);
     release.current = () => {
+      if (press.frame !== undefined) cancelAnimationFrame(press.frame);
+      press.frame = undefined;
       window.removeEventListener("pointermove", move, true);
       window.removeEventListener("pointerup", drop, true);
       window.removeEventListener("pointercancel", cancel, true);
@@ -461,7 +527,15 @@ export function useRowDrag(
     const listTop = list.getBoundingClientRect().top;
     const scope = list.closest(`[${DROP_SCOPE}]`);
     const reorders = onMove !== undefined && scope === null;
-    const state = { to: at, dragging: false, reorders, zone: undefined, scope, carried: undefined };
+    const state = {
+      to: at,
+      dragging: false,
+      reorders,
+      zone: undefined,
+      scope,
+      carried: undefined,
+      frame: undefined,
+    };
     begin(list, { ...pointer, listTop, at, rows, slots, gap, ...state });
   };
 }
