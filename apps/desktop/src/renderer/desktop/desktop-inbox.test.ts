@@ -712,6 +712,50 @@ test("a row's page is drawn at its newest version, read again once its item chan
   assert.equal(tile(), "true");
 });
 
+test("a row's picture is let go once its item is reposted carrying no media, so the picture shown again is read anew and holds its place until it lands", async () => {
+  const shot = {
+    type: INBOX_BLOCK.IMAGE,
+    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c73",
+    alt: "The chart",
+  };
+  const picture = (page: HTMLElement) =>
+    rowNamed(page, "Expire after 7 days?")
+      .querySelector(".luke-list-row-attachments img")
+      ?.getAttribute("src");
+  const repost = async (blocks: InboxItem["blocks"], revision: number, updatedAt: number) => {
+    inboxes.set(INVITES.id, [{ ...EXPIRY, blocks, revision, updatedAt }]);
+    act(() =>
+      setHolding([
+        { taskId: INVITES.id, items: 1, updatedAt },
+        { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
+      ]),
+    );
+    await settle();
+  };
+  const land = async () => {
+    for (const each of imageReads.splice(0)) each();
+    await settle();
+  };
+  inboxes.set(INVITES.id, [{ ...EXPIRY, blocks: [shot] }]);
+  const { page } = mount();
+  await settle();
+  toggleMediaPreviews(page);
+  await settle();
+  await land();
+  assert.equal(picture(page), "data:image/png;base64,iVBORw0KGgo=");
+
+  await repost([], 2, 6_000);
+  assert.equal(picture(page), undefined, "the reposted item carries no media");
+  await repost([shot], 3, 7_000);
+  assert.equal(
+    picture(page),
+    undefined,
+    "the picture let go holds its place until it is read anew",
+  );
+  await land();
+  assert.equal(picture(page), "data:image/png;base64,iVBORw0KGgo=");
+});
+
 /** The line heading the developer's answer in the shown item's thread, as a reader hears it: who answered, when, and where it went. */
 function answerHead(page: HTMLElement): string | null {
   return wordsOf(

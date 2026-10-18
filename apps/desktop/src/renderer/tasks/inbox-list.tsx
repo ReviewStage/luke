@@ -110,11 +110,12 @@ import {
   inboxMedia,
   inboxPreview,
   isUnread,
+  listedItems,
   NEEDS_YOU,
   needsYou as needsYouOf,
   readersItem,
 } from "./inbox-model";
-import { RowMedia, type RowMediaReads, useRowMediaReads } from "./inbox-row-media";
+import { RowMedia, type RowMediaReads, useRowMediaAsks, useRowMediaReads } from "./inbox-row-media";
 import { ReadAgentModel } from "./mentioned-agent-card";
 import { cardTitle } from "./tool-call-model";
 
@@ -191,6 +192,9 @@ const MARK_ALL_READ = "Mark all as read";
 
 /** What the view's menu offers to show or hide the media under each row's preview with. */
 const MEDIA_PREVIEWS = "Media previews";
+
+/** The items whose media the rows show while they show none, kept as one so the reads see no change. */
+const NO_ITEMS: readonly string[] = [];
 
 /** What the head's menu button is called. */
 const VIEW_OPTIONS = "View options";
@@ -461,6 +465,7 @@ export function InboxItemRow({
     actorName(personActor(member, directory.members, reader, directory.former)),
   );
   const carried = useMemo(() => inboxMedia(item), [item]);
+  useRowMediaAsks(item.id, item.updatedAt, carried, media);
   const menu = useMenu(true);
   const copyLink = useCopyLinkItem()(
     holder.kind === INBOX_HOLDER.TASK
@@ -513,7 +518,7 @@ export function InboxItemRow({
         }
         attachments={
           media === undefined || carried.length === 0 ? undefined : (
-            <RowMedia itemId={item.id} changedAt={item.updatedAt} media={carried} reads={media} />
+            <RowMedia media={carried} reads={media} />
           )
         }
         meta={
@@ -1183,8 +1188,12 @@ export function InboxList({
   const { width, onResize } = useInboxListWidth();
   const rowFocus = useRowFocusKept(rows);
   // Note that only the window's Inbox shows its rows' media, as its view's menu chooses; a task's own shows none.
-  const mediaReads = useRowMediaReads();
-  const media = head.view?.choices.mediaPreviews === true ? mediaReads : undefined;
+  // The reads hold the pictures of the items listed alone, and none while the rows show no media.
+  const previews = head.view?.choices.mediaPreviews === true;
+  const mediaReads = useRowMediaReads(
+    previews ? listedItems(view).map(({ item }) => item.id) : NO_ITEMS,
+  );
+  const media = previews ? mediaReads : undefined;
   const edge = useResizableEdge({
     side: EDGE_SIDE.RIGHT,
     width,
