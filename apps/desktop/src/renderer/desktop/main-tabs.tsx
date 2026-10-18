@@ -10,6 +10,7 @@ import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { INLINE_EDIT_LOOK, InlineEdit } from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
+import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
 import { useEffect, useRef } from "react";
 import { useAppCommand } from "../app-commands";
 import { useCopyLinkItem } from "../copy-link-item";
@@ -50,7 +51,6 @@ import {
   useTranscriptCopier,
 } from "./strip-tabs";
 import { TabStrip } from "./tab-strip";
-import { useTaskRename } from "./task-name-field";
 
 /**
  * main-tabs.tsx -- the task's column's tabs: the plan's own, each coding agent's, the draft agent's, and the Inbox's after it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
@@ -160,7 +160,7 @@ function RenamableTab({
   look: TabLook;
   doors: TabDoors;
   /** The rename the tab's menu opens; none where nothing is renamed, as on an archived task. */
-  rename: ReturnType<typeof useTaskRename> | undefined;
+  rename: InlineRename | undefined;
   /** What the field is called for a reader and how long a name it takes; a plan's where absent. */
   field?: { label: string; maxLength: number } | undefined;
   /** The toolbar's slot the chosen tab's ⋯ stands in; none for the plan's, whose ⋯ the toolbar draws itself. */
@@ -215,7 +215,7 @@ function AgentMenuTab({
   shown: boolean;
   slot: HTMLElement | null;
 }): React.JSX.Element {
-  const rename = useTaskRename(agent.id, agents.onRename);
+  const rename = useInlineRename(agent.id, agents.onRename);
   const archive = useAgentArchive(agent, agents, shown);
   return (
     <>
@@ -447,7 +447,7 @@ export function MainTabStrip({
     onUnpin: (taskId: string, tab: ColumnPinnableTab) => void;
   };
   /** The task's rename, which its tab's menu opens; none while the task is archived. */
-  rename: ReturnType<typeof useTaskRename> | undefined;
+  rename: InlineRename | undefined;
   /** Whether the column offers its keys: on screen, and holding the window's focus. */
   keys: boolean;
   /** Whether the task's page is on screen, which a tab's Archive asks its question on. */

@@ -5177,18 +5177,8 @@ button.attached-file-face:hover img {
   line-height: var(--luke-type-caption-leading);
 }
 
-.terminal-shell-field {
-  min-width: 0;
+.terminal-shell > .luke-inline-edit {
   flex: 1;
-  padding: 1px var(--luke-space-4);
-  border: 0;
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-input);
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
-  color: var(--luke-color-text);
-  font: inherit;
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
 }
 
 .terminal-shell-mark {
@@ -5217,7 +5207,7 @@ button.attached-file-face:hover img {
   visibility: visible;
 }
 
-.terminal-shell:has(.terminal-shell-field) .terminal-shell-kill {
+.terminal-shell:has(> .luke-inline-edit) .terminal-shell-kill {
   visibility: hidden;
 }
 
