@@ -2859,7 +2859,7 @@ ul.actor-stack {
 
 /* A pane that scrolls a list lays its empty state out as a column the state
    fills, while it holds one. */
-:is(.automations-scroll, .factory-scroll, .inbox-tasks-scroll):has(.luke-empty-state) {
+:is(.automations-scroll, .inbox-tasks-scroll):has(.luke-empty-state) {
   display: flex;
   flex-direction: column;
 }
@@ -4770,8 +4770,9 @@ button.integration-tool-head:hover,
 
 /* Factory -------------------------------------------------------------------- */
 
-/* Factory stands in the plan's place as the Inbox does: the toolbar, the
-   summary line, then the line of stations, each Settings' card holding
+/* Factory stands in the plan's place as the Inbox does: @luke/ui's
+   CollectionPage under the toolbar, across the room, holding the summary
+   line, then the line of stations, each Settings' card holding
    Home's rows, what waits on the developer first and set off from the rest
    by a hairline. The stations stretch to one height and fill the room, so
    the line reads as one piece, and the arrows between them carry the flow
@@ -4780,6 +4781,13 @@ button.integration-tool-head:hover,
    the room. Where three busy cards could not each hold a readable row,
    about 300px apiece, the stations stack, the arrows turn down, and an idle
    station is one line. */
+/* The line's page and a world's share one root, which the rows' keys and
+   motion are read against; it draws no box of its own. */
+.factory-pages {
+  display: contents;
+}
+
+/* A world's page: the toolbar over the world. */
 .factory-view {
   display: flex;
   min-width: 0;
@@ -4788,12 +4796,12 @@ button.integration-tool-head:hover,
   flex-direction: column;
 }
 
-.factory-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 var(--content-inset) var(--luke-space-32);
+/* What the line's page holds, which the stations measure their room by.
+   Note that it sets Home's rows at the window's own leading, as Home does,
+   rather than at the page's body leading around it. */
+.factory-board {
   container: factory / inline-size;
+  line-height: normal;
 }
 
 .factory-summary {
@@ -4801,7 +4809,12 @@ button.integration-tool-head:hover,
   align-items: center;
   gap: var(--luke-space-8);
   margin: 0;
-  padding: var(--luke-space-12) 0;
+  padding: 0 0 var(--luke-space-12);
+}
+
+/* Under a failure the summary keeps its own room from it. */
+.factory-summary:not(:first-child) {
+  padding-top: var(--luke-space-12);
 }
 
 /* What waits on the developer leads the line in the label's full ink, its
@@ -8568,10 +8581,9 @@ button.automation-run:hover {
 }
 
 /* A person's page (`person-page.tsx`): Home's column, headed by their face
-   at the page's size beside their name and who they are here. It and the
-   Issues page stand that column under their toolbar, not Home's way down. */
-.person-column,
-.issues-column {
+   at the page's size beside their name and who they are here. It stands
+   that column under its toolbar, not Home's way down. */
+.person-column {
   margin-top: 0;
   gap: var(--luke-space-24);
 }
