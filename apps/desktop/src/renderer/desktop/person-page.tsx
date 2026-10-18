@@ -99,6 +99,9 @@ const SKELETON_ROWS = [
   { name: "54%", context: "80px" },
 ] as const;
 
+/** What the page is called where it cannot name the person yet. */
+const PROFILE = "Profile";
+
 /** What a page's head says under a name, by who the person is to the workspace. */
 function headLine(person: Actor): string | undefined {
   if (person.kind === ACTOR_KIND.PERSON) {
@@ -414,7 +417,7 @@ function PersonColumn({
   const now = useMinute();
   const listed = tasks.listed.tasks;
   // Named as the list names them, else as the members read does, else by the name the page was opened with, else as the former members read does; nobody's name where none does.
-  const { members, readerId, former } = useMemberDirectory();
+  const { members, readerId, former, refused, retry } = useMemberDirectory();
   const member = members?.find((each) => each.userId === userId);
   const known = opened === undefined ? undefined : { userId, name: opened };
   // Note that someone who left having only revised or answered is named by the former members read alone, since a link to them opens with no name.
@@ -458,7 +461,7 @@ function PersonColumn({
   const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
   if (unnamed && members !== undefined && former !== undefined) {
     return (
-      <section className="automations-view" aria-label="Profile">
+      <section className="automations-view" aria-label={PROFILE}>
         <NotFound thing={NOT_FOUND_THING.PERSON} />
       </section>
     );
@@ -466,12 +469,24 @@ function PersonColumn({
   // Note that someone nothing names yet is drawn as a placeholder, because only settled reads may say they are not in the workspace.
   const name = unnamed ? undefined : headName(person);
   const theirs = you ? "your" : "their";
+  // A refused read will not name them, so the head says so and offers Retry rather than wait.
+  const head = !unnamed ? (
+    <PersonHead person={person} />
+  ) : refused ? (
+    <div className="home-note">
+      <ErrorState
+        onRetry={retry}
+      >{`${you ? "Your" : "Their"} profile could not be read.`}</ErrorState>
+    </div>
+  ) : (
+    <PersonHeadSkeleton />
+  );
   return (
-    <section className="automations-view" aria-label={name ?? "Profile"}>
+    <section className="automations-view" aria-label={name ?? PROFILE}>
       <header className="desktop-toolbar">
         <div className="desktop-toolbar-heading">
           <h1 className="desktop-toolbar-title">
-            {name ?? <Skeleton width={SKELETON_HEAD.NAME} />}
+            {name ?? (refused ? PROFILE : <Skeleton width={SKELETON_HEAD.NAME} />)}
           </h1>
         </div>
         <PersonActions
@@ -484,7 +499,7 @@ function PersonColumn({
       </header>
       <div className="home-scroll scroll-fade-top">
         <div className="home-column person-column">
-          {unnamed ? <PersonHeadSkeleton /> : <PersonHead person={person} />}
+          {head}
           {tasks.listFailed ? (
             <div className="home-note">
               <ErrorState onRetry={tasks.onRetryList}>
