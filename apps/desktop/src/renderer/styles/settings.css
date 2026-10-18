@@ -127,7 +127,9 @@
   background: none;
 }
 
-.settings-chevron {
+/* A chip draws its own chevron (`chip.css`), which this unlayered rule
+   would otherwise win over. */
+.settings-chevron:where(:not(.luke-chip *)) {
   width: 11px;
   height: 11px;
   flex: 0 0 auto;
