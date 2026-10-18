@@ -1,11 +1,11 @@
-import { isRecord, isWireBoolean, isWireNumber, isWireString, type UnparsedWireValue } from "@luke/wire";
+import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@luke/wire";
 import {
   APP_PANEL_TAB,
   APP_SETTING_ID,
   type AppPanelTab,
   type AppSettingId,
 } from "@luke/wire/app-settings";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 import { parseReleaseVersion } from "./release-version.js";
 
 /**
@@ -521,36 +521,37 @@ export const PRODUCT_EVENT_BUILD_FIELD = {
 
 /**
  * What the desktop says about the build a whole batch came from: its release
- * version, and whether it runs from a packaged bundle rather than a
- * development checkout. It rides beside the events rather than inside each
- * one, because it is a fact of the sender and not of anything counted, and
- * one place on the request keeps it out of every event's allowlist.
+ * version, read as strictly as an event's own, and whether it runs from a
+ * packaged bundle rather than a development checkout. It rides beside the
+ * events rather than inside each one, because it is a fact of the sender and
+ * not of anything counted, and one place on the request keeps it out of every
+ * event's allowlist.
  */
-export interface ProductEventBuild {
-  readonly [PRODUCT_EVENT_BUILD_FIELD.APP_VERSION]?: string;
-  readonly [PRODUCT_EVENT_BUILD_FIELD.PACKAGED]?: boolean;
-}
+const ProductEventBuildSchema = Schema.Struct({
+  [PRODUCT_EVENT_BUILD_FIELD.APP_VERSION]: Schema.optionalKey(
+    Schema.String.check(
+      Schema.makeFilter(
+        (value) => value === value.trim() && parseReleaseVersion(value) !== undefined,
+      ),
+    ),
+  ),
+  [PRODUCT_EVENT_BUILD_FIELD.PACKAGED]: Schema.optionalKey(Schema.Boolean),
+});
+
+export type ProductEventBuild = typeof ProductEventBuildSchema.Type;
+
+const decodeProductEventBuild = Schema.decodeUnknownOption(ProductEventBuildSchema);
 
 /**
  * Reads a batch's `build`, which is never a reason to refuse it. Note that a
- * missing or unreadable field is left off rather than refusing the batch,
- * because builds 0.7 to 0.17 send no `build` at all and their counts still
+ * missing or unreadable `build` is left off whole rather than refusing the
+ * batch, because builds 0.7 to 0.17 send none at all and their counts still
  * have to land; an event then carries no claim about its build rather than a
- * wrong one. The version is read as strictly as an event's own.
+ * wrong one. A field the schema does not name is not copied forward.
  */
 export function productEventBuildFromWire(value: UnparsedWireValue): ProductEventBuild {
-  const build = isRecord(value) && isRecord(value.build) ? value.build : undefined;
-  if (!build) return {};
-  const appVersion = PRODUCT_EVENT_PROPERTY_READER[PRODUCT_EVENT_PROPERTY.APP_VERSION](
-    build[PRODUCT_EVENT_BUILD_FIELD.APP_VERSION],
-  );
-  const packaged = build[PRODUCT_EVENT_BUILD_FIELD.PACKAGED];
-  return {
-    ...(appVersion === undefined
-      ? undefined
-      : { [PRODUCT_EVENT_BUILD_FIELD.APP_VERSION]: appVersion }),
-    ...(isWireBoolean(packaged) ? { [PRODUCT_EVENT_BUILD_FIELD.PACKAGED]: packaged } : undefined),
-  };
+  if (!isRecord(value)) return {};
+  return Option.getOrElse(decodeProductEventBuild(value.build), () => ({}));
 }
 
 /** What every emitter is handed: a name, and exactly that name's properties. */

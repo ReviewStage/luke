@@ -185,6 +185,15 @@ it("recording is what the host permitted less what an account's end stood down",
   assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
 });
 
+it("an unpackaged run never records, whatever the host permitted", () => {
+  const app = new AppStateStore(
+    initialAppState({ ...RUN, packaged: false }, true, []),
+    Context.empty(),
+  );
+  app.update({ sessionReplay: { permitted: true, accountId: "person", halted: false } });
+  assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
+});
+
 it("the voice and call windows are sent the document, and answered their first read of it, without the planning turns' work or the plan's planning conversation, and the rest of the plan as held", () => {
   const held = initialAppState(RUN, true, []);
   const tasks = {

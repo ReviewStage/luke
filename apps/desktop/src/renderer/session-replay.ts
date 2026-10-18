@@ -32,8 +32,8 @@ import type { PostHog, Properties } from "posthog-js/dist/module.no-external";
  * masking and those blocks are the whole of what decides it.
  *
  * What this file decides on its own is only whether to record at all, and the
- * main process is the whole of that answer: an ordinary run records, a
- * fixture or capture run does not, and a run whose account was deleted stops.
+ * main process is the whole of that answer: an ordinary packaged run records,
+ * a development, fixture, or capture run does not, and a run whose account was deleted stops.
  * There is no switch — `PRIVACY.md` is where a user learns this happens, so
  * that file carries the whole of the disclosure and has to keep doing it. No
  * account is among the reasons either. Recording begins at the first paint of

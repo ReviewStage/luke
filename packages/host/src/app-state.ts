@@ -291,12 +291,18 @@ export function isAppStateSnapshot(value: UnparsedWireValue): boolean {
   return Result.isSuccess(readAppStateSnapshot(value));
 }
 
-/** What this run may record, as the renderer is handed it. */
+/**
+ * What this run may record, as the renderer is handed it. Note that an
+ * unpackaged run never records, whatever its bundle was built with, because
+ * `pnpm start` builds the renderer in whatever shell it is run from, and one
+ * left holding the release's replay key would otherwise record a development
+ * run into production's project.
+ */
 export function sessionReplayBootstrap(
   state: Pick<AppState, "run" | "sessionReplay">,
 ): SessionReplayBootstrap {
   return {
-    permitted: state.sessionReplay.permitted && !state.sessionReplay.halted,
+    permitted: state.run.packaged && state.sessionReplay.permitted && !state.sessionReplay.halted,
     appVersion: state.run.appVersion,
     packaged: state.run.packaged,
     ...(state.sessionReplay.accountId ? { accountId: state.sessionReplay.accountId } : undefined),

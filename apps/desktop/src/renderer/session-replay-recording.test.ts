@@ -45,12 +45,12 @@ const WORDS = [
 const GZIP_MAGIC = "\u001f\u008b";
 
 function bootstrap(permitted: boolean, accountId = "user-1"): SessionReplayBootstrap {
-  return { permitted, appVersion: "1.2.3", packaged: false, accountId };
+  return { permitted, appVersion: "1.2.3", packaged: true, accountId };
 }
 
 /** The same run's word on recording with nobody signed in. */
 function signedOut(permitted: boolean): SessionReplayBootstrap {
-  return { permitted, appVersion: "1.2.3", packaged: false };
+  return { permitted, appVersion: "1.2.3", packaged: true };
 }
 
 function drawPage(): void {
@@ -154,7 +154,7 @@ test("the recorder loads before anything records, a stop while it loads holds, a
   await vi.advanceTimersByTimeAsync(10_000);
   const identify = sent.find((event) => event.event === "$identify");
   assert.equal(identify?.properties.app_version, "1.2.3");
-  assert.equal(identify?.properties.packaged, false);
+  assert.equal(identify?.properties.packaged, true);
 });
 
 test("a sign-in partway through a recording files it under the account, and one after a deletion records again", async () => {

@@ -15,7 +15,8 @@
 export interface SessionReplayBootstrap {
   /**
    * Whether this run may record at all. False for a fixture and a capture
-   * run, which must stay deterministic and send nothing, and false after an
+   * run, which must stay deterministic and send nothing, false for an
+   * unpackaged development run, and false after an
    * account is deleted until the next sign-in.
    * Being signed out is not one of the reasons: recording begins at the first
    * paint, before an account exists.
