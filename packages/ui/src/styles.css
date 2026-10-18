@@ -42,5 +42,7 @@
 @import "./components/settings-section/settings-section.css";
 @import "./components/spinner/spinner.css";
 @import "./components/skeleton/skeleton.css";
+/* After the button's, whose edge and corners it joins. */
+@import "./components/split-button/split-button.css";
 @import "./components/settings-row/settings-row.css";
 @import "./components/auth-page/auth-page.css";
