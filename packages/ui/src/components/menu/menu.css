@@ -126,8 +126,11 @@
     color: inherit;
   }
 
-  /* A glyph or a picture with no size of its own fills the slot it is in. */
-  .luke-menu-item-glyph :is(svg, img),
+  /* A glyph or a picture with no size of its own fills the slot it is in.
+     Note that only a picture standing in the slot itself is sized, because
+     a face's picture fills the face it is drawn in (`Avatar`). */
+  .luke-menu-item-glyph svg,
+  .luke-menu-item-glyph > img,
   .luke-menu-item-end > svg {
     width: var(--luke-menu-glyph);
     height: var(--luke-menu-glyph);
