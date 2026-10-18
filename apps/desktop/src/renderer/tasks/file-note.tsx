@@ -6,6 +6,7 @@ import {
   DisclosureSummary,
   FoldingButton,
   type FoldingButtonHint,
+  useDisclosureBodyDrawn,
   useDisclosureFold,
   WingFace,
 } from "@luke/ui";
@@ -74,6 +75,21 @@ function useAgedHint(ago: string): FoldingButtonHint {
 }
 
 /**
+ * What the fold's line says after Luke's name: the note's words cut to the
+ * line while it is folded, its lines while its words are drawn. Note that it
+ * asks whether the body is drawn rather than whether the fold is open,
+ * because a find draws a folded note's words hidden, and a preview beside
+ * them would be found twice.
+ */
+function NoteLine({ note, lines }: { note: string; lines: string }): React.JSX.Element {
+  return useDisclosureBodyDrawn() ? (
+    <span className="file-note-lines">{lines}</span>
+  ) : (
+    <span className="file-note-preview">{note}</span>
+  );
+}
+
+/**
  * One note's card: its fold's line, which folds it, its age and its link
  * beside that line, then Luke's words while it is open. The tab keeps which
  * cards it folded, so the fold is the tab's (`useDisclosureFold`'s control),
@@ -109,11 +125,7 @@ function FileNoteCard({
               <WingFace />
             </span>
             <span className="file-note-author">{AUTHOR}</span>
-            {folded ? (
-              <span className="file-note-preview">{note.note}</span>
-            ) : (
-              <span className="file-note-lines">{lines}</span>
-            )}
+            <NoteLine note={note.note} lines={lines} />
           </DisclosureSummary>
           <DisclosureBody inset={DISCLOSURE_BODY.NONE}>
             <MarkdownMessage
