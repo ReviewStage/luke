@@ -4,7 +4,11 @@ import { HTTP_STATUS, type RecordedRequest, recordingHttpClient } from "@luke/wi
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { PRODUCT_EVENT } from "./product-events.js";
-import { ProductEventSender, type ProductEventSenderOptions } from "./sender.js";
+import {
+  ProductEventSender,
+  type ProductEventSenderOptions,
+  type RecordedDayStore,
+} from "./sender.js";
 
 const BASE_URL = "https://luke.test";
 const APP_VERSION = "0.2.0";
@@ -75,5 +79,118 @@ it.effect("a batch queued under one account is never posted under another's bear
     // longer name.
     yield* sender.flush;
     assert.equal(requests.length, 1);
+  }),
+);
+
+const NEXT_NOON = Date.parse("2026-08-20T12:00:00.000Z");
+
+/** The host's settings file as the sender sees it: kept across launches by event, discriminator, and account. */
+function keptDays(): RecordedDayStore {
+  const days = new Map<string, Map<string, Map<string, string>>>();
+  return {
+    lastRecordedDay: (name, discriminator, account) =>
+      Effect.sync(() => days.get(name)?.get(discriminator)?.get(account)),
+    keepRecordedDay: ({ name, discriminator, account, day }) =>
+      Effect.sync(() => {
+        const byDiscriminator = days.get(name) ?? new Map<string, Map<string, string>>();
+        const byAccount = byDiscriminator.get(discriminator) ?? new Map<string, string>();
+        byAccount.set(account, day);
+        byDiscriminator.set(discriminator, byAccount);
+        days.set(name, byDiscriminator);
+      }),
+  };
+}
+
+/** How many day markers the requests a launch made carried. */
+function dayMarkers(requests: readonly RecordedRequest[]): number {
+  return requests
+    .flatMap((request) => JSON.parse(request.body ?? "{}").events ?? [])
+    .filter((event: { name: string }) => event.name === PRODUCT_EVENT.APP_DAY_ACTIVE).length;
+}
+
+/**
+ * One launch of the app: a sender of its own over the kept days, which marks
+ * the day as the host does at launch and on its first tick, flushes, and
+ * answers how many day markers it sent.
+ */
+function launch(
+  options: Partial<ProductEventSenderOptions>,
+  respond?: (request: RecordedRequest) => Response,
+) {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const { sender, requests } = yield* sharingSender(options, respond);
+      yield* sender.markDayActive();
+      yield* sender.flush;
+      yield* sender.markDayActive();
+      yield* sender.flush;
+      return dayMarkers(requests);
+    }),
+  );
+}
+
+it.effect("the day is counted once across launches, and again on the next UTC day", () =>
+  Effect.gen(function* () {
+    let now = NOON;
+    const options = {
+      recordedDays: keptDays(),
+      readAccountKey: () => Effect.succeed("ada@luke.test"),
+      now: () => now,
+    };
+
+    assert.equal(yield* launch(options), 1);
+    assert.equal(yield* launch(options), 0);
+
+    now = NEXT_NOON;
+    assert.equal(yield* launch(options), 1);
+    assert.equal(yield* launch(options), 0);
+  }),
+);
+
+it.effect("another account signing in the same day has its own day counted, once", () =>
+  Effect.gen(function* () {
+    let account = "ada@luke.test";
+    const options = {
+      recordedDays: keptDays(),
+      readAccountKey: () => Effect.succeed(account),
+    };
+
+    assert.equal(yield* launch(options), 1);
+    account = "grace@luke.test";
+    assert.equal(yield* launch(options), 1);
+    account = "ada@luke.test";
+    assert.equal(yield* launch(options), 0);
+  }),
+);
+
+it.effect("a day marked while nobody is signed in is marked once an account signs in", () =>
+  Effect.gen(function* () {
+    let account: string | undefined;
+    const { sender, requests } = yield* sharingSender({
+      recordedDays: keptDays(),
+      readAccountKey: () => Effect.succeed(account),
+    });
+    yield* sender.markDayActive();
+    yield* sender.flush;
+    assert.equal(dayMarkers(requests), 0);
+
+    account = "ada@luke.test";
+    yield* sender.markDayActive();
+    yield* sender.flush;
+    assert.equal(dayMarkers(requests), 1);
+  }),
+);
+
+it.effect("a day whose batch never reached the service is counted on the next launch", () =>
+  Effect.gen(function* () {
+    const options = {
+      recordedDays: keptDays(),
+      readAccountKey: () => Effect.succeed("ada@luke.test"),
+    };
+
+    yield* launch(options, () => {
+      throw new TypeError("fetch failed");
+    });
+    assert.equal(yield* launch(options), 1);
   }),
 );

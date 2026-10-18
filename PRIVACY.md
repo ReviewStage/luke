@@ -853,7 +853,11 @@ your name and email to that record. The counts are event names and values from
 a fixed list. A voice session's start is counted with the source that opened
 it, our voice service on your account, and never with a session id. A count
 made before you sign in waits in Luke's memory and is sent under your account
-if you sign in before Luke quits, and is dropped otherwise. Nothing you type
+if you sign in before Luke quits, and is dropped otherwise. The mark that you
+used Luke on a day is counted once a day for each account signed in, so Luke
+keeps in its settings file on your Mac, for each account it was sent for, the
+email address and the UTC day it was last sent, and only the newest day; it is
+never sent anywhere. Nothing you type
 or say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text.
 
