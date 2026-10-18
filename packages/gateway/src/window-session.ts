@@ -14,7 +14,7 @@ export interface SessionReplayBootstrap {
   /**
    * Whether this run may record at all, whatever the switches say. False for
    * a fixture and a capture run, which must stay deterministic and send
-   * nothing, and false for the rest of a run in which an account was deleted.
+   * nothing, and false after an account is deleted until the next sign-in.
    * Being signed out is not one of the reasons: recording begins at the first
    * paint, before an account exists.
    */
