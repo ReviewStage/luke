@@ -1,8 +1,10 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   CHIP_LOOK,
+  CHIP_WIDTH,
   Chip,
   ChipName,
+  type ChipWidth,
   cssCustomProperties,
   SettingsRow,
   type SettingsRowDensity,
@@ -28,9 +30,9 @@ import { ChangedMark } from "./marks";
  * scroller, which clips what runs past its edge, so the room is the
  * scroller's and not the window's.
  *
- * The chip is `@luke/ui`'s field `Chip`; its width, the column a settings
- * row's pop-ups share, is the picker's layout (`.settings-picker`), and a
- * `PickerRow` stands it in `@luke/ui`'s `SettingsRow`.
+ * The chip is `@luke/ui`'s field `Chip`, at the column a settings row's
+ * pop-ups share unless its place names another width, and a `PickerRow`
+ * stands it in `@luke/ui`'s `SettingsRow`.
  */
 
 /** Which of the chip's edges the menu hangs from: its trailing edge, where a settings column is, or its leading edge, where a chip leads its line. */
@@ -190,6 +192,8 @@ interface PickerProps {
   disabled?: boolean | undefined;
   /** The chip's edge the menu hangs from; the trailing one where none is named. */
   align?: PickerAlign | undefined;
+  /** How wide the chip stands; the settings column where none is named. */
+  width?: ChipWidth | undefined;
   /** Reads what the menu lists now, as it opens, so a list that failed to read is asked for again. */
   onOpen?: (() => void) | undefined;
   onPick: (id: string) => void;
@@ -214,6 +218,7 @@ export function Picker({
   anchor,
   disabled,
   align = PICKER_ALIGN.END,
+  width = CHIP_WIDTH.FIELD,
   onOpen,
   onPick,
 }: PickerProps): React.JSX.Element {
@@ -236,6 +241,7 @@ export function Picker({
       <Chip
         ref={chip}
         look={CHIP_LOOK.FIELD}
+        width={width}
         chevron
         {...(anchor ? searchAnchorProps(anchor) : undefined)}
         aria-label={`${label}: ${valueLabel}`}

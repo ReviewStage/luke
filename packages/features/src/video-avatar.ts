@@ -45,7 +45,7 @@ export const DEFAULT_VIDEO_AVATAR: VideoAvatar = VIDEO_AVATAR.ATLAS;
 
 /**
  * Where Keyframe serves its stock avatars' cover photos, which the setting's
- * menu loads from there as it opens. The panel's Content Security Policy
+ * row loads from there as it draws. The panel's Content Security Policy
  * names this origin and no other of Keyframe's (`apps/desktop/src/renderer/index.html`).
  */
 export const VIDEO_AVATAR_COVER_ORIGIN = "https://storage-public.keyframelabs.com";

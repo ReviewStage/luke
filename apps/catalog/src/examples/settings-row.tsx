@@ -128,7 +128,7 @@ function SlottedRows(): React.JSX.Element {
       <SettingsRow
         label="Linear"
         leading={<Mark provider={MARK_PROVIDER.LINEAR} />}
-        below={<KeyForm />}
+        below={() => <KeyForm />}
         error="Linear did not accept this key. Check it and try again."
       >
         {() => null}

@@ -35,9 +35,11 @@ import { type ReactNode, useId } from "react";
  * What rides the label's line without being its name, a Modified word or a
  * mark that something needs a hand, is the row's `adornment`: it stands after
  * the label, a short step off it, and the label alone still names the
- * control. What the row itself grows under its line, the field a stored key
- * is replaced in or the tools a connection holds, is its `below`: it stands
- * inside the row's rule, inset to the words where a mark leads them, and the
+ * control. What the row itself grows under its line, a control that needs
+ * the row's whole width such as a gallery of faces, or the field a stored
+ * key is replaced in, is its `below`: it stands inside the row's rule, inset
+ * to the words where a mark leads them, handed the same ids, so the label
+ * still names it and the description and the error still describe it; the
  * row's error stands under it, so a refusal reads after the thing refused.
  * `below` is for content the row owns alone, never a layout of the page's:
  * a page lays itself out with sections and rows. A row that belongs to the
@@ -83,10 +85,10 @@ export function SettingsRow({
   error,
   leading,
   adornment,
-  below,
   density = SETTINGS_ROW_DENSITY.CARD,
   indent = SETTINGS_ROW_INDENT.NONE,
   children,
+  below,
 }: {
   label: ReactNode;
   description?: ReactNode;
@@ -94,16 +96,16 @@ export function SettingsRow({
   leading?: ReactNode;
   /** What rides the label's line after it without naming the control: a Modified word, a mark. */
   adornment?: ReactNode;
-  /** What the row grows under its line and owns alone, a stored key's field; never a page's layout. */
-  below?: ReactNode;
   /** What went wrong with the last write, or nothing while none did. */
   error?: ReactNode;
   /** How the row stands; in a section's card where none is named. */
   density?: SettingsRowDensity | undefined;
   /** Where the row's edge stands; at the card's where none is named. */
   indent?: SettingsRowIndent | undefined;
-  /** The row's controls, handed the row's ids to name and describe them by. */
-  children: (control: SettingsRowControl) => ReactNode;
+  /** The row's controls at its end, handed the row's ids to name and describe them by. */
+  children?: ((control: SettingsRowControl) => ReactNode) | undefined;
+  /** What the row grows under its words and owns alone, handed the same ids; never a page's layout. */
+  below?: ((control: SettingsRowControl) => ReactNode) | undefined;
 }): React.JSX.Element {
   const id = useId();
   const labelId = `${id}label`;
@@ -115,6 +117,11 @@ export function SettingsRow({
   const describedBy = [described ? descriptionId : undefined, failed ? errorId : undefined]
     .filter((part) => part !== undefined)
     .join(" ");
+  const control: SettingsRowControl = {
+    labelId,
+    "aria-describedby": describedBy === "" ? undefined : describedBy,
+    "aria-invalid": failed ? true : undefined,
+  };
   return (
     <div
       className="luke-settings-row"
@@ -146,19 +153,13 @@ export function SettingsRow({
               ) : null}
             </div>
           </div>
-          <div className="luke-settings-row-controls">
-            {children({
-              labelId,
-              "aria-describedby": describedBy === "" ? undefined : describedBy,
-              "aria-invalid": failed ? true : undefined,
-            })}
-          </div>
+          <div className="luke-settings-row-controls">{children?.(control)}</div>
         </div>
-        {said(below) ? (
+        {below === undefined ? null : (
           <div className="luke-settings-row-below" data-led={led}>
-            {below}
+            {below(control)}
           </div>
-        ) : null}
+        )}
         <p className="luke-settings-row-error" id={errorId} aria-live="polite">
           {failed ? error : null}
         </p>

@@ -155,7 +155,7 @@ test("what a row grows below its line is read after the row's words, and its err
     createElement(SettingsRow, {
       label: "Anthropic",
       error: "The key was refused.",
-      below: createElement("input", { "aria-label": "Anthropic API key" }),
+      below: () => createElement("input", { "aria-label": "Anthropic API key" }),
       children: () => createElement(Button, { children: "Add key" }),
     }),
   );
@@ -165,4 +165,33 @@ test("what a row grows below its line is read after the row's words, and its err
   if (field === null || error === null) throw new Error("no field or error");
   expect(words.indexOf("Add key")).toBeLessThan(words.indexOf("The key was refused."));
   expect(field.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("a control as wide as the row stands under its words, named by the label and described as one at its end is", () => {
+  const container = mount(
+    createElement(SettingsRow, {
+      label: "Avatar",
+      description: "Who Luke appears as on video.",
+      error: "The setting could not be saved.",
+      below: (control) =>
+        createElement("fieldset", {
+          "aria-labelledby": control.labelId,
+          "aria-describedby": control["aria-describedby"],
+          "aria-invalid": control["aria-invalid"],
+        }),
+    }),
+  );
+  const group = container.querySelector("fieldset");
+  if (group === null) throw new Error("no fieldset");
+  expect(wordsOf(group, "aria-labelledby")).toBe("Avatar");
+  expect(wordsOf(group, "aria-describedby")).toBe(
+    "Who Luke appears as on video. The setting could not be saved.",
+  );
+  expect(group.getAttribute("aria-invalid")).toBe("true");
+  // It follows the words in reading order, and before the error that describes it.
+  const words = container.querySelector(".luke-settings-row-description");
+  const error = container.querySelector('[aria-live="polite"]');
+  if (words === null || error === null) throw new Error("no words or error");
+  expect(words.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(group.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });

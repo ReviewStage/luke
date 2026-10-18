@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 /**
  * use-combobox-field.ts -- the keys and the names of a field that steers a list while the caret stays in it, which `Combobox` and the desktop's searchable menu share.
@@ -12,7 +12,9 @@ import type { KeyboardEvent } from "react";
  * caller and kept from the surface behind the field. An Enter held with
  * Command or Control, or one pressed while the list is shut, chooses no row
  * and answers `onEnter` instead. A key the field does not steer by goes to
- * `onKey`, for a caller with keys of its own.
+ * `onKey`, for a caller with keys of its own. The handler says whether it
+ * took the key, for an editor that owns the caret and forwards its keys
+ * (an `@` list's), which hands the key on to its own text where it did not.
  *
  * Keys an input method is composing with are its own: none of them reaches
  * the list or `onKey`, though an Escape is still kept from the surface behind.
@@ -28,17 +30,21 @@ export interface ComboboxFieldProps {
   readonly autoComplete: "off";
 }
 
-/** The field's names, and the key handler for it or a box around it. */
+/** A key as the field hears it: React's, on a field it is spread onto, or the page's, forwarded by an editor that owns the caret. */
+export type ComboboxKey = ReactKeyboardEvent<HTMLElement> | KeyboardEvent;
+
+/** The field's names, and the key handler for it or a box around it, which says whether it took the key. */
 export interface ComboboxField {
   readonly field: ComboboxFieldProps;
-  readonly onKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
+  readonly onKeyDown: (event: ComboboxKey) => boolean;
 }
 
 /** Whether a key went to an input method composing text rather than to the field. */
-function composing(event: KeyboardEvent): boolean {
+function composing(event: ComboboxKey): boolean {
   // Note that Safari reports the composition's last key with `isComposing`
   // already false, and code 229 still, so both are read.
-  return event.nativeEvent.isComposing || event.keyCode === 229;
+  const native = "nativeEvent" in event ? event.nativeEvent : event;
+  return native.isComposing || event.keyCode === 229;
 }
 
 /**
@@ -88,35 +94,36 @@ export function useComboboxField(input: {
   /** What an Escape does while the list stands: shutting it, as a rule. */
   onEscape?: (() => void) | undefined;
   /** What a key the field does not steer by does. */
-  onKey?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
+  onKey?: ((event: ComboboxKey) => void) | undefined;
 }): ComboboxField {
   const { open, active, count } = input;
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+  const onKeyDown = (event: ComboboxKey): boolean => {
     // Note that an Escape an input method is composing with is kept from the
     // surface behind even with the list shut, because it cancels candidates.
     const ime = composing(event);
     if (event.key === "Escape" && (open || ime)) event.stopPropagation();
-    if (ime) return;
+    if (ime) return false;
     const moved = open
       ? steppedTo(event.key, active, count, input.skipped ?? NONE_SKIPPED)
       : undefined;
     if (moved !== undefined) {
       event.preventDefault();
       input.onActiveChange(moved);
-      return;
+      return true;
     }
     if (open && event.key === "Escape") {
       event.preventDefault();
       input.onEscape?.();
-      return;
+      return true;
     }
     if (event.key !== "Enter") {
       input.onKey?.(event);
-      return;
+      return false;
     }
     event.preventDefault();
     if (open && !event.metaKey && !event.ctrlKey) input.onChoose(active);
     else input.onEnter?.();
+    return true;
   };
   return {
     field: {

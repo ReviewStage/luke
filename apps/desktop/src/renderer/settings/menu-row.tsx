@@ -109,7 +109,7 @@ export function MenuRow({
             adornment={row.adornment}
             description={row.description}
             error={row.error}
-            below={row.below}
+            below={row.below === undefined || row.below === null ? undefined : () => row.below}
           >
             {(control) => (
               <>

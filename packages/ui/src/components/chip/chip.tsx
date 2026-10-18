@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { ChipFrame, type ChipFrameProps } from "./chip-frame.js";
+import type { ComponentPropsWithRef, ReactNode } from "react";
+import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
 
 /**
  * chip.tsx -- the one chip: a button naming a value or a thing, drawn in the look of the place it stands.
@@ -21,20 +21,150 @@ import { ChipFrame, type ChipFrameProps } from "./chip-frame.js";
  *   (`aria-pressed`), when it fills inside the selection's hairline; its
  *   caller holds which one is pressed.
  *
+ * Beside its look a chip may say where a thing stands in the state palette
+ * (`tone`), tinted and hairlined in that state's ink, as a pull request's
+ * state is; stand at a width its place shares (`width`); and draw its mark
+ * alone where its place has no room for its words (`iconOnly`), its words
+ * still read as its name. A removable chip (`onRemove`) is no button of its
+ * own: it names what stands, a filter applied, and ends in a × named for
+ * what lifting it does.
+ *
  * A chip that opens a menu of values ends in the menu's small, muted
  * chevron where `chevron` asks for one. Its words go in a `ChipName`, which
- * cuts them short rather than letting them push past the row around it.
- * It takes no class or style: its outer layout is its container's.
+ * cuts them short rather than letting them push past the row around it, in
+ * the code face where they name code (`mono`, a branch). A leading mark, a
+ * glyph or a picture, stands at the control's glyph size. It takes no class
+ * or style: its outer layout is its container's.
  */
 
-export { CHIP_LOOK, type ChipLook } from "./chip-frame.js";
+/** The looks a chip comes in, by the place it stands. */
+export const CHIP_LOOK = {
+  TOOLBAR: "toolbar",
+  PILL: "pill",
+  FIELD: "field",
+  FILTER: "filter",
+} as const;
 
-/** A chip: a button in the look of its place. */
-export function Chip(props: Omit<ChipFrameProps, "className">): React.JSX.Element {
-  return <ChipFrame {...props} />;
+export type ChipLook = (typeof CHIP_LOOK)[keyof typeof CHIP_LOOK];
+
+/** Where the thing a chip names stands, in the state palette `Badge` says it in. */
+export const CHIP_TONE = {
+  NEUTRAL: "neutral",
+  ATTENTION: "attention",
+  COMPLETE: "complete",
+  MERGED: "merged",
+  DANGER: "danger",
+} as const;
+
+export type ChipTone = (typeof CHIP_TONE)[keyof typeof CHIP_TONE];
+
+/**
+ * How wide a chip stands: its words' own width; the field column a settings
+ * row's pop-ups share, so a change of value cannot re-shape its row; at least
+ * that column, growing to name its whole value; or half of it, for a chip
+ * choosing among a few short words (a role).
+ */
+export const CHIP_WIDTH = {
+  AUTO: "auto",
+  FIELD: "field",
+  MIN_FIELD: "min-field",
+  FIXED: "fixed",
+} as const;
+
+export type ChipWidth = (typeof CHIP_WIDTH)[keyof typeof CHIP_WIDTH];
+
+/** What every chip takes, a button or a removable one: its look and the options beside it. */
+interface ChipFace {
+  look: ChipLook;
+  /** Where the thing it names stands; the look's own ink where none is named. */
+  tone?: ChipTone | undefined;
+  /** How wide it stands; its words' own width where none is named. */
+  width?: ChipWidth | undefined;
+  /** Whether it draws its mark alone, its words read as its name and drawn nowhere. */
+  iconOnly?: boolean | undefined;
 }
 
-/** A chip's words, cut short at its end rather than pushing past the row it stands in. */
-export function ChipName({ children }: { children: ReactNode }): React.JSX.Element {
-  return <span className="luke-chip-name">{children}</span>;
+/** A chip that is a button: its face, whether it ends in a menu's chevron, and its button's own attributes. */
+type ButtonChipProps = ChipFace & {
+  /** Whether the chip ends in a chevron, saying it opens a menu of values. */
+  chevron?: boolean;
+  onRemove?: never;
+} & Omit<ComponentPropsWithRef<"button">, "type" | "style" | "className">;
+
+/** A chip naming what stands, ended by the × that lifts it. */
+type RemovableChipProps = ChipFace & {
+  /** Lifts what the chip names. */
+  onRemove: () => void;
+  /** What the × does, its name for a reader ("Show everyone's tasks"). */
+  removeLabel: string;
+  children: ReactNode;
+};
+
+export type ChipProps = ButtonChipProps | RemovableChipProps;
+
+/** The attributes a chip's face options draw as, on the button or the removable chip's box alike. */
+function faceAttributes({ look, tone, width = CHIP_WIDTH.AUTO, iconOnly = false }: ChipFace) {
+  return {
+    "data-look": look,
+    "data-tone": tone,
+    "data-width": width,
+    "data-icon-only": iconOnly ? "true" : undefined,
+  };
+}
+
+/** A removable chip: its face, then a × named for what it lifts. */
+function RemovableChip({
+  onRemove,
+  removeLabel,
+  children,
+  ...face
+}: RemovableChipProps): React.JSX.Element {
+  return (
+    <span className="luke-chip" data-removable="true" {...faceAttributes(face)}>
+      <span className="luke-chip-face">{children}</span>
+      <button
+        type="button"
+        className="luke-chip-remove"
+        aria-label={removeLabel}
+        onClick={onRemove}
+      >
+        <RemoveIcon />
+      </button>
+    </span>
+  );
+}
+
+/** A chip: a button in the look of its place, or a removable chip where `onRemove` is given. */
+export function Chip(props: ChipProps): React.JSX.Element {
+  if (props.onRemove !== undefined) return <RemovableChip {...props} />;
+  const { look, tone, width, iconOnly, chevron = false, children, ...button } = props;
+  return (
+    <button
+      type="button"
+      {...button}
+      className="luke-chip"
+      {...faceAttributes({ look, tone, width, iconOnly })}
+    >
+      <span className="luke-chip-face">
+        {children}
+        {chevron ? <ChevronDownIcon /> : null}
+      </span>
+    </button>
+  );
+}
+
+/** A chip's words, cut short at its end rather than pushing past the row it stands in; in the code face where they name code. */
+export function ChipName({
+  mono = false,
+  children,
+}: {
+  /** Whether the words name code, a branch, and read in the code face. */
+  mono?: boolean;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <span className="luke-chip-name" data-mono={mono ? "true" : undefined}>
+      {children}
+    </span>
+  );
 }

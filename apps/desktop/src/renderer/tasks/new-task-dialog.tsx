@@ -7,6 +7,7 @@ import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/s
 import {
   BUTTON_VARIANT,
   Button,
+  CHIP_WIDTH,
   Combobox,
   ComposeIcon,
   DIALOG_SIZE,
@@ -151,6 +152,7 @@ function WorkspaceChip({
       }))}
       noMatch={NO_WORKSPACE_MATCH}
       align={PICKER_ALIGN.START}
+      width={CHIP_WIDTH.AUTO}
       disabled={disabled}
       onPick={onChoose}
     />
@@ -420,6 +422,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
           <RepositoryChip
             key={repositories.scope}
             place={CHIP_PLACE.FIELD}
+            width={CHIP_WIDTH.AUTO}
             align={PICKER_ALIGN.START}
             value={repository}
             chooser={repositories}
