@@ -26,10 +26,15 @@ import type { CodeRef } from "@luke/features/task-wire";
 import { AttentionMark } from "@luke/panel/attention-mark";
 import { useAutomation } from "@luke/panel/automation-directory";
 import { useMemberDirectory, usePerson } from "@luke/panel/member-directory";
+import { PictureBlock } from "@luke/panel/picture-block";
 import { SpinnerRegion } from "@luke/panel/spinner";
+import { RelativeTime } from "@luke/panel/tasks/relative-time";
+import { REPLY_SCOPE } from "@luke/panel/tasks/reply-to-selection";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { WordsWorkspace } from "@luke/panel/tasks/use-link-standing";
 import { opensAsLink } from "@luke/panel/tasks/use-open-link";
+import { TextLink } from "@luke/panel/text-link";
+import { Tooltip } from "@luke/panel/tooltip";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BackIcon,
@@ -64,9 +69,6 @@ import { isWireString } from "@luke/wire";
 import { CheckIcon, ClockIcon, FactoryIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref";
-import { PictureBlock } from "../picture-block";
-import { TextLink } from "../text-link";
-import { Tooltip } from "../tooltip";
 import {
   AgentActorRef,
   AgentCard,
@@ -114,8 +116,6 @@ import {
   withValue,
 } from "./inbox-model";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager";
-import { RelativeTime } from "./relative-time";
-import { REPLY_SCOPE } from "./reply-to-selection";
 import { SentWords } from "./skill-chip";
 import { TAB_KIND, tabLook } from "./tab-look";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions";

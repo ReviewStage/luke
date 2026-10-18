@@ -1,11 +1,11 @@
 import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/features/terminal-model";
+import { FIND_STEP, type FindSource, useFindSource } from "@luke/panel/find-in-tab";
 import { Shortcut } from "@luke/panel/shortcut";
 import { TERMINAL_FIND, type TerminalFind } from "@luke/panel/terminal/contract";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import { TEXT_BUTTON_TONE, TextButton } from "@luke/ui";
 import { useMemo } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader";
-import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref";
 import { TreeToggle, usePaneRoom } from "./file-view";
 import { AgentGlyph } from "./tab-look";

@@ -5,6 +5,7 @@ import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/cr
 import { FEEDBACK_KIND, type FeedbackKind, type FeedbackResult } from "@luke/features/feedback";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { useAppCommand, useMenuCommands } from "@luke/panel/app-commands";
+import { FeedbackDialog } from "@luke/panel/feedback-dialog";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { ToastHost } from "@luke/panel/toast";
@@ -15,7 +16,6 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { FeedbackDialog } from "./feedback-dialog";
 
 /** The two Help items that open the dialog, one per kind of note. */
 type FeedbackCommand = typeof APP_COMMAND.SEND_FEEDBACK | typeof APP_COMMAND.SUGGEST_FEATURE;

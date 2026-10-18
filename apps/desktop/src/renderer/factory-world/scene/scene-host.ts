@@ -1,3 +1,4 @@
+import type { FactorySceneHandle, FactorySceneProps } from "@luke/panel/factory-world/contract";
 import type {
   PickTarget,
   WorldHost,
@@ -21,7 +22,6 @@ import {
   Texture,
   WebGLRenderer,
 } from "three";
-import type { FactorySceneHandle, FactorySceneProps } from "../contract";
 import { cameraRig } from "./camera-rig";
 import { type PickPointer, sameTarget, scenePicking } from "./picking";
 

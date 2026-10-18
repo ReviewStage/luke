@@ -10,7 +10,12 @@ import {
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { runAppCommand, useAppCommand } from "@luke/panel/app-commands";
+import { LinkWorkspaceProvider } from "@luke/panel/copy-link-item";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import { type HoverPane, useHoverPane } from "@luke/panel/desktop/hover-pane";
+import { LukeIdentity } from "@luke/panel/desktop/luke-identity";
+import { SIDEBAR_WIDTH, type SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
+import { type CountNoun, SidebarGroupHeader } from "@luke/panel/desktop/sidebar-group-header";
 import {
   EDGE_SIDE,
   type ResizableEdgeProps,
@@ -21,10 +26,13 @@ import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-director
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { RepositoryPicture } from "@luke/panel/repository-picture";
 import { Shortcut } from "@luke/panel/shortcut";
+import { GLYPH_STATE, stateEndMark } from "@luke/panel/state-glyph";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import { type SettledWaiting, useSettledWaiting } from "@luke/panel/tasks/inbox-settling";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { inColumn, type PinnedTab } from "@luke/panel/tasks/use-side-panel";
 import { useUnreadTasks } from "@luke/panel/tasks/use-task-looks";
+import { commandKeyshortcuts, Tooltip } from "@luke/panel/tooltip";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
@@ -91,21 +99,13 @@ import {
 import { useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref";
 import { type CallCardInput, ColumnFoot } from "../call/call-card";
-import { LinkWorkspaceProvider } from "../copy-link-item";
 import type { NavigationHistory } from "../navigation-history";
-import { GLYPH_STATE, stateEndMark } from "../state-glyph";
 import { NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model";
-import { inColumn, type PinnedTab } from "../tasks/use-side-panel";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
-import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { ActionMenu, type MenuAction } from "./action-menu";
 import { useFailedRunsMark } from "./failed-runs";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
-import { LukeIdentity } from "./luke-identity";
 import { SidebarAgent } from "./sidebar-agent";
-import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
 import { SidebarFoot } from "./sidebar-foot";
-import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
 import {
   type DrawnSection,

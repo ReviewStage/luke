@@ -4,12 +4,17 @@ import { useAppCommand } from "@luke/panel/app-commands";
 import { READING_AUTOMATIONS } from "@luke/panel/desktop/automation-words";
 import { useColumnDock } from "@luke/panel/desktop/column-dock";
 import { useFloatDismiss } from "@luke/panel/desktop/hover-pane";
+import { OfflineMark, useOffline } from "@luke/panel/desktop/offline-mark";
 import { PaneGlide } from "@luke/panel/desktop/pane-motion";
+import { SIDEBAR_OVERLAY, type SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
 import { useWindowTitle } from "@luke/panel/desktop/window-title";
+import { FIND_PAGE, PageFind } from "@luke/panel/find-in-tab";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { SignInGate } from "@luke/panel/sign-in-gate";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { SIDE_PANEL_TAB } from "@luke/panel/tasks/use-side-panel";
 import { useTaskLooks } from "@luke/panel/tasks/use-task-looks";
+import { Tooltip } from "@luke/panel/tooltip";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -32,20 +37,17 @@ import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card";
 import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
 import { ExperimentTag } from "../experiment-marks";
-import { FIND_PAGE, PageFind } from "../find-in-tab";
 import type { NavigationHistory, WindowHistory } from "../navigation-history";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards";
 import { MentionedAgents } from "../tasks/mentioned-agent-card";
 import { NewTaskDialog } from "../tasks/new-task-dialog";
-import { SIDE_PANEL_TAB } from "../tasks/use-side-panel";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
   ISSUES_PAGE,
   type TasksControl,
 } from "../tasks/use-tasks-tab";
-import { Tooltip } from "../tooltip";
 import { DesktopAgentPage } from "./desktop-agent-page";
 import { DesktopChat } from "./desktop-chat";
 import { DesktopFactory } from "./desktop-factory";
@@ -53,10 +55,8 @@ import { DesktopInbox } from "./desktop-inbox";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopTasks } from "./desktop-tasks";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
-import { OfflineMark, useOffline } from "./offline-mark";
 import { PersonPage } from "./person-page";
 import { SidePanelToggle } from "./side-panel";
-import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse";
 import { taskCardOf } from "./task-card";
 import { useSummaryPin } from "./task-summary";
 

@@ -30,7 +30,15 @@ import {
 } from "@luke/host/app-state";
 import type { ActHandle } from "@luke/panel/act";
 import { appPlatform } from "@luke/panel/app-platform";
+import { useCopyToast } from "@luke/panel/copy-feedback";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import {
+  CLOSED_TAB_STRIP,
+  type ClosedTab,
+  NO_CLOSED_TABS,
+  withClosedTab,
+  withUndrawnPassed,
+} from "@luke/panel/tasks/closed-tabs";
 import { useInboxPages } from "@luke/panel/tasks/use-inbox-pages";
 import {
   MAIN_TAB,
@@ -38,6 +46,20 @@ import {
   type MainTabsControl,
   useMainTabs,
 } from "@luke/panel/tasks/use-main-tabs";
+import { usePanelArrivals } from "@luke/panel/tasks/use-panel-arrivals";
+import {
+  drawsChanges,
+  drawsMacTerminal,
+  drawsSubagent,
+  drawsTerminal,
+  inColumn,
+  type PinnedTab,
+  SIDE_PANEL_TAB,
+  type SidePanelControl,
+  type SidePanelTab,
+  type TaskHolds,
+  useSidePanel,
+} from "@luke/panel/tasks/use-side-panel";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "@luke/panel/toast";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
@@ -126,16 +148,8 @@ import {
 import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCopyToast } from "../copy-feedback";
 import { useChosenWorkspace } from "../desktop/chosen-workspace";
 import type { FixtureChat, Staged } from "./chat-fixture";
-import {
-  CLOSED_TAB_STRIP,
-  type ClosedTab,
-  NO_CLOSED_TABS,
-  withClosedTab,
-  withUndrawnPassed,
-} from "./closed-tabs";
 import { agentTabLabel } from "./coding-agent-model";
 import type { MessageReveal } from "./message-links";
 import type { SectionReveal } from "./plan-body";
@@ -150,26 +164,12 @@ import {
 import type { TranscriptReader } from "./use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 import { useLastTask } from "./use-last-task";
-import { usePanelArrivals } from "./use-panel-arrivals";
 import {
   type HistorySpot,
   type PlanHistoryControl,
   type PlanHistorySource,
   usePlanHistory,
 } from "./use-plan-history";
-import {
-  drawsChanges,
-  drawsMacTerminal,
-  drawsSubagent,
-  drawsTerminal,
-  inColumn,
-  type PinnedTab,
-  SIDE_PANEL_TAB,
-  type SidePanelControl,
-  type SidePanelTab,
-  type TaskHolds,
-  useSidePanel,
-} from "./use-side-panel";
 import { useWorkspaceChat } from "./use-workspace-chat";
 import { sayRestored } from "./version-view";
 import { agentListCallIds, sidebarCallIds, workerCallIds, workRowsOf } from "./work-model";

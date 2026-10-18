@@ -1,5 +1,6 @@
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
+import type { SceneHover } from "@luke/panel/factory-world/contract";
 import {
   PICK_KIND,
   type PickTarget,
@@ -7,6 +8,7 @@ import {
   type WorldLayer,
 } from "@luke/panel/factory-world/world";
 import { dayAndTimeText } from "@luke/panel/tasks/task-time";
+import { Tooltip } from "@luke/panel/tooltip";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
@@ -46,8 +48,6 @@ import {
 import { useEffect, useState } from "react";
 import { LinesChanged } from "../tasks/agent-published";
 import type { TasksControl } from "../tasks/use-tasks-tab";
-import { Tooltip } from "../tooltip";
-import type { SceneHover } from "./contract";
 
 /**
  * world-chrome.tsx -- what every world shares over its scene, in the page's DOM: the pipeline bar whose counts switch the layers, the hover label, the card of what is selected, and the way home.

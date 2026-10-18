@@ -5,6 +5,7 @@ import { PLAN_ACTOR, type Task, type TaskSummary } from "@luke/features/task-wir
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { MemberDirectory } from "@luke/panel/member-directory";
+import { OpenPersonProvider } from "@luke/panel/person-door";
 import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
 import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
 import { lineWords } from "@luke/panel/testing/actor-line";
@@ -19,7 +20,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
-import { OpenPersonProvider } from "../person-door";
 import type { TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopTasks } from "./desktop-tasks";
 import { SidebarTask } from "./task-actions";

@@ -32,8 +32,11 @@ import { type GitHubConnectControl, useGitHubConnection } from "@luke/panel/gith
 import { GRANT_OUTCOME, grantedBySignIn, useIntegrationGrant } from "@luke/panel/integration-grant";
 import { type IntegrationStatuses, useIntegrationStatuses } from "@luke/panel/integration-statuses";
 import { useIntegrationTools } from "@luke/panel/integration-tools";
+import { focusSearchField, Highlighted } from "@luke/panel/search-field";
+import { MenuRow } from "@luke/panel/settings/menu-row";
 import { Shortcut } from "@luke/panel/shortcut";
 import { SPINNER_SIZE, SpinnerRing } from "@luke/panel/spinner";
+import { commandKeyshortcuts } from "@luke/panel/tooltip";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
@@ -70,9 +73,6 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { IntegrationToolDetail, IntegrationToolList, keepInView } from "../integration-tool-list";
-import { focusSearchField, Highlighted } from "../search-field";
-import { commandKeyshortcuts } from "../tooltip";
-import { MenuRow } from "./menu-row";
 
 /**
  * integrations-page.tsx -- Settings › Integrations: the services the account connects so Luke's agents can use them.

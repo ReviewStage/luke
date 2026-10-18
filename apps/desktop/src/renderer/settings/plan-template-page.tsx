@@ -10,6 +10,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { type ActHandle, useAct } from "@luke/panel/act";
 import type { PlanEditDoor } from "@luke/panel/tasks/use-plan-editing";
 import { TOAST_TONE, useToast } from "@luke/panel/toast";
+import { Tooltip } from "@luke/panel/tooltip";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
   BANNER_LOOK,
@@ -41,7 +42,6 @@ import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TaskReader } from "../tasks/edit-ref";
 import { PlanBody } from "../tasks/plan-body";
-import { Tooltip } from "../tooltip";
 
 /**
  * plan-template-page.tsx -- Settings › Plan template: the Markdown every new plan starts as a copy of, drawn and edited as a plan is.

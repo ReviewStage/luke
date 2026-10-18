@@ -4,6 +4,8 @@ import {
   type CodingAgentPullRequestAnswer,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
+import { RowHint, RowHintOptions, Tooltip } from "@luke/panel/tooltip";
 import {
   CHIP_LOOK,
   Chip,
@@ -17,8 +19,6 @@ import {
 } from "@luke/ui";
 import { GitBranchIcon, TerminalIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip";
 import {
   checkoutCommand,
   publishedUrl,

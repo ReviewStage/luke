@@ -9,11 +9,11 @@ import type {
   PullRequestReviewTeam,
 } from "@luke/features/coding-agent-wire";
 import { PULL_REQUEST_ACTION, REVIEWER_KIND } from "@luke/features/pull-request-write-wire";
+import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
+import { Tooltip } from "@luke/panel/tooltip";
 import { BUTTON_SIZE, cssCustomProperties, dropBelowStart, IconButton, useMenu } from "@luke/ui";
 import { TagIcon, UserPlusIcon, UserRoundIcon, UsersRoundIcon } from "lucide-react";
 import { useCallback, useState } from "react";
-import { ActionMenu, type MenuAction } from "../desktop/action-menu";
-import { Tooltip } from "../tooltip";
 import type { PullRequestWrites } from "./pull-request-writes";
 
 /**

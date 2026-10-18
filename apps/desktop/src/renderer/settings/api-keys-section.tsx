@@ -10,6 +10,7 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "@luke/panel/act";
 import { HarnessMark } from "@luke/panel/harness-marks";
+import { MenuRow } from "@luke/panel/settings/menu-row";
 import { dayText } from "@luke/panel/tasks/task-time";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
@@ -30,7 +31,6 @@ import {
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MenuRow } from "./menu-row";
 
 /**
  * api-keys-section.tsx -- Settings › Coding agents › API keys: the account's own Anthropic and OpenAI keys a coding agent runs on.
