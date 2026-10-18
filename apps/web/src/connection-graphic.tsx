@@ -10,7 +10,7 @@ import { LukeMark } from "./SiteChrome";
 function ArrowMark(): React.JSX.Element {
   return (
     <svg
-      className="size-6 shrink-0 text-muted-foreground"
+      className="size-6 shrink-0 text-(--luke-color-text-muted)"
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
@@ -30,7 +30,10 @@ function ArrowMark(): React.JSX.Element {
 /** The service's mark, drawn at `PROVIDER_MARK_SIZE.TILE` by the caller, then the arrow and Luke's face; the space around it is the card's. */
 export function ConnectionGraphic({ mark }: { mark: React.ReactNode }): React.JSX.Element {
   return (
-    <div className="flex items-center justify-center gap-4 text-foreground" aria-hidden="true">
+    <div
+      className="flex items-center justify-center gap-4 text-(--luke-color-text)"
+      aria-hidden="true"
+    >
       {mark}
       <ArrowMark />
       <LukeMark className="h-auto w-12 shrink-0" />
