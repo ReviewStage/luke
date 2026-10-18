@@ -4,7 +4,10 @@
  * Sentry's Effect guide (docs.sentry.io/platforms/javascript/guides/effect)
  * composes `Sentry.effectLayer`, which starts the SDK and registers its
  * `ErrorReporter`, with the tracer, the logger, and the metrics layer. The web
- * functions take all of it. An eve root's process is started by eve's own
+ * functions take all of it, with the process's uncaught-exception and
+ * unhandled-rejection handlers the Effect SDK leaves out, and send what they
+ * queued after each answer (`sentryReportedFetch`), because Vercel may freeze
+ * an instance as soon as it has answered. An eve root's process is started by eve's own
  * instrumentation (`instrumentation/sentry.ts`, Sentry's eve guide), which
  * runs before the agent loads, so its runtime takes everything but the
  * start: a second `init` would replace the client eve's integration hangs
@@ -83,10 +86,56 @@ export const sentryLogger: Logger.Logger<unknown, void> = Sentry.SentryEffectLog
 /**
  * Sentry started on `options`, with its `ErrorReporter` registered: a route
  * that fails, a cause handed to `ErrorReporter.report`, and an effect under
- * `Effect.withErrorReporting` are each captured.
+ * `Effect.withErrorReporting` are each captured, and so is an exception or a
+ * rejection nothing in the process caught.
+ *
+ * Note that the two process handlers are added here rather than in
+ * `sentryOptions`, because the Effect SDK's server `init` starts only its
+ * context-lines and linked-errors integrations, while an eve root starts
+ * `@sentry/node`'s full defaults from those same options, which already hold
+ * both handlers.
  */
 export function sentryLayer(options: SentryOptions = sentryOptions()): Layer.Layer<never> {
-  return Layer.merge(Sentry.effectLayer(options), sentryTelemetry);
+  const started = Sentry.effectLayer({
+    ...options,
+    integrations: [
+      Sentry.onUncaughtExceptionIntegration(),
+      Sentry.onUnhandledRejectionIntegration(),
+    ],
+  });
+  return Layer.merge(started, sentryTelemetry);
+}
+
+/** How long an instance is kept awake after an answer for Sentry to send what it queued. */
+const REQUEST_FLUSH_MS = 2_000;
+
+/** A web function's handler, as the platform calls it. */
+type WebFetch = (request: Request) => Promise<Response>;
+
+/**
+ * A web function's handler as Sentry watches it. What it throws, such as a
+ * runtime whose layer could not be built, is captured before it is thrown on
+ * to the platform. Once it has answered or thrown, what Sentry queued is sent,
+ * and that sending is handed to `keepAwake` (Vercel's `waitUntil`) rather
+ * than awaited, so the answer leaves at once and the instance is not frozen
+ * before the report does.
+ */
+export function sentryReportedFetch(
+  fetch: WebFetch,
+  keepAwake: (sending: Promise<boolean>) => void,
+): WebFetch {
+  return async (request) => {
+    try {
+      return await fetch(request);
+    } catch (failure) {
+      Sentry.captureException(failure, {
+        mechanism: { type: "auto.function.vercel", handled: false },
+      });
+      throw failure;
+    } finally {
+      keepAwake(Sentry.flush(REQUEST_FLUSH_MS));
+    }
+  };
 }
 
 /**

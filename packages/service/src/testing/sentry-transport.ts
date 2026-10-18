@@ -4,8 +4,9 @@
  * Sentry's transport is the process boundary its reports cross, so a suite
  * replaces it and nothing else: the SDK, its reporter, its logger, and its
  * check-ins are the production ones. The SDK is a process-wide singleton, so
- * the layer closes it when released, which also flushes what is queued; a
- * suite reads what was sent once its layer is released.
+ * the layer closes it when released, which also flushes what is queued, and
+ * takes back the process handlers it added; a suite reads what was sent once
+ * its layer is released.
  */
 
 import * as Sentry from "@sentry/effect";
@@ -43,6 +44,14 @@ const ItemHeaderSchema = Schema.Struct({ type: Schema.String });
 
 const decodeItemHeader = Schema.decodeUnknownSync(Schema.fromJsonString(ItemHeaderSchema));
 
+/** The process's handlers of an exception and a rejection nothing caught, as they stand. */
+function processHandlers(): ReadonlySet<unknown> {
+  return new Set([
+    ...process.listeners("uncaughtException"),
+    ...process.listeners("unhandledRejection"),
+  ]);
+}
+
 /** One item of an envelope as the suite reads it: its type, its payload's text, and what the suite reads of it. */
 export interface SentItem {
   readonly type: string;
@@ -55,6 +64,14 @@ export interface RecordingSentry {
   readonly sent: SentItem[];
   /** The deployment's Sentry layer, started on the fixture DSN over the recording transport. */
   readonly layer: Layer.Layer<never>;
+  /**
+   * Hands an exception nothing caught to the handlers the layer added to the
+   * process, as Node would, and to none of the runner's own, which would fail
+   * the suite.
+   */
+  readonly throwUncaught: (error: Error) => void;
+  /** Hands a rejection nothing handled to the layer's handlers, on the same terms. */
+  readonly rejectUnhandled: (reason: Error) => void;
 }
 
 /**
@@ -98,10 +115,43 @@ export function recordingSentry(delivered?: () => Promise<void>): RecordingSentr
     tracesSampleRate: 1.0,
     transport,
   });
+  let standing = processHandlers();
+  const added = <Handler>(handlers: readonly Handler[]): Handler[] =>
+    handlers.filter((handler) => !standing.has(handler));
   const closed = Layer.effectDiscard(
-    Effect.addFinalizer(() => Effect.promise(() => Sentry.close())),
+    Effect.sync(() => {
+      standing = processHandlers();
+    }).pipe(
+      Effect.andThen(Effect.addFinalizer(() => Effect.promise(() => Sentry.close()))),
+      Effect.andThen(
+        Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            for (const handler of added(process.listeners("uncaughtException"))) {
+              process.removeListener("uncaughtException", handler);
+            }
+            for (const handler of added(process.listeners("unhandledRejection"))) {
+              process.removeListener("unhandledRejection", handler);
+            }
+          }),
+        ),
+      ),
+    ),
   );
-  return { sent, layer: Layer.merge(closed, started) };
+  return {
+    sent,
+    // Note that `closed` is built first, so it reads the handlers that stood before Sentry started.
+    layer: Layer.provideMerge(started, closed),
+    throwUncaught: (error) => {
+      for (const handler of added(process.listeners("uncaughtException"))) {
+        handler(error, "uncaughtException");
+      }
+    },
+    rejectUnhandled: (reason) => {
+      for (const handler of added(process.listeners("unhandledRejection"))) {
+        handler(reason, Promise.resolve());
+      }
+    },
+  };
 }
 
 /** The items of one type, in the order they were sent. */
