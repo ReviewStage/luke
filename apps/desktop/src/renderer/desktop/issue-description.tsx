@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { ISSUE_BOUNDS } from "@luke/features/issue-wire";
-import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { planSections } from "@luke/features/plan-document";
+import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { AsyncResult } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";

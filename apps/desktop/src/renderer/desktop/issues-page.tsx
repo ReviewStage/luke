@@ -55,12 +55,7 @@ import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu";
 import { readKept, writeKept } from "./folded-groups";
 import { IssueBoard, IssueBoardSkeleton, useBoardKeys } from "./issue-board";
-import {
-  IssueCrumbs,
-  IssueDetail,
-  IssueDetailSkeleton,
-  IssueDocumentPage,
-} from "./issue-detail";
+import { IssueCrumbs, IssueDetail, IssueDetailSkeleton, IssueDocumentPage } from "./issue-detail";
 import { type IssueFilterControl, useIssueFilter } from "./issue-filter-view";
 import { IssueList, listRowIssue } from "./issue-list";
 import { PRIORITY_ORDER, PriorityGlyph } from "./issue-pickers";
