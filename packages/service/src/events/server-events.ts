@@ -68,7 +68,6 @@ type Values<T> = T[keyof T];
 interface ServerEventProperties {
   [SERVER_EVENT.TASK_CREATE]: {
     source: Values<typeof SERVER_TASK_SOURCE>;
-    is_planning: boolean;
     has_issue: boolean;
   };
   [SERVER_EVENT.AGENT_START]: {
@@ -193,10 +192,7 @@ export function recordServerEvent<Name extends ServerEventName>(
  * Analytics that keeps what it was handed rather than posting it, for a test
  * that asserts what an endpoint counted.
  */
-export function recordingProductAnalytics(): {
-  readonly layer: Layer.Layer<ProductAnalytics>;
-  readonly recorded: readonly ServerEvent[];
-} {
+export function recordingProductAnalytics() {
   const recorded: ServerEvent[] = [];
   const layer = Layer.succeed(ProductAnalytics, {
     capture: (event) => Effect.sync(() => void recorded.push(event)),

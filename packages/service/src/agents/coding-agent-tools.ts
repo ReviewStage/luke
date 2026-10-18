@@ -1615,7 +1615,6 @@ export function runStartAgent(
         if (stands) {
           yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
             source: SERVER_TASK_SOURCE.AGENT,
-            is_planning: false,
             has_issue: false,
           });
         }

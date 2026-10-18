@@ -612,7 +612,6 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   );
   yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
     source: SERVER_TASK_SOURCE.SIDEBAR,
-    is_planning: planning ?? false,
     has_issue: issue !== undefined || issueId !== undefined,
   });
   const answer: TaskStartAnswer =
