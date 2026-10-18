@@ -219,7 +219,7 @@ export function ChatComposer({
   } as const;
   return (
     <div className="chat-composer" data-compact={String(compact === true)}>
-      <div className="chat-composer-box field-well">
+      <div className="chat-composer-box">
         {listed && mention !== undefined ? (
           <MentionMenu
             id={listId}

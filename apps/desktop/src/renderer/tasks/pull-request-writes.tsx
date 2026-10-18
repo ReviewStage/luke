@@ -16,7 +16,7 @@ import {
   type PullRequestActionRequest,
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { Badge, CHIP_LOOK, Chip, ChipName, useMenu } from "@luke/ui";
+import { Badge, CHIP_LOOK, Chip, ChipName, ErrorState, useMenu } from "@luke/ui";
 import {
   CheckIcon,
   GitPullRequestClosedIcon,
@@ -94,7 +94,6 @@ const STATE_WORDS = {
 const WRITE_WORDS = {
   SIGN_IN: "Sign in with GitHub to make this change as you.",
   SIGN_IN_PRESS: "Sign in with GitHub",
-  DISMISS: "Dismiss",
   /** GitHub's own words on a change it refused. */
   refused: (words: string) => `GitHub said: ${words}`,
 } as const;
@@ -290,30 +289,18 @@ export function PullRequestWriteNote({
   const { note, dismiss } = writes;
   if (note === undefined) return null;
   return (
-    <p className={`failure-note ${className}`} role="alert">
-      <span className="failure-note-words">
+    <div className={className}>
+      <ErrorState
+        remedy={
+          note.kind === WRITE_NOTE.SIGN_IN
+            ? { label: WRITE_WORDS.SIGN_IN_PRESS, onClick: () => void connect() }
+            : undefined
+        }
+        onDismiss={dismiss}
+      >
         {note.kind === WRITE_NOTE.SIGN_IN ? WRITE_WORDS.SIGN_IN : note.words}
-      </span>
-      {note.kind === WRITE_NOTE.SIGN_IN ? (
-        <button
-          type="button"
-          className="toolbar-button bordered-button failure-note-remedy"
-          onClick={() => void connect()}
-        >
-          {WRITE_WORDS.SIGN_IN_PRESS}
-        </button>
-      ) : null}
-      <Tooltip label={WRITE_WORDS.DISMISS}>
-        <button
-          type="button"
-          className="icon-button pull-request-write-dismiss"
-          aria-label={WRITE_WORDS.DISMISS}
-          onClick={dismiss}
-        >
-          <XIcon />
-        </button>
-      </Tooltip>
-    </p>
+      </ErrorState>
+    </div>
   );
 }
 

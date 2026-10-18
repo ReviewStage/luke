@@ -301,10 +301,10 @@ async function mount(
     registry,
     /** The shells as the list draws them: each one's name, what it says under it, whether it is shown, and whether it runs something. */
     rows: () =>
-      [...container.querySelectorAll(".terminal-shell")].map((row) => ({
-        name: row.querySelector(".terminal-shell-name")?.textContent,
+      [...container.querySelectorAll('[aria-label="Shell list"] > li')].map((row) => ({
+        name: row.querySelector(".luke-list-row-title")?.textContent,
         detail: row.querySelector(".terminal-shell-detail")?.textContent,
-        shown: row.getAttribute("aria-current") === "true",
+        shown: row.querySelector('[aria-current="true"]') !== null,
         running: row.querySelector(".terminal-shell-running") !== null,
       })),
     /** Presses the button the label names, wherever it stands in the tab. */
@@ -316,9 +316,9 @@ async function mount(
     },
     /** Presses a shell's row, which shows it. */
     choose: async (name: string) => {
-      const row = [...container.querySelectorAll<HTMLButtonElement>(".terminal-shell-row")].find(
-        (each) => each.querySelector(".terminal-shell-name")?.textContent === name,
-      );
+      const row = [
+        ...container.querySelectorAll<HTMLButtonElement>('[aria-label="Shell list"] > li > button'),
+      ].find((each) => each.querySelector(".luke-list-row-title")?.textContent === name);
       assert.ok(row, `a row for ${name}`);
       // A press takes the keyboard to the row first, as the window's does.
       row.focus();
@@ -854,7 +854,9 @@ test("a shell's × asks first, then ends it, and ending the one shown shows the 
 
 test("a shell renamed from its row's menu is renamed in place, and the list says its new name", async () => {
   const tab = await mount();
-  const row = tab.container.querySelector<HTMLButtonElement>(".terminal-shell-row");
+  const row = tab.container.querySelector<HTMLButtonElement>(
+    '[aria-label="Shell list"] > li > button',
+  );
   assert.ok(row);
   act(() => {
     row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
@@ -952,7 +954,9 @@ test("a read of the shells that went out before a rename lands nowhere, so the n
     window.dispatchEvent(new Event("focus"));
   });
   main.holding.clear();
-  const row = tab.container.querySelector<HTMLButtonElement>(".terminal-shell-row");
+  const row = tab.container.querySelector<HTMLButtonElement>(
+    '[aria-label="Shell list"] > li > button',
+  );
   assert.ok(row);
   act(() => {
     row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));

@@ -247,7 +247,7 @@ test("an agent's row in the summary offers Copy link on a right-click, copying t
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount("plan", "acme");
-  const row = [...page.querySelectorAll<HTMLElement>(".task-summary-row")].find((each) =>
+  const row = [...page.querySelectorAll<HTMLElement>(".task-summary li > button")].find((each) =>
     each.textContent?.includes(AGENT.title ?? ""),
   );
   assert.ok(row, "the agent's row is listed");
@@ -321,7 +321,7 @@ test("a column too narrow to spare the rail draws none, and the toolbar's button
   act(() => toggle.click());
   const card = document.querySelector('[role="dialog"][aria-label="Summary"]');
   assert.ok(card, "the card hangs");
-  assert.ok(card.querySelectorAll(".task-summary-row").length > 0, "the card lists the summary");
+  assert.ok(card.querySelectorAll("li > button").length > 0, "the card lists the summary");
 });
 
 test("Escape takes the card the toolbar's button hung back down and hands the focus back to that button", () => {

@@ -12,7 +12,10 @@ import { PAGE_FRAME, PAGE_WIDTH, type PageHeading } from "../page-frame/page-fra
  * edge and the header's acts end on the secondary column's. Each scroll
  * reaches the page's edge on its own side, so the wheel works anywhere
  * over the column it moves. In a pane too narrow for two columns, the
- * secondary column follows the main content in the one scroll.
+ * secondary column follows the main content in the one scroll. A main
+ * content that is only an `EmptyState` (or a centred `ErrorState`, where the
+ * thing could not be read) stands it a little above the room's middle, as a
+ * collection's page stands its empty and failed states.
  *
  * Under the window's toolbar (`PAGE_FRAME.TOOLBAR`) the page draws no
  * header: the toolbar stands still above the columns, and the page is named
