@@ -606,7 +606,7 @@ it.effect(
 
       const rows = [...tab.querySelectorAll(".pull-request-check")];
       assert.equal(
-        rows[0]?.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+        rows[0]?.querySelector("img")?.getAttribute("src"),
         "https://avatars.githubusercontent.com/in/15368?v=4&s=32",
         "an App's logo is drawn from GitHub's avatar host at its size",
       );
@@ -615,15 +615,11 @@ it.effect(
         "a picture GitHub's avatar host serves is never asked of the service",
       );
       assert.equal(
-        rows[1]?.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+        rows[1]?.querySelector("img")?.getAttribute("src"),
         `data:${PIXEL.contentType};base64,${PIXEL.base64}`,
         "any other is drawn as the service read it",
       );
-      assert.equal(
-        rows[2]?.querySelector(".pull-request-check-avatar"),
-        null,
-        "no avatar, none drawn",
-      );
+      assert.equal(rows[2]?.querySelector(".lucide-bot"), null, "no avatar, none drawn");
       assert.deepEqual(words(tab, '[role="timer"]'), ["1m 5s"]);
 
       yield* TestClock.adjust("1 second");
@@ -689,7 +685,7 @@ test("the Checks tab lists the head's deployments over its checks: each environm
     ["Deployed", "Failed"],
   );
   assert.equal(
-    deployments.querySelector("img.pull-request-check-avatar")?.getAttribute("src"),
+    deployments.querySelector("img")?.getAttribute("src"),
     "https://avatars.githubusercontent.com/in/8329?v=4&s=32",
   );
   const buttons = deployments.querySelectorAll<HTMLButtonElement>("button.pull-request-check");
